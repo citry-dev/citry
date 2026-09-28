@@ -12,6 +12,7 @@ from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
     get_html_form_owner,
+    is_vue_directive_attribute,
     merge_root_attrs,
     pop_html_attr,
 )
@@ -39,20 +40,6 @@ _SUBMIT_MODES = ("enter", "blur", "both", "explicit")
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -145,14 +132,6 @@ def _plain(owner: str, name: str, value: object, *, allow_empty: bool = False) -
     return plain
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     input_name: str,
@@ -160,8 +139,6 @@ def _attrs(
     owned: frozenset[str],
     class_: CClassValue | None = None,
     style: CStyleValue | None = None,
-    *,
-    dynamic_only: frozenset[str] = frozenset(),
 ) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         raise TypeError(f"{owner} {input_name} must be a mapping or None, got {attrs!r}.")
@@ -173,10 +150,14 @@ def _attrs(
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} {input_name} cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"{owner} {input_name} cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned | dynamic_only:
-            raise ValueError(f"{owner} {input_name} cannot dynamically bind owned attribute {key!r}.")
+        # A Vue directive could rebind an owned attribute (including the
+        # description links the component merges), change a part's structure,
+        # or attach a listener, so none may arrive through Python data.
+        if is_vue_directive_attribute(normalized):
+            raise ValueError(
+                f"{owner} {input_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
     return merge_root_attrs(copied, class_, style)
 
 
@@ -286,7 +267,6 @@ class CEditable(LibraryComponent):
             "input_attrs",
             kwargs.input_attrs,
             _INPUT_OWNED,
-            dynamic_only=frozenset({"aria-describedby", "aria-errormessage"}),
         )
         external_described_by = pop_html_attr(
             input_attrs,

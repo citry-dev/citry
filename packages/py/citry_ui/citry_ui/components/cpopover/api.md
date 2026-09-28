@@ -197,6 +197,12 @@ public part selectors for targeted regions.
 owned by its own component. Unlayered consumer CSS overrides Citry UI defaults;
 named layers follow the site-wide layer-order contract.
 
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes the surface sets itself (such as `popover` and `role`), Citry
+runtime attributes, and any Vue directive syntax: names starting with `v-`,
+`:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component tag
+in your template instead, for example `<c-CPopover :title="hint">`.
+
 The documented variables, selectors, and reflected attributes are public CSS
 API. `.cui-*` classes, `--_cui-*` variables, host markup, initialization
 markers, and anchor names are private.

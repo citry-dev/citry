@@ -119,9 +119,6 @@ def test_invalid_server_inputs_fail(template: str, error: type[Exception]) -> No
         "tabindex",
         "hidden",
         "inert",
-        ":data-size",
-        "x-show",
-        "x-ignore.self",
         "data-citry-toolbar-initialized",
     ],
 )
@@ -132,6 +129,32 @@ def test_owned_runtime_and_visibility_attributes_are_rejected(attribute: str) ->
             "<button>A</button><button>B</button><button>C</button></c-CToolbar>",
             data={"attrs": {attribute: "consumer"}},
         )
+
+
+@pytest.mark.parametrize("attribute", [":data-size", "v-bind:role", "v-show", "v-if", "V-IF", "@keydown", "#default"])
+def test_python_attrs_reject_vue_directives(attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    with pytest.raises(ValueError, match=re.escape(f"CToolbar attrs cannot contain the Vue directive {attribute!r}")):
+        _render(
+            '<c-CToolbar label="Editor" c-attrs="attrs">'
+            "<button>A</button><button>B</button><button>C</button></c-CToolbar>",
+            data={"attrs": {attribute: "consumer"}},
+        )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(
+        '<c-CToolbar label="Editor" c-attrs="attrs"><button>A</button></c-CToolbar>',
+        data={"attrs": {"x-data": "{}", "hx-get": "/tools"}},
+        static_fallback=True,
+    )
+
+    root = _root(html)
+    assert 'x-data="{}"' in root
+    assert 'hx-get="/tools"' in root
 
 
 def test_css_contract_uses_public_inputs_through_private_fallbacks() -> None:

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 import citry_ui
@@ -69,7 +71,7 @@ def _render_context_menu_instances(count: int) -> str:
                 c-aria_label="f'Actions for record {item}'"
               >
                 <c-fill name="target" data="{ target_attrs }">
-                  <button type="button" c-attrs="target_attrs">Record {{ item }}</button>
+                  <button type="button" c-bind="target_attrs">Record {{ item }}</button>
                 </c-fill>
                 <c-fill name="menu">
                   <c-CMenuItem c-value="f'copy-{item}'">Copy {{ item }}</c-CMenuItem>
@@ -131,7 +133,7 @@ def _render_context_menu_combined_instances(count: int) -> str:
                 c-aria_label="f'Actions for record {item}'"
               >
                 <c-fill name="target" data="{ target_attrs }">
-                  <button type="button" c-attrs="target_attrs">Record {{ item }}</button>
+                  <button type="button" c-bind="target_attrs">Record {{ item }}</button>
                 </c-fill>
                 <c-fill name="menu">
                   <c-CMenuItem c-value="f'context-{item}'">Context action {{ item }}</c-CMenuItem>
@@ -589,6 +591,33 @@ def test_split_button_instance_scaling_emits_each_shared_asset_once(count: int):
     assert html.count("cannot replace an incompatible SplitButton submit runtime") == 1
     assert html.count("@keyframes cui-button-spin") == 1
     assert html.count(":where(.cui-menu-host) {") == 1
+
+
+def _context_menu_target_attrs(html: str) -> list[dict[str, object]]:
+    """Return the attribute maps Vue receives for the context menu target buttons."""
+    payload = html.split(" data-citry-vue-document=", 1)[1].split(">", 1)[1].split("</script>", 1)[0]
+    manifest = json.loads(payload)["manifest"]
+    return [
+        value
+        for occurrence in manifest["occurrences"]
+        for value in occurrence["preparedData"].values()
+        if isinstance(value, dict) and "data-citry-context-menu-target" in value
+    ]
+
+
+@pytest.mark.parametrize(
+    "render",
+    [_render_context_menu_instances, _render_context_menu_combined_instances],
+)
+def test_context_menu_target_button_receives_its_attributes(render):
+    # The target slot's attrs spread onto the button, so Vue sets the id and
+    # marker on the button itself rather than one attribute holding a dict.
+    targets = _context_menu_target_attrs(render(2))
+
+    assert targets == [
+        {"data-citry-context-menu-target": "", "id": "context-menu-asset-0-target"},
+        {"data-citry-context-menu-target": "", "id": "context-menu-asset-1-target"},
+    ]
 
 
 @pytest.mark.parametrize("count", [1, 10, 100])

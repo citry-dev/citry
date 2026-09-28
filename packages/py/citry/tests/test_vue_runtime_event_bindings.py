@@ -351,8 +351,8 @@ def test_runtime_event_sites_include_the_selected_branch_and_each_loop_route() -
     assert len(bindings) == 2
     assert [row[site["bindingKey"]] for row in loop_rows] == list(bindings)
     assert {binding["handler"] for binding in bindings.values()} == {"first", "second"}
-    assert f'v-if="preparedData.{branch_step["key"]} === {branch_step["index"]}"' in compile_input.template
-    assert f'v-for="preparedData in preparedData.{each_step["key"]}"' in compile_input.template
+    assert f'v-if="$citryPrepared.{branch_step["key"]} === {branch_step["index"]}"' in compile_input.template
+    assert f'v-for="$citryPrepared in $citryPrepared.{each_step["key"]}"' in compile_input.template
     assert "v-citry-runtime-events" in compile_input.template
 
 

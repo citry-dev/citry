@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
@@ -21,9 +21,6 @@ _VARIANTS = ("soft", "outline", "plain")
 _SIZES = ("sm", "md", "lg")
 _ORIENTATIONS = ("horizontal", "vertical")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-teleport", "x-text"}
-)
 _GROUP_OWNED = frozenset(
     {
         "aria-hidden",
@@ -103,31 +100,19 @@ def _choice(component: str, name: str, value: object, allowed: tuple[str, ...]) 
     return plain
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(component: str, attrs: Mapping[str, object] | None, owned: frozenset[str]) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         msg = f"{component} attrs must be a mapping or None, got {attrs!r}."
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{component} attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, component)
     for key in copied:
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"{component} attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _DIRECTIVES:
-            msg = f"{component} attrs cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if _dynamic_target(normalized) in owned:
-            msg = f"{component} attrs cannot dynamically bind owned attribute {key!r}."
             raise ValueError(msg)
     return copied
 

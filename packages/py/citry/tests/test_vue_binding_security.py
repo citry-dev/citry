@@ -376,7 +376,7 @@ def test_unused_events_declaration_is_not_active_policy_but_preserves_runtime_op
 
     registry.set_mounted_prefix("/citry")
     allowed = Page().render().serialize(security_javascript="allow")
-    assert "CitryStable.startPrepared" in allowed
+    assert "data-citry-vue-document" in allowed
 
 
 def test_omit_marker_is_removed_on_cache_replay() -> None:

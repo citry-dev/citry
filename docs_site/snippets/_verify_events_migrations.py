@@ -33,9 +33,9 @@ def _event_context(component):
 
 def _prepared_manifest(component):
     source = component.render().serialize()
-    prefix = "CitryStable.startPrepared("
-    start = source.index(prefix) + len(prefix)
-    prepared, _consumed = json.JSONDecoder().raw_decode(source[start:])
+    # The app configuration is the JSON data block that follows this attribute.
+    block = source.split(" data-citry-vue-document=", 1)[1].split(">", 1)[1]
+    prepared = json.loads(block.split("</script>", 1)[0])
     return prepared["manifest"]
 
 
@@ -43,7 +43,7 @@ def _verify_component_view() -> None:
     rendered = _serialized_html(component_view.ContactForm())
     assert f"/citry/ext/events/e/{component_view.ContactForm.class_id}" in rendered
     assert '<form method="post"' in rendered
-    assert "CitryStable.startPrepared" not in rendered
+    assert "data-citry-vue-document" not in rendered
 
     verb_cls = _events_info(component_view.ContactForm).events_cls
     [action] = coerce_result(verb_cls.post(object(), SimpleNamespace(name="Ada")), handler="post")
@@ -54,7 +54,7 @@ def _verify_component_view() -> None:
 
     named = component_view.NamedContactForm().render().serialize()
     assert f"/citry/ext/events/e/{component_view.NamedContactForm.class_id}/submit" in named
-    assert "CitryStable.startPrepared" in named
+    assert "data-citry-vue-document" in named
     assert _marker_names(component_view.NamedContactForm()) == ["result"]
 
     named_action = _events_info(component_view.NamedContactForm).events_cls.submit(

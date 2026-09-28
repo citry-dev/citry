@@ -9,13 +9,21 @@ use oxc_span::SourceType;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use vize_atelier_core::{
-    ElementNode, ExpressionNode, PropNode, TemplateChildNode,
+    ElementNode, ExpressionNode, PropNode, RootNode, TemplateChildNode,
     options::{CodegenOptions, CustomElementMatcher, ParserOptions, TemplateSyntaxMode},
     parser::parse_with_options_and_template_syntax,
 };
 use vize_atelier_dom::{
     Allocator, DomCompilerOptions,
     compile_template_with_custom_elements_and_template_syntax_and_codegen_options,
+};
+use vize_s1::{SurfaceChild, SurfaceTree};
+
+mod hydration;
+pub mod server_render;
+
+pub use hydration::{
+    HydrationAnchor, HydrationAttribute, HydrationElement, HydrationPlan, HydrationPlanStatus,
 };
 
 const SCHEMA: &str = "citry-vue-compiler/1";
@@ -102,6 +110,11 @@ pub struct CompileArtifact {
     pub transformed_source_sha256: String,
     pub code_sha256: String,
     pub transformed_template: String,
+    pub authored_text_plan: AuthoredTextPlan,
+    pub hydration_plan: HydrationPlan,
+    /// What the render function returns at its root (see
+    /// `hydration::root_shape`); a caller's `v-show` needs one element.
+    pub root_shape: &'static str,
     pub preamble: String,
     pub code: String,
     pub helpers: Vec<String>,
@@ -124,6 +137,41 @@ pub struct CompilerOptions {
     pub prefix_identifiers: bool,
     pub hoist_static: bool,
     pub cache_handlers: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthoredTextPlan {
+    pub source: &'static str,
+    pub source_sha256: String,
+    pub original_source_sha256: String,
+    pub status: AuthoredTextPlanStatus,
+    pub actions: Vec<AuthoredTextAction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<&'static str>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AuthoredTextPlanStatus {
+    Complete,
+    Unsupported,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthoredTextAction {
+    #[serde(rename = "type")]
+    pub action_type: &'static str,
+    pub source_start: u32,
+    pub source_end: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_start: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_end: Option<u32>,
+    pub rule: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -151,6 +199,31 @@ pub struct ElementMetadata {
     pub local_call: Option<ValidatedLocalCall>,
     pub local_descendants: Vec<String>,
     pub local_descendant_runs: Vec<String>,
+    /// Sorted, unique names of the `<slot>` outlets written anywhere inside
+    /// this element. When the element is replaced, whatever a caller passed
+    /// into those outlets mounts again, and the browser looks that up here.
+    pub slot_outlets: Vec<String>,
+    /// For a local call element, the fills written directly inside it,
+    /// sorted by slot name. The browser follows a replaced outlet of the
+    /// called component to the matching fill to find the components in it.
+    pub fills: Vec<SlotFillMetadata>,
+    /// The static name of a `<slot>` element, used to build `slot_outlets`.
+    #[serde(skip)]
+    slot_name: Option<String>,
+    /// The literal slot name of a `<template v-slot>` fill, used to build
+    /// `fills` on the call element that contains it.
+    #[serde(skip)]
+    fill_name: Option<String>,
+}
+
+/// One fill written inside a local call: the slot it fills and what it holds.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SlotFillMetadata {
+    pub name: String,
+    pub local_descendants: Vec<String>,
+    pub local_descendant_runs: Vec<String>,
+    pub slot_outlets: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -327,6 +400,56 @@ pub fn compile(request: CompileRequest) -> CompileArtifact {
             .map(|(_, id)| id.clone())
             .collect();
     }
+    // Slot outlets and fills use the same path rule as the calls above, so a
+    // replaced element names every outlet inside it and a call names the
+    // fills written directly inside it.
+    let slot_paths = elements
+        .iter()
+        .filter_map(|element| {
+            element
+                .slot_name
+                .clone()
+                .map(|name| (element.path.clone(), name))
+        })
+        .collect::<Vec<_>>();
+    for element in &mut elements {
+        let mut outlets = slot_paths
+            .iter()
+            .filter(|(path, _)| path.len() > element.path.len() && path.starts_with(&element.path))
+            .map(|(_, name)| name.clone())
+            .collect::<Vec<_>>();
+        outlets.sort();
+        outlets.dedup();
+        element.slot_outlets = outlets;
+    }
+    let fill_records = elements
+        .iter()
+        .filter_map(|element| {
+            let name = element.fill_name.clone()?;
+            let parent = element.path[..element.path.len() - 1].to_vec();
+            Some((
+                parent,
+                SlotFillMetadata {
+                    name,
+                    local_descendants: element.local_descendants.clone(),
+                    local_descendant_runs: element.local_descendant_runs.clone(),
+                    slot_outlets: element.slot_outlets.clone(),
+                },
+            ))
+        })
+        .collect::<Vec<_>>();
+    for element in &mut elements {
+        if element.local_call.is_none() {
+            continue;
+        }
+        let mut fills = fill_records
+            .iter()
+            .filter(|(parent, _)| *parent == element.path)
+            .map(|(_, fill)| fill.clone())
+            .collect::<Vec<_>>();
+        fills.sort_by(|left, right| left.name.cmp(&right.name));
+        element.fills = fills;
+    }
     let validated_ids = elements
         .iter()
         .filter_map(|element| {
@@ -420,7 +543,7 @@ pub fn compile(request: CompileRequest) -> CompileArtifact {
             .map(|item| item.alias.clone().into())
             .collect(),
     );
-    let (_, compile_errors, result) =
+    let (compiler_root, compile_errors, result) =
         compile_template_with_custom_elements_and_template_syntax_and_codegen_options(
             &compiler_allocator,
             &transformed_template,
@@ -434,6 +557,12 @@ pub fn compile(request: CompileRequest) -> CompileArtifact {
             matcher,
             CodegenOptions::default(),
         );
+    let authored_text_plan = authored_text_plan(
+        &transformed_template,
+        &compiler_root,
+        &request.template,
+        if applied_edits { &edits } else { &[] },
+    );
     diagnostics.extend(compile_errors.into_iter().map(|error| Diagnostic {
         stage: "compile",
         code: format!("{:?}", error.code),
@@ -457,6 +586,15 @@ pub fn compile(request: CompileRequest) -> CompileArtifact {
             end: None,
         });
     }
+    let hydration_plan = hydration::hydration_plan(
+        &transformed_template,
+        &request.template,
+        if applied_edits { &edits } else { &[] },
+        &code,
+        &elements,
+        &request.dynamic_elements,
+    );
+    let root_shape = hydration::root_shape(&code);
     let helpers = emitted_helpers(&preamble);
     let allowed = [
         "Fragment",
@@ -533,6 +671,9 @@ pub fn compile(request: CompileRequest) -> CompileArtifact {
         transformed_source_sha256: hash(&transformed_template),
         code_sha256: hash(&(preamble.clone() + &code)),
         transformed_template,
+        authored_text_plan,
+        hydration_plan,
+        root_shape,
         preamble,
         code,
         helpers,
@@ -541,6 +682,306 @@ pub fn compile(request: CompileRequest) -> CompileArtifact {
         elements,
         dynamic_elements: request.dynamic_elements,
     }
+}
+
+fn authored_text_plan(
+    source: &str,
+    compiler_root: &RootNode<'_>,
+    original_source: &str,
+    source_edits: &[Edit],
+) -> AuthoredTextPlan {
+    let allocator = Allocator::new();
+    let (tree, parse_errors) = vize_s1::parse(&allocator, source);
+    let lowered = vize_s1_to_s2::lower(&allocator, &tree, &parse_errors);
+    let mut reason_code = None;
+    let mut actions = Vec::new();
+
+    for record in &lowered.provenance {
+        let (action_type, content) = match record.rule.as_str() {
+            "condense.whitespace" => ("rewrite", Some(record.after.as_str())),
+            "condense.drop-whitespace" | "drop.comment" | "drop.branch-gap" => ("drop", None),
+            _ => continue,
+        };
+        let start = record.span.start;
+        let end = record.span.end;
+        let authored = source.get(start as usize..end as usize);
+        if start >= end || authored != Some(record.before.as_str()) {
+            reason_code = Some("invalid_source_spans");
+        }
+        if content.is_some_and(|value| value == record.before.as_str())
+            || (content.is_none() && !record.after.is_empty())
+        {
+            reason_code = Some("invalid_source_spans");
+        }
+        actions.push(AuthoredTextAction {
+            action_type,
+            source_start: start,
+            source_end: end,
+            original_start: None,
+            original_end: None,
+            rule: record.rule.to_string(),
+            content: content.map(str::to_owned),
+        });
+    }
+    actions.sort_by_key(|action| (action.source_start, action.source_end));
+    if actions
+        .windows(2)
+        .any(|pair| pair[0].source_end > pair[1].source_start)
+    {
+        reason_code = Some("invalid_source_spans");
+    }
+    if !parse_errors.is_empty() || !lowered.diagnostics.is_empty() {
+        reason_code.get_or_insert("s1_parse_or_lower_diagnostic");
+    }
+
+    let mut source_text = Vec::new();
+    let mut atelier_text = Vec::new();
+    let source_shape_supported = collect_surface_text(&tree, source, &mut source_text);
+    let atelier_shape_supported = collect_atelier_text(compiler_root, &mut atelier_text);
+    let action_indexes = actions
+        .iter()
+        .enumerate()
+        .map(|(index, action)| ((action.source_start, action.source_end), index))
+        .collect::<HashMap<_, _>>();
+    let mut matched_text_actions = HashSet::new();
+    let mut expected_text = Vec::new();
+    for (start, end, raw) in &source_text {
+        let Some(index) = action_indexes.get(&(*start, *end)) else {
+            expected_text.push((*start, *end, raw.clone()));
+            continue;
+        };
+        matched_text_actions.insert((*start, *end));
+        let action = &actions[*index];
+        match action.action_type {
+            "rewrite" => {
+                expected_text.push((*start, *end, action.content.clone().unwrap_or_default()))
+            }
+            "drop" => {}
+            _ => reason_code = Some("invalid_source_spans"),
+        }
+    }
+    for action in &actions {
+        if action.rule != "drop.comment"
+            && !matched_text_actions.contains(&(action.source_start, action.source_end))
+        {
+            reason_code = Some("invalid_source_spans");
+        }
+    }
+    if !source_shape_supported || !atelier_shape_supported {
+        reason_code.get_or_insert("unsupported_ast_shape");
+    } else if expected_text != atelier_text {
+        reason_code.get_or_insert("atelier_text_mismatch");
+    }
+    if reason_code == Some("invalid_source_spans") {
+        actions.clear();
+    }
+
+    let unchanged_spans = unchanged_source_spans(original_source, source_edits);
+    let mut mapping_failed = unchanged_spans.is_none();
+    if let Some(unchanged_spans) = unchanged_spans.as_ref() {
+        for action in &mut actions {
+            let Some((original_start, original_end)) = map_action_to_original(
+                source,
+                original_source,
+                action.source_start,
+                action.source_end,
+                unchanged_spans,
+            ) else {
+                mapping_failed = true;
+                break;
+            };
+            action.original_start = Some(original_start);
+            action.original_end = Some(original_end);
+        }
+    }
+    if mapping_failed {
+        for action in &mut actions {
+            action.original_start = None;
+            action.original_end = None;
+        }
+        if reason_code != Some("invalid_source_spans") {
+            reason_code = Some("source_edit_overlap");
+        }
+    }
+
+    AuthoredTextPlan {
+        source: "transformedTemplate",
+        source_sha256: hash(source),
+        original_source_sha256: hash(original_source),
+        status: if reason_code.is_some() {
+            AuthoredTextPlanStatus::Unsupported
+        } else {
+            AuthoredTextPlanStatus::Complete
+        },
+        actions,
+        reason_code,
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct UnchangedSourceSpan {
+    transformed_start: usize,
+    transformed_end: usize,
+    original_start: usize,
+    original_end: usize,
+}
+
+fn unchanged_source_spans(
+    original_source: &str,
+    edits: &[Edit],
+) -> Option<Vec<UnchangedSourceSpan>> {
+    let mut spans = Vec::with_capacity(edits.len() + 1);
+    let mut original_cursor = 0usize;
+    let mut transformed_cursor = 0usize;
+    let mut previous_edit_start = None;
+    for edit in edits {
+        if edit.start < original_cursor
+            || edit.end < edit.start
+            || original_source.get(edit.start..edit.end).is_none()
+            || previous_edit_start == Some(edit.start)
+        {
+            return None;
+        }
+        let unchanged = original_source.get(original_cursor..edit.start)?;
+        let transformed_end = transformed_cursor.checked_add(unchanged.len())?;
+        spans.push(UnchangedSourceSpan {
+            transformed_start: transformed_cursor,
+            transformed_end,
+            original_start: original_cursor,
+            original_end: edit.start,
+        });
+        transformed_cursor = transformed_end.checked_add(edit.replacement.len())?;
+        original_cursor = edit.end;
+        previous_edit_start = Some(edit.start);
+    }
+    let unchanged = original_source.get(original_cursor..)?;
+    let transformed_end = transformed_cursor.checked_add(unchanged.len())?;
+    spans.push(UnchangedSourceSpan {
+        transformed_start: transformed_cursor,
+        transformed_end,
+        original_start: original_cursor,
+        original_end: original_source.len(),
+    });
+    Some(spans)
+}
+
+fn map_action_to_original(
+    transformed_source: &str,
+    original_source: &str,
+    source_start: u32,
+    source_end: u32,
+    unchanged_spans: &[UnchangedSourceSpan],
+) -> Option<(u32, u32)> {
+    let start = source_start as usize;
+    let end = source_end as usize;
+    if start >= end {
+        return None;
+    }
+    let index = unchanged_spans.partition_point(|span| span.transformed_end < end);
+    let span = unchanged_spans.get(index)?;
+    if start < span.transformed_start || end > span.transformed_end {
+        return None;
+    }
+    let original_start = span
+        .original_start
+        .checked_add(start.checked_sub(span.transformed_start)?)?;
+    let original_end = span
+        .original_start
+        .checked_add(end.checked_sub(span.transformed_start)?)?;
+    if original_end > span.original_end
+        || transformed_source.get(start..end)?
+            != original_source.get(original_start..original_end)?
+    {
+        return None;
+    }
+    Some((
+        u32::try_from(original_start).ok()?,
+        u32::try_from(original_end).ok()?,
+    ))
+}
+
+fn collect_surface_text(
+    tree: &SurfaceTree<'_>,
+    source: &str,
+    output: &mut Vec<(u32, u32, String)>,
+) -> bool {
+    collect_surface_children(tree.children.iter(), source, output)
+}
+
+fn collect_surface_children<'tree, 'source>(
+    children: impl IntoIterator<Item = &'tree SurfaceChild<'source>>,
+    source: &'source str,
+    output: &mut Vec<(u32, u32, String)>,
+) -> bool
+where
+    'source: 'tree,
+{
+    let mut supported = true;
+    for child in children {
+        match child {
+            SurfaceChild::Element(element) => {
+                // Surface tokens own the whitespace before a sibling tag as
+                // `leading`; it has no text node or changed-span decision yet.
+                supported &= element.open.lt_name.leading.is_empty();
+                supported &= collect_surface_children(element.children.iter(), source, output);
+            }
+            SurfaceChild::Text(token) => {
+                supported &= token.leading.is_empty();
+                if !token.text.is_empty() {
+                    if let Some((start, end)) = source_slice_span(source, token.text) {
+                        output.push((start, end, token.text.to_owned()));
+                    } else {
+                        supported = false;
+                    }
+                }
+            }
+            // Citry-generated `$citryPrepared` expressions are dynamic text, not
+            // authored bytes. Keep them as opaque boundaries while checking
+            // adjacent authored Text nodes against Atelier below.
+            SurfaceChild::Interpolation(_) => {}
+            SurfaceChild::Comment(_) => supported = false,
+            _ => supported = false,
+        }
+    }
+    supported
+}
+
+fn collect_atelier_text(root: &RootNode<'_>, output: &mut Vec<(u32, u32, String)>) -> bool {
+    collect_atelier_children(root.children.iter(), output)
+}
+
+fn collect_atelier_children<'tree, 'source>(
+    children: impl IntoIterator<Item = &'tree TemplateChildNode<'source>>,
+    output: &mut Vec<(u32, u32, String)>,
+) -> bool
+where
+    'source: 'tree,
+{
+    let mut supported = true;
+    for child in children {
+        match child {
+            TemplateChildNode::Element(element) => {
+                supported &= collect_atelier_children(element.children.iter(), output);
+            }
+            TemplateChildNode::Text(text) => output.push((
+                text.loc.span.start,
+                text.loc.span.end,
+                text.content.to_owned(),
+            )),
+            TemplateChildNode::Interpolation(_) => {}
+            _ => supported = false,
+        }
+    }
+    supported
+}
+
+fn source_slice_span(source: &str, slice: &str) -> Option<(u32, u32)> {
+    let start = (slice.as_ptr() as usize).checked_sub(source.as_ptr() as usize)?;
+    let end = start.checked_add(slice.len())?;
+    if source.get(start..end)? != slice {
+        return None;
+    }
+    Some((u32::try_from(start).ok()?, u32::try_from(end).ok()?))
 }
 
 struct WalkState<'a> {
@@ -558,9 +999,16 @@ struct WalkState<'a> {
     diagnostics: &'a mut Vec<Diagnostic>,
 }
 
+/// The runtime directive object a parsed directive compiles to, and the
+/// static input type that picked a `vModel*` implementation.
+///
+/// `component_call` is true for a declared Citry component call: the
+/// metadata parse cannot tell a component tag from an unknown element, and
+/// Vue compiles `v-model` on a component to props instead of a directive.
 fn directive_runtime_identity(
     element: &ElementNode<'_>,
     directive: &str,
+    component_call: bool,
 ) -> (Option<String>, Option<String>) {
     if directive == "show" {
         return (Some("vShow".to_owned()), None);
@@ -580,7 +1028,24 @@ fn directive_runtime_identity(
             None,
         );
     }
+    // Vue's compiler turns these into props, children, or structure, so no
+    // runtime directive object is involved.
+    const COMPILED_AWAY: [&str; 14] = [
+        "bind", "on", "if", "else-if", "else", "for", "slot", "html", "text", "once", "memo",
+        "cloak", "pre", "is",
+    ];
+    if COMPILED_AWAY.contains(&directive) {
+        return (None, None);
+    }
     if directive != "model" {
+        // A custom directive: the render resolves it by name from the
+        // component's `directives` option or the app.
+        return (Some(format!("resolveDirective:{directive}")), None);
+    }
+    // On a component, `v-model` compiles to a `modelValue` prop and an
+    // `onUpdate:modelValue` listener; only a form element uses a runtime
+    // `vModel*` directive.
+    if component_call {
         return (None, None);
     }
     if element.tag == "select" {
@@ -715,6 +1180,10 @@ fn walk(
             "citryDirective{}",
             hex(&Sha256::digest(path.join("/").as_bytes()))
         );
+        let local_call_site = state
+            .calls_by_span
+            .get(&(element.loc.span.start, element.loc.span.end))
+            .is_some_and(|calls| !calls.is_empty());
         let directives = element
             .props
             .iter()
@@ -728,7 +1197,7 @@ fn walk(
             .enumerate()
             .map(|(ordinal, d)| {
                 let (runtime_implementation, static_input_type) =
-                    directive_runtime_identity(element, d.name);
+                    directive_runtime_identity(element, d.name, local_call_site);
                 DirectiveMetadata {
                     ordinal,
                     name: d.name.to_owned(),
@@ -740,7 +1209,11 @@ fn walk(
                         .collect(),
                     source_start: d.loc.span.start,
                     source_end: d.loc.span.end,
-                    runtime_lifecycle: runtime_implementation.is_some(),
+                    // A component call's `v-show` or custom directive is part
+                    // of its authored call, whose Vue key changes whenever the
+                    // call does, so Vue unmounts the old child and its root
+                    // instead of the browser comparing directive signatures.
+                    runtime_lifecycle: runtime_implementation.is_some() && !local_call_site,
                     runtime_implementation,
                     static_input_type,
                 }
@@ -828,7 +1301,7 @@ fn walk(
                 element.loc.span.end,
             ));
         }
-        if matching_binding.is_empty() && element.props.iter().any(|prop| matches!(prop, PropNode::Directive(d) if (d.name=="bind" && matches!(d.exp.as_ref(),Some(ExpressionNode::Simple(exp)) if exp.content.starts_with("preparedData.citryAttrs") || exp.content.starts_with("preparedData.citryKey"))) || d.name=="citry-runtime-events")) {
+        if matching_binding.is_empty() && element.props.iter().any(|prop| matches!(prop, PropNode::Directive(d) if (d.name=="bind" && matches!(d.exp.as_ref(),Some(ExpressionNode::Simple(exp)) if exp.content.starts_with("$citryPrepared.citryAttrs") || exp.content.starts_with("$citryPrepared.citryKey"))) || d.name=="citry-runtime-events")) {
             state.diagnostics.push(diag("metadata", "UNDECLARED_ELEMENT_BINDING", "generated element binding has no matching metadata record", element.loc.span.start, element.loc.span.end));
         }
         let binding = matching_binding.first().copied();
@@ -885,27 +1358,14 @@ fn walk(
                 element.loc.span.end,
             ));
         }
-        if local_call.is_some()
-            && directives
-                .iter()
-                .any(|directive| directive.runtime_lifecycle)
-        {
-            state.diagnostics.push(diag(
-                "metadata",
-                "COMPONENT_RUNTIME_DIRECTIVE_UNSUPPORTED",
-                "runtime directives on Citry component calls are unsupported",
-                element.loc.span.start,
-                element.loc.span.end,
-            ));
-        }
         if matching.is_empty()
             && element.props.iter().any(|prop| {
                 matches!(prop, PropNode::Directive(d)
                     if d.name == "bind"
                     && matches!(d.arg.as_ref(), Some(ExpressionNode::Simple(arg)) if arg.content == "citry-id")
                     && matches!(d.exp.as_ref(), Some(ExpressionNode::Simple(exp))
-                        if exp.content.starts_with("preparedData.calls.")
-                            || exp.content.starts_with("preparedData.calls[")
+                        if exp.content.starts_with("$citryPrepared.calls.")
+                            || exp.content.starts_with("$citryPrepared.calls[")
                             || matches!(exp.content, "citryOccurrenceId" | "citryLocalId")))
             })
             && state
@@ -935,6 +1395,10 @@ fn walk(
             local_call,
             local_descendants: Vec::new(),
             local_descendant_runs: Vec::new(),
+            slot_outlets: Vec::new(),
+            fills: Vec::new(),
+            slot_name: slot_outlet_name(element),
+            fill_name: slot_fill_name(element),
         });
         walk(
             &element.children,
@@ -943,6 +1407,47 @@ fn walk(
             state,
         );
     }
+}
+
+/// The static `name` of a `<slot>` outlet. The producer always writes one; an
+/// outlet without it is left out, so a component placed through it still
+/// fails the browser's remount check instead of being accepted silently.
+fn slot_outlet_name(element: &ElementNode<'_>) -> Option<String> {
+    if element.tag != "slot" {
+        return None;
+    }
+    element.props.iter().find_map(|prop| match prop {
+        PropNode::Attribute(item) if item.name == "name" => {
+            item.value.as_ref().map(|value| value.content.to_owned())
+        }
+        _ => None,
+    })
+}
+
+/// The slot a `<template v-slot>` fills, when its name is written literally:
+/// `v-slot:name`, `#name`, or the producer's `v-slot:['name']`.
+fn slot_fill_name(element: &ElementNode<'_>) -> Option<String> {
+    if element.tag != "template" {
+        return None;
+    }
+    element.props.iter().find_map(|prop| match prop {
+        PropNode::Directive(d) if d.name == "slot" => match d.arg.as_ref() {
+            Some(ExpressionNode::Simple(arg)) if arg.is_static => Some(arg.content.to_owned()),
+            Some(ExpressionNode::Simple(arg)) => string_literal(arg.content.trim()),
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
+/// The text of a quoted JavaScript string with no quotes or escapes inside.
+fn string_literal(content: &str) -> Option<String> {
+    let quote = content.chars().next()?;
+    if !matches!(quote, '\'' | '"') || content.len() < 2 || !content.ends_with(quote) {
+        return None;
+    }
+    let inner = &content[1..content.len() - 1];
+    (!inner.contains(['\'', '"', '\\'])).then(|| inner.to_owned())
 }
 
 fn plan_dynamic_model_marker(
@@ -1018,7 +1523,7 @@ fn plan_key_edit(
                 None => false,
             }
         {
-            let expected = prepared_key.map(|name| format!("preparedData.{name}"));
+            let expected = prepared_key.map(|name| format!("$citryPrepared.{name}"));
             let authorized = matches!(d.exp.as_ref(), Some(ExpressionNode::Simple(exp)) if expected.as_deref() == Some(exp.content));
             if authorized {
                 continue;
@@ -1043,7 +1548,7 @@ fn plan_key_edit(
         }
     });
     let prepared_key_attr = prepared_key.and_then(|name| {
-        let expected = format!("preparedData.{name}");
+        let expected = format!("$citryPrepared.{name}");
         element.props.iter().find_map(|prop| match prop {
             PropNode::Directive(d)
                 if d.name == "bind"
@@ -1055,7 +1560,7 @@ fn plan_key_edit(
     // The key is a compiler-owned ASCII digest; no user value enters JavaScript source.
     let attribute = prepared_key.map_or_else(
         || format!(r#"key="{key}""#),
-        |name| format!(r#":key="JSON.stringify(['{key}', preparedData.{name}])""#),
+        |name| format!(r#":key="JSON.stringify(['{key}', $citryPrepared.{name}])""#),
     );
     let replacement = if static_key.is_some() || prepared_key.is_some() {
         attribute
@@ -1163,7 +1668,7 @@ fn validate_element_binding(
         element.props.iter().any(|prop| matches!(prop, PropNode::Directive(d) if d.name=="bind" && match (arg,d.arg.as_ref()) { (None,None)=>true,(Some(want),Some(ExpressionNode::Simple(value)))=>value.content==want,_=>false } && matches!(d.exp.as_ref(),Some(ExpressionNode::Simple(value)) if value.content==expected)))
     };
     if let Some(key) = &binding.attrs_binding_key
-        && !has(None, &format!("preparedData.{key}"))
+        && !has(None, &format!("$citryPrepared.{key}"))
     {
         diagnostics.push(diag(
             "metadata",
@@ -1174,7 +1679,7 @@ fn validate_element_binding(
         ));
     }
     if let Some(key) = &binding.key_binding_key
-        && !has(Some("key"), &format!("preparedData.{key}"))
+        && !has(Some("key"), &format!("$citryPrepared.{key}"))
     {
         diagnostics.push(diag(
             "metadata",
@@ -1200,7 +1705,7 @@ fn validate_element_binding(
             ));
             return;
         }
-        let expected = format!("$citryEvents.runtimeEvents(preparedData.{key})");
+        let expected = format!("$citryEvents.runtimeEvents($citryPrepared.{key})");
         let matches = element.props.iter().filter(|prop| matches!(prop,
             PropNode::Directive(d)
                 if d.name == "citry-runtime-events"
@@ -1247,7 +1752,7 @@ fn browser_binding_expression(content: &str, key: &str) -> bool {
     let Expression::Identifier(object) = &first.object else {
         return false;
     };
-    if object.name != "preparedData" {
+    if object.name != "$citryPrepared" {
         return false;
     }
     match call.arguments.as_slice() {
@@ -1300,7 +1805,7 @@ fn validate_local_call_run(
         ));
         return None;
     }
-    let collection_expression = format!("preparedData.callRuns.{}", run.run_id);
+    let collection_expression = format!("$citryPrepared.callRuns.{}", run.run_id);
     let id_expression = "citryOccurrenceId".to_owned();
     let key_expression = "citryOccurrenceId".to_owned();
     let run_source = format!(
@@ -1363,8 +1868,8 @@ fn validate_local_call(
         ));
         return None;
     }
-    let id = format!("preparedData.calls.{}.id", call.local_id);
-    let key = format!("preparedData.calls.{}.key", call.local_id);
+    let id = format!("$citryPrepared.calls.{}.id", call.local_id);
+    let key = format!("$citryPrepared.calls.{}.key", call.local_id);
     let has = |name: &str, expected: &str| {
         element.props.iter().any(|p| matches!(p,PropNode::Directive(d) if d.name=="bind" && matches!(d.arg.as_ref(),Some(ExpressionNode::Simple(a)) if a.content==name) && matches!(d.exp.as_ref(),Some(ExpressionNode::Simple(e)) if e.content==expected)))
     };
@@ -1385,13 +1890,29 @@ fn validate_local_call(
         "event",
         "ref-static",
         "ref-expression",
+        "show",
+        "condition",
+        "model",
+        "directive",
     ];
     let mut claimed_spans = HashSet::new();
     for binding in &call.bindings {
         let within_call = binding.source_start >= call.source_start
             && binding.source_end <= call.source_end
             && binding.source_start < binding.source_end;
-        let expected = format!("{}=\"{}\"", binding.name, html_escape_attr(&binding.value));
+        // Python writes an authored binding exactly as the author wrote it,
+        // and a generated Citry handler call escaped. Both encodings name the
+        // declared value; which one the source holds decides how the parsed
+        // expression must compare with it.
+        let written = source_span(source, binding.source_start, binding.source_end);
+        let encoded = format!("{}=\"{}\"", binding.name, html_escape_attr(&binding.value));
+        let verbatim = verbatim_attr(&binding.name, &binding.value);
+        let written_verbatim = written != Some(encoded.as_str())
+            && written.is_some()
+            && written == verbatim.as_deref();
+        // `v-else` and a custom directive without a value are written as the
+        // bare name and parse with no expression.
+        let written_bare = binding.value.is_empty() && written == Some(binding.name.as_str());
         let parsed_match = element
             .props
             .iter()
@@ -1424,7 +1945,47 @@ fn validate_local_call(
                         }
                         "event" => directive.name == "on" && argument.is_some(),
                         "ref-expression" => directive.name == "bind" && argument == Some("ref"),
+                        "show" => {
+                            directive.name == "show"
+                                && directive.arg.is_none()
+                                && directive.modifiers.is_empty()
+                        }
+                        "condition" => {
+                            matches!(directive.name, "if" | "else-if" | "else")
+                                && binding.name == format!("v-{}", directive.name)
+                                && directive.arg.is_none()
+                                && directive.modifiers.is_empty()
+                        }
+                        "model" => directive.name == "model",
+                        // The template parser and Python both accept only a
+                        // custom name here; checking again keeps a Vue
+                        // built-in from passing as one.
+                        "directive" => matches!(
+                            directive_runtime_identity(element, directive.name, true).0.as_deref(),
+                            Some(implementation) if implementation == format!("resolveDirective:{}", directive.name)
+                        ) && !directive.name.starts_with("c-")
+                            && !directive.name.starts_with("citry-"),
                         _ => false,
+                    };
+                    if written_bare {
+                        return semantic
+                            && directive.exp.is_none()
+                            && directive.loc.span.start == binding.source_start
+                            && directive.loc.span.end == binding.source_end;
+                    }
+                    // The parser decodes character references in `content`,
+                    // so an escaped value decodes back to the declared one.
+                    // A verbatim value is the declared text itself, entities
+                    // included, so compare the raw source instead.
+                    let expression = if written_verbatim {
+                        directive.exp.as_ref().and_then(|exp| match exp {
+                            ExpressionNode::Simple(value) => {
+                                source_span(source, value.loc.span.start, value.loc.span.end)
+                            }
+                            ExpressionNode::Compound(_) => None,
+                        })
+                    } else {
+                        expression
                     };
                     semantic
                         && expression == Some(binding.value.as_str())
@@ -1437,8 +1998,7 @@ fn validate_local_call(
         if !within_call
             || !valid_binding_kinds.contains(&binding.kind.as_str())
             || !claimed_spans.insert((binding.source_start, binding.source_end))
-            || source_span(source, binding.source_start, binding.source_end)
-                != Some(expected.as_str())
+            || (written != Some(encoded.as_str()) && !written_verbatim && !written_bare)
             || !parsed_match
         {
             diagnostics.push(diag(
@@ -1485,6 +2045,18 @@ fn validate_local_call(
         key_expression: key,
         bindings: call.bindings.clone(),
     })
+}
+
+/// The attribute text Python writes for an authored binding: the value as
+/// the author wrote it, inside whichever quote it does not contain.
+fn verbatim_attr(name: &str, value: &str) -> Option<String> {
+    if !value.contains('"') {
+        Some(format!("{name}=\"{value}\""))
+    } else if !value.contains('\'') {
+        Some(format!("{name}='{value}'"))
+    } else {
+        None
+    }
 }
 
 fn html_escape_attr(value: &str) -> String {
@@ -1581,6 +2153,201 @@ fn emitted_helpers(preamble: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn authored_text_plan_is_source_bound_and_compares_atelier_text() {
+        let cases = [
+            ("<p>leaf</p>", 0),
+            ("<main><p>child</p></main>", 0),
+            ("<p>{{ $citryPrepared.label }}</p>", 0),
+            ("<p> \n \t </p>", 1),
+            ("<p>a \n   b</p>", 1),
+            ("<!-- note --><p>x</p>", 1),
+            ("<pre><span> \n A</span></pre>", 0),
+            ("<div><p>first</p>\n  <p>second</p></div>", 1),
+            ("<p>&nbsp; </p>", 0),
+            ("<p>A &amp;  B</p>", 1),
+            ("<p>&#10;</p>", 0),
+            ("<pre>\n\nA</pre>", 0),
+            ("<p>é  A</p>", 1),
+        ];
+        for (source, expected_actions) in cases {
+            let artifact = compile(CompileRequest {
+                template: source.to_owned(),
+                local_calls: vec![],
+                local_call_runs: vec![],
+                element_bindings: vec![],
+                dynamic_elements: vec![],
+            });
+            let plan = artifact.authored_text_plan;
+            assert_eq!(plan.source, "transformedTemplate");
+            assert_eq!(plan.source_sha256, hash(source));
+            assert_eq!(plan.actions.len(), expected_actions, "{source:?}");
+            if matches!(
+                source,
+                "<p>leaf</p>" | "<main><p>child</p></main>" | "<p>{{ $citryPrepared.label }}</p>"
+            ) {
+                assert!(matches!(plan.status, AuthoredTextPlanStatus::Complete));
+                assert_eq!(plan.reason_code, None);
+            } else {
+                assert_eq!(
+                    matches!(plan.status, AuthoredTextPlanStatus::Unsupported),
+                    plan.reason_code.is_some(),
+                    "status and reason diverged for {source:?}"
+                );
+            }
+            for action in &plan.actions {
+                assert!(
+                    source
+                        .get(action.source_start as usize..action.source_end as usize)
+                        .is_some()
+                );
+            }
+        }
+        for source in ["<!-- note --><p>x</p>", "<p>&nbsp; </p>", "<p>&#10;</p>"] {
+            let artifact = compile(CompileRequest {
+                template: source.to_owned(),
+                local_calls: vec![],
+                local_call_runs: vec![],
+                element_bindings: vec![],
+                dynamic_elements: vec![],
+            });
+            assert!(
+                matches!(
+                    artifact.authored_text_plan.status,
+                    AuthoredTextPlanStatus::Unsupported
+                ),
+                "{source:?}: {:?}",
+                artifact.authored_text_plan
+            );
+        }
+        let adjacent_interpolation = compile(CompileRequest {
+            template: "<p>a {{ $citryPrepared.label }} b</p>".to_owned(),
+            local_calls: vec![],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        assert!(matches!(
+            adjacent_interpolation.authored_text_plan.status,
+            AuthoredTextPlanStatus::Complete
+        ));
+        let mixed_whitespace = compile(CompileRequest {
+            template: "<p>a \n   b</p>".to_owned(),
+            local_calls: vec![],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        assert!(matches!(
+            mixed_whitespace.authored_text_plan.status,
+            AuthoredTextPlanStatus::Complete
+        ));
+        assert_eq!(
+            mixed_whitespace.authored_text_plan.actions[0]
+                .content
+                .as_deref(),
+            Some("a b")
+        );
+        let indented_siblings = compile(CompileRequest {
+            template: "<div><p>first</p>\n  <p>second</p></div>".to_owned(),
+            local_calls: vec![],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        assert!(
+            indented_siblings
+                .authored_text_plan
+                .actions
+                .iter()
+                .any(|action| action.action_type == "drop")
+        );
+        assert!(matches!(
+            indented_siblings.authored_text_plan.status,
+            AuthoredTextPlanStatus::Complete
+        ));
+
+        let pre_newlines = compile(CompileRequest {
+            template: "<pre>\n\nA</pre>".to_owned(),
+            local_calls: vec![],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        assert!(pre_newlines.authored_text_plan.actions.is_empty());
+        assert!(matches!(
+            pre_newlines.authored_text_plan.status,
+            AuthoredTextPlanStatus::Complete
+        ));
+
+        let unicode = compile(CompileRequest {
+            template: "<p>é  A</p>".to_owned(),
+            local_calls: vec![],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        })
+        .authored_text_plan;
+        assert_eq!(unicode.actions[0].source_start, 3);
+        assert_eq!(
+            &"<p>é  A</p>".as_bytes()
+                [unicode.actions[0].source_start as usize..unicode.actions[0].source_end as usize],
+            "é  A".as_bytes()
+        );
+        let json = serde_json::to_value(unicode).unwrap();
+        assert_eq!(json["status"], "complete");
+        assert!(json.get("reasonCode").is_none());
+        assert_eq!(json["actions"][0]["type"], "rewrite");
+    }
+
+    #[test]
+    fn authored_text_spans_map_only_through_unchanged_source_gaps() {
+        let source = "<div v-show=\"visible\">é  A</div>";
+        let artifact = compile(CompileRequest {
+            template: source.to_owned(),
+            local_calls: vec![],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        let plan = artifact.authored_text_plan;
+        assert_eq!(plan.original_source_sha256, hash(source));
+        assert!(
+            artifact
+                .transformed_template
+                .starts_with("<div key=\"citryReplacement")
+        );
+        assert_ne!(artifact.transformed_template, source);
+        let action = plan
+            .actions
+            .first()
+            .expect("mixed authored whitespace creates a text action");
+        let original_start = source.find('é').unwrap();
+        let original_end = source.find("</div>").unwrap();
+        assert_eq!(action.original_start, Some(original_start as u32));
+        assert_eq!(action.original_end, Some(original_end as u32));
+        assert_eq!(
+            &artifact.transformed_template.as_bytes()
+                [action.source_start as usize..action.source_end as usize],
+            &source.as_bytes()[original_start..original_end]
+        );
+
+        let original = "<p>é  A</p>";
+        let insertion = original.find("  ").unwrap() + 1;
+        let edit = Edit {
+            start: insertion,
+            end: insertion,
+            replacement: "generated".to_owned(),
+        };
+        let transformed = apply_edits(original, std::slice::from_ref(&edit));
+        let unchanged = unchanged_source_spans(original, &[edit]).unwrap();
+        assert_eq!(
+            map_action_to_original(&transformed, original, 3, 8, &unchanged),
+            None,
+            "an insertion inside an authored text action cannot be mapped"
+        );
+    }
+
     fn call_run_request(template: &str) -> CompileRequest {
         let source_start = template.find("<component").unwrap();
         let source_end = source_start + template[source_start..].find('>').unwrap() + 1;
@@ -1601,7 +2368,7 @@ mod tests {
         }
     }
 
-    const CALL_RUN: &str = "<component v-for=\"citryOccurrenceId in preparedData.callRuns.citryRun0\" :is=\"'citry-row'\" :citry-id=\"citryOccurrenceId\" :key=\"citryOccurrenceId\"></component>";
+    const CALL_RUN: &str = "<component v-for=\"citryOccurrenceId in $citryPrepared.callRuns.citryRun0\" :is=\"'citry-row'\" :citry-id=\"citryOccurrenceId\" :key=\"citryOccurrenceId\"></component>";
 
     #[test]
     fn validates_exact_local_call_run_and_reports_it_to_stable_ancestor() {
@@ -1614,7 +2381,10 @@ mod tests {
         );
         assert_eq!(artifact.local_call_runs.len(), 1);
         let run = &artifact.local_call_runs[0];
-        assert_eq!(run.collection_expression, "preparedData.callRuns.citryRun0");
+        assert_eq!(
+            run.collection_expression,
+            "$citryPrepared.callRuns.citryRun0"
+        );
         assert_eq!(run.id_expression, "citryOccurrenceId");
         assert_eq!(run.key_expression, "citryOccurrenceId");
         assert_eq!(artifact.elements[0].local_descendant_runs, ["citryRun0"]);
@@ -1629,6 +2399,52 @@ mod tests {
         assert!(resolution > render_list);
         assert!(artifact.code.contains("128 /* KEYED_FRAGMENT */"));
         assert!(!artifact.code.contains("64 /* STABLE_FRAGMENT */"));
+    }
+
+    #[test]
+    fn hydration_plan_reads_local_call_runs_and_literal_slot_names() {
+        let template = format!("<div title=\"ž\" v-show=\"shown\">{CALL_RUN}</div>");
+        let artifact = compile(call_run_request(&template));
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        let plan = &artifact.hydration_plan;
+        assert_eq!(plan.status, HydrationPlanStatus::Complete);
+        // The generated run is a component loop: one list Fragment keyed to
+        // the loop's bytes in the compiler input.
+        assert_eq!(plan.anchors.len(), 1);
+        assert_eq!(plan.anchors[0].origin, "v-for");
+        assert_eq!(
+            plan.anchors[0].original_start,
+            template.find("<component").map(|offset| offset as u32)
+        );
+        assert_eq!(
+            plan.elements
+                .iter()
+                .map(|element| (element.vnode, element.tag.as_str()))
+                .collect::<Vec<_>>(),
+            [("element", "div"), ("component", "component")]
+        );
+
+        // Citry names forwarded slots with a quoted literal argument.
+        let slotted = compile(CompileRequest {
+            template: "<my-layout><template v-slot:['citrySlotA']><slot name=\"citrySlotB\"></slot></template></my-layout>".to_owned(),
+            local_calls: vec![],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        let plan = &slotted.hydration_plan;
+        assert_eq!(plan.status, HydrationPlanStatus::Complete);
+        assert_eq!(
+            plan.anchors
+                .iter()
+                .map(|anchor| anchor.origin)
+                .collect::<Vec<_>>(),
+            ["slot"]
+        );
     }
 
     #[test]
@@ -1683,7 +2499,7 @@ mod tests {
             CALL_RUN.replace(" :key=\"citryOccurrenceId\"", ""),
             CALL_RUN.replace(
                 ":key=\"citryOccurrenceId\"",
-                ":key=\"preparedData.calls[citryOccurrenceId].key\"",
+                ":key=\"$citryPrepared.calls[citryOccurrenceId].key\"",
             ),
             CALL_RUN.replace(":citry-id=\"citryOccurrenceId\"", ":citry-id=\"wrong\""),
             CALL_RUN.replace(" :key=", " data-extra=\"x\" :key="),
@@ -1807,7 +2623,7 @@ mod tests {
 
     #[test]
     fn validates_runtime_event_directives_against_their_declared_binding_key() {
-        let template = r#"<button v-citry-runtime-events="$citryEvents.runtimeEvents(preparedData.citryRuntimeEventsA)">save</button>"#;
+        let template = r#"<button v-citry-runtime-events="$citryEvents.runtimeEvents($citryPrepared.citryRuntimeEventsA)">save</button>"#;
         let source_end = template.find('>').unwrap() + 1;
         let compile_with_key = |runtime_events_binding_key: Option<&str>| {
             compile(CompileRequest {
@@ -1883,14 +2699,14 @@ mod tests {
     #[test]
     fn keeps_supported_directives_on_single_children_of_template_v_for() {
         let template = concat!(
-            "<template v-if=\"preparedData.citryIf0 === 0\">",
-            "<template v-for=\"preparedData in preparedData.citryLoop0\">",
-            "<input v-show=\"preparedData.visible\" ",
-            "v-model=\"preparedData.value\" ",
+            "<template v-if=\"$citryPrepared.citryIf0 === 0\">",
+            "<template v-for=\"$citryPrepared in $citryPrepared.citryLoop0\">",
+            "<input v-show=\"$citryPrepared.visible\" ",
+            "v-model=\"$citryPrepared.value\" ",
             "v-citry-event-timing.debounce.30ms=\"$citryEvents.dispatch\" ",
-            "v-citry-runtime-events=\"$citryEvents.runtimeEvents(preparedData.citryRuntimeEvents0)\" ",
+            "v-citry-runtime-events=\"$citryEvents.runtimeEvents($citryPrepared.citryRuntimeEvents0)\" ",
             "v-citry-control=\"$citryEvents.control\" ",
-            "v-bind=\"preparedData.citryAttrs0\">",
+            "v-bind=\"$citryPrepared.citryAttrs0\">",
             "</template></template>"
         );
         let source_start = template.find("<input").unwrap();
@@ -1924,8 +2740,8 @@ mod tests {
             );
         }
         assert!(artifact.code.contains("_withDirectives("));
-        assert!(artifact.code.contains("(preparedData) => {"));
-        let runtime_tuple = "runtimeEvents(preparedData.citryRuntimeEvents0)";
+        assert!(artifact.code.contains("($citryPrepared) => {"));
+        let runtime_tuple = "runtimeEvents($citryPrepared.citryRuntimeEvents0)";
         let with_directives = artifact.code.find("_withDirectives(").unwrap();
         let runtime_expression = artifact.code.find(runtime_tuple).unwrap();
         assert!(
@@ -1933,7 +2749,7 @@ mod tests {
             "runtime directive expression must remain in the v-for child's directive tuple: {}",
             artifact.code
         );
-        for expression in ["preparedData.visible", "preparedData.value"] {
+        for expression in ["$citryPrepared.visible", "$citryPrepared.value"] {
             assert!(
                 artifact.code.contains(expression),
                 "missing loop-scoped directive expression {expression}: {}",
@@ -1954,7 +2770,7 @@ mod tests {
 
     #[test]
     fn validates_local_calls_without_absolute_occurrence_ids() {
-        let template = "<citry-child :citry-id=\"preparedData.calls.citryCallA.id\" :key=\"preparedData.calls.citryCallA.key\"></citry-child>";
+        let template = "<citry-child :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child>";
         let artifact = compile(CompileRequest {
             template: template.to_owned(),
             local_calls: vec![LocalCall {
@@ -1986,8 +2802,68 @@ mod tests {
     }
 
     #[test]
+    fn reports_slot_outlets_inside_elements_and_fills_inside_local_calls() {
+        let frame = r#"<citry-frame :citry-id="$citryPrepared.calls.citryCallA.id" :key="$citryPrepared.calls.citryCallA.key">"#;
+        let leaf = r#"<citry-leaf :citry-id="$citryPrepared.calls.citryCallB.id" :key="$citryPrepared.calls.citryCallB.key">"#;
+        let template = format!(
+            r#"<main>{frame}<template v-slot:['citrySlotX']>{leaf}</citry-leaf><slot name="citrySlotF"></slot></template></citry-frame><div v-show="$citryPrepared.o"><slot v-if="$citryPrepared.selectedSlots['citrySlotY'] === 'supplied'" name="citrySlotY"></slot></div></main>"#
+        );
+        let span = |opening: &str| {
+            let start = template.find(opening).unwrap();
+            (start as u32, (start + opening.len()) as u32)
+        };
+        let call = |local_id: &str, type_key: &str, tag: &str, opening: &str| LocalCall {
+            local_id: local_id.to_owned(),
+            type_key: type_key.to_owned(),
+            component_tag: tag.to_owned(),
+            source_start: span(opening).0,
+            source_end: span(opening).1,
+            bindings: vec![],
+        };
+        let artifact = compile(CompileRequest {
+            template: template.clone(),
+            local_calls: vec![
+                call("citryCallA", "Frame", "citry-frame", frame),
+                call("citryCallB", "Leaf", "citry-leaf", leaf),
+            ],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        let by_tag = |tag: &str| {
+            artifact
+                .elements
+                .iter()
+                .find(|element| element.tag == tag)
+                .unwrap()
+        };
+        // The fill names the call inside it and the slot it passes on.
+        let fills = serde_json::to_value(&by_tag("citry-frame").fills).unwrap();
+        assert_eq!(
+            fills,
+            serde_json::json!([{
+                "name": "citrySlotX",
+                "localDescendants": ["citryCallB"],
+                "localDescendantRuns": [],
+                "slotOutlets": ["citrySlotF"],
+            }])
+        );
+        // The replaced element names the outlet written inside it.
+        let wrapper = by_tag("div");
+        assert!(wrapper.replacement_key.is_some());
+        assert_eq!(wrapper.slot_outlets, ["citrySlotY"]);
+        assert_eq!(by_tag("main").slot_outlets, ["citrySlotF", "citrySlotY"]);
+        assert!(by_tag("citry-leaf").fills.is_empty());
+    }
+
+    #[test]
     fn validates_declared_native_component_call_bindings() {
-        let template = "<citry-child :disabled=\"blocked\" :citry-id=\"preparedData.calls.citryCallA.id\" :key=\"preparedData.calls.citryCallA.key\"></citry-child>";
+        let template = "<citry-child :disabled=\"blocked\" :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child>";
         let binding_start = template.find(":disabled").unwrap();
         let binding_end = binding_start + ":disabled=\"blocked\"".len();
         let artifact = compile(CompileRequest {
@@ -2021,6 +2897,371 @@ mod tests {
             .find_map(|item| item.local_call.as_ref())
             .unwrap();
         assert_eq!(call.bindings[0].name, ":disabled");
+    }
+
+    fn compile_shown_call(directive: &str) -> CompileArtifact {
+        let template = format!(
+            "<main><citry-child {directive}=\"visible\" :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child></main>"
+        );
+        let call_start = template.find("<citry-child").unwrap();
+        let binding_start = template.find(directive).unwrap();
+        let binding_end = binding_start + format!("{directive}=\"visible\"").len();
+        compile(CompileRequest {
+            local_calls: vec![LocalCall {
+                local_id: "citryCallA".to_owned(),
+                type_key: "Child".to_owned(),
+                component_tag: "citry-child".to_owned(),
+                source_start: call_start as u32,
+                source_end: (call_start + template[call_start..].find('>').unwrap() + 1) as u32,
+                bindings: vec![ComponentCallBinding {
+                    kind: "show".to_owned(),
+                    name: directive.to_owned(),
+                    value: "visible".to_owned(),
+                    source_start: binding_start as u32,
+                    source_end: binding_end as u32,
+                }],
+            }],
+            template,
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        })
+    }
+
+    #[test]
+    fn declared_v_show_on_a_component_call_keeps_the_citry_key() {
+        let artifact = compile_shown_call("v-show");
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        let call = artifact
+            .elements
+            .iter()
+            .find(|item| item.local_call.is_some())
+            .unwrap();
+        // The call keeps its own key: no replacement key and no entry for
+        // the browser's directive-signature comparison.
+        assert_eq!(call.directives.len(), 3);
+        assert_eq!(call.directives[0].name, "show");
+        assert_eq!(
+            call.directives[0].runtime_implementation.as_deref(),
+            Some("vShow")
+        );
+        assert!(!call.directives[0].runtime_lifecycle);
+        assert_eq!(call.replacement_key, None);
+        assert!(!artifact.transformed_template.contains("citryReplacement"));
+        assert!(artifact.code.contains("[_vShow, _ctx.visible]"));
+        assert_eq!(artifact.root_shape, "element");
+    }
+
+    #[test]
+    fn component_calls_reject_v_show_modifiers_and_undeclared_directives() {
+        let modified = compile_shown_call("v-show.lazy");
+        assert!(
+            modified
+                .diagnostics
+                .iter()
+                .any(|item| item.code == "LOCAL_CALL_CLIENT_BINDING_MISMATCH"),
+            "{:?}",
+            modified.diagnostics
+        );
+        let template = "<citry-child v-model=\"query\" :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child>";
+        let undeclared = compile(CompileRequest {
+            template: template.to_owned(),
+            local_calls: vec![LocalCall {
+                local_id: "citryCallA".to_owned(),
+                type_key: "Child".to_owned(),
+                component_tag: "citry-child".to_owned(),
+                source_start: 0,
+                source_end: (template.find('>').unwrap() + 1) as u32,
+                bindings: vec![],
+            }],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        assert!(
+            undeclared
+                .diagnostics
+                .iter()
+                .any(|item| item.code == "LOCAL_CALL_CLIENT_BINDING_MISMATCH"),
+            "{:?}",
+            undeclared.diagnostics
+        );
+    }
+
+    /// Compile one declared call carrying `attributes`, each written as
+    /// `(kind, source text, declared name, declared value)`.
+    fn compile_call_with(attributes: &[(&str, &str, &str, &str)]) -> CompileArtifact {
+        let written = attributes
+            .iter()
+            .map(|(_, text, _, _)| *text)
+            .collect::<Vec<_>>()
+            .join(" ");
+        let template = format!(
+            "<main><citry-child {written} :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child></main>"
+        );
+        let call_start = template.find("<citry-child").unwrap();
+        let mut cursor = call_start;
+        let bindings = attributes
+            .iter()
+            .map(|(kind, text, name, value)| {
+                let start = cursor + template[cursor..].find(text).unwrap();
+                cursor = start + text.len();
+                ComponentCallBinding {
+                    kind: (*kind).to_owned(),
+                    name: (*name).to_owned(),
+                    value: (*value).to_owned(),
+                    source_start: start as u32,
+                    source_end: (start + text.len()) as u32,
+                }
+            })
+            .collect();
+        compile(CompileRequest {
+            local_calls: vec![LocalCall {
+                local_id: "citryCallA".to_owned(),
+                type_key: "Child".to_owned(),
+                component_tag: "citry-child".to_owned(),
+                source_start: call_start as u32,
+                source_end: (call_start + template[call_start..].find('>').unwrap() + 1) as u32,
+                bindings,
+            }],
+            template,
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        })
+    }
+
+    #[test]
+    fn declared_conditions_models_and_custom_directives_on_a_call() {
+        let artifact = compile_call_with(&[
+            ("condition", "v-if=\"open\"", "v-if", "open"),
+            (
+                "model",
+                "v-model:title.trim=\"t\"",
+                "v-model:title.trim",
+                "t",
+            ),
+            ("directive", "v-focus", "v-focus", ""),
+            (
+                "directive",
+                "v-tip:top.delay=\"tip\"",
+                "v-tip:top.delay",
+                "tip",
+            ),
+        ]);
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        let call = artifact
+            .elements
+            .iter()
+            .find(|item| item.local_call.is_some())
+            .unwrap();
+        let runtime = call
+            .directives
+            .iter()
+            .map(|item| {
+                (
+                    item.name.as_str(),
+                    item.runtime_implementation.as_deref(),
+                    item.runtime_lifecycle,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            runtime[..4],
+            [
+                ("if", None, false),
+                // `v-model` on a component is a prop and a listener.
+                ("model", None, false),
+                ("focus", Some("resolveDirective:focus"), false),
+                ("tip", Some("resolveDirective:tip"), false),
+            ]
+        );
+        assert_eq!(call.replacement_key, None);
+        assert!(!artifact.code.contains("_vModel"));
+        assert!(artifact.code.contains("titleModifiers: { trim: true }"));
+        assert!(artifact.code.contains("[_directive_focus]"));
+        assert!(
+            artifact
+                .code
+                .contains("[_directive_tip, _ctx.tip, \"top\", { \"delay\": true }]")
+        );
+
+        let bare_else = compile_call_with(&[("condition", "v-else", "v-else", "")]);
+        // Only the missing `v-if` is reported: the bare binding matched.
+        assert!(
+            bare_else
+                .diagnostics
+                .iter()
+                .all(|item| item.code != "LOCAL_CALL_CLIENT_BINDING_MISMATCH"),
+            "{:?}",
+            bare_else.diagnostics
+        );
+    }
+
+    #[test]
+    fn call_bindings_must_match_their_declared_kind() {
+        for attributes in [
+            // A condition declared for another directive.
+            [("condition", "v-model=\"q\"", "v-model", "q")],
+            // A declared `v-else` name that the source spells `v-if`.
+            [("condition", "v-if=\"a\"", "v-else", "a")],
+            // A built-in or Citry-owned directive declared as custom.
+            [("directive", "v-html=\"h\"", "v-html", "h")],
+            [("directive", "v-citry-control=\"c\"", "v-citry-control", "c")],
+            // A declared empty value written with a value.
+            [("directive", "v-focus=\"x\"", "v-focus", "")],
+        ] {
+            let artifact = compile_call_with(&attributes);
+            assert!(
+                artifact
+                    .diagnostics
+                    .iter()
+                    .any(|item| item.code == "LOCAL_CALL_CLIENT_BINDING_MISMATCH"),
+                "{attributes:?}: {:?}",
+                artifact.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn custom_directive_on_an_element_is_a_runtime_directive() {
+        let artifact = compile(CompileRequest {
+            template: "<main><p v-focus:x.a=\"1\">text</p></main>".to_owned(),
+            local_calls: vec![],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        let element = artifact
+            .elements
+            .iter()
+            .find(|item| item.tag == "p")
+            .unwrap();
+        assert_eq!(
+            element.directives[0].runtime_implementation.as_deref(),
+            Some("resolveDirective:focus")
+        );
+        assert!(element.directives[0].runtime_lifecycle);
+        assert!(element.replacement_key.is_some());
+    }
+
+    #[test]
+    fn reports_the_render_root_shape_a_caller_v_show_needs() {
+        let shape = |template: &str| {
+            compile(CompileRequest {
+                template: template.to_owned(),
+                local_calls: vec![],
+                local_call_runs: vec![],
+                element_bindings: vec![],
+                dynamic_elements: vec![],
+            })
+            .root_shape
+        };
+        assert_eq!(shape("<section>a</section>"), "element");
+        assert_eq!(shape("<!-- note --><section>a</section>"), "element");
+        assert_eq!(
+            shape("<p v-if=\"on\">a</p><span v-else>b</span>"),
+            "element"
+        );
+        assert_eq!(shape("<p v-if=\"on\">a</p>"), "element");
+        assert_eq!(shape("<p>a</p><p>b</p>"), "fragment");
+        assert_eq!(shape("<p v-for=\"x in xs\" :key=\"x\">a</p>"), "fragment");
+        assert_eq!(
+            shape("<template v-if=\"on\"><p>a</p><p>b</p></template>"),
+            "fragment"
+        );
+        assert_eq!(shape("text"), "text");
+        assert_eq!(
+            shape(
+                "<citry-opaque-html :record=\"$citryPrepared.opaqueHtml.citryOpaque0\"></citry-opaque-html>"
+            ),
+            "opaque-html"
+        );
+        assert_eq!(shape(""), "empty");
+    }
+
+    fn compile_listener_call(attribute: &str, value: &str) -> CompileArtifact {
+        let template = format!(
+            "<citry-child {attribute} :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child>"
+        );
+        compile(CompileRequest {
+            local_calls: vec![LocalCall {
+                local_id: "citryCallA".to_owned(),
+                type_key: "Child".to_owned(),
+                component_tag: "citry-child".to_owned(),
+                source_start: 0,
+                source_end: (template.find('>').unwrap() + 1) as u32,
+                bindings: vec![ComponentCallBinding {
+                    kind: "event".to_owned(),
+                    name: "@input".to_owned(),
+                    value: value.to_owned(),
+                    source_start: 13,
+                    source_end: (13 + attribute.len()) as u32,
+                }],
+            }],
+            template,
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        })
+    }
+
+    #[test]
+    fn verbatim_statement_listener_on_a_call_compiles_its_comparison() {
+        // A handler written as statements is compiled from the raw attribute
+        // text, so `<` must reach the compiler unescaped.
+        let value = "x = $event.target.value.length < 3; y = 'a'";
+        let artifact = compile_listener_call(&format!("@input=\"{value}\""), value);
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        assert!(
+            artifact.code.contains("$event.target.value.length < 3"),
+            "{}",
+            artifact.code
+        );
+        // A value holding a double quote is written inside single quotes.
+        let quoted = "x = \"a\" < y";
+        let artifact = compile_listener_call(&format!("@input='{quoted}'"), quoted);
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        // The escaped form of a generated call still names the same value.
+        let call = "$citryEvents.dispatchComponent('id', $event, (a < b))";
+        let escaped = html_escape_attr(call);
+        let artifact = compile_listener_call(&format!("@input=\"{escaped}\""), call);
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        // Text that is neither encoding of the declared value is rejected.
+        let artifact = compile_listener_call("@input=\"x = 2\"", "x = 1");
+        assert!(
+            artifact
+                .diagnostics
+                .iter()
+                .any(|item| item.code == "LOCAL_CALL_CLIENT_BINDING_MISMATCH"),
+            "{:?}",
+            artifact.diagnostics
+        );
     }
 
     #[test]
@@ -2125,7 +3366,7 @@ mod tests {
             })
         };
         let extra = compile_case(
-            "<citry-child :disabled=\"blocked\" v-bind=\"evil\" :citry-id=\"preparedData.calls.citryCallA.id\" :key=\"preparedData.calls.citryCallA.key\"></citry-child>",
+            "<citry-child :disabled=\"blocked\" v-bind=\"evil\" :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child>",
         );
         assert!(
             extra
@@ -2134,7 +3375,7 @@ mod tests {
                 .any(|item| item.code == "LOCAL_CALL_CLIENT_BINDING_MISMATCH")
         );
         let reordered = compile_case(
-            "<citry-child :citry-id=\"preparedData.calls.citryCallA.id\" :disabled=\"blocked\" :key=\"preparedData.calls.citryCallA.key\"></citry-child>",
+            "<citry-child :citry-id=\"$citryPrepared.calls.citryCallA.id\" :disabled=\"blocked\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child>",
         );
         assert!(
             reordered
@@ -2230,7 +3471,7 @@ mod tests {
 
     #[test]
     fn composes_a_declared_prepared_key_with_the_lifecycle_digest() {
-        let template = "<input v-bind=\"preparedData.citryAttrsA\" :key=\"preparedData.citryKeyA\" v-model=\"name\">";
+        let template = "<input v-bind=\"$citryPrepared.citryAttrsA\" :key=\"$citryPrepared.citryKeyA\" v-model=\"name\">";
         let artifact = compile(CompileRequest {
             template: template.to_owned(),
             local_calls: vec![],
@@ -2258,7 +3499,7 @@ mod tests {
         assert!(
             artifact
                 .transformed_template
-                .contains("preparedData.citryKeyA")
+                .contains("$citryPrepared.citryKeyA")
         );
     }
 
@@ -2266,8 +3507,8 @@ mod tests {
     fn template_v_if_fragment_keeps_a_prepared_child_lifecycle_key() {
         let template = concat!(
             "<template v-if=\"ready\">",
-            "<input v-bind=\"preparedData.citryAttrsA\" ",
-            ":key=\"preparedData.citryKeyA\" v-model=\"name\">",
+            "<input v-bind=\"$citryPrepared.citryAttrsA\" ",
+            ":key=\"$citryPrepared.citryKeyA\" v-model=\"name\">",
             "</template>"
         );
         let source_start = template.find("<input").unwrap();
@@ -2294,7 +3535,7 @@ mod tests {
         assert!(artifact.code.contains("_Fragment"), "{}", artifact.code);
         assert!(artifact.code.contains("key: 0"), "{}", artifact.code);
         assert!(
-            artifact.code.contains("preparedData.citryKeyA"),
+            artifact.code.contains("$citryPrepared.citryKeyA"),
             "{}",
             artifact.code
         );
@@ -2304,8 +3545,8 @@ mod tests {
     fn template_v_if_fragment_keeps_a_native_local_call_key() {
         let template = concat!(
             "<template v-if=\"ready\">",
-            "<citry-child :citry-id=\"preparedData.calls.citryCallA.id\" ",
-            ":key=\"preparedData.calls.citryCallA.key\"></citry-child>",
+            "<citry-child :citry-id=\"$citryPrepared.calls.citryCallA.id\" ",
+            ":key=\"$citryPrepared.calls.citryCallA.key\"></citry-child>",
             "</template>"
         );
         let source_start = template.find("<citry-child").unwrap();
@@ -2333,7 +3574,9 @@ mod tests {
         assert!(artifact.code.contains("_Fragment"), "{}", artifact.code);
         assert!(artifact.code.contains("key: 0"), "{}", artifact.code);
         assert!(
-            artifact.code.contains("preparedData.calls.citryCallA.key"),
+            artifact
+                .code
+                .contains("$citryPrepared.calls.citryCallA.key"),
             "{}",
             artifact.code
         );
@@ -2512,7 +3755,7 @@ mod tests {
 
     #[test]
     fn rejects_direct_and_nested_local_calls_created_by_v_for() {
-        let template = "<div v-for=\"item in items\"><template #default><citry-child :citry-id=\"preparedData.calls.citryCallA.id\" :key=\"preparedData.calls.citryCallA.key\"></citry-child></template></div>";
+        let template = "<div v-for=\"item in items\"><template #default><citry-child :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child></template></div>";
         let start = template.find("<citry-child").unwrap();
         let end = start + template[start..].find('>').unwrap() + 1;
         let artifact = compile(CompileRequest {
@@ -2573,6 +3816,114 @@ mod tests {
             assert!(
                 artifact.helpers.contains(&helper.to_owned()),
                 "missing {helper}"
+            );
+        }
+    }
+
+    fn compile_plain(template: &str) -> CompileArtifact {
+        compile(CompileRequest {
+            template: template.to_owned(),
+            local_calls: vec![],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        })
+    }
+
+    #[test]
+    fn statement_text_is_reported_unless_a_handler_separates_it_with_semicolons() {
+        // Vue reads a handler as statements only when it contains `;`. A
+        // statement in a position that holds one expression cannot run in the
+        // browser (`$event => (if ...)`, `title: if ...`), so each form must be
+        // a compile diagnostic.
+        for template in [
+            "<button @click=\"if (a) b = 1\">x</button>",
+            "<button @click=\"let z = 1\">x</button>",
+            "<button @click=\"const z = 1\">x</button>",
+            "<button @click=\"{ b = 1 }\">x</button>",
+            "<button @click=\"throw e\">x</button>",
+            "<button @click=\"while (a) a--\">x</button>",
+            "<button @click=\"a = 1 // note\">x</button>",
+            "<button :title=\"if (a) b\">x</button>",
+            "<button :title=\"a; b\">x</button>",
+            "<p v-for=\"x in if (a) b\">x</p>",
+            "<p v-if=\"let z = 1\">x</p>",
+        ] {
+            let artifact = compile_plain(template);
+            assert!(
+                artifact
+                    .diagnostics
+                    .iter()
+                    .any(|item| item.code == "InvalidExpression"),
+                "{template}: {:?}\n{}",
+                artifact.diagnostics,
+                artifact.code
+            );
+        }
+        // With a `;` the same statements compile to a block-bodied handler, and
+        // expression handlers keep the concise form.
+        for (template, expected) in [
+            (
+                "<button @click=\"if (a) b = 1;\">x</button>",
+                "onClick: $event => {if (_ctx.a) _ctx.b = 1;}",
+            ),
+            (
+                "<button @click=\"let z = a; b = z\">x</button>",
+                "onClick: $event => {let z = _ctx.a; _ctx.b = z}",
+            ),
+            // A handler that starts with a name is still statements when a `;`
+            // follows; only a handler that is exactly one reference or one
+            // function is passed through unwrapped.
+            (
+                "<button @click=\"foo; bar()\">x</button>",
+                "onClick: $event => {_ctx.foo; _ctx.bar()}",
+            ),
+            (
+                "<button @click=\"a.b; c()\">x</button>",
+                "onClick: $event => {_ctx.a.b; _ctx.c()}",
+            ),
+            (
+                "<button @click=\"() => a; b()\">x</button>",
+                "onClick: $event => {() => _ctx.a; _ctx.b()}",
+            ),
+            ("<button @click=\"a.b\">x</button>", "onClick: _ctx.a.b"),
+            // A trailing line comment would hide the block's closing `}`, so it
+            // is written as a block comment; `//` inside a string is kept.
+            (
+                "<button @click=\"n = 1; // note\">x</button>",
+                "onClick: $event => {_ctx.n = 1; /*  note */}",
+            ),
+            (
+                "<button @click=\"() => { a; } // note\" :title=\"t\">x</button>",
+                "onClick: () => { _ctx.a; } /*  note */,",
+            ),
+            (
+                "<button @click=\"n = '//'; m = 2\">x</button>",
+                "onClick: $event => {_ctx.n = '//'; _ctx.m = 2}",
+            ),
+            (
+                "<button @click=\"b = 1\">x</button>",
+                "onClick: $event => (_ctx.b = 1)",
+            ),
+            (
+                "<button @click=\"a ? b() : c()\">x</button>",
+                "onClick: $event => (_ctx.a ? _ctx.b() : _ctx.c())",
+            ),
+            (
+                "<button @click=\"() => { a; b }\">x</button>",
+                "onClick: () => { _ctx.a; _ctx.b }",
+            ),
+        ] {
+            let artifact = compile_plain(template);
+            assert!(
+                artifact.diagnostics.is_empty(),
+                "{template}: {:?}",
+                artifact.diagnostics
+            );
+            assert!(
+                artifact.code.contains(expected),
+                "{template}:\n{}",
+                artifact.code
             );
         }
     }

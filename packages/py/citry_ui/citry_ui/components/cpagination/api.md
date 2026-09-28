@@ -42,6 +42,12 @@ Rebuilt Button ranges retain the server locale even without browser i18n; a clie
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cpagination/snippets/customization.py" title="Customize Pagination" />
 
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes the component sets itself (such as `aria-label`), Citry runtime
+attributes, and any Vue directive syntax: names starting with `v-`, `:`, `.`,
+`^`, `@`, or `#`. Write Vue bindings and listeners on the component tag in your
+template instead, for example `<c-CPagination :title="hint" @focusin="track">`.
+
 ## Accessibility and behavior
 
 Pagination is a named navigation landmark. Current page uses `aria-current="page"`. Links and Buttons keep native Tab and activation behavior; ellipses are inert.

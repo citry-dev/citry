@@ -95,84 +95,11 @@ citry-ui-rating-value = { $value } من { $max }
 
 
 def _page(app: Citry) -> str:
-    class Page(Component):
+    # The browser-owned values live in Vue component data, so the button
+    # below changes every client prop at once and the catalog-owned labels
+    # must follow the new values without a server round trip.
+    class I18nDemo(Component):
         citry = app
-        template = """
-          <!doctype html>
-          <html lang="en-US">
-            <head><meta charset="utf-8" /></head>
-            <body>
-              <c-i18n tag="main" c-client="True">
-                <section x-data="{
-                  progressLabel: 'Processed', progressValue: 25, currentPage: 2,
-                  tags: ['alpha'],
-                  notices: [{id: 'saved', title: 'Saved', durationMs: 0}],
-                }">
-                <c-CBreadcrumbs c-items="breadcrumbs" c-attrs="{'id': 'breadcrumbs'}" />
-                <c-CBreadcrumbs
-                  c-items="breadcrumbs"
-                  label="Custom breadcrumbs"
-                  c-attrs="{'id': 'breadcrumbs-override'}"
-                />
-                <c-CProgress
-                  label="Processed"
-                  c-value="25"
-                  c-attrs="{'id': 'progress'}"
-                  :label="progressLabel"
-                  :value="progressValue"
-                />
-                <c-CNumberInput
-                  id="number-input"
-                  name="amount"
-                  value="1234.5"
-                  step="0.1"
-                  c-input_attrs="{'aria-label':'Measurement'}"
-                />
-                <c-CRangeSlider
-                  id="range"
-                  c-value="('1234.5', '5678.5')"
-                  min="0"
-                  max="10000"
-                  step="0.5"
-                  show_value="always"
-                />
-                <c-CRating id="rating-i18n" label="Article rating" value="3.5" precision="0.5" />
-                <c-CPagination
-                  c-pages="5"
-                  c-page="2"
-                  c-attrs="{'id': 'pagination'}"
-                  :page="currentPage"
-                />
-                <c-CCombobox id="combobox" c-options="options" c-input_attrs="combo_input_attrs" />
-                <c-CTagsInput
-                  id="tags"
-                  c-value="initial_tags"
-                  c-input_attrs="tags_input_attrs"
-                  :value="tags"
-                />
-                <c-CToastRegion
-                  id="toasts"
-                  c-items="initial_notices"
-                  c-duration_ms="0"
-                  :items="notices"
-                />
-                <button id="change-values" type="button" @click="
-                  progressLabel = 'Reviewed';
-                  progressValue = 50;
-                  currentPage = 3;
-                  tags = ['alpha', 'beta'];
-                  notices = [
-                    {id: 'saved', title: 'Updated', durationMs: 0},
-                    {id: 'queued', title: 'Queued', durationMs: 0},
-                  ];
-                ">Change values</button>
-                <button id="switch-cs" type="button" @click="$i18n.switchLocale('cs-CZ')">Čeština</button>
-                <button id="switch-ar" type="button" @click="$i18n.switchLocale('ar-EG')">العربية</button>
-                </section>
-              </c-i18n>
-            </body>
-          </html>
-        """
 
         def template_data(self, kwargs, slots):
             return {
@@ -189,6 +116,129 @@ def _page(app: Citry) -> str:
                 "tags_input_attrs": {"aria-label": "Tags"},
                 "initial_notices": (citry_ui.CToastMessage(id="saved", title="Saved", duration_ms=0),),
             }
+
+        template = """
+          <section>
+            <c-CBreadcrumbs
+              c-items="breadcrumbs"
+              c-attrs="{'id': 'breadcrumbs'}"
+            />
+            <c-CBreadcrumbs
+              c-items="breadcrumbs"
+              label="Custom breadcrumbs"
+              c-attrs="{'id': 'breadcrumbs-override'}"
+            />
+            <c-CProgress
+              label="Processed"
+              c-value="25"
+              c-attrs="{'id': 'progress'}"
+              :label="progressLabel"
+              :value="progressValue"
+            />
+            <c-CNumberInput
+              id="number-input"
+              name="amount"
+              value="1234.5"
+              step="0.1"
+              c-input_attrs="{'aria-label':'Measurement'}"
+            />
+            <c-CRangeSlider
+              id="range"
+              c-value="('1234.5', '5678.5')"
+              min="0"
+              max="10000"
+              step="0.5"
+              show_value="always"
+            />
+            <c-CRating
+              id="rating-i18n"
+              label="Article rating"
+              value="3.5"
+              precision="0.5"
+            />
+            <c-CPagination
+              c-pages="5"
+              c-page="2"
+              c-attrs="{'id': 'pagination'}"
+              :page="currentPage"
+            />
+            <c-CCombobox
+              id="combobox"
+              c-options="options"
+              c-input_attrs="combo_input_attrs"
+            />
+            <c-CTagsInput
+              id="tags"
+              c-value="initial_tags"
+              c-input_attrs="tags_input_attrs"
+              :value="tags"
+            />
+            <c-CToastRegion
+              id="toasts"
+              c-items="initial_notices"
+              c-duration_ms="0"
+              :items="notices"
+            />
+            <button
+              id="change-values"
+              type="button"
+              @click="
+                progressLabel = 'Reviewed';
+                progressValue = 50;
+                currentPage = 3;
+                tags = ['alpha', 'beta'];
+                notices = [
+                  {id: 'saved', title: 'Updated', durationMs: 0},
+                  {id: 'queued', title: 'Queued', durationMs: 0},
+                ];
+              "
+            >
+              Change values
+            </button>
+            <button
+              id="switch-cs"
+              type="button"
+              @click="$i18n.switchLocale('cs-CZ')"
+            >
+              Čeština
+            </button>
+            <button
+              id="switch-ar"
+              type="button"
+              @click="$i18n.switchLocale('ar-EG')"
+            >
+              العربية
+            </button>
+          </section>
+        """
+
+        js = """
+          $component({
+            data() {
+              return {
+                progressLabel: 'Processed',
+                progressValue: 25,
+                currentPage: 2,
+                tags: ['alpha'],
+                notices: [{ id: 'saved', title: 'Saved', durationMs: 0 }],
+              };
+            },
+          });
+        """
+
+    class Page(Component):
+        citry = app
+        template = """
+          <!doctype html>
+          <html lang="en-US">
+            <head><meta charset="utf-8" /></head>
+            <body>
+              <c-i18n tag="main" c-client="True">
+                <c-I18nDemo />
+              </c-i18n>
+            </body>
+          </html>
+        """
 
     i18n = app.extensions.get_extension("i18n")
     context = i18n.make_context(locale="en-US")
@@ -275,7 +325,10 @@ def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed
 
     page.locator("#combobox-root [data-citry-combobox-trigger]").click()
     assert page.locator("#combobox-root [data-citry-combobox-trigger]").get_attribute("aria-label") == "Hide options"
-    page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-cs'), '$i18n').switchLocale('cs-CZ')")
+    # The open combobox popup covers the locale buttons, and it must stay open
+    # so its label shows the translated "hide" text. Dispatching the click on
+    # the button runs its Vue handler without a pointer hit test.
+    page.locator("#switch-cs").dispatch_event("click")
     page.wait_for_function("document.querySelector('main')?.lang === 'cs-CZ'")
     assert page.locator("#breadcrumbs").get_attribute("aria-label") == "Drobečková navigace"
     assert page.locator("#breadcrumbs-override").get_attribute("aria-label") == "Custom breadcrumbs"
@@ -298,7 +351,7 @@ def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed
     page.locator("#number-input").press("ArrowUp")
     assert page.locator("#number-input-transport").input_value() == "1234.6"
 
-    page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-ar'), '$i18n').switchLocale('ar-EG')")
+    page.locator("#switch-ar").dispatch_event("click")
     page.wait_for_function("document.querySelector('main')?.lang === 'ar-EG'")
     assert page.locator("main").get_attribute("dir") == "rtl"
     assert page.locator("#breadcrumbs").get_attribute("aria-label") == "مسار التنقل"

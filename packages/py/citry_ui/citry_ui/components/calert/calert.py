@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 from citry_ui.components.cicon import CIconName  # noqa: TC001 - runtime type hints
 from citry_ui.components.cicon.cicon import _resolve_registered_icon
@@ -28,19 +28,6 @@ _AUTOMATIC_ICON_NAMES = {
     "error": "danger",
 }
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-teleport",
-        "x-text",
-    }
-)
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-atomic",
@@ -141,15 +128,6 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(
     input_name: str,
     attrs: dict[str, object],
@@ -158,18 +136,16 @@ def _validate_attrs(
     component_name = f"CAlert {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
     for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"{component_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in owned:
-            msg = f"{component_name} cannot dynamically bind owned attribute {target!r}."
+        # A Vue directive could rebind an owned attribute, add listeners, or
+        # replace the Alert's children, so none may arrive through Python data.
+        if is_vue_directive_attribute(key):
+            msg = (
+                f"{component_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
 
 

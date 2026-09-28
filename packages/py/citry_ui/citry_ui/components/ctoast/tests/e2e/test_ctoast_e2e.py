@@ -15,6 +15,15 @@ from citry import Citry, Component, ComponentLibrary
 pytestmark = pytest.mark.e2e
 
 
+def _repository_root() -> Path:
+    # pnpm installs node_modules at the repository root. Find the root from this
+    # file, not the working directory, because pytest may run from a package folder.
+    for directory in Path(__file__).resolve().parents:
+        if (directory / "package.json").is_file() and (directory / "pyproject.toml").is_file():
+            return directory
+    raise RuntimeError("Could not locate repository root for Toast browser tests.")
+
+
 def _page() -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
@@ -346,7 +355,7 @@ def test_plain_text_update_identity_rtl_css_and_accessibility(toast_page) -> Non
     page.evaluate("window.__state.placement = 'block-end-start'")
     page.wait_for_function("document.querySelector('#notices').dataset.placement === 'block-end-start'")
     assert page.locator("#notices").evaluate("element => getComputedStyle(element).insetInlineStart !== 'auto'")
-    axe_path = Path("node_modules/axe-core/axe.min.js").resolve()
+    axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file()
     page.add_script_tag(path=str(axe_path))
     violations = page.evaluate(

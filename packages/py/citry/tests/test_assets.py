@@ -893,7 +893,7 @@ class TestConcurrentLoading:
         render_ids = []
         for html in results:
             payload_match = re.search(
-                r"CitryStable\.startPrepared\((\{.*?\})\)\.catch",
+                r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>',
                 html,
                 re.DOTALL,
             )

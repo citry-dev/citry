@@ -33,7 +33,7 @@ interface PluginHost {
   occurrence(id: string): Occurrence | null;
   occurrenceId(component: ComponentPublicInstance): string | null;
 }
-interface StableRegistry {
+interface RuntimeRegistry {
   registerBrowserPlugin(
     name: string,
     version: number,
@@ -103,7 +103,7 @@ interface PreparedStage extends ActivationState {
   };
 }
 interface PluginGlobal extends Window {
-  CitryStable: StableRegistry;
+  __citryRuntime: RuntimeRegistry;
 }
 
 (function (global: PluginGlobal) {
@@ -184,7 +184,7 @@ interface PluginGlobal extends Window {
     return Object.freeze({ payload: structuredClone(payload), providers, barriers });
   }
 
-  global.CitryStable.registerBrowserPlugin(
+  global.__citryRuntime.registerBrowserPlugin(
     "i18n",
     1,
     (host) => {

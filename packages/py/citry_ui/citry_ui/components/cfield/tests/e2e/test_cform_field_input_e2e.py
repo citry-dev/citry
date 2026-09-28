@@ -9,7 +9,6 @@ pytest.importorskip("pytest_playwright")
 import citry_ui
 from citry import Citry, Component
 from citry.ext.events.renderers import dispatcher_for
-from citry_ui.quality.routes import render_scenario
 
 pytestmark = pytest.mark.e2e
 
@@ -593,10 +592,10 @@ def test_change_clears_a_finished_native_invalid_episode(page):
     page.wait_for_function("!document.querySelector('#email-control-field').hasAttribute('data-invalid')")
 
 
-def test_field_input_quality_route_initializes_and_proves_control_reset_and_form_state(page):
+def test_field_input_quality_route_initializes_and_proves_control_reset_and_form_state(page, open_scenario):
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
-    page.set_content(render_scenario("field-input.states"), wait_until="load")
+    open_scenario("field-input.states")
     page.wait_for_function(
         """() => {
           const fields = [...document.querySelectorAll('[data-citry-field-root]')];

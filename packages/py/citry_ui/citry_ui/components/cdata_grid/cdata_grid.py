@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, merge_attrs
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -30,9 +30,6 @@ CDataGridEditor = Literal["text", "number", "checkbox", "select"]
 CDataGridEditSource = Literal["pointer", "keyboard"]
 
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -268,14 +265,6 @@ class CDataGridCellEditDetail(TypedDict):
     sourceEvent: object
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     value: Mapping[str, object] | None,
@@ -290,13 +279,15 @@ def _attrs(
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"{owner} requires string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} cannot dynamically bind owned attribute {key!r}.")
+        # A Vue directive could rebind an owned grid attribute, add listeners,
+        # or change the table structure, so none may arrive through Python data.
+        if is_vue_directive_attribute(key):
+            raise ValueError(
+                f"{owner} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
     return merge_root_attrs(copied, class_, style)
 
 
@@ -388,6 +379,16 @@ def _edit_value(column: CDataGridColumn, cell: CDataGridCell, *, editable: bool)
 class CDataGrid(LibraryComponent):
     class I18n:
         messages_locale = "en-US"
+        # The browser code builds these IDs from a variable
+        # (`citry-ui-data-grid-${kind}`), so Citry cannot find them as literal
+        # calls; listing them sends them to the browser.
+        client_messages = (
+            "citry-ui-data-grid-edit",
+            "citry-ui-data-grid-editing",
+            "citry-ui-data-grid-edit-submitted",
+            "citry-ui-data-grid-edit-cancelled",
+            "citry-ui-data-grid-edit-invalid",
+        )
 
     @dataclass(slots=True)
     class Kwargs:

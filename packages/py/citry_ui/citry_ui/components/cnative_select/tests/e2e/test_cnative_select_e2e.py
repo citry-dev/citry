@@ -107,6 +107,26 @@ def _native_select_page() -> str:
             border-width: 5px;
           }
         """
+        # The page owns the demo state that the selects bind to. Tests drive it
+        # through `window.__nativeSelectDemo`, which is the same Vue reactive object.
+        js = """
+          $component({
+            data() {
+              const nativeSelectDemo = Citry.vue.reactive({
+                value: 'reef',
+                immutable: 'reef',
+                nullValue: null,
+                standaloneRequired: true,
+                standaloneVariant: 'outline',
+                unsupportedRequired: false,
+                variant: 'outline',
+                size: 'md',
+              });
+              window.__nativeSelectDemo = nativeSelectDemo;
+              return {state: {nativeSelectDemo}};
+            },
+          });
+        """
         template = """
           <!doctype html>
           <html lang="en">

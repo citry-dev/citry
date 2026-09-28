@@ -205,6 +205,19 @@ extend-markup-names = [
     "ARG002",
     "T201",    # The comparison runner prints its results
 ]
+# The benchmark harness tests follow the same rules as the package tests.
+"benchmarks/web/**/test_*.py" = [
+    "ARG001",  # Unused function argument (mock/callback signatures in tests)
+    "ARG002",  # Unused method argument
+    "ARG003",  # Unused classmethod argument
+    "ANN",     # Annotations are not needed for tests
+    "N806",    # Variable in function should be lowercase
+    "PLC0415", # `import` should be at the top-level of a file
+    "PLW1641", # `__eq__` without `__hash__` is fine for throwaway test fixtures
+    "RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
+    "S101",    # Use of `assert` detected
+    "TRY002",  # Create your own exception
+]
 "docs_site/_internal/*" = [
     "T201",    # the CLI prints its build summary to stdout
     "E501",    # page-chrome templates carry long inline SVG icon and HTML lines
@@ -362,6 +375,11 @@ testpaths = [
     "packages/py/citry_ui/citry_ui/quality/tests",
     "packages/py/pygments_citry/tests",
 ]
+# Put the repository root on sys.path so tests can import `scripts.*` and the
+# gate can load `-p scripts.vue_render_parity.collect`. pytest applies this
+# before it loads `-p` plugins, whether pytest starts as `uv run pytest` or
+# `python -m pytest`.
+pythonpath = ["."]
 markers = [
     "e2e: browser end-to-end test (needs Playwright and a browser binary)",
     "qualification: slow boundary proof kept in full integration and version-matrix runs",

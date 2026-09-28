@@ -113,5 +113,11 @@ old-*.zip
 
 # Local benchmark installations and measurement evidence.
 .benchmarks/
+# Node.js distributions the benchmark harness downloads into each Node app
+# (third-party binaries and scripts; ruff skips them through this entry too).
+/benchmarks/web/apps/*/.toolchain/
+
+# Pages recorded by the Vue render parity check (scripts/vue_render_parity).
+.vue-render-parity/
 
 # Reflex initialization writes its own app-local ignore file.

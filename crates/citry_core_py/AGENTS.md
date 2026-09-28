@@ -11,13 +11,18 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
 
 - `src/lib.rs` - the `#[pymodule] fn _rust(...)`. Registers each submodule and
   its functions / classes. This is the registration point for everything Python
-  can import.
+  can import. It also sets `BUILD_PROFILE` (`"release"` or `"debug"`), which the
+  benchmark runners read to refuse an unoptimized build.
 - `src/html_transform.rs` - wraps `citry_html_transform`.
 - `src/i18n.rs` - exposes ICU4X locale canonicalization and direction lookup,
   and wraps the language-neutral `citry_i18n` catalog runtime.
 - `src/safe_eval.rs` - wraps `python_safe_eval`.
 - `src/template_formatter.rs` - wraps `citry_template_formatter` and attaches
   stable formatter codes, ranges, and parser diagnostics to Python errors.
+- `src/vue.rs` - wraps `citry_vue_compiler`: `_compile_vue`, and the
+  render programs the server runs to write HTML Vue hydrates
+  (`ServerRenderProgram`, `_read_server_render_program`,
+  `_render_for_hydration`).
 - `src/template_parser.rs` - wraps `citry_template_parser`: `parse_template`
   / `compile_template`, the V3 AST classes, and `TagRules`.
 - `Cargo.toml` - depends on the sibling crates by path; `crate-type =

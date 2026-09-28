@@ -341,7 +341,7 @@ def test_hostile_mutation_duplicate_id_writing_mode_and_recovery(page: Any) -> N
           root.setAttribute('aria-checked','true');
           root.dataset.axis='inline';
           root.dataset.citryUiPart='thumb';
-          root.setAttribute('x-show','false');
+          root.setAttribute(':hidden','true');
           root.setAttribute('onclick','window.__hostileClick=true');
           root.style.setProperty('scroll-behavior','smooth','important');
         }"""
@@ -355,7 +355,7 @@ def test_hostile_mutation_duplicate_id_writing_mode_and_recovery(page: Any) -> N
             && root.tabIndex===0
             && !root.hasAttribute('aria-hidden')
             && !root.hasAttribute('aria-checked')
-            && !root.hasAttribute('x-show')
+            && !root.hasAttribute(':hidden')
             && !root.hasAttribute('onclick')
             && root.dataset.citryUiPart==='scroll-area'
             && getComputedStyle(root).scrollBehavior==='auto';
@@ -478,6 +478,43 @@ def test_retained_root_handoff_focus_offsets_scope_move_and_fresh_clone(page: An
     page.wait_for_timeout(50)
     assert page.evaluate("window.__scrollAreaTest.events.length") == callback_count
     assert page.evaluate("!window.__retainedScrollRoot[Symbol.for('citry-ui:scroll-area-handoff')].owner")
+    assert errors == []
+
+
+def test_restoration_scroll_event_after_a_move_does_not_call_on_scroll_change(page: Any) -> None:
+    errors = _load(page)
+    main = page.locator("#main")
+    main.evaluate("root => { root.scrollLeft=130; root.scrollTop=95; }")
+    page.wait_for_function("window.__scrollAreaTest.events.length===1")
+    # The browser dispatches the scroll event for the component's offset restoration
+    # one frame after the write. Moving the root into a shadow root inside the same
+    # frame makes that event arrive in a new tree, where the root cannot scroll.
+    # A slow parallel run produced this order by chance; the wrapped
+    # requestAnimationFrame produces it on every run.
+    page.evaluate(
+        """() => new Promise(resolve => {
+          const root=document.querySelector('#main');
+          const nativeFrame=window.requestAnimationFrame.bind(window);
+          let moved=false;
+          window.requestAnimationFrame=callback => nativeFrame(time => {
+            callback(time);
+            const restored=Math.abs(root.scrollLeft-130)<=1 && Math.abs(root.scrollTop-95)<=1;
+            if (moved || !restored) return;
+            moved=true;
+            const host=document.createElement('div');
+            document.body.append(host);
+            host.attachShadow({mode:'open'}).append(root);
+            resolve();
+          });
+          root.remove();
+          document.body.append(root);
+        })"""
+    )
+    page.wait_for_timeout(100)
+    # The restoration belongs to the component, so it must not reach onScrollChange.
+    # A reported event would also carry a null target, because the browser clears
+    # the target of an event dispatched inside a shadow tree.
+    assert page.evaluate("window.__scrollAreaTest.events.length") == 1
     assert errors == []
 
 

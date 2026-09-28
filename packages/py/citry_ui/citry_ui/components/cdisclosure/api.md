@@ -46,6 +46,12 @@ from the visible controlled state.
 as `@click` and `@focus` still receive their ordinary browser events;
 Disclosure dispatches no custom toggle, show, or hide event.
 
+`attrs`, `heading_attrs`, `trigger_attrs`, `panel_attrs`, and `actions_attrs`
+reject Vue directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`.
+Write Vue bindings and listeners on the component tag in your template
+instead. A click on the trigger bubbles to the root, so
+`<c-CDisclosure @click="count += 1">` sees it.
+
 ## Add actions and disabled state
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdisclosure/snippets/actions_and_disabled.py" title="Disclosure actions and disabled state" />
@@ -88,8 +94,9 @@ still contain non-whitespace text outside decorative content. Links, controls,
 custom elements, and other HTML do not belong inside the trigger. Every title
 descendant rejects `role`, `tabindex`, `contenteditable`, `autofocus`, `href`,
 `xlink:href`, `controls`, `usemap`, `form`, `popover`, `is`, `hidden`, `inert`,
-ARIA naming or description attributes, inline or Vue event listeners, and
-Vue structural or ownership directives.
+ARIA naming or description attributes, inline and Vue event listeners, and
+every other Vue directive except a binding such as `:class` whose target
+attribute the title accepts.
 
 The default panel accepts normal flow content and nested Disclosure or
 Accordion roots within the overlay boundary above. Actions follow the same

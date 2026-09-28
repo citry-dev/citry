@@ -183,19 +183,23 @@ def test_invalid_label_combinations_fail_before_rendering():
         "tabindex",
         "contenteditable",
         ":role",
-        "x-bind:aria-hidden",
+        "v-bind:aria-hidden",
+        "V-BIND:role",
         ".data-orientation",
         "data-citry-morph",
         "data-cev-action",
         "data-cid",
-        "x-bind",
-        "x-if",
-        "x-for",
-        "x-teleport",
-        "x-ignore",
-        "x-html",
-        "x-text",
-        "x-model",
+        "v-bind",
+        "v-if",
+        "V-IF",
+        "v-for",
+        "v-html",
+        "v-text",
+        "v-model",
+        "v-show",
+        "#default",
+        "@click",
+        "v-on:click",
     ],
 )
 def test_divider_rejects_owned_runtime_and_structural_attributes(attribute):
@@ -203,9 +207,17 @@ def test_divider_rejects_owned_runtime_and_structural_attributes(attribute):
         _render(CDivider(attrs={attribute: "consumer"}))
 
 
-def test_python_attrs_cannot_introduce_vue_directives():
-    with pytest.raises(TypeError, match="Python-resolved attributes cannot introduce Vue syntax"):
+def test_python_attrs_reject_vue_directives_before_rendering():
+    # The component names itself and points at the template, rather than
+    # leaving a generic compiler error to surface later.
+    with pytest.raises(ValueError, match="CDivider attrs cannot contain the Vue directive '@click'"):
         _render(CDivider(attrs={"@click": "shown = false"}))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(CDivider(attrs={"x-data": "{}", "hx-get": "/rows"}))
+    assert 'x-data="{}"' in html
+    assert 'hx-get="/rows"' in html
 
 
 def test_direct_choices_are_detrusted_and_label_text_is_escaped():

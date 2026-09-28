@@ -39,6 +39,6 @@ def test_serialized_client_provider_delivers_its_message_to_the_live_i18n_runtim
     page.wait_for_function("window.__citryReady?.length === 1")
     page.wait_for_function("document.querySelector('#title')?.textContent === 'Client title'")
     assert page.locator("#title").text_content() == "Client title"
-    assert page.evaluate("() => CitryStable._apps.size") == 1
+    assert page.evaluate("() => __citryRuntime._apps.size") == 1
     assert page_errors == []
     assert console_errors == []

@@ -110,7 +110,7 @@ def make_dynamic_component(citry_instance: Citry) -> type[Component]:
                 raise TypeError(
                     'Dynamic component selection cannot select <c-mark>; use a literal <c-mark name="..."> tag.'
                 )
-            if comp_cls.simple:
+            if comp_cls.simple is True:
                 return {"target": _simple_selector_target(self, comp_cls, data)}
             # The target renders in this tag's place: remaining kwargs and the
             # full slots pass through, so the target's own Kwargs/Slots
@@ -195,6 +195,7 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
             if prepared_render_active():
                 from citry._vue.capture import (  # noqa: PLC0415
                     PreparedDynamicElementClose,
+                    is_vue_directive_name,
                     prepared_dynamic_element_open,
                 )
 
@@ -212,9 +213,7 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
                     ):
                         retained_bindings.append(binding)
                         resolved_attrs.pop(binding.key)
-                executable = [
-                    name for name in resolved_attrs if isinstance(name, str) and name.startswith(("@", ":", "v-", "#"))
-                ]
+                executable = [name for name in resolved_attrs if isinstance(name, str) and is_vue_directive_name(name)]
                 if executable:
                     raise TypeError(
                         "prepared dynamic <c-element> does not support tag-dependent or executable Vue "

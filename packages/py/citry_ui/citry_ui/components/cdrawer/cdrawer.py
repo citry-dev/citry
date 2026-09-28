@@ -11,7 +11,7 @@ from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
     merge_root_attrs,
-    reject_html_attr_bindings,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
@@ -101,14 +101,9 @@ class CDrawer(LibraryComponent):
         validate_choice("CDrawer", "scroll", kwargs.scroll, ("body", "drawer"))
         close_label = kwargs.close_label if "close_label" in self.raw_kwargs else self.i18n.tr("citry-ui-drawer-close")
         validate_non_empty_string("CDrawer", "close_label", close_label)
-        executable_attrs = [
-            name for name in (kwargs.attrs or {}) if isinstance(name, str) and name.startswith(("v-", "@", ":"))
-        ]
-        if executable_attrs:
-            raise ValueError(
-                "CDrawer attrs cannot introduce Vue directives through Python-resolved attributes: "
-                f"{executable_attrs!r}"
-            )
+        # A Vue directive could rebind the dialog's owned state, change its
+        # structure, or attach a listener, so none may arrive through Python data.
+        reject_vue_directive_attrs(kwargs.attrs, "CDrawer")
         reject_owned_attrs(
             kwargs.attrs,
             {
@@ -123,38 +118,6 @@ class CDrawer(LibraryComponent):
                 "data-citry-drawer-host",
                 "data-citry-drawer-initialized",
                 "data-citry-drawer-trigger",
-                "data-citry-ui-part",
-                "data-open",
-                "data-placement",
-                "data-scroll",
-                "data-size",
-                "hidden",
-                "id",
-                "inert",
-                "open",
-                "popover",
-                "role",
-                "tabindex",
-                "x-for",
-                "x-html",
-                "x-if",
-                "x-ignore",
-                "x-model",
-                "x-modelable",
-                "x-teleport",
-                "x-text",
-            },
-            "CDrawer",
-        )
-        reject_html_attr_bindings(
-            kwargs.attrs,
-            {
-                "aria-describedby",
-                "aria-hidden",
-                "aria-label",
-                "aria-labelledby",
-                "aria-modal",
-                "closedby",
                 "data-citry-ui-part",
                 "data-open",
                 "data-placement",

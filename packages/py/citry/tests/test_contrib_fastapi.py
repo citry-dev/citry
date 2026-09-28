@@ -64,7 +64,7 @@ class TestServedEndpoints:
         js = client.get(f"/citry/cache/{widget.class_id}.js")
         assert js.status_code == 200
         # The served Vue Options source is associated with its type and source digest.
-        assert f'CitryStable.registerTypeOptions.bind(null, "{widget.class_id}", "' in js.text
+        assert f'__citryRuntime.registerTypeOptions.bind(null, "{widget.class_id}", "' in js.text
         css = client.get(f"/citry/cache/{widget.class_id}.css")
         assert css.status_code == 200
         assert css.text == ".w {}"

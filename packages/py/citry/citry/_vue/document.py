@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from citry.citry_render import CitryRender, Placeholder
+from citry.citry_render import CitryRender, Placeholder, SimpleVueRecord, simple_vue_called_components
 from citry.util.html import Markup, escape_to_str
 
 if TYPE_CHECKING:
@@ -138,6 +138,12 @@ def typed_document_shell(render: CitryRender, host_html: str) -> TypedDocumentSh
                 continue
             if body_depth and isinstance(part, PreparedLeafProgram):
                 record_region("body")
+                continue
+            if body_depth and type(part) is SimpleVueRecord:
+                record_region("body")
+                # Ordinary children the record called record their own regions.
+                if part.leaf.call_children is not None:
+                    visit([called for called in simple_vue_called_components(part) if isinstance(called, CitryRender)])
                 continue
             if body_depth and type(part) in {Markup, _EscapedSlotText}:
                 # Markup is already trusted by the ordinary rendering

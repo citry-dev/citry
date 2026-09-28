@@ -11,6 +11,7 @@ from secrets import token_hex
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal
 
+from citry._owned_resource import OWNED_ASSET_CROSSORIGIN
 from citry.attrs import format_attrs
 from citry.citry_render import SerializedScriptSecurity
 from citry.ext.dependencies.types import _JAVASCRIPT_MIME_TYPES, Dependency, Script, Style
@@ -373,6 +374,11 @@ class _ScriptSecurityMaterializer:
                 digests = (*digests, computed)
             else:
                 attrs["integrity"] = declared or computed
+            # The browser checks integrity only on a CORS response. Citry's
+            # own routes allow CORS reads, so ask for one; a crossorigin value the
+            # author set on purpose stays as written.
+            if _canonicalize_html_attr(attrs, "crossorigin", "Script") is None:
+                attrs["crossorigin"] = OWNED_ASSET_CROSSORIGIN
             provenance: Literal["citry-computed", "declared-verified"] = (
                 "citry-computed" if declared is None else "declared-verified"
             )

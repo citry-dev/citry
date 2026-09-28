@@ -325,12 +325,41 @@ def test_tabs_accepts_deferred_declarations_owned_by_a_vue_component(spike_modul
         slots={"default": StatefulTabsDeclarations()},
     )
     content = str(tabs)
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", content, flags=re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>',
+        content,
+        flags=re.DOTALL,
+    )
     assert match is not None
     manifest = json.loads(match.group(1))["manifest"]
     type_keys = {occurrence["typeKey"].split("_", 1)[0] for occurrence in manifest["occurrences"]}
     assert {"CTabs", "CTab", "CTabPanel", "StatefulTabsDeclarations"} <= type_keys
     assert any(occurrence["preparedData"].get("citryText0") == "Account" for occurrence in manifest["occurrences"])
+
+
+def test_tabs_rejects_vue_bound_declarations_owned_by_a_sibling_component(spike_modules):
+    engine = spike_modules["app"].engine
+
+    class VueTabsDeclarations(Component):
+        citry = engine
+        template = """
+          <c-CTab value="account"><span v-text="label"></span></c-CTab>
+          <c-CTabPanel value="account">Account preferences</c-CTabPanel>
+        """
+
+        def js_data(self, kwargs, slots):
+            return {"label": "Account"}
+
+    tabs = engine.get("ctabs")(
+        default_value="account",
+        aria_label="Account settings",
+        slots={"default": VueTabsDeclarations()},
+    )
+    # The declarations component is a sibling of the internal tab list, so
+    # Vue cannot give the tab's content that component's data. Rendering
+    # stops with an error instead of showing an empty tab.
+    with pytest.raises(TypeError, match=r"fill written by VueTabsDeclarations .* uses VueTabsDeclarations's Vue data"):
+        str(tabs)
 
 
 def test_runner_exposes_catalog_standalone_pages_and_visible_errors(spike_modules):
@@ -369,7 +398,7 @@ def test_runner_exposes_catalog_standalone_pages_and_visible_errors(spike_module
     assert interactive_page.status == 200
     interactive_content = str(interactive_page.content)
     assert '"serverData":{"generation":"first"}' in interactive_content
-    assert "CitryStable.startPrepared" in interactive_content
+    assert "data-citry-vue-document" in interactive_content
     assert unknown_response.status == 404
     assert invalid_response.status == 400
     assert "must be 'true' or 'false'" in str(invalid_response.content)

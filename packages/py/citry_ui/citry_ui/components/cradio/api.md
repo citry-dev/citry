@@ -80,6 +80,13 @@ description.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cradio/snippets/customization.py" title="Customize Radio with public CSS" />
 
+`attrs` on `CRadioGroup` and `CRadio`, and `input_attrs` on `CRadio`, accept
+ordinary native, ARIA, and data attributes. They reject the attributes each
+part sets itself (such as the input's `type`, `name`, and `checked`), Citry
+runtime attributes, and any Vue directive syntax: names starting with `v-`,
+`:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component tag
+in your template instead, for example `<c-CRadioGroup :title="hint">`.
+
 ## Choose the right control
 
 Use Native Select when choices should collapse, Checkbox for independent

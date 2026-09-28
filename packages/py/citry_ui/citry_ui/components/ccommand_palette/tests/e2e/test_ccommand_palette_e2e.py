@@ -27,7 +27,7 @@ def _page() -> str:
 
     class Page(Component):
         citry = app
-        js = """$component({data(){const state=Citry.vue.reactive({actions:[],opens:[],queries:[],controlledOpen:false,controlledQuery:'',controlledRequests:[],controlledCloseReasons:[],acceptOpen:false,acceptClose:false,acceptQuery:false,commands:[{value:'open-settings',label:'Open settings',keywords:['preferences'],disabled:false},{value:'deploy',label:'Deploy production',keywords:['release'],disabled:true},{value:'copy-id',label:'Copy ID',keywords:['identifier'],disabled:false}]});window.__commandPalette=state;return state;}});"""
+        js = """$component({data(){const state=Citry.vue.reactive({actions:[],opens:[],queries:[],controlledOpen:false,controlledQuery:'',controlledRequests:[],controlledCloseReasons:[],acceptOpen:false,acceptClose:false,acceptQuery:false,showBasic:true,commands:[{value:'open-settings',label:'Open settings',keywords:['preferences'],disabled:false},{value:'deploy',label:'Deploy production',keywords:['release'],disabled:true},{value:'copy-id',label:'Copy ID',keywords:['identifier'],disabled:false}]});window.__commandPalette=state;return state;}});"""
         template = """
           <!doctype html>
           <html lang="en">
@@ -37,6 +37,7 @@ def _page() -> str:
             </head>
             <body>
               <button id="before" type="button">Before</button>
+              <template v-if="showBasic">
               <c-CCommandPalette
                 id="basic-palette"
                 label="Workspace commands"
@@ -56,6 +57,8 @@ def _page() -> str:
                   </button>
                 </c-fill>
               </c-CCommandPalette>
+              </template>
+              <button id="remove-basic" type="button" @click="showBasic = false">Remove</button>
               <button id="owner-focus" type="button">Owner focus</button>
               <c-CCommandPalette
                 id="controlled-palette"
@@ -487,6 +490,23 @@ def test_document_open_shadow_root_move_refreshes_scope_and_closes_modal(page: A
         "modals": 0,
     }
     assert errors == []
+
+
+def test_vue_unmount_while_open_releases_the_modal_at_once(page: Any) -> None:
+    _ready(page)
+    page.locator("#trigger").click()
+    page.wait_for_function("() => document.querySelector('#basic-palette').matches(':modal')")
+    # The open modal blocks pointer input to the page, so click the button
+    # directly. Vue then unmounts the palette in its next render.
+    page.locator("#remove-basic").evaluate("element => element.click()")
+    # The handoff timer would release the modal after one second; an unmount
+    # has no next render to adopt it, so the release must come well before.
+    page.wait_for_function(
+        "() => !document.querySelector('#basic-palette')"
+        " && globalThis[Symbol.for('citry-ui:dialog-controller-runtime')].counts().modals === 0",
+        timeout=300,
+    )
+    assert page.evaluate("document.documentElement.style.overflow") == ""
 
 
 def test_hostile_owned_mutation_fails_closed_and_removal_cleans_resources(page: Any) -> None:

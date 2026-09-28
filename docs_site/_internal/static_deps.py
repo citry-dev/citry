@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+from http.server import SimpleHTTPRequestHandler
 from typing import TYPE_CHECKING
 
 from lxml import html as lxml_html
@@ -44,6 +45,22 @@ if TYPE_CHECKING:
 # value). The runtime is written under this prefix so the URL the pages emit,
 # "<prefix>/citry.js", resolves to the file on disk.
 CITRY_MOUNT_PREFIX = "/citry"
+
+
+class StaticSiteRequestHandler(SimpleHTTPRequestHandler):
+    """
+    Serve a built site with the CORS header GitHub Pages sends.
+
+    Citry loads its own files with ``integrity`` and ``crossorigin``, and the
+    UI previews run in sandboxed iframes whose requests count as cross-origin,
+    so a local host without ``Access-Control-Allow-Origin`` leaves every
+    preview blank while the deployed site works. Sending the header on every
+    file keeps local previews and tests faithful to the deploy.
+    """
+
+    def end_headers(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        super().end_headers()
 
 
 def export_runtime(output_dir: Path, citry_instance: Citry) -> Path:
@@ -70,14 +87,11 @@ def export_runtime(output_dir: Path, citry_instance: Citry) -> Path:
 
 
 def _prepared_owned_assets(html: str, citry_instance: Citry) -> set[tuple[str, str]]:
-    """Read owned asset identities from exact generated prepared calls."""
+    """Read owned asset identities from the generated app configurations and fragment descriptors."""
     document = lxml_html.document_fromstring(html)
-    marker = "CitryStable.startPrepared("
-    suffix = ").catch(error => queueMicrotask(() => { throw error; }));"
     digest_pattern = re.compile(r"[0-9a-f]{64}")
     prefix = (citry_instance.mounted_prefix or CITRY_MOUNT_PREFIX).strip("/")
     referenced: set[tuple[str, str]] = set()
-    decoder = json.JSONDecoder()
 
     def collect(manifest: object) -> None:
         if type(manifest) is not dict or manifest.get("protocol") != "citry-vue-prepared/1":
@@ -110,17 +124,14 @@ def _prepared_owned_assets(html: str, citry_instance: Citry) -> set[tuple[str, s
                     raise RuntimeError("A generated prepared manifest has an unexpected owned asset URL.")
                 referenced.add((extension, digest))
 
-    bootstrap_prefix = f"(function() {{\n{marker}"
-    bootstrap_suffix = f"{suffix}\n}})();"
-    for script in document.xpath("//script[not(@src)]"):
+    for script in document.xpath('//script[@type="application/json"]'):
         source = script.text or ""
-        if source.startswith(bootstrap_prefix) and source.endswith(bootstrap_suffix):
-            payload, consumed = decoder.raw_decode(source[len(bootstrap_prefix) :])
-            if source[len(bootstrap_prefix) + consumed :] != bootstrap_suffix:
-                raise RuntimeError("A generated prepared bootstrap has invalid framing.")
+        # A document app's configuration data block carries the manifest directly.
+        if script.get("data-citry-vue-document") is not None:
+            payload = json.loads(source)
             collect(payload.get("manifest") if type(payload) is dict else None)
             continue
-        if script.get("type") != "application/json" or script.get("data-citry-vue-fragment") is None:
+        if script.get("data-citry-vue-fragment") is None:
             continue
         fragment = json.loads(source)
         vue = fragment.get("vue") if type(fragment) is dict else None

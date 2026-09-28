@@ -211,6 +211,12 @@ root for an isolated override. Public selectors such as
 attributes such as `data-open`, `data-loading`, `data-selected`, and
 `data-highlighted` expose current styling state.
 
+`attrs` targets the root and `input_attrs` targets the visible input. Both
+accept ordinary native, ARIA, and data attributes. They reject the attributes
+Combobox sets itself (such as `data-open` on the root and `role` on the input)
+and any Vue directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`.
+Write Vue bindings and listeners on the component tag in your template instead.
+
 The popup stays under the component and inherits its theme. It does not use the
 browser top layer yet, so an ancestor with clipped overflow may clip it.
 

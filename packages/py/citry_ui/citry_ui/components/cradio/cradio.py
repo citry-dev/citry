@@ -8,7 +8,13 @@ from typing import Any, Literal, cast
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._aria import merge_idrefs
-from citry_ui.components._attrs import CClassValue, CStyleValue, get_html_form_owner, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    get_html_form_owner,
+    merge_root_attrs,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_optional_boolean
 
@@ -23,9 +29,6 @@ _VARIANTS = ("solid", "outline")
 _SIZES = ("sm", "md", "lg")
 _LABEL_POSITIONS = ("start", "end")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-teleport", "x-text"}
-)
 _GROUP_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -189,28 +192,14 @@ def _copy_attrs(component: str, input_name: str, attrs: Mapping[str, object] | N
     return dict(attrs or {})
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    if attribute.startswith("x-bind:"):
-        return attribute.removeprefix("x-bind:").split(".", 1)[0]
-    if attribute.startswith((":", ".")):
-        return attribute[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(component: str, attrs: dict[str, object], owned: frozenset[str]) -> None:
     reject_owned_attrs(attrs, owned, component)
+    # A Vue directive could rebind the checked state, name, or Form wiring this
+    # component owns, so none may arrive through Python data.
+    reject_vue_directive_attrs(attrs, component.removesuffix("attrs").rstrip(" _"))
     for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"{component} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            msg = f"{component} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in owned:
-            msg = f"{component} cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
 
 

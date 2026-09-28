@@ -62,12 +62,10 @@ def _write_sources(root: Path, *, snippet: str) -> None:
 
 def _prepared_configuration(html: str) -> dict[str, object]:
     document = lxml_html.document_fromstring(html)
-    marker = "CitryStable.startPrepared("
-    bootstraps = [script.text or "" for script in document.xpath("//script") if marker in (script.text or "")]
-    assert len(bootstraps) == 1
-    source = bootstraps[0]
-    start = source.index(marker) + len(marker)
-    configuration, _ = json.JSONDecoder().raw_decode(source[start:])
+    # The page carries its start configuration as one JSON data block.
+    blocks = document.xpath('//script[@type="application/json"][@data-citry-vue-document]')
+    assert len(blocks) == 1
+    configuration = json.loads(blocks[0].text or "")
     assert type(configuration) is dict
     return configuration
 

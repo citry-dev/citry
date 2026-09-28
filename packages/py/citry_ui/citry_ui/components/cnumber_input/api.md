@@ -32,6 +32,13 @@ and shared state.
 
 Standalone use needs an accessible name in `input_attrs`.
 
+`attrs` and `input_attrs` accept ordinary native, ARIA, and data attributes.
+They reject the attributes the component sets itself (such as the editor's
+`id`, `role`, and `aria-valuenow`), Citry runtime attributes, and any Vue
+directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue
+bindings and listeners on the component tag in your template instead, for
+example `<c-CNumberInput :title="hint" :onValueChange="save">`.
+
 ## Keep decimals exact
 
 Server inputs accept `int`, `Decimal`, or a plain-decimal string. Floats,
@@ -67,7 +74,7 @@ not change until the owner supplies the requested exact string.
 
 `onInputValueChange` reports the literal draft and its `empty`, `incomplete`,
 `invalid`, or `valid` parse status. It does not make the draft a second
-controlled axis. Native `@input` also remains available through `input_attrs`.
+controlled axis.
 
 ## Hide controls or enable wheel stepping
 

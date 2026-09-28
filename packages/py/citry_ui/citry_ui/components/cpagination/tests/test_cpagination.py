@@ -72,3 +72,21 @@ def test_owned_attrs_fail():
 
     with pytest.raises(ValueError, match="cannot"):
         str(Page())
+
+
+@pytest.mark.parametrize(
+    "key",
+    [":aria-label", "v-bind:role", ".hidden", "v-if", "V-FOR", "v-html", "@click", "#default"],
+)
+def test_python_attrs_reject_vue_directives(key):
+    with pytest.raises(ValueError, match=re.escape(f"CPagination attrs cannot contain the Vue directive {key!r}")):
+        _render(f"""<c-CPagination c-pages="4" c-attrs="{{'{key}': 'value'}}" />""")
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(
+        """<c-CPagination c-pages="4" c-attrs="{'x-data': 'pager', 'title': 'Pages'}" />""",
+        static_fallback=True,
+    )
+    assert 'x-data="pager"' in html
+    assert 'title="Pages"' in html

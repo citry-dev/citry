@@ -66,8 +66,10 @@ def _run_sources(*sources: str) -> list[dict]:
 
 
 def _prepared_transport(html: str) -> dict:
-    marker = "CitryStable.startPrepared("
-    start = html.index(marker) + len(marker)
+    # The start configuration is a JSON data block; its JSON starts right
+    # after the opening tag.
+    marker = '<script type="application/json" data-citry-vue-document="'
+    start = html.index(">", html.index(marker)) + 1
     transport, _ = json.JSONDecoder().raw_decode(html[start:])
     assert transport["manifest"]["protocol"] == "citry-vue-prepared/1"
     return transport
@@ -93,8 +95,8 @@ import sys
 adapter = runpy.run_path({_EXECUTOR.as_posix()!r})
 payload = json.load(sys.stdin)
 rendered = json.loads(adapter["run_source_json"](payload["source"], payload["run_id"]))
-marker = "CitryStable.startPrepared("
-start = rendered["html"].index(marker) + len(marker)
+marker = '<script type="application/json" data-citry-vue-document="'
+start = rendered["html"].index(">", rendered["html"].index(marker)) + 1
 prepared, _ = json.JSONDecoder().raw_decode(rendered["html"][start:])
 manifest = prepared["manifest"]
 occurrence = next(item for item in manifest["occurrences"] if item["id"] == manifest["rootId"])
@@ -137,8 +139,8 @@ import sys
 adapter = runpy.run_path({_EXECUTOR.as_posix()!r})
 payload = json.load(sys.stdin)
 rendered = json.loads(adapter["run_source_json"](payload["source"], payload["run_id"]))
-marker = "CitryStable.startPrepared("
-start = rendered["html"].index(marker) + len(marker)
+marker = '<script type="application/json" data-citry-vue-document="'
+start = rendered["html"].index(">", rendered["html"].index(marker)) + 1
 prepared, _ = json.JSONDecoder().raw_decode(rendered["html"][start:])
 manifest = prepared["manifest"]
 occurrence = next(item for item in manifest["occurrences"] if item["id"] == manifest["rootId"])
@@ -665,3 +667,95 @@ def test_event_input_annotation_resolves_in_the_dynamic_module() -> None:
             "target": f"render:{occurrence['eventContext']['serverRenderId']}",
         }
     ]
+
+
+def test_render_of_the_current_component_needs_the_forwarded_vue_headers() -> None:
+    # The browser advertises the prepared Vue renderer, so re-rendering the
+    # component on screen needs the app, occurrence and revision headers the
+    # preview forwards. Any other forwarded header must not reach the request.
+    source = """
+from citry import Component
+
+
+class CounterState:
+    count: int = 0
+
+    def render(self):
+        return Counter(count=self.count)
+
+
+class Counter(Component):
+    State = CounterState
+
+    class Kwargs:
+        count: int = 0
+
+    class Events:
+        def add(self, state: CounterState, request):
+            state.count += 1
+            assert request.headers.get("Cookie") is None
+            return state.render()
+
+    def template_data(self, kwargs, slots):
+        return {"count": kwargs.count}
+
+    template = '<button @c-click="add">{{ count }}</button>'
+
+
+Counter()
+"""
+    program = f"""
+import json
+import runpy
+import sys
+
+adapter = runpy.run_path({_EXECUTOR.as_posix()!r})
+source = sys.stdin.read()
+rendered = json.loads(adapter["run_source_json"](source, 3))
+marker = '<script type="application/json" data-citry-vue-document="'
+start = rendered["html"].index(">", rendered["html"].index(marker)) + 1
+prepared, _ = json.JSONDecoder().raw_decode(rendered["html"][start:])
+manifest = prepared["manifest"]
+occurrence = next(item for item in manifest["occurrences"] if item["id"] == manifest["rootId"])
+event_context = occurrence["eventContext"]
+envelope = {{
+    "protocol": "citry-events/1",
+    "requestId": "playground-vue-headers",
+    "capabilities": {{"actions": ["render", "state"], "swaps": ["morph"], "renderers": ["vue-prepared/1"]}},
+    "calls": [{{
+        "componentClassId": event_context["componentClassId"],
+        "handlerName": "add",
+        "callerRenderId": event_context["serverRenderId"],
+        "stateToken": event_context["stateToken"],
+        "args": {{}},
+        "sendSequence": 1,
+    }}],
+}}
+headers = {{
+    "X-Citry-Vue-App": manifest["appId"],
+    "X-Citry-Vue-Occurrence": manifest["rootId"],
+    "X-Citry-Vue-Revision": str(manifest["revision"]),
+    "Cookie": "session=forged",
+}}
+without = json.loads(adapter["dispatch_event_json"](json.dumps(envelope), 3))
+forwarded = json.loads(adapter["dispatch_event_json"](json.dumps(envelope), 3, json.dumps(headers)))
+print(json.dumps([without, forwarded]))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", program],
+        input=source,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    without, forwarded = json.loads(completed.stdout)
+
+    [missing] = without["results"]
+    assert not missing["ok"]
+    assert "requires current app, occurrence, and revision headers" in missing["error"]["message"]
+    [result] = forwarded["results"]
+    assert result["ok"], result
+    [render] = result["actions"]
+    assert render["action"] == "render"
+    assert render["renderer"] == "vue-prepared/1"
+    assert render["prepared"]["revision"] == 1

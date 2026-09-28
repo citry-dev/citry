@@ -103,20 +103,32 @@ def test_every_decision_slot_is_required(missing: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "attrs",
+    ("attrs", "message"),
     [
-        {"role": "dialog"},
-        {"open": True},
-        {"aria-describedby": "other"},
-        {":aria-modal": "false"},
-        {"x-if": "bad"},
-        {"data-citry-private": "bad"},
+        ({"role": "dialog"}, "cannot override owned attribute"),
+        ({"open": True}, "cannot override owned attribute"),
+        ({"aria-describedby": "other"}, "cannot override owned attribute"),
+        ({"data-citry-private": "bad"}, "reserved Citry runtime attribute"),
+        ({":aria-modal": "false"}, "Vue directive"),
+        ({"v-bind:role": "alert"}, "Vue directive"),
+        ({"v-if": "bad"}, "Vue directive"),
+        ({"V-IF": "bad"}, "Vue directive"),
+        ({"@close": "bad"}, "Vue directive"),
+        ({"#default": "bad"}, "Vue directive"),
     ],
 )
-def test_owned_attrs_are_rejected(attrs: dict[str, object]) -> None:
+def test_owned_attrs_are_rejected(attrs: dict[str, object], message: str) -> None:
     source = _MINIMAL.replace('id="delete"', 'c-attrs="attrs"')
-    with pytest.raises(ValueError, match="cannot"):
+    with pytest.raises(ValueError, match=message):
         _render(source, {"attrs": attrs})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    source = _MINIMAL.replace('id="delete"', 'c-attrs="attrs"')
+    html = _render(source, {"attrs": {"x-if": "plain", "data-note": "kept"}})
+    # The dialog root renders in the browser, so its attributes travel in the prepared data.
+    assert '"x-if":"plain"' in html
+    assert '"data-note":"kept"' in html
 
 
 def test_invalid_server_configuration_fails() -> None:

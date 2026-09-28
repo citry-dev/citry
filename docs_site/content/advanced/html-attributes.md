@@ -165,7 +165,9 @@ assert attrs == (
 
 The formatting rules are:
 
-- `True` produces a bare attribute;
+- `True` produces a bare attribute. When Vue renders an interactive
+  component, a non-boolean attribute such as `data-open` reads as `"true"`;
+  see [HTML elements](/syntax/dynamic-attributes/#html-elements);
 - `False` and `None` leave the attribute out;
 - an empty `class` or `style` is left out;
 - names and values are HTML-escaped;

@@ -154,6 +154,9 @@ Citry lint policy. Free names inside a `$component` initializer are also
 errors by default, which catches an undeclared context value when it was
 used but not destructured. Configure the severity or real host-provided
 globals through `LintSettings`; see [Template linting](/ide/template-linting/).
+A `component.<name>` or `this.<name>` read that names nothing the component
+defines is an error. Citry checks this only when it can read every
+`js_data()` key and every Vue Options section from the source.
 
 Hovering `$component`, a destructured callback value, or a Citry Vue helper
 such as `$sendEvent`, `$loading`, or `$error` shows its Citry contract and a
@@ -195,16 +198,16 @@ Hover an argument name such as `count` in
 `tr("account-unread", count=value)` to see its `@param` type and description.
 Go to definition on that argument to open the exact `@param` declaration.
 The same rule works in template and Python `tr()` calls, Vue `$i18n.tr()`,
-the injected component JavaScript `i18n.tr()`, and literal `<c-trans>` values
-and fills.
+`component.$i18n.tr()` or `this.$i18n.tr()` in component JavaScript, and
+literal `<c-trans>` values and fills.
 
 Named formatter and parser profiles complete in the matching operation, such
 as `fmt.number(..., format="...")`, `self.i18n.parse.percent(...)`, and
 `$i18n.format.currency(...)`. Template `fmt` methods include their call
 signatures and return types. A misspelled template method or a literal profile
-that is not registered for that exact operation is an error. `$i18n` and the
-`i18n` value in a `$component`
-callback include the nested `context`, `format`, and `parse` APIs. Public
+that is not registered for that exact operation is an error. `$i18n` in a
+template and `component.$i18n` or `this.$i18n` in component JavaScript
+include the nested `context`, `format`, and `parse` APIs. Public
 Fluent message references navigate to the same defining source; private term
 references navigate within their own `messages` block.
 

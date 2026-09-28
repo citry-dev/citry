@@ -98,8 +98,8 @@ def test_export_prepared_page_assets_uses_only_the_generated_manifest(tmp_path: 
     }
     html = (
         f"<p>/citry/ext/events/definitions/{fake_digest}.js</p>"
-        f"<script>(function() {{\nCitryStable.startPrepared({json.dumps(payload)})"
-        ".catch(error => queueMicrotask(() => { throw error; }));\n})();</script>"
+        f'<script type="application/json" data-citry-vue-document="app">{json.dumps(payload)}</script>'
+        '<script type="module">__citryRuntime.startDocument("app");</script>'
     )
     monkeypatch.setattr(events, "definition_bundle", lambda _citry, digest: b"js" if digest == js_digest else None)
     monkeypatch.setattr(events, "style_asset", lambda _citry, digest: b"css" if digest == css_digest else None)

@@ -5,8 +5,9 @@ use std::convert::Infallible;
 use html5ever::tendril::StrTendril;
 use html5ever::tokenizer::states::RawKind;
 use html5ever::tokenizer::{Doctype, Tag, TagKind, Token, TokenSink, TokenSinkResult};
+use html5ever::tree_builder::create_element;
 use html5ever::tree_builder::TreeBuilder;
-use html5ever::{Attribute, LocalName, ParseOpts, QualName};
+use html5ever::{namespace_url, ns, Attribute, LocalName, ParseOpts, QualName};
 use html5gum::emitters::callback::{Callback, CallbackEmitter, CallbackEvent};
 use html5gum::{Emitter, ForwardingEmitter, Span, State, Tokenizer};
 use markup5ever_rcdom::{Handle, RcDom};
@@ -37,12 +38,14 @@ pub struct OutputTag {
 struct ScannerCallback<'a, S> {
     sink: &'a mut S,
     facts: &'a mut Vec<OutputTag>,
+    collect_facts: bool,
     input: &'a [u8],
     current_tag: Option<Tag>,
     current_fact: Option<OutputTag>,
     next_state: Option<State>,
     raw_stack: Vec<(String, usize)>,
     boundary: Option<&'a mut BoundaryTracker>,
+    lexical_text: Option<&'a mut LexicalTextTracker>,
 }
 
 trait ScannerSink: TokenSink {
@@ -66,6 +69,111 @@ impl ScannerSink for TreeBuilder<Handle, RcDom> {
 struct BoundaryTracker {
     stack: Vec<String>,
     invalid: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct LexicalTextRun {
+    pub parent_open: usize,
+    pub child_index: usize,
+    pub value: String,
+}
+
+struct LexicalFrame {
+    tag: String,
+    open_id: usize,
+    children: usize,
+    last_was_text: bool,
+}
+
+struct LexicalTextTracker {
+    frames: Vec<LexicalFrame>,
+    next_open_id: usize,
+    runs: Vec<LexicalTextRun>,
+    valid: bool,
+}
+
+impl Default for LexicalTextTracker {
+    fn default() -> Self {
+        Self {
+            frames: vec![LexicalFrame {
+                tag: String::new(),
+                open_id: 0,
+                children: 0,
+                last_was_text: false,
+            }],
+            next_open_id: 1,
+            runs: Vec::new(),
+            valid: true,
+        }
+    }
+}
+
+impl LexicalTextTracker {
+    fn open(&mut self, tag: &str, self_closing: bool) {
+        let parent = self.frames.last_mut().expect("fragment frame exists");
+        parent.children += 1;
+        parent.last_was_text = false;
+        let is_void = crate::transformer::is_void_element(tag.as_bytes());
+        if self_closing && !is_void {
+            self.valid = false;
+        }
+        if !is_void && !self_closing {
+            let open_id = self.next_open_id;
+            self.next_open_id += 1;
+            self.frames.push(LexicalFrame {
+                tag: tag.to_owned(),
+                open_id,
+                children: 0,
+                last_was_text: false,
+            });
+        } else {
+            self.next_open_id += 1;
+        }
+    }
+
+    fn close(&mut self, tag: &str) {
+        if self.frames.len() <= 1 || self.frames.last().is_none_or(|frame| frame.tag != tag) {
+            self.valid = false;
+            return;
+        }
+        self.frames.pop();
+        self.frames
+            .last_mut()
+            .expect("fragment frame exists")
+            .last_was_text = false;
+    }
+
+    fn text(&mut self, value: &[u8]) {
+        if value.is_empty() {
+            return;
+        }
+        let value = String::from_utf8_lossy(value);
+        let frame = self.frames.last_mut().expect("fragment frame exists");
+        if frame.last_was_text {
+            self.runs
+                .last_mut()
+                .expect("adjacent text exists")
+                .value
+                .push_str(&value);
+        } else {
+            self.runs.push(LexicalTextRun {
+                parent_open: frame.open_id,
+                child_index: frame.children,
+                value: value.into_owned(),
+            });
+            frame.children += 1;
+            frame.last_was_text = true;
+        }
+    }
+
+    fn comment(&mut self) {
+        // A comment is one child node. The structure check decides whether
+        // this particular comment was expected; here it only separates the
+        // text on either side into distinct sibling positions.
+        let frame = self.frames.last_mut().expect("fragment frame exists");
+        frame.children += 1;
+        frame.last_was_text = false;
+    }
 }
 
 impl<S: ScannerSink> ScannerCallback<'_, S> {
@@ -94,7 +202,7 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                     self_closing: false,
                     attrs: Vec::new(),
                 });
-                self.current_fact = Some(OutputTag {
+                self.current_fact = self.collect_facts.then_some(OutputTag {
                     name: decoded,
                     start: span.start,
                     end: span.end,
@@ -148,6 +256,11 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                 }
             }
             CallbackEvent::CloseStartTag { self_closing } => {
+                if let (Some(tag), Some(tracker)) =
+                    (self.current_tag.as_ref(), self.lexical_text.as_deref_mut())
+                {
+                    tracker.open(tag.name.as_ref(), self_closing);
+                }
                 if let (Some(tag), Some(boundary)) =
                     (self.current_tag.as_ref(), self.boundary.as_deref_mut())
                 {
@@ -174,6 +287,9 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
             }
             CallbackEvent::EndTag { name } => {
                 let decoded = String::from_utf8_lossy(name).into_owned();
+                if let Some(tracker) = self.lexical_text.as_deref_mut() {
+                    tracker.close(&decoded);
+                }
                 if let Some(boundary) = self.boundary.as_deref_mut() {
                     if crate::transformer::is_void_element(decoded.as_bytes())
                         || boundary.stack.pop().as_deref() != Some(decoded.as_str())
@@ -198,6 +314,9 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                 }));
             }
             CallbackEvent::String { value } => {
+                if let Some(tracker) = self.lexical_text.as_deref_mut() {
+                    tracker.text(value);
+                }
                 let mut first = true;
                 for part in value.split(|byte| *byte == 0) {
                     if !first {
@@ -209,25 +328,38 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                     )));
                 }
             }
-            CallbackEvent::Comment { value } => self.sink_token(Token::CommentToken(
-                StrTendril::from_slice(&String::from_utf8_lossy(value)),
-            )),
+            CallbackEvent::Comment { value } => {
+                if let Some(tracker) = self.lexical_text.as_deref_mut() {
+                    tracker.comment();
+                }
+                self.sink_token(Token::CommentToken(StrTendril::from_slice(
+                    &String::from_utf8_lossy(value),
+                )));
+            }
             CallbackEvent::Doctype {
                 name,
                 public_identifier,
                 system_identifier,
                 force_quirks,
-            } => self.sink_token(Token::DoctypeToken(Doctype {
-                name: Some(name)
-                    .filter(|value| !value.is_empty())
-                    .map(|value| StrTendril::from_slice(&String::from_utf8_lossy(value))),
-                public_id: public_identifier
-                    .map(|value| StrTendril::from_slice(&String::from_utf8_lossy(value))),
-                system_id: system_identifier
-                    .map(|value| StrTendril::from_slice(&String::from_utf8_lossy(value))),
-                force_quirks,
-            })),
+            } => {
+                if let Some(tracker) = self.lexical_text.as_deref_mut() {
+                    tracker.valid = false;
+                }
+                self.sink_token(Token::DoctypeToken(Doctype {
+                    name: Some(name)
+                        .filter(|value| !value.is_empty())
+                        .map(|value| StrTendril::from_slice(&String::from_utf8_lossy(value))),
+                    public_id: public_identifier
+                        .map(|value| StrTendril::from_slice(&String::from_utf8_lossy(value))),
+                    system_id: system_identifier
+                        .map(|value| StrTendril::from_slice(&String::from_utf8_lossy(value))),
+                    force_quirks,
+                }));
+            }
             CallbackEvent::Error(error) => {
+                if let Some(tracker) = self.lexical_text.as_deref_mut() {
+                    tracker.valid = false;
+                }
                 if let Some(boundary) = self.boundary.as_deref_mut() {
                     boundary.invalid = true;
                 }
@@ -268,6 +400,9 @@ impl<S: ScannerSink> ForwardingEmitter for ScannerEmitter<'_, S> {
             if let Some(boundary) = self.inner.callback_mut().boundary.as_deref_mut() {
                 boundary.invalid = true;
             }
+            if let Some(tracker) = self.inner.callback_mut().lexical_text.as_deref_mut() {
+                tracker.valid = false;
+            }
         }
     }
 
@@ -293,18 +428,58 @@ pub fn scan_output_html(input: &str) -> Vec<OutputTag> {
         inner: CallbackEmitter::new(ScannerCallback {
             sink: &mut builder,
             facts: &mut facts,
+            collect_facts: true,
             input: input.as_bytes(),
             current_tag: None,
             current_fact: None,
             next_state: None,
             raw_stack: Vec::new(),
             boundary: None,
+            lexical_text: None,
         }),
     };
     Tokenizer::new_with_emitter(input, emitter)
         .finish()
         .expect("string input is infallible");
     facts
+}
+
+/// Parse a `div` fragment while retaining decoded source text in lexical
+/// element occurrences. The DOM and source facts come from one tokenizer pass.
+pub(crate) fn parse_div_fragment_with_lexical_text(
+    input: &str,
+) -> Option<(RcDom, Vec<LexicalTextRun>)> {
+    let dom = RcDom::default();
+    let context = create_element(
+        &dom,
+        QualName::new(None, ns!(html), LocalName::from("div")),
+        Vec::new(),
+    );
+    let mut builder =
+        TreeBuilder::new_for_fragment(dom, context, None, ParseOpts::default().tree_builder);
+    let mut facts = Vec::new();
+    let mut tracker = LexicalTextTracker::default();
+    let emitter = ScannerEmitter {
+        inner: CallbackEmitter::new(ScannerCallback {
+            sink: &mut builder,
+            facts: &mut facts,
+            collect_facts: false,
+            input: input.as_bytes(),
+            current_tag: None,
+            current_fact: None,
+            next_state: None,
+            raw_stack: Vec::new(),
+            boundary: None,
+            lexical_text: Some(&mut tracker),
+        }),
+    };
+    Tokenizer::new_with_emitter(input, emitter)
+        .finish()
+        .expect("string input is infallible");
+    if !tracker.valid || tracker.frames.len() != 1 {
+        return None;
+    }
+    Some((builder.sink, tracker.runs))
 }
 
 /// Validate one strict, independently parseable HTML fragment boundary.
@@ -323,12 +498,14 @@ pub fn validate_html_fragment_boundary(input: &str) -> Result<(), &'static str> 
         inner: CallbackEmitter::new(ScannerCallback {
             sink: &mut builder,
             facts: &mut facts,
+            collect_facts: true,
             input: input.as_bytes(),
             current_tag: None,
             current_fact: None,
             next_state: None,
             raw_stack: Vec::new(),
             boundary: Some(&mut boundary),
+            lexical_text: None,
         }),
     };
     Tokenizer::new_with_emitter(input, emitter)

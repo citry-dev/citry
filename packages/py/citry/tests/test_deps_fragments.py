@@ -425,9 +425,11 @@ class TestMountedDocumentFlow:
 
         rendered = page().render()
         html = rendered.serialize()
-        assert html.index("/citry/citry.js") < html.rindex("CitryStable.startPrepared(")
+        data_block = '<script type="application/json" data-citry-vue-document='
+        assert html.index("/citry/citry.js") < html.index(data_block)
         assert '"loadInitialAssets":true' in html
-        assert 'type="application/json" data-citry' not in html
+        # The start configuration is the only JSON data block Citry writes.
+        assert html.count('type="application/json" data-citry') == html.count(data_block) == 1
 
     def test_content_only_mounted_page_emits_css_without_runtime(self):
         c = Citry()

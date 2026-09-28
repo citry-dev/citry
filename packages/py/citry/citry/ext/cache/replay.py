@@ -1012,6 +1012,9 @@ def _replay_typed_leaf(part: ArtifactPart) -> RenderPart:
             ),
         )
     if type(part) is ArtifactLeafProgramPart:
+        # Artifact validation has already admitted only FrozenJsonObject data;
+        # thaw a fresh graph at the cache boundary.
+        prepared_data = _as_dict(part.prepared_data, "leaf prepared data")
         return PreparedLeafProgram(
             fragment=LeafProgramFragment(
                 template=part.template,
@@ -1019,7 +1022,7 @@ def _replay_typed_leaf(part: ArtifactPart) -> RenderPart:
                 browser_requirements=frozenset(part.browser_requirements),
                 safe_body=part.safe_body,
             ),
-            prepared_data=_as_dict(part.prepared_data, "leaf prepared data"),
+            prepared_data=prepared_data,
             operations=(),
             vue_errors=part.vue_errors,
             resolved_opens={},

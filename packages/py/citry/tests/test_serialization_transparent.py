@@ -117,7 +117,11 @@ def test_nested_transparent_provide_preserves_child_markers_and_values():
     html = rendered.serialize()
     assert html.count('id="citry-vue-') == 1
     assert len(set(re.findall(r"citryOccurrence[0-9a-f]{24}", html))) == 3
-    assert html.count("violet") == 2
+    # Each widget's provided value reaches the browser once in the prepared
+    # data and once in the server HTML the host carries.
+    host, scripts = html.split("<script", 1)
+    assert host.count("violet") == 2
+    assert scripts.count("violet") == 2
 
 
 def test_transparent_lexical_fill_owner_keeps_one_boundary_across_child_frame():

@@ -8,7 +8,7 @@ from types import MappingProxyType
 from typing import Any, Literal, get_args
 
 from citry import LibraryComponent, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_choice
 from citry_ui.components.cicon._catalog import ICON_GLYPHS
 
@@ -176,6 +176,9 @@ def _validate_icon_attrs(attrs: Mapping[str, object] | None) -> None:
         msg = f"CIcon attrs must be a mapping or None, got {attrs!r}."
         raise TypeError(msg)
     reject_owned_attrs(attrs, _OWNED_ATTRS, "CIcon")
+    # The SVG must stay inert, and a Vue directive could bind geometry or the
+    # accessible name, change structure, or attach a listener.
+    reject_vue_directive_attrs(attrs, "CIcon")
     for key in attrs or {}:
         normalized = key.lower()
         if normalized.startswith("aria-") and normalized not in _ALLOWED_ARIA_ATTRS:
@@ -184,9 +187,9 @@ def _validate_icon_attrs(attrs: Mapping[str, object] | None) -> None:
         if normalized.startswith(("data-citry-", "data-cev", "data-cid")):
             msg = f"CIcon attrs cannot contain reserved Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        if normalized.startswith(("@", ":", ".", "$", "c-", "x-")) or (
-            normalized.startswith("on") and len(normalized) > 2
-        ):
+        # Citry `c-` attributes and inline `on*` handlers would also turn the
+        # SVG into something that runs code.
+        if normalized.startswith(("$", "c-")) or (normalized.startswith("on") and len(normalized) > 2):
             msg = f"CIcon attrs cannot contain executable browser attribute {key!r}."
             raise ValueError(msg)
 

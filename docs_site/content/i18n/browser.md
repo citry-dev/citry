@@ -245,11 +245,32 @@ ordinary non-reactive state.
 ## Let Citry preload literal message names
 
 Citry finds literal `$i18n.tr()` and `$i18n.resolve()` calls in Vue
-expressions, checked `$c-tr` declarations, and literal `i18n` calls in
-component JavaScript. A bounded object-literal
-`i18n.bind({ message: "...", output: "...", ... })` contributes its exact
+expressions, checked `$c-tr` declarations, and literal calls on
+`component.$i18n` or `this.$i18n` in component JavaScript. A bounded
+object-literal `i18n.bind({ message: "...", output: "...", ... })` contributes its exact
 output too. Citry includes those outputs and their referenced messages and
 private terms in the browser artifact.
+
+In component JavaScript, Citry recognizes a call when it can prove the
+receiver is the component's i18n service:
+
+- `component.$i18n.tr(...)`, `.resolve(...)`, and `.bind(...)` in a
+  `$component` callback, and `this.$i18n` in a method, computed getter or
+  setter, `data()`, lifecycle hook, `provide()`, or `watch` handler;
+- a variable that holds the service, such as
+  `const i18n = component.$i18n`, followed by `i18n.tr(...)` or
+  `i18n.bind(...)`. A `let` or `var` also works when it is declared
+  once and nothing assigns it again.
+
+Citry does not follow the service through destructuring
+(`const { bind } = component.$i18n`), a copy of the variable
+(`const other = i18n`), optional chaining on the component
+(`component?.$i18n`), or a call to your own helper function. It also
+cannot read a message ID built at runtime, such as a template string or
+a variable. Citry does not send those messages to the browser, so the
+call fails in the browser with an error that names the message. Load
+those IDs with `ensureMessages()` or list them in `client_messages`, as
+the next section shows.
 
 A message reference is transitive. If message A includes public message B,
 loading A also includes B and the private terms needed to format the selected

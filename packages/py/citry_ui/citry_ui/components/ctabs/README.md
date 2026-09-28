@@ -21,10 +21,14 @@ from public exports. Do not replace this queue ordering with a synchronous
 nested `.render()`: fragment ownership adoption requires the internal
 components to remain ordinary logical children of `CTabs`.
 
-A component used only to group declarations must be transparent when those
-declarations are rendered later outside the wrapper's Vue subtree. A
-nontransparent wrapper owns a separate Vue scope, which native slots cannot
-forward upward into `CTabs` and then down into `CInternalTabs`.
+Tab and Panel content is compiled with its author: the assembler passes it
+as a Vue slot from `CInternalTabs` up to the call of the component that wrote
+it (see "Fills keep their author's Vue scope" in
+[`docs/design/vue.md`](../../../../../../docs/design/vue.md)). A component used
+only to group declarations must be transparent when the declarations use Vue
+bindings. A non-transparent wrapper is a sibling of `CInternalTabs`, and Vue
+slots cannot travel from a sibling, so assembly rejects its Vue-bound content
+and copies content that shows only Python values.
 
 The public guide is [`api.md`](api.md), and the structured reference is
 [`api.yml`](api.yml). The docs catalog validates and combines them at the public

@@ -211,7 +211,9 @@ class TestScriptEndpointLogic:
         rendered = Widget().render()
         record = next(iter(rendered.context.extra["dependencies"]))
         html = rendered.serialize()
-        match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+        match = re.search(
+            r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+        )
         assert match is not None
         manifest = json.loads(match.group(1))["manifest"]
         occurrence = next(item for item in manifest["occurrences"] if item["typeKey"] == Widget.class_id)

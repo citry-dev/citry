@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -36,6 +37,7 @@ from docs_site._internal.guards import (
     run_guards,
     single_h1,
     snippet_path,
+    stray_markup,
 )
 from docs_site._internal.guards.base import GuardContext, GuardResult, Severity
 from docs_site._internal.guards.site_index import SiteIndex
@@ -811,6 +813,104 @@ def test_rendered_markdown_guard_ignores_markdown_shown_on_purpose(tmp_path: Pat
     )
 
     assert list(rendered_markdown.check(_index_ctx(tmp_path, build))) == []
+
+
+def _prepared_page(fragment_html: str) -> str:
+    """A built page whose content ships inside a prepared Vue app's start script."""
+    transport = {
+        "manifest": {
+            "protocol": "citry-vue-prepared/1",
+            "occurrences": [{"id": "root", "preparedData": {"opaqueHtml": {"content": {"html": fragment_html}}}}],
+        }
+    }
+    return (
+        '<html><body><div id="app"></div>'
+        f'<script type="application/json" data-citry-vue-document="app">{json.dumps(transport)}</script>'
+        "</body></html>"
+    )
+
+
+def test_single_h1_counts_content_served_and_shipped_to_vue_once(tmp_path: Path) -> None:
+    """Raw HTML the server wrote into the body and also ships for Vue is one heading, not two."""
+    build = tmp_path / "site"
+    build.mkdir()
+    fragment = "<h1>Home</h1><p>Copy</p>"
+    page = _prepared_page(fragment).replace('<div id="app"></div>', f'<div id="app"><!--[-->{fragment}<!--]--></div>')
+    (build / "index.html").write_text(page, encoding="utf-8")
+
+    assert list(single_h1.check(_index_ctx(tmp_path, build))) == []
+
+
+def test_rendered_markdown_guard_reads_content_vue_builds_and_points_at_the_source_line(tmp_path: Path) -> None:
+    """A page Vue builds in the browser still ships its HTML; leaks there fail at the Markdown line."""
+    content = tmp_path / "content"
+    (content / "guide").mkdir(parents=True)
+    (content / "guide" / "start.md").write_text(
+        '# Start\n\n<section class="band">\n### Choose Citry when\n</section>\n',
+        encoding="utf-8",
+    )
+    build = tmp_path / "site"
+    (build / "guide" / "start").mkdir(parents=True)
+    (build / "guide" / "start" / "index.html").write_text(
+        _prepared_page('<section class="band">### Choose Citry when</section>'),
+        encoding="utf-8",
+    )
+    ctx = _index_ctx(tmp_path, build)
+    ctx.content_dir = content
+
+    [result] = rendered_markdown.check(ctx)
+
+    assert result.source == str(content / "guide" / "start.md")
+    assert result.line == 4
+    assert "### Choose Citry when" in result.message
+
+
+def test_stray_markup_guard_catches_paragraphs_around_generated_markup(tmp_path: Path) -> None:
+    """The markdown pass wrapping raw HTML in paragraphs shows up as gaps; the build must fail."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        _prepared_page('<div class="panel"><p><div class="code">x</div><p></div><p></p></div>'),
+        encoding="utf-8",
+    )
+    (tmp_path / "index.md").write_text("# Home\n", encoding="utf-8")
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.severity is Severity.ERROR
+    assert result.source == str(tmp_path / "index.md")
+    assert "'<p><div'" in result.message
+    assert "'<p></div>'" in result.message
+    assert "'<p></p>'" in result.message
+
+
+def test_stray_markup_guard_ignores_paragraphs_inside_scripts_and_ordinary_html(tmp_path: Path) -> None:
+    """Script text and well-formed paragraphs are not markdown damage."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><article><p>Text</p><div><p>More</p></div></article>"
+        '<script>const html = "<p></p><p><div>";</script></body></html>',
+        encoding="utf-8",
+    )
+
+    assert list(stray_markup.check(_index_ctx(tmp_path, build))) == []
+
+
+def test_stray_markup_guard_ignores_empty_elements_inside_vue_shells(tmp_path: Path) -> None:
+    """A shell's served HTML comes from component templates, not the markdown pass."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        '<html><body><main><div data-allow-mismatch="children"><div><p></p></div><img src="/x.png"></div>'
+        "<p></p></main></body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "index.md").write_text("# Home\n", encoding="utf-8")
+
+    # Only the empty paragraph outside the shell is reported.
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+    assert result.message.count("'<p></p>'") == 1
 
 
 def test_rendered_css_guard_catches_a_custom_property_glued_to_its_value(tmp_path: Path) -> None:

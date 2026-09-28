@@ -138,7 +138,7 @@ def test_native_select_renders_one_native_root_with_ordered_options_and_groups()
     assert html.index("Choose a habitat") < html.index("Coral reef") < html.index("Open ocean") < html.index("Pelagic")
     assert '<optgroup label="Open ocean">' in html
     definition, keys = _vue_option_keys(value)
-    assert definition.count(':key="preparedData.') == 4
+    assert definition.count(':key="$citryPrepared.') == 4
     assert len(keys) == 4
     assert len(set(keys)) == len(keys)
     assert "native-select-placeholder" in keys
@@ -268,35 +268,46 @@ def test_direct_text_inputs_are_de_trusted_and_non_string_html_protocol_is_rejec
     ("attrs", "message"),
     [
         ({"readonly": True}, "owned attribute"),
-        ({":multiple": "many"}, "dynamically bind owned"),
-        ({"X-BIND:VALUE": "chosen"}, "dynamically bind owned"),
-        ({".required": True}, "dynamically bind owned"),
-        ({":form": "owner"}, "dynamically bind owned"),
-        ({"X-BIND:FORM": "owner"}, "dynamically bind owned"),
-        ({".form": "owner"}, "dynamically bind owned"),
-        ({"x-bind": {"value": "reef"}}, "ownership directive"),
-        ({"x-model": "reef"}, "ownership directive"),
-        ({"x-html": "options"}, "ownership directive"),
         ({"data-citry-root": "x"}, "reserved Citry runtime"),
+        ({":multiple": "many"}, "CNativeSelect attrs cannot contain the Vue directive ':multiple'"),
+        ({"V-BIND:VALUE": "chosen"}, "CNativeSelect attrs cannot contain the Vue directive 'V-BIND:VALUE'"),
+        ({".required": True}, "CNativeSelect attrs cannot contain the Vue directive '.required'"),
+        ({":form": "owner"}, "CNativeSelect attrs cannot contain the Vue directive ':form'"),
+        ({"v-bind": {"value": "reef"}}, "CNativeSelect attrs cannot contain the Vue directive 'v-bind'"),
+        ({"v-model": "reef"}, "CNativeSelect attrs cannot contain the Vue directive 'v-model'"),
+        ({"v-html": "options"}, "CNativeSelect attrs cannot contain the Vue directive 'v-html'"),
+        ({"V-IF": "ready"}, "CNativeSelect attrs cannot contain the Vue directive 'V-IF'"),
+        ({"@change": "changed = true"}, "CNativeSelect attrs cannot contain the Vue directive '@change'"),
+        ({"#default": "slotProps"}, "CNativeSelect attrs cannot contain the Vue directive '#default'"),
     ],
 )
 def test_root_attrs_reject_second_ownership_paths(attrs, message):
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match=re.escape(message)):
         _render(CNativeSelect(options=[], attrs=attrs))
 
 
-def test_native_event_and_unrelated_alpine_attrs_remain_allowed():
+def test_option_and_group_attrs_reject_vue_directives():
+    option = CNativeSelectOption("reef", "Reef", attrs={"v-if": "shown"})
+    with pytest.raises(ValueError, match="CNativeSelect option attrs cannot contain the Vue directive 'v-if'"):
+        _render(CNativeSelect(options=[option]))
+
+    group = CNativeSelectGroup("Pacific", [CNativeSelectOption("reef", "Reef")], attrs={":label": "name"})
+    with pytest.raises(ValueError, match="CNativeSelect group attrs cannot contain the Vue directive ':label'"):
+        _render(CNativeSelect(options=[group]))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
     root = _root(
         _render(
             CNativeSelect(
                 options=[CNativeSelectOption("reef", "Reef")],
-                attrs={"@change": "changed = true", ":title": "hint"},
+                attrs={"x-data": "{}", "title": "hint"},
             )
         )
     )
 
-    assert '@change="changed = true"' in root
-    assert ':title="hint"' in root
+    assert 'x-data="{}"' in root
+    assert 'title="hint"' in root
 
 
 def test_option_and_group_attrs_are_copied_validated_and_rendered():

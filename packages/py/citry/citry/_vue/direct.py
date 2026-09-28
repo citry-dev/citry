@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Protocol
 
-from citry.citry_render import CitryRender, RenderPart
+from citry.citry_render import CitryRender, RenderPart, SimpleVueRecord
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -406,6 +406,8 @@ def wrap_python_composition_result(selected: RenderPart) -> RenderPart:
     session = direct_session()
     if session is None:
         return selected
+    if isinstance(selected, SimpleVueRecord):
+        return _mark_python_simple_vue(selected)
     selected_prepared = selected.frame.prepared_occurrence if isinstance(selected, RenderDecoration) else None
     if (
         isinstance(selected, RenderDecoration)
@@ -424,6 +426,13 @@ def wrap_python_composition_result(selected: RenderPart) -> RenderPart:
     parts: list[RenderPart] = []
     changed = False
     for part in selected.parts:
+        # A simple="vue" root render is a plain wrapper around one record, so
+        # the record itself carries the Python composition mark.
+        if isinstance(part, SimpleVueRecord):
+            marked = _mark_python_simple_vue(part)
+            parts.append(marked)
+            changed = changed or marked is not part
+            continue
         part_prepared = part.frame.prepared_occurrence if isinstance(part, RenderDecoration) else None
         if (
             isinstance(part, RenderDecoration)
@@ -443,6 +452,15 @@ def wrap_python_composition_result(selected: RenderPart) -> RenderPart:
     if not changed:
         return selected
     return CitryRender(parts=parts, context=selected.context, frame=selected.frame)
+
+
+def _mark_python_simple_vue(record: SimpleVueRecord) -> SimpleVueRecord:
+    """Mark a ``simple="vue"`` record that a Python composition site placed."""
+    # An authored tag's record keeps its parser call record; only a record
+    # rendered as its own root reaches here without one.
+    if record.call_metadata is not None or record.python_composition:
+        return record
+    return replace(record, python_composition=True)
 
 
 def begin_slot_execution(

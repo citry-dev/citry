@@ -77,7 +77,7 @@ def test_mark_only_static_component_serializes_without_client_runtime() -> None:
     assert "<b" in html
     assert "static</b>" in html
     assert "<script" not in html.lower()
-    assert "citrystable" not in html.lower()
+    assert "__citryruntime" not in html.lower()
     assert "citry-events" not in html.lower()
 
 

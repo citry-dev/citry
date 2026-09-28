@@ -186,14 +186,48 @@ def test_item_outside_tree_and_unknown_collection_content_fail() -> None:
     "template",
     [
         _tree("c-attrs=\"{'role': 'listbox'}\""),
-        _tree("c-attrs=\"{':data-selection-mode': 'mode'}\""),
-        _tree("c-attrs=\"{'x-html': 'content'}\""),
         '<c-CTree label="Files"><c-CTreeItem value="a" label="A" c-attrs="{\'aria-expanded\': \'true\'}" /></c-CTree>',
     ],
 )
-def test_owned_attrs_and_directives_are_rejected(template: str) -> None:
-    with pytest.raises(ValueError, match="cannot"):
+def test_owned_attrs_are_rejected(template: str) -> None:
+    with pytest.raises(ValueError, match="cannot override owned attribute"):
         _render(template)
+
+
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CTree", ":data-selection-mode"),
+        ("CTree", "v-bind:role"),
+        ("CTree", "v-html"),
+        ("CTree", "V-IF"),
+        ("CTree", "@keydown"),
+        ("CTreeItem", ".aria-expanded"),
+        ("CTreeItem", "v-for"),
+        ("CTreeItem", "#default"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(owner: str, attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    template = (
+        _tree(attrs)
+        if owner == "CTree"
+        else f'<c-CTree label="Files"><c-CTreeItem value="a" label="A" {attrs} /></c-CTree>'
+    )
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        _render(template)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(_tree("c-attrs=\"{'x-data': '{}', 'hx-get': '/files'}\""), static_fallback=True)
+
+    root = _tag(html, "tree")
+    assert 'x-data="{}"' in root
+    assert 'hx-get="/files"' in root
 
 
 def test_css_exposes_public_variables_environment_rules_and_parts() -> None:

@@ -8,7 +8,9 @@ import pytest
 from citry_ui.quality.routes import build_scenario, render_scenario, renderable_scenario_ids
 from citry_ui.quality.scenarios import SCENARIOS
 
-_PREPARED_RE = re.compile(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", re.DOTALL)
+_PREPARED_RE = re.compile(
+    r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', re.DOTALL
+)
 _GENERATED_ID_PATTERNS = (
     ("citrySlot", re.compile(r"citrySlot[0-9A-Za-z]+")),
     ("citryCall", re.compile(r"citryCall[0-9A-Za-z]+")),
@@ -272,7 +274,6 @@ def _prepared_contract(configuration: dict[str, object], *, wrapper_type: str | 
         ],
         "definitions": [normalize_definition(item) for item in definitions],
         "occurrences": [normalize_occurrence(item) for item in occurrences],
-        "replacements": normalize(manifest.get("replacements", [])),
         "scripts": normalize_assets(manifest["scripts"]),
         "styles": normalize_assets(manifest["styles"]),
         "typePolicies": [normalize(item) for item in manifest["typePolicies"] if item["typeKey"] in retained_types],
@@ -391,6 +392,15 @@ def test_prepared_route_contract_rejects_changed_prepared_binding() -> None:
 
 def test_every_ready_scenario_has_exactly_one_renderer():
     assert renderable_scenario_ids() == tuple(scenario.id for scenario in SCENARIOS)
+
+
+def test_default_delivery_writes_the_component_markup_into_the_served_page():
+    # A no-JavaScript test reads the served HTML, so the scenario page must
+    # carry its component markup without any extra setting.
+    html = render_scenario("button.states")
+
+    assert '<main id="main-content">' in html
+    assert '"hydrate":true' in html
 
 
 def test_unknown_scenario_fails_instead_of_silently_skipping():

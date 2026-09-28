@@ -906,7 +906,10 @@ def test_initial_invalid_prop_values_keep_the_ssr_fallback_interactive(page):
 
     assert root.get_attribute("data-citry-tabs-initialized") == ""
     assert root.get_attribute("data-orientation") == "horizontal"
-    assert root.get_attribute("data-loop") == ""
+    # The invalid client value falls back to the Python default `loop=True`,
+    # which Vue writes as the text "true" on a data attribute; Python's
+    # static HTML writes "".
+    assert root.get_attribute("data-loop") == "true"
     assert root.get_attribute("data-grow") is None
     for name in ("loop", "orientation", "grow", "onValueChange"):
         assert sum(f"CTabs {name} received invalid client value" in message for message in messages) == 1
@@ -1026,7 +1029,8 @@ def test_reactive_root_configuration_does_not_disable_nested_tabs(page):
     assert inner.get_attribute("data-activation") == "automatic"
     assert inner.get_attribute("data-orientation") == "horizontal"
     assert inner.get_attribute("data-direction") is None
-    assert inner.get_attribute("data-loop") == ""
+    # The inner tabs keep the Python default True, which Vue writes as "true".
+    assert inner.get_attribute("data-loop") == "true"
     assert inner.get_attribute("data-variant") == "underline"
     assert inner.get_attribute("data-density") == "default"
     assert inner.get_attribute("data-align") == "start"

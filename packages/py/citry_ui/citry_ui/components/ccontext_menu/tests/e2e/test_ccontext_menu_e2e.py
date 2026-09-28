@@ -1330,7 +1330,7 @@ def test_callback_exception_rolls_back_before_native_default_continues(page) -> 
     assert sum("context callback boom" in error for error in errors) == 1
 
 
-def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page, serve_citry_ui_live) -> None:
+def test_nested_boundary_server_revision_shadow_move_and_hostile_repair(page, serve_citry_ui_live) -> None:
     app, html = _page(refresh=True)
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
@@ -1373,7 +1373,11 @@ def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page, serv
             host.id = 'context-shadow-host';
             document.body.append(host);
             const shadow = host.attachShadow({ mode: 'open' });
-            document.querySelectorAll('style').forEach((style) => shadow.append(style.cloneNode(true)));
+            // A served page links its stylesheets, so the shadow root needs
+            // copies of those links as well as of the inline styles.
+            document
+              .querySelectorAll('style, link[rel="stylesheet"]')
+              .forEach((style) => shadow.append(style.cloneNode(true)));
             shadow.append(document.querySelector('#geometry'));
           }
         """

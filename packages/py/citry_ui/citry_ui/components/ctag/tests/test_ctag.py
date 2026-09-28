@@ -140,8 +140,6 @@ def test_invalid_composition_and_values_fail(source: str, message: str) -> None:
         {"role": "button"},
         {"tabindex": 0},
         {"aria-hidden": "true"},
-        {":data-disabled": "bad"},
-        {"x-html": "bad"},
         {"data-citry-private": "bad"},
     ],
 )
@@ -152,6 +150,36 @@ def test_owned_group_and_tag_attrs_are_rejected(attrs: dict[str, object]) -> Non
         _render(group_source, {"attrs": attrs})
     with pytest.raises(ValueError, match="cannot"):
         _render(tag_source, {"attrs": attrs})
+
+
+@pytest.mark.parametrize(
+    "attribute",
+    [":data-disabled", "v-bind:role", "v-html", "V-IF", "@click", "#default", ".tabindex"],
+)
+def test_python_attrs_reject_vue_directives(attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    group_source = '<c-CTagGroup label="Topics" c-attrs="attrs"><c-CTag value="x">X</c-CTag></c-CTagGroup>'
+    tag_source = '<c-CTagGroup label="Topics"><c-CTag value="x" c-attrs="attrs">X</c-CTag></c-CTagGroup>'
+    for owner, source in (("CTagGroup", group_source), ("CTag", tag_source)):
+        message = re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")
+        with pytest.raises(ValueError, match=message):
+            _render(source, {"attrs": {attribute: "x"}})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(
+        '<c-CTagGroup label="Topics" c-attrs="attrs"><c-CTag value="x">X</c-CTag></c-CTagGroup>',
+        {"attrs": {"x-data": "{}", "hx-get": "/topics"}},
+        static_fallback=True,
+    )
+
+    root = re.search(r'<[^>]+data-citry-ui-part="tag-group"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/topics"' in root.group(0)
 
 
 def test_public_types_and_runtime_type_hints_resolve() -> None:

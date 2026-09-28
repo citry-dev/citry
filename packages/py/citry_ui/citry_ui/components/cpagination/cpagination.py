@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
 from citry import LibraryComponent, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
@@ -19,9 +19,6 @@ CPaginationSize = Literal["sm", "md", "lg"]
 _VARIANTS = ("soft", "outline", "plain")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-teleport", "x-text"}
-)
 _OWNED = frozenset(
     {
         "aria-hidden",
@@ -93,27 +90,17 @@ def _range(pages: int, page: int, siblings: int, boundaries: int) -> tuple[int |
     return tuple(result)
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         raise TypeError(f"CPagination attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, _OWNED, "CPagination attrs")
+    # A Vue directive could rebind an owned attribute, replace the page
+    # listeners, or change the root's structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CPagination")
     for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CPagination attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"CPagination attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in _OWNED:
-            raise ValueError(f"CPagination attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 

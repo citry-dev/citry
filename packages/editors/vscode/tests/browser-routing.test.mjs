@@ -25,7 +25,7 @@ test("finds Vue expressions inside nested templates", () => {
 });
 
 test("routes complete component JavaScript but not Python around it", () => {
-	const source = ["class Card:", '    js = """$component(({ data }) => data)"""'].join("\n");
+	const source = ["class Card:", '    js = """$component(({ component }) => component)"""'].join("\n");
 
 	assert.equal(browserProjectionCandidateAt(source, "python", source.indexOf("$component") + 2), true);
 	assert.equal(browserProjectionCandidateAt(source, "python", source.indexOf("class Card") + 2), false);

@@ -209,14 +209,38 @@ def test_interactive_option_content_is_rejected_server_side() -> None:
         ),
         (
             '<c-CListbox label="Letters"><c-CListboxGroup label="Latin" '
-            "c-attrs=\"{'x-show': 'visible'}\">"
+            "c-attrs=\"{'v-show': 'visible'}\">"
             '<c-CListboxOption value="a">A</c-CListboxOption></c-CListboxGroup></c-CListbox>'
+        ),
+        _listbox("c-attrs=\"{'v-bind:role': 'kind'}\""),
+        _listbox("c-attrs=\"{'V-IF': 'shown'}\""),
+        _listbox("c-listbox_attrs=\"{'v-for': 'item in items'}\""),
+        _listbox("c-listbox_attrs=\"{'#default': ''}\""),
+        (
+            '<c-CListbox label="Letters"><c-CListboxOption value="a" '
+            "c-attrs=\"{'.aria-selected': 'picked'}\">A</c-CListboxOption></c-CListbox>"
+        ),
+        (
+            '<c-CListbox label="Letters"><c-CListboxOption value="a" '
+            "c-attrs=\"{'@click': 'pick()'}\">A</c-CListboxOption></c-CListbox>"
         ),
     ],
 )
 def test_owned_attrs_and_directives_are_rejected(template: str) -> None:
     with pytest.raises(ValueError, match="cannot"):
         _render(template)
+
+
+def test_python_attrs_reject_vue_directives_before_rendering() -> None:
+    # Each map names itself so the caller knows which input to fix.
+    message = "CListbox listbox_attrs cannot contain the Vue directive 'v-html'"
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _render(_listbox("c-listbox_attrs=\"{'v-html': 'markup'}\""))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(_listbox("c-attrs=\"{'x-data': '{}'}\""), static_fallback=True)
+    assert 'x-data="{}"' in _tag(html, "listbox-root")
 
 
 def test_css_includes_public_states_environment_rules_and_logical_layout() -> None:

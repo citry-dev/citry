@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CDividerOrientation = Literal["horizontal", "vertical"]
@@ -22,19 +22,6 @@ _SIZES = ("sm", "md", "lg")
 _INSETS = ("none", "start", "end", "both")
 _LABEL_POSITIONS = ("start", "center", "end")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-teleport",
-        "x-text",
-    }
-)
 _OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -77,34 +64,18 @@ def _plain_choice(input_name: str, value: object, allowed: tuple[str, ...]) -> s
     return plain
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         msg = f"CDivider attrs must be a mapping or None, got {attrs!r}."
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, _OWNED_ATTRS, "CDivider attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CDivider")
     for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"CDivider attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"CDivider attrs cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in _OWNED_ATTRS:
-            msg = f"CDivider attrs cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
     return copied
 

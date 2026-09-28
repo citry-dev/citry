@@ -316,12 +316,15 @@ class Page(Component):
     """
 
     js = """
-    $component(({ i18n }) => ({
-      render(value) {
-        return i18n.tr("account-greeting", { name: "Ada" })
-          + i18n.format.number(value, { format: "measurement" });
+    $component({
+      methods: {
+        label(value) {
+          const i18n = this.$i18n;
+          return i18n.tr("account-greeting", { name: "Ada" })
+            + i18n.format.number(value, { format: "measurement" });
+        },
       },
-    }));
+    });
     """
 
     messages = """
@@ -802,6 +805,81 @@ def test_i18n_diagnostics_validate_python_and_browser_profile_names(tmp_path):
     assert any(
         item.code == "citry.i18n.unknown-message" and "account-typo" in item.message for item in browser_findings
     )
+
+
+@pytest.mark.parametrize(
+    ("owner_setup", "reported"),
+    [
+        # A local holding the instance's service, or the member read directly.
+        ("const i18n = this.$i18n;", True),
+        ("const i18n = { tr: this.$i18n.tr };", False),
+        # Another object that only shares the name is not the i18n service.
+        ("const i18n = makeTranslator();", False),
+    ],
+)
+def test_component_js_i18n_calls_require_a_proven_service(tmp_path, owner_setup, reported):
+    project, app_file, source = _i18n_project(tmp_path)
+    authored = source.replace("const i18n = this.$i18n;", owner_setup)
+    typo = authored.replace(
+        'return i18n.tr("account-greeting", { name: "Ada" })',
+        'return i18n.tr("account-typo", { name: "Ada" })',
+    )
+    document = DocumentState(app_file.as_uri(), "python", authored, 2)
+    document.update(authored, 2, project)
+
+    target = definition(
+        document,
+        _position(authored, 'return i18n.tr("account-greeting"', len('return i18n.tr("account-')),
+        project,
+        {document.uri: document},
+    )
+    document.update(typo, 3, project)
+    findings = browser_diagnostics(document, project, {document.uri: document})
+
+    assert isinstance(target, types.Location) is reported
+    assert (
+        any(item.code == "citry.i18n.unknown-message" and "account-typo" in item.message for item in findings)
+        is reported
+    )
+
+
+def test_component_js_i18n_calls_in_lifecycle_hooks_are_proven(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    authored = source.replace(
+        "      methods: {",
+        "      mounted() {\n"
+        "        const i18n = this.$i18n;\n"
+        '        i18n.tr("account-typo");\n'
+        "      },\n"
+        "      methods: {",
+    )
+    document = DocumentState(app_file.as_uri(), "python", authored, 2)
+    document.update(authored, 2, project)
+
+    findings = browser_diagnostics(document, project, {document.uri: document})
+
+    assert any(item.code == "citry.i18n.unknown-message" and "account-typo" in item.message for item in findings)
+
+
+def test_component_js_i18n_member_call_navigates_without_a_local(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    authored = source.replace("const i18n = this.$i18n;\n", "").replace(
+        'return i18n.tr("account-greeting", { name: "Ada" })',
+        'return this.$i18n.tr("account-greeting", { name: "Ada" })',
+    )
+    document = DocumentState(app_file.as_uri(), "python", authored, 2)
+    document.update(authored, 2, project)
+
+    target = definition(
+        document,
+        _position(authored, 'this.$i18n.tr("account-greeting"', len('this.$i18n.tr("account-')),
+        project,
+        {document.uri: document},
+    )
+
+    assert isinstance(target, types.Location)
+    line = authored.splitlines()[target.range.start.line]
+    assert line[target.range.start.character : target.range.end.character] == "account-greeting"
 
 
 def test_private_fluent_term_definition_uses_the_live_source_unit(tmp_path):
@@ -1754,6 +1832,10 @@ class Card(Component):
             "preserve",
             "--target",
             "es2022",
+            # Plain diagnostics keep the asserted "file(line,col)" form even
+            # when the environment forces colored output (FORCE_COLOR).
+            "--pretty",
+            "false",
             str(projected),
         ],
         cwd=tmp_path,
@@ -1810,6 +1892,10 @@ class Card(Component):
             "preserve",
             "--target",
             "es2022",
+            # Plain diagnostics keep the asserted "file(line,col)" form even
+            # when the environment forces colored output (FORCE_COLOR).
+            "--pretty",
+            "false",
             str(unsupported),
         ],
         cwd=tmp_path,
@@ -1888,6 +1974,10 @@ def test_open_inject_projection_keeps_explicit_options_and_accepts_unknown_keys(
             "preserve",
             "--target",
             "es2022",
+            # Plain diagnostics keep the asserted "file(line,col)" form even
+            # when the environment forces colored output (FORCE_COLOR).
+            "--pretty",
+            "false",
             str(projected),
         ],
         cwd=tmp_path,
@@ -1954,6 +2044,10 @@ class Card(Component):
             "preserve",
             "--target",
             "es2022",
+            # Plain diagnostics keep the asserted "file(line,col)" form even
+            # when the environment forces colored output (FORCE_COLOR).
+            "--pretty",
+            "false",
             str(projected),
         ],
         cwd=tmp_path,
@@ -1996,9 +2090,9 @@ def test_browser_diagnostics_do_not_apply_the_retired_expression_csp_evaluator(t
 
 def test_component_js_unknown_variables_use_lint_globals_and_default_to_error(tmp_path):
     js_source = """
-$component(({ data }) => {
-  console.log(data.ready, configuredClient);
-  scope.ready = data.ready;
+$component(({ component }) => {
+  console.log(component.ready, configuredClient);
+  scope.ready = component.ready;
 });
 """
     js_file = tmp_path / "card.js"
@@ -2044,6 +2138,12 @@ $component(({ data }) => {
     )
     assert projection is not None
     assert "/** @type {string} */\nvar configuredClient;" in projection.source
+    # The runtime passes `onEvent` to the callback and sets `$onEvent` on the
+    # instance, so the editor must not flag either as a missing property.
+    assert "@property {(name: string, handler: (detail: unknown) => void) => CitryCleanup} onEvent" in (
+        projection.source
+    )
+    assert "$onEvent: (name: string, callback: (detail: unknown) => void) => CitryCleanup" in projection.source
 
 
 def test_inferred_js_data_tracks_kwargs_types_synchronized_source_and_invalid_literals(tmp_path):
@@ -2164,8 +2264,8 @@ def test_js_data_public_name_diagnostics_cover_reserved_prefixes_and_dedupe_shar
     from citry._diagnostic_catalog import JS_DATA_PUBLIC_NAME_COLLISION
 
     app_source = (
-        "first = {'$private': 1, '_hidden': 1, 'preparedData': 1, 'save': 1}\n"
-        "second = {'$private': 1, '_hidden': 1, 'preparedData': 1, 'save': 1}\n"
+        "first = {'$private': 1, '_hidden': 1, '$citryPrepared': 1, 'save': 1}\n"
+        "second = {'$private': 1, '_hidden': 1, '$citryPrepared': 1, 'save': 1}\n"
     )
     app_file = tmp_path / "app.py"
     app_file.write_text(app_source, encoding="utf-8")
@@ -2189,10 +2289,10 @@ def test_js_data_public_name_diagnostics_cover_reserved_prefixes_and_dedupe_shar
     roots_by_owner = {
         "First": tuple(
             data_root(name, 0, presence="conditional" if name == "save" else "always")
-            for name in ("$private", "_hidden", "preparedData", "save")
+            for name in ("$private", "_hidden", "$citryPrepared", "save")
         ),
         "Second": tuple(
-            data_root(name, 1, presence="always") for name in ("$private", "_hidden", "preparedData", "save")
+            data_root(name, 1, presence="always") for name in ("$private", "_hidden", "$citryPrepared", "save")
         ),
     }
     components = (SimpleNamespace(name="First"), SimpleNamespace(name="Second"))
@@ -3136,8 +3236,18 @@ def test_plain_html_attribute_completion_includes_vue_core_and_shorthands():
     assert plain_by_label["@click"].insert_text == '@click="${1:expression}"'
     assert plain_by_label[":aria-expanded"].insert_text == ':aria-expanded="${1:expression}"'
     component_labels = {item.label for item in component}
-    assert {"@click", "v-on", ":aria-expanded", "v-bind"} <= component_labels
-    assert not {"v-text", "v-html", "v-show", "v-for"} & component_labels
+    assert {
+        "@click",
+        "v-on",
+        ":aria-expanded",
+        "v-bind",
+        "v-show",
+        "v-if",
+        "v-else-if",
+        "v-else",
+        "v-model",
+    } <= component_labels
+    assert not {"v-text", "v-html", "v-for"} & component_labels
     assert {"v-text", ":aria-expanded"} <= {item.label for item in element}
 
 
@@ -3575,6 +3685,9 @@ def test_vue_syntax_hover_maps_nested_and_inline_python_attribute_names():
     ("source", "marker"),
     [
         ('<c-card v-text="title"></c-card>', "v-text"),
+        ('<c-card v-show.lazy="open"></c-card>', "v-show"),
+        ('<c-card v-if.x="open"></c-card>', "v-if"),
+        ('<c-card v-for="item in items"></c-card>', "v-for"),
         ('<c-if cond="ready" v-text="title"></c-if>', "v-text"),
     ],
 )
@@ -3582,6 +3695,35 @@ def test_vue_syntax_hover_respects_citry_owned_and_component_only_channels(sourc
     project = _syntax_state()
 
     assert hover(_document(source, project), _position(source, marker, 1), project) is None
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "anchor"),
+    [
+        ('<c-card v-if="open"></c-card>', "v-if", "#v-if"),
+        ("<c-card v-else></c-card>", "v-else", "#v-else"),
+        ('<c-card v-model:title.trim="text"></c-card>', "v-model", "#v-model"),
+        ('<input v-model.lazy="text">', "v-model", "#v-model"),
+    ],
+)
+def test_vue_condition_and_model_hover_on_component_tags(source, marker, anchor):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, marker, 1), project)
+
+    assert result is not None
+    assert f"https://vuejs.org/api/built-in-directives.html{anchor}" in result.contents.value
+
+
+def test_vue_show_hover_is_available_on_component_tags():
+    project = _syntax_state()
+    source = '<c-card v-show="open"></c-card>'
+
+    result = hover(_document(source, project), _position(source, "v-show", 1), project)
+
+    assert result is not None
+    assert "https://vuejs.org/api/built-in-directives.html#v-show" in result.contents.value
+    assert "one root element" in result.contents.value
 
 
 @pytest.mark.parametrize(
@@ -6212,3 +6354,42 @@ def test_native_vue_component_prop_ranges_and_loop_types_keep_template_scope(tmp
     )
     assert "required-count" in findings[1].message
     assert "string" in findings[1].message
+
+
+def test_browser_diagnostics_warn_when_vue_reads_a_python_loop_variable(tmp_path):
+    source = '''from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Card(Component):
+    citry = engine
+    template = """
+      <ul>
+        <li c-for="item in items" :title="item"></li>
+        <li c-for="label in items" :title="label"></li>
+      </ul>
+    """
+    class Lint:
+        rule_unknown_vue_variable = "ignore"
+    def js_data(self, kwargs, slots):
+        return {"label": "Ready"}
+'''
+    app_file = tmp_path / "app.py"
+    app_file.write_text(source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+
+    findings = [
+        finding
+        for finding in browser_diagnostics(document, project, {document.uri: document})
+        if finding.code in {"citry.vue.python-variable", "citry.vue.unknown-variable"}
+    ]
+
+    # `label` is also a js_data key, so Vue shows that browser value instead of
+    # the loop value, and its warning names both meanings.
+    assert [(finding.code, finding.severity, finding.range.start) for finding in findings] == [
+        ("citry.vue.python-variable", types.DiagnosticSeverity.Warning, _position(source, 'item"></li>')),
+        ("citry.vue.python-variable", types.DiagnosticSeverity.Warning, _position(source, 'label"></li>')),
+    ]
+    assert 'c-title="item"' in findings[0].message
+    assert "component's browser value 'label'" in findings[1].message

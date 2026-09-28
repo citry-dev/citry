@@ -43,7 +43,7 @@ def test_dynamic_element_dispatches_lexical_event_arguments(page: Any, serve_liv
     )
     page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
     page.locator("#choice").click()
-    page.wait_for_function("() => !CitryStable._apps.values().next().value.busy")
+    page.wait_for_function("() => !__citryRuntime._apps.values().next().value.busy")
 
     [call] = [call for request in calls for call in request["calls"]]
     assert call["handlerName"] == "choose"
@@ -91,14 +91,64 @@ def test_dynamic_control_keeps_lexical_state_across_real_tag_change(page: Any, s
     control = page.locator("#dynamic-control")
     assert control.evaluate("element => element.tagName") == "INPUT"
     control.fill("first")
-    page.wait_for_function("CitryStable._apps.values().next().value.revision === 1")
+    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 1")
     assert control.evaluate("element => element.tagName") == "TEXTAREA"
     assert page.locator("#dynamic-value").text_content() == "first"
 
     control.fill("second")
-    page.wait_for_function("CitryStable._apps.values().next().value.revision === 2")
+    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 2")
     assert page.locator("#dynamic-value").text_content() == "second"
     flat_calls = [call for request in calls for call in request["calls"]]
     assert [call["handlerName"] for call in flat_calls] == ["update", "update"]
     assert [call["stateUpdates"] for call in flat_calls] == [{"value": "first"}, {"value": "second"}]
     assert faults == []
+
+
+@pytest.mark.parametrize(
+    "fill",
+    [
+        '<c-child id="direct" @c-click="save" />',
+        '<c-provide key="theme" mode="dark"><c-child id="direct" @c-click="save" /></c-provide>',
+    ],
+    ids=["plain-fill", "transparent-in-fill"],
+)
+def test_component_event_in_a_fill_dispatches_to_the_fill_author(page: Any, serve_live: Any, fill: str) -> None:
+    engine = Citry(secret="fill-author-events-browser", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class Child(Component):
+        citry = engine
+        template = '<button type="button">save</button>'
+
+    class Box(Component):
+        citry = engine
+        template = "<section><c-slot /></section>"
+
+    class Page(Component):
+        citry = engine
+
+        class Events:
+            def save(self):
+                return None
+
+        # The listener sits in Page's fill, so Page's handler runs even though
+        # Box receives the fill and declares no Events of its own.
+        template = f"<main><c-box>{fill}</c-box></main>"
+
+    dispatcher_for(engine)
+    calls: list[dict[str, Any]] = []
+    page.on(
+        "request",
+        lambda request: calls.append(request.post_data_json)
+        if request.url.endswith("/ext/events/call") and request.post_data_json
+        else None,
+    )
+    page_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    page.get_by_role("button", name="save").click()
+    page.wait_for_function("() => !__citryRuntime._apps.values().next().value.busy")
+
+    [call] = [call for request in calls for call in request["calls"]]
+    assert call["handlerName"] == "save"
+    assert page_errors == []

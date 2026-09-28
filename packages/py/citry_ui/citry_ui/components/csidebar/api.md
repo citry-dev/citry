@@ -61,6 +61,12 @@ preview iframe cannot enter a self-expanding height loop.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/csidebar/snippets/customization.py" title="Customize Sidebar" />
 
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes the component sets itself (such as `role`, `aria-label`, and
+`data-collapsed`) and any Vue directive syntax: names starting with `v-`, `:`,
+`.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component tag in your
+template instead, for example `<c-CSidebar :title="hint">`.
+
 ## Persistent Sidebar or mobile Drawer?
 
 Sidebar remains in document layout and never traps focus, adds a scrim, or

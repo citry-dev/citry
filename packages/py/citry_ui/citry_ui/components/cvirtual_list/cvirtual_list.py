@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CVirtualListStrategy = Literal["content-visibility", "window"]
@@ -16,28 +16,6 @@ CVirtualListRangeReason = Literal["initial", "scroll", "resize", "configuration"
 _VIRTUAL_LIST_CONTEXT = "citry_ui_virtual_list"
 _MAX_EXTENT = 16_000_000
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {
-        "v-bind",
-        "v-for",
-        "v-html",
-        "v-if",
-        "v-model",
-        "v-on",
-        "v-show",
-        "v-text",
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-busy",
@@ -127,14 +105,6 @@ def _integer(name: str, value: object, *, minimum: int, maximum: int | None = No
     return raw
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith(("x-bind:", "v-bind:")):
-        return key.split(":", 1)[1].split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     attrs: Mapping[str, object] | None,
@@ -148,16 +118,15 @@ def _attrs(
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, owner)
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"{owner} attrs require string keys, got {key!r}.")
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} attrs cannot dynamically bind owned attribute {key!r}.")
     merged_style = style if owned_style is None else (style, owned_style) if style is not None else owned_style
     return merge_root_attrs(copied, class_, merged_style)
 

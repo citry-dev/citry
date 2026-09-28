@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value, merge_attrs
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -25,9 +25,6 @@ CTreeGridAlign = Literal["start", "center", "end"]
 CTreeGridSource = Literal["pointer", "keyboard", "reset"]
 
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -194,14 +191,6 @@ class CTreeGridCellActivateDetail(TypedDict):
     sourceEvent: object
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     value: Mapping[str, object] | None,
@@ -219,10 +208,15 @@ def _attrs(
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} cannot dynamically bind owned attribute {key!r}.")
+        # A Vue directive could rebind an owned attribute, replace a row or
+        # cell's structure, or add a listener, so none may arrive through
+        # Python data. `owner` already names the exact mapping, such as one
+        # row's attrs, so the message is built here.
+        if is_vue_directive_attribute(key):
+            raise ValueError(
+                f"{owner} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
     return merge_root_attrs(copied, class_, style)
 
 
@@ -236,6 +230,17 @@ def _sequence(name: str, value: object) -> tuple[object, ...]:
 class CTreeGrid(LibraryComponent):
     class I18n:
         messages_locale = "en-US"
+        # The browser code builds these IDs from a variable
+        # (`citry-ui-tree-grid-${kind}`), so Citry cannot find them as literal
+        # calls; listing them sends them to the browser.
+        client_messages = (
+            "citry-ui-tree-grid-expand",
+            "citry-ui-tree-grid-collapse",
+            "citry-ui-tree-grid-expanded",
+            "citry-ui-tree-grid-collapsed",
+            "citry-ui-tree-grid-selected",
+            "citry-ui-tree-grid-unselected",
+        )
 
     @dataclass(slots=True)
     class Kwargs:

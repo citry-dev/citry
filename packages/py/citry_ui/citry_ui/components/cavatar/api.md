@@ -91,6 +91,13 @@ root, fallback, and image without relying on private classes.
   title="Customize Avatar with public CSS"
 />
 
+`attrs` targets the root and `img_attrs` targets the image. Both accept
+ordinary native, ARIA, and data attributes. They reject the attributes Avatar
+sets itself (such as `role` on the root and `src` on the image), Citry runtime
+attributes, and any Vue directive syntax: names starting with `v-`, `:`, `.`,
+`^`, `@`, or `#`. `img_attrs` also rejects inline `on*` handlers. Write Vue bindings
+and listeners on the component tag in your template instead.
+
 ## Accessibility and loading behavior
 
 A nonempty `alt` makes the root one named image semantic. The internal HTML

@@ -117,6 +117,13 @@ class LintSettings:
         component_js_globals: Extra globals available to component JavaScript
             analysis. Values use the same annotation convention as
             ``template_variables``.
+        rule_unknown_component_js_member: Severity for a ``this.<name>`` or
+            ``component.<name>`` read in component JavaScript that the
+            component instance does not have. The default is ``"error"``.
+        rule_vue_python_variable: Severity for a Vue expression that reads a
+            name bound in Python by an enclosing ``c-for`` loop or
+            ``c-fill`` binding. The browser looks that name up in Vue state,
+            not in the Python loop. The default is ``"warning"``.
 
     Raises:
         TypeError: If a variable or global collection is not a mapping.
@@ -131,6 +138,8 @@ class LintSettings:
     vue_variables: Mapping[str, object] = field(default_factory=dict)
     rule_unknown_component_js_variable: LintSeverity = "error"
     component_js_globals: Mapping[str, object] = field(default_factory=dict)
+    rule_unknown_component_js_member: LintSeverity = "error"
+    rule_vue_python_variable: LintSeverity = "warning"
 
     def __post_init__(self) -> None:
         if (
@@ -208,6 +217,24 @@ class LintSettings:
             )
             raise ValueError(msg)
         object.__setattr__(self, "component_js_globals", component_js_globals)
+        if (
+            type(self.rule_unknown_component_js_member) is not str
+            or self.rule_unknown_component_js_member not in _ALLOWED_LINT_SEVERITIES
+        ):
+            msg = (
+                "rule_unknown_component_js_member must be one of "
+                f"{_ALLOWED_LINT_SEVERITIES}, got {self.rule_unknown_component_js_member!r}"
+            )
+            raise ValueError(msg)
+        if (
+            type(self.rule_vue_python_variable) is not str
+            or self.rule_vue_python_variable not in _ALLOWED_LINT_SEVERITIES
+        ):
+            msg = (
+                "rule_vue_python_variable must be one of "
+                f"{_ALLOWED_LINT_SEVERITIES}, got {self.rule_vue_python_variable!r}"
+            )
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,6 +309,23 @@ class CitrySettings:
         security_script_integrity: Script integrity policy. ``"off"`` does
             not compute security digests; ``"citry"`` collects SHA-384
             metadata for structured scripts whose bytes Citry can prove.
+        ssr: Send each interactive Vue document's content in its HTML. On by
+            default: the server writes the page for Vue to adopt
+            ("hydrate"), and a page it cannot write that way carries Citry's
+            ordinary server HTML, which Vue replaces when it mounts.
+            ``False`` sends an empty mount element instead, and Vue builds
+            the page in the browser. Noninteractive output is unchanged.
+        ssr_element_threshold: Send small pages without their content. A page
+            whose server-written HTML holds this many elements or fewer is
+            sent with an empty mount element and built in the browser, which
+            can be slightly faster for a small page because the browser does
+            not parse the HTML and then hydrate it. The default, ``0``,
+            keeps the content of every page that contains an element, which
+            search engines and readers without JavaScript need. It applies
+            only to pages Vue can adopt; a page Vue replaces always carries
+            its server HTML. Must be a non-negative ``int``:
+            another type raises ``TypeError`` and a negative value raises
+            ``ValueError`` when the settings are created.
         id_generator: A function returning the per-render id stamped on each
             component instance (``component.id``, which drives the
             ``data-cid-<id>`` markers that scope a component's CSS and JS on the
@@ -339,6 +383,8 @@ class CitrySettings:
     security_csp: SecurityCspMode = "off"
     security_javascript: SecurityJavascriptMode = "allow"
     security_script_integrity: SecurityScriptIntegrityMode = "off"
+    ssr: bool = True
+    ssr_element_threshold: int = 0
 
     def __post_init__(self) -> None:
         # Copy every input into its immutable stored shape, so a direct
@@ -357,6 +403,16 @@ class CitrySettings:
         _validate_security_csp(self.security_csp)
         _validate_security_javascript(self.security_javascript)
         _validate_security_script_integrity(self.security_script_integrity)
+        if type(self.ssr) is not bool:
+            raise TypeError("Citry ssr must be a bool.")
+        # An exact int check keeps True/False and floats from passing as a
+        # count, and a negative count has no meaning as a page size.
+        if type(self.ssr_element_threshold) is not int:
+            raise TypeError(
+                f"Citry ssr_element_threshold must be an int, got {type(self.ssr_element_threshold).__name__}."
+            )
+        if self.ssr_element_threshold < 0:
+            raise ValueError(f"Citry ssr_element_threshold must be 0 or greater, got {self.ssr_element_threshold}.")
 
         # Extensions are copied into a tuple of their own.
         object.__setattr__(self, "extensions", tuple(self.extensions))

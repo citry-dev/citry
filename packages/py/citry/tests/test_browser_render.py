@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import base64
 import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, browser_render
 from citry._serialization_security import _browser_loader_descriptor
 from citry.browser_render import (
     BrowserPluginDescriptor,
@@ -228,6 +230,8 @@ def test_prepared_browser_extension_detaches_and_revalidates_contribution_assets
         ("$bad-name",),
         ("$slots",),
         ("$state",),
+        ("$citryPrepared",),
+        ("$onEvent",),
         ("$b", "$a"),
         ("$a", "$a"),
     ],
@@ -244,6 +248,16 @@ def test_browser_plugin_descriptor_rejects_invalid_template_context_names(names:
 
     with pytest.raises((TypeError, ValueError), match="template context names"):
         collect_browser_plugin_descriptors(Citry(extensions=[InvalidBrowserExtension]))
+
+
+def test_reserved_template_context_names_match_the_browser_runtime() -> None:
+    # Python accepts plugin names before the browser sees them, so a name the
+    # browser reserves but Python allows would only fail after serialization.
+    client_js = (Path(browser_render.__file__).parent / "_vue" / "client.js").read_text(encoding="utf-8")
+    match = re.search(r"RESERVED_TEMPLATE_CONTEXT_NAMES = new Set\(\[(.*?)\]\)", client_js, re.DOTALL)
+    assert match is not None
+    browser_names = set(re.findall(r'"(\$[A-Za-z][A-Za-z0-9_]*)"', match.group(1)))
+    assert browser_names == set(browser_render._RESERVED_TEMPLATE_CONTEXT_NAMES)
 
 
 def test_browser_plugin_descriptors_reject_context_name_claimed_by_two_extensions() -> None:
@@ -375,9 +389,12 @@ $component({});
     assert (
         '"extensions":{"browser_probe":{"payload":{"revision":0},"schemaVersion":1,"templateContextNames":[]}}' in html
     )
-    assert html.index("window.probePluginLoaded = true") < html.index("CitryStable.startPrepared")
-    assert html.index(".probe-extension { color: green; }") < html.index("CitryStable.startPrepared")
-    assert html.index("window.probeContributionLoaded = true") < html.index("CitryStable.startPrepared")
+    # The inline runtime mentions the data block attribute too, so locate the
+    # data block by its opening tag.
+    start_tags = html.index('<script type="application/json" data-citry-vue-document=')
+    assert html.index("window.probePluginLoaded = true") < start_tags
+    assert html.index(".probe-extension { color: green; }") < start_tags
+    assert html.index("window.probeContributionLoaded = true") < start_tags
     assert '"owner":{"extensionName":"browser_probe","kind":"extension"}' in html
     assert 'data-citry-css-url="/assets/' in html
     assert 'data-citry-vue-style-app="' in html
@@ -421,7 +438,7 @@ def test_interactive_serialization_revalidates_metadata_after_serialize_hooks(mu
         extension.name = "browser_probe"
 
 
-def test_initial_component_styles_have_exact_app_and_manifest_url_ownership() -> None:
+def test_mounted_document_links_initial_styles_with_app_and_manifest_url_ownership() -> None:
     app = Citry(autodiscover=False)
     app.set_mounted_prefix("/citry")
 
@@ -432,11 +449,25 @@ def test_initial_component_styles_have_exact_app_and_manifest_url_ownership() ->
 
     html = str(Page().render().serialize())
     app_id = re.search(r'"appId":"([0-9a-f]{32})"', html)
-    style_url = re.search(r'"styles":\[\{.*?"url":"([^"]+)"', html)
+    style = re.search(r'"styles":\[\{.*?"sha256":"([0-9a-f]{64})","url":"([^"]+)"', html)
     assert app_id is not None
-    assert style_url is not None
-    assert f'data-citry-vue-style-app="{app_id.group(1)}"' not in html
-    assert f'data-citry-css-url="{style_url.group(1)}"' not in html
+    assert style is not None
+    # A mounted document links its stylesheet in <head>, so the served HTML
+    # paints styled, with the ownership attributes the runtime adopts it by
+    # and the integrity and CORS mode the runtime would request it with.
+    head = html[: html.index("</head>")]
+    link = re.search(r"<link [^>]*data-citry-css-url=[^>]*>", head)
+    assert link is not None
+    integrity = "sha256-" + base64.b64encode(bytes.fromhex(style.group(1))).decode()
+    for attribute in (
+        'rel="stylesheet"',
+        f'href="{style.group(2)}"',
+        f'data-citry-css-url="{style.group(2)}"',
+        f'data-citry-vue-style-app="{app_id.group(1)}"',
+        f'integrity="{integrity}"',
+        'crossorigin="anonymous"',
+    ):
+        assert attribute in link.group(0)
     assert '"loadInitialAssets":true' in html
 
 

@@ -64,4 +64,12 @@ form in its constrained preview.
 Search, multiple paths, async child loading, and virtualized levels are not
 silent modes of this API; they remain separate future contracts.
 
+## Add root and Option attributes
+
+`attrs` on Cascader and on each Option accepts ordinary native, ARIA, and data
+attributes. It rejects the attributes each component sets itself (such as
+`role` and `aria-selected`), Citry runtime attributes, and any Vue directive
+syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and
+listeners on the component tag in your template instead.
+
 <!-- UI_LIBRARY_API_REFERENCE -->

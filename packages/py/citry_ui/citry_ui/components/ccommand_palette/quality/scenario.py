@@ -256,7 +256,11 @@ def command_palette_states_component(app: Citry) -> type[Component]:
 
               <article>
                 <h2>Action and close policy</h2>
-                <button id="quality-command-palette-owner-focus" type="button">Owner focus target</button>
+                <button
+                  ref="ownerFocus"
+                  id="quality-command-palette-owner-focus"
+                  type="button"
+                >Owner focus target</button>
                 <c-CCommandPalette
                   id="quality-command-palette-actions"
                   label="Action transaction commands"
@@ -270,9 +274,7 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                       actionOpen=value;
                     }" :onAction="(value,detail)=>{
                       actionLog.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
-                      if (value==='copy-id') {
-                        document.getElementById('quality-command-palette-owner-focus').focus();
-                      }
+                      if (value==='copy-id') focusOwnerTarget();
                     }"
                 />
                 <button type="button" @click="actionOpen=true">Restore action palette</button>
@@ -285,7 +287,11 @@ def command_palette_states_component(app: Citry) -> type[Component]:
             <div class="citry-ui-quality-grid">
               <article>
                 <h2>Native Form and IME safety</h2>
-                <form id="quality-command-palette-form" @submit.prevent="submits++">
+                <form
+                  ref="profileForm"
+                  id="quality-command-palette-form"
+                  @submit.prevent="submits++"
+                >
                   <label>Profile name <input name="profile_name" value="Ada" /></label>
                   <c-CCommandPalette
                     id="quality-command-palette-form-palette"
@@ -296,9 +302,7 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                         'form implicit-submit ime composition',
                     }"
                     :onAction="(value)=>{
-                        if (value==='copy-id') {
-                          document.getElementById('quality-command-palette-form').requestSubmit();
-                        }
+                        if (value==='copy-id') submitProfileForm();
                       }"
                   >
                     <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
@@ -385,6 +389,14 @@ def command_palette_states_component(app: Citry) -> type[Component]:
               };
             },
             methods: {
+              // Template expressions cannot reach document, so actions that
+              // move focus or submit the native form go through refs here.
+              focusOwnerTarget() {
+                this.$refs.ownerFocus.focus();
+              },
+              submitProfileForm() {
+                this.$refs.profileForm.requestSubmit();
+              },
               handleShortcut(event) {
                 if (
                   (!event.metaKey && !event.ctrlKey)

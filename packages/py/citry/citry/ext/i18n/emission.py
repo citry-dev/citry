@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -10,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from citry._owned_resource import _OwnedResource
 from citry.citry_render import selected_render_ids
 from citry.ext.dependencies.types import Script
+from citry.util.html import script_json
 
 from .context import LocaleContext
 from .usage import (
@@ -93,9 +93,7 @@ def emit_i18n_dependencies(extension: I18nExtension, ctx: OnDependenciesContext)
         "providers": providers,
         "requirements": requirements,
     }
-    manifest_json = json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), sort_keys=True).replace(
-        "<", "\\u003c"
-    )
+    manifest_json = script_json(manifest, sort_keys=True, ensure_ascii=False)
     ctx.before_manifest.append(
         Script(
             kind="core",

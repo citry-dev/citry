@@ -68,6 +68,29 @@ def test_invalid_values_fail(attrs: str, swatches: object, match: str) -> None:
         _render(attrs, swatches=swatches)
 
 
+@pytest.mark.parametrize(
+    ("attribute", "match"),
+    [
+        ("role", "cannot override owned attribute"),
+        ("data-citry-morph", "Citry runtime attribute"),
+        (":role", "CColorPicker attrs cannot contain the Vue directive"),
+        ("v-bind:data-open", "Vue directive"),
+        ("v-if", "Vue directive"),
+        ("V-IF", "Vue directive"),
+        ("@input", "Vue directive"),
+        ("#default", "Vue directive"),
+    ],
+)
+def test_attrs_reject_owned_runtime_and_vue_directive_names(attribute: str, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        _render(f"c-attrs=\"{{'{attribute}': 'x'}}\"")
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render("c-attrs=\"{'x-model': 'plain'}\"", static_fallback=True)
+    assert 'x-model="plain"' in html
+
+
 def test_assets_docs_and_translations_cover_contract() -> None:
     root = Path(__file__).parents[1]
     js = (root / "runtime.source.js").read_text(encoding="utf8")

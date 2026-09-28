@@ -18,6 +18,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._validation import (
@@ -50,20 +51,6 @@ _PLACEMENTS = ("bottom-start", "bottom-end", "top-start", "top-end")
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -209,14 +196,6 @@ def _plain_js_value(value: object) -> object:
     return value
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     input_name: str,
@@ -224,7 +203,6 @@ def _attrs(
     owned: frozenset[str],
     class_: CClassValue | None = None,
     style: CStyleValue | None = None,
-    dynamic_only: frozenset[str] = frozenset(),
 ) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         msg = f"{owner} {input_name} must be a mapping or None, got {attrs!r}."
@@ -235,17 +213,12 @@ def _attrs(
         if not isinstance(key, str):
             msg = f"{owner} {input_name} requires string keys, got {key!r}."
             raise TypeError(msg)
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"{owner} {input_name} cannot contain Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            msg = f"{owner} {input_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if _dynamic_target(normalized) in owned | dynamic_only:
-            msg = f"{owner} {input_name} cannot dynamically bind owned attribute {key!r}."
-            raise ValueError(msg)
+    # A Vue directive could rebind the selection, listbox wiring, or Form
+    # state this component owns, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, f"{owner} {input_name.removesuffix('attrs').rstrip('_')}".rstrip())
     return merge_root_attrs(copied, class_, style)
 
 
@@ -435,13 +408,7 @@ class CSelect(LibraryComponent):
             )
             invalid = kwargs.invalid if kwargs.invalid is not None else False
 
-        trigger_attrs = _attrs(
-            "CSelect",
-            "trigger_attrs",
-            kwargs.trigger_attrs,
-            _TRIGGER_OWNED,
-            dynamic_only=frozenset({"aria-describedby", "aria-errormessage"}),
-        )
+        trigger_attrs = _attrs("CSelect", "trigger_attrs", kwargs.trigger_attrs, _TRIGGER_OWNED)
         aria_label = pop_html_attr(trigger_attrs, "aria-label", component_name="CSelect trigger_attrs")
         aria_labelledby = pop_html_attr(trigger_attrs, "aria-labelledby", component_name="CSelect trigger_attrs")
         external_described_by = pop_html_attr(

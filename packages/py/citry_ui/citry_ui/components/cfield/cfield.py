@@ -16,7 +16,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
-    reject_html_attr_bindings,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._validation import (
@@ -564,7 +564,9 @@ class CInput(LibraryComponent):
             },
             "CInput",
         )
-        reject_html_attr_bindings(kwargs.attrs, {"form"}, "CInput")
+        # A Vue directive could rebind `form` or another owned attribute, so none
+        # may arrive through Python data.
+        reject_vue_directive_attrs(kwargs.attrs, "CInput")
 
         field = self.inject(FIELD_CONTEXT_KEY, None)
         form = self.inject(FORM_CONTEXT_KEY, None)

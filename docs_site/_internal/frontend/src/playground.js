@@ -214,8 +214,8 @@ const preview = new PreviewBridge({
   onDiagnostic(kind, message) {
     showDiagnostic("preview", `Client ${kind.replaceAll("_", " ")}`, message);
   },
-  onEvent(envelope, { runId }) {
-    return session.dispatchEvent(runId, envelope);
+  onEvent(envelope, { runId, headers }) {
+    return session.dispatchEvent(runId, envelope, headers);
   },
   onNavigation() {
     showDiagnostic("preview", "The rendered page navigated unexpectedly and was restored.");

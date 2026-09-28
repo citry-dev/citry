@@ -76,6 +76,13 @@ one native Progress root.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cprogress/snippets/customization.py" title="Customize Progress with public CSS" />
 
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes the component sets itself (such as `value`, `max`, and
+`aria-label`), Citry runtime attributes, and any Vue directive syntax: names
+starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on
+the component tag in your template instead, for example
+`<c-CProgress :title="hint">`.
+
 ## Choose the right indicator
 
 Progress represents task completion. Use `CSpinner` for a compact unknown wait

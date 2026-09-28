@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 from citry import LibraryComponent, SlotInput
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._shared_component_assets import build_shared_component_assets
 from citry_ui.components._validation import (
@@ -126,6 +126,9 @@ def _build_button_snapshot(component: Any, kwargs: Any) -> dict[str, Any]:
         },
         "CButton",
     )
+    # A Vue directive could rebind an owned attribute or add a listener, so
+    # none may arrive through Python data.
+    reject_vue_directive_attrs(kwargs.attrs, "CButton")
     if kwargs.href is not None:
         _reject_link_form_attrs(kwargs.attrs)
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
 from citry import LibraryComponent, SlotInput
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_html_attr_bindings
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -60,42 +60,6 @@ _ROOT_OWNED = frozenset(
         "data-collapsed",
         "data-collapsible",
         "data-has-header",
-        "data-side",
-        "data-size",
-        "data-sticky",
-        "data-variant",
-        "hidden",
-        "id",
-        "inert",
-        "role",
-        "ref",
-        "tabindex",
-        "v-for",
-        "v-html",
-        "v-if",
-        "v-model",
-        "v-on",
-        "v-show",
-        "v-text",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
-_BOUND_OWNED = frozenset(
-    {
-        "aria-hidden",
-        "aria-label",
-        "aria-labelledby",
-        "data-citry-ui-part",
-        "data-collapsed",
-        "data-collapsible",
         "data-side",
         "data-size",
         "data-sticky",
@@ -160,7 +124,9 @@ class CSidebar(LibraryComponent):
         validate_non_empty_string("CSidebar", "expand_label", expand_label)
         validate_non_empty_string("CSidebar", "collapse_label", collapse_label)
         reject_owned_attrs(kwargs.attrs, _ROOT_OWNED, "CSidebar")
-        reject_html_attr_bindings(kwargs.attrs, _BOUND_OWNED, "CSidebar")
+        # A Vue directive could rebind the collapsed state, landmark naming,
+        # or panel wiring this component owns, so none may arrive through Python data.
+        reject_vue_directive_attrs(kwargs.attrs, "CSidebar")
 
         root_id = kwargs.id or f"cui-sidebar-{self.id}"
         panel_id = f"{root_id}-panel"

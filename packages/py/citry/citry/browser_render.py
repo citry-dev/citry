@@ -254,6 +254,7 @@ _RESERVED_TEMPLATE_CONTEXT_NAMES = frozenset(
     {
         "$attrs",
         "$citryEvents",
+        "$citryPrepared",
         "$data",
         "$el",
         "$emit",
@@ -262,6 +263,7 @@ _RESERVED_TEMPLATE_CONTEXT_NAMES = frozenset(
         "$forceUpdate",
         "$loading",
         "$nextTick",
+        "$onEvent",
         "$options",
         "$parent",
         "$props",

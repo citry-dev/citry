@@ -238,10 +238,21 @@ def test_attribute_maps_are_copied_merged_and_land_only_on_their_destination():
         ("heading_attrs", "aria-level"),
         ("trigger_attrs", "aria-expanded"),
         ("trigger_attrs", ":disabled"),
-        ("panel_attrs", "x-bind:hidden"),
+        ("trigger_attrs", "v-bind:aria-expanded"),
+        ("trigger_attrs", "v-if"),
+        ("trigger_attrs", "V-SHOW"),
+        ("trigger_attrs", "@click.stop"),
+        ("trigger_attrs", "v-on:focus"),
+        ("panel_attrs", "v-bind:hidden"),
+        ("panel_attrs", ".hidden"),
+        ("heading_attrs", "V-IF"),
         ("actions_attrs", "role"),
         ("actions_attrs", "data-cev-action"),
-        ("attrs", "x-html"),
+        ("actions_attrs", "@click"),
+        ("attrs", "v-html"),
+        ("attrs", "v-for"),
+        ("attrs", "v-on:click"),
+        ("attrs", "#default"),
     ],
 )
 def test_owned_runtime_and_dynamic_attribute_aliases_are_rejected(
@@ -262,16 +273,27 @@ def test_root_presence_and_supplementary_trigger_metadata_remain_allowed():
     html = _render(
         _disclosure(
             inputs=(
-                "c-attrs=\"{'hidden': False, 'x-show': 'visible'}\" "
+                "c-attrs=\"{'hidden': False, 'x-data': 'visible'}\" "
                 "c-trigger_attrs=\"{'aria-describedby': 'help', "
                 "'aria-details': 'details', 'aria-keyshortcuts': 'Alt+S'}\""
             )
         )
     )
-    assert 'x-show="visible"' in html
+    # A name outside Vue's directive syntax is an ordinary attribute.
+    assert 'x-data="visible"' in html
     assert 'aria-describedby="help"' in html
     assert 'aria-details="details"' in html
     assert 'aria-keyshortcuts="Alt+S"' in html
+
+
+def test_python_attrs_reject_vue_directives_before_rendering():
+    with pytest.raises(ValueError, match=re.escape("CDisclosure attrs cannot contain the Vue directive ':class'")):
+        _render(_disclosure(inputs="c-attrs=\"{':class': 'selected'}\""))
+
+
+def test_title_accepts_bindings_to_allowed_attributes():
+    html = _render(_disclosure('<span :class="tone">Help</span>'))
+    assert ':class="tone"' in html
 
 
 def test_title_accepts_the_exact_phrasing_and_decorative_svg_contract():
@@ -302,7 +324,17 @@ def test_title_accepts_the_exact_phrasing_and_decorative_svg_contract():
         ('<span role="button">Help</span>', "cannot use"),
         ('<span aria-label="Hidden">Help</span>', "cannot use"),
         ('<span @click="run">Help</span>', "event attribute"),
+        ('<span v-on:click="run">Help</span>', "event attribute"),
         ('<span :href="target">Help</span>', "dynamically bind"),
+        ('<span v-bind:aria-label="name">Help</span>', "dynamically bind"),
+        ('<span v-html="markup">Help</span>', "Vue directive"),
+        ('<span V-IF="shown">Help</span>', "Vue directive"),
+        ('<span v-bind="extra">Help</span>', "Vue directive"),
+        # The browser picks a dynamic argument's attribute, so it cannot be
+        # checked against the rejected list and is refused outright.
+        ('<span :[attr]="value">Help</span>', "Vue directive"),
+        ('<span v-bind:[attr]="value">Help</span>', "Vue directive"),
+        ('<span ^aria-label="name">Help</span>', "Vue directive"),
     ],
 )
 def test_title_rejects_interactive_hidden_renamed_or_decorative_only_output(

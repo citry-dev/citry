@@ -56,7 +56,7 @@ def test_keyed_transparent_call_compiles_a_keyed_fragment_for_each_body_shape(bo
 
     assert binding["attrsBindingKey"] is None
     assert type(key) is str
-    assert compile_input.template.count('<template v-if="true" :key="preparedData.') == 1
+    assert compile_input.template.count('<template v-if="true" :key="$citryPrepared.') == 1
     assert '<template v-if="false"></template></template>' in compile_input.template
     assert root.prepared_data[key].startswith("citryTransparent")
     assert binding["sourceStart"] == len(b"<main>")
@@ -64,7 +64,7 @@ def test_keyed_transparent_call_compiles_a_keyed_fragment_for_each_body_shape(bo
     assert binding["sourceEnd"] == len(compile_input.template[:opening_end].encode())
 
     compiled = _compile(root, compile_input)
-    assert f"createElementBlock(_Fragment, {{ key: _ctx.preparedData.{key} }}" in compiled.javascript
+    assert f"createElementBlock(_Fragment, {{ key: _ctx.$citryPrepared.{key} }}" in compiled.javascript
 
 
 def test_unkeyed_transparent_call_remains_unwrapped() -> None:
@@ -79,7 +79,7 @@ def test_unkeyed_transparent_call_remains_unwrapped() -> None:
 
     assert "citryKey0" not in root.prepared_data
     assert "citryTransparent" not in compile_input.template
-    assert ':key="preparedData.' not in compile_input.template
+    assert ':key="$citryPrepared.' not in compile_input.template
 
 
 def test_empty_keyed_transparent_call_preserves_an_independently_keyed_child() -> None:
@@ -105,12 +105,12 @@ def test_empty_keyed_transparent_call_preserves_an_independently_keyed_child() -
     wrapper_key = compile_input.element_bindings[0]["keyBindingKey"]
 
     assert compile_input.template.count(":key=") == 2
-    assert f':key="preparedData.calls.{local_id}.key"' in compile_input.template
+    assert f':key="$citryPrepared.calls.{local_id}.key"' in compile_input.template
     assert root.prepared_data["citryKey0"].startswith("citryTransparent")
     assert child.parent_id == root.id
     compiled = _compile(root, compile_input)
-    assert f"key: _ctx.preparedData.{wrapper_key}" in compiled.javascript
-    assert f"key: _ctx.preparedData.calls.{local_id}.key" in compiled.javascript
+    assert f"key: _ctx.$citryPrepared.{wrapper_key}" in compiled.javascript
+    assert f"key: _ctx.$citryPrepared.calls.{local_id}.key" in compiled.javascript
 
 
 def test_duplicate_transparent_sibling_keys_are_rejected() -> None:
@@ -230,7 +230,7 @@ def test_keyed_transparent_wrapper_survives_component_cache_replay() -> None:
     for assembly in assemblies:
         root, compile_input = _root(assembly)
         assert root.prepared_data["citryKey0"].startswith("citryTransparent")
-        assert '<template v-if="true" :key="preparedData.citryKey0">' in compile_input.template
+        assert '<template v-if="true" :key="$citryPrepared.citryKey0">' in compile_input.template
         assert compile_input.element_bindings[0]["keyBindingKey"] == "citryKey0"
         _compile(root, compile_input)
 
@@ -261,8 +261,58 @@ def test_keyed_transparent_wrapper_in_supplied_slot_keeps_lexical_key_owner() ->
     child = next(item for item in assembly.view.occurrences if item.type_key == Child.class_id)
 
     assert root.prepared_data["citryKey0"].startswith("citryTransparent")
-    assert ':key="preparedData.citryKey0"' in compile_input.template
+    assert ':key="$citryPrepared.citryKey0"' in compile_input.template
     assert compile_input.element_bindings[0]["keyBindingKey"] == "citryKey0"
     assert child.parent_id == receiver.id
     assert receiver.parent_id == root.id
     _compile(root, compile_input)
+
+
+def test_slot_names_inside_keyed_rows_follow_the_row_key_across_reorder() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Table(Component):
+        citry = registry
+        template = """
+            <table><tbody>
+              <tr c-for="row in rows" #c-key="row" c-data-row="row">
+                <td><c-slot name="cell" c-row="row" /></td>
+              </tr>
+            </tbody></table>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"rows": kwargs["rows"]}
+
+    class Page(Component):
+        citry = registry
+        template = """
+            <c-table c-rows="rows">
+              <c-fill name="cell" data="{ row }"><input c-name="row" /></c-fill>
+            </c-table>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"rows": kwargs["rows"]}
+
+    def outlets(rows: list[str]) -> tuple[str, dict[str, str]]:
+        # The slot names stay positional, so the compiled template does not
+        # depend on the rows. Each outlet's Vue key, sent as data, follows its
+        # row key, so a moved row keeps its slot content.
+        assembly = _assemble(Page(rows=rows))
+        table = next(item for item in assembly.view.occurrences if item.type_key == Table.class_id)
+        template = assembly.compile_inputs[table.definition_id].template
+        row_keys = [
+            table.prepared_data[name] for name in re.findall(r':key="\$citryPrepared\.(citryKey\d+)"', template)
+        ]
+        names = re.findall(r'name="(citrySlot[0-9a-f]+)"', template)
+        slot_keys = table.prepared_data["slotKeys"]
+        assert len(row_keys) == len(names) == len(rows)
+        assert template.count(':key="$citryPrepared.slotKeys[') == len(rows)
+        return template, {row: slot_keys[name] for row, name in zip(row_keys, names, strict=True)}
+
+    template, first = outlets(["a", "b"])
+    reordered_template, reordered = outlets(["b", "a"])
+    assert reordered_template == template
+    assert reordered == first
+    assert len(set(first.values())) == 2

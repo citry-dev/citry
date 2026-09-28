@@ -32,12 +32,13 @@ from citry._vue.direct_capture import (
     _matches_cache_replay_identity,
     assemble_typed_render,
 )
-from citry._vue.leaf_program import static_leaf_parts, typed_leaf_parts
+from citry._vue.leaf_program import LEAF_TEMPLATE_CONTRACT_DESCRIPTOR
 from citry.citry_context import CitryContext
 from citry.citry_render import CitryRender
 from citry.component_registry import NotRegistered
 from citry.ext.cache import component_cache_key
 from citry.ext.cache.artifact import (
+    _RENDER_CONTRACT,
     ArtifactAttribute,
     ArtifactDirectPythonComponentPart,
     ArtifactDirectSlotPart,
@@ -500,24 +501,29 @@ def test_common_leaf_component_cache_hit_skips_data_and_keeps_fresh_boundary() -
 
     class Card(Component):
         citry = app
-        template = "<p>{{ value }}</p>"
+        template = '<p c-bind="attrs">{{ value }}</p>'
 
         class Cache:
             enabled = True
 
         def template_data(self, kwargs, slots):
             calls.append("data")
-            return {"value": "{{ remains data }}"}
+            return {"attrs": {"title": "ready"}, "value": "{{ remains data }}"}
 
     first = render_prepared(Card())
     second = render_prepared(Card())
 
     assert calls == ["data"]
     assert first.frame.render_id != second.frame.render_id
-    assert first.parts[0].fragment == second.parts[0].fragment
-    assert first.parts[0].prepared_data == second.parts[0].prepared_data
-    assert typed_leaf_parts(first.parts[0]) == typed_leaf_parts(second.parts[0])
-    assert static_leaf_parts(first.parts[0]) == static_leaf_parts(second.parts[0])
+    assert first.serialize(deps_strategy="ignore").startswith('<p title="ready" data-cid-')
+    assert second.serialize(deps_strategy="ignore").startswith('<p title="ready" data-cid-')
+    replayed = assemble_typed_render(
+        second,
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    assert replayed.view.occurrences[0].prepared_data["citryText0"] == "{{ remains data }}"
+    assert replayed.view.occurrences[0].prepared_data["citryAttrs0"] == {"title": "ready"}
 
 
 def test_source_fingerprint_mismatch_is_a_diagnosed_miss_and_fresh_store() -> None:
@@ -997,6 +1003,116 @@ def test_corrupt_entry_is_a_miss_and_successful_render_replaces_it() -> None:
     render_prepared_direct(Card())
 
     assert json.loads(app.cache.get(key))["artifact_version"] == 1
+
+
+def _leaf_parent_app() -> tuple[Citry, type[Component], list[str]]:
+    # A cached parent around an uncached child stores the child's leaf
+    # program, the one cached part that carries generated Vue template text.
+    app = Citry()
+    calls: list[str] = []
+
+    class LeafChild(Component):
+        citry = app
+        template = '<p :title="value">{{ value }}</p>'
+
+        def template_data(self, kwargs, slots):
+            calls.append("child")
+            return {"value": "v"}
+
+    class LeafParent(Component):
+        citry = app
+        template = "<div><c-LeafChild /></div>"
+
+        class Cache:
+            enabled = True
+
+    return app, LeafParent, calls
+
+
+@pytest.mark.parametrize(
+    ("stale_contract", "outcome"),
+    [
+        pytest.param(None, "missing", id="entry-without-contract"),
+        pytest.param("0" * 64, "other", id="entry-with-other-contract"),
+    ],
+)
+def test_entry_from_a_build_with_another_render_contract_is_a_miss_and_replaced(
+    stale_contract: str | None,
+    outcome: str,
+) -> None:
+    app, parent, calls = _leaf_parent_app()
+    render_prepared_direct(parent())
+    key, (value, expires) = next(iter(app.cache._data.items()))
+    wire = json.loads(value)
+    assert wire["frames"][1]["parts"][0][0] == "leaf_program"
+    # Rewrite the entry the way an earlier build wrote it: its leaf template
+    # read prepared data through another name, and it stamped another contract.
+    wire["frames"][1]["parts"][0][1] = wire["frames"][1]["parts"][0][1].replace("$citryPrepared.", "preparedData.")
+    if outcome == "missing":
+        del wire["render_contract"]
+    else:
+        wire["render_contract"] = stale_contract
+    app.cache._data[key] = (json.dumps(wire), expires)
+    with pytest.raises(_CacheArtifactCompatibilityError, match="render_contract"):
+        _decode_artifact(app.cache._data[key][0])
+
+    rendered = render_prepared_direct(parent())
+    replaced = json.loads(app.cache._data[key][0])
+    assembly = assemble_typed_render(
+        rendered, revision=0, tag_for_type=lambda value: "x-" + value.lower().replace("_", "-")
+    )
+
+    assert calls == ["child", "child"]
+    assert replaced["render_contract"] == _RENDER_CONTRACT
+    assert "$citryPrepared.citryText0" in replaced["frames"][1]["parts"][0][1]
+    assert all("preparedData" not in item.template for item in assembly.compile_inputs.values())
+
+
+def test_leaf_template_contract_descriptor_moves_with_the_generated_template() -> None:
+    # The render cache stamps entries with LEAF_TEMPLATE_CONTRACT_DESCRIPTOR,
+    # so a change to the generated leaf template that leaves the descriptor as
+    # it was would replay old templates. When this template changes, edit the
+    # descriptor in leaf_program.py and update both locked values together.
+    app, parent, _calls = _leaf_parent_app()
+    render_prepared_direct(parent())
+    wire = json.loads(next(iter(app.cache._data.values()))[0])
+
+    assert (wire["frames"][1]["parts"][0][1], LEAF_TEMPLATE_CONTRACT_DESCRIPTOR) == (
+        '<p :title="value">{{ $citryPrepared.citryText0 }}</p>',
+        "leaf-template/1;data=$citryPrepared;"
+        "text={{ $citryPrepared.citryText<n> }};attrs=v-bind=$citryPrepared.citryAttrs<n>;"
+        "key=:key=$citryPrepared.citryKey<n>;"
+        "if=template v-if/v-else-if $citryPrepared.citryIf<n> === <branch>;"
+        "loop=template v-for $citryPrepared in $citryPrepared.citryLoop<n>,v-if length === 0;"
+        "runtimeEvents=v-citry-runtime-events $citryEvents.runtimeEvents($citryPrepared.citryRuntimeEvents<n>);"
+        "events=v-on:<event>.<modifiers> $citryEvents.dispatch('<id>', $event, (<args>));"
+        "timing=v-citry-event-timing $citryEvents.timings('<ids>',[{id,args}]);"
+        "controls=v-citry-control $citryEvents.controls($citryPrepared.citryControls<n>) or ('<ids>')",
+    )
+
+
+def test_cached_raw_html_stores_bytes_and_assembly_rebuilds_the_browser_record() -> None:
+    # The entry keeps only the raw HTML bytes; the record the browser mounts,
+    # with its node count, is built from them each time a page is assembled,
+    # so an entry never holds a record in an older shape.
+    app = Citry()
+
+    class RawCard(Component):
+        citry = app
+        template = "<div><c-raw><b>x</b> y</c-raw></div>"
+
+        class Cache:
+            enabled = True
+
+    render_prepared_direct(RawCard())
+    stored = next(iter(app.cache._data.values()))[0]
+    replayed = render_prepared_direct(RawCard())
+    assembly = assemble_typed_render(replayed, revision=0, tag_for_type=lambda _value: "x-raw-card")
+
+    assert "opaqueHtml" not in stored
+    assert assembly.view.occurrences[0].prepared_data["opaqueHtml"] == {
+        "citryOpaque0": {"html": "<b>x</b> y", "nodeCount": 2}
+    }
 
 
 def test_configured_entry_limit_skips_oversized_publication() -> None:

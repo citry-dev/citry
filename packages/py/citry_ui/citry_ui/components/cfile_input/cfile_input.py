@@ -13,6 +13,7 @@ from citry_ui.components._attrs import (
     CStyleValue,
     get_html_attr,
     get_html_form_owner,
+    is_vue_directive_attribute,
     merge_root_attrs,
     pop_html_attr,
 )
@@ -27,20 +28,6 @@ _CAPTURES = ("user", "environment")
 _VARIANTS = ("outline", "soft", "plain")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _INPUT_OWNED_ATTRS = frozenset(
     {
         "accept",
@@ -71,13 +58,6 @@ _INPUT_OWNED_ATTRS = frozenset(
         "value",
     }
 )
-_INPUT_DYNAMIC_OWNED_ATTRS = _INPUT_OWNED_ATTRS | {
-    "aria-describedby",
-    "aria-errormessage",
-    "aria-label",
-    "aria-labelledby",
-    "form",
-}
 _DROP_ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -138,27 +118,17 @@ def _choice(input_name: str, value: object, allowed: tuple[str, ...]) -> str:
     return plain
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    if attribute.startswith("x-bind:"):
-        return attribute.removeprefix("x-bind:").split(".", 1)[0]
-    if attribute.startswith((":", ".")):
-        return attribute[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(
     component_name: str,
     attrs: Mapping[str, object] | None,
     *,
     owned: frozenset[str],
-    dynamic_owned: frozenset[str] | None = None,
 ) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         msg = f"{component_name} must be a mapping or None, got {attrs!r}."
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, component_name)
-    dynamic_owned = dynamic_owned or owned
     for key in copied:
         if not isinstance(key, str):
             msg = f"{component_name} requires string keys, got {key!r}."
@@ -167,14 +137,14 @@ def _copy_attrs(
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"{component_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in dynamic_owned:
-            msg = f"{component_name} cannot dynamically bind owned attribute {target!r}."
+        # A Vue directive could rebind an owned attribute (including the
+        # relationships the component merges), change the structure, or
+        # attach a listener, so none may arrive through Python data.
+        if is_vue_directive_attribute(normalized):
+            msg = (
+                f"{component_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
     return copied
 
@@ -263,7 +233,6 @@ class CFileInput(LibraryComponent):
             "CFileInput attrs",
             kwargs.attrs,
             owned=_INPUT_OWNED_ATTRS,
-            dynamic_owned=_INPUT_DYNAMIC_OWNED_ATTRS,
         )
         for html_attribute in (
             "aria-describedby",
@@ -633,7 +602,6 @@ class CDropTarget(LibraryComponent):
             "CDropTarget input_attrs",
             kwargs.input_attrs,
             owned=_INPUT_OWNED_ATTRS | {"aria-label", "aria-labelledby", "class", "style"},
-            dynamic_owned=_INPUT_DYNAMIC_OWNED_ATTRS,
         )
         for html_attribute in ("aria-describedby", "aria-errormessage", "form"):
             get_html_attr(input_attrs, html_attribute, component_name="CDropTarget input_attrs")

@@ -20,7 +20,7 @@ from citry.ext.dependencies.scripts import uses_component
 from citry.ext.events.emission import EXTRA_KEY, EventInstanceEntry, build_events_manifest
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
@@ -86,6 +86,22 @@ class _PreparedResult:
     tags: dict[str, str] | None
     validate: Callable[[], None]
     extensions: tuple[PreparedBrowserExtension, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class EarlySelectedTreeCompilation:
+    """Request-local compiler output prepared before HTML frame materialization."""
+
+    selected_render: CitryRender
+    citry: Citry
+    revision: int
+    root_occurrence_id: str | None
+    producer_identity: tuple[object, object, object]
+    assembly: Assembly | None
+    compiled_by_definition: dict[str, CompiledRender] | None
+    error: Exception | None = None
+    error_stage: str | None = None
+    metadata: _BuiltInPreparationMetadata | None = None
 
 
 def definition_bundle(citry: Citry, digest: str) -> bytes | None:
@@ -170,6 +186,63 @@ def default_events_producer(citry: Citry) -> DirectVueEventsProducer:
     )
     _PRODUCERS[citry] = producer
     return producer
+
+
+def precompile_selected_tree_for_serialization(
+    render: CitryRender,
+    citry: Citry,
+) -> EarlySelectedTreeCompilation | None:
+    """Compile the pure selected tree early when no browser hook can run."""
+    browser_hooks = set(citry.extensions._extensions_with_hook("browser_plugin")) | set(
+        citry.extensions._extensions_with_hook("prepare_browser_render")
+    )
+    if browser_hooks:
+        from citry.ext.i18n.extension import I18nExtension  # noqa: PLC0415
+
+        # The stock, unconfigured i18n extension contributes nothing to the
+        # browser tree. Permit that exact inert instance while leaving every
+        # configured, replaced, or user-defined callback on the late path.
+        inert_i18n_only = all(
+            type(extension) is I18nExtension
+            and not extension.configured
+            and "browser_plugin" not in vars(extension)
+            and "prepare_browser_render" not in vars(extension)
+            for extension in browser_hooks
+        )
+        if not inert_i18n_only:
+            return None
+    producer = default_events_producer(citry)
+    if type(producer) is not DirectVueEventsProducer or not producer._uses_builtin_metadata(citry):
+        return None
+    metadata = _BuiltInPreparationMetadata(citry, producer._tag_for_type)
+    producer_identity = (
+        producer._builtin_citry_ref,
+        producer._builtin_tag_callback,
+        producer._tag_for_type,
+    )
+    try:
+        assembly = assemble_typed_render(
+            render,
+            revision=0,
+            tag_for_type=producer._tag_for_type,
+            component_metadata_for_type=metadata.resolve,
+            expected_citry=citry,
+        )
+    except Exception as error:  # noqa: BLE001 -- defer to the established post-validation boundary
+        return EarlySelectedTreeCompilation(
+            render, citry, 0, None, producer_identity, None, None, error, "assembly", metadata
+        )
+    try:
+        compiled = producer._compile_view(assembly)
+        if set(compiled) != {item.id for item in assembly.view.definitions}:
+            raise ValueError("direct compiler output must exactly cover the prepared definitions")
+    except Exception as error:  # noqa: BLE001 -- preserve compiler errors after pre-extension validation
+        return EarlySelectedTreeCompilation(
+            render, citry, 0, None, producer_identity, assembly, None, error, "compile", metadata
+        )
+    return EarlySelectedTreeCompilation(
+        render, citry, 0, None, producer_identity, assembly, compiled, metadata=metadata
+    )
 
 
 class DirectVueEventsProducer:
@@ -283,6 +356,7 @@ class DirectVueEventsProducer:
         base_revision: int | None = None,
         root_occurrence_id: str | None = None,
         dependency_options: _DependencyOptions | None = None,
+        _early_selected_tree: EarlySelectedTreeCompilation | None = None,
     ) -> _PreparedResult:
         """Prepare initial or event output without rendering the selected tree again."""
         root_component = render.context.component
@@ -296,7 +370,11 @@ class DirectVueEventsProducer:
             self._tag_for_type,
         )
         built_in_metadata = (
-            _BuiltInPreparationMetadata(citry, self._tag_for_type) if self._uses_builtin_metadata(citry) else None
+            _early_selected_tree.metadata
+            if _early_selected_tree is not None and _early_selected_tree.metadata is not None
+            else (
+                _BuiltInPreparationMetadata(citry, self._tag_for_type) if self._uses_builtin_metadata(citry) else None
+            )
         )
         from citry.browser_render import (  # noqa: PLC0415
             collect_browser_plugin_descriptors,
@@ -313,14 +391,32 @@ class DirectVueEventsProducer:
                 for name in registration.plugin.template_context_names
             )
         )
-        assembly = assemble_typed_render(
-            render,
-            revision=revision,
-            tag_for_type=self._tag_for_type,
-            component_metadata_for_type=(built_in_metadata.resolve if built_in_metadata is not None else None),
-            root_occurrence_id=root_occurrence_id,
-            template_context_names=template_context_names,
-            expected_citry=citry,
+        if _early_selected_tree is not None and (
+            _early_selected_tree.selected_render is not render
+            or _early_selected_tree.citry is not citry
+            or _early_selected_tree.revision != revision
+            or _early_selected_tree.root_occurrence_id != root_occurrence_id
+            or _early_selected_tree.producer_identity[0] is not built_in_identity[0]
+            or _early_selected_tree.producer_identity[1] is not built_in_identity[1]
+            or _early_selected_tree.producer_identity[2] is not built_in_identity[2]
+        ):
+            raise ValueError("early selected-tree compilation does not match the current render preparation")
+        if _early_selected_tree is not None and _early_selected_tree.error_stage == "assembly":
+            if _early_selected_tree.error is None:
+                raise AssertionError("early selected-tree assembly error is missing")
+            raise _early_selected_tree.error
+        assembly = (
+            _early_selected_tree.assembly
+            if _early_selected_tree is not None and _early_selected_tree.assembly is not None
+            else assemble_typed_render(
+                render,
+                revision=revision,
+                tag_for_type=self._tag_for_type,
+                component_metadata_for_type=(built_in_metadata.resolve if built_in_metadata is not None else None),
+                root_occurrence_id=root_occurrence_id,
+                template_context_names=template_context_names,
+                expected_citry=citry,
+            )
         )
         if dependency_options is None:
             from citry._csp_validation import _CspRenderValidator  # noqa: PLC0415
@@ -368,7 +464,15 @@ class DirectVueEventsProducer:
             if entry.render_id in selected_ids
         ]
 
-        compiled_by_definition = self._compile_view(assembly)
+        if _early_selected_tree is not None and _early_selected_tree.error_stage == "compile":
+            if _early_selected_tree.error is None:
+                raise AssertionError("early selected-tree compiler error is missing")
+            raise _early_selected_tree.error
+        compiled_by_definition = (
+            _early_selected_tree.compiled_by_definition
+            if _early_selected_tree is not None and _early_selected_tree.compiled_by_definition is not None
+            else self._compile_view(assembly)
+        )
         if set(compiled_by_definition) != {item.id for item in view.definitions}:
             raise ValueError("direct compiler output must exactly cover the prepared definitions")
         definition_ids = {logical_id: compiled.id for logical_id, compiled in compiled_by_definition.items()}
@@ -425,36 +529,40 @@ class DirectVueEventsProducer:
 
             options = dependency_options or {}
             supplied_policy = options.get("javascript_policy")
-            javascript_validator = (
-                supplied_policy
-                if supplied_policy is not None
-                else _JavascriptPolicy(options.get("security_javascript", citry.settings.security_javascript))
-            )
-            csp_validator = _CspRenderValidator(options.get("security_csp", citry.settings.security_csp))
-            component_classes = {
-                type_key: (
-                    built_in_metadata.classes[type_key].__name__
-                    if built_in_metadata is not None and type_key in built_in_metadata.classes
-                    else citry.get_component_by_class_id(type_key).__name__
-                )
-                for type_key in {item.type_key for item in view.definitions}
-            }
-            for html in opaque_records:
-                javascript_validator.validate_settled_html(
-                    html,
-                    marker_prefix="data-cid-",
-                    trusted_tag_starts=frozenset(),
-                    component_classes=component_classes,
-                )
-                csp_validator.validate_settled_html(
-                    html,
-                    marker_prefix="data-cid-",
-                    trusted_tag_starts=frozenset(),
-                    component_classes=component_classes,
-                )
-            if supplied_policy is None:
+            javascript_mode = options.get("security_javascript", citry.settings.security_javascript)
+            javascript_validator = supplied_policy
+            if javascript_validator is None and javascript_mode != "allow":
+                javascript_validator = _JavascriptPolicy(javascript_mode)
+            csp_mode = options.get("security_csp", citry.settings.security_csp)
+            csp_validator = None if csp_mode == "off" else _CspRenderValidator(csp_mode)
+            if javascript_validator is not None or csp_validator is not None:
+                component_classes = {
+                    type_key: (
+                        built_in_metadata.classes[type_key].__name__
+                        if built_in_metadata is not None and type_key in built_in_metadata.classes
+                        else citry.get_component_by_class_id(type_key).__name__
+                    )
+                    for type_key in {item.type_key for item in view.definitions}
+                }
+                for html in opaque_records:
+                    if javascript_validator is not None:
+                        javascript_validator.validate_settled_html(
+                            html,
+                            marker_prefix="data-cid-",
+                            trusted_tag_starts=frozenset(),
+                            component_classes=component_classes,
+                        )
+                    if csp_validator is not None:
+                        csp_validator.validate_settled_html(
+                            html,
+                            marker_prefix="data-cid-",
+                            trusted_tag_starts=frozenset(),
+                            component_classes=component_classes,
+                        )
+            if supplied_policy is None and javascript_validator is not None:
                 javascript_validator.report()
-            csp_validator.report()
+            if csp_validator is not None:
+                csp_validator.report()
         type_policies: list[dict[str, object]] = []
         selected_type_keys = dict.fromkeys(item.type_key for item in view.definitions)
         for type_key in selected_type_keys:
@@ -735,7 +843,7 @@ def native_compile_view(
 
     def compile_view(assembly: Assembly) -> dict[str, CompiledRender]:
         definitions = {item.id: item for item in assembly.view.definitions}
-        return {
+        compiled = {
             definition_id: compiler.compile(
                 value.template,
                 type_key=definitions[definition_id].type_key,
@@ -750,8 +858,46 @@ def native_compile_view(
             )
             for definition_id, value in assembly.compile_inputs.items()
         }
+        check_directive_roots(assembly, compiled)
+        return compiled
 
     return compile_view
+
+
+_UNSHOWABLE_ROOTS = {
+    "fragment": "its template has several top-level nodes, or a 'v-for', '<c-for>', or '<c-slot>' at the top level",
+    "text": "its template renders only text",
+    "opaque-html": "its template renders HTML from Python (such as '<c-raw>' or trusted markup) at the top level",
+}
+
+
+def check_directive_roots(assembly: Assembly, compiled: Mapping[str, CompiledRender]) -> None:
+    """
+    Reject a caller's ``v-show`` or custom directive that Vue would skip without an error.
+
+    Vue applies these directives on a component tag to the element the child
+    renders at its root. For a child whose compiled render returns several
+    roots, only text, or HTML from Python, Vue does nothing, so the page would
+    keep showing content the author meant to hide, or miss the directive's
+    behavior. A child whose root is another component, or whose shape the
+    reader cannot tell, is left to the browser runtime check.
+
+    Raises:
+        RuntimeError: When such a child's selected render cannot carry the
+            directive.
+
+    """
+    occurrences = {item.id: item for item in assembly.view.occurrences}
+    for occurrence_id, (class_name, tag, directive) in assembly.root_directive_occurrences.items():
+        shape = compiled[occurrences[occurrence_id].definition_id].root_shape
+        reason = _UNSHOWABLE_ROOTS.get(shape)
+        if reason is not None:
+            msg = (
+                f"{directive!r} on <{tag}> needs component {class_name!r} to render one root element, but "
+                f"{reason}. Vue would ignore {directive!r} there. Wrap the child's template in one element, or put "
+                f"{directive!r} on an element around <{tag}>."
+            )
+            raise RuntimeError(msg)
 
 
 def _validate_style_assets(styles: list[dict[str, object]], view: PreparedViewMetadata) -> None:

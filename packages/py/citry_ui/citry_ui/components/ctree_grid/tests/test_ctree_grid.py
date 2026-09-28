@@ -9,7 +9,7 @@ import pytest
 
 import citry_ui
 from citry import Citry, Component
-from citry_ui import CTreeGrid, CTreeGridColumn, CTreeGridRow
+from citry_ui import CTreeGrid, CTreeGridCell, CTreeGridColumn, CTreeGridRow
 
 
 def _render(columns, rows, attrs: str = "", *, static_fallback: bool = False) -> str:
@@ -29,7 +29,9 @@ def _render(columns, rows, attrs: str = "", *, static_fallback: bool = False) ->
 
 
 def _manifest(html: str) -> dict[str, object]:
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     return json.loads(match.group(1))["manifest"]
 
@@ -119,6 +121,43 @@ def test_server_defaults_are_namespaced_away_from_vue_props() -> None:
 def test_invalid_data_fails(columns, rows, attrs: str, match: str) -> None:
     with pytest.raises((TypeError, ValueError), match=match):
         _render(columns, rows, attrs)
+
+
+@pytest.mark.parametrize(
+    ("place", "attribute", "owner"),
+    [
+        ("root", ":role", "CTreeGrid attrs"),
+        ("root", "v-if", "CTreeGrid attrs"),
+        ("root", "V-IF", "CTreeGrid attrs"),
+        ("root", "@keydown", "CTreeGrid attrs"),
+        ("row", "v-bind:aria-level", "CTreeGrid Row 'x' attrs"),
+        ("row", "#default", "CTreeGrid Row 'x' attrs"),
+        ("column", "v-html", "CTreeGrid Column 'a' cell_attrs"),
+        ("cell", ".aria-colindex", "CTreeGrid Row 'x' Cell 'a' attrs"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(place: str, attribute: str, owner: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the message names the exact mapping that held it.
+    attrs = {attribute: "x"}
+    column = CTreeGridColumn("a", "A", cell_attrs=attrs if place == "column" else None)
+    cell = CTreeGridCell(1, attrs=attrs) if place == "cell" else 1
+    row = CTreeGridRow("x", "X", {"a": cell}, attrs=attrs if place == "row" else None)
+    root_attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\"" if place == "root" else ""
+    with pytest.raises(ValueError, match=re.escape(f"{owner} cannot contain the Vue directive {attribute!r}")):
+        _render([column], [row], root_attrs)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    columns, rows = _data()
+    html = _render(columns, rows, "c-attrs=\"{'x-data': '{}', 'hx-get': '/rows'}\"", static_fallback=True)
+
+    root = re.search(r'<[^>]+data-citry-ui-part="tree-grid"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/rows"' in root.group(0)
 
 
 def test_assets_docs_and_translations_cover_contract() -> None:

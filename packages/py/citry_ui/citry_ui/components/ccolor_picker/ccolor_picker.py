@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -28,9 +28,6 @@ CColorPickerSource = Literal["area", "hue", "text", "swatch", "native", "reset"]
 
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -103,20 +100,27 @@ def _attrs(
         raise TypeError(f"CColorPicker attrs must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, _ROOT_OWNED, "CColorPicker attrs")
+    # A Vue directive could rebind an owned attribute, add listeners, or
+    # change the picker's structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CColorPicker")
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CColorPicker attrs require string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CColorPicker attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"CColorPicker attrs cannot use ownership directive {key!r}.")
     return merge_root_attrs(copied, class_, style)
 
 
 class CColorPicker(LibraryComponent):
     class I18n:
         messages_locale = "en-US"
+        # The browser code builds these IDs from a variable
+        # (`citry-ui-color-picker-${kind}`), so Citry cannot find them as literal
+        # calls; listing them sends them to the browser.
+        client_messages = (
+            "citry-ui-color-picker-selected",
+            "citry-ui-color-picker-invalid",
+        )
 
     @dataclass(slots=True)
     class Kwargs:

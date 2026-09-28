@@ -6,6 +6,7 @@ import pytest
 
 from citry._browser_expressions import BrowserExpression, browser_component_prop_sites
 from citry.analysis import (
+    VUE_AMBIENT_NAMES,
     ComponentJsLintConsumer,
     VueLintConsumer,
     analyze_browser_component_source,
@@ -30,6 +31,7 @@ from citry.analysis import (
     lint_csp_compatibility,
     lint_unknown_component_js_variables,
     lint_unknown_vue_variables,
+    lint_vue_python_variables,
     python_event_handler_range,
 )
 from citry_core.template_parser import parse_template
@@ -636,6 +638,196 @@ def test_unknown_vue_lint_uses_native_names_and_respects_unknown_namespace() -> 
     assert [item.name for item in findings] == ["opaque"]
 
 
+def _python_variable_findings(
+    source: str,
+    known: frozenset[str] = frozenset(),
+    rule: str = "warning",
+    namespace_policy: str = "unknown",
+    unknown_rule: str = "error",
+) -> list[tuple[str, str, str]]:
+    # The default open namespace keeps the unknown-variable rule out of the way.
+    findings = lint_vue_python_variables(
+        browser_expressions(parse_template(source)),
+        (VueLintConsumer(known, unknown_rule, namespace_policy, rule),),  # type: ignore[arg-type]
+    )
+    return [(item.name, item.severity, item.message) for item in findings]
+
+
+def test_vue_python_variable_lint_reports_c_for_names_with_the_c_attribute_form():
+    findings = _python_variable_findings(
+        '<ul><li c-for="item in items" :title="item" v-text="label"></li></ul>',
+        frozenset({"label"}),
+    )
+
+    assert findings == [
+        (
+            "item",
+            "warning",
+            "Vue reads 'item' from browser state, but 'item' is a Python variable here. "
+            'Use c-title="item" to pass the Python value.',
+        )
+    ]
+
+
+def test_vue_python_variable_lint_covers_directives_events_and_c_fill_bindings():
+    findings = _python_variable_findings(
+        '<c-for each="row in rows">'
+        '<p v-show="row.visible" @click="pick(row)" v-bind:data-id="row" :title.prop="row" :key="row"></p>'
+        '<c-card c-for="cell in row" :title="cell"></c-card>'
+        "</c-for>"
+        '<c-card><c-fill name="body" data="{ entry }">'
+        '<b v-text="entry" :title="entry + suffix"></b>'
+        "</c-fill></c-card>",
+        frozenset({"pick", "suffix"}),
+    )
+
+    general = "Pass its value with a c- attribute or loop with Vue's v-for instead."
+    # Only a plain attribute bound to exactly the name gets the `c-` form: a
+    # modifier, `:key`, a component prop, or a larger expression does not.
+    assert [(name, message.split(" here. ")[1]) for name, _severity, message in findings] == [
+        ("row", general),
+        ("row", general),
+        ("row", 'Use c-data-id="row" to pass the Python value.'),
+        ("row", general),
+        ("row", general),
+        ("cell", general),
+        ("entry", general),
+        ("entry", general),
+    ]
+
+
+def test_vue_python_variable_lint_names_both_meanings_when_the_browser_also_knows_the_name():
+    # A js_data key or other browser name makes Vue show the component's value
+    # instead of the loop value, with no error, so the warning names both.
+    assert _python_variable_findings(
+        '<li c-for="item in items" :title="item" v-text="item"></li>',
+        frozenset({"item"}),
+        namespace_policy="closed",
+    ) == [
+        (
+            "item",
+            "warning",
+            "Vue reads the component's browser value 'item' here, not the Python loop or slot variable "
+            "'item'. Use c-title=\"item\" for the Python value, or rename one of them.",
+        ),
+        (
+            "item",
+            "warning",
+            "Vue reads the component's browser value 'item' here, not the Python loop or slot variable "
+            "'item'. Pass the Python value with a c- attribute, or rename one of them.",
+        ),
+    ]
+    # An open namespace that lists the name gets the same message.
+    assert [
+        message
+        for _name, _severity, message in _python_variable_findings(
+            '<li c-for="item in items" :title="item"></li>', frozenset({"item"})
+        )
+    ] == [
+        "Vue reads the component's browser value 'item' here, not the Python loop or slot variable "
+        "'item'. Use c-title=\"item\" for the Python value, or rename one of them."
+    ]
+
+
+def test_vue_python_variable_lint_with_several_components_sharing_a_template():
+    expressions = browser_expressions(parse_template('<li c-for="item in items" :title="item"></li>'))
+
+    # One component defines `item` and another provably lacks it: the
+    # unknown-variable error owns the read, so this rule adds nothing.
+    assert (
+        lint_vue_python_variables(
+            expressions,
+            (
+                VueLintConsumer(frozenset({"item"}), "error", "closed", "warning"),
+                VueLintConsumer(frozenset(), "error", "closed", "warning"),
+            ),
+        )
+        == ()
+    )
+    # Only a component that reports the read picks the message, so an ignoring
+    # component that defines `item` does not make the warning claim Vue has it.
+    findings = lint_vue_python_variables(
+        expressions,
+        (
+            VueLintConsumer(frozenset({"item"}), "error", "closed", "ignore"),
+            VueLintConsumer(frozenset(), "error", "unknown", "warning"),
+        ),
+    )
+    assert [item.message for item in findings] == [
+        "Vue reads 'item' from browser state, but 'item' is a Python variable here. "
+        'Use c-title="item" to pass the Python value.'
+    ]
+
+
+def test_vue_python_variable_lint_skips_vue_aliases_and_reads_outside_the_python_scope():
+    # A Vue v-for alias shadows the Python name inside the browser loop.
+    assert (
+        _python_variable_findings(
+            '<c-for each="item in items"><ul><li v-for="item in list" :title="item"></li></ul></c-for>',
+            frozenset({"list"}),
+        )
+        == []
+    )
+    # Outside the loop the name is not a Python binding at all.
+    assert _python_variable_findings('<c-for each="item in items"></c-for><b :title="item"></b>') == []
+
+
+def test_vue_python_variable_lint_tracks_nested_python_loops_and_normalized_names():
+    findings = _python_variable_findings(
+        '<c-for each="group in groups">'
+        '<ul :data-group="group"><li c-for="item in group.items" :title="item + group"></li></ul>'
+        "</c-for>"
+        # Python stores the NFKC form `fi`; JavaScript keeps the ligature.
+        '<b c-for="\ufb01 in items" :title="\ufb01"></b>',
+    )
+
+    assert [name for name, _severity, _message in findings] == ["group", "item", "group", "\ufb01"]
+
+
+def test_vue_python_variable_lint_severity_and_namespace_policy():
+    source = '<li c-for="item in items" :title="item"></li>'
+
+    assert _python_variable_findings(source, rule="ignore") == []
+    assert [severity for _name, severity, _message in _python_variable_findings(source, rule="error")] == ["error"]
+    # An open namespace cannot prove the browser lacks the name, but the Python
+    # binding still makes the Vue read suspicious, so the warning remains.
+    assert len(_python_variable_findings(source, frozenset({"item"}))) == 1
+    assert lint_vue_python_variables(browser_expressions(parse_template(source)), ()) == (), (
+        "syntax-only analysis without a proven owner reports nothing"
+    )
+
+
+def test_python_names_missing_from_a_closed_namespace_get_one_unknown_variable_error():
+    expressions = browser_expressions(parse_template('<li c-for="item in items" :title="item + label"></li>'))
+    consumers = (VueLintConsumer(frozenset({"label"}), "error", "closed", "warning"),)
+
+    unknown = lint_unknown_vue_variables(expressions, consumers)
+
+    # The provably broken read stays an error and names the Python variable;
+    # the Python-variable rule adds no second finding for the same span.
+    assert [(item.code, item.severity, item.message) for item in unknown] == [
+        (
+            "citry.vue.unknown-variable",
+            "error",
+            "Vue variable 'item' is not available in this component. 'item' is a Python variable "
+            "here, which the browser never sees; pass its value with a c- attribute or loop with Vue's v-for.",
+        )
+    ]
+    assert lint_vue_python_variables(expressions, consumers) == ()
+    # With the unknown-variable rule ignored, the warning takes over.
+    assert [
+        item.code
+        for item in lint_vue_python_variables(
+            expressions, (VueLintConsumer(frozenset({"label"}), "ignore", "closed", "warning"),)
+        )
+    ] == ["citry.vue.python-variable"]
+
+
+def test_vue_lint_consumer_rejects_an_unknown_python_variable_severity():
+    with pytest.raises(ValueError, match="Python-variable rule severity"):
+        VueLintConsumer(frozenset(), "error", "closed", "warn")  # type: ignore[arg-type]
+
+
 def test_component_source_analysis_keeps_initializer_bindings_and_free_names_separate():
     source = """
 const outside = missingOutside;
@@ -752,6 +944,22 @@ def test_unknown_component_js_lint_flags_a_missing_context_destructure():
     assert [(item.name, item.code, item.severity) for item in findings] == [
         ("scope", "citry.component-js.unknown-variable", "error")
     ]
+
+
+def test_component_js_lint_knows_citry_and_dom_globals_but_vue_templates_do_not():
+    source = """$component({ onServerRender({ component }) {
+  const input = component.$el.querySelector("input");
+  if (!(input instanceof HTMLInputElement)) return;
+  const observer = new MutationObserver(() => getComputedStyle(input));
+  Citry.vue.nextTick(() => observer.disconnect());
+  missingHelper(input);
+} });"""
+
+    findings = lint_unknown_component_js_variables(source, (ComponentJsLintConsumer(frozenset(), "error"),))
+
+    assert [item.name for item in findings] == ["missingHelper"]
+    assert "Citry" not in VUE_AMBIENT_NAMES
+    assert "HTMLInputElement" not in VUE_AMBIENT_NAMES
 
 
 def test_simple_data_and_scope_members_are_identified_without_chained_guesses():

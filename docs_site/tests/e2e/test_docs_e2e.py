@@ -23,6 +23,11 @@ pytest.importorskip("pytest_playwright")
 
 pytestmark = pytest.mark.e2e
 
+# Resolve repository files (pnpm's node_modules, the docs static assets) from this
+# file rather than the working directory, which differs when pytest runs from a subfolder.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_AXE_PATH = _REPO_ROOT / "node_modules" / "axe-core" / "axe.min.js"
+
 
 def _failed_requests(page: Any, url: str) -> list[str]:
     """Navigate to ``url`` and return any request that came back 4xx/5xx."""
@@ -309,7 +314,7 @@ def test_ui_preview_frame_resizes_only_from_its_own_window(
                 + 'sandbox="allow-scripts" srcdoc="<p>Preview</p>"></iframe>';
         }"""
     )
-    page.add_script_tag(path=str(Path("docs_site/static/js/site.js").resolve()))
+    page.add_script_tag(path=str(_REPO_ROOT / "docs_site" / "static" / "js" / "site.js"))
     frame = page.locator("[data-ui-preview-frame]")
     frame_element = frame.element_handle()
     assert frame_element is not None
@@ -389,7 +394,7 @@ def test_search_prefixes_a_result_route_that_matches_the_deployment_base(page: A
         "<div data-search-empty></div><div data-search-noresults hidden></div>"
         "<div data-search-error hidden></div></div></div></div></body>"
     )
-    page.add_script_tag(path=str(Path("docs_site/static/js/search.js").resolve()))
+    page.add_script_tag(path=str(_REPO_ROOT / "docs_site" / "static" / "js" / "search.js"))
 
     page.locator("[data-search-open]").click()
     page.locator(".djc-search__input").fill("docs")
@@ -412,7 +417,7 @@ def test_google_search_fallback_scopes_to_the_public_site_path(page: Any, docs_s
         "<div data-search-noresults hidden></div><div data-search-error hidden></div>"
         "</div></div></div></body>"
     )
-    page.add_script_tag(path=str(Path("docs_site/static/js/search.js").resolve()))
+    page.add_script_tag(path=str(_REPO_ROOT / "docs_site" / "static" / "js" / "search.js"))
 
     page.locator("[data-search-open]").click()
     page.locator(".djc-search__input").fill("components")
@@ -1790,12 +1795,10 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
     lifecycle.locator('[role="menu"]').first.wait_for(state="hidden")
     lifecycle.get_by_role("button", name="Close vault").click()
     assert lifecycle.locator('[role="menu"]:popover-open').count() == 0
-
-    axe_path = Path("node_modules/axe-core/axe.min.js").resolve()
-    assert axe_path.is_file(), "run `pnpm install` before Citry UI axe tests"
+    assert _AXE_PATH.is_file(), "run `pnpm install` before Citry UI axe tests"
     for index in range(13):
         frame = demos.nth(index).locator("[data-ui-preview-frame]").element_handle().content_frame()
-        frame.add_script_tag(path=str(axe_path))
+        frame.add_script_tag(path=str(_AXE_PATH))
         violations = frame.evaluate(
             """async () => {
               const result = await axe.run(document, { resultTypes: ['violations'] });
@@ -1855,6 +1858,9 @@ def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
     limited.locator('[data-citry-toast-id="queue-3"]').wait_for(state="visible")
 
     focus = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    # F6 only reaches a toast the region's script has already rendered, and this
+    # frame may still be starting when the earlier checks finish.
+    focus.locator('[data-citry-toast-initialized] [data-citry-toast-id="f6"]').wait_for(state="visible")
     focus.get_by_role("button", name="Focus before F6").focus()
     focus.locator("body").press("F6")
     assert focus.locator('[data-citry-toast-id="f6"]').evaluate("element => element === document.activeElement")

@@ -89,14 +89,17 @@ def _axe_serious_or_critical(page: Any) -> list[dict[str, object]]:
     )
 
 
-def test_image_quality_native_semantics_delivery_reactivity_lifecycle_guards_and_axe(page: Any) -> None:
+def test_image_quality_native_semantics_delivery_reactivity_lifecycle_guards_and_axe(
+    page: Any,
+    open_scenario: Any,
+) -> None:
     console_errors: list[str] = []
     page_errors: list[str] = []
     requests: list[dict[str, object]] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: page_errors.append(str(error)))
     _install_image_routes(page, requests)
-    page.set_content(render_scenario("image.states"), wait_until="load")
+    open_scenario("image.states")
     page.locator("#quality-image-lazy").scroll_into_view_if_needed()
     _wait_for_all_settled(page)
 
@@ -147,7 +150,7 @@ def test_image_quality_native_semantics_delivery_reactivity_lifecycle_guards_and
     functional_link.focus()
     assert functional_link.evaluate("element => element === document.activeElement") is True
 
-    # Initial cached images can finish before Alpine attaches native listeners.
+    # Initial cached images can finish before the Vue client attaches native listeners.
     initial_output = page.locator("#quality-image-reactive-output").text_content().split("|")
     initial_loads, initial_errors = (int(value) for value in initial_output[3:])
     page.get_by_role("button", name="Broken", exact=True).click()
@@ -215,7 +218,10 @@ def test_image_quality_native_semantics_delivery_reactivity_lifecycle_guards_and
     assert page_errors == []
 
 
-def test_image_quality_csp_remains_browser_owned_and_shows_the_visual_fallback(page: Any) -> None:
+def test_image_quality_csp_remains_browser_owned_and_shows_the_visual_fallback(
+    page: Any,
+    open_scenario: Any,
+) -> None:
     console_errors: list[str] = []
     page_errors: list[str] = []
     requests: list[dict[str, object]] = []
@@ -223,7 +229,7 @@ def test_image_quality_csp_remains_browser_owned_and_shows_the_visual_fallback(p
     page.on("pageerror", lambda error: page_errors.append(str(error)))
     _install_image_routes(page, requests)
 
-    page.set_content(_with_image_csp(render_scenario("image.states")), wait_until="load")
+    open_scenario("image.states", transform=_with_image_csp)
     page.locator("#quality-image-lazy").scroll_into_view_if_needed()
     _wait_for_all_settled(page)
 

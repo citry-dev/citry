@@ -834,6 +834,7 @@ logical sections:
 header
   artifact version
   Citry compatibility version
+  render contract hash
   extension payload versions
   creation metadata used only for diagnostics
 
@@ -856,6 +857,20 @@ extensions
   Events payload
   payloads from explicitly replay-compatible user extensions
 ```
+
+The render contract hash covers three things: the generated Vue template
+text that a stored leaf program carries (a leaf program is a child component
+compiled to one Vue template plus the data that template reads), the browser
+runtime contract that template is compiled against, and the installed Citry
+version (`LEAF_TEMPLATE_CONTRACT_DESCRIPTOR` in `citry/_vue/leaf_program.py`
+and `HELPER_CONTRACT` in `citry/_vue/compiler.py`). An entry with a missing or
+different hash is an `incompatible-entry` miss, and the render that follows
+overwrites it under the same key, so a persistent backend needs no manual
+clearing after an upgrade. The integer versions stay at 1 before Citry 1.0.0,
+so this hash is what lets a newer build skip an entry an older build wrote.
+Values the browser needs that are derived from stored parts, such as the raw
+HTML record and its node count, are rebuilt from the stored HTML each time a
+page is assembled and are never stored.
 
 Literal HTML is stored as structural chunks around local references, not as one
 string later searched with regex replacements. Authored text that happens to

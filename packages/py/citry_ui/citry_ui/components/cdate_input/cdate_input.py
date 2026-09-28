@@ -17,7 +17,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
-    reject_html_attr_bindings,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._date import canonical_date
@@ -38,9 +38,6 @@ CDateInputSize = Literal["sm", "md", "lg"]
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-text"}
-)
 _OWNED_ATTRS = frozenset(
     {
         "aria-invalid",
@@ -79,31 +76,19 @@ def _positive_step(value: object) -> int:
     return cast("int", value)
 
 
-def _dynamic_target(key: str) -> str | None:
-    normalized = key.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"CDateInput attrs must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, _OWNED_ATTRS, "CDateInput")
-    reject_html_attr_bindings(copied, _OWNED_ATTRS, "CDateInput")
+    # A Vue directive could rebind the value or bounds, add listeners, or
+    # change the input's structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CDateInput")
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CDateInput attrs require string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CDateInput attrs cannot contain reserved runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"CDateInput attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(key) in _OWNED_ATTRS:
-            raise ValueError(f"CDateInput attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 

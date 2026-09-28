@@ -209,6 +209,8 @@ enter the accessible name.
 
 Direct string inputs render as plain text even when supplied through a trusted
 string subclass. `attrs`, `input_attrs`, `class_`, and `style` remain trusted
-authoring surfaces for unowned attributes. Checkbox rejects directives and
-attributes that could replace its native input, label relationship, semantics,
-state ownership, runtime markers, or accessibility exposure.
+authoring surfaces for unowned attributes. Checkbox rejects attributes that
+could replace its native input, label relationship, semantics, state ownership,
+runtime markers, or accessibility exposure. `attrs` and `input_attrs` also
+reject Vue directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`.
+Write Vue bindings and listeners on the component tag in your template instead.

@@ -5,7 +5,15 @@ import test from "node:test";
 import { build } from "esbuild";
 import { version as vueVersion } from "vue";
 
-import { VUE_VERSION, buildCitryI18n, citryVueBuildOptions, citryVueEventsBuildOptions } from "../build-support.mjs";
+import {
+  CITRY_RUNTIME_PATH,
+  VUE_VERSION,
+  buildCitryI18n,
+  buildCitryVueRuntime,
+  citryVueBuildOptions,
+  citryVueEventsBuildOptions,
+  citryVueFragmentsBuildOptions,
+} from "../build-support.mjs";
 
 const assertCommittedBuild = async function (options, committedUrl) {
   const output = await build(options({ write: false, outfile: undefined }));
@@ -29,15 +37,25 @@ test("the committed Vue Events bridge exactly matches its TypeScript source", as
   await assertCommittedBuild(citryVueEventsBuildOptions, "../../../py/citry/citry/_vue/events.js");
 });
 
+test("the committed Vue fragment manager exactly matches its TypeScript source", async () => {
+  await assertCommittedBuild(citryVueFragmentsBuildOptions, "../../../py/citry/citry/_vue/fragments.js");
+});
+
 test("the combined interactive runtime preserves loader order", () => {
   const runtime = readFileSync(new URL("../../../py/citry/citry/_vue/runtime.js", import.meta.url), "utf8");
-  const guard = runtime.indexOf("if (!global.CitryStable)");
+  const guard = runtime.indexOf("if (!global.__citryRuntime)");
   const vue = runtime.indexOf("Citry Vue runtime");
-  const coordinator = runtime.indexOf("global.CitryStable", vue);
+  const coordinator = runtime.indexOf("global.__citryRuntime", vue);
   const events = runtime.indexOf("Citry Vue Events bridge");
   assert.ok(guard >= 0 && vue > guard && coordinator > vue && events > coordinator);
   assert.ok(runtime.indexOf("global.Vue = Vue") > vue);
   assert.ok(runtime.indexOf("global.CitryVueEvents = CitryVueEvents") > events);
+});
+
+test("the committed combined runtime exactly matches a fresh assembly of its parts", async () => {
+  // The hand-written coordinator reaches browsers only through this file, so an edit to
+  // `_vue/client.js` without a rebuild would otherwise ship the old coordinator.
+  assert.equal(await buildCitryVueRuntime(), readFileSync(CITRY_RUNTIME_PATH, "utf8"));
 });
 
 test("the committed Vue i18n plugin exactly matches its source build", async () => {

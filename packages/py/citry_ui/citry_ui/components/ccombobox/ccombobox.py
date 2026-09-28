@@ -11,7 +11,7 @@ from typing import Any, ClassVar, Literal
 from citry import LibraryComponent, SlotInput
 from citry_ui.components._active_descendant import ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY
 from citry_ui.components._aria import merge_idrefs
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
@@ -221,6 +221,16 @@ class CCombobox(LibraryComponent):
             },
             "CCombobox input_attrs",
         )
+        # A Vue directive could rebind an owned attribute, add listeners, or
+        # change the Combobox structure, so none may arrive through Python data.
+        for input_name, attrs in (("attrs", kwargs.attrs), ("input_attrs", kwargs.input_attrs)):
+            for key in attrs or {}:
+                if is_vue_directive_attribute(key):
+                    msg = (
+                        f"CCombobox {input_name} cannot contain the Vue directive {key!r}; "
+                        "author Vue bindings and listeners in a template instead."
+                    )
+                    raise ValueError(msg)
 
         options = self._normalize_options(kwargs.options)
         field = self.inject(FIELD_CONTEXT_KEY, None)

@@ -1644,6 +1644,8 @@ fn validate_node(
     validate_citry_tag_spelling(node, context)?;
     validate_fill_placement(node, tag_stack, context)?;
     validate_client_props_placement(node, context)?;
+    validate_component_tag_vue_directives(node, context)?;
+    validate_slot_tag_vue_directives(node, context)?;
     validate_attributes_present(node, context)?;
     validate_meta_attr_placement(node, context)?;
     validate_attribute_conflicts(node, context)?;
@@ -1752,6 +1754,251 @@ fn is_component_tag_client_binding_attr(name: &str) -> bool {
         || name.starts_with('@')
         || name.starts_with("v-bind:")
         || name.starts_with("v-on:")
+        || is_component_tag_vue_directive(name)
+}
+
+/// Vue's own directives that never pass through a component tag. Every
+/// other `v-` name that is not listed here and not handled above is a custom
+/// directive the caller registered.
+const VUE_BUILT_IN_DIRECTIVES: &[&str] = &[
+    "bind", "on", "show", "if", "else-if", "else", "for", "model", "slot", "html", "text", "once",
+    "memo", "cloak", "pre", "is",
+];
+
+/// Whether a `v-` directive other than `v-bind`/`v-on` is carried by a
+/// component tag, in any argument or modifier form.
+///
+/// The browser applies these to the generated Vue component call: `v-if`,
+/// `v-else-if`, and `v-else` decide whether the call renders, `v-model`
+/// becomes a `modelValue` prop and an `update:modelValue` listener, and
+/// `v-show` or a custom directive reaches the element the child renders at
+/// its root. `validate_component_tag_vue_directives` rejects the argument
+/// and modifier forms these directives do not accept, so it can name the fix.
+fn is_component_tag_vue_directive(name: &str) -> bool {
+    // Only a `v-` spelling can name one of these; `#name` and `.name` are
+    // the slot and DOM-property shorthands.
+    if !name.starts_with("v-") {
+        return false;
+    }
+    match vue_directive_name(name) {
+        Some("show" | "if" | "else-if" | "else" | "model") => true,
+        Some(directive) => is_custom_vue_directive(directive),
+        None => false,
+    }
+}
+
+/// Whether a directive name (without its `v-`) names a custom directive.
+///
+/// `v-c-*` and `v-citry-*` belong to Citry's own browser runtime (the
+/// translation and Events bindings), so a component tag does not pass them
+/// on as a caller's directive.
+///
+/// The name is compared in lowercase, so `v-If` is not taken for a custom
+/// directive that Vue would look up and skip without an error.
+fn is_custom_vue_directive(directive: &str) -> bool {
+    let lowercase = directive.to_ascii_lowercase();
+    !directive.is_empty()
+        && !VUE_BUILT_IN_DIRECTIVES.contains(&lowercase.as_str())
+        && !lowercase.starts_with("c-")
+        && !lowercase.starts_with("citry-")
+}
+
+/// The Vue directive a component-tag attribute spells, without its argument
+/// or modifiers: `v-model:title.trim` gives `model`, the slot shorthand
+/// `#header` gives `slot`, and the DOM-property shorthand `.value` gives
+/// `prop`. Citry's own `#c-*` metadata and every non-directive name give
+/// `None`.
+fn vue_directive_name(name: &str) -> Option<&str> {
+    if let Some(argument) = name.strip_prefix('#') {
+        return (!argument.starts_with("c-")).then_some("slot");
+    }
+    if name.len() > 1 && name.starts_with('.') {
+        return Some("prop");
+    }
+    let directive = name.strip_prefix("v-")?;
+    Some(&directive[..directive.find([':', '.']).unwrap_or(directive.len())])
+}
+
+/// What to write instead of a Vue directive that a component tag cannot carry.
+///
+/// Shared wording with `citry.client_directives`, which reports the same
+/// directives when they arrive at render time through `c-bind`.
+fn component_tag_directive_hint(directive: &str) -> &'static str {
+    match directive {
+        "if" | "else-if" | "else" => {
+            "Write 'v-if', 'v-else-if', and 'v-else' without an argument or modifiers."
+        }
+        "for" => "A browser 'v-for' cannot create Citry components. Repeat the component with '<c-for>'.",
+        "slot" => "Pass slot content with '<c-fill name=\"...\">' inside the component tag.",
+        "html" | "text" => {
+            "This directive would replace the child's own content. Pass the value as a prop or through '<c-fill>' and render it inside the child."
+        }
+        "show" => "Write 'v-show' without an argument or modifiers.",
+        "model" => "Name the prop after 'v-model:', or write 'v-model' alone for 'modelValue'.",
+        "bind" => {
+            "Bind an object with a plain 'v-bind=\"...\"', or bind each prop as ':name=\"...\"'."
+        }
+        "on" => "Write each listener as '@event=\"...\"' or 'v-on:event=\"...\"'.",
+        "prop" => "Pass the value as a component prop with ':name=\"...\"'.",
+        _ if directive.to_ascii_lowercase() != directive => {
+            "Vue's own directives and Citry's 'v-c-*' and 'v-citry-*' names are lowercase."
+        }
+        _ if directive.starts_with("c-") || directive.starts_with("citry-") => {
+            "Citry reserves 'v-c-*' and 'v-citry-*' for its own browser runtime."
+        }
+        _ => "Put the directive on an element inside the child's template.",
+    }
+}
+
+/// Reject Vue directives that have no meaning on a Citry component tag.
+///
+/// A component tag carries props (`v-bind`/`:`), listeners (`v-on`/`@`),
+/// the `v-if`/`v-else-if`/`v-else` chain, `v-model`, a plain `v-show`, and
+/// custom directives. Every other directive would otherwise reach the child
+/// as a Python kwarg and be dropped without a trace, so the template fails
+/// to compile instead. The `c-` form (`c-v-for`) is rejected the same way,
+/// because it names the same directive with a Python-computed value; the
+/// `c-` form of a supported directive fails when the page renders, because
+/// its expression must be written in the template.
+fn validate_component_tag_vue_directives(
+    node: &Node,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    if !is_component_boundary_tag(tag_name) {
+        return Ok(());
+    }
+    for attr in node.attrs() {
+        if attr.kind == HtmlAttrKind::Meta {
+            continue;
+        }
+        let name = attr.key.content.as_str();
+        let logical_name = name.strip_prefix("c-").unwrap_or(name);
+        let Some(directive) = vue_directive_name(logical_name) else {
+            continue;
+        };
+        let has_value = attr
+            .inner_value
+            .as_ref()
+            .is_some_and(|value| !value.content.trim().is_empty());
+        // Props (`v-bind:name`, or one `v-bind` object) and listeners
+        // (`v-on:event`) cross the boundary. The argument-less `v-bind.prop`
+        // and `v-on` object forms have no component-call translation, and
+        // the condition directives and `v-show` take neither an argument nor
+        // modifiers, just as on an element.
+        // `v-model:` or `v-on:` with nothing after the colon names no prop or event.
+        let empty_argument = logical_name
+            .split_once(':')
+            .is_some_and(|(_, rest)| rest.is_empty() || rest.starts_with('.'));
+        let supported = !empty_argument
+            && (logical_name == "v-bind"
+                || logical_name.starts_with("v-bind:")
+                || logical_name.starts_with("v-on:")
+                || matches!(logical_name, "v-show" | "v-if" | "v-else-if" | "v-else")
+                || (logical_name.starts_with("v-")
+                    && (directive == "model" || is_custom_vue_directive(directive))));
+        if !supported {
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "Vue directive '{name}' is not supported on the component tag '<{tag_name}>'. {}",
+                    component_tag_directive_hint(directive)
+                ),
+            ));
+        }
+        // Vue compiles these from their expression, so an empty value would
+        // fail later in the browser compiler with a less direct message.
+        let example = match logical_name {
+            "v-show" => Some("v-show=\"open\""),
+            "v-if" => Some("v-if=\"open\""),
+            "v-else-if" => Some("v-else-if=\"open\""),
+            _ if directive == "model" => Some("v-model=\"query\""),
+            _ => None,
+        };
+        if let (Some(example), false) = (example, has_value) {
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "'{name}' on the component tag '<{tag_name}>' needs a Vue expression, for example '{example}'."
+                ),
+            ));
+        }
+        // `v-else` follows the branch before it and has no condition of its own.
+        if logical_name == "v-else" && has_value {
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "'{name}' on the component tag '<{tag_name}>' takes no value. Write 'v-else' alone, or 'v-else-if=\"...\"' for another condition."
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// What to write instead of a Vue directive on `<c-slot>`.
+///
+/// Shared wording with `citry.client_directives`, which reports the same
+/// directives when they arrive at render time through `c-bind`.
+fn slot_tag_directive_hint(directive: &str) -> &'static str {
+    match directive {
+        "if" | "else-if" | "else" => {
+            "Wrap the slot in '<template v-if=\"...\">' for a browser-side condition, or use '<c-if>' when Python decides."
+        }
+        "for" => "Repeat the slot with '<c-for>'.",
+        "show" => "Wrap the slot in an element that carries 'v-show'.",
+        "slot" => "Name the slot with 'name=\"...\"'; the caller fills it with '<c-fill name=\"...\">'.",
+        "on" => "Put the listener on an element around the slot or inside the fill.",
+        "bind" | "prop" => {
+            "Vue slot props are not supported. Pass Python slot data as a plain attribute ('item=\"text\"') or a 'c-' attribute ('c-item=\"expr\"')."
+        }
+        _ => "Put the directive on an element around the slot or inside its fallback content.",
+    }
+}
+
+/// Reject Vue directives on `<c-slot>`.
+///
+/// Every `<c-slot>` attribute other than its name and `required` becomes
+/// Python slot data, so a `v-if`, `:prop`, or `@event` there would reach the
+/// fill as a data key and the browser would never see it. The template fails
+/// to compile instead. The `c-` form (`c-v-if`) is rejected the same way,
+/// because it names the same directive with a Python-computed value.
+fn validate_slot_tag_vue_directives(
+    node: &Node,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    if tag_name != C_SLOT_TAG {
+        return Ok(());
+    }
+    for attr in node.attrs() {
+        // `#c-*` metadata has its own placement rules.
+        if attr.kind == HtmlAttrKind::Meta {
+            continue;
+        }
+        let name = attr.key.content.as_str();
+        let logical_name = name.strip_prefix("c-").unwrap_or(name);
+        // The `:` and `@` shorthands spell `v-bind` and `v-on`; every other
+        // directive form (`v-*`, `#name`, `.name`) is named by the helper.
+        let directive = if logical_name.starts_with(':') {
+            Some("bind")
+        } else if logical_name.starts_with('@') {
+            Some("on")
+        } else {
+            vue_directive_name(logical_name)
+        };
+        let Some(directive) = directive else {
+            continue;
+        };
+        return Err(context.error_from_token(
+            &attr.token,
+            format!(
+                "Vue directive '{name}' is not supported on '<{tag_name}>'. Its attributes other than 'name' and 'required' become Python slot data, which the browser never sees. {}",
+                slot_tag_directive_hint(directive)
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Validate where `#c-*` framework-metadata attributes may sit.

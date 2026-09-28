@@ -16,7 +16,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
-    reject_html_attr_bindings,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._date import canonical_date
@@ -94,9 +94,6 @@ _SOURCE_MONTHS = (
     "December",
 )
 _RUNTIME_PREFIXES = ("data-citry-", "data-cdate-range", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -122,31 +119,21 @@ _ROOT_OWNED = frozenset(
 )
 
 
-def _dynamic_target(key: str) -> str | None:
-    normalized = key.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"CDateRange attrs must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
+    # A static accessible name may replace the default one, so only the
+    # remaining owned attributes are refused as plain keys.
     reject_owned_attrs(copied, _ROOT_OWNED - {"aria-label", "aria-labelledby"}, "CDateRange")
-    reject_html_attr_bindings(copied, _ROOT_OWNED, "CDateRange")
+    # A Vue directive could rebind an owned attribute, change the root's
+    # structure, or attach a listener, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CDateRange")
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CDateRange attrs require string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CDateRange attrs cannot contain reserved runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"CDateRange attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(key) in _ROOT_OWNED:
-            raise ValueError(f"CDateRange attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 

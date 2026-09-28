@@ -925,7 +925,7 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
                 c-aria_label="f'Actions for record {item}'"
               >
                 <c-fill name="target" data="{ target_attrs }">
-                  <button type="button" c-attrs="target_attrs">
+                  <button type="button" c-bind="target_attrs">
                     Record {{ item }}
                   </button>
                 </c-fill>

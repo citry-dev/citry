@@ -1,6 +1,6 @@
 ---
 title: Template linting
-description: Configure unknown template, Vue, and component JavaScript variables consistently across Citry tools.
+description: Configure unknown template, Vue, and component JavaScript names consistently across Citry tools.
 ---
 
 # Template linting
@@ -17,25 +17,76 @@ to a component:
 - `citry.component-js.unknown-variable` checks free names inside a
   `$component` callback or configuration object's `onServerRender` callback.
 
-The component JavaScript rule catches a missing binding such as using the old
-free `data` name inside an `onServerRender` callback:
+The component JavaScript rule catches a missing binding, such as an
+undeclared `settings` name inside an `onServerRender` callback:
 
 ```javascript
 $component({
   onServerRender({ component }) {
-    component.ready = data.ready;
+    component.ready = settings.ready;
   },
 });
 ```
 
-Use `component.serverDefaults` or an instance value instead of an undeclared
+Use an instance value such as `component.ready` instead of an undeclared
 name, or declare a real project global through the lint settings when another
 script supplies that name.
 
+A misspelled instance value is an error by default too. When the component's
+`js_data()` keys are known and its Vue Options are written out in the source,
+`citry.component-js.unknown-member` reports a `component.<name>` or
+`this.<name>` read that names no `js_data()` key, prop, `data()` key, `setup`
+binding, method, computed value, or injection:
+
+```javascript
+// js_data() returns {"likes": ...}
+$component(({ component }) => {
+  // error: Component instance member 'like' is not defined
+  // by this component.
+  console.log(component.like);
+});
+```
+
+Options that merge in `mixins` or `extends` turn this check off, because
+their names are not in the source. A plugin that adds an instance property
+should name it with a `$` prefix, such as `$api`; the rule reports an
+unprefixed name it cannot find.
+
+A Vue binding that reads a Python loop variable never sees the loop value.
+Python runs the `c-for` loop on the server, but Vue evaluates `:title` later
+in the browser, where `item` does not exist:
+
+```citry-html
+<!-- Vue looks up `item` in browser state. -->
+<li c-for="item in items" :title="item"></li>
+
+<!-- Python sets the attribute for each item. -->
+<li c-for="item in items" c-title="item"></li>
+```
+
+Citry reports each such read once. When Citry knows all of the component's
+browser names, the read is a `citry.vue.unknown-variable` error whose message
+says the name is a Python variable. When it cannot know them all, for
+example because the Vue Options use `mixins`, or when you set
+`rule_unknown_vue_variable="ignore"`, the read is a
+`citry.vue.python-variable` warning that suggests the `c-` attribute form.
+
+The warning also fires when the component's browser data, such as a
+`js_data()` key, defines the same name. Vue then shows the component's value
+instead of the loop value without any error, so the message names both
+meanings and suggests the `c-` attribute or renaming one of them.
+
+Both cover names from `c-for` loops and `c-fill` bindings in every Vue
+expression, including `v-text`, `v-show`, and `@click`. Neither reports the
+read when a Vue `v-for` or slot alias of the same name encloses the
+expression, because Vue then reads its own loop or slot value.
+
 See the diagnostic reference entries for
 [template variables](/ide/diagnostics/#citry.template.unknown-variable),
-[Vue variables](/ide/diagnostics/#citry.vue.unknown-variable), and
-[component JavaScript variables](/ide/diagnostics/#citry.component-js.unknown-variable)
+[Vue variables](/ide/diagnostics/#citry.vue.unknown-variable),
+[Python variables in Vue expressions](/ide/diagnostics/#citry.vue.python-variable),
+[component JavaScript variables](/ide/diagnostics/#citry.component-js.unknown-variable),
+and [component instance members](/ide/diagnostics/#citry.component-js.unknown-member)
 for their stable messages and reporting surfaces.
 
 The application owns this policy. `citry check` and the language server use
@@ -78,11 +129,19 @@ app = Citry(
                 "Flags installed by the host page.",
             ],
         },
+        rule_unknown_component_js_member="error",
+        rule_vue_python_variable="warning",
     ),
 )
 ```
 
-Each `rule_unknown_*` field accepts `"ignore"`, `"warning"`, or `"error"`.
+Each `rule_*` field accepts `"ignore"`, `"warning"`, or `"error"`.
+`rule_vue_python_variable` defaults to `"warning"`; the `rule_unknown_*`
+fields default to `"error"`.
+`rule_unknown_component_js_member` sets the severity of
+`citry.component-js.unknown-member`. When one JavaScript file serves several
+components, the strictest of their severities applies, so every one of them
+must set `"ignore"` to silence the rule for that file.
 
 Every key already present in `Citry.template_globals` is known automatically.
 Citry conservatively infers ordinary scalar, homogeneous-container, and
@@ -119,6 +178,7 @@ class AccountCard(Component):
     class Lint:
         rule_unknown_template_variable = "warning"
         rule_unknown_component_js_variable = "warning"
+        rule_unknown_component_js_member = "warning"
         template_variables = {
             "account_context": Annotated[
                 "myapp.accounts.AccountContext",

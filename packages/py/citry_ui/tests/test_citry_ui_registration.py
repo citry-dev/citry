@@ -127,7 +127,9 @@ from citry_ui.components import COMPONENTS
 
 
 def _prepared_button_occurrence(html: str) -> dict[str, object]:
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     manifest = json.loads(match.group(1))["manifest"]
     return next(item for item in manifest["occurrences"] if item["typeKey"].startswith("CButton_"))

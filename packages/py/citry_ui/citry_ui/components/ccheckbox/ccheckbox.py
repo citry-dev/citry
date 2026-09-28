@@ -13,6 +13,7 @@ from citry_ui.components._attrs import (
     CStyleValue,
     get_html_attr,
     get_html_form_owner,
+    is_vue_directive_attribute,
     merge_root_attrs,
     pop_html_attr,
 )
@@ -27,7 +28,6 @@ _VARIANTS = ("solid", "outline")
 _SIZES = ("sm", "md", "lg")
 _LABEL_POSITIONS = ("start", "end")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset({"x-bind", "x-html", "x-model", "x-modelable", "x-text"})
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -70,13 +70,6 @@ _INPUT_OWNED_ATTRS = frozenset(
         "value",
     }
 )
-_INPUT_DYNAMIC_OWNED_ATTRS = _INPUT_OWNED_ATTRS | {
-    "aria-describedby",
-    "aria-errormessage",
-    "aria-label",
-    "aria-labelledby",
-    "form",
-}
 
 
 class CCheckboxDefaultSlotData:
@@ -133,38 +126,25 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(
     input_name: str,
     attrs: dict[str, object],
     *,
     owned: frozenset[str],
-    dynamic_owned: frozenset[str] | None = None,
 ) -> None:
     component_name = f"CCheckbox {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
-    dynamic_targets = dynamic_owned or owned
     for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"{component_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in dynamic_targets:
-            msg = f"{component_name} cannot dynamically bind owned attribute {target!r}."
+        # A Vue directive could rebind the checked state, the form owner, or the
+        # naming attributes the component merges, so none may arrive through Python data.
+        if is_vue_directive_attribute(key):
+            msg = (
+                f"{component_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
 
 
@@ -230,12 +210,7 @@ class CCheckbox(LibraryComponent):
         attrs = _copy_attrs("attrs", kwargs.attrs)
         input_attrs = _copy_attrs("input_attrs", kwargs.input_attrs)
         _validate_attrs("attrs", attrs, owned=_ROOT_OWNED_ATTRS)
-        _validate_attrs(
-            "input_attrs",
-            input_attrs,
-            owned=_INPUT_OWNED_ATTRS,
-            dynamic_owned=_INPUT_DYNAMIC_OWNED_ATTRS,
-        )
+        _validate_attrs("input_attrs", input_attrs, owned=_INPUT_OWNED_ATTRS)
         for html_attribute in (
             "form",
             "aria-label",

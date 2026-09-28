@@ -27,7 +27,9 @@ def _render(source: str, *, static_fallback: bool = False) -> str:
 
 
 def _manifest(html: str) -> dict[str, object]:
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     return json.loads(match.group(1))["manifest"]
 
@@ -144,8 +146,13 @@ def test_window_slot_data_uses_logical_positions_and_set_size():
     html = _render(source)
     static_html = _render(source, static_fallback=True)
     assert "7:row-7:12:window" in static_html
-    prepared = _window_occurrence(_manifest(html))["preparedData"]
+    # The page wrote the fill, so Vue compiles it in the page's template and
+    # the fill's Python values are stored with the page, not the window.
+    manifest = _manifest(html)
+    page = next(item for item in manifest["occurrences"] if item["typeKey"].startswith("Page_"))
+    prepared = page["preparedData"]
     assert [prepared[f"citryText{index}"] for index in range(4)] == ["7", "row-7", "12", "window"]
+    assert not any(key.startswith("citryText") for key in _window_occurrence(manifest)["preparedData"])
 
 
 def test_window_accepts_empty_and_final_partial_ranges():
@@ -239,11 +246,38 @@ def test_root_and_item_attrs_merge_but_owned_surfaces_are_rejected():
         )
 
 
-def test_vue_directives_cannot_enter_through_python_attr_mappings():
-    with pytest.raises(ValueError, match="dynamically bind owned attribute"):
-        _render("<c-CVirtualList c-attrs=\"{'v-bind:role':'kind'}\" />")
-    with pytest.raises(ValueError, match="ownership directive"):
-        _render("<c-CVirtualList c-attrs=\"{'v-if':'visible'}\" />")
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CVirtualList", "v-bind:role"),
+        ("CVirtualList", ":aria-busy"),
+        ("CVirtualList", "v-if"),
+        ("CVirtualList", "V-IF"),
+        ("CVirtualList", "@scroll"),
+        ("CVirtualListItem", ".aria-posinset"),
+        ("CVirtualListItem", "v-html"),
+        ("CVirtualListItem", "#default"),
+    ],
+)
+def test_vue_directives_cannot_enter_through_python_attr_mappings(owner: str, attribute: str):
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    root_attrs, item_attrs = (attrs, "") if owner == "CVirtualList" else ("", attrs)
+    source = (
+        f'<c-CVirtualList {root_attrs}><c-CVirtualListItem item_key="a" {item_attrs}>A'
+        "</c-CVirtualListItem></c-CVirtualList>"
+    )
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        _render(source)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render("<c-CVirtualList c-attrs=\"{'x-data': '{}', 'hx-get': '/rows'}\" />", static_fallback=True)
+
+    assert re.search(r'<div class="cui-virtual-list"[^>]+x-data="\{\}"[^>]+hx-get="/rows"', html)
 
 
 def test_focusable_false_removes_extra_tab_stop():

@@ -40,7 +40,9 @@ def _decoded_calls(html):
 
 
 def _prepared(html):
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     return json.loads(match.group(1))["manifest"]
 
@@ -286,7 +288,7 @@ class TestComponentTransform:
 
         script = get_component_script("js", Widget)
         assert "$component" not in script.content
-        assert f'CitryStable.registerTypeOptions.bind(null, "{Widget.class_id}", "' in script.content
+        assert f'__citryRuntime.registerTypeOptions.bind(null, "{Widget.class_id}", "' in script.content
 
     @pytest.mark.parametrize(
         "source",
@@ -340,7 +342,7 @@ class TestComponentTransform:
         result = transform_component(source, "example")
 
         assert "$component" not in result
-        assert 'CitryStable.registerTypeOptions.bind(null, "example", "' in result
+        assert '__citryRuntime.registerTypeOptions.bind(null, "example", "' in result
 
     def test_call_followed_by_block_activates_component_runtime(self):
         c = Citry()
@@ -767,7 +769,7 @@ class TestManifestAndRuntime:
         assert (
             html.index("Citry Vue runtime")
             < html.index("registerTypeOptions")
-            < html.rindex("CitryStable.startPrepared(")
+            < html.rindex('<script type="application/json" data-citry-vue-document=')
         )
 
     def test_plain_component_javascript_uses_native_vue_runtime(self):
@@ -780,7 +782,7 @@ class TestManifestAndRuntime:
 
         html = str(_page(c)())
         assert "Citry Vue runtime" in html
-        assert "startPrepared" in html
+        assert "data-citry-vue-document" in html
 
 
 class TestSimpleStrategy:

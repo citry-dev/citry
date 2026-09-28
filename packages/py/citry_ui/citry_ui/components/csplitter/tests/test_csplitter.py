@@ -198,15 +198,51 @@ def test_panel_outside_splitter_and_unknown_direct_content_fail() -> None:
     "template",
     [
         _two_panels("c-attrs=\"{'role': 'group'}\""),
-        _two_panels("c-attrs=\"{':data-orientation': 'orientation'}\""),
-        _two_panels("c-attrs=\"{'x-html': 'content'}\""),
         '<c-CSplitter><c-CSplitterPanel id="a" label="A" c-attrs="{\'role\': \'region\'}">A</c-CSplitterPanel>'
         '<c-CSplitterPanel id="b" label="B">B</c-CSplitterPanel></c-CSplitter>',
     ],
 )
-def test_owned_attrs_and_directives_are_rejected(template: str) -> None:
-    with pytest.raises(ValueError, match="cannot"):
+def test_owned_attrs_are_rejected(template: str) -> None:
+    with pytest.raises(ValueError, match="cannot override owned attribute"):
         _render(template)
+
+
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CSplitter", ":data-orientation"),
+        ("CSplitter", "v-bind:data-orientation"),
+        ("CSplitter", "v-html"),
+        ("CSplitter", "V-IF"),
+        ("CSplitter", "@pointerdown"),
+        ("CSplitterPanel", "#default"),
+        ("CSplitterPanel", ".data-size"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(owner: str, attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    template = (
+        _two_panels(attrs)
+        if owner == "CSplitter"
+        else (
+            f'<c-CSplitter><c-CSplitterPanel id="a" label="A" {attrs}>A</c-CSplitterPanel>'
+            '<c-CSplitterPanel id="b" label="B">B</c-CSplitterPanel></c-CSplitter>'
+        )
+    )
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        _render(template)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(_two_panels("c-attrs=\"{'x-data': '{}', 'hx-get': '/panes'}\""), static_fallback=True)
+
+    root = _tag(html, "splitter")
+    assert 'x-data="{}"' in root
+    assert 'hx-get="/panes"' in root
 
 
 def test_css_exposes_public_variables_environment_rules_and_parts() -> None:

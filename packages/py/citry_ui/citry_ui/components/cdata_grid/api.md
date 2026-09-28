@@ -122,6 +122,13 @@ Use `density`, `striped`, `column_borders`, and `sticky_header` for common
 presentation. Customize the root and native table separately with `attrs` and
 `table_attrs`, or use the documented public variables and part selectors.
 
+`attrs`, `table_attrs`, column `header_attrs` and `cell_attrs`, row `attrs`,
+and Cell `attrs` accept ordinary native, ARIA, and data attributes. They reject
+the attributes the grid sets itself (such as `role` and `aria-colindex`), Citry
+runtime attributes, and any Vue directive syntax: names starting with `v-`,
+`:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component tag in
+your template instead.
+
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdata_grid/snippets/customization.py" title="Customize a Data Grid" />
 
 Arbitrary caller-authored Cell widgets, built-in filtering, grouping,

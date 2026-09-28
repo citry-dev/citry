@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_html_attr_bindings
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs
 
 CBadgeVariant = Literal["soft", "solid", "outline"]
@@ -20,27 +20,6 @@ _INTENTS = ("neutral", "primary", "success", "warn", "danger")
 _SIZES = ("sm", "md", "lg")
 _SHAPES = ("rounded", "pill")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-teleport",
-        "x-text",
-        "v-bind",
-        "v-for",
-        "v-html",
-        "v-if",
-        "v-model",
-        "v-on",
-        "v-show",
-        "v-text",
-    }
-)
 _OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -90,16 +69,12 @@ def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, _OWNED_ATTRS, "CBadge attrs")
-    reject_html_attr_bindings(copied, _OWNED_ATTRS, "CBadge")
+    # A Vue directive could rebind an owned attribute, add listeners, or
+    # change the Badge's structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CBadge")
     for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"CBadge attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"CBadge attrs cannot use ownership directive {key!r}."
             raise ValueError(msg)
     return copied
 

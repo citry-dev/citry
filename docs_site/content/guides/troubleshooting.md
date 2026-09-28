@@ -60,7 +60,7 @@ first error in the chain:
 | A required Vue prop is missing or incompatible | The parent omitted a declared prop or supplied a value with a proven incompatible type | Check the child's native `props` option and the parent's `:` or `v-bind` binding |
 | Generated Vue host or configuration is missing | An optimizer, sanitizer, or DOM update removed part of the interactive delivery | Preserve the [Vue host, configuration, and fragment descriptors](/advanced/vue-runtime/#preserve-interactive-html) |
 | Fragment graph or asset adoption failed | Citry routes are not mounted, or one manifest or asset is incomplete | Mount the integration and inspect the first network or graph error |
-| A `v-for` or `v-if` cannot create the expected Citry child | Vue owns the browser loop or branch and cannot run Python | Use `<c-for>` or `<c-if>` when the structure creates Python component instances |
+| A `v-for` cannot create the expected Citry child | Vue owns the browser loop and cannot run Python | Use `<c-for>` when the loop creates Python component instances |
 
 Citry rejects invalid prepared metadata before callbacks can observe a partial update. Do
 not suppress the diagnostic and continue with only the visible HTML.

@@ -585,7 +585,12 @@ The trust and byte-ownership rules are:
   Its author supplies explicit `integrity` metadata, and Citry preserves and
   validates its shape while the browser verifies the resource.
 - Cross-origin SRI resources also need the appropriate CORS request and
-  response configuration. Citry must not add `crossorigin` blindly.
+  response configuration. For a file whose bytes Citry owns, Citry sets
+  `crossorigin="anonymous"` on the tag (unless the author set a value) and its
+  asset routes send `Access-Control-Allow-Origin: *`, so the check also works
+  in a sandboxed iframe with an opaque origin
+  ([`dependencies.md`](dependencies.md) 9.6). For a third-party URL, Citry
+  leaves `crossorigin` exactly as the author wrote it.
 - Fragment descriptors carry `integrity` and any explicit `crossorigin` value
   into dynamically created script elements before the request begins.
 - Changing any script bytes changes its digest and the CSP header value.
@@ -780,6 +785,28 @@ Hash-based document policies work naturally because Citry already builds the
 complete body before the host sends the response header. Per-request inline
 data may produce per-request hashes, while static output produces stable
 hashes.
+
+An interactive document keeps its per-request data out of executable scripts.
+The server sends the app's configuration (the prepared manifest with the
+page's data) as a JSON data block,
+`<script type="application/json" data-citry-vue-document="APP_ID">`, and
+starts the app with a one-line module script,
+`__citryRuntime.startDocument("APP_ID")` ([`dependencies.md`](dependencies.md)
+8.2). The browser never runs a data block, so CSP does not apply to it: a
+nonce policy does not need the block's nonce, and a hash policy does not need
+its hash. `csp_script_hashes` therefore lists the start script, whose text
+holds only the random app id, and not the configuration. The per-script
+records in `serialized.security.scripts` still describe the data block with
+its digest, as they do for every inert structured script. Citry still stamps
+the request nonce on the data block, and the runtime refuses a block whose
+nonce differs from the nonce of the runtime's own script tag. The runtime
+therefore trusts a configuration only when it comes from the same document,
+carries the id named by an authorized start script, is the only block with
+that id, and, under a nonce policy, carries the page nonce. With a hash-only
+policy and a predictable id (an application `id_generator`), injected markup
+before the real block can hide it (an unclosed comment or attribute value)
+and supply its own block, so such pages should keep the default random ids
+or use a nonce policy.
 
 A fragment is different. Its serialization result can describe its scripts
 and carry SRI metadata, but the fragment response cannot add hash sources to

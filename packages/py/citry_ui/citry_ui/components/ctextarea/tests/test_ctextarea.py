@@ -70,7 +70,9 @@ def test_textarea_defaults_render_one_native_control():
     assert 'data-size="md"' in root
     assert 'data-resize="vertical"' in root
     assert "<textarea" in html
-    assert "></textarea>" in html
+    # The one newline after the start tag is dropped by the HTML parser and by
+    # Vue's template compiler, so the textarea still starts empty.
+    assert ">\n</textarea>" in html
 
 
 def test_textarea_preserves_native_text_and_escapes_trusted_string_subclasses():
@@ -243,8 +245,10 @@ def test_textarea_rejects_a_conflicting_form_owner_and_field_id():
             )
         )
 
-    with pytest.raises(ValueError, match="dynamically bind HTML attribute 'form'"):
+    with pytest.raises(ValueError, match="CTextarea attrs cannot contain the Vue directive ':form'"):
         _render(CTextarea(attrs={":form": "owner"}))
+    with pytest.raises(ValueError, match="Vue directive 'V-IF'"):
+        _render(CTextarea(attrs={"V-IF": "hidden"}))
 
     with pytest.raises(ValueError, match="conflicts with its CField control_id"):
         _render(

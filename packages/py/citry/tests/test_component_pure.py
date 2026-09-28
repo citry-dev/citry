@@ -54,7 +54,7 @@ def test_pure_component_reuses_equal_body_with_fresh_component_ids() -> None:
     assert markers[0][1] == markers[1][1]
 
 
-def test_prepared_pure_component_reuses_immutable_text_with_fresh_occurrences() -> None:
+def test_prepared_pure_component_reuses_one_evaluation_with_fresh_occurrences() -> None:
     app = Citry(autodiscover=False, extensions=[])
 
     class PureLeaf(Component):
@@ -78,9 +78,16 @@ def test_prepared_pure_component_reuses_immutable_text_with_fresh_occurrences() 
     assert len(leaves) == 2
     assert leaves[0].id != leaves[1].id
     assert leaves[0].definition_id == leaves[1].definition_id
-    assert all("same" in occurrence.prepared_data.values() for occurrence in leaves)
+    # The pure body was evaluated once, and each fresh occurrence carries
+    # that one text value.
+    assert [occurrence.prepared_data for occurrence in leaves] == [
+        {"calls": {}, "citryText0": "same"},
+        {"calls": {}, "citryText0": "same"},
+    ]
+    # Both occurrences share one compiled definition, which keeps the fixed
+    # markup in the template and reads only the value from prepared data.
     definition = assembly.compile_inputs[leaves[0].definition_id]
-    assert "<section><span>fixed</span>" in definition.template
+    assert definition.template == "<section><span>fixed</span>{{ $citryPrepared.citryText0 }}</section>"
 
 
 def test_pure_capture_whitelists_only_context_free_prepared_parts() -> None:

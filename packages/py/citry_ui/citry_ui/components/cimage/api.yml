@@ -29,7 +29,7 @@ inputs:
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles and merges them with attrs before owned style fallbacks.}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed neutral-root attributes; executable listener and Vue directive names are rejected.'}
-      - {id: img-attrs, name: img_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed native image attributes; executable load/error listeners are rejected, so use onStatusChange or an authored Vue listener in a component template.'}
+      - {id: img-attrs, name: img_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed native image attributes; executable load/error listeners and Vue directive names are rejected, so use onStatusChange or an authored Vue listener in a component template.'}
 
   - id: cimage-client-inputs
     component: CImage

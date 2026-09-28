@@ -13,6 +13,11 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 pytestmark = pytest.mark.e2e
 
+# Resolve repository files (pnpm's node_modules, the docs static assets) from this
+# file rather than the working directory, which differs when pytest runs from a subfolder.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_AXE_PATH = _REPO_ROOT / "node_modules" / "axe-core" / "axe.min.js"
+
 
 def _composer_surface_styles(composer: Any) -> dict[str, str]:
     return composer.evaluate(
@@ -312,10 +317,8 @@ def test_landing_showcase_is_simple_nestable_and_visibly_draggable(
     rendered_button.click()
     assert rendered_button.evaluate("element => document.activeElement !== element")
     assert composer.locator("[data-composer-reset]").count() == 1
-
-    axe_path = Path("node_modules/axe-core/axe.min.js").resolve()
-    assert axe_path.is_file(), "run `pnpm install` before landing showcase axe tests"
-    page.add_script_tag(path=str(axe_path))
+    assert _AXE_PATH.is_file(), "run `pnpm install` before landing showcase axe tests"
+    page.add_script_tag(path=str(_AXE_PATH))
     violations = composer.evaluate(
         """async root => {
           const result = await axe.run(root, { resultTypes: ['violations'] });

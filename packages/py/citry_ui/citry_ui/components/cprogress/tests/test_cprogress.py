@@ -136,24 +136,42 @@ def test_invalid_server_inputs_fail_deterministically(kwargs, error, match):
         "data-intent",
         "data-size",
         "data-shape",
-        ":value",
-        "x-bind:aria-label",
         "data-citry-morph",
         "data-cev-action",
         "data-cid",
-        "x-bind",
-        "x-if",
-        "x-for",
-        "x-teleport",
-        "x-ignore",
-        "x-html",
-        "x-text",
-        "x-model",
     ],
 )
-def test_progress_rejects_owned_runtime_and_structural_attributes(attribute):
+def test_progress_rejects_owned_and_runtime_attributes(attribute):
     with pytest.raises(ValueError, match="cannot"):
         _render(CProgress(label="Task", attrs={attribute: "consumer"}))
+
+
+@pytest.mark.parametrize(
+    "attribute",
+    [
+        ":value",
+        "v-bind:aria-label",
+        ".max",
+        "v-bind",
+        "v-if",
+        "V-IF",
+        "v-for",
+        "v-html",
+        "v-text",
+        "v-model",
+        "@click",
+        "#default",
+    ],
+)
+def test_progress_rejects_vue_directives(attribute):
+    with pytest.raises(ValueError, match=re.escape(f"CProgress attrs cannot contain the Vue directive {attribute!r}")):
+        _render(CProgress(label="Task", attrs={attribute: "consumer"}))
+
+
+def test_progress_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(CProgress(label="Task", attrs={"x-data": "task", "title": "Upload"}), static_fallback=True)
+    assert 'x-data="task"' in html
+    assert 'title="Upload"' in html
 
 
 def test_choices_and_labels_are_detrusted_before_rendering():

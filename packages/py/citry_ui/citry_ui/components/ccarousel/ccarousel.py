@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar, Literal, TypedDict, overload
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._scroll_geometry import SCROLL_GEOMETRY_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
@@ -40,9 +40,6 @@ _ORIENTATIONS = ("horizontal", "vertical")
 _VARIANTS = ("plain", "surface")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -138,27 +135,17 @@ def _choice(component: str, name: str, value: object, allowed: tuple[str, ...]) 
     return plain
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(component: str, value: Mapping[str, object] | None, owned: frozenset[str]) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"{component} attrs must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, owned, f"{component} attrs")
+    # A Vue directive could rebind an owned attribute, add listeners, or
+    # change the slide structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, component)
     for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{component} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{component} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{component} attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 

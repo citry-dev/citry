@@ -42,7 +42,7 @@ async function vuePluginHarness() {
       throw new Error("unexpected i18n test fetch");
     },
     window: {
-      CitryStable: {
+      __citryRuntime: {
         registerBrowserPlugin(_name, _version, registeredFactory) {
           factory = registeredFactory;
         },

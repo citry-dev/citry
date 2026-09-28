@@ -98,13 +98,14 @@ broken `<picture>` candidate without emitting `error`; in that case Image keeps
 the last accepted status and callback ledger. It does not invent an observer or
 synthetic failure signal.
 
-`attrs` and `img_attrs` are Python-resolved structural data. They reject
-executable listener attributes such as `@load`, `@error`, and `onload`; those
-values cannot introduce Vue code into the prepared template. Use the
+`attrs` and `img_attrs` are plain data that Python writes into the page. They
+reject executable listener attributes such as `@load`, `@error`, and `onload`,
+and any other Vue directive syntax: names starting with `v-`, `:`, `.`, `^`,
+`@`, or `#`, so the data cannot add Vue code to the component. Use the
 `:onStatusChange` callback prop for normalized owner notifications, including
 cached completion. A component template that owns the native `<img>` may author
-a Vue listener directly when it needs a raw browser event; that listener runs
-in an isolated expression scope belonging to the component's Vue instance.
+a Vue listener directly when it needs a raw browser event; that listener can
+read only that component's own values.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cimage/snippets/reactive_image.py"
@@ -139,7 +140,8 @@ responsibilities.
 
 ## Understand lifecycle and fallback
 
-Equal retained-node server morphs preserve the active request and status.
+A server update that keeps the same image root and equal request fields
+preserves the active request and status.
 Changing request fields starts one new generation. Replacing the native image,
 removing the owner, invalid structure, a closed ShadowRoot, or cross-document
 adoption requires fresh ownership. Late work from an old generation cannot

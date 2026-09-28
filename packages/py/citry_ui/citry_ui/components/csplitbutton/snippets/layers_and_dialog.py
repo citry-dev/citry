@@ -9,7 +9,7 @@ class SplitButtonLayersAndDialog(Component):
       <section
         class="split-button-layer-demo"
 
-        @click="if ($event.target.closest('[data-open-provenance]')) dialogOpen=true"
+        @click="if ($event.target.closest('[data-open-provenance]')) dialogOpen = true;"
       >
         <h2>Clipped specimen tray</h2>
         <div class="split-button-layer-demo__clip" dir="rtl">

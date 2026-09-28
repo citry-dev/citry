@@ -3915,5 +3915,5 @@ def test_render():
     data = gen_render_data()
     rendered = render(data)
     assert len(rendered) > 50_000  # the full project page, not a truncated render
-    for anchor in ("<!DOCTYPE html>", "Project Name", "<body", "CitryStable.startPrepared"):
+    for anchor in ("<!DOCTYPE html>", "Project Name", "<body", "__citryRuntime.startDocument("):
         assert anchor in rendered

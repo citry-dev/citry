@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import re
+import warnings
 from typing import TYPE_CHECKING
 
 import pytest
@@ -87,7 +88,9 @@ def _vue_fragment(html: str) -> dict[str, object]:
 
 
 def _prepared(html: str) -> dict[str, object]:
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     return json.loads(match.group(1))
 
@@ -842,9 +845,16 @@ class TestCspSerializationModes:
             """
 
         rendered = Card().render()
-        warned = rendered.serialize(security_csp="warn")
-        assert "startPrepared" in warned
-        assert '@click="items.map' not in warned
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            warned = rendered.serialize(security_csp="warn")
+        assert "data-citry-vue-document" in warned
+        # The expression is compiled into the Vue definition, never evaluated
+        # from HTML. It appears only as an inert attribute in the server HTML
+        # the Vue host carries until Vue replaces it.
+        host, scripts = warned.split("<script", 1)
+        assert '@click="items.map' in host
+        assert '@click="items.map' not in scripts
 
     def test_strict_accepts_precompiled_native_vue_expression(self):
         c = Citry(security_csp="strict")
@@ -856,7 +866,7 @@ class TestCspSerializationModes:
             """
 
         html = Card().render().serialize(csp_nonce="requestNonce")
-        assert "startPrepared" in html
+        assert "data-citry-vue-document" in html
 
     def test_strict_accepts_browser_decoded_native_vue_expression(self):
         c = Citry(security_csp="strict")
@@ -867,7 +877,7 @@ class TestCspSerializationModes:
                 <button @click="items.map(item =&gt; item.id)">Save</button>
             """
 
-        assert "startPrepared" in Card().render().serialize(csp_nonce="requestNonce")
+        assert "data-citry-vue-document" in Card().render().serialize(csp_nonce="requestNonce")
 
     @pytest.mark.parametrize("mutation", ["edit", "duplicate"])
     def test_warn_late_script_changes_match_off_output(self, mutation):
@@ -950,7 +960,7 @@ class TestCspSerializationModes:
                 <c-child @click="items.map(item => item.id)" />
             """
 
-        assert "startPrepared" in Parent().render().serialize(csp_nonce="requestNonce")
+        assert "data-citry-vue-document" in Parent().render().serialize(csp_nonce="requestNonce")
 
     def test_component_boundary_expression_is_absent_from_final_html(self):
         c = Citry(security_csp="strict")
@@ -1119,7 +1129,7 @@ class TestJavascriptDeliveryPolicy:
 
         class Card(Component):
             citry = c
-            template = '<main x-data="{}"><button @click="save()">Save</button></main>'
+            template = '<main data-card="{}"><button @click="save()">Save</button></main>'
             js = "globalThis.cardReady = true;"
             css = ".card { color: rebeccapurple; }"
 
@@ -1131,7 +1141,9 @@ class TestJavascriptDeliveryPolicy:
         if strategy in {"simple", "ignore"}:
             assert warned == allowed
         else:
-            assert "startPrepared" in warned if strategy == "document" else "data-citry-vue-fragment" in warned
+            assert (
+                "data-citry-vue-document" in warned if strategy == "document" else "data-citry-vue-fragment" in warned
+            )
             if strategy == "document":
                 assert _prepared(warned)["manifest"]["scripts"]
             else:
@@ -1143,14 +1155,14 @@ class TestJavascriptDeliveryPolicy:
 
         class Card(Component):
             citry = c
-            template = '<main x-data="{}"><p>Server fallback</p></main>'
+            template = '<main data-card="{}"><p>Server fallback</p></main>'
             js = "globalThis.cardReady = true;"
             css = "p { color: rebeccapurple; }"
 
         html = Card().render().serialize(deps_strategy=strategy)
 
         assert "Server fallback" in html
-        assert 'x-data="{}"' in html
+        assert 'data-card="{}"' in html
         assert "rebeccapurple" in html
         assert "<script" not in html
         assert "data-citry-root" not in html
@@ -1173,12 +1185,12 @@ class TestJavascriptDeliveryPolicy:
     @pytest.mark.parametrize(
         ("template", "message"),
         [
-            ("<div x-cloak>Hidden</div>", "x-cloak"),
+            ("<div v-cloak>Hidden</div>", "v-cloak"),
             ('<button @click="save()">Save</button>', "@click"),
             ('<button onclick="save()">Save</button>', "native inline event"),
             ('<a href="javascript:save()">Save</a>', "javascript: URL"),
             ('<script type="module">save()</script>', "raw executable"),
-            ('<div x-unknown-plugin="value"></div>', "x-unknown-plugin"),
+            ('<div v-unknown-plugin="value"></div>', "v-unknown-plugin"),
         ],
     )
     def test_forbid_rejects_settled_activation_paths(self, template, message):
@@ -1190,6 +1202,18 @@ class TestJavascriptDeliveryPolicy:
         Card.template = template
         with pytest.raises(ValueError, match=message):
             Card().render().serialize(deps_strategy="ignore")
+
+    def test_forbid_allows_attributes_no_citry_runtime_reads(self):
+        # Only Vue directive spellings need the browser runtime. An x-* name
+        # is an ordinary attribute to Citry, so forbid keeps it as bytes.
+        c = Citry(security_javascript="forbid")
+
+        class Card(Component):
+            citry = c
+            template = '<div x-data="{}" x-cloak>Plain</div>'
+
+        html = Card().render().serialize(deps_strategy="ignore")
+        assert 'x-data="{}"' in html
 
     @pytest.mark.parametrize("kind", ["component", "dependencies"])
     def test_ignore_cannot_hide_reached_javascript_declarations(self, kind):
@@ -1317,12 +1341,12 @@ class TestJavascriptDeliveryPolicy:
 
         class Card(Component):
             citry = c
-            template = '<main x-data="items.map(item => item.id)">Fallback</main>'
+            template = '<main data-items="items.map(item => item.id)">Fallback</main>'
             js = "globalThis.managed = true;"
             css = "main { color: purple; }"
 
         result = Card().render().serialize_result(csp_nonce="requestNonce")
-        assert 'x-data="items.map(item => item.id)"' in result.html
+        assert 'data-items="items.map(item => item.id)"' in result.html
         assert re.search(r'<style\b[^>]*\bnonce="requestNonce"', result.html)
         assert "<script" not in result.html
         assert result.security.scripts == ()

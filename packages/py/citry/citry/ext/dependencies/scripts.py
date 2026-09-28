@@ -497,7 +497,7 @@ def transform_component(js_content: str, class_id: str) -> str:
     Expand the ``$component(`` sugar in a component's JS.
 
     ``$component({...})`` becomes a partially applied
-    ``CitryStable.registerTypeOptions`` call carrying the component class ID
+    ``__citryRuntime.registerTypeOptions`` call carrying the component class ID
     and a content digest. Repeated pages may register the same trusted Options
     source without replacing it, while different source under the same type
     identity remains a collision.
@@ -516,7 +516,7 @@ def _transform_component_spans(
 ) -> str:
     """Expand already-scanned ``$component`` calls without a second JS pass."""
     source_hash = hashlib.sha256(js_content.encode()).hexdigest()
-    replacement = f'CitryStable.registerTypeOptions.bind(null, "{class_id}", "{source_hash}")('
+    replacement = f'__citryRuntime.registerTypeOptions.bind(null, "{class_id}", "{source_hash}")('
     parts: list[str] = []
     previous_end = 0
     for start, identifier_end, end in spans:

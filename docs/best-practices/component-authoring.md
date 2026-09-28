@@ -423,9 +423,9 @@ When an optional client prop should fall back to the server value, declare no
 JavaScript default. Citry uses `undefined` for an omitted optional prop, so the
 component can resolve a configuration value as "valid prop when supplied,
 otherwise `js_data()` fallback." `null`, `false`, `0`, and `""` are supplied
-values and require explicit component semantics or validation. The complete
-props omission and recovery contract lives in
-[`alpinejs.md`](../design/alpinejs.md#43-prop-declaration-and-updates).
+values and require explicit component semantics or validation. The contract
+for omitted props and their server fallback lives in
+[`vue_migration.md`](../design/vue_migration.md#browser-authoring-contracts).
 
 Citry skips a component's first client initialization when its prop declaration
 rejects the initial supply. If a component promises that an invalid individual

@@ -1293,6 +1293,67 @@ def test_registry_check_reports_unknown_alpine_roots_and_respects_component_poli
     ]
 
 
+def test_registry_check_reports_a_vue_read_of_a_python_loop_variable_once(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = """
+          <ul>
+            <li c-for="item in items" :title="item" v-text="label"></li>
+            <li c-for="label in items" :title="label"></li>
+          </ul>
+        """
+
+        class JsData:
+            label: str
+
+    class Relaxed(Component):
+        citry = engine
+        template = '<p c-for="entry in items" :title="entry"></p>'
+
+        class Lint:
+            rule_unknown_vue_variable = "ignore"
+
+    class Quiet(Component):
+        citry = engine
+        template = '<p c-for="row in items" :title="row"></p>'
+
+        class Lint:
+            rule_unknown_vue_variable = "ignore"
+            rule_vue_python_variable = "ignore"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [
+        (item.code, item.severity, item.message)
+        for item in report.findings
+        if item.code in {"citry.vue.python-variable", "citry.vue.unknown-variable"}
+    ]
+
+    # `label` is also a js_data key, so Vue silently shows that browser value
+    # instead of the loop value, and the warning names both meanings.
+    assert findings == [
+        (
+            "citry.vue.unknown-variable",
+            "error",
+            "Vue variable 'item' is not available in this component. 'item' is a Python variable here, "
+            "which the browser never sees; pass its value with a c- attribute or loop with Vue's v-for.",
+        ),
+        (
+            "citry.vue.python-variable",
+            "warning",
+            "Vue reads the component's browser value 'label' here, not the Python loop or slot variable "
+            "'label'. Use c-title=\"label\" for the Python value, or rename one of them.",
+        ),
+        (
+            "citry.vue.python-variable",
+            "warning",
+            "Vue reads 'entry' from browser state, but 'entry' is a Python variable here. "
+            'Use c-title="entry" to pass the Python value.',
+        ),
+    ]
+
+
 def test_registry_check_defaults_unknown_alpine_roots_to_error(tmp_path):
     engine = Citry(autodiscover=False)
 

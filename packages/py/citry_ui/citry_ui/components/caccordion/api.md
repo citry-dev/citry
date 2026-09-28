@@ -210,6 +210,8 @@ panel content use ordinary Citry escaping. The chevron comes from the packaged
 icon allowlist.
 
 Attribute maps are trusted authoring surfaces for unowned values. Accordion
-rejects attributes and Vue directives that could replace native semantics,
-children, expansion visibility, focus ownership, a second popover/command
-activation owner, public mirrors, or Citry runtime markers.
+rejects attributes that could replace native semantics, expansion visibility,
+focus ownership, a second popover/command activation owner, public mirrors, or
+Citry runtime markers. Every attribute map also rejects Vue directive syntax:
+names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and
+listeners on the component tag in your template instead.

@@ -136,7 +136,8 @@ The built-in `sm`, `md`, `lg`, `xl`, and `xxl` thresholds are viewport-based
 and fixed. A custom class can use any media or container query without adding
 another component input.
 
-The family reserves its part/configuration attributes, Citry runtime fields,
-whole-object spreads, and structural Vue directives. Ordinary native,
-ARIA, data, listener, and targeted unrelated binding attributes remain
-available through `attrs`.
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes each component sets itself (such as `data-cols`), Citry runtime
+attributes, and any Vue directive syntax: names starting with `v-`, `:`, `.`,
+`^`, `@`, or `#`. Write Vue bindings and listeners on the component tag in your
+template instead, for example `<c-CGrid :title="label" @click="select">`.

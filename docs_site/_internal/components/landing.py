@@ -8,6 +8,7 @@ import importlib
 import itertools
 import json
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from markupsafe import Markup, escape
@@ -23,15 +24,20 @@ from docs_site.snippets.landing.status_card import StatusCard
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+# The landing snippets ship inside the docs_site package, so they are found from
+# this file. A build started from another directory, or with a docs config whose
+# repo_root points somewhere else, still reads the same source.
+_SNIPPETS_DIR = Path(__file__).resolve().parents[2] / "snippets" / "landing"
+
 # The walkthrough reads this file and marks the line ranges below. Line numbers
 # are the one fragile part, so `test_walkthrough_stops_point_at_the_right_lines`
 # checks that each range still contains the text it claims to explain.
-_TOUR_PATH = "docs_site/snippets/landing/product_card.py"
+_TOUR_PATH = _SNIPPETS_DIR / "product_card.py"
 
 # The editor demo reads ordinary source and layers its interactive symbols on
 # top. Keeping the annotations here means the file stays useful as real Citry
 # code, while a stale or ambiguous range fails the docs build.
-_EDITOR_PATH = "docs_site/snippets/landing/editor_invite_panel.py"
+_EDITOR_PATH = _SNIPPETS_DIR / "editor_invite_panel.py"
 
 _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
     {
@@ -1359,9 +1365,9 @@ class LandingTourMarkup(Component):
         pass
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
-        source = (current_docs_project().runtime.repo_root / _TOUR_PATH).read_text(encoding="utf-8")
+        source = _TOUR_PATH.read_text(encoding="utf-8")
         return {
-            "file_name": _TOUR_PATH.rsplit("/", 1)[-1],
+            "file_name": _TOUR_PATH.name,
             "code": Markup(_tour_code(source, _TOUR_STOPS)),  # noqa: S704 - pygments output
             # Each line is its own block so a highlight can span the full width,
             # which means the rendered text carries no newline characters. The
@@ -1553,12 +1559,9 @@ class LandingEditorDemoMarkup(Component):
         pass
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
-        repo_root = current_docs_project().runtime.repo_root
-        if repo_root is None:
-            raise RuntimeError("The landing editor demo needs a repository root to load its source.")
-        source = (repo_root / _EDITOR_PATH).read_text(encoding="utf-8")
+        source = _EDITOR_PATH.read_text(encoding="utf-8")
         return {
-            "file_name": _EDITOR_PATH.rsplit("/", 1)[-1],
+            "file_name": _EDITOR_PATH.name,
             "code": Markup(_editor_code(source, _EDITOR_MARKS)),  # noqa: S704 - escaped Pygments output
             # Backticks offer readable source data while the helper keeps every
             # character outside the generated code tags escaped.

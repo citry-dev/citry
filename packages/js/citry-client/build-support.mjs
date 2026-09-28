@@ -1,6 +1,7 @@
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-import { build } from "esbuild";
+import { build, transform } from "esbuild";
 
 export const VUE_VERSION = "3.5.42";
 export const VUE_GENERATED_BANNER =
@@ -112,6 +113,54 @@ export const citryI18nBuildOptions = function (overrides = {}) {
       banner: I18N_GENERATED_BANNER,
     },
     { ...buildOverrides, define: { __CITRY_I18N_BUILD_ID__: JSON.stringify(i18nBuildId) } },
+  );
+};
+
+const VUE_DIRECTORY = new URL("../../py/citry/citry/_vue/", import.meta.url);
+export const CITRY_RUNTIME_PATH = fileURLToPath(new URL("runtime.js", VUE_DIRECTORY));
+
+// The prepared coordinator (`_vue/client.js`) is hand-written and heavily commented, so the
+// runtime ships it with comments and indentation removed, using the same settings as the other
+// generated bundles. esbuild keeps every property name and every local name that does not shadow
+// another. It may still rename a local that
+// shadows another (`props` becomes `props2`), print `undefined` as `void 0`, and join adjacent
+// string literals; none of these changes behavior. No `target` is set, so no syntax is lowered.
+const minifyCitryClient = async function (source) {
+  const result = await transform(source, { loader: "js", ...DELIVERY_MINIFY_OPTIONS });
+  return result.code;
+};
+
+// Build the text of `_vue/runtime.js` from the generated Vue, fragment and Events files and the
+// hand-written coordinator. The build writes it and the canary test compares it with the
+// committed file, so both must produce it through this one function.
+export const buildCitryVueRuntime = async function () {
+  const [vue, fragments, client, events] = await Promise.all(
+    ["vue.js", "fragments.js", "client.js", "events.js"].map((name) =>
+      readFile(fileURLToPath(new URL(name, VUE_DIRECTORY)), "utf8"),
+    ),
+  );
+  // Read the contract from the source as written, so the check below does not depend on how
+  // the minifier spells the declaration.
+  const helperContract = client.match(/const HELPER_CONTRACT = "([0-9a-f]+)";/)?.[1];
+  if (!helperContract) throw new Error("Citry Vue client does not declare its helper contract");
+  const minifiedClient = await minifyCitryClient(client);
+  // The minified coordinator must still declare the same contract, or the guard below would
+  // compare against a value the shipped code no longer carries.
+  if (!minifiedClient.includes(`HELPER_CONTRACT="${helperContract}"`))
+    throw new Error("minifying the Citry Vue client changed its helper contract declaration");
+  return (
+    "/* Citry interactive runtime. GENERATED FILE, do not edit: Vue runtime, prepared coordinator, then Events bridge. */\n" +
+    `(function (global) {\nif (!global.__citryRuntime) {\n` +
+    vue +
+    "\nglobal.Vue = Vue;\n" +
+    fragments +
+    "\nglobal.CitryVueFragments = CitryVueFragments;\n" +
+    minifiedClient +
+    `\n} else {\n  if (global.__citryRuntime.compilerRuntime?.helperContract !== "${helperContract}") ` +
+    `throw new Error("an incompatible Citry Vue runtime is already loaded");\n` +
+    `  if (!global.Vue) throw new Error("the existing Citry Vue runtime has no Vue namespace");\n}\n` +
+    `if (!global.CitryVueEvents) {\n${events}\nglobal.CitryVueEvents = CitryVueEvents;\n}\n` +
+    "\n})(globalThis);\n"
   );
 };
 

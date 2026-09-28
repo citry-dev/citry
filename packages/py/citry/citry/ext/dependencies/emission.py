@@ -25,7 +25,7 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from citry._owned_resource import _OwnedResource
+from citry._owned_resource import OWNED_ASSET_CROSSORIGIN, _OwnedResource
 from citry.assets import HasHtml
 from citry.citry_render import CitryRender, selected_render_ids
 from citry.ext.dependencies.routes import RUNTIME_PATH, runtime_url, script_url
@@ -40,7 +40,7 @@ from citry.ext.dependencies.scripts import (
     uses_component,
 )
 from citry.ext.dependencies.types import Dependency, Script, Style
-from citry.util.html import Markup
+from citry.util.html import Markup, script_json
 
 if TYPE_CHECKING:
     from citry._javascript_policy import _JavascriptPolicy
@@ -56,6 +56,7 @@ if TYPE_CHECKING:
 EXTRA_KEY = "dependencies"
 VUE_RUNTIME_EMITTED_KEY = "vue_runtime_emitted"
 VUE_RUNTIME_REQUIRED_KEY = "vue_runtime_required"
+_VUE_RUNTIME_SCRIPT_KEY = "_citry_vue_managed_runtime_script"
 VUE_FRAGMENT_MOUNT_KEY = "vue_fragment_mount"
 VUE_DEPENDENCIES_PREPARED_KEY = "vue_dependencies_prepared"
 
@@ -94,9 +95,10 @@ class OnDependenciesContext:
     """The ``serialize(deps_strategy=...)`` value this emission runs under
     (``"document"``, ``"simple"``, or ``"fragment"``)."""
     before_manifest: list[Dependency]
-    """Entries rendered immediately before the native Vue fragment descriptor,
-    or before dependency scripts for static output (mutable). Under ``simple``
-    they are emitted with the other direct dependency tags."""
+    """Entries rendered before the dependency scripts of static output
+    (mutable). Under ``simple`` they are emitted with the other direct
+    dependency tags. An interactive fragment rejects any entry here; its
+    browser code goes through the prepared browser extension API."""
     _security_csp: SecurityCspMode = "off"
     """The effective call-local CSP mode used by built-in dependency producers."""
     _security_javascript: SecurityJavascriptMode = "allow"
@@ -165,8 +167,10 @@ def emit_dependencies(
             security_javascript=security_javascript,
         )
 
-    # "fragment": nothing is inlined; the output carries a pre-loader plus a
-    # manifest of URLs for the client-side manager to fetch (section 8).
+    # "fragment": nothing is inlined. A static fragment carries ordinary
+    # <link>/<script> tags that reference cached URLs; an interactive one
+    # carries a runtime loader plus one JSON descriptor that tells the Vue
+    # runtime which assets to load before it mounts the fragment.
     if ctx.deps_strategy == "fragment":
         return _emit_fragment(
             citry,
@@ -179,10 +183,10 @@ def emit_dependencies(
             security_javascript=security_javascript,
         )
 
-    # "document" includes the client-side manager and everything that needs
-    # it (the JS-variables scripts, the per-instance component calls, the
-    # manifest). "simple" is the no-JS-runtime mode: component and
-    # Dependencies tags only, so per-instance JS does not run there.
+    # "document" includes the Vue runtime when the page needs one, along with
+    # the JS-variables scripts that depend on it; component calls go through
+    # the Vue serialization plan. "simple" is the no-JS-runtime mode:
+    # component and Dependencies tags only, so per-instance JS does not run.
     # CSS variables are pure CSS (a stylesheet plus a root-element marker)
     # and work under both.
     with_client_js = ctx.deps_strategy == "document"
@@ -206,9 +210,9 @@ def emit_dependencies(
 
     # The extension-owned custom hook: other extensions adjust the lists in
     # place (docs/design/extensions.md section 9.2). The hook sees the
-    # component-derived entries (possibly none); the runtime and the manifest
-    # are appended after it, so URLs an extension adds here are still marked
-    # as loaded.
+    # component-derived entries (possibly none). The runtime is added after
+    # the hook runs, so the hook cannot move or drop it. A prepared Vue page
+    # skips the hook here, because its assets are delivered by the Vue app.
     if ctx.context.extra.get(VUE_DEPENDENCIES_PREPARED_KEY) is True:
         scripts, styles, before_manifest = [], [], []
     else:
@@ -228,12 +232,14 @@ def emit_dependencies(
         _validate_hook_nonces(script_security, scripts, styles, before_manifest)
 
     # An actual Vue serialization plan requests its runtime here so it appears
-    # before component Options. Static dependency hooks remain direct tags and
-    # need no client-side ownership manifest.
+    # before component Options. Static dependency hooks remain direct tags,
+    # which the browser loads on its own without any Citry runtime.
     core_scripts: list[Dependency] = []
+    managed_runtime: Script | None = None
     vue_runtime_required = with_client_js and ctx.context.extra.get(VUE_RUNTIME_REQUIRED_KEY) is True
     if vue_runtime_required:
-        core_scripts.append(_runtime_script(citry))
+        managed_runtime = _runtime_script(citry)
+        core_scripts.append(managed_runtime)
         ctx.context.extra[VUE_RUNTIME_EMITTED_KEY] = True
     elif resolved.has_component_calls:
         raise RuntimeError("Component JavaScript calls require a native Vue serialization plan.")
@@ -243,6 +249,10 @@ def emit_dependencies(
         core_scripts = javascript_policy.process_dependencies(core_scripts, position="managed runtime")
         scripts = javascript_policy.process_dependencies(scripts, position="page")
         styles = javascript_policy.process_dependencies(styles, position="stylesheet")
+    if managed_runtime is not None and any(script is managed_runtime for script in core_scripts):
+        ctx.context.extra[_VUE_RUNTIME_SCRIPT_KEY] = managed_runtime
+    else:
+        ctx.context.extra.pop(_VUE_RUNTIME_SCRIPT_KEY, None)
 
     js_html = "".join(
         str(script.render()) if script_security is None else script_security.render(script)
@@ -504,16 +514,14 @@ def _resolve_records(
 
             # The class's own JS/CSS: inlined content for a page, a cache URL for
             # a fragment (the endpoint serves what the cache write here stores).
-            # Either way the Component.css sheet is tagged with its class id
-            # (data-citry-css-class), which is how the client-side manager's
-            # cleanup finds the sheet when the class's last instance leaves the
-            # page (docs/design/dependencies.md 8.4).
-            # The legacy document emitter uses these attributes to find and
-            # retire component-owned sheets. Prepared Vue assets carry their
-            # ownership in the manifest's occurrence IDs instead. Omitting
-            # the legacy class marker there lets related components share one
-            # byte-identical sheet (for example CSlider/CRangeSlider) without
-            # creating conflicting attributes on the same prepared asset.
+            # Static output tags the Component.css sheet with its class id
+            # (data-citry-css-class) so a page, host library, or test can tell
+            # which component a sheet belongs to. Prepared Vue assets record
+            # their owners in the Vue app's asset list (the occurrence IDs that
+            # use each sheet) instead. Omitting the class marker there lets
+            # related components share one byte-identical sheet (for example
+            # CSlider/CRangeSlider) without conflicting attributes on the same
+            # prepared asset.
             css_class_attr: dict[str, str | bool] = {} if prepared_vue else {"data-citry-css-class": comp_cls.class_id}
             if as_urls:
                 if has_component_asset("js", comp_cls):
@@ -661,7 +669,7 @@ def _resolve_records(
     )
 
 
-# ----- The client runtime and the page manifest -----
+# ----- The client runtime and the Vue fragment descriptor -----
 
 
 @cache
@@ -732,7 +740,11 @@ def _preloader_script(
     integrity_line = ""
     if script_security is not None and script_security.integrity_enabled:
         integrity = script_security.owned_integrity(resource)
-        integrity_line = f"  s.integrity = {json.dumps(integrity)};\n"
+        # The browser checks integrity only on a CORS response, and Citry's
+        # runtime route sends the header that allows one.
+        integrity_line = (
+            f"  s.integrity = {json.dumps(integrity)};\n  s.crossOrigin = {json.dumps(OWNED_ASSET_CROSSORIGIN)};\n"
+        )
     nonce_line = ""
     if script_security is not None and script_security.csp_nonce is not None:
         nonce_line = f"  s.nonce = {json.dumps(script_security.csp_nonce)};\n"
@@ -750,9 +762,11 @@ def _preloader_script(
 
 
 def _vue_fragment_manifest(vue_mount: dict[str, object]) -> Script:
+    # Page data inside the descriptor may contain "</script>" or "<!--", so
+    # the JSON is escaped the same way as a document app's configuration.
     return Script(
         kind="core",
-        content=json.dumps({"vue": vue_mount}),
+        content=script_json({"vue": vue_mount}),
         attrs={"type": "application/json", "data-citry-vue-fragment": True},
     )
 
@@ -834,11 +848,10 @@ def _emit_fragment(
             position="fragment framework",
         )
 
-    # Static fragments have no Vue application or client-side ownership graph.
-    # Emit their already-resolved dependencies as ordinary tags: stylesheets
-    # remain useful after insertion, and an integrating fragment library keeps
-    # its normal script execution semantics.  Do not emit the former legacy
-    # data-citry manifest, which the native Vue runtime intentionally ignores.
+    # Static fragments have no Vue application. Emit their already-resolved
+    # dependencies as ordinary tags: stylesheets remain useful after
+    # insertion, and an integrating fragment library keeps its normal script
+    # execution semantics.
     if vue_mount is None:
         if resolved.has_component_calls:
             raise RuntimeError("A static fragment cannot carry component runtime state.")
@@ -855,16 +868,16 @@ def _emit_fragment(
         return html + css_html + before_html + script_html
 
     # A fragment that carries nothing at all has nothing to load, so it needs
-    # no pre-loader or manifest (and no mounted integration).
+    # no runtime loader, no Vue descriptor, and no mounted integration.
     if not scripts and not styles and not resolved.has_component_calls and not before_manifest and vue_mount is None:
         return _blank(ctx.html, placeholder_texts)
     if citry.mounted_prefix is None:
         raise RuntimeError(fragment_needs_mount_msg)
 
     html = _blank(ctx.html, placeholder_texts)
-    # Ownership and Events manifests stay inert top-level JSON. Every other
-    # graph-backed hook entry is a descriptor inside the dependency manifest,
-    # so an ignored incoming branch cannot execute it during fragment parsing.
+    # The Vue fragment descriptor is inert top-level JSON, so a fragment
+    # branch that the inserting library ignores cannot run anything while it
+    # is parsed; the Vue runtime reads the descriptor and loads the assets.
     if script_security is None:
         manifest = _vue_fragment_manifest(vue_mount)
         before_html = "".join(str(dep.render()) for dep in framework_manifests)
@@ -1075,6 +1088,7 @@ def _fill_placeholders(html: str, placeholders: list[tuple[int, str]], content: 
 
 
 _HEAD_OR_BODY_END_RE = re.compile(r"</(?:head|body)\s*>")
+_BODY_END_RE = re.compile(r"</body\s*>")
 
 
 def _insert_default(html: str, content: str, kind: str) -> str:
@@ -1086,13 +1100,20 @@ def _insert_default(html: str, content: str, kind: str) -> str:
     docs/design/dependencies.md section 7.3).
     """
     target = None
-    for match in _HEAD_OR_BODY_END_RE.finditer(html):
-        is_head = match[0][2:6] == "head"
-        if kind == "css" and is_head:
-            target = match.start()
-            break
-        if kind == "js" and not is_head:
-            target = match.start()  # keep the last </body>
+    if kind == "js":
+        # Search back from the end for the last </body>; scanning the whole
+        # page forward costs about a millisecond on a hydrated page.
+        end = len(html)
+        while (start := html.rfind("</body", 0, end)) >= 0:
+            if _BODY_END_RE.match(html, start) is not None:
+                target = start
+                break
+            end = start
+    else:
+        for match in _HEAD_OR_BODY_END_RE.finditer(html):
+            if match[0][2:6] == "head":
+                target = match.start()
+                break
     if target is not None:
         return html[:target] + content + html[target:]
     return content + html if kind == "css" else html + content

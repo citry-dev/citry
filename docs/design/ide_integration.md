@@ -1745,7 +1745,29 @@ degradation contract in section 3.4.1.
     globals. Invalid severities or JavaScript identifiers are rejected when
     settings are constructed. Invalid or unsupported initializer source
     produces no partial namespace diagnostic and leaves ordinary JavaScript
-    diagnostics to the installed provider.
+    diagnostics to the installed provider. The rule for a
+    `component.<name>` or `this.<name>` read that the instance lacks,
+    `citry.component-js.unknown-member`, takes its severity from the matching
+    `rule_unknown_component_js_member` setting in the same two places; when
+    one JavaScript file serves several components, the strictest owner's
+    severity applies.
+
+    `citry.vue.python-variable` reports a Vue expression that reads a name an
+    enclosing `c-for` loop or `c-fill` binding introduces in Python. Vue
+    evaluates the expression later in the browser against component state, so
+    the read never sees the loop value. The rule is skipped when a Vue `v-for`
+    or slot alias rebinds the name. Each read gets one finding: when a closed
+    namespace with an active `citry.vue.unknown-variable` rule proves the name
+    missing, that rule reports the read as an error with its `python` message
+    variant, and this rule stays quiet. This rule reports the rest, which is an
+    open namespace, an ignored unknown-variable rule, or a component whose
+    browser names also include the name, because a Python binding with that
+    name means the author most likely wanted the loop value. When a reporting
+    component's browser names include the name, Vue shows that value without
+    an error, so the rule uses its `browser` or `browser-attribute` message
+    variant, which names both the browser value and the Python variable. It
+    takes its severity from `rule_vue_python_variable` (default `"warning"`)
+    in the same two places.
 
     `$component` exposes the complete runtime callback context, including
     `id`, `els`, typed `data`, initial `scope`, read-only `props`, Events

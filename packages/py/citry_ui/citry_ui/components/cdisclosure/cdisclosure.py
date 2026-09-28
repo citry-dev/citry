@@ -12,7 +12,13 @@ from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
     ANCHORED_LAYER_RUNTIME_JS,
 )
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    html_attr_binding_target,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+)
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 from citry_ui.components.cicon.cicon import _resolve_registered_icon
@@ -50,19 +56,6 @@ _DISCLOSURE_CONTEXT_KEY = "citry_ui_disclosure"
 _ACCORDION_ITEM_CONTEXT_KEY = "citry_ui_accordion_item"
 _ACCORDION_PANEL_CONTEXT_KEY = "citry_ui_accordion_panel"
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-teleport",
-        "x-text",
-    }
-)
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "id",
@@ -102,7 +95,6 @@ _HEADING_OWNED_ATTRS = frozenset(
         "hidden",
         "inert",
         "popover",
-        "x-show",
         "aria-hidden",
         "aria-label",
         "aria-labelledby",
@@ -124,7 +116,6 @@ _TRIGGER_OWNED_ATTRS = frozenset(
         "hidden",
         "inert",
         "popover",
-        "x-show",
         "command",
         "commandfor",
         "popovertarget",
@@ -169,7 +160,6 @@ _PANEL_OWNED_ATTRS = frozenset(
         "hidden",
         "inert",
         "popover",
-        "x-show",
         "aria-hidden",
         "aria-label",
         "aria-labelledby",
@@ -188,7 +178,6 @@ _ACTIONS_OWNED_ATTRS = frozenset(
         "hidden",
         "inert",
         "popover",
-        "x-show",
         "aria-hidden",
         "aria-label",
         "aria-labelledby",
@@ -345,13 +334,8 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
+def _is_vue_listener(normalized: str) -> bool:
+    return normalized.startswith(("@", "v-on:"))
 
 
 def _validate_attrs(input_name: str, attrs: dict[str, object], owned: frozenset[str]) -> None:
@@ -365,16 +349,13 @@ def _validate_attrs(input_name: str, attrs: dict[str, object], owned: frozenset[
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"{owner} cannot contain reserved Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            msg = f"{owner} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if directive in owned:
-            msg = f"{owner} cannot use owned directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in owned:
-            msg = f"{owner} cannot dynamically bind owned attribute {target!r}."
+        # A Vue directive could rebind an owned attribute, change the part's
+        # structure, or add a listener, so Python data cannot carry it.
+        if is_vue_directive_attribute(normalized):
+            msg = (
+                f"{owner} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
 
 
@@ -392,13 +373,18 @@ def _title_attribute_problem(tag: str, attrs: list[tuple[str, str | None]]) -> s
             continue
         if normalized in _TITLE_REJECTED_ATTRS or normalized.startswith("aria-"):
             return f"<{tag}> cannot use {name!r}"
-        if normalized.startswith(("on", "@", "x-on:")):
+        # The title sits inside the trigger Button, so any code it runs on
+        # click would compete with the Button's own activation.
+        if normalized.startswith("on") or normalized == "v-on" or _is_vue_listener(normalized):
             return f"<{tag}> cannot use event attribute {name!r}"
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            return f"<{tag}> cannot use ownership directive {name!r}"
-        target = _dynamic_target(normalized)
-        if target is not None and (target in _TITLE_REJECTED_ATTRS or target.startswith("aria-")):
+        if not is_vue_directive_attribute(normalized):
+            continue
+        # A binding may style or describe phrasing content, but not produce
+        # an attribute the title rejects in static form.
+        target = html_attr_binding_target(normalized)
+        if target is None:
+            return f"<{tag}> cannot use Vue directive {name!r}"
+        if target in _TITLE_REJECTED_ATTRS or target.startswith("aria-"):
             return f"<{tag}> cannot dynamically bind {target!r}"
     return None
 
@@ -776,10 +762,7 @@ class CDisclosure(LibraryComponent):
             "role", "tabindex", "contenteditable", "autofocus", "href", "xlink:href",
             "controls", "usemap", "form", "popover", "is", "hidden", "inert", "focusable",
           ]);
-          const ownershipDirectives = new Set([
-            "x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable",
-            "x-teleport", "x-text",
-          ]);
+          const vueDirectivePrefixes = ["v-", ":", ".", "^", "@", "#"];
           const allowedChoices = {
             variant: ["outline", "soft", "plain"],
             size: ["sm", "md", "lg"],
@@ -829,15 +812,18 @@ class CDisclosure(LibraryComponent):
               root,
             );
           };
-          const dynamicTarget = (name) => {
-            const normalized = name.toLowerCase();
-            if (normalized.startsWith("x-bind:")) {
-              return normalized.slice(7).split(".", 1)[0];
+          const isVueDirective = (name) => vueDirectivePrefixes.some((prefix) => name.startsWith(prefix));
+          const isListener = (name) => name.startsWith("on") || name.startsWith("@")
+            || name === "v-on" || name.startsWith("v-on:");
+          const bindingTarget = (name) => {
+            let target = null;
+            if (name.startsWith("v-bind:")) {
+              target = name.slice(7).split(".", 1)[0];
+            } else if (name.startsWith(":") || name.startsWith(".")) {
+              target = name.slice(1).split(".", 1)[0];
             }
-            if (normalized.startsWith(":") || normalized.startsWith(".")) {
-              return normalized.slice(1).split(".", 1)[0];
-            }
-            return null;
+            // A dynamic argument such as `:[name]` has no fixed target to check.
+            return target === null || target.startsWith("[") ? null : target;
           };
           const nearestRootOwns = (element) => element?.closest?.(rootSelector) === root;
           const directPart = (owner, part) => Array.from(owner?.children ?? []).find(
@@ -867,15 +853,19 @@ class CDisclosure(LibraryComponent):
               if (titleRejected.has(name) || name.startsWith("aria-")) {
                 return `<${tag}> cannot use ${attribute.name}`;
               }
-              if (name.startsWith("on") || name.startsWith("@") || name.startsWith("x-on:")) {
+              // This mirrors the server title check so a title changed after
+              // render meets the same contract.
+              if (isListener(name)) {
                 return `<${tag}> cannot use event attribute ${attribute.name}`;
               }
-              const directive = name.split(".", 1)[0];
-              if (ownershipDirectives.has(directive)) {
-                return `<${tag}> cannot use ownership directive ${attribute.name}`;
+              if (!isVueDirective(name)) {
+                continue;
               }
-              const target = dynamicTarget(name);
-              if (target && (titleRejected.has(target) || target.startsWith("aria-"))) {
+              const target = bindingTarget(name);
+              if (target === null) {
+                return `<${tag}> cannot use Vue directive ${attribute.name}`;
+              }
+              if (titleRejected.has(target) || target.startsWith("aria-")) {
                 return `<${tag}> cannot dynamically bind ${target}`;
               }
             }

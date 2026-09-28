@@ -52,8 +52,9 @@ jobs:
       - name: Install the workspace
         run: uv sync --locked --all-packages
 
-      # Node runs the gate's pinned pyright and package-local checks for the
-      # protocol packages, client, docs playground, and VS Code extension. Only
+      # Node runs the gate's pinned pyright, the package-local checks for the
+      # protocol packages, client, docs playground, and VS Code extension, and
+      # Vue's own server renderer for the Vue render parity phase. Only
       # this full-gate workflow runs check.py, so Node is set up here rather
       # than in each per-language test workflow.
       # pnpm goes first: setup-node's pnpm cache needs the pnpm binary. The
@@ -73,7 +74,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # The whole gate in one command: cargo fmt/clippy/test, ruff check/format,
-      # mypy, pyright, package-local Node checks, pytest, and the custom
+      # mypy, pyright, package-local Node checks, pytest, the Vue render parity
+      # check over the pages that pytest run recorded, and the custom
       # validators. Runs every phase then reports.
       - name: Run the check suite
         run: python scripts/check.py --profile full

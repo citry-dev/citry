@@ -6,7 +6,7 @@ from html import escape
 
 from citry._output_html import scan_output_html
 from citry.attrs import _html_attr_identity
-from citry_core.html_transform import mark_html, validate_html_fragment_boundary
+from citry_core.html_transform import mark_html, static_html_node_count, validate_html_fragment_boundary
 
 
 def reject_cross_boundary_html(html: str) -> None:
@@ -42,4 +42,16 @@ def mark_opaque_html(html: str, markers: tuple[tuple[str, object], ...]) -> str:
     return marked.replace(f' {sentinel}=""', replacement)
 
 
-__all__ = ["mark_opaque_html", "reject_cross_boundary_html"]
+def opaque_html_record(html: str) -> dict[str, object]:
+    """
+    Return the prepared record the browser renders as one static vnode.
+
+    ``nodeCount`` is the number of top-level nodes the browser creates for the
+    HTML inside a ``<template>`` element. Vue needs it to adopt those nodes
+    when the server wrote the block into a hydrated page; the server checks
+    that the page's own parse creates the same nodes before it writes them.
+    """
+    return {"html": html, "nodeCount": static_html_node_count(html)}
+
+
+__all__ = ["mark_opaque_html", "opaque_html_record", "reject_cross_boundary_html"]

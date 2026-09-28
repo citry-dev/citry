@@ -656,19 +656,6 @@
             ce = new Proxy(o, {
               get: (e, t) => ("onOpenChange" === t ? le : Reflect.get(e, t)),
             }),
-            dt = new Set([
-              "x-data",
-              "x-init",
-              "x-effect",
-              "x-id",
-              "x-if",
-              "x-for",
-              "x-show",
-              "x-ignore",
-              "x-teleport",
-              "x-html",
-              "x-text",
-            ]),
             et = new Set([
               "blur",
               "contextmenu",
@@ -682,17 +669,10 @@
               "visibilitychange",
             ]),
             dn = (e) =>
-              e.startsWith("x-bind:")
-                ? e.slice(7).split(".", 1)[0]
-                : e.startsWith(":") || e.startsWith(".")
-                  ? e.slice(1).split(".", 1)[0]
-                  : null,
-            en = (e) =>
-              e.startsWith("x-on:")
-                ? e.slice(5).split(".", 1)[0]
-                : e.startsWith("@")
-                  ? e.slice(1).split(".", 1)[0]
-                  : null,
+              e.startsWith(":") || e.startsWith(".")
+                ? e.slice(1).split(".", 1)[0]
+                : null,
+            en = (e) => (e.startsWith("@") ? e.slice(1).split(".", 1)[0] : null),
             tn = s.getAttribute("role"),
             Tr = Object.fromEntries(
               [...s.attributes]
@@ -729,7 +709,6 @@
             ye = () => {
               for (const e of s.attributes) {
                 const t = e.name,
-                  n = t.split(".", 1)[0],
                   o = dn(t),
                   r = en(t);
                 if (
@@ -742,7 +721,6 @@
                     "is",
                     "popover",
                   ].includes(t) ||
-                  dt.has(n) ||
                   (r && et.has(r)) ||
                   (o &&
                     ([
@@ -789,7 +767,6 @@
             qe = () => {
               for (const e of i.attributes) {
                 const t = e.name,
-                  n = t.split(".", 1)[0],
                   o = dn(t),
                   r = en(t);
                 if (
@@ -804,7 +781,6 @@
                     "is",
                     "popover",
                   ].includes(t) ||
-                  dt.has(n) ||
                   (r && et.has(r)) ||
                   (o &&
                     (o.startsWith("aria-") ||

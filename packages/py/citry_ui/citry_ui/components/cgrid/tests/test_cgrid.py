@@ -257,21 +257,27 @@ def test_semantic_roots_and_root_styling_merge():
         (CContainer, "data-size"),
         (CContainer, ":data-fluid"),
         (CGrid, "DATA-COLS"),
-        (CGrid, "x-bind:data-cols-lg"),
+        (CGrid, "v-bind:data-cols-lg"),
+        (CGrid, "V-BIND:data-cols"),
         (CGridItem, "data-span"),
         (CGridItem, ".data-span-xl"),
         (CGrid, "data-citry-morph"),
         (CGrid, "data-cev-action"),
         (CGrid, "data-cid"),
-        (CGrid, "x-bind"),
-        (CGrid, "x-bind.modifier"),
-        (CGrid, "x-for"),
-        (CGrid, "x-if"),
-        (CGrid, "x-teleport"),
-        (CGrid, "x-ignore"),
-        (CGrid, "x-html"),
-        (CGrid, "x-text"),
-        (CGrid, "x-model"),
+        (CGrid, "v-bind"),
+        (CGrid, "v-bind.prop"),
+        (CGrid, "v-for"),
+        (CGrid, "v-if"),
+        (CGrid, "v-html"),
+        (CGrid, "v-text"),
+        (CGrid, "v-model"),
+        (CGrid, "v-show"),
+        (CGridItem, "v-slot"),
+        (CGridItem, "#default"),
+        (CContainer, "@click"),
+        (CContainer, "v-on:click"),
+        (CGrid, ":title"),
+        (CGrid, ".title"),
     ],
 )
 def test_roots_reject_owned_runtime_and_structural_attributes(component, attribute):
@@ -279,9 +285,22 @@ def test_roots_reject_owned_runtime_and_structural_attributes(component, attribu
         _render(component(attrs={attribute: "consumer"}))
 
 
-def test_python_attrs_reject_executable_vue_bindings():
-    with pytest.raises(RuntimeError, match="cannot come from"):
+def test_python_attrs_reject_vue_directives_before_rendering():
+    # The component names itself and points at the template, rather than
+    # leaving a generic compiler error to surface later.
+    with pytest.raises(ValueError, match="CGrid attrs cannot contain the Vue directive ':class'"):
         _render(CGrid(attrs={":class": "{selected}"}))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(CGrid(attrs={"x-data": "{}", "hx-get": "/rows"}))
+
+    root = re.search(r'<div[^>]+data-citry-ui-part="grid"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/rows"' in root.group(0)
 
 
 def test_authored_native_template_bindings_remain_compilable():
@@ -290,15 +309,17 @@ def test_authored_native_template_bindings_remain_compilable():
 
     class Page(Component):
         citry = app
-        template = (
-            '<main x-data="{selected: false}">'
-            '<button :class="{selected}" @click="selected = true">Select</button>'
-            "<c-CGrid />"
-            "</main>"
-        )
+        template = """
+            <main>
+              <button :class="{selected}" @click="selected = true">Select</button>
+              <c-CGrid />
+            </main>
+        """
+        js = """
+            $component({data(){return {selected: false};}});
+        """
 
     html = str(Page())
-    assert '"x-data": "{selected: false}"' in html
     assert "_normalizeClass({selected: _ctx.selected})" in html
     assert "onClick: $event => (_ctx.selected = true)" in html
 

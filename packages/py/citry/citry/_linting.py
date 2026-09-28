@@ -174,6 +174,8 @@ class TemplateLintInfo:
     rule_unknown_component_js_variable: LintSeverity = "error"
     component_js_globals: tuple[VueVariableInfo, ...] = ()
     allows_extra_variables: bool = False
+    rule_unknown_component_js_member: LintSeverity = "error"
+    rule_vue_python_variable: LintSeverity = "warning"
 
     def __post_init__(self) -> None:
         if (
@@ -215,6 +217,15 @@ class TemplateLintInfo:
         if type(self.allows_extra_variables) is not bool:
             msg = "TemplateLintInfo.allows_extra_variables must be a bool"
             raise TypeError(msg)
+        if (
+            type(self.rule_unknown_component_js_member) is not str
+            or self.rule_unknown_component_js_member not in _RULE_SEVERITIES
+        ):
+            msg = f"Unknown component-JavaScript member lint severity: {self.rule_unknown_component_js_member!r}"
+            raise ValueError(msg)
+        if type(self.rule_vue_python_variable) is not str or self.rule_vue_python_variable not in _RULE_SEVERITIES:
+            msg = f"Unknown Vue Python-variable lint severity: {self.rule_vue_python_variable!r}"
+            raise ValueError(msg)
         names = tuple(item.name for item in self.template_variables)
         if names != tuple(sorted(set(names))):
             msg = "Template lint variables must be unique and sorted by name"
@@ -239,6 +250,8 @@ class TemplateLintInfo:
             "rule_unknown_component_js_variable": self.rule_unknown_component_js_variable,
             "component_js_globals": [item.to_dict() for item in self.component_js_globals],
             "allows_extra_variables": self.allows_extra_variables,
+            "rule_unknown_component_js_member": self.rule_unknown_component_js_member,
+            "rule_vue_python_variable": self.rule_vue_python_variable,
         }
 
     @classmethod
@@ -253,6 +266,8 @@ class TemplateLintInfo:
             "rule_unknown_component_js_variable",
             "component_js_globals",
             "allows_extra_variables",
+            "rule_unknown_component_js_member",
+            "rule_vue_python_variable",
         }:
             msg = "template lint data must contain the exact supported fields"
             raise ValueError(msg)
@@ -277,6 +292,8 @@ class TemplateLintInfo:
             rule_unknown_component_js_variable=value["rule_unknown_component_js_variable"],  # type: ignore[arg-type]
             component_js_globals=tuple(VueVariableInfo.from_dict(item) for item in component_js_globals),
             allows_extra_variables=value["allows_extra_variables"],  # type: ignore[arg-type]
+            rule_unknown_component_js_member=value["rule_unknown_component_js_member"],  # type: ignore[arg-type]
+            rule_vue_python_variable=value["rule_vue_python_variable"],  # type: ignore[arg-type]
         )
 
 
@@ -294,6 +311,8 @@ class _ComponentLintOverrides:
     rule_unknown_component_js_variable: LintSeverity | None
     component_js_globals: Mapping[str, object]
     component_js_global_owners: Mapping[str, type]
+    rule_unknown_component_js_member: LintSeverity | None = None
+    rule_vue_python_variable: LintSeverity | None = None
 
 
 def _application_lint_info(citry: Citry) -> TemplateLintInfo:
@@ -321,6 +340,8 @@ def _application_lint_info(citry: Citry) -> TemplateLintInfo:
         vue_variables=tuple(vue_variables[name] for name in sorted(vue_variables)),
         rule_unknown_component_js_variable=citry.settings.lint.rule_unknown_component_js_variable,
         component_js_globals=tuple(component_js_globals[name] for name in sorted(component_js_globals)),
+        rule_unknown_component_js_member=citry.settings.lint.rule_unknown_component_js_member,
+        rule_vue_python_variable=citry.settings.lint.rule_vue_python_variable,
     )
 
 
@@ -375,6 +396,16 @@ def _component_lint_info(citry: Citry, component_class: type) -> TemplateLintInf
         ),
         component_js_globals=tuple(component_js_globals[name] for name in sorted(component_js_globals)),
         allows_extra_variables=allows_extra_variables,
+        rule_unknown_component_js_member=(
+            overrides.rule_unknown_component_js_member
+            if overrides.rule_unknown_component_js_member is not None
+            else application.rule_unknown_component_js_member
+        ),
+        rule_vue_python_variable=(
+            overrides.rule_vue_python_variable
+            if overrides.rule_vue_python_variable is not None
+            else application.rule_vue_python_variable
+        ),
     )
 
 
@@ -393,6 +424,8 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
     vue_variables: dict[str, object] = {}
     vue_variable_owners: dict[str, type] = {}
     component_js_rule: LintSeverity | None = None
+    component_js_member_rule: LintSeverity | None = None
+    vue_python_variable_rule: LintSeverity | None = None
     component_js_globals: dict[str, object] = {}
     component_js_global_owners: dict[str, type] = {}
     declarations = _active_nested_class_declarations(component_class, "Lint")
@@ -414,6 +447,8 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
             "vue_variables",
             "rule_unknown_component_js_variable",
             "component_js_globals",
+            "rule_unknown_component_js_member",
+            "rule_vue_python_variable",
         }
         if unknown:
             rendered = ", ".join(sorted(unknown))
@@ -455,6 +490,24 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
                 )
                 raise ValueError(msg)
             component_js_rule = cast("LintSeverity", candidate_rule)
+        if "rule_unknown_component_js_member" in public_values:
+            candidate_rule = public_values["rule_unknown_component_js_member"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_unknown_component_js_member "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            component_js_member_rule = cast("LintSeverity", candidate_rule)
+        if "rule_vue_python_variable" in public_values:
+            candidate_rule = public_values["rule_vue_python_variable"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_vue_python_variable "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            vue_python_variable_rule = cast("LintSeverity", candidate_rule)
         if "template_variables" in public_values:
             candidate_variables = public_values["template_variables"]
             try:
@@ -498,6 +551,8 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
         component_js_rule,
         component_js_globals,
         component_js_global_owners,
+        component_js_member_rule,
+        vue_python_variable_rule,
     )
 
 

@@ -8,7 +8,7 @@ from typing import Any, ClassVar, cast
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._validation import validate_boolean
 from citry_ui.components.cbutton.cbutton import (
@@ -92,25 +92,7 @@ _PRIMARY_EXTRA_ATTRS = {
 }
 _TRIGGER_EXTRA_ATTRS = {"aria-describedby", "aria-details", "aria-keyshortcuts"}
 _MENU_EXTRA_ATTRS = {"aria-describedby", "aria-details", "aria-keyshortcuts"}
-_OWNERSHIP_DIRECTIVES = {
-    "x-data",
-    "x-init",
-    "x-effect",
-    "x-if",
-    "x-for",
-    "x-teleport",
-    "x-ignore",
-    "x-id",
-    "x-show",
-    "x-html",
-    "x-text",
-    "x-model",
-    "x-modelable",
-    "x-bind",
-    "$c-props",
-    "c-bind",
-    "c-props",
-}
+_CITRY_DIRECTIVES = {"$c-props", "c-bind", "c-props"}
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_RESERVED = {
     "id",
@@ -268,14 +250,6 @@ def _plain_id(value: object, render_id: str) -> str:
     return plain
 
 
-def _dynamic_target(name: str) -> str | None:
-    if name.startswith("x-bind:"):
-        return name.removeprefix("x-bind:").split(".", 1)[0]
-    if name.startswith((":", ".")):
-        return name[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_destination_attrs(
     input_name: str,
     value: Mapping[str, object] | None,
@@ -289,6 +263,9 @@ def _copy_destination_attrs(
         msg = f"CSplitButton {input_name} must be a mapping or None, got {value!r}."
         raise TypeError(msg)
     attrs = dict(value)
+    # A Vue directive could rebind an owned attribute, add a listener, or change
+    # the structure of a part this component renders, so none may arrive through Python data.
+    reject_vue_directive_attrs(attrs, f"CSplitButton {input_name.removesuffix('attrs').replace('_', ' ')}".rstrip())
     seen: set[str] = set()
     allowed = _COMMON_ATTRS | extra_allowed
     for key in attrs:
@@ -303,21 +280,12 @@ def _copy_destination_attrs(
         if normalized.startswith(_RUNTIME_PREFIXES) or normalized in reserved:
             msg = f"CSplitButton {input_name} cannot override owned attribute {key!r}."
             raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
+        if normalized in _CITRY_DIRECTIVES:
             msg = f"CSplitButton {input_name} cannot use ownership directive {key!r}."
             raise ValueError(msg)
         if normalized.startswith("on"):
             msg = f"CSplitButton {input_name} cannot use raw event attribute {key!r}."
             raise ValueError(msg)
-        if normalized.startswith(("@", "x-on:")):
-            continue
-        target = _dynamic_target(normalized)
-        if target is not None:
-            if target in reserved or not (target in allowed or target.startswith("data-")):
-                msg = f"CSplitButton {input_name} cannot dynamically bind attribute {target!r}."
-                raise ValueError(msg)
-            continue
         if normalized not in allowed and not normalized.startswith("data-"):
             msg = f"CSplitButton {input_name} does not allow attribute {key!r}."
             raise ValueError(msg)

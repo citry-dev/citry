@@ -170,7 +170,9 @@ def test_field_relationship_and_native_required_validation(radio_page):
 
     assert group.get_attribute("aria-labelledby") == "signal-band-label"
     assert group.get_attribute("aria-describedby") == "signal-band-description"
-    assert group.get_attribute("data-citry-field-control") == ""
+    # Inside a field the group sets this marker to Python True, which Vue
+    # writes as "true"; Python's static HTML writes "".
+    assert group.get_attribute("data-citry-field-control") == "true"
     assert group.get_attribute("id") == "signal-band-group"
     assert radios.first.get_attribute("id") == "signal-band"
     assert field.locator(':scope > [data-citry-ui-part="label"]').get_attribute("for") == "signal-band"

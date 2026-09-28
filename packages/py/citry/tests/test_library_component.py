@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import gc
 import inspect
+import re
 import threading
 from dataclasses import is_dataclass
 from pathlib import Path
@@ -224,6 +225,67 @@ def test_pure_library_definition_requires_an_explicit_per_class_promise():
     assert concrete.pure is True
 
 
+def test_simple_vue_library_leaf_materializes_as_distinct_instance_free_occurrences(monkeypatch: pytest.MonkeyPatch):
+    app = Citry(autodiscover=False)
+    callback_calls: list[dict[str, object]] = []
+
+    class Leaf(LibraryComponent):
+        simple = "vue"
+        template = "<button>{{ label }}</button>"
+        js = "$component({data(){return {open:true}}})"
+
+        @staticmethod
+        def template_data(kwargs: dict[str, object], _slots: object) -> dict[str, object]:
+            callback_calls.append(kwargs)
+            return kwargs
+
+    installation = app.register_library(ComponentLibrary("simple-vue-leaf", (Leaf,)))
+    concrete_leaf = installation[Leaf]
+    assert concrete_leaf.simple == "vue"
+
+    class Page(Component):
+        citry = app
+        template = '<main><c-leaf label="one"/><c-leaf label="two"/></main>'
+
+    from citry.component import Component as ComponentBase
+
+    component_init = ComponentBase.__init__
+    leaf_instances: list[object] = []
+
+    def observe_init(self: object, *args: object, **kwargs: object) -> None:
+        if type(self) is concrete_leaf:
+            leaf_instances.append(self)
+        component_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(ComponentBase, "__init__", observe_init)
+
+    html = Page().render().serialize()
+
+    assert len(callback_calls) == 2
+    assert leaf_instances == []
+    assert "one" in html
+    assert "two" in html
+    assert "open:true" in html
+    occurrence_ids = re.findall(r'"renderId":"([^"]+)","serverData":\{\},"typeKey":"Leaf_', html)
+    assert len(occurrence_ids) == 2
+    assert len(set(occurrence_ids)) == 2
+
+
+def test_library_simple_declaration_accepts_only_exact_public_modes():
+    class VueLeaf(LibraryComponent):
+        simple = "vue"
+
+    assert VueLeaf.simple == "vue"
+    # Build "vue" at runtime so the test proves the check compares the
+    # value, not object identity with the interned literal.
+    VueLeaf.simple = "".join(("v", "ue"))  # noqa: FLY002
+
+    with pytest.raises(ValueError, match="simple must be False, True, or 'vue'"):
+
+        class InvalidLeaf(LibraryComponent):
+            simple = "True"
+
+
 def test_separately_installed_parent_and_child_keep_authored_not_concrete_inheritance():
     app = Citry(autodiscover=False)
 
@@ -265,7 +327,7 @@ def test_primary_files_resolve_beside_the_inert_definition_module():
     [occurrence] = assembly.view.occurrences
     template = assembly.compile_inputs[occurrence.definition_id].template
     assert concrete.get_template().source == "<p>{{ label }}</p>\n"
-    assert template.startswith("<p>{{ preparedData.")
+    assert template.startswith("<p>{{ $citryPrepared.")
     assert "From file" in occurrence.prepared_data.values()
     assert concrete.get_js() == 'console.log("library component");\n'
     assert concrete.get_css() == ".library-component { color: blue; }\n"

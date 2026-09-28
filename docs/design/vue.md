@@ -576,6 +576,59 @@ fill needs its own relation because its variable owner differs from the fill's.
 An execution counter may identify temporary records, but stable browser IDs
 must not depend on discarded calls or other unrelated capture order.
 
+Slot names are written into compiled templates, so they must be the same for
+every instance and every render of one structure. The assembler builds a slot
+name from the type of the component whose render contains the outlet, the fill
+kind, the outlet's source and position, the placement route, and the placement
+keys of the calls from the receiver down to that component, plus a count that
+separates repeated outlets at one site. It never uses an
+occurrence ID. Occurrence IDs differ per instance, and an Events update renders
+its target under the ID the browser already holds, so a name built from one
+gives each instance its own definition, and Vue then recreates keyed rows
+inside the slot on every update.
+
+Three rules follow from sharing names between instances:
+
+1. Calls inside a fill are counted and keyed in the fill author's namespace.
+   Several receivers of one type share an outlet name, so the route into each
+   fill body also carries the placement keys from the author down to its
+   receiver. Without it, an unkeyed call inside ten keyed menus looks like one
+   call repeated ten times.
+2. When a fill's author sits further up, the component that writes the outlet
+   passes the fill on through a slot of its own. It renames that slot after
+   the child call the fill passes through, because two receivers below one
+   component can otherwise share a name. It attaches the fill to the call of
+   the component whose compiled template contains the outlet, because Vue
+   resolves an outlet against that component's own slots.
+3. A transparent component that a fill's author calls adds its body to the
+   author's template, so calls in that body stay in the author's call table.
+   A fill that reaches a transparent receiver the author did not call is
+   passed up as a slot when the author contains the receiver's component;
+   otherwise it is copied if it reads no browser data and rejected if it
+   does (see "Fills keep their author's Vue scope").
+
+If two fills still reach one call under the same name, assembly rejects the
+page instead of merging them. A name includes the explicit keys on its call
+path, so when keyed children receive passed-on fills, the definitions that
+contain those calls still change on reorder or insertion. Keyed children that
+receive passed-on fills are not yet tested in a browser.
+
+An outlet inside a keyed element (a table row written by `<c-for>` with
+`#c-key`) keeps its positional name, so the compiled template does not change
+with the row data. Vue keys the outlet's content by its position in the
+template, though, so a moved row would rebuild the cell's content and lose
+the focused input. The assembler therefore gives such an outlet a Vue key
+built from the `#c-key` values of the elements around it and sends it as data
+(`preparedData.slotKeys`), next to the outlet's slot selection. The browser
+test moves keyed table rows whose cells hold a caller's input and checks that
+the input keeps its element, focus and text. An outlet that passes a fill on,
+or a slot result moved into another receiver, has no key yet.
+
+An authored Vue `v-if` inside a row that Python repeats has the same
+position-based branch key, so a reorder rebuilds that branch's elements. A
+static `key` on the branch element keeps them; a browser probe confirmed this,
+and no test covers it yet.
+
 The shared full-page checks and callback/local-state checks precede timing.
 Measure warm prepared rendering, final assembly, and end-to-end results against
 V7 using the same Python version and compiler build. Record new failures and
@@ -756,7 +809,16 @@ Reconstructing that distinction from final strings is therefore insufficient.
 
 The planned internal prepared compiler entry point preserves ordinary element
 open/close records, structured attributes, and authored text as explicit runtime
-nodes. Evaluated text and attribute values occupy separate data fields. These
+nodes. Evaluated text and attribute values occupy separate data fields.
+Python turns each evaluated attribute value into the text its HTML output
+would contain before sending it, so a client render sets the same attribute
+text as the server HTML. Without that step Vue would turn a dict into
+`[object Object]`, a list into `1,2`, and `1.0` into `1`. Exact strings and
+integers JavaScript can hold exactly are sent unchanged. `None` and `False`
+omit the attribute. `True` is sent unchanged, so Vue writes the text `true`
+on an attribute that is not an HTML boolean attribute, where Python's HTML
+writes only the attribute name. An integer too long for Python to write as
+text keeps failing at serialization, as the HTML output does. These
 typed parts travel through the existing `CitryRender` container, so its deferred
 component and control-flow traversal remains shared. Existing
 component, Python control-flow, input validation, slot execution, and render-hook
@@ -837,8 +899,9 @@ template's byte ranges, then compile that transformed template through Vize's
 public DOM compiler. It inserts a generated key only on native elements with
 runtime directives and replaces an authored static key at its parsed attribute
 span. A later definition without that directive gets its ordinary key again,
-so Vue replaces the element and performs directive cleanup. Runtime directives
-on component calls need a separately qualified rule and are rejected initially.
+so Vue replaces the element and performs directive cleanup. A component call
+carries one runtime directive, `v-show`, under the rule in
+[Vue directives on component calls](#vue-directives-on-component-calls).
 
 This avoids copying Vize's private DOM transformation pipeline. It also avoids
 editing generated JavaScript or discovering attributes with text searches.
@@ -849,7 +912,7 @@ and replacement plan. The alternative of returning metadata alone was rejected:
 the browser needs executable keys to enforce the selected cleanup behavior.
 
 Generated component calls use local bindings such as
-`preparedData.calls.call0.id` and `preparedData.calls.call0.key`. The compiler
+`$citryPrepared.calls.call0.id` and `$citryPrepared.calls.call0.key`. The compiler
 accepts these dynamic keys only when the call's tag, exact expression, local ID,
 and byte range match the producer's declared call. Application-authored dynamic
 keys do not gain that permission. Full paths and spans remain available for
@@ -873,13 +936,135 @@ phase and output IDs supply natural explicit keys for the benchmark.
 Definitions must also separate their local call locations from these absolute
 occurrence IDs. The current fixture embeds child IDs in its compiled calls and
 replacement metadata; that cannot be the reusable definition contract. The
-integrated generator will refer to local call bindings in `preparedData`, with
-each occurrence supplying its actual child IDs. A caller-supplied slot reads
-those bindings through its native lexical Vue context. Compiler metadata names
-local call locations; the producer resolves them to occurrence IDs for each
-revision's replacement declarations. Generated IDs use a specified ASCII format
-so Python and JavaScript agree on ordering. When changed replacement sites nest,
-the outermost selected site accounts for the affected descendants once.
+integrated generator will refer to local call bindings in each occurrence's
+`preparedData` (templates read it as `$citryPrepared`), with each occurrence
+supplying its actual child IDs. A caller-supplied slot reads those bindings
+through its native lexical Vue context. Compiler metadata names local call
+locations. The server keeps no page history, so the browser compares a
+retained occurrence's committed and incoming definitions itself: a site whose
+replacement key differs is an element Vue replaces, and the browser resolves
+the calls inside it through each definition's own call table to find the
+components that mount again, together with the components whose parent chain
+leads to them. A component that another caller passes into a slot outlet
+inside that element mounts again too; the next subsection describes how the
+browser finds it. Generated IDs use a specified ASCII format so Python and
+JavaScript agree on ordering. When changed replacement sites nest, each
+component that mounts again is counted once.
+
+#### Components passed into a slot inside a replaced element
+
+A receiver writes `<c-slot>` inside an element that has a runtime directive,
+and its caller fills that slot with `<c-leaf />`. When a server render replaces
+the element, Vue unmounts and mounts the leaf again. The leaf is a call in the
+caller's definition, not the receiver's, so the replaced site's own call list
+does not name it. The browser must still expect the remount, because it checks
+every remount against its prediction and stops the app on a surprise.
+
+Prior art: the native compiler already records, for each element, the local
+calls and call runs written beneath it (`localDescendants`,
+`localDescendantRuns` in `crates/citry_vue_compiler/src/lib.rs`, computed from
+element paths after `walk`). The producer writes each outlet as
+`<slot name="citrySlot...">` and each fill as
+`<template v-slot:['citrySlot...']>` directly inside the call element
+(`_append_slot_outlet` and `append_child_fills` in
+`packages/py/citry/citry/_vue/direct_capture.py`), using the same name on both
+sides. A fill whose author sits further up is passed on through a plain
+`<slot name="...">` of the component in between. Fills are only attached to
+single local calls, never to call runs. A component rendered in a slot has the
+receiver as its `parentId`, because that is its Vue parent.
+
+Chosen design: the compiler reports two more lists from the same element
+paths.
+
+1. Each replacement site lists the names of the `<slot>` outlets inside it
+   (`slotOutlets`).
+2. Each local call lists the fills written directly inside it (`fills`), each
+   with its slot name, the local calls and call runs inside the fill, and the
+   names of the `<slot>` outlets inside the fill.
+
+Both keys appear only when their list is not empty, so definitions without
+slots keep their exact bytes. When a site changes, the browser takes each
+outlet name, finds the occurrence that calls the receiver (the occurrence
+whose call table names the receiver's ID), reads that caller's fill with the
+same name, and adds the components the fill calls. An outlet inside that fill
+passes on a slot of the caller, so the browser repeats the lookup one level
+up. It does this for the committed definitions and occurrences and for the
+incoming ones, as it already does for calls. Everything below those
+components follows through the existing parent-chain rule.
+
+Error modes: a slot outlet or fill name that is not a static string (the
+producer never writes one) is left out of the lists, so a component placed
+through it still fails the revision as an unexpected remount instead of being
+silently accepted. A caller whose fill list has no entry for an outlet
+contributes nothing, which is right for a slot that shows its fallback: the
+fallback's calls belong to the receiver and are already in its site's list.
+A malformed list (not sorted, duplicated, or with non-string names) is
+rejected when the definition is loaded, like the other site metadata. A
+lookup that returns to an occurrence and outlet it already visited stops.
+
+Alternative considered: walking Vue's rendered tree (`subTree`) before the
+revision to collect the component instances under each replaced element. It
+needs no new metadata, but it can only find the old element by its
+replacement key. When the incoming definition adds a runtime directive to an
+element that had none, the old element has no replacement key, so the walk
+cannot find the components that Vue will replace. It would also make the
+check depend on what Vue already rendered rather than on what the definitions
+say. Sending each outlet's occupant IDs from the server as data was also
+rejected: the caller's call table already holds those IDs, so the data would
+repeat them on every render.
+
+Falsifier: a browser test where a receiver's wrapper element around a slot
+changes its replacement site, while the caller's fill places a component
+there. The revision must succeed, the placed component must mount again with
+fresh local state, and a component placed through a passed-on slot must do
+the same. If Vue remounts a component that the lists do not name, the check
+still fails the revision, so a gap in these lists shows up as a failing test
+rather than as silently accepted state loss.
+
+#### A Render that replaces components a caller filled in
+
+A caller writes `<c-mark name="summary"><c-badge /></c-mark>`, or
+`<c-card><c-badge /></c-card>`, and a handler later returns a Render into
+that mark or card. The Render replaces everything inside the target and
+keeps the rest of the page. The badge is a call in the caller's definition,
+so the caller's call table still names the badge's ID after the Render
+removed it. A check that requires every call-table entry to name a present
+component would reject this revision, whether the Render used the same
+component type or a different one.
+
+The browser treats such an entry as unused. The caller stays unchanged
+(it is not in `updatedIds`), and only the slot that its fill occupied could
+render the entry. The replaced target renders its own content: a replaced
+mark renders the Render's payload, and a replaced component renders its
+fallback or the slots that the Render passed to it. The entry stays unused
+while the target shows content the caller did not supply, and a later server
+Render of the caller sends a call table without it.
+`keptOwnerIds` in `client.js` names the callers that this revision keeps
+unchanged. For those callers alone, the call-table and graph checks skip an
+entry whose component is absent. An entry whose component is present must
+still match its declaration exactly. The browser assigns IDs to the Render's
+new components so that none takes an ID that a kept caller's call table
+still names. It also does not reuse a filled-in component's ID for new
+content, because two call tables would then name one component.
+
+Error modes: a caller that the revision updates gets no leniency, so a new
+call table that names a missing component still fails. A revision that
+updates every component has no kept callers, so its checks stay strict, as
+does the check at start. A kept caller must match its committed data exactly,
+and only the browser decides which components a Render removed.
+
+Alternative considered: have the server send the caller's new call table
+with the Render. The server keeps no page history and renders only the
+target, so it cannot know which caller filled the target in or what that
+caller's table holds.
+
+Falsifier: `packages/py/citry/tests/e2e/test_vue_fill_replacement_e2e.py`
+replaces a filled-in component through a mark, through `render:<id>`, and
+through the calling component's own Render, with the same type and with a
+different type. It renders twice and then renders the caller again in the
+browser. The Card cases also pass the Badge through a slot of the
+replacement Card. Loop fills (call runs) inside a replaced target are not
+covered yet.
 
 The actual Events integration must preserve declared handler dispatch, CSRF,
 signed State, send sequences, action ordering, and stale-response handling.
@@ -891,6 +1076,183 @@ that integration. The new benchmark adapter will have its own name, `citry_vue`,
 and retain the existing Citry/Alpine and Python-API/Vue adapters for comparison.
 Readiness follows Vue's flush, component callbacks, and completion of the actual
 Events operation. Server preparation includes native compilation and serialization.
+
+### Vue directives on component calls
+
+An author who writes `<c-child v-if="open" />` or `<c-child v-model="query" />`
+expects Vue's behavior on a component. Every attribute on a Citry component
+tag that is not a Vue binding becomes a Python kwarg, so without a rule the
+child would receive `v-if` as a kwarg it never reads, and the page would
+ignore the directive without an error. The template parser therefore sorts
+every Vue directive on a component tag into one of two groups when it
+compiles the template.
+
+A component tag carries these Vue forms. Python writes each one onto the
+generated Vue component call exactly as authored and declares it to the
+native compiler with a binding kind:
+
+| Authored form | Binding kind | What Vue does with it |
+| --- | --- | --- |
+| `:name`, `v-bind:name`, one plain `v-bind="..."` | `prop`, `props-object` | Passes Vue props. |
+| `@event`, `v-on:event` | `event` | Adds a listener for an event the child emits. |
+| `v-if`, `v-else-if`, `v-else` | `condition` | Decides whether the call renders. |
+| `v-model`, `v-model:name`, with any modifiers | `model` | Passes a prop and listens for its update event. |
+| a plain `v-show` | `show` | Shows or hides the element the child renders at its root. |
+| a custom directive, with any argument, modifiers, or value | `directive` | Runs on the element the child renders at its root. |
+
+`<c-element>` renders a plain HTML element, so every directive stays valid
+there.
+
+The parser rejects every other Vue directive on a component tag, with a
+message that names the directive and says what to write instead:
+
+| Directive | Suggested replacement |
+| --- | --- |
+| `v-for` | `<c-for>` |
+| `v-slot`, `#name` | `<c-fill name="...">` |
+| `v-html`, `v-text` | a prop or a fill rendered inside the child |
+| `v-show`, `v-if`, `v-else-if`, or `v-else` with an argument or modifiers | the plain directive |
+| `.name`, `v-bind.prop`, or another argument-less `v-bind` modifier | `:name` props |
+| `v-on` object form | `@event` listeners |
+| `v-once`, `v-memo`, `v-cloak`, `v-pre`, `v-is` | the same directive on an element in the child's template |
+| `v-c-*`, `v-citry-*` | nothing: Citry reserves these names for its own browser runtime |
+| a built-in name with capitals (`v-If`, `v-On:click`) | the lowercase name |
+| `v-model:` or `v-on:` with an empty argument | a named prop or event, or plain `v-model` |
+
+A `c-` spelling of a rejected directive (`c-v-for`) fails the same way. The
+parser also rejects a `v-show`, `v-if`, `v-else-if`, or `v-model` without an
+expression, and a `v-else` with a value. A key that reaches the call only at
+render time, through `c-bind`, fails when the page renders:
+`classify_component_tag_client_binding_key` reports a rejected directive with
+the same wording, and a carried one fails like every other executable Vue
+binding (including the `c-v-if` spelling), because its expression must be
+written in the template. `v-model:key` and `v-model:citry-id` fail the
+render as `:key` does, because the call's own identity would override the
+model value. A transparent child (such as `<c-provide>`) renders
+its content in place and has no Vue component to receive any of these, so
+any Vue binding on its tag fails the render.
+
+#### Conditions on a call
+
+`v-if`, `v-else-if`, and `v-else` compile exactly like a `<template v-if>`
+around the call: Vue's compiler emits a conditional that creates the
+component in one branch and the `<!--v-if-->` comment placeholder when no
+branch matches. Python still renders every call in the chain, so each child
+has its prepared data and compiled definition whichever branch the browser
+picks. A chain may mix component calls and elements, because Vue reads the
+chain from the generated template, where each call is one element:
+
+```citry-html
+<c-summary v-if="mode === 'summary'" />
+<p v-else-if="mode === 'empty'">Nothing yet</p>
+<c-details v-else />
+```
+
+Vue reads the chain after Python has selected the page's structure. A
+`<c-if>` whose selected body starts with `v-else` continues the chain before
+it, and a sibling element or text between two branches breaks the chain:
+Vue's compiler then reports `VElseNoAdjacentIf`, the same diagnostic it
+reports for elements.
+
+A condition is compiled away, so the call has no runtime directive and
+nothing joins the directive signature. A server Render that changes a
+`js_data` value can switch the branch. The child that appears then mounts for
+the first time inside that revision, and the browser runtime accepts it: a
+retained occurrence that had no mounted instance before the revision may
+mount once during it, reads that revision's data, and runs its
+`onServerRender` callback like a new occurrence. The child that disappears
+unmounts as it would for a browser-side change. An occurrence that was
+mounted before the revision and mounts again, without a changed replacement
+site, still fails the revision.
+
+#### `v-model` on a call
+
+Vue compiles `v-model` on a component to a prop and an update listener, with
+no runtime directive:
+
+```citry-html
+<c-field v-model.trim="query" v-model:title.number="amount" />
+```
+
+becomes the props `modelValue`, `onUpdate:modelValue`, `modelModifiers:
+{trim: true}`, `title`, `onUpdate:title`, and `titleModifiers: {number:
+true}`. These are Vue props, never Python kwargs, so the child's `Kwargs`
+schema does not see them. A Citry child declares them in its `$component`
+options (`props: ["modelValue", "modelModifiers"]`, `emits:
+["update:modelValue"]`) and emits the update event. Vue's `emit` applies
+`.trim` and `.number` to the emitted value itself; `.lazy` and any custom
+modifier only reach the child through the modifiers prop, and the child
+decides what they mean. A child that declares none of these props receives
+them as fallthrough attributes on its root element, as Vue does for any
+undeclared prop.
+
+#### `v-show` and custom directives on a call
+
+Vue passes a component call's runtime directives to the vnode the child
+renders at its root and runs them only when that vnode mounts an element. A
+custom directive resolves in the caller's scope: the caller's `directives`
+option or a directive registered on the app. The native compiler gives it
+the runtime identity `resolveDirective:<name>`, the same identity a custom
+directive on an element has.
+
+The call keeps its Citry-owned `:key`, and the compiler leaves `v-show` and
+custom directives on a call out of the lifecycle signature and plans no
+replacement key. Nothing needs to compare them across revisions: they must
+be written in the template, so one authored call always has the same
+directives, and a different authored call gets a different Vue key because
+the call key hashes the template source. A custom directive name is
+compared in lowercase against Vue's built-ins, so `v-If` is rejected rather
+than looked up as a custom directive. Nothing checks that a custom
+directive is registered: Vue's production build skips an unknown name
+without an error, on a call and on an element alike. When Python selects another call in
+a later revision (for example through `<c-if>`), Vue unmounts the old child
+together with its root element and the directive's state. A custom directive
+on an element, by contrast, joins the signature and gets a replacement key,
+exactly like a built-in runtime directive.
+
+Vue skips a directive on a fragment, text, or fixed HTML root and warns only
+in its development build, so Citry reports those cases instead:
+
+1. After compiling a page's definitions, `check_directive_roots` reads the
+   render root of each child that carries `v-show` or a custom directive.
+   Several top-level nodes (including a `v-for`, or a `<c-for>` or
+   `<c-slot>` at the top level that renders more than one node), a
+   `<template v-if>` with several children, text alone, or HTML
+   from Python (`<c-raw>` or trusted markup) fails the render. The message
+   names the first such directive on the tag and the child, and suggests one
+   wrapping element. A `v-if` chain of elements, an empty render, and a
+   component root are accepted. The check runs on every render, so a child
+   whose `<c-for>` renders one item on the first page and two after an event
+   fails on that later render.
+2. A component root hands the directive on to that component. The browser
+   runtime checks each Citry component's render: when its vnode carries any
+   directive and it returns a fragment, text, or fixed HTML, it throws, which
+   stops the app like any other render error.
+
+#### What a hydrated page writes for these calls
+
+The Rust server render runs the compiled conditional like any other. A test
+it can evaluate (prepared data or a `js_data` value) writes the chosen
+child, or `<!--v-if-->` when no branch matches, and Vue adopts it. A test on
+browser-only state makes the parent element a shell (`browser-condition`).
+`v-model` reaches the call as props, so the server declines the call
+(`component-attrs`) as it does for any prop. The server does not apply a
+caller's `v-show` or custom directive to the child's root element, so it
+declines those calls (`unsupported-directive`). In each declined case the
+parent element is written as a shell that Vue fills in the browser.
+
+`<c-slot>` accepts no Vue directive at all. Every attribute other
+than `name` and `required` becomes Python slot data for the fill, so
+`<c-slot v-if="open">` would hand the fill a data key named `v-if` and the
+browser would never see the condition. The parser rejects every Vue form
+there, including the `:` and `@` shorthands that a component tag keeps,
+because Vue slot props are not supported yet. The message suggests a
+`<template v-if>` or an element with `v-show` around the slot, `<c-for>`
+for a loop, `name="..."` for `#name`, a listener on an element around the
+slot or inside the fill, and plain or `c-` attributes for slot data. A key
+that reaches the slot only at render time, through `c-bind`, fails the
+render with the same wording (the render-time check lives in
+`client_directives.py`).
 
 ### Plan for the Events rendering backend
 
@@ -1326,6 +1688,18 @@ toggling true mounts the new content, but remounts the nested component and
 resets its local state. A revision-dependent outer key also produces correct
 new content through remounting. Neither is the selected retained-instance fix.
 
+### A keyed optimized subtree under a general outer component
+
+A bounded browser proof keeps local `open` state in a general outer component
+and places the selected optimized definition under a keyed wrapper. The
+per-instance compiler cache is reused while the definition stays the same. A
+changed definition, including changed compiled slot source, gets a new key and
+remounts that subtree while retaining outer state. Descendant Vue instances
+are expected to reset. The proof passed 10/10 correctness checks without
+timing; product integration still needs the coordinator to account for those
+expected descendant unmounts and mounts. See the [probe
+results](../../.benchmarks/research/vue-architecture-experiments/hybrid-vnode-boundary/results.json).
+
 ### Compiler controls and a conservative rendering target
 
 Vize exposes `hoist_static` and `cache_handlers`; the official Vue compiler has
@@ -1340,6 +1714,15 @@ The official Vue compiler did remove static caching when requested, but kept
 blocks and property flags. The Vize result is specific to these fixtures; its
 hoisting option is not generally a no-op. Existing Node tooling was used only
 to inspect the official compiler as a reference, not as a Citry dependency.
+
+Citry compiles every Vue definition with `hoist_static` and `cache_handlers`
+off, and the compiler rejects output that reads a render cache (the
+per-instance `_cache` array where Vue's compiled code can keep VNodes between
+renders). Keeping static elements in that cache was measured and not adopted:
+it did not speed up the benchmark board, and an element inside a cached
+element whose contents the browser was meant to build stayed empty. The
+[decision ledger](performance_architecture_experiments.md#decision-ledger)
+records the measurements behind this choice.
 
 Vue also has an internal `BAIL` patch flag. Applied to one VNode, it disables
 that node's optimized path and clears its dynamic-child list. This does not
@@ -1481,7 +1864,7 @@ introduce per-node observers or general directive-removal support.
 
 The HTTP fixture now compiles each final composed template with the native
 compiler and binds its generated module directly to
-`CitryStable.compilerRuntime`. The executable identity includes the compiler
+`__citryRuntime.compilerRuntime`. The executable identity includes the compiler
 binary, options, target, helper contract, template, and directive metadata.
 The prepared view is then updated to reference those executable identities.
 Changing a supplied fill therefore changes its caller's executable identity
@@ -1599,6 +1982,74 @@ or defined teardown/reinitialization behavior. Replacing an element around
 nested components can itself reset those descendants, so that cannot be hidden
 as an implementation detail.
 
+### Values the user edits
+
+Without patch flags, Vue compares every prop on each update and skips a prop
+whose old and new values are equal. `value` is the exception: Vue writes it
+whenever the element's live value differs, which replaces what the user typed.
+Vue's own compiler never writes a constant `value` again, so an ordinary-VNode
+page would reset `<input value="Owner">` on any re-render, local or from the
+server.
+
+The browser runtime's VNode helper therefore decides where each `value` on an
+`input`, `select` or `textarea` comes from, and passes a constant or
+server-sent one to Vue as `.value`. That is the same DOM property, written at
+mount and while hydrating, but Vue compares it by VNode value like any other
+prop. An unchanged value leaves the user's edit alone. A changed one is
+written, so the page never shows a value from an earlier template or an
+earlier server render. A checkbox or radio value keeps its usual name: the
+user does not type it, and Vue's `v-model` reads it from the VNode.
+
+The helper reads the source from the compiler's output:
+
+1. A `value` the compiler lists as a dynamic prop comes from an authored
+   `:value`. It keeps Vue's rule and is written on every render, because the
+   author bound it one way to browser state.
+2. A `value` without any dynamic-props flag is a template constant.
+3. A `value` that arrives only through a spread (`v-bind="..."`, the full-props
+   flag) comes from the server when the spread object is frozen. Python's
+   attributes (`c-value`, a `value` key from `c-bind`) reach the element as a
+   spread of the occurrence's prepared data, which the runtime freezes before
+   any render reads it. When the compiler merges authored props with that
+   spread, the runtime's `mergeProps` records whether the source that won
+   `value` was frozen. Vue's reactive browser state is never frozen, so an
+   authored spread of browser state keeps Vue's rule.
+
+The maintainers chose this rule so a server render that repeats a value keeps
+the user's draft, while a server render that changes the value always shows
+it. `valueComparedByVNode` in `client.js` holds the rule, and the helper
+contract names it (`editableValue=constantAndServerValueComparedByVNode,uneditedSelectRestored`), so
+a compiled definition built for another rule is rejected.
+
+When the compiler merges literal props with that spread (an element with a
+constant `value` and a Python attribute), the literal source wins `value` and
+counts as a constant. The producer rejects an authored `v-bind` object on an
+element that carries Python attributes, so beside a frozen spread the other
+sources can only be compiler literals.
+
+A `<select>` needs one more step. When a server render changes its option
+list, Vue reuses the `<option>` elements, so the element that was selected
+can now hold another value, and the select shows an option the server never
+sent. The runtime marks a select when an `input` or `change` event reaches
+it, and clears the mark when Vue writes a changed value. After each update,
+an unmarked select whose live value differs from its VNode value is set back
+to that value. Text fields skip this step: only the user or the component's
+own script changes their value, and Citry UI components that write a draft
+from script rely on keeping it.
+
+Error modes: an authored spread of an object the author froze in browser
+JavaScript is treated as a server value and keeps the draft while it stays
+equal. An authored spread of browser state with no Python attributes keeps
+Vue's rule, even for a literal `value` next to it. A script that picks a
+select option without an `input` or `change` event is overwritten on the next
+update, as Vue itself would do.
+
+Vue moves a keyed element with `insertBefore`, and the browser drops the focus
+of an element that leaves the document for that instant. The runtime records
+the focused element and its selection before it publishes a server revision
+and restores them after Vue's flush when that element is still in the page and
+nothing else took the focus.
+
 ### Accepted element replacement and descendant state
 
 The selected next implementation replaces an element when its runtime-directive
@@ -1638,7 +2089,9 @@ integration must preserve these requirements:
    requires deferring mount callbacks during the transaction and deduplicating
    them after Vue flushes. A first bounded slice may reject that combination.
 5. Reject unexpected mounted identities or generations. Failure after publication
-   remains terminal; there is no general rollback promise.
+   remains terminal; there is no general rollback promise. A retained occurrence
+   with no mounted instance before the revision may mount once during it (a
+   `v-if` switched by new server data); see "Conditions on a call".
 
 This is enough evidence to continue implementation. Production readiness still
 requires compiler-discovered directive sites and stable replacement keys, direct
@@ -2428,10 +2881,13 @@ and treatment of `v-html` as opaque inserted HTML.[^dom-entry][^template-syntax]
 ### Component and marker update experiment
 
 The selected contract addresses a live Citry component instance or an explicitly
-declared marker. Existing `actions.Render` already recognizes `render:<id>`
-alongside its CSS selector behavior; the Vue proposal changes that target
-contract. The public target spelling is not selected. The proof uses structured
-targets so parsing a convenience string does not obscure the behavior:
+declared marker. `actions.Render` accepts `target="render:<id>"` for a component
+occurrence, `target="mark:<name>"` for a `<c-mark name="...">` region declared
+by the component handling the event, and `target=None` for the calling
+instance. It rejects every other target string, including a CSS selector, when
+the action is constructed, before anything reaches the browser. The proof below
+predates that spelling and uses structured targets, so parsing a convenience
+string does not obscure the behavior:
 
 ```js
 [
@@ -2440,8 +2896,8 @@ targets so parsing a convenience string does not obscure the behavior:
 ]
 ```
 
-`#c-mark="here"` is a candidate authoring spelling, not an implemented grammar
-feature. Markers belong to a component occurrence; repeated markers need stable
+Authors declare a marker with the `<c-mark name="here">` built-in. Markers
+belong to a component occurrence; repeated markers need stable
 occurrence keys or explicit rejection of ambiguity. Components can be empty or
 multi-root because the address names their logical instance, not a root element.
 Ordinary elements need no refs or DOM-to-render-location map.
@@ -2647,6 +3103,137 @@ the base proposal does not. Python prepares its own structure and data; Vue
 evaluates browser expressions when it renders on the client. A JavaScript
 runtime or restricted shared expression language matters only if we later
 choose matching Vue SSR/hydration.
+
+Partial Python SSR allows browser-only values on server-selected nodes: Python
+emits the initial structure and data, then Vue evaluates browser `data()` or
+`setup()` and initializes qualified text, attribute, and visibility bindings
+during hydration. A browser-only condition that changes which structural nodes
+exist needs an explicit client-rendered boundary or remains unsupported in the
+initial snapshot. This is not a promise of Nuxt-equivalent SSR or hydration;
+the isolated browser proofs qualify only the stated helpers and do not
+establish general product support.
+
+Opaque HTML records come from HTML Python hands over as a finished string:
+`<c-raw>` contents and trusted `Markup` values that contain tags. Each record holds only that
+HTML. Every other part of a component body, including plain markup and
+Python text, reaches the browser as compiled Vue template source and
+prepared values.
+
+Opaque HTML source and its mounted VNode have separate lifetimes. Initial HTML
+records follow occurrence and revision identity; a mounted VNode cache belongs
+to one Vue component instance. That instance may reuse its VNode for the same
+HTML, while changed HTML gets a fresh keyed Static VNode (or a keyed empty
+Fragment). Do not share mounted VNodes or their DOM anchors between occurrences.
+The focused opaque-HTML test covers same-HTML updates and replacement; this
+does not make opaque content compile as Vue. See the [E2E
+test](../../packages/py/citry/tests/e2e/test_vue_opaque_html_e2e.py#L15).
+
+### What the compiler reports for hydration
+
+When the server writes HTML that Vue adopts in the browser, two things must match
+what Vue's first render would create. The HTML needs the comment markers Vue
+looks for, and every attribute that hydration does not rewrite must already
+hold Vue's value. Both depend on the render function the compiler emitted,
+not on the template text alone. For example, the patched compiler (Citry's
+modified copy of the vize compiler, `third_party/rust/vize_atelier_core`)
+keeps a child with its own `:key` inside a per-row Fragment in `<template v-for>`,
+while upstream Vue would render the child directly. A constant binding such
+as `:data-x="1"` is compiled as static and is never rewritten.
+
+So the native compiler reads its own emitted render function beside the
+template that produced it, and reports the result as `hydrationPlan` in the
+compiler artifact (`crates/citry_vue_compiler/src/hydration.rs`). The Python
+reader validates it into `CompiledRender.hydration_plan`. Positions use the
+same coordinates as the authored text plan (the artifact's record of which
+template text the compiler rewrote or dropped): `sourceStart`/`sourceEnd` are UTF-8
+byte offsets into `transformedTemplate`, and `originalStart`/`originalEnd`
+are offsets into the template Citry passed to the compiler. Element positions
+are opening-tag spans, except for the parser-implied elements described
+next, and `path` matches the artifact's `elements[].path`.
+The template parser adds a `tbody` around a table's direct rows and a `tr`
+around direct cells, as the browser's HTML parser does. Such an element has
+no authored tag, so its record keeps its `path` but has no
+`originalStart`/`originalEnd`.
+
+`anchors` lists each marker the render function creates, keyed to the
+opening tag of the construct that creates it:
+
+| `kind` / `origin` | The server writes |
+| --- | --- |
+| `fragment` / `v-for` | `<!--[-->` before the whole list and `<!--]-->` after it, also for an empty list |
+| `fragment` / `v-for-item` | the same pair around each row of a `<template v-for>` |
+| `fragment` / `v-if-branch` | the pair around a `<template v-if>` branch the render wraps in a Fragment (several children, text, or a nested `v-if` chain) |
+| `fragment` / `slot` | the pair around a `<slot>` outlet's content, supplied or fallback |
+| `fragment` / `root` | the pair around a template with several root nodes |
+| `comment` / `v-if` | `<!--v-if-->` when no branch of a chain without `v-else` matches |
+| `comment` / `empty-render` | `<!---->` for a template that renders nothing |
+
+A construct with no anchor, such as a keyed `<template v-for>` with one
+element child, renders its child directly. In Vue 3.5.42, hydration requires
+`<!--[` at a Fragment and a matching `<!--]` after its children, and accepts
+any other comment for a placeholder (`runtime-core` `hydrateNode`,
+`hydrateFragment`). The server renderer writes a Fragment as that pair and a
+comment vnode as `<!--text-->` (`server-renderer` `renderVNode`). `renderSlot`
+always returns a Fragment, and a `null` render becomes an empty comment
+(`renderSlot`, `normalizeVNode`).
+
+`elements` lists each element and component call with its `patchFlag`,
+`dynamicProps`, and one record per authored attribute. The record's
+`hydration` value says what hydration does with it. `hydrateElement` patches
+a prop when it is a listener, a `.prop` binding, `value` or `indeterminate`
+on `input` or `option`, any non-reserved prop of a custom element, or a key
+in `dynamicProps`. It only compares every other prop and leaves the server's
+value in place. When the element has a directive with a `created` hook, such
+as `v-model`, it skips even the comparison, but still keeps the server value:
+
+- `patched`: hydration rewrites the value, so the server may write any value.
+- `checked`: the server must write exactly Vue's first-render value. This
+  includes static attributes, `class`, `style`, and constant bindings.
+- `per-key`: a `v-bind` object or dynamic name; the same rules apply to each
+  key the render produces, so the server checks them per render.
+- `directive`: `v-show`, `v-model`, or another runtime directive sets the
+  state.
+- `component`: the child component's root element decides.
+- `none`: nothing reaches the DOM, as with `key`, `v-if`, a `@vue:mounted`
+  hook, or the compiler's model-site marker (an attribute the compiler adds
+  to dynamic-type `v-model` inputs, which the Citry runtime removes before Vue
+  sees it).
+
+The compiler also inserts a lifecycle `key` on elements with runtime
+directives, so Vue replaces rather than reuses them. An inserted attribute
+has no `originalStart`/`originalEnd`, because it has no authored bytes. Both
+lists follow the order in which the render creates nodes (named slots before
+the default slot), not source order, so a consumer looks records up by
+position.
+
+When the render function and the template disagree anywhere (an output shape
+the reader does not know, such as `createSlots`, or an attribute key the
+render does not emit), the plan's `status` is `unsupported` with a
+`reasonCode` (`unsupported_render_shape`, `attribute_key_mismatch`,
+`source_edit_overlap`, or `source_too_large`) and it carries no anchors or
+elements. An empty `<template v-if>` is one such unsupported shape. A consumer that
+cannot use a plan must treat it as unsupported. The Python reader raises on
+a malformed plan. Teleport, Suspense, Transition, KeepAlive, and `v-html`
+content are outside the plan; the compiler's list of allowed runtime helpers
+already rejects the first four. The plan is built even for an artifact whose
+diagnostics reject it, so a consumer must check the diagnostics first, as
+the Python reader does. Text nodes are also outside it: the authored text
+plan covers them. The research check in
+`.benchmarks/research/vue-architecture-experiments/compiler-anchors/` renders
+the emitted code with Vue's own server renderer and compares its markers
+with the plan.
+
+The server does not read this plan when it writes HTML for hydration. It
+runs the render function itself over the page's prepared data
+(`crates/citry_vue_compiler/src/server_render.rs`, described in
+[`vue_ssr_selected_tree_plan.md`](vue_ssr_selected_tree_plan.md)), so the
+anchors and attribute values come from the same render function the
+browser runs. The
+plan stays as the compiler's independent report, and a Rust test checks,
+for representative templates, that the server writes the same kinds and
+numbers of anchors as the plan lists. `scripts/vue_render_parity/check.py`
+compares the server's HTML with Vue's own `renderToString` for every page
+the non-browser tests prepare.
 
 ### Compile during serialization, before delivery
 
@@ -3476,7 +4063,7 @@ for the current checkout.
 | `<c-Card>` | Most static attributes become Python kwargs. `@event` has special Alpine boundary-handler treatment. | Partition browser bindings before Python kwarg resolution. Preserve unprefixed Python kwargs, including user fields named `key`, `ref`, `class`, or `style`. |
 | `<c-component>` | `is`/`c-is` select a Python component. | Resolve that selection on the server. A Vue `:is` must not masquerade as a Python selector. |
 | `<c-element>` | `is`/`c-is` select an HTML tag; remaining attributes use HTML semantics. | Consume the selector and compile the selected element, subject to app-boundary and allowed-tag rules. |
-| `<c-slot>` | `name`/`c-name` select the Python slot; `required`/`c-required` enforce its requirement. Other attributes become Python slot data. | Keep those roles. In particular, today's `:name` becomes slot data under the key `:name`, not a browser slot selector. Proposed Vue slot props need their own captured channel. |
+| `<c-slot>` | `name`/`c-name` select the Python slot; `required`/`c-required` enforce its requirement. Other plain and `c-` attributes become Python slot data; Vue directives, including `:name` and `@event`, fail to compile. | Keep those roles. Proposed Vue slot props would need a separate way to send their values to the browser. |
 | `<c-fill>` | Closed attribute rules allow its name, Python `data`/`fallback` bindings, and supported Python spread. Vue `v-slot` and `:name` are rejected. | Add any proposed JavaScript alias syntax deliberately. Retain Python bindings and lazy fallback behavior. |
 | `<c-if>`, `<c-elif>`, `<c-else>`, `<c-for>`, `<c-empty>`, `<c-raw>` | Closed server-side structural rules. | Consume server control before Vue compilation. Do not rename Python control expressions to Vue directives. |
 | `<c-provide>` | Registered transparent Python component; `key` selects the provide entry and other kwargs provide Python values. | Execute its Python injection behavior. Its spelling alone does not require a browser Vue component. |
@@ -3527,6 +4114,280 @@ locations for native compiler errors. Python kwargs and Python slot-data
 diagnostics remain active. An obvious forbidden `v-for` can be diagnosed from
 source, but serialization must also check the actual prepared tree because
 Python output can introduce components that source inspection cannot see.
+
+## Fills keep their author's Vue scope
+
+Status: implemented on 2026-09-27 in
+`packages/py/citry/citry/_vue/direct_capture.py`. This section records the
+rule, the cases it rejects, and the evidence behind it.
+
+### The problem
+
+A page writes Vue bindings inside the content it passes to a tab:
+
+```citry-html
+<c-CTabs default_value="one" aria_label="Example">
+  <c-CTab value="one"><span v-text="label"></span></c-CTab>
+  <c-CTabPanel value="one"><b v-text="detail"></b></c-CTabPanel>
+</c-CTabs>
+```
+
+The page's `js_data()` returns `label` and `detail`, and the tab and the panel
+must show them. In Vue, content passed into a slot (a fill) is compiled in the
+render function of the component that wrote it, so it reads that component's
+data. The content reaches the browser by an indirect path:
+
+1. `CTab` does not render its content. It stores the content as a Python
+   `Slot` in a list that `CTabs` keeps (`ctabs.py`, `CTab.template_data`).
+2. `CInternalTabs` is an ordinary component with its own Vue definition. For
+   each stored tab it renders `CInternalTab`, a transparent component (one
+   that has no Vue definition of its own; Citry copies its template into the
+   template of the component that calls it).
+3. `CInternalTab` calls the stored content through a new `Slot`.
+
+When the assembler builds Vue templates, a fill whose receiver is a
+transparent component has no Vue component to receive it as a slot. If the
+assembler copied every such fill into the template it was building, the tab
+content above would land in `CInternalTabs`'s template, and `label` would be
+read from `CInternalTabs`, which has no such field. The bindings would render
+empty, clicks and `v-model` would change the wrong component, and Citry
+Events bindings would send nothing. Python `{{ }}` text would still show,
+because the assembler copies the fill's Python values along with it.
+
+Eight citry_ui families pass content this way: Tabs, FormCollection,
+Sortable, Splitter, Stepper, Tour, TransferList and VirtualList.
+
+### The rule
+
+The assembler copies a fill into the template it is building only when that
+template is the one the fill's author is compiled into. Otherwise:
+
+1. **The author encloses the receiver.** The fill takes the ordinary slot
+   path: the receiving template gets a native `<slot>` outlet, and rule 2 in
+   "Three rules follow from sharing names between instances" passes the fill
+   up to the author's call, where Vue compiles it in the author's render
+   function. The tab content above is compiled in the page's template, and
+   `CInternalTabs` holds only the outlets.
+2. **The author is outside the receiver's component tree** (for example a
+   sibling component that groups tab declarations and is passed into
+   `CTabs`). Vue passes slots only down the component tree, so no slot can
+   carry the fill. The assembler still copies a fill that reads no browser
+   data, and rejects one that does (see "Error modes").
+
+A transparent author needs one more step. It has no render function of its
+own: its template, and so every fill it writes, is compiled in the template
+of the component that was being built when the assembler reached it. The
+assembler records that component per transparent render
+(`transparent_template_owners`) and treats it as the fill's owner, both for
+the decision above and for where the fill's Python values are stored. A
+transparent render is reached once per template; a second visit under a
+different template raises `UnsupportedPreparedView` rather than guess.
+
+The owner of the template being built is the current `call_owner_id`. The
+ancestor check reuses `call_path`, which walks placement keys from a
+descendant up to an ancestor and fails when the ancestor is not on the way.
+
+### How the assembler decides that a fill reads browser data
+
+Only fills on path 2 are checked. While such a fill is assembled, the
+assembler records every binding in it that reads the author's Vue instance,
+including bindings of transparent components reached inside the fill, whose
+templates are compiled where the fill is copied.
+It reads these facts from the prepared parts, not from the generated
+template text:
+
+- **Authored Vue attributes on elements** (`PreparedElementOpen.attrs` with
+  source origin, and the authored attributes of dynamic elements). The
+  expression of `:attr`, `v-bind`, `v-if`, `v-else-if`, `v-show`, `v-text`,
+  `v-html` and `@event` is parsed by the same analyzer that checks browser
+  expressions elsewhere (`analyze_browser_source`, backed by OXC in the Rust
+  parser crate), which returns the names the expression reads without
+  defining them. A name counts as a read unless it is one of Vue's template
+  globals (`Math`, `JSON` and the rest of Vue's `isGloballyAllowed` list),
+  a reserved template-context helper, or `$event` inside a handler. An
+  expression that uses `this`, or that the analyzer cannot parse, counts as
+  a read.
+- **Bindings that always need the author's instance:** `v-model`, `v-for`,
+  `v-slot` and `#name`, a dynamic argument such as `:[name]`, `ref` and
+  `:ref`, a bare `:name` (Vue reads `name`), and any custom directive.
+- **Citry Events bindings** (`@c-*`, polling and control bindings, and
+  runtime-spread handlers). The browser sends these for the component whose
+  template holds them, so a copied one reaches the wrong handler even when
+  its arguments are literals.
+- **Component-call bindings** inside the fill (`:prop`, `@event`, `v-show`,
+  `v-if`, `v-model`, directives and Citry handlers), checked the same way.
+- **Browser values of extension helpers**, such as the values expression of
+  an i18n binding.
+- **A compiled leaf program** that needs Vue or Events. Its bindings exist
+  only as template text, so it counts as a read without parsing. No test
+  reaches this case; fills observed so far arrive as typed parts.
+
+Literal-only bindings (`v-text="'x'"`, `@click="$event.preventDefault()"`,
+`:title="'t'"` on a component call) read nothing and are copied.
+
+### Error modes
+
+- **Author outside the receiver's tree, fill reads browser data.** The page
+  fails to render with `UnsupportedPreparedView` (a `TypeError`). The message
+  names the fill, its author and the line in the author's template, the
+  first binding that reads data, the transparent receiver and the component
+  it renders inside, and suggests a fix:
+
+  ```text
+  the 'default' fill written by Decls at line 2 of Decls's template uses
+  Decls's Vue data or handlers (v-text on <span>), but CInternalTab renders
+  it inside CInternalTabs, which Decls does not contain. Vue gives a fill its
+  author's data only inside the author's component tree. Write the fill in a
+  component that contains CInternalTabs (for a citry_ui group such as CTabs,
+  write the declarations inside the group's tag or in a transparent
+  component), or make the fill read only Python values.
+  ```
+- **Author outside the receiver's tree, fill has only Python values or
+  literals.** Copied into the receiving template.
+  `test_tabs_accepts_deferred_declarations_owned_by_a_vue_component` covers
+  it.
+- **Loop-bound names are not tracked.** `<p v-for="i in 3" v-text="i">`
+  inside a sibling's fill is rejected, although it reads no author data,
+  because `v-for` always counts as a read. The error is explicit, and moving
+  the fill into the enclosing component fixes it.
+- **Some sibling setups are rejected earlier** with "direct slot result
+  moved outside its receiver" or "deferred direct slot lexical owner is not
+  an ancestor of its receiver". The rule leaves these errors in place.
+- **A transparent receiver called directly by the fill's author:** the fill
+  is copied into the author's template.
+- **Two fills reaching one call under one slot name** are rejected by the
+  ordinary slot path.
+
+### Alternatives considered
+
+- **Give the copied content access to the author's instance.** Rewrite each
+  expression in the copied body to read from the author's Vue instance
+  through a runtime helper. Rejected: it needs a JavaScript expression
+  rewriter, and `ref`, local directives, `$emit`, `$slots`, injected values
+  and Events bindings would still resolve against the wrong component. Vue
+  slots already handle all of these.
+- **Reject Vue bindings in every copied fill that crosses a template.**
+  Cheap and safe, but it turns the documented `CTab` use, and seven other
+  families, into errors. Kept only for the sibling case, where no Vue
+  mechanism exists.
+- **Make `CInternalTab` and the other internal receivers non-transparent.**
+  Every tab would get its own Vue component instance, and the problem would
+  remain for any other library that calls a stored `Slot` from a transparent
+  component.
+
+### What would show the rule is wrong
+
+- A fill written by an ancestor compiles into a template other than the
+  author's, or reads the wrong data in the browser. The unit tests in
+  `test_vue_direct_relationships.py` (`test_ctabs_content_keeps_...`,
+  `test_fill_rendered_by_a_transparent_receiver_...`,
+  `test_fill_forwarded_through_an_intermediate_component_...`,
+  `test_keyed_instances_share_definitions_...`,
+  `test_transparent_author_reached_inside_a_forwarded_fill_...`) check
+  where each fill is compiled. `tests/e2e/test_vue_fill_author_scope_e2e.py`
+  checks `v-text`, `@click`, `v-model` and two `@c-click` bindings in a
+  browser, and each of the eight citry_ui families has a browser test
+  (`test_<family>_fill_vue_scope_e2e.py`) with a Vue binding inside its
+  content. All of these fail on the assembler without the rule.
+- A transparent receiver called directly by its author gets a native slot
+  instead of the copy. That would add definitions; the board comparison
+  below would show it.
+- A keyed row moved by the server loses focus or state in its slot content
+  (`test_vue_slot_keyed_rows_e2e.py`).
+- Server hydration writes HTML that Vue does not produce for the new slot
+  shape (`scripts/vue_render_parity/check.py`).
+- An Events update re-renders a component between the author and the
+  receiver, and the fill goes missing or stale. The browser test
+  `test_events_update_of_a_component_between_author_and_receiver_keeps_the_page_working`
+  re-renders such a component under the id the browser holds: the update's
+  own content replaces the page's fill, the page's content does not come
+  back, and the page keeps its state.
+
+### Measured effect
+
+Medians with the native build installed, one process per run, base and new
+runs interleaved, on a machine that other jobs may have shared. Scripts are
+in `.benchmarks/research/fill-scope/impl/`.
+
+| Public board, 1,400 rows | Base | With the rule |
+| --- | --- | --- |
+| Render, ms (six runs of 21 samples) | 55.2 to 57.5 | 55.1 to 57.8 |
+| Serialize, ms | 50.2 to 50.8 | 49.1 to 50.7 |
+| Definitions | 11 | 11, same ids |
+| HTML bytes | 2,697,121 | identical after replacing per-render ids |
+
+The board's fills all take the unchanged branches, so its output is the same
+byte for byte apart from the render ids and app id that differ on every
+render.
+
+Nine of the 79 citry_ui quality scenarios change (whole-page render, two
+runs each):
+
+| Scenario | Definitions | HTML bytes | Render, ms |
+| --- | --- | --- | --- |
+| `tabs.overview` | 9 → 10 | 29,738 → 35,162 | 113.6 → 115.1 |
+| `virtual-list.states` | 8 → 9 | 94,138 → 113,936 | 145.2 → 151.8 |
+| `stepper.states` | 10 → 15 | 32,882 → 42,883 | 121.2 → 123.6 |
+| `splitter.states` | 10 → 15 | 34,360 → 42,701 | 115.9 → 118.2 |
+| `tour.states` | 5 → 5 | 15,198 → 17,919 | 112.3 → 113.6 |
+| `transfer-list.states` | 5 → 5 | 14,988 → 15,699 | 113.9 → 112.5 |
+| `form-collection.states` | 4 → 4 | 12,526 → 13,160 | 108.0 → 108.7 |
+| `sortable.states` | 5 → 5 | 12,442 → 13,153 | 105.8 → 105.8 |
+| `composition.ledger-dashboard` | 11 → 11 | 34,609 → 35,753 | 134.2 → 134.0 |
+
+Carrying fills as Vue slots adds `<template v-slot>` wrappers to every
+component a fill passes through, and components that pass on different sets
+of slot names get separate definitions. The affected pages grow by 3 to 30
+percent in HTML and by up to 5 percent in server render time. The browser's
+cost of compiling the extra definitions was not measured. A later change
+could remove the extra definitions by naming passed-on slots by position
+rather than by the place they are written in the template.
+
+### Hydration
+
+Server render programs (see [`vue_board_hydration_plan.md`](vue_board_hydration_plan.md))
+support `renderSlot` and fills written as an object of `_withCtx` entries,
+which is the shape the ordinary slot path produces. The render parity check
+over the non-browser test suites compared 531 pages (55,208 elements) with 0
+mismatches and 0 Vue errors on 2026-09-27. Most slot content in the citry_ui
+pages sits inside shells that the browser builds, so the check proves less
+about hydrating passed-on slots than the page count suggests.
+
+### Known leftovers
+
+- When a transparent author is reached inside a fill that is passed on to
+  its caller, a fill it copies into a transparent receiver stores its Python
+  values with the caller, where the template reads them, and also copies
+  them into the occurrence where the receiver renders, where nothing reads
+  them. The copy
+  costs bytes, not correctness.
+- Keyed children that receive passed-on fills are still not tested in a
+  browser beyond the keyed tabs and virtual-list rows above.
+
+### What moved with the change (Mechanism 4)
+
+- `direct_capture.py`: the copy condition, the recorded template owner and
+  class name for transparent renders, the owner of fills written by a
+  transparent author, and the sibling check with its error message.
+- Tests: the two unit tests that asserted the old placement now assert the
+  author's template (`test_ctabs_content_keeps_nested_calls_and_vue_bindings_in_the_authors_definition`
+  and `test_window_slot_data_uses_logical_positions_and_set_size`); new unit
+  tests for the declaration pattern, forwarding, keyed instances, receiver
+  fallback, transparent authors, sibling rejection per binding kind and the
+  sibling cases that still copy; a citry_ui unit test for Vue-bound tab
+  declarations in a sibling component; the browser tests above;
+  `test_deferred_tabs_slots_keep_lexical_vue_data` in the docs e2e suite now
+  passes.
+- Docs: rule 3 above; `docs_site/content/syntax/vue.md` and the citry_ui
+  Tabs docs describe the sibling rule.
+- Changelogs and versions: the root `CHANGELOG.md` and
+  `packages/py/citry_ui/CHANGELOG.md`. citry_ui's `citry` requirement
+  (`packages/py/citry_ui/pyproject.toml`) must be raised to the first
+  `citry` release that contains this rule when that release is cut.
+- Not affected: the grammar, the AST, the compiler output format, the five
+  `LangImpl` implementations, the PyO3 surface, `_rust.pyi`, the client
+  runtime and the compiled-definition cache format (definitions are
+  content-addressed, so changed templates get new ids).
 
 ## Sources
 

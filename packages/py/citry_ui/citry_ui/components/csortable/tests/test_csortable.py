@@ -27,7 +27,9 @@ def _render(source: str, *, static_fallback: bool = False) -> str:
 
 
 def _manifest(html: str) -> dict[str, object]:
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     return json.loads(match.group(1))["manifest"]
 
@@ -129,6 +131,40 @@ def test_default_and_handle_slots_render_without_replacing_owned_button() -> Non
 def test_invalid_composition_fails(source: str, match: str) -> None:
     with pytest.raises((SyntaxError, TypeError, ValueError), match=match):
         _render(source)
+
+
+@pytest.mark.parametrize(
+    ("root", "item", "match"),
+    [
+        ("c-attrs=\"{'role': 'grid'}\"", "", "cannot override owned attribute 'role'"),
+        ("c-attrs=\"{'data-citry-root': 'x'}\"", "", "CSortable attrs cannot contain Citry runtime attribute"),
+        ("c-attrs=\"{':role': 'kind'}\"", "", "CSortable attrs cannot contain the Vue directive ':role'"),
+        ("c-attrs=\"{'v-if': 'shown'}\"", "", "CSortable attrs cannot contain the Vue directive 'v-if'"),
+        ("c-attrs=\"{'V-FOR': 'row'}\"", "", "CSortable attrs cannot contain the Vue directive 'V-FOR'"),
+        ("c-attrs=\"{'@keydown': 'move'}\"", "", "CSortable attrs cannot contain the Vue directive '@keydown'"),
+        (
+            "",
+            "c-attrs=\"{'v-bind:role': 'kind'}\"",
+            "CSortableItem attrs cannot contain the Vue directive 'v-bind:role'",
+        ),
+        ("", "c-attrs=\"{'v-html': 'markup'}\"", "CSortableItem attrs cannot contain the Vue directive 'v-html'"),
+        ("", "c-attrs=\"{'#default': 'props'}\"", "CSortableItem attrs cannot contain the Vue directive '#default'"),
+    ],
+)
+def test_python_attrs_reject_owned_runtime_and_vue_directive_names(root: str, item: str, match: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(match)):
+        _render(f'<c-CSortable {root}><c-CSortableItem value="a" label="A" {item} /></c-CSortable>')
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(
+        "<c-CSortable c-attrs=\"{'x-data': 'list'}\">"
+        '<c-CSortableItem value="a" label="A" c-attrs="{\'x-init\': \'row\'}" />'
+        "</c-CSortable>",
+        static_fallback=True,
+    )
+    assert 'x-data="list"' in html
+    assert 'x-init="row"' in html
 
 
 def test_explicit_labels_do_not_register_catalog_bindings() -> None:

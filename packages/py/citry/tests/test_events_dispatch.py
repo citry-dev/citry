@@ -202,12 +202,18 @@ class TestHappyPaths:
         assert action["target"] == "render:c9zk1q00"
         # No capabilities field means the baseline, which excludes morph.
         assert action["swap"] == "replace"
-        assert '"count": 1' in action["html"]
-        assert "eventContext" in action["html"]
-        assert "citry-vue-" in action["html"]
+        # The fragment's JSON block carries the new state; parse it so the
+        # check reads values, not formatting.
+        match = re.search(r"<script\b[^>]*data-citry-vue-fragment[^>]*>(.*?)</script>", action["html"], re.DOTALL)
+        assert match is not None
+        manifest = json.loads(match.group(1))["vue"]["prepared"]["manifest"]
+        [root] = [o for o in manifest["occurrences"] if o["id"] == manifest["rootId"]]
+        assert root["eventContext"]["publicState"] == {"count": 1, "name": "Counter"}
+        # The rendered text shows the new count, not only the stored state.
+        assert root["preparedData"]["citryText1"] == "1"
         # The fragment carries its own manifests; the state action is not
         # needed because the fresh manifest carries the new token.
-        assert "stateToken" in action["html"]
+        assert root["eventContext"]["stateToken"]
         assert all(a["action"] != "state" for a in item["actions"])
 
     def test_morph_when_the_client_advertises_it(self):

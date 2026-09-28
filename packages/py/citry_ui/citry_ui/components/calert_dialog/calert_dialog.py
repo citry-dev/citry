@@ -8,7 +8,7 @@ from typing import Any, Literal, Protocol, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput
 from citry.ext.dependencies import Script, Style
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -33,9 +33,6 @@ def _dialog_scripts() -> tuple[Script, ...]:
 
 
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-teleport", "x-text"}
-)
 _OWNED_ATTRS = frozenset(
     {
         "aria-describedby",
@@ -94,27 +91,17 @@ class CAlertDialogOpenChangeDetail(TypedDict):
     returnValue: str
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    if attribute.startswith("x-bind:"):
-        return attribute.removeprefix("x-bind:").split(".", 1)[0]
-    if attribute.startswith((":", ".")):
-        return attribute[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         raise TypeError(f"CAlertDialog attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, _OWNED_ATTRS, "CAlertDialog attrs")
+    # A Vue directive could rebind an owned attribute, add listeners, or
+    # change the dialog's structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CAlertDialog")
     for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CAlertDialog attrs cannot contain reserved Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"CAlertDialog attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in _OWNED_ATTRS:
-            raise ValueError(f"CAlertDialog attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 

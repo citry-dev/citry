@@ -193,10 +193,12 @@ def test_simple_data_runs_again_for_changed_inputs_and_globals() -> None:
     assert calls == ["a", "b", "c"]
 
 
-@pytest.mark.parametrize("simple", [1, None, "true", property(lambda _self: True)])
+@pytest.mark.parametrize("simple", [1, None, "true", "Vue", property(lambda _self: True)])
 def test_invalid_flag_rejected_before_registration(simple: object) -> None:
     app = Citry()
-    with pytest.raises(ValueError, match="simple must be an exact bool"):
+    # `simple` accepts exactly False, True, or the string "vue"; anything
+    # else, including a near-miss spelling, fails before registration.
+    with pytest.raises(ValueError, match=r"simple must be False, True, or 'vue'"):
         type("BadFlag", (Component,), {"citry": app, "simple": simple})
     assert not app.has("BadFlag")
 

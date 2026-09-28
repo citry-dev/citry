@@ -147,7 +147,7 @@ def test_class_style_attrs_merge_before_owned_scroll_behavior() -> None:
     assert root.count("scroll-behavior: auto !important") == 1
 
 
-@pytest.mark.parametrize("attribute", ["@scroll", "@scrollend", "v-on:scroll", "x-on:scroll"])
+@pytest.mark.parametrize("attribute", ["@scroll", "@scrollend", "v-on:scroll", "V-ON:SCROLL", "onscroll"])
 def test_python_resolved_native_listener_attributes_are_rejected(attribute: str) -> None:
     with pytest.raises(ValueError, match="executable listener attribute"):
         _render(f"<c-CScrollArea c-attrs=\"{{{attribute!r}: 'handler($event)'}}\">Content</c-CScrollArea>")
@@ -182,16 +182,22 @@ def test_invalid_public_inputs_fail(inputs: str, message: str) -> None:
         "{'hidden': True}",
         "{'inert': True}",
         "{'is': 'x-scroll'}",
-        "{'x-data': '{}'}",
-        "{'x-bind:role': 'role'}",
+        "{'c-bind': 'extra'}",
         "{'onclick': 'unsafe()'}",
         "{'@scroll.window': 'unsafe()'}",
-        "{'x-on:wheel.document': 'unsafe()'}",
     ],
 )
 def test_owned_or_untrusted_root_attributes_fail(attrs: str) -> None:
     with pytest.raises(ValueError, match="attrs"):
         _render(f'<c-CScrollArea c-attrs="{attrs}">Content</c-CScrollArea>')
+
+
+@pytest.mark.parametrize("attribute", [":role", "v-bind:role", ".tabindex", "v-if", "V-IF", "v-html", "#default"])
+def test_python_attrs_reject_vue_directives(attribute: str) -> None:
+    with pytest.raises(
+        ValueError, match=re.escape(f"CScrollArea attrs cannot contain the Vue directive {attribute!r}")
+    ):
+        _render(f"<c-CScrollArea c-attrs=\"{{{attribute!r}: 'value'}}\">Content</c-CScrollArea>")
 
 
 def test_assets_include_one_shared_geometry_copy_and_environment_rules() -> None:

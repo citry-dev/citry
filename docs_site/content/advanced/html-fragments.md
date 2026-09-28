@@ -100,8 +100,10 @@ Load Citry once in the host document, then insert the response:
 
 The existing runtime notices the fragment descriptor, validates its one mount
 host, fetches missing assets and mounts the complete fragment. Removing that
-host disposes the fragment's Vue app. Compatible assets already loaded for the
-page are reused.
+host disposes the fragment's Vue app. A component script the page already
+loaded is not fetched or run again. Each Vue app adds its own stylesheet link,
+so the fragment's styles stay in place when the page's app is removed; the
+browser usually serves the repeated link from its cache.
 
 ## Render a fresh fragment for each insertion
 

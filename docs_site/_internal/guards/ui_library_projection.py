@@ -46,7 +46,7 @@ _GUIDE_REQUIRED_FRAGMENTS: dict[str, tuple[tuple[str, str], ...]] = {
         ('Use `alt=""` only', "teach the explicit decorative alternative-text decision"),
         ("frozen `CImageSource` records", "teach structured ordered responsive sources"),
         ("important above-fold image", "teach bounded native fetch priority"),
-        ("isolated expression scope", "state the native image listener expression boundary"),
+        ("executable listener attributes", "state the native image listener expression boundary"),
         ("native event truth", "state the browser-owned responsive settlement boundary"),
         ("potentially sensitive application data", "state the currentSrc privacy boundary"),
         ("`img-src` CSP", "state the browser-owned CSP boundary"),

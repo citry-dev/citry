@@ -135,26 +135,44 @@ def test_fallback_image_attributes_require_valid_html_names(attribute):
 
 
 @pytest.mark.parametrize(
-    ("destination", "attribute"),
+    ("destination", "attribute", "message"),
     [
-        ("attrs", "role"),
-        ("attrs", "ARIA-LABEL"),
-        ("attrs", "tabindex"),
-        ("attrs", "data-status"),
-        ("attrs", ":data-shape"),
-        ("attrs", "x-if"),
-        ("attrs", "data-citry-morph"),
-        ("img_attrs", "src"),
-        ("img_attrs", "srcset"),
-        ("img_attrs", "alt"),
-        ("img_attrs", "onload"),
-        ("img_attrs", "@error"),
-        ("img_attrs", "x-bind:src"),
+        ("attrs", "role", "cannot override owned attribute"),
+        ("attrs", "ARIA-LABEL", "cannot override owned attribute"),
+        ("attrs", "tabindex", "cannot override owned attribute"),
+        ("attrs", "data-status", "cannot override owned attribute"),
+        ("attrs", "data-citry-morph", "reserved Citry runtime attribute"),
+        ("attrs", ":data-shape", "Vue directive"),
+        ("attrs", "v-if", "Vue directive"),
+        ("attrs", "V-IF", "Vue directive"),
+        ("attrs", "#default", "Vue directive"),
+        ("img_attrs", "src", "cannot override owned attribute"),
+        ("img_attrs", "srcset", "cannot override owned attribute"),
+        ("img_attrs", "alt", "cannot override owned attribute"),
+        ("img_attrs", "onload", "cannot override owned attribute"),
+        ("img_attrs", "onclick", "inert image attributes only"),
+        ("img_attrs", "@error", "Vue directive"),
+        ("img_attrs", "v-bind:src", "Vue directive"),
+        ("img_attrs", "V-ON:load", "Vue directive"),
     ],
 )
-def test_owned_attributes_and_runtime_paths_are_rejected(destination, attribute):
-    with pytest.raises(ValueError, match=r"cannot|inert"):
+def test_owned_attributes_and_runtime_paths_are_rejected(destination, attribute, message):
+    with pytest.raises(ValueError, match=f"CAvatar {destination} .*{message}"):
         _render(CAvatar(**{destination: {attribute: "consumer"}}))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(
+        CAvatar(
+            attrs={"x-data": "plain"},
+            img_attrs={"x-bind": "plain", "loading": "lazy"},
+            src="/a.png",
+        ),
+        static_fallback=True,
+    )
+    assert 'x-data="plain"' in html
+    assert 'x-bind="plain"' in html
+    assert 'loading="lazy"' in html
 
 
 def test_direct_strings_are_detrusted_and_escaped():

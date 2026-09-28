@@ -259,11 +259,9 @@ def test_messages_validate_exact_placeholders_and_render_text_safely() -> None:
     ("destination", "attrs"),
     [
         ("attrs", {"id": "hostile"}),
-        ("attrs", {"x-data": "{}"}),
-        ("attrs", {":data-empty": "false"}),
+        ("attrs", {"c-bind": "props"}),
         ("input_attrs", {"id": "hostile"}),
         ("input_attrs", {"aria-labelledby": "missing"}),
-        ("input_attrs", {":placeholder": "value"}),
         ("input_attrs", {"data-citry-hostile": "yes"}),
     ],
 )
@@ -284,7 +282,7 @@ def test_owned_static_dynamic_and_runtime_attributes_are_rejected(
 
 @pytest.mark.parametrize(
     "attribute",
-    ["@input", "@change", "v-on:input", "x-on:input", "oninput", "onclick"],
+    ["@input", "@change", "v-on:input", "V-ON:input", "oninput", "onclick"],
 )
 def test_python_resolved_listener_attributes_are_rejected(attribute: str) -> None:
     data = {
@@ -296,6 +294,46 @@ def test_python_resolved_listener_attributes_are_rejected(attribute: str) -> Non
 
     with pytest.raises(ValueError, match="executable listener attribute"):
         _render('<c-CTagsInput c-input_attrs="input_attrs" />', data)
+
+
+@pytest.mark.parametrize(
+    ("destination", "attribute"),
+    [
+        ("attrs", ":data-empty"),
+        ("attrs", "v-if"),
+        ("attrs", "V-IF"),
+        ("attrs", "#default"),
+        ("input_attrs", ":placeholder"),
+        ("input_attrs", "v-bind:id"),
+        ("input_attrs", "v-model"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(destination: str, attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    data = {"label": {"aria-label": "Labels"}, "extra": {attribute: "x"}}
+    if destination == "attrs":
+        template = '<c-CTagsInput c-attrs="extra" c-input_attrs="label" />'
+    else:
+        data["label"] = {**data["label"], attribute: "x"}
+        template = '<c-CTagsInput c-input_attrs="label" />'
+    message = re.escape(f"CTagsInput {destination} cannot contain the Vue directive {attribute!r}")
+    with pytest.raises(ValueError, match=message):
+        _render(template, data)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(
+        '<c-CTagsInput c-attrs="extra" c-input_attrs="label" />',
+        {"label": {"aria-label": "Labels"}, "extra": {"x-data": "{}", "hx-get": "/tags"}},
+    )
+
+    root = re.search(r'<[^>]+data-citry-ui-part="tags-input"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/tags"' in root.group(0)
 
 
 def test_direct_python_composition_and_empty_slot_contract() -> None:

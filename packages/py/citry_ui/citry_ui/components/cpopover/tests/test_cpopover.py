@@ -177,15 +177,26 @@ def test_popover_public_schema_is_nested_slotted_and_runtime_introspectable():
         ({"attrs": []}, TypeError, "CPopover attrs must be a mapping"),
         ({"attrs": {"popover": "auto"}}, ValueError, "owned attribute"),
         ({"attrs": {"ROLE": "alert"}}, ValueError, "owned attribute"),
-        ({"attrs": {":aria-labelledby": "other"}}, ValueError, "dynamically bind"),
-        ({"attrs": {"x-bind": "surfaceAttrs"}}, ValueError, "ownership directive"),
-        ({"attrs": {"x-show": "visible"}}, ValueError, "ownership directive"),
+        ({"attrs": {":aria-labelledby": "other"}}, ValueError, "Vue directive ':aria-labelledby'"),
+        ({"attrs": {"v-bind:popover": "mode"}}, ValueError, "Vue directive 'v-bind:popover'"),
+        ({"attrs": {"v-bind": "surfaceAttrs"}}, ValueError, "Vue directive 'v-bind'"),
+        ({"attrs": {"v-show": "visible"}}, ValueError, "Vue directive 'v-show'"),
+        ({"attrs": {"V-IF": "visible"}}, ValueError, "Vue directive 'V-IF'"),
+        ({"attrs": {"@toggle": "track"}}, ValueError, "Vue directive '@toggle'"),
+        ({"attrs": {"#default": "props"}}, ValueError, "Vue directive '#default'"),
         ({"attrs": {"data-citry-root": ""}}, ValueError, "runtime attribute"),
     ],
 )
 def test_popover_rejects_invalid_or_ambiguous_inputs(kwargs, exception, message):
     with pytest.raises(exception, match=message):
         _page_html(_popover(**kwargs))
+
+
+def test_popover_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _page_html(_popover(attrs={"x-data": "surface", "title": "Moon"}), static_fallback=True)
+
+    assert 'x-data="surface"' in html
+    assert 'title="Moon"' in html
 
 
 def test_popover_detrusts_safe_id_strings_before_rendering():

@@ -566,6 +566,44 @@ class TestValidationErrors:
         assert (event["event"], event["handler"]) == ("click", "go")
         assert (binding["kind"], binding["name"]) == ("event", "v-on:click")
 
+    def _fill_author(self, *, author_events, receiver_events):
+        app = Citry(secret=SIGNING_KEY)
+        type("Child", (Component,), {"citry": app, "template": "x"})
+        type(
+            "Box",
+            (Component,),
+            {
+                "citry": app,
+                "template": "<section><c-slot /></section>",
+                "Events": type("Events", (), receiver_events),
+            },
+        )
+        return type(
+            "Comp",
+            (Component,),
+            {
+                "citry": app,
+                "template": '<c-Box><c-Child @c-click="save" /></c-Box>',
+                "Events": type("Events", (), author_events),
+            },
+        )
+
+    def test_component_handler_in_a_fill_comes_from_the_fill_author(self):
+        # The fill's listener runs in its author's scope, so the author's
+        # handler is valid even though the receiving Box declares none.
+        comp = self._fill_author(author_events={"save": _noop}, receiver_events={})
+        owner, tables, _compiled = _typed_binding_tables(comp)
+        [event] = tables["eventBindings"]
+        assert owner.type_key == comp.class_id
+        assert (event["event"], event["handler"]) == ("click", "save")
+
+    def test_component_handler_in_a_fill_is_not_taken_from_the_receiver(self):
+        # A handler that only the receiver declares would dispatch to the
+        # author, which cannot run it, so it is rejected by the author's name.
+        comp = self._fill_author(author_events={"other": _noop}, receiver_events={"save": _noop})
+        with pytest.raises(ValueError, match=r"not a declared handler of Comp\. Declared handlers: other"):
+            _typed_binding_tables(comp)
+
     def test_component_handler_is_validated_during_compilation(self):
         comp = self._component('<c-Child @c-click="ghost" />', events={"go": _noop}, child=True)
         with pytest.raises(ValueError, match=r"names event handler 'ghost'.*component boundary"):

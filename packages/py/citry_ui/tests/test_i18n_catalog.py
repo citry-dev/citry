@@ -218,7 +218,9 @@ def test_client_provider_emits_only_the_default_catalog_binding() -> None:
             return {"items": items}
 
     html = str(Page())
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     manifest = json.loads(match.group(1))["manifest"]
     bindings = [

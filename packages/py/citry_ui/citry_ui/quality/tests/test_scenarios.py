@@ -7,18 +7,17 @@ from citry_ui.quality.scenarios import SCENARIOS, ScenarioStatus, manifest_json,
 
 def _quality_state_groups(html: str, markup_pattern: str) -> list[str]:
     """
-    Read quality-state markers from either rendered roots or Vue prepared data.
+    Read quality-state markers from both rendered roots and Vue prepared data.
 
-    Static scenarios still expose their component roots in the HTML. Interactive
-    scenarios now render through the Vue host, so the same attributes are
-    serialized into the prepared manifest instead of appearing in the initial
-    document. Keep the fixture assertions about state coverage independent of
-    that transport detail.
+    Static scenarios expose their component roots in the HTML. Interactive
+    scenarios carry the same attributes in the prepared manifest, and their
+    served HTML may hold a root twice (once in the manifest, once in the
+    page) or only in the manifest, when the server cannot write the part
+    around it. Reading both, each group once, keeps the fixture assertions
+    about state coverage independent of that transport detail.
     """
     literal_groups = re.findall(markup_pattern, html)
-    if literal_groups:
-        return literal_groups
-    return re.findall(r'"data-quality-states":"([^"]+)"', html)
+    return list(dict.fromkeys(literal_groups + re.findall(r'"data-quality-states":"([^"]+)"', html)))
 
 
 def test_scenario_catalog_has_stable_unique_ordered_ids():

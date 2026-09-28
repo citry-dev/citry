@@ -27,7 +27,9 @@ def _render(source: str, *, static_fallback: bool = False) -> str:
 
 
 def _manifest(html: str) -> dict[str, object]:
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     return json.loads(match.group(1))["manifest"]
 
@@ -162,6 +164,49 @@ def test_min_max_and_item_policy_disable_or_omit_controls() -> None:
 def test_invalid_composition_fails(source: str, match: str) -> None:
     with pytest.raises((SyntaxError, TypeError, ValueError), match=match):
         _render(source)
+
+
+_ITEM = '<c-CFormCollectionItem value="a" label="A" c-attrs="item_attrs"><input /></c-CFormCollectionItem>'
+
+
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CFormCollection", "v-bind:disabled"),
+        ("CFormCollection", ":role"),
+        ("CFormCollection", "V-IF"),
+        ("CFormCollection", "v-for"),
+        ("CFormCollection", "#default"),
+        ("CFormCollection", "@submit"),
+        ("CFormCollectionItem", ".role"),
+        ("CFormCollectionItem", "v-html"),
+        ("CFormCollectionItem", "v-on:click"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(owner: str, attribute: str) -> None:
+    # Python attrs are data, so every directive spelling is refused with the
+    # owning component's name before it can rebind owned state.
+    attrs = {attribute: "x"}
+    root, item = (attrs, {}) if owner == "CFormCollection" else ({}, attrs)
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class Page(Component):
+        citry = app
+        template = f'<c-CFormCollection label="X" c-attrs="root_attrs">{_ITEM}</c-CFormCollection>'
+
+        def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:
+            return {"root_attrs": root, "item_attrs": item}
+
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        str(Page())
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(
+        "<c-CFormCollection label=\"X\" c-attrs=\"{'x-data':'{}'}\"></c-CFormCollection>", static_fallback=True
+    )
+    assert 'x-data="{}"' in html
 
 
 def test_explicit_action_labels_render_without_catalog_ownership() -> None:

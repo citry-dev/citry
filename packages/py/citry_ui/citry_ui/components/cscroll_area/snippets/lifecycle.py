@@ -33,7 +33,7 @@ class ScrollAreaLifecycle(Component):
       >
         <div class="scroll-area-lifecycle__controls">
           <button type="button" @c-click="refresh">
-            Retained-root server morph
+            Retained-root server update
           </button>
           <button type="button" @c-click="replace">
             Replace the root

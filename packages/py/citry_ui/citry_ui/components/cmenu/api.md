@@ -211,6 +211,8 @@ suppresses outside anchored layers and gives the Dialog Escape/focus ownership.
 
 Text is escaped. Values are plain, nonempty canonical strings; generated IDs
 do not expose raw values. `href` remains a trusted application URL boundary.
-Attribute maps reject owned semantics, focus, visibility, anchoring, structural
-client-runtime directives, and Citry runtime namespaces. Use Popover when item content
+Attribute maps reject owned semantics, focus, visibility, anchoring, Vue
+directive syntax (names starting with `v-`, `:`, `.`, `^`, `@`, or `#`), and Citry
+runtime namespaces. Write Vue bindings and listeners on the component tag in
+your template instead. Use Popover when item content
 needs links, Buttons, inputs, editing, or independent Tab stops.

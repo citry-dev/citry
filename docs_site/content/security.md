@@ -125,10 +125,40 @@ also owns layouts, analytics, and every resource outside the component render.
 For a third-party URL, provide its published `integrity` value on a
 [`Script`][citry.ext.dependencies.Script]. Citry validates and preserves the
 value but reports it as unverified; it never downloads third-party code during
-serialization. Configure CORS and `crossorigin` as required by that resource.
+serialization. Set `crossorigin` on that `Script` yourself: the browser checks
+the digest only when the third-party host sends CORS headers.
 
 This option provides byte identity and hash metadata. It composes with
 `security_csp="strict"`, but does not enable that expression policy by itself.
+
+An interactive page sends its app's data, such as the rows of a table, as
+JSON that the browser reads but never runs. Your policy does not need to
+allow it, so `csp_script_hashes` lists the short script that starts the app
+but not the data. That script names an app id that is random for each
+response, so compute the hashes for each response, as for any page with
+inline scripts. `serialized.security.scripts` still records the data with its
+digest.
+
+### Embed Citry pages in sandboxed iframes
+
+Citry always adds `integrity` to the scripts and stylesheets it serves to run
+interactive components, whether or not you enable the option above. A browser
+checks a digest only on a response the page is allowed to read. So Citry
+requests its own files with `crossorigin="anonymous"`, and its asset routes
+(`/citry/citry.js`, the component JS and CSS, and the compiled component code)
+answer with `Access-Control-Allow-Origin: *`. That lets a Citry page mount
+inside `<iframe sandbox="allow-scripts">`, where every request counts as
+cross-origin.
+
+The header is safe on these routes: they return the same public bytes to
+every caller and never read cookies. Citry's event, message, and preview
+endpoints do not send it.
+
+If a sandboxed page stays blank and the browser console shows a Subresource
+Integrity error, a proxy or CDN in front of Citry is probably dropping
+`Access-Control-Allow-Origin`. Pass that header through for Citry's asset
+URLs. Pages that are not sandboxed and live on the same origin as Citry keep
+working without it.
 
 ## Apply a request CSP nonce centrally
 
@@ -158,7 +188,10 @@ least 128 random bits before encoding.
 
 Citry adds the value after dependency hooks have run. Every structured
 [`Script`][citry.ext.dependencies.Script], including external scripts and inert
-JSON manifests, receives it. Every structured
+JSON manifests, receives it. The browser does not need the nonce on JSON
+data, but Citry's runtime does: it starts an interactive page only from app
+data that carries the same nonce as the runtime's own script, so markup
+injected into the page cannot supply its own app data. Every structured
 [`Style`][citry.ext.dependencies.Style], including external stylesheet links,
 receives it. A matching explicit nonce is accepted, while a different or
 malformed one is an error. The original dependency objects are not mutated, so

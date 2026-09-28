@@ -17,6 +17,15 @@ from citry import Citry, Component
 pytestmark = pytest.mark.e2e
 
 
+def _repository_root() -> Path:
+    # pnpm installs node_modules at the repository root. Find the root from this
+    # file, not the working directory, because pytest may run from a package folder.
+    for directory in Path(__file__).resolve().parents:
+        if (directory / "package.json").is_file() and (directory / "pyproject.toml").is_file():
+            return directory
+    raise RuntimeError("Could not locate repository root for Drawer browser tests.")
+
+
 def _page() -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
@@ -278,7 +287,7 @@ def test_drawer_geometry_rtl_theme_and_accessibility(page: Any) -> None:
     assert geometry["width"] <= geometry["viewport"]
     assert drawer.evaluate("element => getComputedStyle(element).colorScheme") == "dark"
 
-    axe_path = Path("node_modules/axe-core/axe.min.js").resolve()
+    axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file()
     page.add_script_tag(path=str(axe_path))
     violations = page.evaluate(

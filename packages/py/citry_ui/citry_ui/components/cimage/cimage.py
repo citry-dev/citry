@@ -13,6 +13,7 @@ from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
     is_executable_event_attribute,
+    is_vue_directive_attribute,
     merge_root_attrs,
 )
 
@@ -52,26 +53,6 @@ _RUNTIME_PREFIXES = (
     "data-citry-",
     "data-cev",
     "data-cid",
-    "data-has-alpine-state",
-    "x-citry-",
-)
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-data",
-        "x-bind",
-        "x-effect",
-        "x-for",
-        "x-html",
-        "x-id",
-        "x-if",
-        "x-ignore",
-        "x-init",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
 )
 _ROOT_OWNED = frozenset(
     {
@@ -327,14 +308,6 @@ def _uses_auto_sizes(sizes: str | None) -> bool:
     return normalized == "auto" or normalized.startswith("auto,")
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    if attribute.startswith("x-bind:"):
-        return attribute.removeprefix("x-bind:").split(".", 1)[0]
-    if attribute.startswith((":", ".")):
-        return attribute[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(
     value: Mapping[str, object] | None,
     *,
@@ -351,7 +324,6 @@ def _copy_attrs(
             msg = f"CImage {destination} requires string attribute names."
             raise TypeError(msg)
         normalized = key.casefold()
-        target = _dynamic_target(normalized)
         if (
             normalized in owned
             or (reject_all_aria and normalized.startswith("aria-"))
@@ -365,13 +337,13 @@ def _copy_attrs(
                 "use onStatusChange or author a Vue listener in the template."
             )
             raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"CImage {destination} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if target in owned or (reject_all_aria and target is not None and target.startswith("aria-")):
-            msg = f"CImage {destination} cannot dynamically bind owned attribute {target!r}."
+        # Any other directive could rebind an owned image attribute, change the
+        # structure, or spread over the element, so Python data cannot carry it.
+        if is_vue_directive_attribute(normalized):
+            msg = (
+                f"CImage {destination} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
     return copied
 
@@ -773,46 +745,12 @@ class CImage(LibraryComponent):
           }
           const ownedElements = [root, picture, ...sourceElements, image, placeholder, fallback]
             .filter(Boolean);
-          const frameworkMarker = (attribute) => attribute.name === "data-citry-root"
-            || attribute.name === "data-has-alpine-state"
-            || attribute.name.startsWith("data-cid")
-            || attribute.name.startsWith("data-cev")
-            || attribute.name.startsWith("x-citry-");
-          const correlationValid = () => {
-            const identifiers = (root.getAttribute("data-cid") ?? "").split(/\\s+/).filter(Boolean);
-            const markers = [...root.attributes]
-              .filter((attribute) => attribute.name.startsWith("data-cid-"))
-              .map((attribute) => attribute.name.slice(9));
-            const fillOwners = [root, placeholder, fallback].filter(Boolean);
-            const legacyCorrelationPresent = root.hasAttribute("data-citry-root")
-              || root.hasAttribute("data-has-alpine-state")
-              || root.hasAttribute("x-citry-boundary")
-              || root.hasAttribute("data-cid")
-              || [...root.attributes].some((attribute) => attribute.name.startsWith("data-cid-"));
-            return (!legacyCorrelationPresent || (
-              root.getAttribute("data-citry-root") === ""
-              && (!root.hasAttribute("data-has-alpine-state")
-                || root.getAttribute("data-has-alpine-state") === "true")
-              && (!root.hasAttribute("x-citry-boundary")
-                || root.getAttribute("x-citry-boundary") === "")
-              && identifiers.length === 1
-              && markers.length === 1
-              && markers[0] === identifiers[0]
-            ))
-              && ownedElements.slice(1).every((element) =>
-                ![...element.attributes].some((attribute) => attribute.name.startsWith("data-cid"))
-                && !element.hasAttribute("data-citry-root")
-                && !element.hasAttribute("data-has-alpine-state")
-                && !element.hasAttribute("x-citry-boundary"))
-              && ownedElements.every((element) =>
-                ![...element.attributes].some((attribute) => attribute.name.startsWith("data-cev")))
-              && ownedElements.every((element) => [...element.attributes].every((attribute) =>
-                !attribute.name.startsWith("x-citry-")
-                || attribute.name === "x-citry-boundary"
-                || (attribute.name === "x-citry-fill-source"
-                  && fillOwners.includes(element)
-                  && /^[0-9a-f]{64}:.+$/u.test(attribute.value))));
-          };
+          // Citry's reserved event and component markers must not appear on
+          // or change within the owned anatomy while this client owns it.
+          const frameworkMarker = (attribute) => attribute.name.startsWith("data-cid")
+            || attribute.name.startsWith("data-cev");
+          const markersAbsent = () => ownedElements.every((element, index) => ![...element.attributes]
+            .some((attribute) => attribute.name.startsWith("data-cev") || (index > 0 && frameworkMarker(attribute))));
           const frameworkBaseline = ownedElements.map((element) => JSON.stringify(
             [...element.attributes]
               .filter(frameworkMarker)
@@ -1018,7 +956,7 @@ class CImage(LibraryComponent):
             if (data.hasPlaceholder) expected.push(placeholder);
             if (data.hasFallback) expected.push(fallback);
             const children = [...root.children];
-            if (!scopeValid() || !correlationValid() || !frameworkMarkersValid()
+            if (!scopeValid() || !markersAbsent() || !frameworkMarkersValid()
               || children.length !== expected.length
               || children.some((child, index) => child !== expected[index])
               || root.dataset.citryUiPart !== "image-root"
@@ -1028,7 +966,7 @@ class CImage(LibraryComponent):
               || root.hasAttribute("data-has-placeholder") !== data.hasPlaceholder
               || root.hasAttribute("data-has-fallback") !== data.hasFallback
               || (!configuration && !serverImageValid())
-              || !runtimeAttributesValid(root, ["data-citry-ui-part", "data-citry-root", imageReady])
+              || !runtimeAttributesValid(root, ["data-citry-ui-part", imageReady])
               || !runtimeAttributesValid(image, ["data-citry-ui-part"])
               || hasForbidden(root, ["role", "tabindex", "hidden", "inert", "popover"], true)
               || hasForbidden(image, [
@@ -1315,6 +1253,11 @@ class CImage(LibraryComponent):
             if (!ownsRoot) return;
             delete root[imageOwner];
             if (record) {
+              // The runtime runs this cleanup before it knows whether the
+              // revision keeps or unmounts this root, so the ready marker goes
+              // now. A retained root restores it from the handoff record when
+              // its next server-render callback runs.
+              root.removeAttribute(imageReady);
               root[handoffKey] = record;
               record.abort = setTimeout(() => {
                 if (root[handoffKey] === record && !root[imageOwner]?.active) abortHandoff(record);

@@ -1,29 +1,26 @@
 from __future__ import annotations
 
 import gc
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from weakref import ref
 
 import pytest
 
-import citry._vue.capture as prepared_capture
 from citry import Citry, Component, Const, Extension, Markup
 from citry._vue.capture import PreparedExprNode, render_prepared_direct, typed_render_scope
 from citry._vue.direct_capture import assemble_typed_render
 from citry.constness import _MAX_UNROLL_ITERATIONS
 from citry.nodes import ExprHtmlAttr, ForNode
+from tests.test_const import _track_prepared_expression
 
 
 def test_prepared_const_expression_specializes_by_equal_value(monkeypatch) -> None:
     app = Citry(autodiscover=False)
-    calls: list[object] = []
-    original = PreparedExprNode.evaluate
-
-    def counted(self, variables, *, sandboxed):
-        calls.append(variables["value"])
-        return original(self, variables, sandboxed=sandboxed)
-
-    monkeypatch.setattr(PreparedExprNode, "evaluate", counted)
+    # Const precomputing evaluates through PreparedExprNode, while a live
+    # plain-JSON value runs the generated evaluator; the helper counts both.
+    calls = _track_prepared_expression(monkeypatch, "value")
 
     class Value(Component):
         citry = app
@@ -36,7 +33,8 @@ def test_prepared_const_expression_specializes_by_equal_value(monkeypatch) -> No
     output = [render_prepared_direct(Value(value=value)).serialize(deps_strategy="ignore") for value in values]
 
     assert [text.split(">", 1)[1].split("<", 1)[0] for text in output] == ["1", "1", "2", "3", "4"]
-    assert len(calls) == 4
+    # Equal Const values share one precomputed body; each live value is evaluated.
+    assert calls == [(1,), (2,), (3,), (4,)]
 
 
 def test_prepared_const_preserves_text_escaping_and_trusted_markup() -> None:
@@ -153,38 +151,42 @@ def test_prepared_const_keeps_custom_value_protocol_live() -> None:
     assert calls == 2
 
 
-def test_prepared_const_keeps_registered_exact_string_handler_live(monkeypatch) -> None:
-    app = Citry(autodiscover=False)
-    handler_calls = 0
-    original_dispatch = prepared_capture._default_value_dispatch_for
-    original_render = prepared_capture._render_value
+def test_prepared_const_keeps_registered_exact_string_handler_live() -> None:
+    # Registering str as component-like sends every str through the
+    # component-like protocol, and a str has no __citry_element__, so each
+    # render that dispatches live raises that AttributeError. A Const string
+    # must do so too, even after an earlier render stored it as plain text.
+    source = """
+from citry import Citry, Component, Const
+from citry._vue.capture import render_prepared_direct
+from citry.component_like import ComponentLike
 
-    def registered_dispatch(kind):
-        return False if kind is str else original_dispatch(kind)
+app = Citry(autodiscover=False)
 
-    def registered_render(value, **kwargs):
-        nonlocal handler_calls
-        if type(value) is str:
-            handler_calls += 1
-            return value.upper()
-        return original_render(value, **kwargs)
+class Value(Component):
+    citry = app
+    template = "{{ value }}"
 
-    monkeypatch.setattr(prepared_capture, "_default_value_dispatch_for", registered_dispatch)
-    monkeypatch.setattr(prepared_capture, "_render_value", registered_render)
+    def template_data(self, kwargs, slots):
+        return {"value": kwargs["value"]}
 
-    class Value(Component):
-        citry = app
-        template = "{{ value }}"
-
-        def template_data(self, kwargs, slots):
-            return {"value": kwargs["value"]}
-
-    outputs = [
-        render_prepared_direct(Value(value=Const("custom"))).serialize(deps_strategy="ignore") for _ in range(2)
-    ]
-
-    assert outputs == ["CUSTOM", "CUSTOM"]
-    assert handler_calls == 2
+renders = (
+    lambda: render_prepared_direct(Value(value=Const("custom"))).serialize(deps_strategy="ignore"),
+    lambda: Value(value=Const("custom")).render().serialize(deps_strategy="ignore"),
+)
+assert [render() for render in renders] == ["custom", "custom"]
+ComponentLike.register(str)
+for render in renders * 2:
+    try:
+        render()
+    except AttributeError as error:
+        assert "__citry_element__" in str(error), error
+    else:
+        raise AssertionError("a Const str bypassed the registered component-like handler")
+"""
+    # Registration is process-wide, so it runs in its own interpreter.
+    result = subprocess.run([sys.executable, "-c", source], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
 
 
 def test_prepared_const_specializes_element_key_but_keeps_attrs_hook_live(monkeypatch) -> None:

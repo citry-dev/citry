@@ -1392,7 +1392,7 @@ class TestCompatMode:
         assert response.headers["content-type"].startswith("text/html")
         assert ">No JS</p>" in response.text
         assert "citry-vue-" not in response.text
-        assert "startPrepared" not in response.text
+        assert "data-citry-vue-document" not in response.text
 
     def test_redirect_becomes_a_303(self):
         c = _citry()

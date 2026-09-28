@@ -10,16 +10,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
 CInfiniteScrollReason = Literal["button", "intersection", "retry"]
 
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-busy",
@@ -73,14 +70,6 @@ def _threshold(value: object) -> float:
     return result
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     attrs: Mapping[str, object] | None, class_: CClassValue | None, style: CStyleValue | None
 ) -> dict[str, object]:
@@ -88,16 +77,14 @@ def _attrs(
         raise TypeError(f"CInfiniteScroll attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, _ROOT_OWNED, "CInfiniteScroll attrs")
+    # A Vue directive could rebind an owned attribute, change the root's
+    # structure, or attach a listener, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CInfiniteScroll")
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CInfiniteScroll attrs require string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CInfiniteScroll attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"CInfiniteScroll attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in _ROOT_OWNED:
-            raise ValueError(f"CInfiniteScroll attrs cannot dynamically bind owned attribute {key!r}.")
     return merge_root_attrs(copied, class_, style)
 
 

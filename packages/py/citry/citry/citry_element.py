@@ -77,6 +77,11 @@ class _PreparedCallMetadata:
     explicit_key: str | None
     origin: str | None = None
     slot_free_body: bool = False
+    # The simple='vue' components whose templates contain this call, from
+    # the outermost down to the one that wrote it. They have no Python
+    # instance, so the called component's ``parent`` skips them; error
+    # messages read their names from here to show the full component path.
+    simple_vue_callers: tuple[str, ...] = ()
 
 
 class CitryElement:

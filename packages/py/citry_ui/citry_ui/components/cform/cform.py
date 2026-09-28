@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -102,6 +102,9 @@ class CForm(LibraryComponent):
             },
             "CForm",
         )
+        # A Vue directive could rebind an owned attribute or add a listener, so
+        # none may arrive through Python data.
+        reject_vue_directive_attrs(kwargs.attrs, "CForm")
         form_id = kwargs.id or f"cui-form-{self.id}"
         self.provide(
             FORM_CONTEXT_KEY,

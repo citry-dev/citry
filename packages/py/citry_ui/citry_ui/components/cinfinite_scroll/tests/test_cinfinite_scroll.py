@@ -86,11 +86,29 @@ def test_loading_error_end_and_explicit_labels() -> None:
         ('<c-CInfiniteScroll c-auto="1" />', "must be a bool"),
         ("<c-CInfiniteScroll c-attrs=\"{'aria-busy':'true'}\" />", "owned attribute"),
         ("<c-CInfiniteScroll c-attrs=\"{'ref':'other'}\" />", "owned attribute"),
+        (
+            "<c-CInfiniteScroll c-attrs=\"{'v-bind:aria-busy':'busy'}\" />",
+            "cannot contain the Vue directive 'v-bind:aria-busy'",
+        ),
+        ("<c-CInfiniteScroll c-attrs=\"{':role':'kind'}\" />", "cannot contain the Vue directive ':role'"),
+        ("<c-CInfiniteScroll c-attrs=\"{'.ref':'other'}\" />", "cannot contain the Vue directive '.ref'"),
+        ("<c-CInfiniteScroll c-attrs=\"{'v-if':'shown'}\" />", "cannot contain the Vue directive 'v-if'"),
+        ("<c-CInfiniteScroll c-attrs=\"{'V-IF':'shown'}\" />", "cannot contain the Vue directive 'V-IF'"),
+        ("<c-CInfiniteScroll c-attrs=\"{'v-for':'item in items'}\" />", "cannot contain the Vue directive 'v-for'"),
+        ("<c-CInfiniteScroll c-attrs=\"{'v-html':'markup'}\" />", "cannot contain the Vue directive 'v-html'"),
+        ("<c-CInfiniteScroll c-attrs=\"{'#default':''}\" />", "cannot contain the Vue directive '#default'"),
+        ("<c-CInfiniteScroll c-attrs=\"{'@scroll':'seen()'}\" />", "cannot contain the Vue directive '@scroll'"),
     ],
 )
 def test_invalid_inputs_fail(source: str, match: str) -> None:
     with pytest.raises((TypeError, ValueError), match=match):
         _render(source)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render("<c-CInfiniteScroll c-attrs=\"{'x-data':'{}','hx-get':'/feed'}\" />", static_fallback=True)
+    assert 'x-data="{}"' in html
+    assert 'hx-get="/feed"' in html
 
 
 def test_assets_docs_and_translation_reference_cover_contract() -> None:

@@ -742,7 +742,7 @@ class TestDynamicElement:
             assert key_binding is None
         else:
             assert occurrence.prepared_data[key_binding] == expected_key
-            assert f':key="preparedData.{key_binding}"' in compile_input.template
+            assert f':key="$citryPrepared.{key_binding}"' in compile_input.template
             assert f':key="{expected_key}"' not in compile_input.template
 
     def test_dynamic_element_explicitly_rejects_c_ignore_in_prepared_render(self):
@@ -774,7 +774,7 @@ class TestDynamicElement:
 
         assert occurrence.prepared_data["citryAttrs0"] == {"title": "ordinary"}
         assert occurrence.prepared_data["citryKey0"] == "row"
-        assert ':key="preparedData.citryKey0"' in compile_input.template
+        assert ':key="$citryPrepared.citryKey0"' in compile_input.template
 
     def test_private_key_rejects_an_ordinary_attribute_before_attrs_hook(self):
         c = Citry()

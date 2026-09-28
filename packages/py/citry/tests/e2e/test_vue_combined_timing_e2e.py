@@ -113,7 +113,7 @@ def test_combined_control_timing_keeps_rejected_drafts_but_debounces_admitted_ch
     control.fill("first")
     page.clock.run_for(10)
     control.fill("rejected-draft")
-    draft = page.evaluate("[...CitryStable._apps.values().next().value.mounted.values()][0].component.$state.query")
+    draft = page.evaluate("[...__citryRuntime._apps.values().next().value.mounted.values()][0].component.$state.query")
     assert draft == "rejected-draft"
     page.clock.run_for(10)
     control.fill("latest-admitted")
@@ -167,7 +167,7 @@ def test_combined_pending_debounce_survives_an_unchanged_revision(page: Any, ser
     page.locator("#pending").click()
     page.clock.run_for(10)
     page.locator("#advance").click()
-    page.wait_for_function("CitryStable._apps.values().next().value.revision > 0")
+    page.wait_for_function("__citryRuntime._apps.values().next().value.revision > 0")
     page.clock.run_for(40)
     page.wait_for_timeout(20)
     assert calls.count("delayed") == 1
@@ -225,6 +225,6 @@ def test_combined_replacement_cancels_pending_and_retained_lifetimes(page: Any, 
     page.wait_for_timeout(20)
     assert calls.count("delayed") == 1
     assert page.evaluate(
-        "[...CitryStable._apps.values().next().value.mounted.values()]"
+        "[...__citryRuntime._apps.values().next().value.mounted.values()]"
         ".every(value => !value.record.eventTimingLifetimes?.size)"
     )

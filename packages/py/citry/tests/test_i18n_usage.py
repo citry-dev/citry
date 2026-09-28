@@ -96,6 +96,68 @@ def test_records_template_data_and_composite_template_calls_without_values() -> 
     assert "12.5" not in repr(record)
 
 
+def test_component_js_preloads_calls_through_a_variable_holding_the_service() -> None:
+    app = configured_app()
+
+    class Toast(Component):
+        citry = app
+
+        template = """
+            <div></div>
+        """
+        js = """
+            $component({
+                onServerRender({ component }) {
+                    const i18n = component.$i18n;
+                    if (!i18n) return;
+                    i18n.tr("alias-message");
+                    const binding = i18n.bind({
+                        message: "alias-bound-message",
+                        onChange: () => {},
+                    });
+                    let kept = component.$i18n;
+                    kept?.tr("unassigned-let-message");
+                    let changed = component.$i18n;
+                    changed = other;
+                    changed.tr("reassigned-message");
+                    const { tr } = component.$i18n;
+                    tr("destructured-message");
+                    const copy = i18n;
+                    copy.tr("copied-message");
+                    return () => binding.dispose();
+                },
+                methods: {
+                    label() {
+                        const service = this.$i18n;
+                        return service.tr("method-alias-message");
+                    },
+                },
+            });
+        """
+        messages = """
+            alias-message = Alias
+            alias-bound-message = Alias bound
+            unassigned-let-message = Unassigned let
+            reassigned-message = Reassigned
+            destructured-message = Destructured
+            copied-message = Copied
+            method-alias-message = Method alias
+        """
+
+    rendered = Toast().render()
+    record = next(iter(rendered.context.extra[EXTRA_KEY].values()))
+
+    # Only variables proven to hold the service count; a reassigned `let`,
+    # destructuring, and a copy of the variable are not followed. The
+    # extension collects `tr()` calls before `bind()` calls.
+    assert record.client_outputs == (
+        MessageOutputUse("alias-message", None),
+        MessageOutputUse("unassigned-let-message", None),
+        MessageOutputUse("method-alias-message", None),
+        MessageOutputUse("alias-bound-message", None),
+    )
+
+
 def test_nested_component_usage_merges_into_the_root_render() -> None:
     app = configured_app()
 

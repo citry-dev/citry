@@ -57,7 +57,7 @@ from __future__ import annotations
 from contextvars import ContextVar
 from dataclasses import dataclass
 from html import unescape
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
 
 from citry.citry_element import _DEFAULT_CITRY_ELEMENT, CitryElement
 from citry.component_like import _DEFAULT_COMPONENT_LIKE, ComponentLike, _resolve_component_like
@@ -66,7 +66,7 @@ from citry.slots import Slot
 from citry.util.html import escape
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterator
 
     from citry._vue.capture import (
         PreparedDynamicElementClose,
@@ -105,7 +105,7 @@ PreparedRenderPart: TypeAlias = (
     "PreparedElementOpen | PreparedElementClose | PreparedDynamicElementOpen | PreparedDynamicElementClose | "
     "PreparedStaticRun | PreparedLeafProgram"
 )
-RenderPart: TypeAlias = "str | CitryRender | DeferredComponent | Placeholder | PreparedRenderPart"
+RenderPart: TypeAlias = "str | CitryRender | DeferredComponent | Placeholder | PreparedRenderPart | SimpleVueRecord"
 
 # How collected JS/CSS dependencies are handled when serializing (see
 # CitryRender.serialize and docs/design/dependencies.md section 7.1).
@@ -181,6 +181,35 @@ class PreparedOccurrenceMetadata:
     call: _PreparedCallMetadata | None
     raw_slots_present: bool
     component_tag_client_bindings: tuple[PreparedComponentBinding, ...]
+
+
+# Final because the Vue assembler matches it by exact type.
+@final
+@dataclass(frozen=True, slots=True)
+class SimpleVueRecord:
+    """
+    Carry one ``simple="vue"`` occurrence's identity and data without a Python component.
+
+    The render loop puts this record where an ordinary child ``CitryRender``
+    would go. Serialization reads the row's recorded template values
+    (``leaf``) from it and gives the occurrence its own Vue instance, as it
+    would for an ordinary component.
+    """
+
+    component_class: type[Component]
+    class_id: str
+    render_id: str
+    call_metadata: _PreparedCallMetadata | None
+    js_data: dict[str, object]
+    leaf: PreparedLeafProgram
+    prepared_data: dict[str, object]
+    css_vars_hash: str | None = None
+    root_markers: tuple[str, ...] = ()
+    # True when a Python expression, public Slot call or render hook placed
+    # this occurrence. Such a call has no parser record, so the Vue assembler
+    # reads this flag, set only by `wrap_python_composition_result()`, to tell it
+    # apart from an authored tag whose call record went missing.
+    python_composition: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,7 +328,7 @@ class CitryRender:
 
     """
 
-    __slots__ = ("__weakref__", "context", "frame", "parts", "render_target")
+    __slots__ = ("__weakref__", "context", "frame", "owner_citry", "parts", "render_target")
 
     def __init__(
         self,
@@ -310,9 +339,14 @@ class CitryRender:
         frame: RenderFrame | None = None,
         is_transparent_root: bool = False,
         render_target: Literal["html", "prepared"] | None = None,
+        owner_citry: Citry | None = None,
     ) -> None:
         self.parts = parts
         self.context = context
+        context_citry = context.component.citry if context.component is not None else None
+        if owner_citry is not None and context_citry is not None and owner_citry is not context_citry:
+            raise ValueError("CitryRender owner must match its component context.")
+        self.owner_citry = owner_citry if owner_citry is not None else context_citry
         self.frame = frame or RenderFrame.from_context(
             context, is_component_root=is_component_root, is_transparent_root=is_transparent_root
         )
@@ -336,6 +370,7 @@ class CitryRender:
         security_csp: SecurityCspMode | None = None,
         security_javascript: SecurityJavascriptMode | None = None,
         security_script_integrity: SecurityScriptIntegrityMode | None = None,
+        ssr: bool | None = None,
     ) -> str:
         """
         Turn this render into a final HTML string.
@@ -378,6 +413,8 @@ class CitryRender:
                 JavaScript delivery policy.
             security_script_integrity: Override this render's engine-level
                 script integrity policy.
+            ssr: Override the engine's initial Vue HTML hydration setting.
+                ``None`` uses :class:`CitrySettings`'s ``ssr`` value.
 
         Raises ``RuntimeError`` if any child component was left unrendered (a
         ``DeferredComponent`` still in the parts), which can only happen if this
@@ -398,6 +435,7 @@ class CitryRender:
             security_csp=security_csp,
             security_javascript=security_javascript,
             security_script_integrity=security_script_integrity,
+            ssr=ssr,
         ).html
 
     def serialize_result(
@@ -409,6 +447,7 @@ class CitryRender:
         security_csp: SecurityCspMode | None = None,
         security_javascript: SecurityJavascriptMode | None = None,
         security_script_integrity: SecurityScriptIntegrityMode | None = None,
+        ssr: bool | None = None,
     ) -> SerializedRender:
         """
         Return final HTML together with security metadata for those exact bytes.
@@ -429,6 +468,7 @@ class CitryRender:
             security_csp=security_csp,
             security_javascript=security_javascript,
             security_script_integrity=security_script_integrity,
+            ssr=ssr,
         )
 
     def __str__(self) -> str:
@@ -676,7 +716,7 @@ def _render_value(
         # module, so a top-level import back into it would be circular.
         from citry.component_render import render_impl  # noqa: PLC0415
 
-        if value.comp_cls.simple and context is not None:
+        if value.comp_cls.simple is True and context is not None:
             from citry._simple_runtime import render_simple_value  # noqa: PLC0415
 
             return render_simple_value(value, context, provides)
@@ -703,6 +743,28 @@ def _render_value(
     return escape(value)
 
 
+def simple_vue_called_components(record: SimpleVueRecord) -> Iterator[CitryRender | SimpleVueRecord]:
+    """
+    Yield the components a ``simple='vue'`` occurrence called, and the ones those records called.
+
+    A record keeps its called children inside its leaf rather than in a
+    render's ``parts``, so every walk over a render tree reaches them
+    through this function. Called records are yielded and then searched in
+    turn; an ordinary child render is yielded but not entered, since the
+    caller already walks renders. Any other part (a child that has not been
+    rendered yet) is yielded as well, so a checker can reject it.
+    """
+    pending: list[SimpleVueRecord] = [record]
+    while pending:
+        children = pending.pop().leaf.call_children
+        if children is None:
+            continue
+        for part in children.parts:
+            if type(part) is SimpleVueRecord:
+                pending.append(part)
+            yield cast("CitryRender | SimpleVueRecord", part)
+
+
 def selected_render_ids(render: CitryRender) -> frozenset[str]:
     """Return component render IDs reachable through the final selected tree."""
     selected: set[str] = set()
@@ -715,5 +777,16 @@ def selected_render_ids(render: CitryRender) -> frozenset[str]:
         seen.add(id(current))
         if current.frame.is_component_root and current.frame.render_id is not None:
             selected.add(current.frame.render_id)
-        pending.extend(part for part in current.parts if isinstance(part, CitryRender))
+        for part in current.parts:
+            if isinstance(part, SimpleVueRecord):
+                selected.add(part.render_id)
+                if part.leaf.call_children is None:
+                    continue
+                for called in simple_vue_called_components(part):
+                    if isinstance(called, SimpleVueRecord):
+                        selected.add(called.render_id)
+                    elif isinstance(called, CitryRender):
+                        pending.append(called)
+            elif isinstance(part, CitryRender):
+                pending.append(part)
     return frozenset(selected)

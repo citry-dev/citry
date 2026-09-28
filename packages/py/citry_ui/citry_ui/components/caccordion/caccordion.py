@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 from typing import Any, Literal, TypedDict
 
 from citry import CitryRender, LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._direct_output import feed_typed_direct_output
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
@@ -39,19 +39,6 @@ _ACCORDION_CONTEXT_KEY = "citry_ui_accordion"
 _ACCORDION_ITEM_CONTEXT_KEY = "citry_ui_accordion_item"
 _ACCORDION_PANEL_CONTEXT_KEY = "citry_ui_accordion_panel"
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-teleport",
-        "x-text",
-    }
-)
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -95,7 +82,6 @@ _ITEM_OWNED_ATTRS = frozenset(
         "popover",
         "role",
         "tabindex",
-        "x-show",
     }
 )
 _HEADING_OWNED_ATTRS = frozenset(
@@ -112,7 +98,6 @@ _HEADING_OWNED_ATTRS = frozenset(
         "popover",
         "role",
         "tabindex",
-        "x-show",
     }
 )
 _TRIGGER_OWNED_ATTRS = frozenset(
@@ -139,7 +124,6 @@ _TRIGGER_OWNED_ATTRS = frozenset(
         "role",
         "tabindex",
         "type",
-        "x-show",
     }
 )
 _PANEL_OWNED_ATTRS = frozenset(
@@ -156,7 +140,6 @@ _PANEL_OWNED_ATTRS = frozenset(
         "inert",
         "popover",
         "role",
-        "x-show",
     }
 )
 _ACTIONS_OWNED_ATTRS = frozenset(
@@ -314,15 +297,6 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(
     component_name: str,
     attrs: dict[str, object],
@@ -334,16 +308,13 @@ def _validate_attrs(
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            msg = f"{component_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if directive in owned:
-            msg = f"{component_name} cannot use owned directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in owned:
-            msg = f"{component_name} cannot dynamically bind owned attribute {target!r}."
+        # A Vue directive could rebind an owned attribute, add listeners, or
+        # change the part's structure, so none may arrive through Python data.
+        if is_vue_directive_attribute(key):
+            msg = (
+                f"{component_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
 
 

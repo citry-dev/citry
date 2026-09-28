@@ -56,10 +56,7 @@ def field_input_states_component(app: Citry) -> type[Component]:
                     :value="controlled
                         ? value
                         : undefined"
-                    @input="
-                      value = $event.target.value;
-                      invalid = $event.target.value.length < 3;
-                    "
+                    @input="acceptValue($event.target.value)"
                   />
                 </c-fill>
               </c-CField>
@@ -127,6 +124,14 @@ def field_input_states_component(app: Citry) -> type[Component]:
                 invalid: false,
                 formDisabled: false,
               };
+            },
+            methods: {
+              // The note needs at least three characters, so the Field turns
+              // invalid while a shorter value is typed.
+              acceptValue(value) {
+                this.value = value;
+                this.invalid = value.length < 3;
+              },
             },
           });
         """

@@ -41,10 +41,9 @@ print("hello")
 
 def _prepared_render(html: str) -> tuple[dict, str]:
     document = lxml_html.document_fromstring(html)
-    marker = "CitryStable.startPrepared("
-    [script] = [node for node in document.xpath("//script") if node.text and marker in node.text]
-    start = script.text.index(marker) + len(marker)
-    transport, _ = json.JSONDecoder().raw_decode(script.text[start:])
+    # The page carries its start configuration as one JSON data block.
+    [block] = document.xpath('//script[@type="application/json"][@data-citry-vue-document]')
+    transport = json.loads(block.text)
     assert transport["manifest"]["protocol"] == "citry-vue-prepared/1"
     definitions = transport["manifest"]["definitions"]
     bundles = []
@@ -57,6 +56,11 @@ def _prepared_render(html: str) -> tuple[dict, str]:
     assert definition_ids
     assert all(
         f'window.CitryStableDefinitions["{definition_id}"]' in render_source for definition_id in definition_ids
+    )
+    definition_ids = {item["id"] for item in transport["manifest"]["definitions"]}
+    assert definition_ids
+    assert all(
+        f'window.__citryRuntimeDefinitions["{definition_id}"]' in render_source for definition_id in definition_ids
     )
     return transport, render_source
 

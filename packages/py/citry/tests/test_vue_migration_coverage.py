@@ -1970,7 +1970,7 @@ def test_vue_events_cache_collision_eviction_and_collected_engine_are_explicit()
 def test_vue_events_rejects_componentless_roots_and_incomplete_compiler_output() -> None:
     app = Citry(autodiscover=False)
     bare = CitryRender(parts=[], context=CitryContext(), render_target="prepared")
-    with pytest.raises(UnsupportedPreparedView, match="no current component registry"):
+    with pytest.raises(UnsupportedPreparedView, match="no matching owning component registry"):
         default_events_producer(app).prepare_from_render(bare, citry=app, app_id="bare", revision=0)
 
     class Page(Component):
@@ -2566,8 +2566,21 @@ def test_leaf_projection_validates_spreads_and_prepared_dom_properties() -> None
         element_metadata=(),
     )
     assert _spread_attrs_renderer(spread_node, spread_node) is spread_node
-    assert _spread_passthrough_is_live(spread_node, CitryContext())
-    assert not _spread_passthrough_is_live(object(), CitryContext())
+    # The opening's own node renders the spread live; a different node, or a
+    # renderer that is not a transparent i18n wrapper of it, does not.
+    assert _spread_passthrough_is_live(spread_node, CitryContext(), spread_node)
+    other_node = PreparedElementOpenNode(
+        spread_source,
+        (0, len(spread_source)),
+        "div",
+        (spread_attr,),
+        (),
+        is_void=False,
+        is_self_closing=False,
+        element_metadata=(),
+    )
+    assert not _spread_passthrough_is_live(other_node, CitryContext(), spread_node)
+    assert not _spread_passthrough_is_live(object(), CitryContext(), spread_node)
 
     static_source = "<button title='x'>"
     static_attr = StaticHtmlAttr(static_source, (8, 17), "title", "x", ())

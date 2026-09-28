@@ -99,6 +99,29 @@ def _textarea_page(*, static_fallback: bool = False) -> str:
             border-width: 5px;
           }
         """
+        # The page owns the demo state that the textareas bind to. Tests drive it
+        # through `window.__textareaDemo`, which is the same Vue reactive object.
+        js = """
+          $component({
+            data() {
+              const textareaDemo = Citry.vue.reactive({
+                controlled: true,
+                draft: 'Moss and fern',
+                immutable: 'Fixed record',
+                rows: 4,
+                required: false,
+                disabled: false,
+                readonly: false,
+                invalid: false,
+                variant: 'outline',
+                size: 'md',
+                resize: 'vertical',
+              });
+              window.__textareaDemo = textareaDemo;
+              return {state: {textareaDemo}};
+            },
+          });
+        """
         template = """
           <!doctype html>
           <html lang="en">

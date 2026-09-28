@@ -37,8 +37,10 @@ REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry"
 # The package carries readable and generated client runtimes. The budget includes
-# the accepted post-start lifecycle and pending Events discovery improvements.
-MAX_WHEEL_BYTES: Final = 1_124 * 1024
+# the accepted post-start lifecycle and pending Events discovery improvements,
+# plus the reusable browser programs in `_vue/leaf_program.py` (1,199,379 bytes
+# measured when the cap was last raised, leaving about 5 KB of headroom).
+MAX_WHEEL_BYTES: Final = 1_176 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
     'uvicorn>=0.49; extra == "ext-preview"',
     'playwright>=1.62.0; extra == "ext-preview"',

@@ -8,7 +8,7 @@ from typing import Any, ClassVar, Literal
 
 from citry import LibraryComponent, SlotInput
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._dialog_controller import DIALOG_CONTROLLER_RUNTIME_DEPENDENCY
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
@@ -116,6 +116,9 @@ class CDialog(LibraryComponent):
             },
             "CDialog",
         )
+        # A Vue directive could rebind an owned attribute or add a listener, so
+        # none may arrive through Python data.
+        reject_vue_directive_attrs(kwargs.attrs, "CDialog")
 
         dialog_id = kwargs.id or f"cui-dialog-{self.id}"
         title_id = f"{dialog_id}-title"
@@ -550,7 +553,17 @@ class CDialog(LibraryComponent):
 
           return () => {
             host.removeEventListener("click", onHostClick);
+            // A server revision runs this cleanup and then the callback again on the
+            // same dialog, so an open dialog is handed to the next callback run.
             const handedOff = controller.cleanup({ handoff: true });
+            if (handedOff) {
+              // Vue runs this cleanup before an unmount removes the dialog from the
+              // page. By the next microtask the removal is done, so a disconnected
+              // dialog releases the scroll lock now rather than when the handoff expires.
+              queueMicrotask(() => {
+                if (!dialog.isConnected) controllerRuntime.abortHandoff(dialog);
+              });
+            }
             appliedOpen = false;
             updateActivators(false);
             syncRuntimeDialog(false);

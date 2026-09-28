@@ -13,7 +13,7 @@ from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
     ANCHORED_LAYER_RUNTIME_JS,
 )
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._direct_output import feed_typed_direct_output
 from citry_ui.components._shared_component_assets import build_shared_component_assets
 from citry_ui.components._validation import (
@@ -155,20 +155,6 @@ _SIZES = ("sm", "md", "lg")
 _INTENTS = ("default", "danger")
 _MENU_CONTEXT_KEY = "citry_ui_menu"
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _SURFACE_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -411,15 +397,6 @@ def _copy_attrs(
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(
     component_name: str,
     attrs: dict[str, object],
@@ -436,13 +413,14 @@ def _validate_attrs(
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            msg = f"{component_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in owned:
-            msg = f"{component_name} cannot dynamically bind owned attribute {target!r}."
+        # A Vue directive could rebind owned focus, visibility, or anchoring,
+        # change the menu structure, or attach a listener, so none may arrive
+        # through Python data.
+        if is_vue_directive_attribute(normalized):
+            msg = (
+                f"{component_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
 
 

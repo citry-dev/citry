@@ -162,6 +162,7 @@ serde_json = { version = "1.0.113" }
 vize_atelier_core = { path = "third_party/rust/vize_atelier_core", version = "=0.420.0" }
 vize_atelier_dom = "=0.420.0"
 vize_s1_to_s2 = { path = "third_party/rust/vize_s1_to_s2", version = "=0.420.0" }
+vize_s1 = "=0.420.0"
 unicode-normalization = { version = "0.1.23" }
 unicode_names2 = { version = "1.2.2" }
 walkdir = { version = "2.3.2" }

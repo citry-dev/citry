@@ -49,7 +49,7 @@ function runtime() {
     return vm.runInNewContext("JSON.parse(__json)", context);
   };
   const render = vm.runInNewContext("(function () {})", context);
-  const stable = context.CitryStable;
+  const stable = context.__citryRuntime;
   return {
     stable,
     realm,
@@ -333,7 +333,6 @@ test("applyEnvelope rejects invalid runtime-site references before publishing th
         definitions: [asset],
         occurrences: [nextRoot],
         updatedIds: ["root"],
-        replacements: [],
       }),
       "root",
     ),
@@ -469,4 +468,57 @@ test("runtime event definition matching ignores JSON object key order but reject
       ),
     /loaded definition metadata does not match its prepared declaration/,
   );
+});
+
+test("applyEnvelope keeps a private copy of a caller's envelope and a stale one changes nothing", async () => {
+  const fixture = runtime();
+  const { stable, realm } = fixture;
+  const root = {
+    id: "root",
+    typeKey: "Root",
+    definitionId: "root-definition",
+    parentId: null,
+    placementKey: null,
+    serverData: { count: 3 },
+    preparedData: { calls: {}, callRuns: {} },
+  };
+  stable.configure(
+    realm({
+      protocol: "citry-vue-prepared/1",
+      appId: "caller-envelope",
+      revision: 0,
+      rootId: "root",
+      markers: [],
+      occurrences: [root],
+    }),
+  );
+  stable.registerDefinition("caller-envelope", "root-definition", fixture.definition());
+  const app = stable._apps.get("caller-envelope");
+  const before = { revision: app.revision, occurrences: app.occurrences, snapshot: app.snapshot.value };
+  const envelope = realm({
+    protocol: "citry-vue-prepared/1",
+    appId: "caller-envelope",
+    baseRevision: 5,
+    revision: 6,
+    rootId: "root",
+    markers: [],
+    definitions: [],
+    scripts: [],
+    styles: [],
+    typePolicies: [],
+    occurrences: [{ ...root, serverData: { count: 4 } }],
+    updatedIds: ["root"],
+  });
+  const sent = JSON.stringify(envelope);
+
+  await assert.rejects(stable.applyEnvelope("caller-envelope", envelope, "root"), /stale or malformed envelope/);
+
+  // The rejection published nothing, and the caller's object was neither frozen nor changed.
+  assert.equal(app.revision, before.revision);
+  assert.equal(app.occurrences, before.occurrences);
+  assert.equal(app.snapshot.value, before.snapshot);
+  assert.equal(app.busy, false);
+  assert.equal(Object.isFrozen(envelope), false);
+  assert.equal(Object.isFrozen(envelope.occurrences[0].serverData), false);
+  assert.equal(JSON.stringify(envelope), sent);
 });

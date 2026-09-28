@@ -146,9 +146,12 @@ def test_tooltip_public_schema_is_nested_slotted_and_runtime_introspectable():
         ({"attrs": []}, TypeError, "CTooltip attrs must be a mapping"),
         ({"attrs": {"popover": "auto"}}, ValueError, "owned attribute"),
         ({"attrs": {"ROLE": "alert"}}, ValueError, "owned attribute"),
-        ({"attrs": {":aria-label": "other"}}, ValueError, "dynamically bind"),
-        ({"attrs": {"x-bind": "surfaceAttrs"}}, ValueError, "ownership directive"),
-        ({"attrs": {"x-show": "visible"}}, ValueError, "ownership directive"),
+        ({"attrs": {":aria-label": "other"}}, ValueError, "attrs cannot contain the Vue directive ':aria-label'"),
+        ({"attrs": {"v-bind": "surfaceAttrs"}}, ValueError, "attrs cannot contain the Vue directive 'v-bind'"),
+        ({"attrs": {"v-show": "visible"}}, ValueError, "attrs cannot contain the Vue directive 'v-show'"),
+        ({"attrs": {"V-IF": "visible"}}, ValueError, "attrs cannot contain the Vue directive 'V-IF'"),
+        ({"attrs": {"@mouseenter": "show"}}, ValueError, "attrs cannot contain the Vue directive '@mouseenter'"),
+        ({"attrs": {"#default": ""}}, ValueError, "attrs cannot contain the Vue directive '#default'"),
         ({"attrs": {"data-citry-root": ""}}, ValueError, "runtime attribute"),
     ],
 )
@@ -156,6 +159,17 @@ def test_tooltip_rejects_invalid_or_ambiguous_inputs(kwargs, exception, message)
     inputs = {"text": "Europa", **kwargs}
     with pytest.raises(exception, match=message):
         _page_html(_tooltip(**inputs))
+
+
+def test_tooltip_attrs_without_vue_syntax_stay_ordinary_attributes():
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _page_html(_tooltip(text="Europa", attrs={"x-data": "{}", "hx-get": "/hint"}), static_fallback=True)
+
+    root = re.search(r'<[^>]+data-citry-ui-part="tooltip"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/hint"' in root.group(0)
 
 
 def test_tooltip_requires_activator_and_exactly_one_content_source():

@@ -13,7 +13,13 @@ from typing import Any, ClassVar, Literal, TypedDict, cast
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._aria import merge_idrefs
-from citry_ui.components._attrs import CClassValue, CStyleValue, get_html_form_owner, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    get_html_form_owner,
+    merge_root_attrs,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import (
     FORM_CONTROL_RUNTIME_DEPENDENCY,
@@ -49,9 +55,6 @@ CNumberInputExact = int | Decimal | str
 
 _PLAIN_DECIMAL = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cni", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "data-citry-number-input-initialized",
@@ -177,15 +180,6 @@ def _message(name: str, value: object, required_field: str | None = None) -> str
     return text
 
 
-def _dynamic_target(key: str) -> str | None:
-    normalized = key.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(destination: str, value: Mapping[str, object] | None, owned: frozenset[str]) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"CNumberInput {destination} must be a mapping or None, got {value!r}.")
@@ -194,13 +188,11 @@ def _attrs(destination: str, value: Mapping[str, object] | None, owned: frozense
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CNumberInput {destination} requires string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CNumberInput {destination} cannot contain runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"CNumberInput {destination} cannot use ownership directive {key!r}.")
-        if _dynamic_target(key) in owned:
-            raise ValueError(f"CNumberInput {destination} cannot dynamically bind owned attribute {key!r}.")
+    # A Vue directive could rebind the value, listeners, or Form wiring this
+    # component owns, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, f"CNumberInput {destination.removesuffix('attrs').rstrip('_')}".rstrip())
     return copied
 
 

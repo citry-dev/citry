@@ -251,14 +251,22 @@ def test_invalid_structural_inputs_fail_synchronously(inputs: str, error: str) -
         ("attrs", {"id": "hostile"}, "owned attribute"),
         ("attrs", {"data-citry-hostile": "x"}, "owned attribute"),
         ("attrs", {"aria-description": "Hostile"}, "owned attribute"),
-        ("attrs", {":aria-description": "description"}, "dynamically bind"),
-        ("attrs", {"@contextmenu": "x"}, "owned event"),
+        ("attrs", {":aria-description": "description"}, "Vue directive"),
+        ("attrs", {"@contextmenu": "x"}, "Vue directive"),
+        ("attrs", {"@click": "x"}, "Vue directive"),
+        ("attrs", {"V-IF": "x"}, "Vue directive"),
+        ("attrs", {"onclick": "x"}, "raw event attribute"),
         ("target_attrs", {"id": "hostile"}, "owned attribute"),
         ("target_attrs", {"role": "button"}, "owned attribute"),
         ("target_attrs", {"disabled": True}, "owned attribute"),
-        ("target_attrs", {"@pointerdown": "x"}, "owned event"),
-        ("target_attrs", {"x-data": "{}"}, "ownership directive"),
         ("target_attrs", {"is": "fancy-button"}, "owned attribute"),
+        ("target_attrs", {"c-bind": "{}"}, "ownership directive"),
+        ("target_attrs", {"v-bind:role": "button"}, "Vue directive"),
+        ("target_attrs", {".disabled": "x"}, "Vue directive"),
+        ("target_attrs", {"v-if": "x"}, "Vue directive"),
+        ("target_attrs", {"@pointerdown": "x"}, "Vue directive"),
+        ("target_attrs", {"v-on:focus": "x"}, "Vue directive"),
+        ("target_attrs", {"#default": "x"}, "Vue directive"),
     ],
 )
 def test_owned_and_unsafe_attribute_targets_are_rejected(
@@ -278,8 +286,26 @@ def test_owned_and_unsafe_attribute_targets_are_rejected(
         },
         **kwargs,
     )
-    with pytest.raises(ValueError, match=error):
+    with pytest.raises(ValueError, match=f"CContextMenu {input_name} .*{error}"):
         component.render(citry=_app())
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    component = CContextMenu(
+        aria_label="Actions",
+        attrs={"data-note": "host"},
+        target_attrs={"x-data": "plain"},
+        slots={
+            "target": lambda data: CButton(
+                attrs=data.target_attrs,
+                slots={"default": "Target"},
+            ),
+            "menu": (CMenuItem(value="go", slots={"default": "Go"}),),
+        },
+    )
+    html = str(component.render(citry=_app()))
+    # The target renders in the browser, so its attributes travel in the prepared data.
+    assert '"x-data":"plain"' in html
 
 
 def test_missing_slots_and_empty_collection_fail_through_shared_menu_validation() -> None:

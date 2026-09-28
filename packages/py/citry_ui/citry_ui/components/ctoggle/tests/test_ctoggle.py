@@ -112,7 +112,7 @@ def test_invalid_group_contracts_fail(source):
 
 @pytest.mark.parametrize(
     "attribute",
-    ["role", "aria-label", "aria-pressed", "type", "tabindex", "x-if", "data-citry-morph"],
+    ["role", "aria-label", "aria-pressed", "type", "tabindex", "data-citry-morph"],
 )
 def test_toggle_owned_attributes_fail(attribute):
     source = '<c-CToggle c-attrs="attrs">Pin</c-CToggle>'
@@ -128,3 +128,40 @@ def test_toggle_owned_attributes_fail(attribute):
 
     with pytest.raises(ValueError, match="cannot"):
         str(Page())
+
+
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CToggle", ":aria-pressed"),
+        ("CToggle", "v-bind:type"),
+        ("CToggle", "v-if"),
+        ("CToggle", "V-IF"),
+        ("CToggle", "@click"),
+        ("CToggleGroup", ".aria-orientation"),
+        ("CToggleGroup", "v-for"),
+        ("CToggleGroup", "#default"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(owner, attribute):
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    source = (
+        f"<c-CToggle {attrs}>Pin</c-CToggle>"
+        if owner == "CToggle"
+        else f'<c-CToggleGroup label="View" {attrs}><c-CToggle value="sky">Sky</c-CToggle></c-CToggleGroup>'
+    )
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        _render(source)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render("<c-CToggle c-attrs=\"{'x-data': '{}', 'hx-get': '/pin'}\">Pin</c-CToggle>", static_fallback=True)
+
+    root = re.search(r"<button[^>]*>", html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/pin"' in root.group(0)

@@ -141,9 +141,15 @@ Keep a visible label even when placeholder text is present. Native Select
 adds no role, focus proxy, or keyboard handler. Labels, values, names, IDs,
 and autocomplete hints render as plain text, including trusted-string
 subclasses. `attrs`, `class_`, `style`, and option/group `attrs` remain trusted
-code surfaces for unowned native, ARIA, data, and Vue attributes.
+code surfaces for unowned native, ARIA, and data attributes.
+
+`attrs` and option/group `attrs` reject the attributes the component sets
+itself, Citry runtime attributes, and any Vue directive syntax: names starting
+with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the
+component tag in your template instead, for example
+`<c-CNativeSelect :title="hint" @change="save">`.
 
 Use `attrs={"form": "survey"}` for an external native Form owner. That Form
 element and ID must remain stable for one Select initialization; rerender the
-Select when ownership changes. Dynamic `form` bindings and duplicate
-case-insensitive spellings are rejected.
+Select when ownership changes. Duplicate case-insensitive spellings of `form`
+are rejected.

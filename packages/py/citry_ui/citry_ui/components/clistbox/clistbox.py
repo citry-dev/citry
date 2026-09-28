@@ -9,7 +9,7 @@ from html.parser import HTMLParser
 from typing import Any, ClassVar, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CListboxVariant = Literal["plain", "soft", "outline"]
@@ -21,20 +21,6 @@ _CONTEXT = "citry_ui_listbox"
 _VARIANTS = ("plain", "soft", "outline")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -233,14 +219,6 @@ def _initial_values(value: object, *, multiple: bool) -> tuple[str, ...]:
     return result
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     input_name: str,
@@ -262,12 +240,14 @@ def _attrs(
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"{owner} {input_name} cannot contain Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            msg = f"{owner} {input_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if _dynamic_target(normalized) in owned:
-            msg = f"{owner} {input_name} cannot dynamically bind owned attribute {key!r}."
+        # A Vue directive could rebind an owned selection or relationship
+        # attribute, change the structure, or attach a listener, so none may
+        # arrive through Python data.
+        if is_vue_directive_attribute(normalized):
+            msg = (
+                f"{owner} {input_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
     return merge_root_attrs(copied, class_, style)
 

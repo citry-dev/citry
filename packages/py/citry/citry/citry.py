@@ -167,6 +167,8 @@ class Citry:
         security_csp: SecurityCspMode = "off",
         security_javascript: SecurityJavascriptMode = "allow",
         security_script_integrity: SecurityScriptIntegrityMode = "off",
+        ssr: bool = True,
+        ssr_element_threshold: int = 0,
     ) -> None:
         self._engine_id = _new_engine_id()
         # CitrySettings.__post_init__ copies every field into its immutable
@@ -191,6 +193,8 @@ class Citry:
             security_csp=security_csp,
             security_javascript=security_javascript,
             security_script_integrity=security_script_integrity,
+            ssr=ssr,
+            ssr_element_threshold=ssr_element_threshold,
             secret=secret,
             event_result_resolvers=event_result_resolvers,
             event_payload_codecs=event_payload_codecs,

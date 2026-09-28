@@ -436,12 +436,14 @@ render.serialize(
 )
 ```
 
-- **`document`** (default): emit all tags inline, plus the client runtime and
-  a mark-as-loaded manifest so later fragments dedupe against the page.
-- **`simple`**: tags only, no client runtime, no manifest. For static pages
-  and emails.
-- **`fragment`**: no tags inlined; emit the pre-loader plus a JSON manifest
-  of URLs for the client manager to fetch (section 8).
+- **`document`** (default): emit all tags inline, plus the Vue runtime when
+  the page is interactive. The runtime loads each component script once per
+  page, so a later interactive fragment that uses the same component does not
+  fetch or run it again.
+- **`simple`**: tags only, no client runtime. For static pages and emails.
+- **`fragment`**: no tags inlined. A static fragment carries ordinary tags
+  that reference cached URLs; an interactive one carries a runtime loader and
+  one JSON descriptor naming the assets the Vue runtime loads before mounting.
 - **`ignore`**: content unchanged.
 - **`deps_position`**: `smart` uses placeholders/default locations (7.3);
   `prepend`/`append` put the tags before/after the whole output.
@@ -567,6 +569,72 @@ are exposed.
 
 A render with native Vue behavior uses the prepared Vue protocol. A document
 emits the Vue runtime before component Options and then starts the prepared app.
+The runtime and any plugin registration scripts are classic scripts that run
+where the parser meets them. The app itself is started by two tags that always
+sit next to each other, in this order:
+
+```html
+<script type="application/json" data-citry-vue-document="APP_ID">{...}</script>
+<script type="module">__citryRuntime.startDocument("APP_ID");</script>
+```
+
+The first tag is a JSON data block that holds the whole app configuration
+(the prepared manifest, component tags, host selector, and flags). The browser
+never runs it. The second is a one-line module script that asks the already
+loaded runtime to start the app with that id. `startDocument` finds the data
+block whose `data-citry-vue-document` value equals the id, requires exactly
+one such block, reads it with `JSON.parse`, checks that the manifest's
+`appId` matches, and calls `startPrepared` with the result. A failed start is
+reported as an uncaught error on the page. Each app on a page has its own id
+(random unless the application sets `id_generator`), so several apps on one
+page each read only their own block.
+
+The configuration is data rather than a JavaScript object literal because the
+browser reads JSON much faster than it compiles the same text as a script. On
+the benchmark board page with 1,400 rows the configuration is about 1.28 MB,
+and compiling and running it as a script took about 20 ms.
+
+The module script runs only after the browser has parsed the whole document
+and before `DOMContentLoaded`. If the start ran while the browser was still
+reading the page, before it drew anything, it would hold back the first paint
+of the server HTML. Your own `defer` or module scripts placed earlier in the
+page run before the app is registered, so they wait for `citry:ready` rather
+than calling into the app directly. Module scripts keep document order with
+each other and with `defer` scripts. Wherever `deps_position` places the two
+tags, the app starts after parsing.
+
+The server writes the data block's JSON with every `<` escaped as `\u003c`
+(`citry.util.html.script_json`, also used for the fragment descriptor and the
+i18n data block). In JSON a `<` can only occur inside a string, so page data
+such as `</script>`, `<!--` or `<script` cannot end the block early or hide
+its end tag, and `JSON.parse` still reads the original text. U+2028 and
+U+2029 are written as escapes too. A non-finite number is rejected when the
+page is serialized.
+
+Both tags carry the request's CSP nonce like Citry's other scripts. The
+browser does not apply CSP to a data block, so the nonce on it is not needed
+for the page to load; the runtime uses it as a check instead. When the
+runtime's own script tag had a nonce, `startDocument` refuses a data block
+whose nonce differs, so markup injected into the page without the nonce
+cannot supply a configuration. In script-integrity mode only the start
+script's hash is listed in `csp_script_hashes`; the data block is not
+executable, so it needs no CSP hash (the per-script records in
+`serialized.security.scripts` still describe it). The start script's text
+holds only the app id, so its hash is cheap to compute and never contains
+page data.
+
+The trust model is that the runtime trusts a data block from the same
+document when its id matches and, under a nonce policy, its nonce matches.
+The id is random for each response unless the application sets
+`id_generator`, in which case it is predictable. Under a hash-only policy with
+a predictable id, the rule that exactly one block may match does not protect
+the page: injected markup placed before the real block can hide it (for
+example with an unclosed comment or attribute value) and supply its own
+block. An attacker who can inject markup would need to guess a random id,
+so pages at risk of markup injection should use a nonce policy or keep the
+default random ids. The configuration's contents are still checked by
+`startPrepared` before anything mounts.
+
 A fragment emits a small runtime loader followed by one inert
 `data-citry-vue-fragment` JSON descriptor. The fragment manager validates,
 loads, stages, and commits the descriptor; it owns app-local stylesheet and
@@ -695,6 +763,80 @@ staticfiles tier to lean on, so citry serves or inlines the content itself.
 The built-in Events extension fills this slot with named per-component routes
 and fragment-render actions over `Extension.urls`, as specified in
 [`events.md`](events.md).
+
+### 9.6 Letting any page read Citry's own JS and CSS
+
+Citry puts `integrity` on every definition, script, and stylesheet it serves
+itself, and `security_script_integrity="citry"` adds it to the runtime
+tag and component scripts. The browser checks a digest only on a response the
+page may read. A page inside an iframe sandboxed without `allow-same-origin`
+has an opaque origin, so every request it makes counts as cross-origin, and
+without CORS the browser blocks the file and the page never mounts.
+
+So Citry does two things together:
+
+- **Every tag, preload hint, or runtime-created element that fetches a
+  Citry-owned file with `integrity` also sets `crossorigin="anonymous"`.** An
+  author's own `crossorigin` value on the asset stays as written. A preload
+  hint carries the same value as the tag it prepares; with a different value
+  the browser ignores the hint and downloads the file again.
+- **The public asset routes answer with `Access-Control-Allow-Origin: *`:**
+  `citry.js`, `cache/...`, `asset/...`, `ext/events/runtime.js`,
+  `ext/events/definitions/...`, `ext/events/assets/...`, and
+  `ext/i18n/runtime.js`. Routes that answer with a Citry-owned file (the
+  `_OwnedResource` helper, which holds one URL and its exact bytes) get the
+  header automatically; the Events definition and style routes add the same
+  `PUBLIC_ASSET_CORS_HEADERS` themselves, so a new asset route must use one
+  of the two.
+
+The wildcard is safe on those routes because they answer `GET` without reading
+cookies, sessions, or any other request data, so the response does not depend
+on who asks: a page can read only what an anonymous request for the same URL
+returns. Browsers never let a page read a credentialed response that carries
+the wildcard, so if a host puts the mount behind a login, another origin
+cannot read those files with the user's cookies, and an anonymous request gets
+the login response rather than the file. The value does not depend on the
+request's `Origin`, so no `Vary` header is needed.
+
+A file built from one render's `css_data()` or `js_data()` (the
+`cache/<class_id>.<vars_hash>.*` files and Events stylesheets) holds that
+render's values. Its URL is a hash of the content, and anyone who has the URL
+could already download it, so those methods must not return secrets.
+
+The header does widen who can read these files: a public web page running in
+a visitor's browser can now read a Citry file from a server on the visitor's
+internal network, if it knows or guesses the URL. Class-level files hold
+component source that any visitor of the app receives anyway. A deployment
+that treats its component source as confidential on an internal network
+should strip the header at its proxy for the `cache/` and `asset/` routes and
+accept that sandboxed embedding then fails.
+
+The request routes (`ext/events/call`, `ext/events/e/...`,
+`ext/i18n/messages`, and the preview routes) do not send the header. The
+Events CSRF baseline relies on the browser refusing a cross-origin read and
+blocking the preflight for `X-Citry-Events` (see [`events.md`](events.md) 7.4).
+
+Error modes:
+
+- **A proxy or CDN strips the header.** Same-origin pages keep working, since
+  CORS checks pass for a page's own origin. A page in an opaque-origin sandbox,
+  or a page on another origin, fails: the browser reports a Subresource
+  Integrity error and the Vue app does not mount.
+- **Citry's mount sits on another origin that sends no header.** Same as
+  above: integrity needs CORS from that host.
+- **A third-party URL with `integrity`.** Citry does not add `crossorigin` or
+  change it; the author sets it, and that host must send CORS headers.
+- **An author sets `crossorigin="use-credentials"` on an owned asset.** Citry
+  keeps it, and the browser rejects the wildcard for a cross-origin
+  credentialed request, so that asset loads only on same-origin pages.
+  Removing the attribute (`crossorigin=False`) sends a request without CORS,
+  so the integrity check fails in an opaque-origin sandbox in the same way.
+- **A browser cached a response before the header existed.** Definition and
+  stylesheet URLs are cached for a year and change only with their content.
+  A sandboxed frame that loaded one without the header may reuse that cached
+  response and fail its CORS check until the entry expires. Only frames that
+  already failed to mount are affected, since each cross-site frame keeps its
+  own cache.
 
 ---
 

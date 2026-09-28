@@ -312,6 +312,54 @@ def test_root_table_column_row_and_cell_attrs_merge_but_owned_attrs_are_rejected
         )
 
 
+@pytest.mark.parametrize(
+    ("destination", "attribute", "message"),
+    [
+        ("attrs", "data-citry-morph", "CDataGrid attrs cannot contain Citry runtime attribute"),
+        ("attrs", ":aria-busy", "CDataGrid attrs cannot contain the Vue directive"),
+        ("attrs", "v-if", "CDataGrid attrs cannot contain the Vue directive"),
+        ("attrs", "V-IF", "CDataGrid attrs cannot contain the Vue directive"),
+        ("attrs", "@click", "CDataGrid attrs cannot contain the Vue directive"),
+        ("table_attrs", "v-bind:role", "CDataGrid table_attrs cannot contain the Vue directive"),
+        ("table_attrs", "v-for", "CDataGrid table_attrs cannot contain the Vue directive"),
+        ("header_attrs", ".aria-colindex", "header_attrs cannot contain the Vue directive"),
+        ("cell_attrs", "v-html", "cell_attrs cannot contain the Vue directive"),
+        ("row_attrs", "#default", "attrs cannot contain the Vue directive"),
+        ("cell_value_attrs", "@keydown", "attrs cannot contain the Vue directive"),
+    ],
+)
+def test_attrs_reject_runtime_and_vue_directive_names(destination: str, attribute: str, message: str) -> None:
+    mapping = {attribute: "x"}
+    column_kwargs = {destination: mapping} if destination in {"header_attrs", "cell_attrs"} else {}
+    row_attrs = mapping if destination == "row_attrs" else None
+    cell = CDataGridCell("Ada", mapping) if destination == "cell_value_attrs" else "Ada"
+    grid_kwargs = {destination: mapping} if destination in {"attrs", "table_attrs"} else {}
+    with pytest.raises(ValueError, match=message):
+        _render(
+            CDataGrid(
+                columns=(CDataGridColumn("name", "Name", **column_kwargs),),
+                rows=(CDataGridRow("ada", {"name": cell}, attrs=row_attrs),),
+                label="People",
+                **grid_kwargs,
+            )
+        )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(
+        CDataGrid(
+            columns=_columns(),
+            rows=_rows(),
+            label="People",
+            attrs={"x-show": "root"},
+            table_attrs={"x-for": "table"},
+        ),
+        static_fallback=True,
+    )
+    assert 'x-show="root"' in html
+    assert 'x-for="table"' in html
+
+
 def test_runtime_declares_models_navigation_i18n_range_requests_and_cleanup():
     source = (Path(__file__).parents[1] / "runtime.source.js").read_text(encoding="utf8")
     assert "onSortChange: {}" in source

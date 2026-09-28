@@ -21,23 +21,18 @@ class FormSafePalette(Component):
 
     template = """
       <form
+        ref="form"
         id="command-palette-profile-form"
         class="command-palette-form"
 
         @submit.prevent="submits++"
       >
         <h2>Profile Form</h2>
-        <label>Display name <input id="command-profile-name" name="display_name" value="Ada" /></label>
+        <label>Display name <input ref="nameInput" id="command-profile-name" name="display_name" value="Ada" /></label>
         <c-CCommandPalette
           label="Profile commands"
           c-entries="commands"
-          :open="open" :query="query" :onOpenChange="(value)=>open=value" :onQueryChange="(value)=>query=value" :onAction="(value)=>{
-              actions++;
-              if (value==='focus-name') document.getElementById('command-profile-name').focus();
-              if (value==='submit-profile') {
-                document.getElementById('command-palette-profile-form').requestSubmit();
-              }
-            }"
+          :open="open" :query="query" :onOpenChange="(value)=>open=value" :onQueryChange="(value)=>query=value" :onAction="runAction"
         >
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
             <c-CButton
@@ -64,6 +59,15 @@ class FormSafePalette(Component):
           return {
             open:false,submits:0,actions:0,query:''
           };
+        },
+        methods: {
+          // Only an explicit action submits the form; Enter in the palette
+          // never does.
+          runAction(value) {
+            this.actions++;
+            if (value === 'focus-name') this.$refs.nameInput.focus();
+            if (value === 'submit-profile') this.$refs.form.requestSubmit();
+          },
         },
       });
     """

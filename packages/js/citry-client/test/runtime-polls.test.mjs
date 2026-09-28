@@ -38,9 +38,9 @@ function runtime() {
     return vm.runInNewContext("JSON.parse(__json)", context);
   };
   const render = vm.runInNewContext("(function () {})", context);
-  const stable = context.CitryStable;
+  const citryRuntime = context.__citryRuntime;
   return {
-    stable,
+    citryRuntime,
     realm,
     element() {
       return vm.runInNewContext("new Element()", context);
@@ -89,9 +89,9 @@ const pollSpec = (id, overrides = {}) => ({
 
 function ownerFor({ eventBindings = {}, pollBindings = {}, declaredHandlers = ["refresh", "save"] } = {}) {
   const fixture = runtime();
-  const { stable, realm } = fixture;
+  const { citryRuntime, realm } = fixture;
   const eventHandlers = Object.fromEntries(declaredHandlers.map((name) => [name, { httpMethod: "POST" }]));
-  stable.configure(
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId: "runtime-polls-owner",
@@ -118,8 +118,8 @@ function ownerFor({ eventBindings = {}, pollBindings = {}, declaredHandlers = ["
       ],
     }),
   );
-  stable.registerDefinition("runtime-polls-owner", "root-definition", fixture.definition());
-  const type = stable.defineType("runtime-polls-owner", "Root", {});
+  citryRuntime.registerDefinition("runtime-polls-owner", "root-definition", fixture.definition());
+  const type = citryRuntime.defineType("runtime-polls-owner", "Root", {});
   const instance = { citryId: "root" };
   type.beforeCreate.call(instance);
   return { fixture, instance };
@@ -204,8 +204,12 @@ async function assertInitialPreflightRejects(manifest, matcher) {
   const configuration = fixture.realm({ manifest, tags: {} });
   configuration.host = fixture.element();
 
-  await assert.rejects(fixture.stable.startPrepared(configuration), matcher, manifest.appId);
-  assert.equal(fixture.stable._apps.has(manifest.appId), false, "rejected initial metadata must not publish an app");
+  await assert.rejects(fixture.citryRuntime.startPrepared(configuration), matcher, manifest.appId);
+  assert.equal(
+    fixture.citryRuntime._apps.has(manifest.appId),
+    false,
+    "rejected initial metadata must not publish an app",
+  );
 }
 
 test("one runtime site resolves event and poll ids from their separate typed tables", () => {
@@ -344,11 +348,40 @@ test("initial preflight rejects malformed, swapped, and orphan runtime poll meta
   }
 });
 
+const invalidOpaqueRecords = [
+  ["an extra field", { html: "<section></section>", nodeCount: 1, extra: true }],
+  ["no node count", { html: "<section></section>" }],
+  ["a negative node count", { html: "<section></section>", nodeCount: -1 }],
+  ["a fractional node count", { html: "<section></section>", nodeCount: 1.5 }],
+  ["nodes for empty HTML", { html: "", nodeCount: 1 }],
+];
+for (const [label, record] of invalidOpaqueRecords) {
+  test(`initial preflight rejects an opaque HTML record with ${label}`, async () => {
+    const manifest = bootstrap({ appId: `runtime-poll-invalid-opaque-html-${label.replaceAll(" ", "-")}` });
+    manifest.definitions[0].opaqueHtmlSites = [{ key: "citryOpaque0", origin: "raw", sourceStart: 0, sourceEnd: 16 }];
+    manifest.occurrences[0].preparedData.opaqueHtml = { citryOpaque0: record };
+
+    await assertInitialPreflightRejects(manifest, /invalid opaque HTML record/);
+  });
+}
+
+for (const origin of ["grouped", "unknown"]) {
+  test(`initial preflight rejects an opaque HTML site with the unknown origin ${origin}`, async () => {
+    const manifest = bootstrap({ appId: `runtime-poll-invalid-opaque-origin-${origin}` });
+    manifest.definitions[0].opaqueHtmlSites = [{ key: "citryOpaque0", origin, sourceStart: 0, sourceEnd: 16 }];
+    manifest.occurrences[0].preparedData.opaqueHtml = {
+      citryOpaque0: { html: "<section></section>", nodeCount: 1 },
+    };
+
+    await assertInitialPreflightRejects(manifest, /invalid opaque HTML site/);
+  });
+}
+
 test("applyEnvelope rejects an invalid poll before publishing its accompanying State update", async () => {
   const fixture = runtime();
-  const { stable, realm } = fixture;
+  const { citryRuntime, realm } = fixture;
   const appId = "runtime-poll-apply-atomicity";
-  stable.configure(
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId,
@@ -368,9 +401,9 @@ test("applyEnvelope rejects an invalid poll before publishing its accompanying S
       ],
     }),
   );
-  stable.registerDefinition(appId, "root-definition", fixture.definition());
+  citryRuntime.registerDefinition(appId, "root-definition", fixture.definition());
 
-  const app = stable._apps.get(appId);
+  const app = citryRuntime._apps.get(appId);
   const before = {
     revision: app.revision,
     snapshot: app.snapshot.value,
@@ -402,7 +435,7 @@ test("applyEnvelope rejects an invalid poll before publishing its accompanying S
   };
 
   await assert.rejects(
-    stable.applyEnvelope(
+    citryRuntime.applyEnvelope(
       appId,
       realm({
         protocol: "citry-vue-prepared/1",
@@ -414,7 +447,6 @@ test("applyEnvelope rejects an invalid poll before publishing its accompanying S
         definitions: [definitionAsset()],
         occurrences: [nextRoot],
         updatedIds: ["root"],
-        replacements: [],
       }),
       "root",
     ),

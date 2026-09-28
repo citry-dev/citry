@@ -16,6 +16,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._validation import reject_owned_attrs, validate_optional_boolean
@@ -51,10 +52,8 @@ _ROOT_OWNED_ATTRS = frozenset(
         "value",
     }
 )
-_ROOT_DYNAMIC_OWNED_ATTRS = _ROOT_OWNED_ATTRS | {"aria-describedby", "aria-errormessage", "form"}
 _OPTION_OWNED_ATTRS = frozenset({"data-citry-key", "disabled", "label", "selected", "value"})
 _GROUP_OWNED_ATTRS = frozenset({"disabled", "label"})
-_OWNERSHIP_DIRECTIVES = frozenset({"x-bind", "x-html", "x-model", "x-modelable", "x-text"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,38 +164,20 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.lower()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(
     input_name: str,
     attrs: dict[str, object],
     *,
     owned: frozenset[str],
-    dynamic_owned: frozenset[str] | None = None,
 ) -> None:
     component_name = f"CNativeSelect {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
-    dynamic_targets = dynamic_owned or owned
+    # A Vue directive could rebind the value, options, or Form wiring this
+    # component renders itself, so none may arrive through Python data.
+    reject_vue_directive_attrs(attrs, component_name.removesuffix(" attrs"))
     for key in attrs:
-        normalized = key.lower()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.lower().startswith(_RUNTIME_PREFIXES):
             msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"{component_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in dynamic_targets:
-            msg = f"{component_name} cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
 
 
@@ -327,12 +308,7 @@ class CNativeSelect(LibraryComponent):
                 msg = f"CNativeSelect value {value!r} identifies a disabled option."
                 raise ValueError(msg)
         attrs = _copy_attrs("attrs", kwargs.attrs)
-        _validate_attrs(
-            "attrs",
-            attrs,
-            owned=_ROOT_OWNED_ATTRS,
-            dynamic_owned=_ROOT_DYNAMIC_OWNED_ATTRS,
-        )
+        _validate_attrs("attrs", attrs, owned=_ROOT_OWNED_ATTRS)
         self._native_select_name = name
         self._native_select_id = element_id
         return _NormalizedSelect(

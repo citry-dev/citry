@@ -218,9 +218,15 @@ def test_invalid_server_inputs_fail(template: str, message: str) -> None:
     [
         "<c-CFileInput c-attrs=\"{'type': 'text'}\" />",
         "<c-CFileInput c-attrs=\"{':required': 'ready'}\" />",
-        "<c-CFileInput c-attrs=\"{'x-model': 'files'}\" />",
+        "<c-CFileInput c-attrs=\"{'v-model': 'files'}\" />",
+        "<c-CFileInput c-attrs=\"{'v-bind:aria-describedby': 'ids'}\" />",
+        "<c-CFileInput c-attrs=\"{'V-IF': 'shown'}\" />",
+        "<c-CFileInput c-attrs=\"{'@change': 'picked()'}\" />",
         "<c-CDropTarget label=\"Upload\" c-attrs=\"{'for': 'other'}\" />",
-        "<c-CDropTarget label=\"Upload\" c-attrs=\"{'x-html': 'content'}\" />",
+        "<c-CDropTarget label=\"Upload\" c-attrs=\"{'v-html': 'content'}\" />",
+        "<c-CDropTarget label=\"Upload\" c-attrs=\"{'v-for': 'item in items'}\" />",
+        "<c-CDropTarget label=\"Upload\" c-attrs=\"{'#default': ''}\" />",
+        "<c-CDropTarget label=\"Upload\" c-input_attrs=\"{'v-on:change': 'picked()'}\" />",
         "<c-CDropTarget label=\"Upload\" c-input_attrs=\"{'aria-hidden': 'true'}\" />",
         "<c-CDropTarget label=\"Upload\" c-input_attrs=\"{':form': 'owner'}\" />",
     ],
@@ -228,6 +234,22 @@ def test_invalid_server_inputs_fail(template: str, message: str) -> None:
 def test_owned_and_structural_attrs_are_rejected(template: str) -> None:
     with pytest.raises(ValueError, match="cannot"):
         _render(template)
+
+
+def test_python_attrs_reject_vue_directives_before_rendering() -> None:
+    # Each map names itself so the caller knows which input to fix.
+    message = "CDropTarget input_attrs cannot contain the Vue directive '.files'"
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _render("<c-CDropTarget label=\"Upload\" c-input_attrs=\"{'.files': 'picked'}\" />")
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    file_tag = _tag(
+        _render("<c-CFileInput c-attrs=\"{'x-data': '{}', 'hx-post': '/upload'}\" />", static_fallback=True),
+        "file-input",
+    )
+    assert 'x-data="{}"' in file_tag
+    assert 'hx-post="/upload"' in file_tag
 
 
 def test_static_relationship_attrs_remain_available_standalone() -> None:

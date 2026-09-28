@@ -8,7 +8,7 @@ from typing import ClassVar, Literal, TypedDict, cast
 
 from citry import LibraryComponent, Slot, SlotInput, const_value
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._validation import validate_boolean
 from citry_ui.components.cmenu.cmenu import (
     _CMENU_SHARED_ASSETS,
@@ -48,27 +48,9 @@ class CContextMenuOpenChangeDetail(TypedDict):
 
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "$c-props",
-        "c-bind",
-        "c-props",
-        "x-bind",
-        "x-data",
-        "x-effect",
-        "x-for",
-        "x-html",
-        "x-id",
-        "x-if",
-        "x-ignore",
-        "x-init",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
+# Citry template directive names would let a copied attribute re-enter the
+# template as a props or attribute spread.
+_OWNERSHIP_DIRECTIVES = frozenset({"c-bind"})
 _ROOT_ATTRS = frozenset({"class", "dir", "lang", "style"})
 _ROOT_RESERVED = frozenset(
     {
@@ -107,20 +89,6 @@ _TARGET_RESERVED = frozenset(
         "data-citry-context-menu-target",
     }
 )
-_OWNED_EVENTS = frozenset(
-    {
-        "blur",
-        "contextmenu",
-        "focusin",
-        "keydown",
-        "pointercancel",
-        "pointerdown",
-        "pointermove",
-        "pointerup",
-        "scroll",
-        "visibilitychange",
-    }
-)
 
 
 def _plain_id(value: object, render_id: str) -> str:
@@ -155,22 +123,6 @@ def _plain_label(value: object) -> str:
     return plain
 
 
-def _dynamic_target(name: str) -> str | None:
-    if name.startswith("x-bind:"):
-        return name.removeprefix("x-bind:").split(".", 1)[0]
-    if name.startswith((":", ".")):
-        return name[1:].split(".", 1)[0]
-    return None
-
-
-def _event_target(name: str) -> str | None:
-    if name.startswith("x-on:"):
-        return name.removeprefix("x-on:").split(".", 1)[0]
-    if name.startswith("@"):
-        return name[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(
     input_name: str,
     value: Mapping[str, object] | None,
@@ -199,33 +151,22 @@ def _copy_attrs(
         if (root_aria or normalized.startswith(_RUNTIME_PREFIXES) or normalized in reserved) and not native_marker:
             msg = f"CContextMenu {input_name} cannot override owned attribute {key!r}."
             raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
+        # A Vue directive could rebind an owned attribute, replace the menu's
+        # own invocation listeners, or change the target's structure, so none
+        # may arrive through Python data. Listeners belong in the target fill.
+        if is_vue_directive_attribute(key):
+            msg = (
+                f"CContextMenu {input_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
+            raise ValueError(msg)
+        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
             msg = f"CContextMenu {input_name} cannot use ownership directive {key!r}."
             raise ValueError(msg)
-        event = _event_target(normalized)
-        if event is not None:
-            if event in _OWNED_EVENTS:
-                msg = f"CContextMenu {input_name} cannot override owned event {event!r}."
-                raise ValueError(msg)
-            continue
+        # Inline handlers would run beside the menu's invocation logic.
         if normalized.startswith("on"):
             msg = f"CContextMenu {input_name} cannot use raw event attribute {key!r}."
             raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target is not None:
-            native_target = input_name == "target_attrs" and target == "data-citry-context-menu-native"
-            if (
-                (input_name == "attrs" and target.startswith("aria-"))
-                or target in reserved
-                or target.startswith(_RUNTIME_PREFIXES)
-            ) and not native_target:
-                msg = f"CContextMenu {input_name} cannot dynamically bind attribute {target!r}."
-                raise ValueError(msg)
-            if allowed is not None and target not in allowed and not target.startswith(("aria-", "data-")):
-                msg = f"CContextMenu {input_name} does not allow attribute {target!r}."
-                raise ValueError(msg)
-            continue
         if allowed is not None and normalized not in allowed and not normalized.startswith(("aria-", "data-")):
             msg = f"CContextMenu {input_name} does not allow attribute {key!r}."
             raise ValueError(msg)

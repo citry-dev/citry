@@ -63,6 +63,13 @@ disabled values do not submit.
 `input_attrs={"autocomplete": "..."}` when another autocomplete policy is
 required. Citry never invokes WebOTP or reads SMS messages.
 
+`attrs` and `input_attrs` accept ordinary native, ARIA, and data attributes.
+They reject the attributes the component sets itself (such as the input's
+`name` and `pattern`), Citry runtime attributes, and any Vue directive syntax:
+names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and
+listeners on the component tag in your template instead, for example
+`<c-CPinInput :title="hint" :onValueChange="save">`.
+
 ## Mask or group the visual cells
 
 `mask=True` replaces filled visual cells with bullets without changing the

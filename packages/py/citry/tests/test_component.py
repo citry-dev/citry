@@ -42,6 +42,8 @@ class TestComponentFields:
                 vue_variables = {"$baseMagic": int}
                 rule_unknown_component_js_variable = "warning"
                 component_js_globals = {"baseClient": int}
+                rule_unknown_component_js_member = "warning"
+                rule_vue_python_variable = "error"
 
         class Child(Base):
             class Lint:
@@ -74,6 +76,8 @@ class TestComponentFields:
             "Child-only browser value.",
         )
         assert child_lint.rule_unknown_component_js_variable == "warning"
+        assert child_lint.rule_unknown_component_js_member == "warning"
+        assert child_lint.rule_vue_python_variable == "error"
         assert {item.name for item in child_lint.component_js_globals} == {"baseClient", "childClient"}
         child_client_value = next(item for item in child_lint.component_js_globals if item.name == "childClient")
         assert (child_client_value.type_display, child_client_value.description) == (
@@ -85,6 +89,8 @@ class TestComponentFields:
         assert reset_lint.rule_unknown_vue_variable == "error"
         assert reset_lint.vue_variables == ()
         assert reset_lint.rule_unknown_component_js_variable == "error"
+        assert reset_lint.rule_unknown_component_js_member == "error"
+        assert reset_lint.rule_vue_python_variable == "warning"
         assert reset_lint.component_js_globals == ()
 
     def test_lint_declaration_rejects_unknown_fields_and_invalid_values(self):
@@ -113,6 +119,22 @@ class TestComponentFields:
 
                 class Lint:
                     rule_unknown_vue_variable = "warn"
+
+        with pytest.raises(ValueError, match="rule_unknown_component_js_member"):
+
+            class InvalidMemberRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_unknown_component_js_member = "warn"
+
+        with pytest.raises(ValueError, match="rule_vue_python_variable"):
+
+            class InvalidPythonVariableRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_vue_python_variable = "warn"
 
     def test_kwargs_auto_dataclass(self):
         c = Citry()

@@ -149,8 +149,11 @@ function dispatchEvent(data) {
     }
     pyodide.globals.set("__citry_playground_event_envelope", envelopeJson);
     pyodide.globals.set("__citry_playground_event_run_id", data.runId);
+    // The executor accepts only the Vue request headers; see _forwarded_event_headers.
+    pyodide.globals.set("__citry_playground_event_headers", JSON.stringify(data.headers ?? {}));
     const serialized = pyodide.runPython(
-      "dispatch_event_json(__citry_playground_event_envelope, __citry_playground_event_run_id)",
+      "dispatch_event_json(__citry_playground_event_envelope, __citry_playground_event_run_id,"
+        + " __citry_playground_event_headers)",
     );
     if (new TextEncoder().encode(serialized).byteLength > MAX_RESULT_BYTES) {
       throw new Error("The event response exceeds the 2 MiB playground limit.");
@@ -174,6 +177,7 @@ function dispatchEvent(data) {
     try {
       pyodide.globals.delete("__citry_playground_event_envelope");
       pyodide.globals.delete("__citry_playground_event_run_id");
+      pyodide.globals.delete("__citry_playground_event_headers");
     } catch {
       // A failed interpreter may no longer expose its globals proxy.
     }

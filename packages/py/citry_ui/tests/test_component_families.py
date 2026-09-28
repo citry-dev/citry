@@ -684,8 +684,8 @@ def test_input_rejects_case_insensitive_form_conflicts_and_dynamic_rebinding():
 
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
-    with pytest.raises(ValueError, match="dynamically bind HTML attribute 'form'"):
-        _page_html(app, CInput(attrs={"X-BIND:FORM": "owner"}))
+    with pytest.raises(ValueError, match="CInput attrs cannot contain the Vue directive 'V-BIND:FORM'"):
+        _page_html(app, CInput(attrs={"V-BIND:FORM": "owner"}))
 
 
 @pytest.mark.parametrize("omitted_value", [None, False])
@@ -1722,3 +1722,37 @@ def test_tabs_cannot_nest_directly_under_an_existing_tabs_root():
 
     with pytest.raises(ValueError, match="inside a Tab or TabPanel"):
         _page_html(app, tabs)
+
+
+def _table_with(*, root=None, column_cell=None, row=None) -> CTable:
+    return CTable(
+        attrs=root,
+        columns=(CTableColumn("name", "Name", cell_attrs=column_cell),),
+        rows=(CTableRow("alpha", {"name": "Alpha"}, attrs=row),),
+        slots={"caption": "Projects"},
+    )
+
+
+@pytest.mark.parametrize("name", ["v-if", "V-ON:click", "@click", ":title", ".innerHTML", "^onclick", "#default"])
+@pytest.mark.parametrize(
+    ("build", "owner"),
+    [
+        (lambda attrs: CButton(attrs=attrs, slots={"default": "Save"}), "CButton attrs"),
+        (lambda attrs: CDialog(attrs=attrs, slots={"title": "Title", "default": "Body"}), "CDialog attrs"),
+        (lambda attrs: CForm(attrs=attrs, slots={"default": "Fields"}), "CForm attrs"),
+        (lambda attrs: _table_with(root=attrs), "CTable attrs"),
+        (lambda attrs: _table_with(column_cell=attrs), "CTable column 'name' cell_attrs"),
+        (lambda attrs: _table_with(row=attrs), "CTable row 'alpha' attrs"),
+        (
+            lambda attrs: CTabs(default_value="a", aria_label="Sections", attrs=attrs, slots={"default": "x"}),
+            "Tabs attrs",
+        ),
+    ],
+)
+def test_family_attrs_reject_vue_directives(build, owner, name):
+    # Python attrs are data; any Vue directive spelling there could rebind an
+    # owned attribute or install a listener, so the component refuses it.
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+    with pytest.raises(ValueError, match=re.escape(f"{owner} cannot contain the Vue directive {name!r}")):
+        _page_html(app, build({name: "value"}))

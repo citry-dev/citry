@@ -14,6 +14,10 @@ from docs_site._internal.config import DocsConfig
 from docs_site._internal.nav import SCOPE_SITE, NavArea, NavGroup, NavItem, NavTree
 from docs_site._internal.pipeline import render_page
 
+# Read repository files from this file's location rather than the working
+# directory, so the tests pass however pytest is launched.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _nav() -> NavTree:
     return NavTree(
@@ -245,7 +249,7 @@ def test_navigation_renders_review_hint_and_area_badge_without_changing_titles()
     assert current.text_content().strip() == "Citry UI"
     assert tree.find_title("/ui-library/") == "Overview"
 
-    css = Path("docs_site/static/css/site.css").read_text(encoding="utf-8")
+    css = (_REPO_ROOT / "docs_site" / "static" / "css" / "site.css").read_text(encoding="utf-8")
     assert ".djc-sidebar__link:hover .djc-sidebar__review-hint" in css
     assert ".djc-sidebar__link:focus-visible .djc-sidebar__review-hint" in css
 

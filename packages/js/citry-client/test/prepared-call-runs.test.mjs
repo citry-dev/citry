@@ -40,7 +40,7 @@ function runtime({ nextTick } = {}) {
   vm.runInNewContext(source, context);
   const render = vm.runInNewContext("(function () {})", context);
   return {
-    stable: context.CitryStable,
+    citryRuntime: context.__citryRuntime,
     realm(value) {
       context.__json = JSON.stringify(value);
       return vm.runInNewContext("JSON.parse(__json)", context);
@@ -115,7 +115,7 @@ function run(runId, typeKey, componentTag) {
     sourceEnd: 2,
     loopSourceStart: 1,
     loopSourceEnd: 2,
-    collectionExpression: "preparedData.callRuns." + runId,
+    collectionExpression: "$citryPrepared.callRuns." + runId,
     idExpression: "citryOccurrenceId",
     keyExpression: "citryOccurrenceId",
   };
@@ -130,7 +130,7 @@ test("prepared bootstrap requires an explicit marker array", () => {
 
   assert.throws(
     () =>
-      fixture.stable.configure(
+      fixture.citryRuntime.configure(
         fixture.realm({
           protocol: "citry-vue-prepared/1",
           appId: "missing-markers",
@@ -145,8 +145,8 @@ test("prepared bootstrap requires an explicit marker array", () => {
 
 test("prepared call runs exactly partition local calls by declared stable type", () => {
   const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
+  const { citryRuntime, realm } = fixture;
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId: "app",
@@ -160,8 +160,8 @@ test("prepared call runs exactly partition local calls by declared stable type",
       ],
     }),
   );
-  stable.registerDefinition("app", "child-def", fixture.definition(definition()));
-  stable.registerDefinition(
+  citryRuntime.registerDefinition("app", "child-def", fixture.definition(definition()));
+  citryRuntime.registerDefinition(
     "app",
     "parent-def",
     fixture.definition(definition([run("first", "Child", "citry-child"), run("second", "Child", "citry-child")])),
@@ -170,8 +170,8 @@ test("prepared call runs exactly partition local calls by declared stable type",
 
 test("callRuns may be absent only when the definition declares no runs", () => {
   const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
+  const { citryRuntime, realm } = fixture;
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId: "app",
@@ -181,10 +181,10 @@ test("callRuns may be absent only when the definition declares no runs", () => {
       occurrences: [occurrenceWithoutRuns("root", "Parent", "parent-def", null)],
     }),
   );
-  stable.registerDefinition("app", "parent-def", fixture.definition(definition()));
+  citryRuntime.registerDefinition("app", "parent-def", fixture.definition(definition()));
 
   const missing = runtime();
-  missing.stable.configure(
+  missing.citryRuntime.configure(
     missing.realm({
       protocol: "citry-vue-prepared/1",
       appId: "app",
@@ -196,7 +196,7 @@ test("callRuns may be absent only when the definition declares no runs", () => {
   );
   assert.throws(
     () =>
-      missing.stable.registerDefinition(
+      missing.citryRuntime.registerDefinition(
         "app",
         "parent-def",
         missing.definition(definition([run("items", "Child", "citry-child")])),
@@ -207,8 +207,8 @@ test("callRuns may be absent only when the definition declares no runs", () => {
 
 test("ordinary declarations and call-run members jointly partition mixed local calls", () => {
   const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
+  const { citryRuntime, realm } = fixture;
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId: "app",
@@ -231,8 +231,8 @@ test("ordinary declarations and call-run members jointly partition mixed local c
       ],
     }),
   );
-  stable.registerDefinition("app", "child-def", fixture.definition(definition()));
-  stable.registerDefinition(
+  citryRuntime.registerDefinition("app", "child-def", fixture.definition(definition()));
+  citryRuntime.registerDefinition(
     "app",
     "parent-def",
     fixture.definition(
@@ -243,8 +243,8 @@ test("ordinary declarations and call-run members jointly partition mixed local c
 
 test("ordinary slot-fill calls retain a physical parent distinct from their lexical owner", () => {
   const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
+  const { citryRuntime, realm } = fixture;
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId: "app",
@@ -261,9 +261,9 @@ test("ordinary slot-fill calls retain a physical parent distinct from their lexi
       ],
     }),
   );
-  stable.registerDefinition("app", "receiver-def", fixture.definition(definition()));
-  stable.registerDefinition("app", "fill-def", fixture.definition(definition()));
-  stable.registerDefinition(
+  citryRuntime.registerDefinition("app", "receiver-def", fixture.definition(definition()));
+  citryRuntime.registerDefinition("app", "fill-def", fixture.definition(definition()));
+  citryRuntime.registerDefinition(
     "app",
     "parent-def",
     fixture.definition(
@@ -277,8 +277,8 @@ for (const [name, callRuns, error] of [
 ]) {
   test(`prepared call runs reject ${name}`, () => {
     const fixture = runtime();
-    const { stable, realm } = fixture;
-    stable.configure(
+    const { citryRuntime, realm } = fixture;
+    citryRuntime.configure(
       realm({
         protocol: "citry-vue-prepared/1",
         appId: "app",
@@ -302,10 +302,13 @@ for (const [name, callRuns, error] of [
         ],
       }),
     );
-    stable._apps.get("app").occurrences.get("root").preparedData.callRuns = realm(callRuns);
+    // Retained occurrences are frozen, so swap in a malformed copy rather than editing one.
+    const occurrences = citryRuntime._apps.get("app").occurrences;
+    const root = occurrences.get("root");
+    occurrences.set("root", { ...root, preparedData: { ...root.preparedData, callRuns: realm(callRuns) } });
     assert.throws(
       () =>
-        stable.registerDefinition(
+        citryRuntime.registerDefinition(
           "app",
           "parent-def",
           fixture.definition(definition([run("first", "Child", "citry-child"), run("second", "Child", "citry-child")])),
@@ -323,7 +326,7 @@ for (const [name, callRuns, error] of [
     const fixture = runtime();
     assert.throws(
       () =>
-        fixture.stable.configure(
+        fixture.citryRuntime.configure(
           fixture.realm({
             protocol: "citry-vue-prepared/1",
             appId: "app",
@@ -344,8 +347,8 @@ for (const [name, callRuns, error] of [
 
 test("replacement sites reference declared call runs", () => {
   const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
+  const { citryRuntime, realm } = fixture;
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId: "app",
@@ -357,7 +360,7 @@ test("replacement sites reference declared call runs", () => {
   );
   assert.throws(
     () =>
-      stable.registerDefinition(
+      citryRuntime.registerDefinition(
         "app",
         "parent-def",
         fixture.definition(
@@ -723,8 +726,8 @@ test("supplied replacement declarations must agree with browser derivation", asy
 
 test("one definition cannot bind a component tag to two stable types", () => {
   const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
+  const { citryRuntime, realm } = fixture;
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId: "app",
@@ -736,20 +739,20 @@ test("one definition cannot bind a component tag to two stable types", () => {
   );
   assert.throws(
     () =>
-      stable.registerDefinition(
+      citryRuntime.registerDefinition(
         "app",
         "parent-def",
         fixture.definition(definition([run("a", "First", "citry-child"), run("b", "Second", "citry-child")])),
       ),
     /component tag stable-type mismatch/,
   );
-  assert.equal(stable._apps.get("app").definitions.size, 0);
+  assert.equal(citryRuntime._apps.get("app").definitions.size, 0);
 });
 
 test("ordinary and run declarations cannot bind one component tag to different types across definitions", () => {
   const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
+  const { citryRuntime, realm } = fixture;
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId: "app",
@@ -759,14 +762,14 @@ test("ordinary and run declarations cannot bind one component tag to different t
       occurrences: [occurrence("root", "Parent", "root-def", null)],
     }),
   );
-  stable.registerDefinition(
+  citryRuntime.registerDefinition(
     "app",
     "first-def",
     fixture.definition(definition([], [], [ordinary("fixed", "First", "citry-child")])),
   );
   assert.throws(
     () =>
-      stable.registerDefinition(
+      citryRuntime.registerDefinition(
         "app",
         "second-def",
         fixture.definition(definition([run("items", "Second", "citry-child")])),
@@ -777,8 +780,8 @@ test("ordinary and run declarations cannot bind one component tag to different t
 
 test("rejected call-run registration leaves registries unchanged and permits a corrected retry", () => {
   const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
+  const { citryRuntime, realm } = fixture;
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId: "app",
@@ -791,21 +794,24 @@ test("rejected call-run registration leaves registries unchanged and permits a c
       ],
     }),
   );
-  const app = stable._apps.get("app");
+  const app = citryRuntime._apps.get("app");
   const invalid = fixture.definition(definition([run("items", "Wrong", "citry-child")]));
-  assert.throws(() => stable.registerDefinition("app", "parent-def", invalid), /stable-type or ownership mismatch/);
+  assert.throws(
+    () => citryRuntime.registerDefinition("app", "parent-def", invalid),
+    /stable-type or ownership mismatch/,
+  );
   assert.equal(app.definitions.size, 0);
   assert.equal(app.callRunTags.size, 0);
   const compiled = fixture.definition(definition([run("items", "Child", "citry-child")]));
-  stable.registerDefinition("app", "parent-def", compiled);
+  citryRuntime.registerDefinition("app", "parent-def", compiled);
   assert.equal(app.definitions.size, 1);
   assert.equal(app.callRunTags.get("citry-child"), "Child");
 });
 
 test("self-target subtree expansion restores the mounted target placement", async () => {
   const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
+  const { citryRuntime, realm } = fixture;
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId: "app",
@@ -818,14 +824,14 @@ test("self-target subtree expansion restores the mounted target placement", asyn
       ],
     }),
   );
-  stable.registerDefinition(
+  citryRuntime.registerDefinition(
     "app",
     "parent-def",
     fixture.definition(definition([], [], [ordinary("child", "Child", "citry-child")])),
   );
-  stable.registerDefinition("app", "child-def", fixture.definition(definition()));
+  citryRuntime.registerDefinition("app", "child-def", fixture.definition(definition()));
 
-  const app = stable._apps.get("app");
+  const app = citryRuntime._apps.get("app");
   app.types.set("Parent", {});
   app.types.set("Child", {});
   const rootLive = app.snapshot.value.get("root");
@@ -842,7 +848,7 @@ test("self-target subtree expansion restores the mounted target placement", asyn
 
   const isolatedTarget = occurrence("target", "Child", "child-def", null);
   isolatedTarget.serverData = { revision: 1 };
-  await stable.applyEnvelope(
+  await citryRuntime.applyEnvelope(
     "app",
     realm({
       protocol: "citry-vue-prepared/1",
@@ -857,7 +863,6 @@ test("self-target subtree expansion restores the mounted target placement", asyn
       definitions: [],
       occurrences: [isolatedTarget],
       updatedIds: ["target"],
-      replacements: [],
     }),
     "target",
   );

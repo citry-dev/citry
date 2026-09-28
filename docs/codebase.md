@@ -193,6 +193,12 @@ pip install uv
    interpreter and imported `citry_core._rust` path after rebuilding.
 
    Note: both `maturin develop` and the `uv sync` build produce a **debug** (unoptimized) extension. That is fine for tests, but it makes the Rust-backed paths ~10x or more slower, so pass `--release` (for example `uv run maturin develop --release`) before running any benchmark.
+   The extension reports how it was compiled in `citry_core._rust.BUILD_PROFILE` (`"release"` or `"debug"`), and the benchmark runners exit on a debug build with the rebuild command. To measure a debug build on purpose, set `CITRY_BENCH_ALLOW_DEBUG_NATIVE=1`. Check which build is installed:
+
+   ```bash
+   uv run --no-sync python -c \
+     'from citry_core import _rust; print(_rust.BUILD_PROFILE)'
+   ```
 
    When switching between a version-specific extension and an ABI3 build, both
    generated binaries can remain in the package directory. Python prefers the
@@ -279,6 +285,7 @@ uv run --no-sync pytest \
   packages/py/citry/tests/e2e \
   packages/py/citry_ui/citry_ui/components \
   packages/py/citry_ui/citry_ui/quality/tests/e2e \
+  packages/py/citry_ui/tests/e2e \
   -m e2e \
   --browser chromium \
   -n 4 \
@@ -297,6 +304,34 @@ the ordinary Python matrix, and the docs-site E2E suite stay serial. In
 particular, distributing the docs-site suite would repeat its session-scoped
 site build once per worker. On a machine with fewer than four CPUs or limited
 memory, lower `-n`; four is the CI default, not a correctness requirement.
+
+The docs-site playground and live-code browser tests run against the release
+pinned in `docs_site/static/playground/runtime.json`, and skip the tests that
+need this checkout's Citry unless `CITRY_PLAYGROUND_CORE_WHEEL` is set. See
+[Which browser tests run against the pinned release](../docs_site/static/playground/README.md#which-browser-tests-run-against-the-pinned-release).
+
+#### Vue render parity check
+
+The parity check records every Vue page the non-browser suite prepares,
+renders each one with the Rust renderer and with Vue's own
+`renderToString` in Node, and compares the HTML. `scripts/check.py` runs it
+in both profiles, so CI runs it too: its `pytest` phase loads the recording
+plugin, and the `vue render parity` phase that follows compares the pages
+that run recorded. The comparison itself takes a few seconds.
+
+When you change the server's hydration renderer
+(`crates/citry_vue_compiler/src/server_render.rs`) or the compiled render
+code it reads, run it on its own. It needs `pnpm install` and a native
+build, and takes about as long as one non-browser test run. It also records
+pages from the qualification tests and the benchmark board's server tests,
+which the gate's `pytest` phase does not run:
+
+```bash
+.venv/bin/python scripts/vue_render_parity/check.py
+```
+
+What it compares and the rules it applies are in
+[`docs/design/vue_ssr_selected_tree_plan.md`](design/vue_ssr_selected_tree_plan.md#checking-the-servers-html-against-vue).
 
 ### Formatting and linting code
 
@@ -428,6 +463,10 @@ the non-browser pytest suite with `-n 4 --dist loadfile --durations 30`. The
 main pytest phase selects `not e2e and not qualification`; the full profile
 enables pytest-cov there, enforces the repository threshold, and then runs the
 `qualification and not e2e` stress slice separately without coverage.
+The main pytest phase also records every Vue page the tests prepare into a
+temporary directory for that gate run, and the `vue render parity` phase
+compares those pages with Vue's server renderer (see "Vue render parity
+check" above).
 Coverage measures shipped runtime modules. It omits tests, repository-only
 qualification helpers, subprocess adapters whose execution belongs to child
 processes, and Citry UI's public demo `snippets/`, which are excluded from the
@@ -436,7 +475,8 @@ ratchet immediately below the current measured runtime coverage; raise it as
 focused tests recover headroom.
 The `pyright` phase runs the pinned pyright from `node_modules` alongside mypy.
 The package-local Node phases run `pnpm run check` for `citry-client`, the docs
-playground, and the VS Code language extension. One root `pnpm install` covers
+playground, and the VS Code language extension. The `vue render parity` phase
+runs Node with the Vue that `citry-client` pins. One root `pnpm install` covers
 all of them, the same way `uv sync` installs the Python tools.
 
 #### Custom validators
@@ -464,8 +504,9 @@ The runner prints `PASS`/`FAIL` per validator and exits non-zero if any returns 
 #### CI integration
 
 The gate runs in CI via the [`repo--check.yml`](../.github/workflows/repo--check.yml)
-workflow, which builds the workspace and explicitly runs
-`python scripts/check.py --profile full` on every change (no path filters).
+workflow, which builds the workspace, installs the Node workspace, and
+explicitly runs `python scripts/check.py --profile full` on every change (no
+path filters). That run includes the Vue render parity phase.
 The per-language matrix workflows ([`rust--tests.yml`](../.github/workflows/rust--tests.yml),
 [`py--tests.yml`](../.github/workflows/py--tests.yml)) add cross-version,
 cross-OS, and dedicated browser breadth on top of that single-environment gate.
@@ -490,8 +531,10 @@ uv run python scripts/sync_protocol_python.py --check
 
 The Events TypeScript package supplies protocol types and validation used by
 the Vue Events bridge in `packages/js/citry-client`. The client build
-combines the production Vue runtime, prepared coordinator, and Events bridge
-into `citry/_vue/runtime.js`; i18n has a separate generated bundle. Package-local
+combines the production Vue runtime, the fragment manager, the prepared
+coordinator, and the Events bridge into `citry/_vue/runtime.js`; i18n has a separate generated bundle. The
+coordinator is the hand-written `citry/_vue/client.js`; the build removes its
+comments and indentation, so rebuild after editing it. Package-local
 `pnpm run check` commands type-check the sources, replay shared cases, and
 reject stale generated files:
 
@@ -1370,6 +1413,29 @@ Prepare a release as follows:
    separate job uses the dedicated release App to commit only generated
    documentation and runtime pins directly to `main`. That push starts the
    normal site deployment. No follow-up PR or browser-runtime tag is needed.
+9. Confirm that the playground pins moved to the published release, then run
+   the playground and live-code browser tests against them. When Citry is
+   selected, **Release docs** updates `docs_site/static/playground/runtime.json`
+   from the published wheels, runs
+   `pytest docs_site/tests/e2e/test_playground_e2e.py -k published_runtime`
+   against the new pins, and only then commits them to `main`. That push
+   changes `docs_site/`, so **Docs check** runs the whole docs browser suite
+   against the new pins, with the tests that need this checkout's Citry
+   skipped. Nothing runs `test_live_code_e2e.py` with those tests included,
+   so run it and the rest of the playground suite yourself from the updated
+   `main`:
+
+   ```sh
+   CITRY_PLAYGROUND_PINS_MATCH_CHECKOUT=1 uv run --no-sync pytest \
+     docs_site/tests/e2e/test_playground_e2e.py \
+     docs_site/tests/e2e/test_live_code_e2e.py \
+     docs_site/tests/e2e/test_preview_bridge_e2e.py
+   ```
+
+   When Citry is not selected, nothing updates the pins. They take the Citry
+   Core and citry-ui versions named in the next Citry release's source. The
+   skip rule for these tests is described in
+   [Which browser tests run against the pinned release](../docs_site/static/playground/README.md#which-browser-tests-run-against-the-pinned-release).
 
 The controller derives ordering from selected-package constraints. Citry waits
 for a selected Citry Core because it pins Core exactly. citry-lsp and citry-ui

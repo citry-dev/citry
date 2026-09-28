@@ -74,7 +74,7 @@ class TestElementKey:
         compile_input = assembly.compile_inputs[root.definition_id]
 
         assert _element_keys(assembly, root) == ["7"]
-        assert ':key="preparedData.citryKey0"' in compile_input.template
+        assert ':key="$citryPrepared.citryKey0"' in compile_input.template
         assert "data-citry-key" not in compile_input.template
 
     def test_key_inside_c_for_evaluates_per_item(self):
@@ -92,7 +92,7 @@ class TestElementKey:
         compile_input = assembly.compile_inputs[root.definition_id]
 
         assert _element_keys(assembly, root) == ["1", "2"]
-        assert compile_input.template.count(':key="preparedData.citryKey') == 2
+        assert compile_input.template.count(':key="$citryPrepared.citryKey') == 2
 
     def test_key_value_stays_in_prepared_data_not_compiled_template(self):
         c = Citry()
@@ -217,7 +217,7 @@ class TestComponentKey:
         assert _called_occurrence_ids(root) == [child.id]
         assert child.parent_id == root.id
         call_key = next(iter(root.prepared_data["calls"]))
-        assert f':key="preparedData.calls.{call_key}.key"' in assembly.compile_inputs[root.definition_id].template
+        assert f':key="$citryPrepared.calls.{call_key}.key"' in assembly.compile_inputs[root.definition_id].template
 
     def test_multi_root_child_stays_one_prepared_call(self):
         c = Citry()
@@ -314,7 +314,12 @@ class TestComponentKey:
 
         assert _component_keys(rendered) == ['</script><x>&"π']
         assert _called_occurrence_ids(root) == [child.id]
-        assert '</script><x>&"π' not in prepared_wire_data
+        # The key must not reach the browser in any spelling: raw, as a JSON
+        # string, or in pieces. Prepared data carries no markup at all, so no
+        # piece of the key can hide inside an HTML value either.
+        key_as_json = json.dumps('</script><x>&"π')[1:-1]
+        for fragment in ('</script><x>&"π', key_as_json, "</script>", "<x>", "\\u03c0"):
+            assert fragment not in prepared_wire_data
         assert '</script><x>&"π' not in compiled_templates
         assert "<" not in prepared_wire_data
 

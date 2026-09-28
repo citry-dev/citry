@@ -129,6 +129,8 @@ instance, and each rendered component receives its own data graph.
 The returned mapping must follow these rules:
 
 - every key is an exact `str`;
+- no key starts with `$` or `_`, and no key is `citryId`, because Vue and
+  Citry already use those names on the component instance;
 - every value is JSON-serializable;
 - numbers are finite, so `NaN` and infinity are rejected.
 
@@ -165,6 +167,10 @@ an unmatched block, or a `</style` end tag. The browser still decides whether
 the value makes sense for the CSS property that uses it.
 
 CSS data is only emitted when the component has CSS that could use it.
+
+Keep secrets out of CSS data. Citry serves a render's custom properties as a
+stylesheet at a public URL named after a hash of its contents, and any page
+that has the URL can download and read it.
 
 ## Check the returned shape
 

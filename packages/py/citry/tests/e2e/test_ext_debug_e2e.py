@@ -100,7 +100,7 @@ def test_same_type_instances_and_native_slot_keep_lexical_data_and_refs(page: An
     assert len({label for label in labels if label.startswith("Card (")}) == 2
     card_definition_ids = page.evaluate(
         """() => {
-          const runtimeApp = [...CitryStable._apps.values()][0];
+          const runtimeApp = [...__citryRuntime._apps.values()][0];
           return [...runtimeApp.occurrences.values()]
             .filter((occurrence) => occurrence.typeKey.startsWith('Card_'))
             .map((occurrence) => occurrence.definitionId);

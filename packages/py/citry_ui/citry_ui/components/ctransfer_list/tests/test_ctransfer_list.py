@@ -219,6 +219,39 @@ def test_attrs_merge_and_owned_surfaces_are_rejected():
         )
 
 
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CTransferList", ":aria-invalid"),
+        ("CTransferList", "v-bind:data-available-empty"),
+        ("CTransferList", "v-html"),
+        ("CTransferList", "V-IF"),
+        ("CTransferList", "@change"),
+        ("CTransferListItem", ".aria-selected"),
+        ("CTransferListItem", "v-for"),
+        ("CTransferListItem", "#default"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(owner: str, attribute: str):
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    root_attrs, item_attrs = (attrs, "") if owner == "CTransferList" else ("", attrs)
+    source = (
+        f'<c-CTransferList {root_attrs}><c-CTransferListItem value="a" label="A" {item_attrs} /></c-CTransferList>'
+    )
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        _render(source)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render("<c-CTransferList c-attrs=\"{'x-data': '{}', 'hx-get': '/items'}\" />", static_fallback=True)
+
+    assert re.search(r'<div class="cui-transfer-list"[^>]+x-data="\{\}"[^>]+hx-get="/items"', html)
+
+
 def test_misplacement_extra_output_and_direct_nesting_are_rejected():
     with pytest.raises(ValueError, match="directly inside CTransferList"):
         _render('<c-CTransferListItem value="a" label="A" />')

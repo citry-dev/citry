@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+citry_html_transform = { path = "../citry_html_transform" }
 oxc_allocator = { workspace = true }
 oxc_ast = { workspace = true }
 oxc_parser = { workspace = true }
@@ -15,6 +16,7 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 vize_atelier_core = { workspace = true }
 vize_atelier_dom = { workspace = true }
+vize_s1 = { workspace = true }
 # Keep Maturin's sdist path-dependency discovery connected to the patched S2
 # emitter that vize_atelier_dom uses transitively.
 vize_s1_to_s2 = { workspace = true }

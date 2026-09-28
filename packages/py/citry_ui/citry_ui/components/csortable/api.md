@@ -32,6 +32,13 @@ native button, accessible name, focus behavior, and moving semantics.
 Interactive controls may live in Item content because dragging begins only on
 the handle. Avoid making the handle slot itself interactive.
 
+`attrs` on `CSortable` and `CSortableItem` accepts ordinary native, ARIA, and
+data attributes. It rejects the attributes each part sets itself (such as
+`role`), Citry runtime attributes, and any Vue directive syntax: names starting
+with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the
+component tag in your template instead, for example
+`<c-CSortable :title="hint" @change="save">`.
+
 ## Control order from Vue
 
 Pass `order` and `onOrderChange` with native Vue bindings. Controlled moves are

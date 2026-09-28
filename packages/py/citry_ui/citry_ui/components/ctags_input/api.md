@@ -163,7 +163,7 @@ Use these semantic component callbacks with native Vue bindings:
 Native editor events should be authored as Vue listeners in the component
 template when an application needs the raw browser event. Python-resolved
 `attrs` and `input_attrs` mappings reject executable listener names such as
-`@input`, `v-on:input`, `x-on:input`, and `oninput`; use the typed callbacks
+`@input`, `v-on:input`, and `oninput`; use the typed callbacks
 above for normalized component behavior. Native bubbling `input` and `change`
 events on the Select proxy report accepted uncontrolled value changes.
 Controlled value requests dispatch no native proxy change event.
@@ -175,8 +175,11 @@ ordinary ref when application code needs to focus or inspect the editor.
 
 `attrs` targets the root and `input_attrs` targets the editor. They accept
 ordinary nonconflicting attributes, styling, and permitted accessibility
-hints. Python-resolved mappings reject executable listener names and ownership
-directives. Use typed callbacks or authored Vue listeners for browser behavior.
+hints. Python-resolved mappings reject the attributes the component sets
+itself, Citry runtime attributes, executable listener names, and any Vue
+directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Use typed
+callbacks, or write Vue bindings and listeners on the component tag in your
+template.
 
 Tag values, drafts, placeholders, and message substitutions are assigned as
 text or native values. They are never evaluated as HTML, URLs, selectors, or

@@ -104,6 +104,12 @@ family-specific variables.
 }
 ```
 
+`attrs` accepts ordinary native, ARIA, and data attributes for the dialog
+element. It rejects the attributes AlertDialog sets itself (such as `role` and
+`aria-describedby`), Citry runtime attributes, and any Vue directive syntax:
+names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and
+listeners on the component tag in your template instead.
+
 See [`api.yml`](api.yml) for the exhaustive inputs, callbacks, variables,
 attributes, selectors, slots, and public interfaces.
 

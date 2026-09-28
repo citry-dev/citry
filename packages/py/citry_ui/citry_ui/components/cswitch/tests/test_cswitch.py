@@ -101,21 +101,52 @@ def test_switch_merges_root_styling_and_routes_input_attrs():
         ("role", "attrs"),
         ("tabindex", "attrs"),
         ("aria-hidden", "attrs"),
-        ("x-if", "attrs"),
-        ("v-if", "attrs"),
         ("data-citry-morph", "attrs"),
         ("type", "input_attrs"),
         ("role", "input_attrs"),
         ("aria-checked", "input_attrs"),
-        (":checked", "input_attrs"),
-        ("v-bind:checked", "input_attrs"),
-        ("x-model", "input_attrs"),
-        ("v-model", "input_attrs"),
     ],
 )
 def test_switch_rejects_competing_semantics_and_ownership(attribute, destination):
-    with pytest.raises(ValueError, match=r"owned|ownership|reserved"):
+    with pytest.raises(ValueError, match=r"owned|reserved"):
         _render(f"<c-CSwitch c-{destination}=\"{{'{attribute}': 'x'}}\">Irrigation</c-CSwitch>")
+
+
+@pytest.mark.parametrize(
+    ("attribute", "destination"),
+    [
+        ("v-if", "attrs"),
+        ("V-IF", "attrs"),
+        (":role", "attrs"),
+        ("#default", "attrs"),
+        (":checked", "input_attrs"),
+        ("v-bind:checked", "input_attrs"),
+        (".aria-describedby", "input_attrs"),
+        ("v-model", "input_attrs"),
+        ("@change", "input_attrs"),
+        ("v-on:input", "input_attrs"),
+    ],
+)
+def test_switch_rejects_vue_directives_in_python_attrs(attribute, destination):
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    message = re.escape(f"CSwitch {destination} cannot contain the Vue directive {attribute!r}")
+    with pytest.raises(ValueError, match=message):
+        _render(f"<c-CSwitch c-{destination}=\"{{'{attribute}': 'x'}}\">Irrigation</c-CSwitch>")
+
+
+def test_switch_attrs_without_vue_syntax_stay_ordinary_attributes():
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(
+        "<c-CSwitch c-input_attrs=\"{'x-data': '{}', 'hx-get': '/irrigation'}\">Irrigation</c-CSwitch>",
+        static_fallback=True,
+    )
+
+    control = re.search(r'<input[^>]+role="switch"[^>]*>', html)
+    assert control is not None
+    assert 'x-data="{}"' in control.group(0)
+    assert 'hx-get="/irrigation"' in control.group(0)
 
 
 def test_switch_validates_exact_strings_booleans_and_choices():

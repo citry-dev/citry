@@ -85,6 +85,32 @@ class TestCitryInstance:
         with pytest.raises(ValueError, match=name):
             CitrySettings(**{name: value})
 
+    def test_ssr_element_threshold_defaults_and_stores_valid_counts(self):
+        # The default keeps every page's content in its served HTML.
+        assert Citry().settings.ssr_element_threshold == 0
+        assert CitrySettings().ssr_element_threshold == 0
+        for value in (0, 1, 150_000):
+            assert Citry(ssr_element_threshold=value).settings.ssr_element_threshold == value
+            assert CitrySettings(ssr_element_threshold=value).ssr_element_threshold == value
+
+    @pytest.mark.parametrize(
+        ("value", "error"),
+        [
+            # A bool is an int subclass but not a count; a float or string
+            # would silently round or compare wrongly later.
+            (True, TypeError),
+            (20_000.0, TypeError),
+            ("20000", TypeError),
+            (None, TypeError),
+            (-1, ValueError),
+        ],
+    )
+    def test_invalid_ssr_element_threshold_is_rejected(self, value, error):
+        with pytest.raises(error, match="ssr_element_threshold"):
+            Citry(ssr_element_threshold=value)
+        with pytest.raises(error, match="ssr_element_threshold"):
+            CitrySettings(ssr_element_threshold=value)
+
     def test_lint_settings_are_typed_copied_and_stored(self):
         variables = {"request": Annotated[str, "Current request."]}
         vue_variables = {"$featureFlags": Annotated[dict[str, bool], "Feature flags."]}
@@ -96,6 +122,8 @@ class TestCitryInstance:
             vue_variables=vue_variables,
             rule_unknown_component_js_variable="warning",
             component_js_globals=component_js_globals,
+            rule_unknown_component_js_member="ignore",
+            rule_vue_python_variable="error",
         )
         app = Citry(lint=lint)
         variables["later"] = str
@@ -110,6 +138,10 @@ class TestCitryInstance:
             "$featureFlags": Annotated[dict[str, bool], "Feature flags."],
         }
         assert lint.rule_unknown_component_js_variable == "warning"
+        assert lint.rule_unknown_component_js_member == "ignore"
+        assert LintSettings().rule_unknown_component_js_member == "error"
+        assert lint.rule_vue_python_variable == "error"
+        assert LintSettings().rule_vue_python_variable == "warning"
         assert lint.component_js_globals == {
             "analytics": Annotated[object, "Application analytics client."],
         }
@@ -124,6 +156,10 @@ class TestCitryInstance:
             LintSettings(rule_unknown_vue_variable=severity)
         with pytest.raises(ValueError, match="rule_unknown_component_js_variable"):
             LintSettings(rule_unknown_component_js_variable=severity)
+        with pytest.raises(ValueError, match="rule_unknown_component_js_member"):
+            LintSettings(rule_unknown_component_js_member=severity)
+        with pytest.raises(ValueError, match="rule_vue_python_variable"):
+            LintSettings(rule_vue_python_variable=severity)
 
     @pytest.mark.parametrize("name", ["", "two words", "class", "K"])  # noqa: RUF001
     def test_lint_settings_reject_names_without_exact_python_identity(self, name):

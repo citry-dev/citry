@@ -12,6 +12,7 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 from weakref import ReferenceType, WeakKeyDictionary, ref
 
+from citry._class_introspection import _component_declaration_generation
 from citry.browser_render import BrowserPluginDescriptor, BrowserRenderContribution
 from citry.ext.dependencies.types import Script
 from citry.extension import Extension, ExtensionCommand, StagedRenderCacheContribution, TemplateNamespaceContribution
@@ -914,6 +915,11 @@ class I18nExtension(Extension):
         self._source_locales: tuple[str, ...] = ()
         self._registry_generation = 0
         self._loaded_registry_generation = -1
+        # The answer of ``_has_registered_message_source`` with the registry
+        # generation and component declaration count it was computed from.
+        # Registering, unregistering, clearing, reloading files, or assigning
+        # ``messages`` on a class moves one of the two, which forces a rescan.
+        self._message_source_answer: tuple[tuple[int, int], bool] | None = None
 
     @property
     def configured(self) -> bool:
@@ -1177,11 +1183,20 @@ class I18nExtension(Extension):
         """Check whether source mode applies without loading assets or recursing through lint."""
         from citry.assets import _find_pair_declaration  # noqa: PLC0415
 
+        # Read the key before scanning: a registration that lands during the
+        # scan moves the generation, so the stored answer is never reused.
+        key = (self._registry_generation, _component_declaration_generation())
+        answer = self._message_source_answer
+        if answer is not None and answer[0] == key:
+            return answer[1]
+        found = False
         for component_class in self.citry._registered_component_classes_snapshot():
             _owner, inline, path = _find_pair_declaration(component_class, "messages", "messages_file")
             if inline is not None or path is not None:
-                return True
-        return False
+                found = True
+                break
+        self._message_source_answer = (key, found)
+        return found
 
     def on_component_data(self, ctx: OnComponentDataContext) -> None:
         with self._catalog_lock:
@@ -1228,7 +1243,7 @@ class I18nExtension(Extension):
         """Install render-time wrappers for direct, dynamic, and spread `$c-tr`."""
         from .bindings import compile_template_bindings  # noqa: PLC0415
 
-        if ctx.component_class.simple:
+        if ctx.component_class.simple is not False:
             # Simple bodies have no translation collector of their own. Their
             # template validator rejects literal bindings, and ordinary
             # attribute resolution rejects bindings arriving through spreads.
@@ -1251,11 +1266,11 @@ class I18nExtension(Extension):
 
         from citry._browser_expressions import (  # noqa: PLC0415
             BrowserExpression,
-            analyze_browser_component_source,
             analyze_browser_expression,
             browser_expressions,
             browser_i18n_bind_calls,
             browser_member_literal_calls,
+            component_js_i18n_owners,
         )
         from citry.tag_rules import build_tag_rules  # noqa: PLC0415
         from citry_core.template_parser import parse_template  # noqa: PLC0415
@@ -1278,44 +1293,31 @@ class I18nExtension(Extension):
 
         javascript = component_class.get_js()
         if javascript is not None:
-            analysis = analyze_browser_component_source(javascript)
-            if analysis.valid:
-                references: dict[str, set[tuple[int, int]]] = {}
-                for binding in analysis.bindings:
-                    if binding.name == "i18n":
-                        references.setdefault(binding.local_name, set()).update(binding.references)
-                authenticated_i18n_members = frozenset(
-                    (member.start_index, member.end_index)
-                    for member in analysis.member_references
-                    if member.name == "$i18n"
-                )
-                if authenticated_i18n_members:
-                    references.setdefault("$i18n", set()).update(authenticated_i18n_members)
-                expression = BrowserExpression(
-                    javascript,
-                    0,
-                    len(javascript.encode()),
-                    "statement",
-                    "component-js",
-                )
-                for call in browser_member_literal_calls(
-                    expression,
-                    frozenset(references),
-                    frozenset({"resolve", "tr"}),
-                    authenticated_owner_spans=authenticated_i18n_members,
-                ):
-                    if (call.owner_start_index, call.owner_end_index) in references[call.owner]:
-                        outputs[MessageOutputUse(call.value, None)] = None
-                for bind_call in browser_i18n_bind_calls(
-                    expression,
-                    frozenset(references),
-                    authenticated_owner_spans=authenticated_i18n_members,
-                ):
-                    if (
-                        bind_call.owner_start_index,
-                        bind_call.owner_end_index,
-                    ) not in references[bind_call.owner] or bind_call.has_dynamic_output:
-                        continue
+            # Only calls on reads the analyzer proves hold `component.$i18n` or
+            # `this.$i18n` (directly or through an unchanged local variable)
+            # are preloaded; another object named `i18n` could be anything.
+            owners, owner_spans = component_js_i18n_owners(javascript)
+            expression = BrowserExpression(
+                javascript,
+                0,
+                len(javascript.encode("utf-8")),
+                "statement",
+                "component-js",
+            )
+            for call in browser_member_literal_calls(
+                expression,
+                owners,
+                frozenset({"resolve", "tr"}),
+                authenticated_owner_spans=owner_spans,
+            ):
+                if (call.owner_start_index, call.owner_end_index) in owner_spans:
+                    outputs[MessageOutputUse(call.value, None)] = None
+            for bind_call in browser_i18n_bind_calls(
+                expression,
+                owners,
+                proven_owner_spans=owner_spans,
+            ):
+                if not bind_call.has_dynamic_output:
                     outputs[MessageOutputUse(bind_call.message, bind_call.output)] = None
 
         result = tuple(outputs)

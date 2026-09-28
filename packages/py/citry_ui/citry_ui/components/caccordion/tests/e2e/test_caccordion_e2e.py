@@ -792,12 +792,9 @@ def test_correlated_reorder_preserves_focus_and_removal_uses_one_fallback(
         is True
     )
     assert floor.evaluate("element => element === window.__accordionFloorTrigger") is True
-    assert (
-        page.evaluate(
-            "document.activeElement === document.body || document.activeElement === document.documentElement"
-        )
-        is True
-    )
+    # The runtime gives the focus back to the retained trigger after Vue
+    # moves its item, so keyboard users keep their place across a reorder.
+    assert floor.evaluate("element => element === document.activeElement") is True
     assert floor.get_attribute("aria-expanded") == "true"
 
     _advance_server_event(page)

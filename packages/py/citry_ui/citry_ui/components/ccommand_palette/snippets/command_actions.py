@@ -40,7 +40,11 @@ class CommandActions(Component):
           <label><input type="checkbox" v-model="throwNext" /> Throw in next action</label>
           <label><input type="checkbox" v-model="moveFocus" /> Move owner focus</label>
         </div>
-        <button id="command-action-focus-target" type="button">Owner focus target</button>
+        <button
+          ref="focusTarget"
+          id="command-action-focus-target"
+          type="button"
+        >Owner focus target</button>
         <c-CCommandPalette
           label="Draft commands"
           c-entries="commands"
@@ -49,7 +53,7 @@ class CommandActions(Component):
               open=value;
             }" :onQueryChange="(value,detail)=>events.push(`query:${value}:${detail.reason}`)" :onAction="(value,detail)=>{
               events.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
-              if (moveFocus) document.getElementById('command-action-focus-target').focus();
+              if (moveFocus) $refs.focusTarget.focus();
               if (throwNext) { throwNext=false; throw new Error('Application action failed'); }
             }"
         />

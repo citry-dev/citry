@@ -27,7 +27,7 @@ The proposal follows these existing paths:
 - `I18nExtension.on_render_context_merge` collects `I18nRenderRecord` values
   in the root `CitryContext`. `emit_i18n_dependencies` currently converts the
   selected records into one initial-page manifest and adds the browser bundle.
-- `CitryStable.startPrepared` loads definition and component assets before it
+- `__citryRuntime.startPrepared` loads definition and component assets before it
   creates the Vue app. `applyEnvelope` validates and stages a revision before
   it publishes the reactive occurrence snapshot and runs server callbacks.
 - `DirectVueEventsProducer` already emits component scripts and styles for
@@ -365,7 +365,7 @@ Assert exact cleanup order and resource counts, not just rejected promises.
 
 ### Translation context in supplied slots
 
-The full `CitryStable.startPrepared` browser test found a difference between
+The full `__citryRuntime.startPrepared` browser test found a difference between
 component injection and inline slot expressions. Its Page creates an
 I18nProvider, which forwards Page's fill through I18nClientHost. The provider
 and host both have an `en-US` service, while Page has no service. Vue compiles

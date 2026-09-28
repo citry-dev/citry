@@ -27,7 +27,7 @@ def without_component_ids(rendered: str) -> str:
 
 def prepared_i18n_payload(component: Component) -> tuple[dict[str, Any], dict[str, Any]]:
     serialized = component.render().serialize()
-    payload = serialized.split("CitryStable.startPrepared(", 1)[1].split(").catch", 1)[0]
+    payload = serialized.split(" data-citry-vue-document=", 1)[1].split(">", 1)[1].split("</script>", 1)[0]
     manifest = json.loads(payload)["manifest"]
     extension = manifest["extensions"]["i18n"]
     assert extension["schemaVersion"] == 1

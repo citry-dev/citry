@@ -27,7 +27,9 @@ def _render(source: str, *, static_fallback: bool = False) -> str:
 
 
 def _manifest(html: str) -> dict[str, object]:
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     return json.loads(match.group(1))["manifest"]
 
@@ -67,7 +69,8 @@ def test_carousel_renders_apg_semantics_and_form_safe_controls() -> None:
     assert carousel["citryAttrs2"]["aria-label"] == "Next slide"
     slides = _occurrences(manifest, "CCarouselSlide")
     assert [slide["preparedData"]["citryAttrs0"]["data-value"] for slide in slides] == ["aurora", "tide"]
-    assert slides[1]["preparedData"]["citryAttrs0"]["data-active"] == ""
+    # A Python True reaches Vue unchanged; the styles only test for presence.
+    assert slides[1]["preparedData"]["citryAttrs0"]["data-active"] is True
 
 
 def test_schema_registration_and_types_are_public() -> None:
@@ -115,12 +118,40 @@ def test_carousel_uses_the_shared_scroll_geometry_dependency() -> None:
         ('id="two words"', "ASCII whitespace"),
         ('previous_label=""', "previous_label"),
         ("c-attrs=\"{'role': 'group'}\"", "owned"),
-        ("c-attrs=\"{'x-show': 'shown'}\"", "ownership"),
+        ("c-attrs=\"{'data-citry-morph': 'x'}\"", "Citry runtime attribute"),
+        ("c-attrs=\"{'v-bind:role': 'group'}\"", "CCarousel attrs cannot contain the Vue directive"),
+        ("c-attrs=\"{'v-show': 'shown'}\"", "Vue directive"),
+        ("c-attrs=\"{'V-IF': 'shown'}\"", "Vue directive"),
+        ("c-attrs=\"{'@scroll': 'go'}\"", "Vue directive"),
+        ("c-attrs=\"{'#default': 'x'}\"", "Vue directive"),
     ],
 )
 def test_invalid_root_inputs_fail(root: str, message: str) -> None:
     with pytest.raises((TypeError, ValueError), match=message):
         _render(_source(root))
+
+
+@pytest.mark.parametrize(
+    ("attribute", "message"),
+    [
+        ("hidden", "cannot override owned attribute"),
+        (".inert", "CCarouselSlide attrs cannot contain the Vue directive"),
+        ("v-html", "Vue directive"),
+        ("V-FOR", "Vue directive"),
+    ],
+)
+def test_slide_attrs_reject_owned_attributes_and_vue_directives(attribute: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _render(_source(slide=f"c-attrs=\"{{'{attribute}': 'x'}}\""))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(
+        _source("c-attrs=\"{'x-show': 'root'}\"", "c-attrs=\"{'x-if': 'slide'}\""),
+        static_fallback=True,
+    )
+    assert 'x-show="root"' in html
+    assert 'x-if="slide"' in html
 
 
 def test_invalid_collections_and_slide_inputs_fail() -> None:

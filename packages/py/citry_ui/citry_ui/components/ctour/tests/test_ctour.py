@@ -49,7 +49,7 @@ def _render_client(source: str, *, static_fallback: bool = False) -> str:
 
 
 def _prepared_manifest(html: str) -> dict[str, object]:
-    payload = html.split("CitryStable.startPrepared(", 1)[1].split(").catch", 1)[0]
+    payload = html.split(" data-citry-vue-document=", 1)[1].split(">", 1)[1].split("</script>", 1)[0]
     return json.loads(payload)["manifest"]
 
 
@@ -308,14 +308,44 @@ def test_step_outside_tour_and_direct_nested_tour_fail() -> None:
     "source",
     [
         _tour(_step("one"), attrs="c-attrs=\"{'data-open':True}\""),
-        _tour(_step("one"), attrs="c-attrs=\"{'x-html':'unsafe'}\""),
         _tour(_step("one", attrs="c-attrs=\"{'hidden':True}\"")),
-        _tour(_step("one", attrs="c-attrs=\"{':data-value':'shadow'}\"")),
     ],
 )
-def test_owned_attrs_and_replacing_directives_are_rejected(source: str) -> None:
-    with pytest.raises(ValueError, match="cannot"):
+def test_owned_attrs_are_rejected(source: str) -> None:
+    with pytest.raises(ValueError, match="cannot override owned attribute"):
         _render(source)
+
+
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CTour", ":data-open"),
+        ("CTour", "v-bind:role"),
+        ("CTour", "v-html"),
+        ("CTour", "V-IF"),
+        ("CTour", "@keydown"),
+        ("CTourStep", ":data-value"),
+        ("CTourStep", "v-for"),
+        ("CTourStep", "#title"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(owner: str, attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    source = _tour(_step("one"), attrs=attrs) if owner == "CTour" else _tour(_step("one", attrs=attrs))
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        _render(source)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(_tour(_step("one"), attrs="c-attrs=\"{'x-data': '{}', 'hx-get': '/tour'}\""), static_fallback=True)
+
+    root = _tag(html, "tour")
+    assert 'x-data="{}"' in root
+    assert 'hx-get="/tour"' in root
 
 
 def test_runtime_contract_covers_state_geometry_cleanup_and_reasoned_callbacks() -> None:

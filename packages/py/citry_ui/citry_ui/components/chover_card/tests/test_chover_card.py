@@ -114,8 +114,15 @@ def test_hover_card_public_schema_is_runtime_introspectable() -> None:
         ({"id": "two words"}, ValueError, "CHoverCard id"),
         ({"attrs": []}, TypeError, "CHoverCard attrs must be a mapping"),
         ({"attrs": {"aria-hidden": "false"}}, ValueError, "owned attribute"),
-        ({"attrs": {":role": "dialog"}}, ValueError, "dynamically bind"),
-        ({"attrs": {"x-show": "open"}}, ValueError, "ownership directive"),
+        ({"attrs": {":role": "dialog"}}, ValueError, "cannot contain the Vue directive ':role'"),
+        ({"attrs": {"v-bind:aria-hidden": "shut"}}, ValueError, "cannot contain the Vue directive"),
+        ({"attrs": {".popover": "manual"}}, ValueError, "cannot contain the Vue directive"),
+        ({"attrs": {"v-show": "open"}}, ValueError, "cannot contain the Vue directive 'v-show'"),
+        ({"attrs": {"V-IF": "open"}}, ValueError, "cannot contain the Vue directive 'V-IF'"),
+        ({"attrs": {"v-for": "item in items"}}, ValueError, "cannot contain the Vue directive"),
+        ({"attrs": {"v-html": "markup"}}, ValueError, "cannot contain the Vue directive"),
+        ({"attrs": {"#default": ""}}, ValueError, "cannot contain the Vue directive"),
+        ({"attrs": {"@mouseenter": "peek()"}}, ValueError, "cannot contain the Vue directive"),
         ({"attrs": {"data-citry-root": ""}}, ValueError, "runtime attribute"),
     ],
 )
@@ -124,6 +131,12 @@ def test_hover_card_rejects_invalid_or_owned_inputs(
 ) -> None:
     with pytest.raises(exception, match=message):
         _render(_card(**kwargs))
+
+
+def test_hover_card_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(_card(attrs={"x-data": "{}", "hx-get": "/profile"}), static_fallback=True)
+    assert 'x-data="{}"' in html
+    assert 'hx-get="/profile"' in html
 
 
 def test_hover_card_requires_both_owned_slots() -> None:

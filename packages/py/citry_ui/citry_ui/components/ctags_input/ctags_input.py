@@ -19,6 +19,7 @@ from citry_ui.components._attrs import (
     CStyleValue,
     get_html_form_owner,
     is_executable_event_attribute,
+    is_vue_directive_attribute,
     merge_root_attrs,
     pop_html_attr,
 )
@@ -100,27 +101,7 @@ def _fingerprint(value: object) -> str:
     return sha256(payload.encode()).hexdigest()
 
 
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "$c-props",
-        "c-bind",
-        "c-props",
-        "x-bind",
-        "x-data",
-        "x-effect",
-        "x-for",
-        "x-html",
-        "x-id",
-        "x-if",
-        "x-ignore",
-        "x-init",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
+_OWNERSHIP_DIRECTIVES = frozenset({"$c-props", "c-bind", "c-props"})
 _ROOT_OWNED = frozenset(
     {
         "aria-activedescendant",
@@ -345,15 +326,6 @@ def _validate_messages(messages: object) -> CTagsInputMessages:
     return messages
 
 
-def _dynamic_target(key: str) -> str | None:
-    normalized = key.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _destination_attrs(
     destination: str,
     attrs: Mapping[str, object] | None,
@@ -366,18 +338,21 @@ def _destination_attrs(
         if not isinstance(key, str):
             raise TypeError(f"CTagsInput {destination} requires string keys, got {key!r}.")
         normalized = key.casefold()
-        target = _dynamic_target(key)
+        # Listeners get their own message first because the typed callbacks
+        # are the usual replacement for them.
         if is_executable_event_attribute(normalized):
             raise ValueError(
                 f"CTagsInput {destination} cannot use executable listener attribute {key!r}; "
                 "use a typed component callback or author a Vue listener in the template."
             )
-        if (
-            normalized in owned
-            or normalized in _OWNERSHIP_DIRECTIVES
-            or target in owned
-            or normalized.startswith(_RUNTIME_PREFIXES)
-        ):
+        # Any other Vue directive could rebind an owned attribute or change the
+        # structure, so none may arrive through Python data.
+        if is_vue_directive_attribute(key):
+            raise ValueError(
+                f"CTagsInput {destination} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
+        if normalized in owned or normalized in _OWNERSHIP_DIRECTIVES or normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CTagsInput {destination} cannot override owned attribute {key!r}.")
         copied[key] = value
     return copied

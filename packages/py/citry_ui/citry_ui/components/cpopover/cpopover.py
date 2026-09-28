@@ -11,7 +11,7 @@ from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
     ANCHORED_LAYER_RUNTIME_JS,
 )
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CPopoverPlacement = Literal[
@@ -69,20 +69,6 @@ _PLACEMENTS = (
     "bottom-end",
 )
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _SURFACE_OWNED_ATTRS = frozenset(
     {
         "aria-describedby",
@@ -154,30 +140,14 @@ def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(attrs: dict[str, object]) -> None:
     reject_owned_attrs(attrs, _SURFACE_OWNED_ATTRS, "CPopover")
+    # A Vue directive could rebind the surface's popover wiring, replace its
+    # listeners, or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(attrs, "CPopover")
     for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"CPopover attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"CPopover attrs cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in _SURFACE_OWNED_ATTRS:
-            msg = f"CPopover attrs cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
 
 

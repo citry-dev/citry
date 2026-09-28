@@ -20,10 +20,22 @@
         const MAX_HTML_BYTES = 2 * 1024 * 1024;
         const MAX_EVENT_ENVELOPE_BYTES = 1024 * 1024;
         const MAX_PENDING_EVENTS = 16;
+        // The server needs these request headers to answer an event with a
+        // Render action. Nothing else from the Citry request leaves the frame.
+        const FORWARDED_EVENT_HEADERS = ["X-Citry-Vue-App", "X-Citry-Vue-Occurrence", "X-Citry-Vue-Revision"];
         const MAX_ASSET_PATHS = 32;
         const MAX_PENDING_ASSETS = 8;
         const MAX_MESSAGES_PER_SECOND = 10;
         const PLAYGROUND_ASSET_PREFIX = "/__citry_playground__/";
+        // Citry's Vue runtime names its component definitions, component
+        // scripts, and stylesheets inside the startup data of an inline script
+        // and inside event results, then loads them itself. Those paths only
+        // exist in the Python Worker, so the preview swaps each one for a Blob
+        // URL before the runtime sees it. The digest is the file's SHA-256,
+        // which the browser checks against the Blob's bytes through the
+        // integrity attribute the runtime sets.
+        const VUE_ASSET_PATTERN =
+          /\/__citry_playground__\/ext\/events\/(?:definitions\/[0-9a-f]{64}\.js|assets\/[0-9a-f]{64}\.css)/g;
         // Session, run, and nonce identify the one parent and render allowed to
         // control this document after the initial window-message handshake.
         let session = "";
@@ -41,6 +53,7 @@
         const pendingAssets = new Map();
         const queuedEvents = [];
         const assetBlobUrls = new Map();
+        const assetBlobRequests = new Map();
         const initiallyLoadedAssets = { js: new Set(), css: new Set() };
         // DOMParser makes scripts inert. These MIME types identify the scripts
         // that must be recreated after their nodes enter this live document.
@@ -183,17 +196,34 @@
         }
 
         async function ensureAssetBlobs(paths) {
-          const missing = [...new Set(paths)].filter((path) => !assetBlobUrls.has(path));
+          const unique = [...new Set(paths)];
+          // Two event results can name the same new file at once. Share the
+          // first request so each path gets exactly one Blob URL.
+          const missing = unique.filter((path) => !assetBlobUrls.has(path) && !assetBlobRequests.has(path));
           for (let index = 0; index < missing.length; index += MAX_ASSET_PATHS) {
             const batch = missing.slice(index, index + MAX_ASSET_PATHS);
-            const assets = await requestAssetBatch(batch);
-            for (const asset of assets) {
-              const blobUrl = URL.createObjectURL(
-                new Blob([asset.content], { type: `${asset.contentType};charset=utf-8` }),
-              );
-              assetBlobUrls.set(asset.path, blobUrl);
-            }
+            const request = requestAssetBatch(batch).then((assets) => {
+              for (const asset of assets) {
+                const blobUrl = URL.createObjectURL(
+                  new Blob([asset.content], { type: `${asset.contentType};charset=utf-8` }),
+                );
+                assetBlobUrls.set(asset.path, blobUrl);
+              }
+            }).finally(() => {
+              for (const path of batch) assetBlobRequests.delete(path);
+            });
+            for (const path of batch) assetBlobRequests.set(path, request);
           }
+          await Promise.all(unique.map((path) => assetBlobRequests.get(path)).filter(Boolean));
+        }
+
+        async function replaceVueAssetPaths(text) {
+          const paths = [...new Set(text.match(VUE_ASSET_PATTERN) || [])];
+          if (!paths.length) return text;
+          await ensureAssetBlobs(paths);
+          // One Blob URL per path keeps the runtime's per-URL deduplication
+          // working across the first render and later event results.
+          return text.replace(VUE_ASSET_PATTERN, (path) => assetBlobUrls.get(path));
         }
 
         function dependencyManifestTags(root) {
@@ -311,6 +341,9 @@
         }
 
         async function hydrateRenderActions(result) {
+          // Rewrite the whole result, not only Render HTML, because a Vue
+          // server render can name new definitions in any field of an action.
+          result = JSON.parse(await replaceVueAssetPaths(JSON.stringify(result)));
           const prepared = [];
           const paths = [];
           for (const entry of result?.results || []) {
@@ -349,7 +382,18 @@
           return result;
         }
 
-        function sendEventEnvelope(envelope) {
+        function forwardedEventHeaders(request) {
+          // An older Citry runtime calls send(envelope) alone, so the request
+          // may be absent; the server then reports the missing headers.
+          const headers = {};
+          for (const name of FORWARDED_EVENT_HEADERS) {
+            const value = request?.headers?.[name];
+            if (typeof value === "string" && value.length <= 256) headers[name] = value;
+          }
+          return headers;
+        }
+
+        function sendEventEnvelope(envelope, headers) {
           let envelopeBytes;
           try {
             envelopeBytes = byteLength(JSON.stringify(envelope));
@@ -388,31 +432,40 @@
               nonce,
               eventId,
               envelope,
+              headers,
             });
           });
         }
 
-        function playgroundTransportSend(envelope) {
+        function playgroundTransportSend(envelope, request) {
           if (eventsDisabledMessage) return Promise.reject(transportError(eventsDisabledMessage, "stale_preview"));
-          if (eventsEnabled) return sendEventEnvelope(envelope);
+          const headers = forwardedEventHeaders(request);
+          if (eventsEnabled) return sendEventEnvelope(envelope, headers);
           if (queuedEvents.length >= MAX_PENDING_EVENTS) {
             return Promise.reject(transportError("Too many event requests were queued while Result was loading."));
           }
-          return new Promise((resolve, reject) => queuedEvents.push({ envelope, resolve, reject }));
+          return new Promise((resolve, reject) => queuedEvents.push({ envelope, headers, resolve, reject }));
         }
 
         function enableEvents() {
           if (eventsDisabledMessage) return;
           eventsEnabled = true;
           for (const queued of queuedEvents.splice(0)) {
-            sendEventEnvelope(queued.envelope).then(queued.resolve, queued.reject);
+            sendEventEnvelope(queued.envelope, queued.headers).then(queued.resolve, queued.reject);
           }
         }
 
         function ensurePlaygroundTransport() {
           if (transportInstalled || !globalThis.Citry?.events?.registerTransport) return;
           globalThis.Citry.events.registerTransport("playground", { send: playgroundTransportSend });
-          globalThis.Citry.events.configure({ transport: "playground", timeout: 6_000 });
+          globalThis.Citry.events.configure({
+            transport: "playground",
+            timeout: 6_000,
+            // This sandboxed document has no origin, so reading
+            // document.cookie for a CSRF token throws. The Worker transport
+            // never uses cookies, so supply an empty token instead.
+            csrf: { token: () => "" },
+          });
           transportInstalled = true;
         }
 
@@ -495,6 +548,9 @@
           messageTimes = [];
           let prepared;
           try {
+            // Resolve Vue asset paths while the HTML is still text, because
+            // the runtime reads them from inline script source.
+            message.html = await replaceVueAssetPaths(message.html);
             // Full documents contribute head and body attributes. Fragments are
             // inserted into the shell body while preserving the shell head.
             const isDocument = /^\s*(?:<!doctype\s+html\b|<html\b)/i.test(message.html);

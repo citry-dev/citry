@@ -19,7 +19,9 @@ PAGE_TEMPLATE = "<html><head><title>t</title></head><body><p>hi</p></body></html
 
 
 def _prepared(html):
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     return json.loads(match.group(1))["manifest"]
 
@@ -220,7 +222,7 @@ class TestDocumentEmission:
         # Native document serialization mounts one Vue app; simple keeps the
         # settled HTML and direct dependency tags.
         rendered = page().render()
-        assert "startPrepared" in rendered.serialize(deps_strategy="document")
+        assert "data-citry-vue-document" in rendered.serialize(deps_strategy="document")
         assert "<main" not in rendered.serialize(deps_strategy="simple")
 
     def test_nested_url_dependencies_emit_once_in_first_seen_order(self):

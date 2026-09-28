@@ -161,4 +161,6 @@ Keep a visible label even when placeholder text is present. Textarea adds no
 role, focus proxy, or keyboard handler. `value`, name, ID, placeholder,
 autocomplete, and inputmode are always rendered as plain text, including
 trusted-string subclasses. `attrs`, `class_`, and `style` remain trusted code
-surfaces for native, ARIA, data, and Vue attributes.
+surfaces for native, ARIA, and data attributes. `attrs` rejects Vue directive
+names (starting with `v-`, `:`, `.`, `^`, `@`, or `#`); write Vue bindings on the
+component tag in a template instead.

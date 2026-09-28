@@ -89,15 +89,36 @@ def test_invalid_inputs_fail(template, error):
 
 
 @pytest.mark.parametrize(
-    "attribute",
-    ["role", "aria-label", "tabindex", "disabled", ":data-grow", "x-if", "data-citry-morph"],
+    ("attribute", "message"),
+    [
+        ("role", "cannot override owned attribute"),
+        ("aria-label", "cannot override owned attribute"),
+        ("tabindex", "cannot override owned attribute"),
+        ("disabled", "cannot override owned attribute"),
+        ("data-citry-morph", "reserved Citry runtime attribute"),
+        (":data-grow", "Vue directive"),
+        ("v-bind:role", "Vue directive"),
+        ("v-if", "Vue directive"),
+        ("V-IF", "Vue directive"),
+        ("@click", "Vue directive"),
+        ("#default", "Vue directive"),
+    ],
 )
-def test_owned_and_runtime_attributes_are_rejected(attribute):
-    with pytest.raises(ValueError, match="cannot"):
+def test_owned_and_runtime_attributes_are_rejected(attribute, message):
+    with pytest.raises(ValueError, match=message):
         _render(
             '<c-CButtonGroup label="Map" c-attrs="attrs"><c-CButton>One</c-CButton></c-CButtonGroup>',
             data={"attrs": {attribute: "consumer"}},
         )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(
+        '<c-CButtonGroup label="Map" c-attrs="attrs"><c-CButton>One</c-CButton></c-CButtonGroup>',
+        data={"attrs": {"x-if": "plain"}},
+    )
+    # The group root renders in the browser, so its attributes travel in the prepared data.
+    assert '"x-if":"plain"' in html
 
 
 def test_css_surface_and_zero_javascript():

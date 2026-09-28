@@ -336,7 +336,12 @@ preserves the single link; the retained component and its `onServerRender`
 callback observe the applied style. Removing the final owner detaches the link.
 Root reran this browser test successfully. Initial declared assets may load
 when their lazy-loading flag is false; the permission for later discovery is
-still enforced during revision preparation. Independent review accepted the
+still enforced during revision preparation. The app keeps its component types
+for its whole life, so a server render can bring back a type it removed. The
+runtime therefore remembers each stylesheet it loaded or adopted until the app
+is torn down: the returning stylesheet counts as already seen, while a
+stylesheet the page never had still needs its lazy-loading flag, and a changed
+descriptor at the same URL counts as a new asset. Independent review accepted the
 resolver and browser asset lifecycle, including final hook ordering, occurrence
 references, preflight checks and staged-style cleanup.
 
@@ -4387,6 +4392,49 @@ bodies, and matching transformer/analyzer helper selection. Checker and LSP
 must both resolve known Options names and avoid closed-namespace errors when
 the available namespace is unknown. This requires no new template grammar.
 
+### Remove the callback-parameter member analysis
+
+The native crate also carried `analyze_component_members`. It found
+`data.x`, `scope.x`, `state.x` and `props.x` reads on the destructured
+parameters of a `$component(({ data }) => ...)` callback or an `init`
+entry. The Vue callback receives `{ component, revision }`, so that analysis
+describes a callback shape Citry no longer runs. The unknown-member rule reads
+`member_references` from `analyze_component_source` instead.
+
+Prior art, searched across `crates/`, `packages/`, `docs_site/`, `docs/` and
+`scripts/`: the Rust function and its two result structs in `browser.rs`, the
+crate re-export in `lib.rs`, the PyO3 wrapper in
+`citry_core_py/src/template_parser.rs` and its registration in
+`citry_core_py/src/lib.rs`, the `_rust.pyi` stub, the
+`citry_core.template_parser` re-export, and the Python wrapper
+`browser_component_members` with its `BrowserComponentMember` record in
+`_browser_expressions.py`, re-exported from `citry.analysis`. No checker,
+language server, docs-site, playground or test code calls the Python wrapper,
+and no Rust or Python test covers the native function.
+
+Chosen design: delete the function, its private visitors, the PyO3 function,
+the stub entry, both re-exports and the Python wrapper in one change. The host
+language code generators never used this result, so they are unchanged.
+
+Alternatives considered:
+
+- Keep the binding and mark it deprecated. Nothing calls it, and a kept
+  binding invites new code to rely on the callback shape Citry no longer runs.
+- Adapt it to `{ component }`. `member_references` already covers
+  `component.<name>` inside `onServerRender`, and it also follows `this` in
+  Vue Options members (props, `data()`, methods, computed values), which this
+  function never did.
+
+What would prove this wrong: a remaining caller of the removed function, which
+the Rust and Python builds and the search above rule out inside this
+repository, or a `component.<name>` read inside `onServerRender` that
+`member_references` misses, which would leave the unknown-member rule with no
+replacement. The member-rule tests in
+`citry_lsp/tests/test_component_js_members.py` cover direct, aliased and
+closure-captured reads. A caller outside this
+repository that imports the Python wrapper also breaks; the package is below
+`1.0.0`, and such a caller moves to `analyze_browser_component_source`.
+
 ## Native directive coverage still required
 
 The prepared compiler currently permits a bounded helper set. Its model helper
@@ -4440,8 +4488,9 @@ target for those ambiguity checks. Key-only cases are required regressions.
 
 The final key and root-marker corrections are independently accepted across
 ordinary, dynamic and optimized leaf paths. Browser testing also found a
-nested supplied-slot predicate reading the caller's preparedData while its
-selection value lived on the receiver. Store that value with the context that
+nested supplied-slot predicate reading the caller occurrence's prepared data
+(its `preparedData` wire field, which templates read as `$citryPrepared`)
+while its selection value lived on the receiver. Store that value with the context that
 evaluates the generated predicate, preserving the receiver and movement guards.
 Independent review accepts this bounded correction. Caller lexical scope and
 independent cached instances pass two browser cases; tag/key revision cases

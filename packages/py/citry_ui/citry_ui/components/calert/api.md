@@ -171,6 +171,8 @@ icon shape as well as color.
 Title and message content use ordinary Citry escaping. `actions_label` is
 converted to plain text before attribute rendering. Registered icon names use
 the packaged allowlist. `attrs`, `actions_attrs`, `class_`, and `style` remain
-trusted authoring surfaces for unowned values; Alert rejects attributes and
-directives that could replace its children, semantics, focus ownership,
-public mirrors, or runtime markers.
+trusted authoring surfaces for unowned values. Alert rejects attributes that
+could replace its semantics, focus ownership, public mirrors, or runtime
+markers. `attrs` and `actions_attrs` also reject Vue directive syntax: names
+starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on
+the component tag in your template instead.

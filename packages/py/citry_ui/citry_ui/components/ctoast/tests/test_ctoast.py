@@ -140,10 +140,6 @@ def test_toast_region_rejects_duplicate_ids_after_canonicalization() -> None:
         "aria-hidden",
         "inert",
         "data-placement",
-        "x-html",
-        "x-ignore",
-        ":role",
-        "x-bind:aria-label",
     ],
 )
 def test_toast_region_rejects_owned_static_and_dynamic_attrs(attribute: str) -> None:
@@ -164,9 +160,27 @@ def test_toast_region_merges_unrelated_attrs_class_and_style() -> None:
     assert 'data-workflow="sync"' in html
 
 
-def test_toast_region_rejects_python_generated_vue_listener_attributes() -> None:
-    with pytest.raises(TypeError, match="Python-resolved attributes cannot introduce Vue syntax"):
-        _render(attrs={"@click": "clicked = true"})
+@pytest.mark.parametrize(
+    "attribute",
+    [":role", "v-bind:aria-label", "v-html", "v-if", "V-IF", "@click", "v-on:click", "#default"],
+)
+def test_toast_region_rejects_python_generated_vue_directives(attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    message = re.escape(f"CToastRegion attrs cannot contain the Vue directive {attribute!r}")
+    with pytest.raises(ValueError, match=message):
+        _render(attrs={attribute: "clicked = true"})
+
+
+def test_toast_region_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(attrs={"x-data": "{}", "hx-get": "/notices"}, static_fallback=True)
+
+    root = re.search(r'<[^>]+data-citry-ui-part="region"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/notices"' in root.group(0)
 
 
 def test_toast_strings_are_plain_canonical_and_escaped() -> None:

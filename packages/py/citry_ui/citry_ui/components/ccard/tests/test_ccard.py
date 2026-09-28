@@ -249,14 +249,20 @@ def test_hostile_slot_text_is_escaped_and_trusted_part_attrs_are_preserved():
     assert 'data-body-state="ready"' in html
 
 
-def test_python_part_attrs_cannot_introduce_vue_listeners():
-    with pytest.raises(TypeError, match="Python-resolved attributes cannot introduce Vue syntax"):
-        _render(
-            CCard(
-                body_attrs={"@click": "opened = true"},
-                slots={"default": "Card body"},
-            )
-        )
+@pytest.mark.parametrize(
+    ("input_name", "attribute"),
+    [
+        ("body_attrs", "@click"),
+        ("body_attrs", "v-on:click"),
+        ("attrs", ":data-variant"),
+        ("attrs", "V-IF"),
+        ("body_attrs", "#default"),
+        ("body_attrs", ".title"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(input_name, attribute):
+    with pytest.raises(ValueError, match=f"CCard {input_name} cannot contain the Vue directive"):
+        _render(CCard(**{input_name: {attribute: "value"}}, slots={"default": "Card body"}))
 
 
 def test_card_has_static_css_and_no_javascript_asset():

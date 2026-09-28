@@ -197,15 +197,18 @@ run.
 ## Keep target and host attributes separate
 
 `target_attrs` is copied, validated, and included in the target slot data. It
-may carry ordinary classes, styles, safe ARIA, semantic native attributes,
-nonreserved data, and unrelated native listeners. It cannot author the target
-ID, ContextMenu marker, owned invocation events, `role`, native `disabled`,
-Popover/anchor state, or Menu Button ARIA.
+may carry ordinary classes, styles, safe ARIA, semantic native attributes, and
+nonreserved data. It cannot author the target ID, ContextMenu marker, `role`,
+native `disabled`, Popover/anchor state, or Menu Button ARIA.
 
-Host `attrs` accepts ordinary descriptive attributes, `dir`, `lang`,
-nonreserved data, and unrelated native listeners. It cannot replace owned
-identity, roles, ARIA, parts, reflections, lifecycle, Popover/anchor state, or
-Citry runtime namespaces. Mappings are copied once. ContextMenu trusts ordinary
+Host `attrs` accepts ordinary descriptive attributes, `dir`, `lang`, and
+nonreserved data. It cannot replace owned identity, roles, ARIA, parts,
+reflections, lifecycle, Popover/anchor state, or Citry runtime namespaces.
+
+Both mappings reject inline `on*` handlers and any Vue directive syntax: names
+starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write listeners with Vue `@event`
+bindings on the target Element in the target fill, and bind other Vue values on
+the component tag in your template. Mappings are copied once. ContextMenu trusts ordinary
 slot content as application content; it is not an HTML or URL sanitizer.
 
 CContextMenu is not Form-associated. It emits no name/value pair and does not

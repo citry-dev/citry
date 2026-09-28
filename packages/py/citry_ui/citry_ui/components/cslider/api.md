@@ -109,6 +109,9 @@ Choose `solid` or `subtle`, three sizes, horizontal or vertical orientation,
 and `never`, `interaction`, or `always` value bubbles. Use the documented CSS
 variables and part selectors for styling; `attrs` and input-attribute mappings
 cannot replace state, form, identity, or accessibility attributes owned by the
-component.
+component. They also reject Citry runtime attributes and any Vue directive
+syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings
+and listeners on the component tag in your template instead, for example
+`<c-CSlider :title="hint" :onValueChange="save">`.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/states.py" title="Compare Slider states" />

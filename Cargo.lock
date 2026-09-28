@@ -433,6 +433,7 @@ dependencies = [
 name = "citry_vue_compiler"
 version = "0.0.0"
 dependencies = [
+ "citry_html_transform",
  "oxc_allocator 0.143.0",
  "oxc_ast 0.143.0",
  "oxc_parser 0.143.0",
@@ -442,6 +443,7 @@ dependencies = [
  "sha2",
  "vize_atelier_core",
  "vize_atelier_dom",
+ "vize_s1",
  "vize_s1_to_s2",
 ]
 

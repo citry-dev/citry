@@ -797,8 +797,8 @@ def test_reserved_semantics_and_runtime_marker_mutations_fail_closed(page: Any) 
     page.evaluate("document.querySelector('#basic').setAttribute('aria-description','hostile')")
     page.evaluate("document.querySelector('#missing').setAttribute('data-cid-hostile','changed')")
     page.evaluate("document.querySelector('#reactive img').setAttribute('aria-label','hostile')")
-    page.evaluate("document.querySelector('#geometry').setAttribute('x-citry-fill-source','hostile')")
-    page.evaluate("document.querySelector('#basic img').setAttribute('data-has-alpine-state','true')")
+    page.evaluate("document.querySelector('#geometry').setAttribute('data-cev-click','forged')")
+    page.evaluate("document.querySelector('#basic img').setAttribute('data-cid-hostile','forged')")
     page.wait_for_function(
         "['basic','missing','reactive','geometry'].every(id=>"
         "!document.getElementById(id).hasAttribute('data-citry-image-initialized'))"

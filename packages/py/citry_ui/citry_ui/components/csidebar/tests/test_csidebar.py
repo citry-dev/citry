@@ -162,16 +162,30 @@ def test_invalid_inputs_fail_closed(source: str, message: str) -> None:
         "{'data-collapsed':'false'}",
         "{'hidden':True}",
         "{'ref':'other'}",
-        "{':data-size':'size'}",
-        "{'v-bind:ref':'other'}",
-        "{'v-bind:data-size':'size'}",
-        "{'x-html':'unsafe'}",
-        "{'v-html':'unsafe'}",
     ],
 )
-def test_owned_attrs_and_replacing_directives_are_rejected(attrs: str) -> None:
-    with pytest.raises(ValueError, match="cannot"):
+def test_owned_attrs_are_rejected(attrs: str) -> None:
+    with pytest.raises(ValueError, match="cannot override owned attribute"):
         _render(f'<c-CSidebar label="A" c-attrs="{attrs}">A</c-CSidebar>')
+
+
+@pytest.mark.parametrize(
+    "key",
+    [":data-size", "v-bind:ref", "v-bind:data-size", ".hidden", "v-html", "v-if", "V-IF", "@click", "#default"],
+)
+def test_python_attrs_reject_vue_directives(key: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(f"CSidebar attrs cannot contain the Vue directive {key!r}")):
+        _render(f"""<c-CSidebar label="A" c-attrs="{{'{key}':'value'}}">A</c-CSidebar>""")
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(
+        """<c-CSidebar label="A" c-attrs="{'x-html':'panel', 'title':'Tools'}">A</c-CSidebar>""",
+        static_fallback=True,
+    )
+    root = _tag(html, "sidebar")
+    assert 'x-html="panel"' in root
+    assert 'title="Tools"' in root
 
 
 def test_css_exposes_public_variables_parts_and_environment_rules() -> None:

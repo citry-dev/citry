@@ -187,7 +187,10 @@ custom DOM event.
 
 `attrs` target the native Dialog. `input_attrs` target the owned search input
 and accept only attributes that cannot replace its identity, value, disabled
-state, Form boundary, combobox relationships, or active descendant. Mappings
+state, Form boundary, combobox relationships, or active descendant. Both reject
+ARIA attributes, Citry runtime attributes, inline `on*` handlers, and any Vue
+directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue
+bindings and listeners on the component tag in your template instead. Mappings
 are copied once. Labels, descriptions, keywords, shortcut hints, and values are
 escaped text, not HTML or authorized domain actions.
 
