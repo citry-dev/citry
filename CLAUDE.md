@@ -717,6 +717,8 @@ forward before continuing.
   least the out-of-range value; for a wire field, the missing, extra, or wrong
   value; for a mechanism, the input it cannot handle.
 - Sentence case for markdown headings.
+- Don't use `vendor` as a verb. This generalizes further - the way you talk and write
+  should be simpler and avoid needless jargon, so that even a newcomer engineer could understand.
 
 ## Writing rule - don't document what isn't there
 
