@@ -109,6 +109,35 @@ def _citry_requirement(dependencies: Any) -> tuple[Requirement | None, str | Non
     return requirements[0], None
 
 
+def _language_server_lock_problems(project_id: str, manifest: dict[str, Any], lock: dict[str, Any]) -> list[str]:
+    """Check that the locked citry-lsp satisfies the range the example's dev group declares."""
+    dev = manifest.get("dependency-groups", {}).get("dev", [])
+    requirements = []
+    for raw in dev if isinstance(dev, list) else []:
+        try:
+            requirement = Requirement(raw) if isinstance(raw, str) else None
+        except InvalidRequirement:
+            continue
+        if requirement is not None and requirement.name.lower().replace("_", "-") == "citry-lsp":
+            requirements.append(requirement)
+    # An example without the language server in its dev group has nothing to check.
+    if not requirements:
+        return []
+    locked = [package for package in lock.get("package", []) if package.get("name") == "citry-lsp"]
+    if len(locked) != 1:
+        return [f"{project_id}: lock must contain exactly one citry-lsp package"]
+    locked_version = locked[0].get("version")
+    try:
+        compatible = isinstance(locked_version, str) and Version(locked_version) in requirements[0].specifier
+    except InvalidVersion:
+        compatible = False
+    # A raised floor can be declared before the release exists, so this stale
+    # lock is caught here, after publication, when `uv lock` can resolve it.
+    if not compatible:
+        return [f"{project_id}: locked citry-lsp {locked_version!r} does not satisfy {requirements[0]}"]
+    return []
+
+
 def validate_release_surfaces(
     repo_root: Path = REPO_ROOT,
     *,
@@ -146,6 +175,7 @@ def validate_release_surfaces(
                 compatible = False
             if not compatible:
                 problems.append(f"{project_id}: locked Citry {locked_version!r} does not satisfy {requirement}")
+        problems.extend(_language_server_lock_problems(project_id, manifest, lock))
         artifacts = [citry.get("sdist"), *citry.get("wheels", [])]
         artifacts = [artifact for artifact in artifacts if isinstance(artifact, dict)]
         if not artifacts:

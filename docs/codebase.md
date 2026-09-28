@@ -1437,6 +1437,17 @@ Prepare a release as follows:
    Core and citry-ui versions named in the next Citry release's source. The
    skip rule for these tests is described in
    [Which browser tests run against the pinned release](../docs_site/static/playground/README.md#which-browser-tests-run-against-the-pinned-release).
+10. When Citry is selected, open every link in the root `README.md` that
+    points at the new tag (for example
+    `https://github.com/citry-dev/citry/tree/citry%400.6.0/examples/starters/fastapi`)
+    and confirm each one resolves. These links 404 until the tag exists, so
+    no earlier check can prove them.
+11. When an example raised its Citry or citry-lsp floor to a version that
+    this release published, run `uv lock` in that example, run
+    `python -m examples._internal.release_gate` from the repository root, and
+    commit the refreshed locks together in one post-release change. A lock
+    can name only a published release, so this is the one example update
+    that cannot happen before publication.
 
 The controller derives ordering from selected-package constraints. Citry waits
 for a selected Citry Core because it pins Core exactly. citry-lsp and citry-ui
@@ -1473,7 +1484,9 @@ locks a compatible public Citry range. The exact-commit examples CI workflow
 runs alongside candidate preparation and overlays the selected wheel in a clean
 copy, proving the unreleased change without rewriting every example lock.
 Update an example's minimum and lock only when that example actually adopts a
-new public contract.
+new public contract. When the new contract arrives in the release being
+prepared, raise the minimum in the release change and refresh the lock after
+publication (step 11 above).
 
 ### Discord release notifications
 

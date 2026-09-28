@@ -83,12 +83,14 @@ def test_catalog_projects_include_locked_citry_editor_setup() -> None:
         assert settings == expected_settings
 
         manifest = tomllib.loads(project.source.joinpath("pyproject.toml").read_text(encoding="utf-8"))
-        assert "citry-lsp>=0.1,<0.2" in manifest["dependency-groups"]["dev"]
+        # citry-lsp 0.2 is the line that supports Citry 0.6.
+        assert "citry-lsp>=0.2,<0.3" in manifest["dependency-groups"]["dev"]
 
+        # The locked version must satisfy that range, but a lock can only name a
+        # published release, so the release gate checks it after publication.
         lock = tomllib.loads(project.source.joinpath("uv.lock").read_text(encoding="utf-8"))
         locked_servers = [package for package in lock["package"] if package.get("name") == "citry-lsp"]
         assert len(locked_servers) == 1
-        assert locked_servers[0]["version"].startswith("0.1.")
 
 
 def test_profiles_lock_the_shared_starter_curriculum() -> None:
