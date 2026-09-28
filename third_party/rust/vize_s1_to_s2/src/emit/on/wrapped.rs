@@ -53,8 +53,8 @@ pub(in crate::emit) fn emit_wrapped_handler(
         (None, Some(ExprRef::Js(js))) => emit_handler(cx, on, js, is_plain_element, cached),
         (None, Some(ExprRef::Opaque(opaque))) if opaque.reason == OpaqueReason::MultiStatement => {
             let padding = authored_handler_padding(cx.source, on, opaque.source, opaque.span);
-            // The shipped codegen prefix-parses the text: `a; b` reads as the
-            // reference `a` and is pushed raw.
+            // A handler that is exactly one reference is pushed raw; `a; b`
+            // is two statements and takes the block form below.
             if super::super::prefix::handler_source_is_reference(opaque.source) {
                 let (leading, trailing) = padding.unwrap_or(("", ""));
                 cx.buf.push(leading);

@@ -31,6 +31,19 @@ Relative to that archive, the Citry delta is:
 - `src/codegen/v_if/branch.rs`: keeps a keyed single child inside the
   conditional branch Fragment rather than treating the child as the branch's
   identity.
+- `src/steps/expression.rs`, `src/steps/expression/rewrite.rs`,
+  `src/steps/expression/reparse.rs`, `src/steps/expression/parse_checks.rs`,
+  and `src/steps/expression/inline_handler.rs`: read text as a list of
+  statements only for an event handler that contains `;`, as
+  `@vue/compiler-core` does, and report every other statement as an invalid
+  expression, in the TypeScript fallback too. The handler reference and
+  function checks also require the parsed expression to be the whole text, so
+  `a; b()` is compiled as two statements rather than passed on as the
+  reference `a`.
+- `src/codegen.rs`, `src/codegen/expression.rs`, and
+  `src/codegen/expression/generate.rs`: write line comments in an event
+  handler as block comments, so a trailing `// note` cannot hide the closing
+  `}` of `$event => {...}` or the `,` before the next prop.
 - `tests/v_for_unwrapped_runtime_directives.rs`: adds regression coverage for
   custom, `v-show`, and `v-model` directives in unwrapped loops, modifier-key
   escaping, keyed loop and conditional children, mixed directives, and ordinary

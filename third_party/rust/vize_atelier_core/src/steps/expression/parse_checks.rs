@@ -13,7 +13,10 @@ use vize_s0::String;
 /// the official compiler (babel with the `typescript` plugin) accepts. The
 /// parity rule is that vize must not reject what the official compiler
 /// accepts, so such expressions keep the silent passthrough behavior.
-pub(super) fn parses_as_typescript(content: &str) -> bool {
+///
+/// `as_raw_statements` follows `rewrite_expression`: a list of statements
+/// counts only for an event handler that contains `;`.
+pub(super) fn parses_as_typescript(content: &str, as_raw_statements: bool) -> bool {
     let source_type = SourceType::ts().with_module(true);
 
     let expr_allocator = crate::expr_parse_probe::parse_arena();
@@ -26,6 +29,9 @@ pub(super) fn parses_as_typescript(content: &str) -> bool {
         .is_ok()
     {
         return true;
+    }
+    if !as_raw_statements {
+        return false;
     }
 
     let program_allocator = crate::expr_parse_probe::parse_arena();

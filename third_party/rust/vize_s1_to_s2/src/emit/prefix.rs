@@ -42,8 +42,8 @@ pub(in crate::emit) fn strip_typescript_from_expression(content: &str) -> String
     String::from(content)
 }
 
-/// `is_event_handler_reference_expression`: the shipped codegen's prefix
-/// parse of a handler text, which reads `a; b` as the reference `a`.
+/// `is_event_handler_reference_expression`: whether the whole handler text
+/// is one name or member access, which Vue passes through unwrapped.
 pub(super) fn handler_source_is_reference(source: &str) -> bool {
     shape::is_event_handler_reference_expression(source)
 }
@@ -179,7 +179,9 @@ pub(super) fn prefix_expression(
         });
     }
     let retained = content.retained(js);
-    let rewritten = rewrite::rewrite_expression(content.text.as_str(), retained, scope, false);
+    // Only an event handler may hold statements (see `handler::process`).
+    let rewritten =
+        rewrite::rewrite_expression(content.text.as_str(), retained, scope, false, false);
     if rewritten.parse_error {
         return Err(Refused);
     }

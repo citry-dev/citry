@@ -14,7 +14,7 @@ mod splice;
 mod typescript;
 
 use oxc_parser::Parser;
-use oxc_span::SourceType;
+use oxc_span::{GetSpan, SourceType};
 use vize_s0::{Allocator, Box, String};
 
 use crate::{ConstantType, ExpressionNode, SimpleExpressionNode, lane::TransformContext};
@@ -41,7 +41,8 @@ pub fn is_event_handler_reference_expression(content: &str) -> bool {
     let Ok(expr) = parser.parse_expression() else {
         return false;
     };
-    is_handler_reference_shape(&expr)
+    // The whole text must be this one expression, as in Vue's check.
+    only_trailing_trivia(&content[expr.span().end as usize..]) && is_handler_reference_shape(&expr)
 }
 
 /// Returns true if the whole expression is a function / arrow function expression.
@@ -54,7 +55,31 @@ pub fn is_function_expression(content: &str) -> bool {
     let Ok(expr) = parser.parse_expression() else {
         return false;
     };
-    is_function_shape(&expr)
+    // The whole text must be this one expression, as in Vue's check.
+    only_trailing_trivia(&content[expr.span().end as usize..]) && is_function_shape(&expr)
+}
+
+/// Whether `rest` holds only whitespace and comments. `Parser::parse_expression`
+/// stops after one complete expression without checking that the input ended,
+/// so the shape checks call this on the text after the parsed expression:
+/// `foo; bar()` must not read as the handler reference `foo`, or the whole
+/// text is emitted where only that reference is valid.
+fn only_trailing_trivia(rest: &str) -> bool {
+    let mut rest = rest.trim_start();
+    while !rest.is_empty() {
+        if let Some(line) = rest.strip_prefix("//") {
+            rest = line.find(['\n', '\r']).map_or("", |end| &line[end..]);
+        } else if let Some(block) = rest.strip_prefix("/*") {
+            let Some(end) = block.find("*/") else {
+                return false;
+            };
+            rest = &block[end + 2..];
+        } else {
+            return false;
+        }
+        rest = rest.trim_start();
+    }
+    true
 }
 
 /// Rewrite Vue 2 pipe filters in `exp` in place, mirroring
@@ -167,7 +192,8 @@ pub fn process_expression<'a>(
         // rewrite_expression handles both TS stripping and prefixing; the
         // retained AST rides along when it still describes these bytes (P1-7).
         let retained = crate::retained::retained_whole_expression(&normalized);
-        let result = rewrite_expression(content, ctx, as_params, retained);
+        // Only an event handler may hold statements (see `process_inline_handler`).
+        let result = rewrite_expression(content, ctx, as_params, false, retained);
         if result.used_unref {
             ctx.helper(crate::RuntimeHelper::Unref);
         }

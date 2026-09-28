@@ -125,11 +125,18 @@ pub(super) fn report_invalid_expression(
     ctx.on_error_with_message(ErrorCode::InvalidExpression, message, Some(loc.clone()));
 }
 
-/// Rewrite an expression string, prefixing identifiers with `_ctx.` where needed
+/// Rewrite an expression string, prefixing identifiers with `_ctx.` where needed.
+///
+/// `as_raw_statements` mirrors the fourth argument of `@vue/compiler-core`'s
+/// `processExpression`: only an event handler whose text contains `;` may be
+/// read as a list of statements. Every other position must hold a single
+/// expression, so statement text there is reported instead of being emitted
+/// into a position that only accepts an expression.
 pub(crate) fn rewrite_expression(
     content: &str,
     ctx: &TransformContext<'_>,
     as_params: bool,
+    as_raw_statements: bool,
     retained: Option<&JsExpression<'_>>,
 ) -> RewriteResult {
     // Davinci P1-9: the retained AST drives the whole rewrite when its
@@ -159,7 +166,7 @@ pub(crate) fn rewrite_expression(
         }
         #[cfg(any(test, feature = "davinci-differential"))]
         crate::retained::differential::record_transform_rewrite_legacy_ts_strip();
-        return rewrite_reparsed(js_content, content, ctx, retained);
+        return rewrite_reparsed(js_content, content, ctx, as_raw_statements, retained);
     }
 
     // Legacy string path. Classify the residual for the P1-9 coverage
@@ -216,5 +223,5 @@ pub(crate) fn rewrite_expression(
         };
     }
 
-    rewrite_reparsed(js_content, content, ctx, retained)
+    rewrite_reparsed(js_content, content, ctx, as_raw_statements, retained)
 }

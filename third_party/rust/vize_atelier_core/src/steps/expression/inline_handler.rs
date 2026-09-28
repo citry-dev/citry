@@ -36,6 +36,11 @@ pub fn process_inline_handler<'a>(
     }
 
     let content = &normalized.content;
+    // `@vue/compiler-core` reads a handler as statements only when its text
+    // contains `;`. A lone statement such as `if (ok) run()` is rejected there,
+    // and accepting it here would emit it inside the `$event => (...)` wrap
+    // below, which the browser cannot parse.
+    let as_raw_statements = content.contains(';');
     let ts_stripped_content = if ctx.options.is_ts {
         Some(strip_typescript_from_expression(content))
     } else {
@@ -59,7 +64,7 @@ pub fn process_inline_handler<'a>(
     if is_function {
         // Process identifiers in the handler
         if ctx.options.prefix_identifiers {
-            let result = rewrite_expression(content, ctx, false, retained);
+            let result = rewrite_expression(content, ctx, false, as_raw_statements, retained);
             if result.used_unref {
                 ctx.helper(crate::RuntimeHelper::Unref);
             }
@@ -114,7 +119,7 @@ pub fn process_inline_handler<'a>(
                     (*content).into()
                 }
             } else {
-                let result = rewrite_expression(content, ctx, false, retained);
+                let result = rewrite_expression(content, ctx, false, as_raw_statements, retained);
                 if result.used_unref {
                     ctx.helper(crate::RuntimeHelper::Unref);
                 }
@@ -149,7 +154,7 @@ pub fn process_inline_handler<'a>(
 
     // Compound expression - rewrite and wrap in arrow function
     let rewritten: String = if ctx.options.prefix_identifiers {
-        let result = rewrite_expression(content, ctx, false, retained);
+        let result = rewrite_expression(content, ctx, false, as_raw_statements, retained);
         if result.used_unref {
             ctx.helper(crate::RuntimeHelper::Unref);
         }
@@ -167,9 +172,16 @@ pub fn process_inline_handler<'a>(
     // concise body ( ... ) for single expressions. Vue emits the block body
     // with no surrounding spaces (`$event => {...}`).
     let new_content = if rewritten.contains(';') {
-        let mut s = String::with_capacity(12 + rewritten.len() + 1);
+        // A trailing `// note` would comment out the closing `}`, so line
+        // comments become block comments before the body is wrapped.
+        let body = if rewritten.contains("//") {
+            crate::codegen::convert_line_comments_to_block(&rewritten)
+        } else {
+            rewritten
+        };
+        let mut s = String::with_capacity(12 + body.len() + 1);
         s.push_str("$event => {");
-        s.push_str(&rewritten);
+        s.push_str(&body);
         s.push('}');
         s
     } else {

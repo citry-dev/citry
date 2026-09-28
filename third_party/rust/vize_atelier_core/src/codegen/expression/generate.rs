@@ -111,8 +111,16 @@ pub fn generate_event_handler(
             } else {
                 crate::steps::expression::is_function_expression(&processed)
             };
+            // The handler is written on one line among the other props, so a
+            // trailing `// note` would comment out the `,` or `}` after it.
+            // Shape checks read `processed`; only the written text converts.
+            let written = if processed.contains("//") {
+                super::convert_line_comments_to_block(&processed)
+            } else {
+                processed.clone()
+            };
             if is_function {
-                ctx.push(&processed);
+                ctx.push(&written);
                 return;
             }
 
@@ -122,6 +130,7 @@ pub fn generate_event_handler(
             } else {
                 is_simple_member_expression(&processed)
             };
+            let processed = written;
             if crate::steps::is_simple_identifier(&processed) || is_member_ref {
                 if for_caching {
                     ctx.push("(...args) => (");

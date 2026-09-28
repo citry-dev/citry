@@ -53,10 +53,14 @@ pub(super) fn rewrite_from_wrapped_expr(
 /// `content` is the original (pre-strip) text, consulted only for the
 /// TS-acceptance diagnostic check; `retained` short-circuits that check
 /// when the dialect-gated AST already proves the original parses as TS.
+/// `as_raw_statements` lets text that is not one expression parse as a list
+/// of statements; without it the text must be one expression (see
+/// `rewrite_expression`).
 pub(super) fn rewrite_reparsed(
     js_content: String,
     content: &str,
     ctx: &TransformContext<'_>,
+    as_raw_statements: bool,
     retained: Option<&JsExpression<'_>>,
 ) -> RewriteResult {
     let oxc_allocator = crate::expr_parse_probe::parse_arena();
@@ -73,12 +77,17 @@ pub(super) fn rewrite_reparsed(
     match parse_result {
         Ok(expr) => rewrite_from_wrapped_expr(&expr, &wrapped, &js_content, ctx),
         Err(expression_errors) => {
-            // Expression parsing failed - try parsing as a program (multi-statement handlers)
-            let oxc_allocator2 = crate::expr_parse_probe::parse_arena();
-            let parser2 = Parser::new(&oxc_allocator2, &js_content, source_type);
-            let parse_result2 = parser2.parse();
+            // Expression parsing failed - try parsing as a program, but only for
+            // a multi-statement handler. The callers wrap every other position
+            // as an expression (`$event => (...)`, `title: ...`, `_renderList(...)`),
+            // so accepting a statement there would emit invalid JavaScript.
+            let oxc_allocator2 = as_raw_statements.then(crate::expr_parse_probe::parse_arena);
+            let parse_result2 = oxc_allocator2
+                .as_ref()
+                .map(|allocator| Parser::new(allocator, &js_content, source_type).parse())
+                .filter(|parsed| parsed.diagnostics.is_empty());
 
-            if parse_result2.diagnostics.is_empty() {
+            if let Some(parse_result2) = parse_result2 {
                 // Successfully parsed as program - walk the AST and collect
                 // identifiers. Program spans are content-relative already
                 // (no wrapping parens), so the wrapper offset is 0.
@@ -132,7 +141,7 @@ pub(super) fn rewrite_reparsed(
                 // as TypeScript (P1-7), so the re-check is skipped.
                 let ts_accepts = ctx.options.is_ts
                     && (retained.is_some_and(crate::retained::js_module_compatible)
-                        || parses_as_typescript(content));
+                        || parses_as_typescript(content, as_raw_statements));
                 if !ts_accepts {
                     parse_error = Some(
                         expression_errors

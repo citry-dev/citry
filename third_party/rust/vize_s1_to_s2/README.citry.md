@@ -29,6 +29,13 @@ Relative to that archive, the Citry delta is:
   `<template v-for>` would otherwise drop the row Fragment, and preserves
   keyed elements, components, and slots inside conditional Fragments. The
   component and slot loop shapes were already retained.
+- `src/emit/prefix.rs`, `src/emit/prefix/rewrite.rs`,
+  `src/emit/prefix/handler.rs`, and `src/emit/on/wrapped.rs`: apply the same
+  statement rule as the patched `vize_atelier_core` (statements only in an
+  event handler that contains `;`, and handler shape checks that must match
+  the whole text), so the emitter refuses the text the transform reports, and
+  write line comments in an event handler as block comments, so a trailing
+  `// note` cannot hide the closing `}` or the `,` before the next prop.
 - `tests/emit_tpl.rs`: adds regression assertions for keyed component and slot
   children inside `v-if` template branches.
 - `tests/citry_runtime_directives.rs`: adds Citry coverage for custom,
