@@ -2065,9 +2065,14 @@ fn verbatim_attr(name: &str, value: &str) -> Option<String> {
     }
 }
 
+/// Encode a generated attribute value exactly as Python's
+/// `html.escape(value, quote=True)` does, because Python writes every
+/// generated binding that way and this check compares the written bytes.
 fn html_escape_attr(value: &str) -> String {
     value
         .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;")
 }

@@ -110,7 +110,8 @@ def test_direct_definition_composer_preserves_bindings_calls_slots_and_utf8_span
     root_input = inputs["root-def"]
     assert 'v-bind="$citryPrepared.citryAttrsA"' in root_input.template
     assert "v-slot:['citrySlotA']" in root_input.template
-    assert '<slot name="citrySlotA" :key="JSON.stringify([preparedData.citryKeyA, 0])"></slot>' in root_input.template
+    slot_outlet = '<slot name="citrySlotA" :key="JSON.stringify([$citryPrepared.citryKeyA, 0])"></slot>'
+    assert slot_outlet in root_input.template
     encoded = root_input.template.encode()
     call_start = encoded.find(b"<citry-child")
     assert root_input.local_calls[0]["sourceEnd"] == call_start + encoded[call_start:].find(b">") + 1
@@ -175,16 +176,16 @@ def test_direct_capture_keys_slots_by_nearest_prepared_element_and_preserves_voi
         """
     )
 
-    assert template.count(':key="JSON.stringify([preparedData.citryKey1,') == 2
-    assert ':key="JSON.stringify([preparedData.citryKey1, 0])"' in template
-    assert ':key="JSON.stringify([preparedData.citryKey1, 1])"' in template
-    assert ':key="JSON.stringify([preparedData.citryKey0, 0])"' in template
-    assert ':key="JSON.stringify([preparedData.citryKey1, 2])"' not in template
+    assert template.count(':key="JSON.stringify([$citryPrepared.citryKey1,') == 2
+    assert ':key="JSON.stringify([$citryPrepared.citryKey1, 0])"' in template
+    assert ':key="JSON.stringify([$citryPrepared.citryKey1, 1])"' in template
+    assert ':key="JSON.stringify([$citryPrepared.citryKey0, 0])"' in template
+    assert ':key="JSON.stringify([$citryPrepared.citryKey1, 2])"' not in template
 
 
 def test_direct_capture_leaves_unkeyed_slots_without_a_synthetic_key() -> None:
     template = _direct_definition_template('<div><c-slot name="body" /></div>')
-    assert '<slot v-if="preparedData.selectedSlots[' in template
+    assert '<slot v-if="$citryPrepared.selectedSlots[' in template
     assert ':key="' not in template
 
 
@@ -193,7 +194,7 @@ def test_direct_capture_keys_slots_under_a_keyed_dynamic_element() -> None:
         """<c-element c-is="'section'" #c-key="'dynamic'"><c-slot name="body" /></c-element>"""
     )
 
-    assert ':key="JSON.stringify([preparedData.citryKey0, 0])"' in template
+    assert ':key="JSON.stringify([$citryPrepared.citryKey0, 0])"' in template
 
 
 def test_prepared_compiler_keys_slot_outlets_from_the_balanced_element_stream() -> None:
@@ -217,9 +218,9 @@ def test_prepared_compiler_keys_slot_outlets_from_the_balanced_element_stream() 
         )
     )["root-def"].template
 
-    assert ':key="JSON.stringify([preparedData.citryKeyInner, 0])"' in template
-    assert ':key="JSON.stringify([preparedData.citryKeyInner, 1])"' in template
-    assert ':key="JSON.stringify([preparedData.citryKeyOuter, 0])"' in template
+    assert ':key="JSON.stringify([$citryPrepared.citryKeyInner, 0])"' in template
+    assert ':key="JSON.stringify([$citryPrepared.citryKeyInner, 1])"' in template
+    assert ':key="JSON.stringify([$citryPrepared.citryKeyOuter, 0])"' in template
 
 
 def test_prepared_compiler_leaves_unkeyed_slot_outlets_without_a_synthetic_key() -> None:

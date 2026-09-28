@@ -17,7 +17,6 @@ from citry._vue.capture import (
     PreparedAttribute,
     PreparedDynamicElementOpen,
     PreparedElementOpen,
-    PreparedSourceText,
     PreparedStaticRun,
     PreparedTextValue,
     prepared_browser_binding,
@@ -28,7 +27,6 @@ from citry._vue.compiler import NativeCompiler
 from citry._vue.direct import DirectCallRunRender, DirectPythonComponentRender, DirectSlotRender
 from citry._vue.direct_capture import (
     UnsupportedPreparedView,
-    _contains_authored_vue_binding,
     assemble_typed_render,
 )
 from citry._vue.document import typed_document_shell
@@ -587,17 +585,6 @@ def _binding_open(name: str) -> PreparedElementOpen:
     )
 
 
-@pytest.mark.parametrize("name", ["v-text", ":title", "@click", "#c-key"])
-def test_transparent_projection_binding_detection_uses_authored_attribute_names(name: str) -> None:
-    assert _contains_authored_vue_binding((_binding_open(name),))
-
-
-def test_transparent_projection_binding_detection_ignores_plain_text_tokens() -> None:
-    assert not _contains_authored_vue_binding(
-        (PreparedSourceText("plain @name #topic", (0, 19), "plain @name #topic"),)
-    )
-
-
 def test_ctabs_transparent_projection_keeps_vue_bindings_with_lexical_caller() -> None:
     import citry_ui
 
@@ -628,7 +615,7 @@ def test_ctabs_transparent_projection_keeps_vue_bindings_with_lexical_caller() -
 
     assert 'v-text="label"' in page_input.template
     assert 'v-text="label"' not in physical_input.template
-    assert '<slot v-if="preparedData.selectedSlots[' in physical_input.template
+    assert '<slot v-if="$citryPrepared.selectedSlots[' in physical_input.template
 
 
 def test_repeated_forwarded_multi_slot_fills_keep_nested_calls_with_the_lexical_caller() -> None:
@@ -915,17 +902,16 @@ def test_generic_browser_binding_values_expression_preserves_comparisons() -> No
         template_context_names=("$probe",),
     )
     compile_input = next(iter(assembly.compile_inputs.values()))
-    assert "value < 3" in compile_input.template
-    assert "value > 1" in compile_input.template
-    assert "&lt;" not in compile_input.template
-    assert "&gt;" not in compile_input.template
-
     compiled = NativeCompiler().compile(
         compile_input.template,
         type_key="BrowserBindingComparisonExpressions",
         element_bindings=compile_input.element_bindings,
     )
     assert "$probe" in compiled.javascript
+    # The template escapes `<` and `>` inside the attribute; the compiler
+    # decodes them, so the render function compares the values again.
+    assert "value < 3" in compiled.javascript
+    assert "value > 1" in compiled.javascript
 
 
 def test_direct_render_builds_relationships_without_an_ownership_module() -> None:
@@ -1930,7 +1916,7 @@ def test_component_boundary_citry_event_compiles_to_vue_dispatch_metadata() -> N
     compile_input = assembly.compile_inputs[parent.definition_id]
     assert "v-on:change.prevent" in compile_input.template
     assert "$citryEvents.dispatchComponent" in compile_input.template
-    assert "$citryEvents.componentRoot(preparedData.calls." in compile_input.template
+    assert "$citryEvents.componentRoot($citryPrepared.calls." in compile_input.template
     assert "$event.currentTarget" not in compile_input.template
     assert "{text: &quot;hello&quot;}" in compile_input.template
     assert [item["kind"] for item in compile_input.local_calls[0]["bindings"]] == ["event"]

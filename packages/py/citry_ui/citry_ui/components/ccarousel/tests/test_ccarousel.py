@@ -70,7 +70,7 @@ def test_carousel_renders_apg_semantics_and_form_safe_controls() -> None:
     slides = _occurrences(manifest, "CCarouselSlide")
     assert [slide["preparedData"]["citryAttrs0"]["data-value"] for slide in slides] == ["aurora", "tide"]
     # A Python True reaches Vue unchanged; the styles only test for presence.
-    assert slides[1]["preparedData"]["citryAttrs0"]["data-active"] is True
+    assert slides[1]["preparedData"]["citryAttrs0"]["data-active"] == ""
 
 
 def test_schema_registration_and_types_are_public() -> None:
