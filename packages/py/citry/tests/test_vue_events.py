@@ -1714,3 +1714,28 @@ def test_transparent_render_helper_styles_use_the_mapped_vue_owner() -> None:
     assert style["owner"]["typeKey"] == Widget.class_id
     occurrence_types = {item["id"]: item["typeKey"] for item in payload["occurrences"]}
     assert {occurrence_types[value] for value in style["owner"]["occurrenceIds"]} == {Widget.class_id}
+
+
+def test_interactive_component_class_name_with_underscore_renders() -> None:
+    # 0.5.1 rendered interactive components whose class names hold `_`; their
+    # Vue tags must still be valid custom-element names.
+    app = Citry()
+
+    class My_Card(Component):  # noqa: N801
+        citry = app
+        template = """
+<div><p v-text="msg"></p></div>
+"""
+        js = """
+$component({ data() { return { msg: "hi" } } });
+"""
+
+    class Page(Component):
+        citry = app
+        template = """
+<main><c-My_Card /></main>
+"""
+
+    html = str(Page().render().serialize())
+
+    assert re.search(r"citry-my-card-[0-9a-f]{8}", html) is not None

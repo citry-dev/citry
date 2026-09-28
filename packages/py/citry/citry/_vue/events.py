@@ -61,6 +61,11 @@ class _DependencyOptions(TypedDict, total=False):
 
 def _format_default_component_tag(type_key: str, component: type[Component]) -> str:
     words = re.sub(r"(?<!^)(?=[A-Z])", "-", component.__name__).lower()
+    # A component class name may hold `_`, which the Vue tag check rejects,
+    # so reduce the readable part to lowercase words joined by `-`.
+    # The digest suffix keeps the tag unique, so the dropped characters are
+    # only cosmetic.
+    words = re.sub(r"[^a-z0-9]+", "-", words).strip("-") or "component"
     return f"citry-{words}-{hashlib.sha256(type_key.encode()).hexdigest()[:8]}"
 
 
