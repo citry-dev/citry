@@ -6,6 +6,7 @@ import hashlib
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
+from threading import Lock
 from typing import TYPE_CHECKING, TypedDict, cast
 from weakref import WeakKeyDictionary, ref
 
@@ -34,8 +35,19 @@ if TYPE_CHECKING:
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
 
 
+# A page links compiled definitions and stylesheets by digest, and the browser
+# may fetch them from any worker. These per-process maps only save a cache
+# round trip for recent assets; the engine's configured cache backend is where
+# every worker that shares it finds them (see ``_store_asset``).
 _BUNDLES: WeakKeyDictionary[Citry, OrderedDict[str, bytes]] = WeakKeyDictionary()
 _STYLE_ASSETS: WeakKeyDictionary[Citry, OrderedDict[str, bytes]] = WeakKeyDictionary()
+# How many recent assets each process keeps in memory per engine.
+_LOCAL_ASSET_LIMIT = 128
+# The asset name each kind uses in its collision error message.
+_ASSET_LABELS = {"definition": "definition bundle", "style": "stylesheet asset"}
+# Renders publish into these maps while route requests read and refill them,
+# so one lock keeps an eviction from removing an entry mid-update.
+_LOCAL_ASSETS_LOCK = Lock()
 _PRODUCERS: WeakKeyDictionary[Citry, DirectVueEventsProducer] = WeakKeyDictionary()
 
 
@@ -104,16 +116,87 @@ class EarlySelectedTreeCompilation:
     metadata: _BuiltInPreparationMetadata | None = None
 
 
+def _asset_cache_key(kind: str, digest: str) -> str:
+    """The cache key for one Vue definition bundle or stylesheet, named by the sha256 of its bytes."""
+    return f"citry:vue-{kind}:{digest}"
+
+
+def _remember_locally(local: OrderedDict[str, bytes], digest: str, content: bytes, kind: str) -> None:
+    """Keep one asset in this process's bounded map, rejecting a digest reused for other bytes."""
+    with _LOCAL_ASSETS_LOCK:
+        prior = local.get(digest)
+        if prior is not None and prior != content:
+            raise RuntimeError(f"Vue {_ASSET_LABELS[kind]} digest collision.")
+        local[digest] = content
+        local.move_to_end(digest)
+        while len(local) > _LOCAL_ASSET_LIMIT:
+            local.popitem(last=False)
+
+
+def _store_asset(
+    citry: Citry,
+    store: WeakKeyDictionary[Citry, OrderedDict[str, bytes]],
+    kind: str,
+    digest: str,
+    content: bytes,
+) -> None:
+    """Publish one asset before the page that links it is sent, so any worker sharing the cache can serve it."""
+    local = store.setdefault(citry, OrderedDict())
+    _remember_locally(local, digest, content, kind)
+    # ``has`` before ``set`` sends the (possibly large) body to a shared
+    # backend only when it is missing, including after that backend evicted
+    # it. No TTL: an open page can load a component's code at any later
+    # time, so an entry that expired would break that page.
+    key = _asset_cache_key(kind, digest)
+    if not citry.cache.has(key):
+        citry.cache.set(key, content.decode())
+
+
+def _load_asset(
+    citry: Citry,
+    store: WeakKeyDictionary[Citry, OrderedDict[str, bytes]],
+    kind: str,
+    digest: str,
+) -> bytes | None:
+    """Find one asset in this process first, then in the cache another worker may have written."""
+    local = store.get(citry)
+    if local is not None:
+        with _LOCAL_ASSETS_LOCK:
+            content = local.get(digest)
+        if content is not None:
+            return content
+    key = _asset_cache_key(kind, digest)
+    cached = citry.cache.get(key)
+    if cached is None:
+        return None
+    content = cached.encode()
+    # A shared backend is outside this process's control. Serve only bytes
+    # that still match the digest in the URL; anything else is a miss (404),
+    # and the browser's integrity check would reject those bytes anyway.
+    # Deleting the entry lets the next render that links it write it again.
+    if hashlib.sha256(content).hexdigest() != digest:
+        citry.cache.delete(key)
+        return None
+    _remember_locally(store.setdefault(citry, OrderedDict()), digest, content, kind)
+    return content
+
+
 def definition_bundle(citry: Citry, digest: str) -> bytes | None:
-    """Return one engine-owned immutable compiled definition bundle."""
-    bundles = _BUNDLES.get(citry)
-    return None if bundles is None else bundles.get(digest)
+    """
+    Return one engine-owned immutable compiled definition bundle.
+
+    Returns ``None`` when neither this process nor the cache holds it.
+    """
+    return _load_asset(citry, _BUNDLES, "definition", digest)
 
 
 def style_asset(citry: Citry, digest: str) -> bytes | None:
-    """Return one engine-owned immutable prepared stylesheet."""
-    styles = _STYLE_ASSETS.get(citry)
-    return None if styles is None else styles.get(digest)
+    """
+    Return one engine-owned immutable prepared stylesheet.
+
+    Returns ``None`` when neither this process nor the cache holds it.
+    """
+    return _load_asset(citry, _STYLE_ASSETS, "style", digest)
 
 
 def default_events_producer(citry: Citry) -> DirectVueEventsProducer:
@@ -146,24 +229,10 @@ def default_events_producer(citry: Citry) -> DirectVueEventsProducer:
         return app_id, base_revision + 1, base_revision, occurrence_id
 
     def publish_bundle(digest: str, content: bytes) -> None:
-        bundles = _BUNDLES.setdefault(current(), OrderedDict())
-        prior = bundles.get(digest)
-        if prior is not None and prior != content:
-            raise RuntimeError("Vue definition bundle digest collision.")
-        bundles[digest] = content
-        bundles.move_to_end(digest)
-        while len(bundles) > 128:
-            bundles.popitem(last=False)
+        _store_asset(current(), _BUNDLES, "definition", digest, content)
 
     def publish_style(digest: str, content: bytes) -> None:
-        assets = _STYLE_ASSETS.setdefault(current(), OrderedDict())
-        prior = assets.get(digest)
-        if prior is not None and prior != content:
-            raise RuntimeError("Vue stylesheet asset digest collision.")
-        assets[digest] = content
-        assets.move_to_end(digest)
-        while len(assets) > 128:
-            assets.popitem(last=False)
+        _store_asset(current(), _STYLE_ASSETS, "style", digest, content)
 
     producer = DirectVueEventsProducer(
         tag_for_type=tag_for_type,
