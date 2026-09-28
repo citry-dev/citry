@@ -7,7 +7,7 @@ from typing import Literal
 
 from citry_core.template_formatter import python_expression_provider
 
-SERVER_VERSION = "0.1.7"
+SERVER_VERSION = "0.2.0"
 PROTOCOL_VERSION = 1
 CATALOG_SCHEMA_VERSION = 1
 MINIMUM_CITRY_VERSION = (0, 6, 0)

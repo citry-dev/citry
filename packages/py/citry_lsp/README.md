@@ -132,7 +132,7 @@ operation. Stale or malformed client responses produce no edit.
 
 ## Compatibility
 
-The server advertises language-server version 0.1.7, component catalog v1, and
+The server advertises language-server version 0.2.0, component catalog v1, and
 client protocol v1. It accepts Citry 0.6.0 and newer without a version upper
 bound, and checks the catalog and client protocol contracts before returning
 registry-backed results.

@@ -4,7 +4,7 @@
 	"description": "Highlighting, diagnostics, editor intelligence, and formatting for Citry components",
 	"version": "0.1.6",
 	"citry": {
-		"lspVersion": "0.1.7"
+		"lspVersion": "0.2.0"
 	},
 	"publisher": "citry-dev",
 	"license": "MIT",

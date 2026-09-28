@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Accept citry-lsp 0.2.x, the language server for Citry 0.6 projects, as
+  well as citry-lsp 0.1.x for Citry 0.5 projects.
+
 ## 0.1.6 - 2026-09-11
 
 - Use Citry LSP 0.1.7 to complete and validate public State bindings and report
