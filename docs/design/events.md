@@ -1447,8 +1447,13 @@ the URL set once when `urlpatterns()` is built. `class_id` is used
 rather than the registered name because it always exists. The URL is
 authoritative: on the per-event route, a body naming a different
 component or event is rejected; the batch endpoint is where calls name
-their own targets. Its `URLRoute.methods=None` delegates method admission to
-the resolved event handler, including its `405` response and `Allow` header.
+their own targets. The route admits the fixed method tuple
+`EVENT_ROUTE_METHODS` (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`,
+`OPTIONS`), because handlers can register after the host framework has
+mounted it. For those methods, the resolved event handler decides: a method
+the handler does not declare gets a `405` with the handler's own `Allow`
+header. A method outside the tuple gets the host adapter's `405` without
+reaching Events.
 
 Every handler therefore has a real URL that host middleware, rate
 limiters, access logs, curl, and OpenAPI all see:

@@ -332,7 +332,7 @@ Status legend:
 | `Kwargs` / `Slots` / `TemplateData` typed classes | ✅ Done | Auto-dataclass (djc used NamedTuple); also feed parse-time validation via `tag_rules.py` |
 | `get_template_data()` | ✅ Done | As `template_data(kwargs, slots)`; no `args`/`context` params |
 | `js` / `js_file`, `css` / `css_file` declarations | ✅ Done | Loading half only (`media.py`); emission is the dependency extension |
-| `JsData` / `CssData` + `get_js_data()` / `get_css_data()` (JS/CSS variables) | ✅ Done | `js_data(kwargs, slots)` / `css_data(kwargs, slots)` + auto-dataclass schemas, delivered to the browser as hashed variables scripts and `data-ccss`-scoped stylesheets ([`dependencies.md`](dependencies.md) section 5) |
+| `JsData` / `CssData` + `get_js_data()` / `get_css_data()` (JS/CSS variables) | ✅ Done | `js_data(kwargs, slots)` / `css_data(kwargs, slots)` + auto-dataclass schemas, `js_data()` delivered to the browser in the page's Vue payload and `css_data()` as `data-ccss`-scoped stylesheets ([`dependencies.md`](dependencies.md) section 5) |
 | `Media` nested class, `media` property | ✅ Done | `CitryMedia` via `get_media()`; user's class not mutated, callables lazy, `bytes` entries dropped |
 | `media_class` | ❌ Drop | Django forms `Media` output class |
 | `on_render_before` / `on_render` (incl. generator form) / `on_render_after` | ✅ Done (diverged) | A single `on_render()` hook; before/after dropped (template_data and the generator's post-yield phase cover them). No `Context`/`Template` args, no lambda yields; the generator receives the completed `CitryRender`. Design in [`component_on_render.md`](component_on_render.md) |
@@ -481,7 +481,7 @@ pipeline (`CitryRender` parts + `CitryContext.extra`).
 | Feature | Status | Notes |
 |---|---|---|
 | `Script` / `Style` / `Dependency` structs (url-or-content, attrs, `to_json`/`from_json`, dedupe by url/content) | ✅ Done | Plus first-class use as `Dependencies` entries ([`dependencies.md`](dependencies.md) section 3); no string re-parsing |
-| Caching of processed component JS/CSS + JS/CSS variables (`cache_component_js`, `cache_component_js_vars`, eviction) | ✅ Done | Class scripts with lazy repopulation; variables scripts hashed and cached per distinct data ([`dependencies.md`](dependencies.md) sections 4-5) |
+| Caching of processed component JS/CSS + JS/CSS variables (`cache_component_js`, `cache_component_js_vars`, eviction) | ✅ Done (diverged) | Class scripts with lazy repopulation; CSS variables stylesheets hashed and cached per distinct data; JS variables travel in the page's Vue payload rather than a cached script ([`dependencies.md`](dependencies.md) sections 4-5) |
 | `render_dependencies()` + six strategies (`document`/`fragment`/`simple`/`prepend`/`append`/`ignore`) | ✅ Done (diverged) | `serialize(deps_strategy=..., deps_position=...)`: four strategies + positions, implementing djc's own TODO; `fragment` raises until the client-runtime phase ([`dependencies.md`](dependencies.md) section 7.1) |
 | `_insert_js_css_to_default_locations` (`<head>`/`<body>` insertion) | ✅ Done | Plus a no-`<head>`/`<body>` fallback (prepend CSS, append JS) instead of djc's silent drop |
 | `{% component_js_dependencies %}` / `{% component_css_dependencies %}` placeholder tags | ✅ Done | The `<c-js>` / `<c-css>` built-ins, rendering a core `Placeholder` part; first occurrence wins, later ones render nothing |
@@ -1069,7 +1069,7 @@ extension and a good dogfood test for citry's hook system.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Eagerly cache component JS/CSS at class creation (so assets survive a server restart mid-session) | ♻️ Superseded | Replaced by lazy repopulation at the script endpoint, keeping citry's no-I/O-at-import rule ([`dependencies.md`](dependencies.md) section 4.3); variables scripts still need a shared cache in multi-worker setups |
+| Eagerly cache component JS/CSS at class creation (so assets survive a server restart mid-session) | ♻️ Superseded | Replaced by lazy repopulation at the script endpoint, keeping citry's no-I/O-at-import rule ([`dependencies.md`](dependencies.md) section 4.3); `css_data()` stylesheets and Vue definition bundles still need a shared cache in multi-worker setups |
 
 </details>
 

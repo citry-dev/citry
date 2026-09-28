@@ -1074,11 +1074,20 @@ the prototype planned to bolt on; compiled assets need nothing extra.
 
 ### 8.4 Multi-worker and cold start
 
-Compiled output, unlike JS/CSS variables scripts, is **regenerable from
-source**, so no shared cache is *required* for correctness; every worker can
-rebuild independently (the lazy-repopulation property, `dependencies.md`
-4.3). With the persistent compile-cache default (8.1), the operational
-guidance is:
+Compiled output, unlike `css_data()` variables stylesheets, is
+**regenerable from source**, so the compile cache (8.1) does not need to be
+shared for correctness; every worker can rebuild independently (the
+lazy-repopulation property, `dependencies.md` 4.3).
+
+The main cache (`Citry(cache=...)`) is a separate decision, and a
+multi-worker deployment that serves interactive pages needs it shared. The
+worker that renders a page writes the page's compiled Vue definition
+bundles and stylesheets to the main cache and links them by digest. The
+browser then fetches those URLs, possibly from another worker, and a worker
+that cannot find the digest answers 404. The same applies to `css_data()`
+stylesheets and local `Dependencies` files served by URL.
+
+With the persistent compile-cache default (8.1), the operational guidance is:
 
 - **Dev**: defaults do the right thing. Restarting the server recompiles
   nothing whose sources are unchanged (same content, same key, disk hit);
@@ -1086,14 +1095,16 @@ guidance is:
   are always rebuilt fresh from the (correctly cached or recompiled)
   sources.
 - **Production, single host**: defaults already share the compile cache
-  across workers and restarts (same per-user directory). Configuring the
-  *main* cache (`DiskCache`/Redis) remains the separate, fragments-driven
-  decision it is today (`dependencies.md` 8.3).
+  across workers and restarts (same per-user directory). With more than one
+  worker, also point the main cache at a shared store such as `DiskCache`
+  (`dependencies.md` 10.2), so every worker serves the Vue assets another
+  worker linked.
 - **Production, fleet**: run `citry compile` at image-build time so the
   baked image ships a hot compile cache (point `compile_cache` at a path
   inside the image if the per-user default is not baked in); or use a shared
   Redis backend. Worst case without either is redundant recompilation per
-  host, never wrong output.
+  host, never wrong output. The main cache still needs a store every host
+  reaches (for example `RedisCache`), for the Vue assets described above.
 
 ---
 

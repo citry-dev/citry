@@ -659,30 +659,30 @@ adapter tests for admitted and rejected methods. Another form-port browser
 case still requests an arbitrary CSS target with an inner swap. That failure
 belongs to the pending explicit-target migration, not HTML compatibility.
 
-The route correction uses the existing per-handler method check as the single
-authority for the shared event endpoint. Prior art: `URLRoute.methods` is a
-finite tuple, ASGI/WSGI/Django filter against it, and Events already validates
-each resolved handler's allowed methods before decoding or dispatch. Handler
-declarations accept arbitrary valid HTTP tokens, and classes may register
-after the framework routes are mounted. A fixed list or a registration-time
-union would therefore leave valid handlers unreachable.
+The route correction keeps the existing per-handler method check as the
+authority for which methods a handler serves. Prior art: `URLRoute.methods` is
+a finite tuple, and ASGI/WSGI/Django filter requests against it; Events
+already validates each resolved handler's allowed methods before decoding or
+dispatch. Classes may register after the framework routes are mounted (Django
+snapshots its URL set once), so the per-event route cannot list only the
+methods its current handlers declare.
 
-`URLRoute.methods=None` will explicitly delegate method admission to the route
-handler. Only the per-event endpoint selects it; batch and asset routes keep
-their finite sets. Every adapter and other consumer must handle that value.
-Mounted tests must prove PUT/DELETE reach their handlers, rejected methods
-return the handler-specific 405/Allow without invoking it, lazy registration
-works, and unsafe-method CSRF checks remain effective. This is a public routing
-API addition and needs its own documentation and release note.
+The per-event route therefore admits the fixed tuple
+`EVENT_ROUTE_METHODS` (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`,
+`OPTIONS`), and every mounted route's `methods` stays a tuple that adapters
+can iterate. A request with one of those methods reaches the event route,
+which answers `405` with the resolved handler's own `Allow` header when the
+handler does not serve that method. A handler may declare any valid HTTP
+token, but a request using a method outside the tuple (for example `PURGE`)
+is answered with the host adapter's `405` before it reaches Events. 0.5.1 had
+the same kind of limit, with a per-event route that admitted only GET and
+POST. Batch and asset routes keep their own finite sets.
 
-The route implementation now passes mounted Django/FastAPI checks for PUT,
-DELETE, rejected PATCH and CSRF rejection without handler execution. A class
-registered after FastAPI mounting is reachable, and a WSGI test verifies
-delegated method admission. The broader Events route/Django selection records
-135 passes and one HTML-output assertion failure; host parity/request checks
-record 44 passes and two output-marker assertions requiring migration review.
-Independent review is pending. The focused route tests do not establish that
-those broader suites are fully migrated.
+Mounted WSGI and ASGI tests (`tests/test_events_route_methods.py`) prove that
+PUT/DELETE reach their handlers, that a method the handler does not declare
+returns the handler-specific 405/Allow without invoking it, that a method
+outside the tuple stops at the adapter, and that unsafe-method CSRF checks
+remain effective.
 
 Browser method support is narrower than the server's valid HTTP-token contract.
 HEAD cannot carry the JSON request body or return the event result body, Fetch

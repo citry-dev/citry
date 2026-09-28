@@ -254,7 +254,6 @@ Same scheme as DJC (`dependencies.py:436`), with the citry prefix:
 | `citry:<class_id>:css` | mutable compatibility entry for the current class's `Component.css` |
 | `citry:<class_id>:js:component:<content_hash>` | immutable `Script` for one class JS version (post-hook, `$component` transformed) |
 | `citry:<class_id>:css:component:<content_hash>` | immutable `Style` for one class CSS version |
-| `citry:<class_id>:js:<vars_hash>` | generated script registering one distinct `js_data()` result |
 | `citry:<class_id>:css:<vars_hash>` | generated stylesheet defining one distinct `css_data()` result |
 
 During a live render, empty and whitespace-only `Component.js` or
@@ -351,14 +350,11 @@ The mechanism ports from DJC conceptually unchanged:
   text is checked for declaration and style-tag breakout plus balanced blocks,
   strings, and comments. This is a structural containment check, not a full
   CSS grammar validator.
-- **JS variables** become a cached script that calls
-  `Citry.manager.registerComponentData("<class_id>", "<hash>", json_source)`.
-  Each client-active instance produces an explicit component call
-  (`class_id`, `component_id`, `js_vars_hash`, `init | seed`) in the
-  serialize-time manifest. `init` seeds the instance's Alpine scope and then
-  runs `$component`; `seed` performs only the first operation. The content
-  stays deduplicated by hash, while the manager parses a fresh graph per call
-  so sibling instances never share nested mutable values.
+- **JS variables** travel inside the page's Vue payload: each component
+  occurrence carries its own `js_data()` result as a JSON object, and the
+  browser runtime hands it to that instance. They are not written to the
+  cache or served as a separate file, so `DependencyRecord.js_vars_hash`
+  stays `None`.
 - **`$component` sugar**: a regex rewrite applied once when the class's JS is
   first cached: `$component(` becomes
   `Citry.manager.registerComponent("<class_id>", `.
@@ -798,8 +794,8 @@ cannot read those files with the user's cookies, and an anonymous request gets
 the login response rather than the file. The value does not depend on the
 request's `Origin`, so no `Vary` header is needed.
 
-A file built from one render's `css_data()` or `js_data()` (the
-`cache/<class_id>.<vars_hash>.*` files and Events stylesheets) holds that
+A file built from one render's `css_data()` (the
+`cache/<class_id>.<vars_hash>.css` files and Events stylesheets) holds that
 render's values. Its URL is a hash of the content, and anyone who has the URL
 could already download it, so those methods must not return secrets.
 
@@ -932,7 +928,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 |---|---|---|
 | `Script`/`Style`/`Dependency`, kinds, dedupe, to/from JSON | Ported | plus first-class use as `Dependencies` entries (3) |
 | `_parse_dependency_from_string` / `TagAttrParser` | Dropped | entries are objects; DJC's own TODO_V1 (3) |
-| `cache_component_js/css`, `cache_component_js_vars/css_vars`, key scheme | Ported | `citry:` prefix (4.2) |
+| `cache_component_js/css`, `cache_component_css_vars`, key scheme | Ported | `citry:` prefix (4.2); JS variables travel in the Vue payload instead of a cached script (5.2) |
 | Eager class-creation caching (djc `extensions/dependencies.py`) | Replaced | lazy endpoint repopulation (4.3), flagged divergence |
 | `evict_component_scripts` | Ported | folded into the existing `on_files_reset` handler (4.3) |
 | `get_js_data` / `get_css_data` / `JsData` / `CssData` | Ported (reshaped) | `js_data(kwargs, slots)` / `css_data(kwargs, slots)` (5.1) |
