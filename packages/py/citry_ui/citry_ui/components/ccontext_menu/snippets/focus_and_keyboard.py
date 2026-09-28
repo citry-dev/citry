@@ -21,9 +21,7 @@ class ContextMenuFocusAndKeyboard(Component):
               `${next ? 'opened' : 'closed'} by ${detail.reason}`,
             onAction:(value)=>{
               if (value === 'disable-invoker') disableInvoker=true;
-              if (value === 'remove-invoker') {
-                window.document.querySelector('[data-context-menu-return-target]')?.remove();
-              }
+              if (value === 'remove-invoker') invokerRemoved=true;
             },
           }"
         >
@@ -37,12 +35,14 @@ class ContextMenuFocusAndKeyboard(Component):
                 <strong>Focusable report row</strong>
                 <small>The row is the stable fallback target.</small>
               </span>
-              <c-CButton
-                size="sm"
-                variant="outline"
-                c-attrs="{'data-context-menu-return-target':''}"
-                v-bind="{disabled:disableInvoker}"
-              >Nested action</c-CButton>
+              <template v-if="!invokerRemoved">
+                <c-CButton
+                  size="sm"
+                  variant="outline"
+                  c-attrs="{'data-context-menu-return-target':''}"
+                  v-bind="{disabled:disableInvoker}"
+                >Nested action</c-CButton>
+              </template>
               <a href="#focus-linked-record">Linked record</a>
             </div>
           </c-fill>
@@ -59,7 +59,10 @@ class ContextMenuFocusAndKeyboard(Component):
         </c-CContextMenu>
 
         <div class="context-menu-focus__fallbacks">
-          <button type="button" @click="window.location.reload()">Reload nested Button</button>
+          <button
+            type="button"
+            @click="invokerRemoved=false; disableInvoker=false"
+          >Restore nested Button</button>
           <button type="button" disabled>Disabled fallback</button>
           <span tabindex="-1">Programmatic fallback</span>
         </div>
@@ -101,7 +104,7 @@ class ContextMenuFocusAndKeyboard(Component):
     """
 
     js = r"""
-      $component({data(){return {disableInvoker:false,last:'No close yet'};}});
+      $component({data(){return {disableInvoker:false,invokerRemoved:false,last:'No close yet'};}});
     """
 
     css = """

@@ -8,9 +8,6 @@ class ReactiveImage(Component):
     template = """
       <section
         class="image-reactive"
-
-        @image-native-load="nativeLoads++"
-        @image-native-error="nativeErrors++"
       >
         <div class="image-reactive__controls">
           <button
@@ -27,10 +24,7 @@ class ReactiveImage(Component):
           >Broken</button>
           <button
             type="button"
-            @click="
-              source='/static/img/ui/image/horsehead-nebula-1280.jpg?frame=rapid-a';
-              window.queueMicrotask(()=>source='/static/img/ui/image/orion-nebula-640.jpg?frame=rapid-b');
-            "
+            @click="rapidAThenB()"
           >Rapid A then B</button>
         </div>
 
@@ -75,6 +69,16 @@ class ReactiveImage(Component):
             nativeErrors:0,
             redact:(value)=>value ? value.split('/').pop().split('?')[0] : 'none',
           };
+        },
+        methods: {
+          // Replace the source twice in one task; only the second
+          // image may settle the status.
+          rapidAThenB() {
+            this.source = '/static/img/ui/image/horsehead-nebula-1280.jpg?frame=rapid-a';
+            queueMicrotask(() => {
+              this.source = '/static/img/ui/image/orion-nebula-640.jpg?frame=rapid-b';
+            });
+          },
         },
       });
     """

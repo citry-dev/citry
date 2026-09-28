@@ -9,7 +9,7 @@ class DisclosureOverlaysAndDialogs(Component):
       <section
         class="disclosure-overlay-demo"
 
-        @click="dialogOpen = Boolean($event.target.closest('[data-open-credential-dialog]')) || dialogOpen"
+        @click="if ($event.target.closest('[data-open-credential-dialog]')) dialogOpen = true;"
       >
         <c-CDisclosure open>
           <c-fill name="title">Credential help</c-fill>

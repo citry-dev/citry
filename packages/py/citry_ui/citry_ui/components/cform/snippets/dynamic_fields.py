@@ -15,7 +15,7 @@ class FilterSequence(Component):
         </header>
 
         <c-CForm
-          @submit.prevent="result = JSON.stringify(new window.FormData($el).getAll('filter'))"
+          @submit.prevent="result = JSON.stringify(new window.FormData($event.target).getAll('filter'))"
         >
           <div class="filter-sequence__rows">
             <template v-for="(row, index) in rows" :key="row.id">

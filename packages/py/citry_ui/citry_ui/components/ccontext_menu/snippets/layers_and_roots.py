@@ -60,32 +60,31 @@ class ContextMenuLayersAndRoots(Component):
             </c-fill>
             <c-fill name="title">Record inspector</c-fill>
             <c-fill name="default">
-              <c-CContextMenu
-                aria_label="Inspector row actions"
-                c-attrs="{'data-context-menu-removable':''}"
-              >
-                <c-fill name="target" data="{ target_attrs }">
-                  <div
-                    class="context-menu-layers__popover-target"
-                    tabindex="0"
-                    c-bind="target_attrs"
-                  >Row inside Popover</div>
-                </c-fill>
-                <c-fill name="menu">
-                  <c-CMenuItem value="open-row">Open row</c-CMenuItem>
-                  <c-CMenuItem value="archive-row">Archive row</c-CMenuItem>
-                </c-fill>
-              </c-CContextMenu>
+              <template v-if="!nestedRemoved">
+                <c-CContextMenu
+                  aria_label="Inspector row actions"
+                  c-attrs="{'data-context-menu-removable':''}"
+                >
+                  <c-fill name="target" data="{ target_attrs }">
+                    <div
+                      class="context-menu-layers__popover-target"
+                      tabindex="0"
+                      c-bind="target_attrs"
+                    >Row inside Popover</div>
+                  </c-fill>
+                  <c-fill name="menu">
+                    <c-CMenuItem value="open-row">Open row</c-CMenuItem>
+                    <c-CMenuItem value="archive-row">Archive row</c-CMenuItem>
+                  </c-fill>
+                </c-CContextMenu>
+              </template>
             </c-fill>
           </c-CPopover>
           <button
             type="button"
-            @click="
-              window.document.querySelector('[data-context-menu-removable]')?.remove();
-              last='nested ContextMenu removed'
-            "
+            @click="nestedRemoved=true; last='nested ContextMenu removed'"
           >Remove nested ContextMenu</button>
-          <button type="button" @click="window.location.reload()">
+          <button type="button" @click="nestedRemoved=false">
             Restore the fixture, then repeat the cycle
           </button>
 
@@ -178,10 +177,7 @@ class ContextMenuLayersAndRoots(Component):
           </button>
           <output
             aria-live="polite"
-            v-text="`${last}; layers ${counterTick >= 0
-              ? (globalThis[Symbol.for('citry-ui:anchored-layer-runtime')]?.layers.length ?? 0)
-              : 0}; registrations ${globalThis[Symbol.for('citry-ui:anchored-layer-runtime')]
-                ?.stats?.activeCoordinators ?? 0}`"
+            v-text="layerSummary(counterTick)"
           >No layer request yet; layers 0; registrations 0</output>
         </div>
       </section>
@@ -191,7 +187,18 @@ class ContextMenuLayersAndRoots(Component):
       $component({data(){return {
           last:'No layer request yet',
           counterTick:0,
+          nestedRemoved:false,
         };},
+        methods: {
+          // The layer runtime is not reactive, so the tick argument makes
+          // the output re-read it when the refresh button is pressed.
+          layerSummary(tick) {
+            const runtime=globalThis[Symbol.for('citry-ui:anchored-layer-runtime')];
+            const layers=tick >= 0 ? (runtime?.layers.length ?? 0) : 0;
+            const registrations=runtime?.stats?.activeCoordinators ?? 0;
+            return `${this.last}; layers ${layers}; registrations ${registrations}`;
+          },
+        },
         mounted() {
           const shadow=this.$refs.shadowHost.attachShadow({mode:'open'});
           document.querySelectorAll('style').forEach(

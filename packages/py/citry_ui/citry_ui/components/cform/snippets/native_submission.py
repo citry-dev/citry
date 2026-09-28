@@ -19,7 +19,7 @@ class NativeSubmission(Component):
           method="post"
           @submit.prevent="
             submitted = JSON.stringify(
-              Object.fromEntries(new window.FormData($el, $event.submitter))
+              Object.fromEntries(new window.FormData($event.target, $event.submitter))
             );
             submitter = $event.submitter?.value ?? '';
           "

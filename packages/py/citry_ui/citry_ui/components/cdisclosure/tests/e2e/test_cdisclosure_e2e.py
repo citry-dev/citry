@@ -1,7 +1,5 @@
 """Browser contract tests for the Disclosure component family."""
 
-# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,7 +11,6 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component, ComponentLibrary
-from citry.ext.dependencies import Script
 from citry_ui.components.cdisclosure.cdisclosure import (
     CDisclosure,
     CInternalDisclosureActionsContent,
@@ -82,11 +79,6 @@ def _page_html() -> str:
                   id="guide"
                   class_="disclosure-brand disclosure-fast"
                   actions_label="Guide actions"
-                  @click.stop="
-                    $event.target.closest('[data-citry-disclosure-trigger]')?.closest('[data-citry-disclosure-root]')
-                      === $event.currentTarget
-                    && (state.disclosureTest.nativeClicks += 1)
-                  "
                   :variant="state.disclosureTest.variant"
                   :size="state.disclosureTest.size"
                   :indicator="state.disclosureTest.indicator"
@@ -168,7 +160,10 @@ def _initial_invalid_page_html() -> str:
               return { state: { initialInvalid } };
             },
             mounted() {
-              document.querySelector('#initial-invalid-title').textContent = '';
+              // A parent mounts after its children but before their Citry
+              // server-render callbacks run, so the disclosure's first client
+              // initialization sees an unnamed trigger.
+              document.querySelector("#initial-invalid-title").textContent = "";
             },
           });
         """
@@ -266,11 +261,11 @@ def _events_page() -> tuple[Citry, str]:
               id="events-disclosure"
               c-open="server_open"
               style="--cui-disclosure-duration: 0ms"
-              :open="window.__disclosureMorph.controlled"
-              :onOpenChange="(next, detail) => window.__disclosureMorph.events.push({next, detail})"
+              :open="revisionOwner.controlled"
+              :onOpenChange="(next, detail) => revisionOwner.events.push({next, detail})"
             >
-              <c-fill name="title">Morph title {{ step }}</c-fill>
-              <c-fill name="default"><input id="morph-input" value="preserved" /></c-fill>
+              <c-fill name="title">Revision title {{ step }}</c-fill>
+              <c-fill name="default"><input id="revision-input" v-model="revisionOwner.note" /></c-fill>
             </c-CDisclosure>
           </section>
         """
@@ -281,9 +276,26 @@ def _events_page() -> tuple[Citry, str]:
                 "step": kwargs.step,
             }
 
+        # The owner state lives in this component's Vue instance, which a
+        # server revision keeps, so the test can change it between revisions.
+        # A server revision re-applies server-rendered input values, so the
+        # draft lives in that state too.
+        js = """
+          $component({
+            data() {
+              const revisionOwner = Citry.vue.reactive({
+                controlled: undefined,
+                events: [],
+                note: "preserved",
+              });
+              window.__revisionOwner = revisionOwner;
+              return { revisionOwner };
+            },
+          });
+        """
+
     class Page(Component):
         citry = app
-        js = "$component({data(){const disclosureMorph=Citry.vue.reactive({controlled:undefined,events:[]});window.__disclosureMorph=disclosureMorph;return {state:{disclosureMorph}};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -388,38 +400,35 @@ def _overlay_page_html(kind: str) -> str:
     return str(Page())
 
 
+# An older page generation left its anchored-layer runtime on the global
+# object. The test installs it before the page loads; loading the page
+# replaces the document but keeps the window's globals.
+_CLOSED_V2_RUNTIME_SCRIPT = """
+(() => {
+  const coordinator = { generation: 'closed-v2-coordinator' };
+  const runtime = {
+    version: 2,
+    stats: { listenerSets: 0, reconciliations: 0 },
+    layers: [],
+    coordinatorFor: () => coordinator,
+  };
+  window.__closedV2Coordinator = coordinator;
+  window.__oldAnchoredRuntime = runtime;
+  globalThis[Symbol.for('citry-ui:anchored-layer-runtime')] = runtime;
+})();
+"""
+
+
 def _incompatible_runtime_page_html() -> str:
     app = _app()
 
     class Page(Component):
         citry = app
-        js = "$component({});"
-
-        class Dependencies:
-            js = [
-                Script(
-                    content="""
-                      const coordinator = { generation: 'closed-v2-coordinator' };
-                      const runtime = {
-                        version: 2,
-                        stats: { listenerSets: 0, reconciliations: 0 },
-                        layers: [],
-                        coordinatorFor: () => coordinator,
-                      };
-                      window.__closedV2Coordinator = coordinator;
-                      window.__oldAnchoredRuntime = runtime;
-                      globalThis[Symbol.for('citry-ui:anchored-layer-runtime')] = runtime;
-                    """,
-                    wrap=False,
-                )
-            ]
-
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
             <body>
-              <div id="closed-v2-owner" data-citry-tooltip-initialized hidden></div>
               <c-CDisclosure id="new-disclosure">
                 <c-fill name="title">New fragment title</c-fill>
                 <c-fill name="default">New fragment panel</c-fill>
@@ -448,6 +457,16 @@ def disclosure_page(page: Any):
             && roots.every(root => root.hasAttribute('data-citry-disclosure-initialized'));
         }"""
     )
+    # A page listener on the internal trigger stops the click from bubbling,
+    # which proves activation does not depend on the click reaching the root.
+    page.evaluate(
+        """() => document
+          .querySelector('#guide > [data-citry-ui-part=disclosure-header] button')
+          .addEventListener('click', (event) => {
+            event.stopPropagation();
+            window.__disclosureTest.nativeClicks += 1;
+          })"""
+    )
     return page, errors
 
 
@@ -467,7 +486,11 @@ def test_uncontrolled_native_activation_callback_actions_and_nested_isolation(di
 
     assert trigger.get_attribute("aria-expanded") == "false"
     trigger.click()
-    page.wait_for_timeout(100)
+    # The panel grows from zero height, so a fixed delay can still see it
+    # collapsed on a loaded machine. Wait for the reveal animation instead.
+    panel.evaluate(
+        "element => Promise.all(element.getAnimations({subtree: true}).map(animation => animation.finished))"
+    )
     assert trigger.get_attribute("aria-expanded") == "true"
     assert not panel.is_hidden()
     assert guide.get_attribute("data-state") == "open"
@@ -962,7 +985,9 @@ def test_incompatible_runtime_generation_fails_closed_without_replacing_closed_v
         lambda message: errors.append(message.text) if message.type == "error" else None,
     )
     page.on("pageerror", lambda error: errors.append(str(error)))
+    page.evaluate(_CLOSED_V2_RUNTIME_SCRIPT)
     page.set_content(_incompatible_runtime_page_html())
+    page.wait_for_function("() => window.__oldAnchoredRuntime !== undefined")
     page.wait_for_timeout(50)
 
     assert page.evaluate(
@@ -974,15 +999,18 @@ def test_incompatible_runtime_generation_fails_closed_without_replacing_closed_v
             && installed.generation === undefined;
         }"""
     )
+    # The new generation reports the conflict once and leaves the older runtime
+    # untouched, so the state that runtime owns keeps exactly its original shape.
     assert page.evaluate("globalThis[Symbol.for('citry-ui:anchored-layer-runtime-compatible')] === false")
-    assert page.locator("#closed-v2-owner").get_attribute("data-citry-tooltip-initialized") == ""
-    assert page.locator("#new-disclosure").get_attribute("data-citry-disclosure-initialized") is None
-    assert errors == [
-        "[citry-ui] cannot replace an incompatible anchored-layer runtime; a full page reload is required."
-    ]
+    assert page.evaluate("window.__oldAnchoredRuntime.stats") == {"listenerSets": 0, "reconciliations": 0}
+    assert page.evaluate("window.__oldAnchoredRuntime.layers.length") == 0
+    # Each disclosure skips its setup while the runtime is incompatible, so none
+    # starts with a runtime it cannot use.
+    assert page.locator("[data-citry-disclosure-initialized]").count() == 0
+    assert any("a full page reload is required" in error for error in errors)
 
 
-def test_server_fingerprint_morph_handoff_preserves_data_only_updates_and_unchanged_native_values(
+def test_server_revision_preserves_browser_state_and_replaces_only_the_release_baseline(
     page: Any,
     serve_citry_ui_live: Any,
 ):
@@ -995,34 +1023,38 @@ def test_server_fingerprint_morph_handoff_preserves_data_only_updates_and_unchan
     app, html = _events_page()
     base = serve_citry_ui_live(app, html)
     page.goto(base + "/")
-    page.wait_for_function("window.Citry && Citry.events")
+    page.wait_for_function(
+        "document.querySelector('#events-disclosure')?.hasAttribute('data-citry-disclosure-initialized')"
+    )
     trigger = _trigger(page, "events-disclosure")
     page.evaluate("window.__eventsDisclosureRoot = document.querySelector('#events-disclosure')")
 
     trigger.click()
     assert trigger.get_attribute("aria-expanded") == "true"
-    assert page.evaluate("window.__disclosureMorph.events.length") == 1
-    page.locator("#morph-input").fill("browser-owned")
+    assert page.evaluate("window.__revisionOwner.events.length") == 1
+    page.locator("#revision-input").fill("browser-owned")
+    page.evaluate("window.__revisionInput = document.querySelector('#revision-input')")
 
+    # An Events server update re-renders the disclosure with new title content.
     page.evaluate("() => Citry.events.send(document.querySelector('.advance-disclosure'), 'advance', {})")
     page.wait_for_function("document.querySelector('#events-step').textContent.trim() === '1'")
+    assert page.locator("#events-disclosure").get_by_text("Revision title 1").count() == 1
     assert page.evaluate("document.querySelector('#events-disclosure') === window.__eventsDisclosureRoot")
     assert trigger.get_attribute("aria-expanded") == "true"
-    # The server baseline is unchanged, so the retained element keeps its
-    # dirty native value even though the surrounding component received an
-    # event-driven publication.
-    assert page.locator("#morph-input").input_value() == "browser-owned"
+    assert page.locator("#revision-input").input_value() == "browser-owned"
+    # The open panel content is patched in place, not rebuilt.
+    assert page.evaluate("document.querySelector('#revision-input') === window.__revisionInput")
 
-    page.evaluate("window.__disclosureMorph.controlled = false")
+    page.evaluate("window.__revisionOwner.controlled = false")
     page.wait_for_function("document.querySelector('#events-disclosure button').ariaExpanded === 'false'")
     page.evaluate("() => Citry.events.send(document.querySelector('.advance-disclosure'), 'advance', {})")
     page.wait_for_function("document.querySelector('#events-step').textContent.trim() === '2'")
     assert trigger.get_attribute("aria-expanded") == "false"
-    assert page.evaluate("window.__disclosureMorph.events.length") == 1
+    assert page.evaluate("window.__revisionOwner.events.length") == 1
 
-    page.evaluate("window.__disclosureMorph.controlled = null")
+    page.evaluate("window.__revisionOwner.controlled = null")
     page.wait_for_function("document.querySelector('#events-disclosure button').ariaExpanded === 'true'")
-    assert page.evaluate("window.__disclosureMorph.events.length") == 1
+    assert page.evaluate("window.__revisionOwner.events.length") == 1
     assert errors == []
 
 

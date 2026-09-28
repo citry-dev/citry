@@ -53,6 +53,7 @@ def test_drawer_renders_native_modal_anatomy_and_logical_configuration() -> None
     occurrence = _prepared_occurrence(html)
     attrs = occurrence["preparedData"]["citryAttrs0"]
     assert attrs["id"] == "field-note"
+    # A Python True reaches Vue unchanged; Vue sets the dialog's `open` property.
     assert attrs["open"] is True
     assert attrs["aria-labelledby"] == "field-note-title"
     assert attrs["aria-describedby"] == "field-note-description"
@@ -107,10 +108,16 @@ def test_drawer_rejects_invalid_server_inputs(name: str, value: object) -> None:
         "role",
         "aria-hidden",
         "data-placement",
-        "x-html",
-        "x-ignore",
+        "v-html",
+        "v-if",
+        "V-IF",
+        "v-for",
         ":open",
-        "x-bind:aria-labelledby",
+        ".open",
+        "v-bind:aria-labelledby",
+        "V-BIND:role",
+        "#default",
+        "v-on:close",
     ],
 )
 def test_drawer_rejects_owned_static_and_dynamic_attrs(attr: str) -> None:
@@ -119,8 +126,16 @@ def test_drawer_rejects_owned_static_and_dynamic_attrs(attr: str) -> None:
 
 
 def test_drawer_rejects_python_resolved_vue_directives() -> None:
-    with pytest.raises(ValueError, match="cannot introduce Vue directives"):
+    # The component names itself and points at the template, rather than
+    # leaving a generic compiler error to surface later.
+    with pytest.raises(ValueError, match=re.escape("CDrawer attrs cannot contain the Vue directive '@close'")):
         _render(attrs={"@close": "closed = true"})
+
+
+def test_drawer_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(attrs={"x-data": "{}", "hx-get": "/notes"})
+    assert "x-data" in html
+    assert "hx-get" in html
 
 
 def test_drawer_merges_class_style_and_unrelated_attrs() -> None:

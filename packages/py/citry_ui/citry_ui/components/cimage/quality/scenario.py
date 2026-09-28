@@ -77,10 +77,7 @@ def image_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack image-quality"
             aria-labelledby="image-quality-title"
-
             @c-quality-morph="refresh"
-            @quality-image-native-load="nativeLoads++"
-            @quality-image-native-error="nativeErrors++"
           >
             <h1 id="image-quality-title">Image states</h1>
             <output hidden data-quality-morph-step>{{ morph_step }}</output>
@@ -213,12 +210,7 @@ def image_states_component(app: Citry) -> type[Component]:
                   >Broken</button>
                   <button
                     type="button"
-                    @click="
-                      reactiveSource='https://images.citry.test/northstar/horsehead-1280.jpg?frame=rapid-a';
-                      globalThis.queueMicrotask(
-                        ()=>reactiveSource='https://images.citry.test/northstar/orion-640.jpg?frame=rapid-b'
-                      );
-                    "
+                    @click="rapidAThenB()"
                   >Rapid A then B</button>
                 </div>
                 <c-CImage
@@ -361,6 +353,16 @@ def image_states_component(app: Citry) -> type[Component]:
                 lifecycleCallbacks:0,
                 redact:(value)=>value ? value.split('/').pop().split('?')[0] : 'none',
               };
+            },
+            methods: {
+              // Template expressions cannot reach browser globals such as
+              // queueMicrotask, so the supersession probe lives here.
+              rapidAThenB() {
+                this.reactiveSource = 'https://images.citry.test/northstar/horsehead-1280.jpg?frame=rapid-a';
+                queueMicrotask(() => {
+                  this.reactiveSource = 'https://images.citry.test/northstar/orion-640.jpg?frame=rapid-b';
+                });
+              },
             },
           });
         """

@@ -20,7 +20,7 @@ def _interaction_page() -> str:
 
     class Page(Component):
         citry = app
-        js = "$component({data(){return {loading:true,disabled:false,showSubmit:true};}});"
+        js = "$component({data(){return {loading:true,disabled:false,submitMounted:true};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -38,7 +38,10 @@ def _interaction_page() -> str:
                 @reset="window.__buttonResets = (window.__buttonResets || 0) + 1"
               >
                 <input id="probe-input" name="title" value="Original" />
-                <span id="submit-mount" v-if="showSubmit">
+                <span
+                  id="submit-mount"
+                  v-if="submitMounted"
+                >
                   <c-CButton
                     type="submit"
                     c-attrs="submit_attrs"
@@ -69,18 +72,18 @@ def _interaction_page() -> str:
                 Toggle loading
               </button>
               <button
+                id="unmount-submit"
+                type="button"
+                @click="submitMounted = false"
+              >
+                Remove submit
+              </button>
+              <button
                 id="toggle-disabled"
                 type="button"
                 @click="disabled = !disabled"
               >
                 Toggle disabled
-              </button>
-              <button
-                id="remove-submit"
-                type="button"
-                @click="showSubmit = false"
-              >
-                Remove submit button
               </button>
               <c-js />
             </body>
@@ -603,28 +606,34 @@ def test_link_loading_and_disabled_states_block_activation_then_restore_native_l
 
 def test_removing_button_runs_component_listener_cleanup(page):
     _load(page, _interaction_page(), "#submit-action")
+    # A plain probe listener shows whether the Button's loading guard still
+    # intercepts clicks: the guard stops every click while the Button is loading.
+    # The same guard stops a form submission that names the Button as submitter,
+    # before the page's own submit listener can count it.
     page.evaluate(
         """() => {
           window.__removedButton = document.querySelector('#submit-action');
-          document.querySelector('#remove-submit').click();
+          window.__probeClicks = 0;
+          window.__removedButton.addEventListener('click', () => { window.__probeClicks += 1; });
+          window.__removedButton.click();
+          window.__submitFrom = (submitter) => document.querySelector('#probe-form').dispatchEvent(
+            new SubmitEvent('submit', {submitter, cancelable: true}),
+          );
+          window.__submitFrom(window.__removedButton);
         }"""
     )
-    page.wait_for_function("!document.querySelector('#submit-action')")
+    assert page.evaluate("window.__probeClicks") == 0
+    assert page.evaluate("window.__buttonClicks || 0") == 0
+    assert page.evaluate("window.__buttonSubmits || 0") == 0
+
+    # Vue owns the button, so removal goes through a render that unmounts it.
+    page.locator("#unmount-submit").click()
+    page.wait_for_function("!window.__removedButton.isConnected")
 
     assert page.evaluate("!window.__removedButton.hasAttribute('data-citry-button-initialized')") is True
-    event = page.evaluate(
-        """() => {
-          const click = new MouseEvent('click', {bubbles: true, cancelable: true});
-          const dispatched = window.__removedButton.dispatchEvent(click);
-          return {
-            dispatched,
-            defaultPrevented: click.defaultPrevented,
-            callerListenerCalls: window.__buttonClicks || 0,
-          };
-        }"""
-    )
-    # The CButton guard is installed in onServerRender and blocks activation
-    # while loading. Vue removes that component listener during the supported
-    # v-if unmount; a caller-authored listener may remain on a retained,
-    # detached DOM object by Vue's design.
-    assert event == {"dispatched": True, "defaultPrevented": False, "callerListenerCalls": 1}
+    # Once cleanup removed the guard, a click on the detached element is no longer stopped.
+    page.evaluate("window.__removedButton.click()")
+    assert page.evaluate("window.__probeClicks") == 1
+    # The form stays mounted, and cleanup also removed its submit guard.
+    page.evaluate("window.__submitFrom(window.__removedButton)")
+    assert page.evaluate("window.__buttonSubmits || 0") == 1

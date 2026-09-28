@@ -61,7 +61,13 @@ class DisclosureFormsAndFocus(Component):
             }
             if (this.invalidTarget === null) {
               this.invalidTarget = event.target;
-              window.setTimeout(() => {
+              // A submit fires `invalid` for each control, and queued
+              // microtasks run between those events. Clearing
+              // `invalidTarget` in `$nextTick` would let each later control
+              // schedule its own focus, so the last one would win. A timer
+              // runs once, after every event and after Vue opens the panel,
+              // so the first invalid control keeps focus.
+              setTimeout(() => {
                 this.invalidTarget?.focus();
                 this.invalidTarget = null;
               }, 0);
