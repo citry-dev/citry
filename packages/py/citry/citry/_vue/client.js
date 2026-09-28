@@ -12,9 +12,9 @@
     Object.defineProperty(citryNamespace, "vue", {value: V, enumerable: true, configurable: false, writable: false});
   }
   if (global.Citry === undefined) global.Citry = citryNamespace;
-  const HELPER_CONTRACT = "f30a03c6ab842434ce11a1b4b6eac1d98ecc9d88a33207f373b88d974da3613e";
-  if (global.CitryStable) {
-    if (global.CitryStable.compilerRuntime?.helperContract !== HELPER_CONTRACT)
+  const HELPER_CONTRACT = "b103179315e9ac0096610edd010fca48bc708a210cc9a159d35dc92e398a91d5";
+  if (global.__citryRuntime) {
+    if (global.__citryRuntime.compilerRuntime?.helperContract !== HELPER_CONTRACT)
       throw new Error("an incompatible Citry Vue runtime is already loaded");
     return;
   }
@@ -95,7 +95,7 @@
     registerTransport(name, implementation) {
       if (typeof name !== "string" || name.length === 0) throw new TypeError("Citry.events.registerTransport needs a non-empty name");
       if (!implementation || typeof implementation.send !== "function")
-        throw new TypeError("Citry.events.registerTransport needs an implementation with send(envelope)");
+        throw new TypeError("Citry.events.registerTransport needs an implementation with send(envelope, request)");
       publicEventTransports.set(name, implementation);
     },
     applyActions(actions) {
@@ -221,6 +221,7 @@
     const protocolValidator = global.CitryVueEvents?.assertValidActionList;
     if (typeof protocolValidator === "function") protocolValidator(actions);
     else assertPublicActionList(actions);
+    // The caller keeps its array and may change it while the actions run, so run a private copy.
     return structuredClone(actions);
   };
   async function applyPublicActionsWithoutApp(actions) {
@@ -253,8 +254,36 @@
     return value;
   };
   const detached = value => freezeDetached(clone(value));
+  // Freeze a JSON tree in place, without recursion so deep server data cannot overflow the stack.
+  // Every object that can end up inside a combined envelope is frozen all the way down, so a frozen
+  // object needs no second visit: that is what lets freezing a combined envelope skip the retained
+  // occurrences it shares with the app.
+  const deepFreeze = root => {
+    const pending = [root];
+    while (pending.length) {
+      const value = pending.pop();
+      if (!value || typeof value !== "object" || Object.isFrozen(value)) continue;
+      Object.freeze(value);
+      for (const key of Object.keys(value)) pending.push(value[key]);
+    }
+    return root;
+  };
+  // Combined envelopes that preflightResult checked in full and then froze, mapped to the definition
+  // declarations it accepted. A later step of the same transaction can rely on those checks without
+  // copying the envelope, because nothing can change it anymore. The checks that depend on live app
+  // state (definitions registered since, mounted components) run again before anything publishes.
+  const validatedEnvelopes = new WeakMap();
+  // Throw when a definition this envelope declares was registered after preflight with different
+  // metadata, for example by another transaction that loaded the same id and then failed.
+  function assertDeclaredDefinitionsCurrent(app, declared) {
+    for (const [id, definition] of declared) {
+      const current = app.definitions.get(id);
+      if (current && current !== definition && definitionMetadataKey(current) !== definitionMetadataKey(definition))
+        throw new Error("prepared definition metadata collision");
+    }
+  }
   const RESERVED_TEMPLATE_CONTEXT_NAMES = new Set([
-    "$attrs", "$citryEvents", "$data", "$el", "$emit", "$error", "$event", "$forceUpdate", "$loading",
+    "$attrs", "$citryEvents", "$citryPrepared", "$data", "$el", "$emit", "$error", "$event", "$forceUpdate", "$loading",
     "$nextTick", "$onEvent", "$options", "$parent", "$props", "$refs", "$root", "$sendEvent", "$slots", "$state", "$watch",
   ]);
   function templateContextNames(value, label) {
@@ -343,14 +372,106 @@
     prepared.key = inputModelKey(instance, site, type, prepared.key);
     return prepared;
   };
+  // Vue's patch flags for props the compiler found dynamic (runtime-core `PatchFlags`).
+  const PROPS_FLAG = 8, FULL_PROPS_FLAG = 16;
+  // Form controls whose `value` the user edits in place (a checkbox or radio input is excluded below).
+  const EDITABLE_VALUE_TAGS = new Set(["input", "select", "textarea"]);
+  // Where the winning `value` of a `mergeProps` result came from. Python-computed attributes reach
+  // an element as a spread of the occurrence's frozen prepared data. The producer rejects an authored
+  // `v-bind` object on such an element, so beside a frozen spread the other sources are the
+  // compiler's literal props: a `value` there is a template constant (an authored `:value` is caught
+  // earlier through `dynamicProps`).
+  const mergedValueSources = new WeakMap();
+  // Selects the user picked from since the page last wrote their value. Vue reuses `<option>`
+  // elements when the list changes, so an untouched select can end up on an option the server did
+  // not send; only a select the user changed keeps its pick. Text fields need no such check: only
+  // the user or the component's own script changes their value, and both must be kept.
+  const userEditedFields = new WeakSet();
+  // Test harnesses load the runtime with a minimal `document` that has no event support.
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    const markEdited = event => { if (event.target?.localName === "select") userEditedFields.add(event.target); };
+    document.addEventListener("input", markEdited, true);
+    document.addEventListener("change", markEdited, true);
+  }
+  // Runs after Vue patches a `<select>` whose `value` is compared by VNode value.
+  function restoreUneditedValue(vnode, oldVnode) {
+    const element = vnode.el, next = vnode.props[".value"];
+    // A changed value was just written by Vue, which replaces any draft, so the field starts clean.
+    if (!oldVnode.props || oldVnode.props[".value"] !== next) { userEditedFields.delete(element); return; }
+    if (!element || userEditedFields.has(element)) return;
+    const text = next === null || next === undefined ? "" : String(next);
+    if (element.value !== text) element.value = text;
+  }
+  // Where an element's `value` comes from: "browser" for an authored Vue binding (`:value`, or a
+  // spread of browser state), "server" for a value Python computed, "constant" for a template literal.
+  function valueSource(props, patchFlag, dynamicProps) {
+    if (Array.isArray(dynamicProps) && dynamicProps.includes("value")) return "browser";
+    if ((patchFlag & FULL_PROPS_FLAG) === 0) return "constant";
+    // A spread without an authored `:value`: prepared data is frozen before any render reads it,
+    // and Vue's reactive browser state never is.
+    if (Object.isFrozen(props)) return "server";
+    return mergedValueSources.get(props) || "browser";
+  }
+  // Ordinary VNodes carry no patch flags, so Vue compares every prop on each update. It skips a
+  // prop whose old and new VNode values are equal, except `value`: that one it writes whenever the
+  // element's live value differs, which replaces what the user typed. The `.value` spelling is the
+  // same DOM property, compared by VNode value like any other prop. So a constant or server value
+  // that did not change leaves the user's edit alone, and a changed one is still written.
+  function valueComparedByVNode(source) {
+    // An authored `:value` bound to browser state keeps Vue's rule and is written on every render,
+    // because the author chose a one-way binding from that state.
+    return source !== "browser";
+  }
+  // `authored` is the props object the compiled render passed, before `vnodeProps` copied it: the
+  // copy loses the frozen or merged identity that tells a server value apart.
+  function editableValueProps(type, props, authored, patchFlag, dynamicProps) {
+    if (typeof type !== "string" || !EDITABLE_VALUE_TAGS.has(type) || props === null || props === undefined ||
+        !own(props, "value"))
+      return props;
+    // A checkbox or radio value is not typed by the user, and Vue's v-model reads it from
+    // `vnode.props.value`, so it keeps its usual name.
+    if (type === "input" && (props.type === "checkbox" || props.type === "radio")) return props;
+    if (!valueComparedByVNode(valueSource(authored, patchFlag, dynamicProps))) return props;
+    const prepared = {};
+    for (const key of Object.keys(props)) if (key !== "value") prepared[key] = props[key];
+    // Vue writes `value` after the other props (a range input needs its min and max first), so
+    // the renamed key stays last.
+    prepared[".value"] = props.value;
+    if (type === "select") {
+      const hook = props.onVnodeUpdated;
+      prepared.onVnodeUpdated = hook === undefined ? restoreUneditedValue : [...[hook].flat(), restoreUneditedValue];
+    }
+    return prepared;
+  }
+  function compilerCreateVNode(type, props, children, patchFlag, dynamicProps) {
+    return V.createVNode(type, editableValueProps(type, vnodeProps(props), props, patchFlag, dynamicProps), children, 0,
+      dynamicProps);
+  }
   const compilerRuntime = Object.create(V);
   Object.defineProperty(compilerRuntime, "openBlock", {value: () => null, enumerable: true});
   for (const name of ["createVNode", "createElementVNode", "createBlock", "createElementBlock"]) {
     Object.defineProperty(compilerRuntime, name, {
-      value: (type, props, children) => V.createVNode(type, vnodeProps(props), children),
+      value: (type, props, children, patchFlag, dynamicProps) =>
+        compilerCreateVNode(type, props, children, patchFlag, dynamicProps),
       enumerable: true,
     });
   }
+  Object.defineProperty(compilerRuntime, "mergeProps", {
+    value: (...sources) => {
+      const merged = V.mergeProps(...sources);
+      if (own(merged, "value") && sources.some(source => source !== null && typeof source === "object" && Object.isFrozen(source))) {
+        // Vue lets the last source that has `value` win, so that source decides where it came from.
+        for (let index = sources.length - 1; index >= 0; index -= 1) {
+          const source = sources[index];
+          if (source === null || source === undefined || !own(source, "value")) continue;
+          mergedValueSources.set(merged, Object.isFrozen(source) ? "server" : "constant");
+          break;
+        }
+      }
+      return merged;
+    },
+    enumerable: true,
+  });
   Object.defineProperty(compilerRuntime, "createTextVNode", {
     value: text => V.createTextVNode(text),
     enumerable: true,
@@ -376,12 +497,12 @@
     }
     const runtime = Object.create(compilerRuntime);
     for (const name of ["createVNode", "createElementVNode", "createBlock", "createElementBlock"])
-      Object.defineProperty(runtime, name, {enumerable: true, value(type, props, children) {
+      Object.defineProperty(runtime, name, {enumerable: true, value(type, props, children, patchFlag, dynamicProps) {
         if (typeof type === "string" && type.startsWith("citry-dynamic-")) {
           if (!aliases.has(type)) throw new Error("unknown prepared dynamic element alias: " + type);
           type = aliases.get(type);
         }
-        return V.createVNode(type, vnodeProps(props), children);
+        return compilerCreateVNode(type, props, children, patchFlag, dynamicProps);
       }});
     return Object.freeze(runtime);
   }
@@ -391,18 +512,36 @@
   });
   Object.defineProperty(compilerRuntime, "helperContract", {value: HELPER_CONTRACT, enumerable: true});
 
+  // An opaque HTML record is trusted HTML from Python and the number of top-level nodes it parses
+  // into inside a <template> element, which the server computed.
+  function checkOpaqueHtmlRecord(value) {
+    const record = plain(value, "opaque HTML record");
+    if (Object.keys(record).sort().join(",") !== "html,nodeCount" || typeof record.html !== "string" ||
+        !Number.isSafeInteger(record.nodeCount) || record.nodeCount < 0 ||
+        (record.html === "" && record.nodeCount !== 0))
+      throw new TypeError("invalid opaque HTML record");
+    return record;
+  }
+
   const opaqueHtmlComponent = Object.freeze({
     name: "CitryOpaqueHtml",
     props: {record: {type: Object, required: true}},
     setup(props) {
+      let cachedHtml;
+      let cachedVNode = null;
       return () => {
-        const record = plain(props.record, "opaque HTML record");
-        if (Object.keys(record).join(",") !== "html" || typeof record.html !== "string")
-          throw new TypeError("invalid opaque HTML record");
-        if (record.html === "") return V.h(V.Fragment, {key: record.html}, []);
-        const vnode = V.createStaticVNode(record.html, 0);
-        vnode.key = record.html;
-        return vnode;
+        const record = checkOpaqueHtmlRecord(props.record);
+        if (cachedVNode && cachedHtml === record.html) return cachedVNode;
+        const key = record.html;
+        // The block renders inside a Fragment. A hydrated page carries the block between the
+        // Fragment's comments, and Vue adopts `nodeCount` nodes there without reading them; when
+        // Vue builds the page it inserts the parsed HTML and ignores the count. HTML that parses
+        // into no nodes renders an empty Fragment, because a static vnode needs at least one node.
+        const children = record.nodeCount === 0 ? [] : [V.createStaticVNode(record.html, record.nodeCount)];
+        const vnode = V.h(V.Fragment, {key}, children);
+        cachedHtml = record.html;
+        cachedVNode = vnode;
+        return cachedVNode;
       };
     },
   });
@@ -421,6 +560,13 @@
     return Object.freeze(result);
   }
   const signatureKey = value => JSON.stringify(value);
+  // Slot outlet names come sorted and unique from the compiler; the order keeps definitions cache-stable.
+  function normalizeSlotNames(value, label) {
+    if (!Array.isArray(value) || value.some(name => typeof name !== "string" || name.length === 0) ||
+        signatureKey(value) !== signatureKey([...new Set(value)].sort()))
+      throw new TypeError("invalid " + label);
+    return Object.freeze([...value]);
+  }
   function normalizeReplacementSites(value) {
     if (!Array.isArray(value)) throw new TypeError("replacementSites must be an array");
     let prior = "";
@@ -436,7 +582,8 @@
           new Set(descendantRuns).size !== descendantRuns.length || item.siteId <= prior)
         throw new Error("replacement sites must be sorted and unique");
       prior = item.siteId;
-      return Object.freeze({siteId: item.siteId, key, localDescendants: Object.freeze([...descendants]), localDescendantRuns: Object.freeze([...descendantRuns])});
+      const slotOutlets = normalizeSlotNames(item.slotOutlets ?? [], "replacement site slot outlets");
+      return Object.freeze({siteId: item.siteId, key, localDescendants: Object.freeze([...descendants]), localDescendantRuns: Object.freeze([...descendantRuns]), slotOutlets});
     }));
   }
 
@@ -464,12 +611,30 @@
       plain(item, "local call declaration");
       if (typeof item.localId !== "string" || typeof item.typeKey !== "string" ||
           typeof item.componentTag !== "string" || !Array.isArray(item.bindings) ||
-          Object.keys(item).sort().join(",") !== "bindings,componentTag,localId,typeKey" ||
+          Object.keys(item).filter(key => key !== "fills").sort().join(",") !== "bindings,componentTag,localId,typeKey" ||
           ids.has(item.localId)) throw new TypeError("invalid local call declaration");
+      // The fills written inside this call, which a replaced slot outlet of the called component
+      // leads to. A call without fills carries no key.
+      let priorFill = "";
+      const fills = Object.freeze((item.fills ?? []).map(fill => {
+        plain(fill, "local call fill");
+        if (Object.keys(fill).sort().join(",") !== "localDescendantRuns,localDescendants,name,slotOutlets" ||
+            typeof fill.name !== "string" || fill.name <= priorFill ||
+            !Array.isArray(fill.localDescendants) || fill.localDescendants.some(id => typeof id !== "string") ||
+            signatureKey(fill.localDescendants) !== signatureKey([...new Set(fill.localDescendants)].sort()) ||
+            !Array.isArray(fill.localDescendantRuns) || fill.localDescendantRuns.some(id => typeof id !== "string") ||
+            signatureKey(fill.localDescendantRuns) !== signatureKey([...new Set(fill.localDescendantRuns)].sort()))
+          throw new TypeError("invalid local call fill");
+        priorFill = fill.name;
+        return Object.freeze({name: fill.name, localDescendants: Object.freeze([...fill.localDescendants]),
+          localDescendantRuns: Object.freeze([...fill.localDescendantRuns]),
+          slotOutlets: normalizeSlotNames(fill.slotOutlets, "local call fill slot outlets")});
+      }));
+      if (own(item, "fills") && fills.length === 0) throw new TypeError("invalid local call declaration");
       const bindings = Object.freeze(item.bindings.map(binding => {
         plain(binding, "component call binding");
         if (Object.keys(binding).sort().join(",") !== "kind,name,sourceEnd,sourceStart,value" ||
-            !["prop", "props-object", "events-object", "event", "ref-static", "ref-expression"].includes(binding.kind) ||
+            !["prop", "props-object", "events-object", "event", "ref-static", "ref-expression", "show", "condition", "model", "directive"].includes(binding.kind) ||
             typeof binding.name !== "string" || typeof binding.value !== "string" ||
             !Number.isInteger(binding.sourceStart) || !Number.isInteger(binding.sourceEnd) ||
             binding.sourceStart < 0 || binding.sourceEnd <= binding.sourceStart)
@@ -483,7 +648,7 @@
         });
       }));
       ids.add(item.localId);
-      return Object.freeze({localId: item.localId, typeKey: item.typeKey, componentTag: item.componentTag, bindings});
+      return Object.freeze({localId: item.localId, typeKey: item.typeKey, componentTag: item.componentTag, bindings, fills});
     }));
   }
 
@@ -676,7 +841,8 @@
     }
   }
 
-  function preflightDefinitions(app, assets, occurrences, rootId) {
+  // keptOwners holds the components this revision keeps unchanged; see keptOwnerIds().
+  function preflightDefinitions(app, assets, occurrences, rootId, keptOwners = null) {
     const declared = new Map();
     for (const asset of assets) {
       const normalized = normalizeDefinitionAsset(asset);
@@ -690,24 +856,36 @@
     for (const occurrence of occurrences) {
       const definition = declared.get(occurrence.definitionId) || app.definitions.get(occurrence.definitionId);
       if (!definition) throw new Error("unknown prepared definition metadata");
-      validateOccurrenceCallRuns(occurrenceMap, occurrence, definition);
+      validateOccurrenceCallRuns(occurrenceMap, occurrence, definition, keptOwners?.has(occurrence.id) === true);
       validateOccurrenceRuntimeEvents(occurrence, definition);
       const opaque = own(occurrence.preparedData, "opaqueHtml")
         ? plain(occurrence.preparedData.opaqueHtml, "preparedData.opaqueHtml") : {};
-      const declaredOpaque = new Set(definition.opaqueHtmlSites.map(site => site.key));
+      const declaredOpaque = new Map(definition.opaqueHtmlSites.map(site => [site.key, site]));
       if (Object.keys(opaque).length !== declaredOpaque.size || Object.keys(opaque).some(key => !declaredOpaque.has(key)))
         throw new Error("prepared opaque HTML does not match definition declarations");
-      for (const key of declaredOpaque) {
-        const record = plain(opaque[key], "opaque HTML record");
-        if (Object.keys(record).join(",") !== "html" || typeof record.html !== "string")
-          throw new TypeError("invalid opaque HTML record");
-      }
+      for (const key of declaredOpaque.keys()) checkOpaqueHtmlRecord(opaque[key]);
     }
-    validateGraph(occurrenceMap, rootId);
+    validateGraph(occurrenceMap, rootId, keptOwners);
     return declared;
   }
 
-  function validateOccurrenceCallRuns(occurrences, occurrence, definition) {
+  // A Render into a marker or a component replaces everything inside it and keeps the rest of the
+  // page as it was. A caller outside that target may have written components between the target's
+  // tags (a fill), and the caller's call table still names them after the Render removed them. Only
+  // the slot they filled could render those entries, and the replaced target now shows content the
+  // caller did not supply, so they stay unused. A later server Render of the caller sends a call
+  // table without them. This returns the
+  // components an envelope keeps unchanged, whose call tables may hold such entries.
+  function keptOwnerIds(app, envelope) {
+    const updated = new Set(envelope.updatedIds);
+    return new Set(envelope.occurrences
+      .filter(item => !updated.has(item.id) && app.occurrences.has(item.id)).map(item => item.id));
+  }
+
+  // allowRemovedChildren: the occurrence is one the page keeps unchanged (see keptOwnerIds), so a
+  // call whose component is no longer in `occurrences` is a fill a Render replaced, not an error.
+  // A call whose component is present must still match its declaration exactly.
+  function validateOccurrenceCallRuns(occurrences, occurrence, definition, allowRemovedChildren = false) {
     const calls = plain(occurrence.preparedData.calls, "preparedData.calls");
     const declarations = new Map(definition.localCallRuns.map(run => [run.runId, run]));
     const values = own(occurrence.preparedData, "callRuns")
@@ -724,6 +902,7 @@
         throw new Error("prepared ordinary local call does not match its declaration");
       const binding = calls[declaration.localId];
       const child = occurrences.get(binding.id);
+      if (!child && allowRemovedChildren) continue;
       if (!child || child.parentId !== binding.parentId || child.typeKey !== declaration.typeKey || covered.has(child.id))
         throw new Error("prepared ordinary local call stable-type mismatch");
       covered.add(child.id);
@@ -734,6 +913,7 @@
       const declaration = declarations.get(runId);
       for (const id of ids) {
         const child = occurrences.get(id);
+        if (!child && allowRemovedChildren) continue;
         if (!child || child.parentId !== occurrence.id || child.typeKey !== declaration.typeKey || covered.has(id))
           throw new Error("prepared local call run stable-type or ownership mismatch");
         covered.add(id);
@@ -755,7 +935,7 @@
     }
   }
 
-  function validateGraph(occurrences, rootId) {
+  function validateGraph(occurrences, rootId, keptOwners = null) {
     if (typeof rootId !== "string" || !occurrences.has(rootId) || occurrences.get(rootId).parentId !== null || occurrences.get(rootId).placementKey !== null) throw new Error("invalid prepared root");
     let roots = 0;
     const placements = new Set();
@@ -784,6 +964,8 @@
               typeof binding.parentId !== "string")
             throw new Error("invalid prepared local call binding");
           const child = occurrences.get(binding.id);
+          // A kept caller's entry for a fill a Render replaced (see keptOwnerIds).
+          if (!child && keptOwners?.has(owner.id)) continue;
           if (!child || child.parentId !== binding.parentId || referenced.has(binding.id))
             throw new Error("prepared local call does not match occurrence placement");
           referenced.add(binding.id);
@@ -795,6 +977,7 @@
               throw new Error("invalid prepared local call run values");
             for (const id of ids) {
               const child = occurrences.get(id);
+              if (!child && keptOwners?.has(owner.id)) continue;
               if (!child || child.parentId !== owner.id || referenced.has(id))
                 throw new Error("prepared local call run does not match occurrence placement");
               referenced.add(id);
@@ -848,14 +1031,21 @@
       plain(item.serverData, "serverData");
       plain(item.preparedData, "preparedData");
       if (occurrences.has(item.id)) throw new Error("duplicate occurrence id");
-      occurrences.set(item.id, Object.freeze({...clone(item), serverData: clone(item.serverData)}));
+      // The bootstrap belongs to the page or the caller, so keep a private copy, with server data
+      // copied on its own so it never aliases prepared data. Freeze all of it: retained occurrences
+      // are shared with later combined envelopes, which must not change.
+      const detached = clone({...item, serverData: undefined});
+      detached.serverData = clone(item.serverData);
+      occurrences.set(item.id, deepFreeze(detached));
     }
     validateGraph(occurrences, bootstrap.rootId);
     const markers = normalizeMarkers(bootstrap.markers, occurrences);
+    // Components read and may write their server data through Vue reactivity, so each gets a
+    // writable copy; the frozen occurrence keeps the data the server sent.
     const initialLive = new Map([...occurrences].map(([id,item]) => [id, {...item, serverData: V.reactive(clone(item.serverData))}]));
     const definitionTypes = new Map();
     for (const item of occurrences.values()) { const prior = definitionTypes.get(item.definitionId); if (prior && prior !== item.typeKey) throw new Error("definition used by multiple stable types"); definitionTypes.set(item.definitionId, item.typeKey); }
-    const app = {id: bootstrap.appId, startAttempt, rootId: bootstrap.rootId, revision: bootstrap.revision, occurrences, markers, snapshot: V.shallowRef(initialLive), definitions: new Map(), definitionTypes, callRunTags: new Map(), typeTags: new Map(), types: new Map(), browserPlugins: [], templateContextNames: [], initialPluginStages: [], vueApp: null, hostElement: null, mounted: new Map(), nextMountGeneration: 0, preparedHost: null, eventDispatch: null, eventDispatchComponent: null, initialTasks: new Set(), initialError: null, transaction: null, busy: false, terminal: false};
+    const app = {id: bootstrap.appId, startAttempt, rootId: bootstrap.rootId, revision: bootstrap.revision, occurrences, markers, snapshot: V.shallowRef(initialLive), definitions: new Map(), definitionTypes, callRunTags: new Map(), typeTags: new Map(), types: new Map(), browserPlugins: [], templateContextNames: [], initialPluginStages: [], vueApp: null, hostElement: null, mounted: new Map(), mountEpoch: 0, nextMountGeneration: 0, preparedHost: null, eventDispatch: null, eventDispatchComponent: null, initialTasks: new Set(), initialError: null, transaction: null, busy: false, terminal: false};
     apps.set(app.id, app);
     return app;
   }
@@ -871,8 +1061,10 @@
     validateDefinitionCallRuns(app, normalized);
     const prior = app.definitions.get(definitionId);
     if (prior && (prior.render !== normalized.render || prior.target !== normalized.target || prior.helperContract !== normalized.helperContract || signatureKey(prior.dynamicElements) !== signatureKey(normalized.dynamicElements) || signatureKey(prior.directiveSignature) !== signatureKey(normalized.directiveSignature)||signatureKey(prior.replacementSites)!==signatureKey(normalized.replacementSites)||signatureKey(prior.localCalls)!==signatureKey(normalized.localCalls)||signatureKey(prior.localCallRuns)!==signatureKey(normalized.localCallRuns)||signatureKey(prior.opaqueHtmlSites)!==signatureKey(normalized.opaqueHtmlSites)||signatureKey(prior.runtimeEventSites)!==signatureKey(normalized.runtimeEventSites))) throw new Error("definition id collision");
+    // The committed page passed the strict graph check when it started and before every revision,
+    // so a call naming an absent component here is a fill a Render replaced (see keptOwnerIds).
     for (const occurrence of app.occurrences.values()) if (occurrence.definitionId === definitionId)
-      validateOccurrenceCallRuns(app.occurrences, occurrence, normalized);
+      validateOccurrenceCallRuns(app.occurrences, occurrence, normalized, true);
     if (!prior) {
       app.definitions.set(definitionId, normalized);
       for (const call of [...normalized.localCalls, ...normalized.localCallRuns])
@@ -1035,6 +1227,7 @@
       const incoming = context?.publicState || {};
       if (!state.values) {
         state.contractEpoch += 1;
+        // $state is writable from the browser, so it holds a copy, never the server's context object.
         state.values = V.reactive(Object.assign(Object.create(null), clone(incoming)));
         state.pending = Object.create(null);
         state.nestedViews = new WeakMap();
@@ -1432,6 +1625,7 @@
       descriptor,
       view,
       listeners: new Map(),
+      disposed: false,
       loading(name) {
         if (name === undefined) return view.total > 0;
         return (view.loading[requireEventHandler(record, name)] ?? 0) > 0;
@@ -1474,6 +1668,9 @@
       subscribe(name, callback) {
         if (typeof name !== "string" || name.length === 0) throw new TypeError("$onEvent needs a non-empty event name");
         if (typeof callback !== "function") throw new TypeError("$onEvent needs a callback function");
+        // An unmounted instance never receives another event, so a late call (from a timer, say) must not leave a
+        // listener behind that nothing will release.
+        if (activity.disposed) return () => {};
         const listeners = activity.listeners.get(name) || new Set();
         listeners.add(callback);
         activity.listeners.set(name, listeners);
@@ -1494,6 +1691,7 @@
         }
       },
       dispose() {
+        activity.disposed = true;
         activity.listeners.clear();
       },
       latestStarted: Object.create(null),
@@ -1532,8 +1730,10 @@
       ...Object.keys(userOptions.methods || {}), ...Object.keys(userOptions.computed || {}), ...injectedKeys,
       ...pluginContextNames,
     ]);
-    const reservedPublicNames = new Set(["preparedData", "$citryEvents", ...eventPublicNames, ...pluginContextNames]);
-    const options = {...userOptions, name: userOptions.name || "CitryStable_" + typeKey, props};
+    const reservedPublicNames = new Set([
+      "$citryPrepared", "$citryEvents", ...eventPublicNames, ...pluginContextNames,
+    ]);
+    const options = {...userOptions, name: userOptions.name || "CitryComponent_" + typeKey, props};
     delete options.onServerRender;
     options.data = function () {
       const app = definitionRegistry(appId), occurrence = app.occurrences.get(this.citryId);
@@ -1560,7 +1760,7 @@
       if (!occurrence || occurrence.typeKey !== typeKey || app.mounted.has(occurrence.id)) throw new Error("invalid mounted occurrence");
       const generation = ++app.nextMountGeneration;
       const initialLive = app.snapshot.value.get(occurrence.id);
-      const record = {app, occurrenceId: occurrence.id, parentId: occurrence.parentId, generation, live: V.shallowRef(initialLive), serverKeys: new Set(Object.keys(occurrence.serverData)), definition: V.shallowRef({id: occurrence.definitionId, render: null, cache: []}), callbackScope: undefined, callbackCleanup: undefined, callbackSubscriptions: undefined, applying: false, failed: false, events: null, state: null, controlHandles: new Map()};
+      const record = {app, occurrenceId: occurrence.id, parentId: occurrence.parentId, generation, live: V.shallowRef(initialLive), serverKeys: new Set(Object.keys(occurrence.serverData)), definition: V.shallowRef({id: occurrence.definitionId, render: null, cache: []}), callbackScope: undefined, callbackCleanup: undefined, callbackSubscriptions: undefined, callbackRunning: false, applying: false, failed: false, events: null, state: null, controlHandles: new Map()};
       record.events = createEventActivity(record, occurrence.eventContext?.descriptor || null);
       record.state = createStateFacade(record, occurrence.eventContext);
       instanceRecords.set(this, record);
@@ -1571,8 +1771,11 @@
         if (reservedOptionKeys.has(key) || key in this) throw new Error("js_data/public instance collision: " + key);
         installServerKey(this, record, key);
       }
-      if (reservedOptionKeys.has("preparedData") || "preparedData" in this) throw new Error("preparedData/public instance collision");
-      Object.defineProperty(this, "preparedData", {enumerable: true, configurable: true, get() { return record.live.value?.preparedData || {}; }});
+      // Generated templates read the values Python computed for each occurrence through `$citryPrepared`. The `$citry`
+      // prefix keeps it apart from author names: Vue never proxies a `$` key from data() and refuses a
+      // `$` prop, and this check rejects a method, computed or injection of that name.
+      if (reservedOptionKeys.has("$citryPrepared") || "$citryPrepared" in this) throw new Error("$citryPrepared/public instance collision");
+      Object.defineProperty(this, "$citryPrepared", {enumerable: false, configurable: true, get() { return record.live.value?.preparedData || {}; }});
       Object.defineProperty(this, "$loading", {enumerable: false, configurable: true, value: record.events.loading});
       Object.defineProperty(this, "$error", {enumerable: false, configurable: true, value: record.events.error});
       Object.defineProperty(this, "$state", {enumerable: false, configurable: true, value: record.state.facade});
@@ -1584,7 +1787,9 @@
         if (!record.events?.descriptor)
           throw new Error("this component declares no Events class; $onEvent needs a component Events declaration");
         if (!record.events?.subscribe) throw new Error("Citry Events subscriptions are unavailable");
-        return subscribeRecordEvent(record, name, callback);
+        // Only a call made while an onServerRender callback is running belongs to that run; any other call
+        // (mounted(), a method, a timer) keeps its listener for the life of this instance.
+        return subscribeRecordEvent(record, name, callback, record.callbackRunning ? record.callbackSubscriptions : undefined);
       }});
       if (reservedOptionKeys.has("$citryEvents") || "$citryEvents" in this) throw new Error("$citryEvents/public instance collision");
       Object.defineProperty(this, "$citryEvents", {enumerable: false, configurable: true, value: Object.freeze({
@@ -1688,13 +1893,28 @@
       if (!definition) throw new Error("missing initial render definition: " + record.definition.value.id);
       record.definition.value = {id: record.definition.value.id, render: definition.render, cache: []};
       record.app.mounted.set(record.occurrenceId, {component: this, record});
+      // A validated envelope was checked against this set, so later steps must see that it moved.
+      record.app.mountEpoch += 1;
       if (userCreated) userCreated.call(this);
     };
     options.render = function (...args) {
       const record = instanceRecords.get(this), definition = record.definition.value;
       if (!definition.render) throw new Error("render definition is unavailable");
       args[1] = definition.cache;
-      return definition.render.apply(this, args);
+      const root = definition.render.apply(this, args);
+      // A caller's v-show or custom directive reaches only an element root.
+      // Vue skips it on a fragment, text, or fixed HTML root without an
+      // error, which would leave hidden content on the page or drop the
+      // directive's behavior. The server rejects the shapes it can see; this
+      // covers a root that is another component whose own root is unusable.
+      if (root && this.$.vnode.dirs?.length) {
+        const reason = root.type === V.Fragment ? "several root nodes"
+          : root.type === V.Text ? "only text"
+          : root.type === opaqueHtmlComponent ? "HTML from Python" : null;
+        if (reason) throw new Error("A 'v-show' or custom directive on a Citry component needs one root element, " +
+          "but component " + typeKey + " rendered " + reason + " at its root");
+      }
+      return root;
     };
     options.mounted = function () {
       const record = instanceRecords.get(this);
@@ -1725,7 +1945,7 @@
       if (record) {
         record.state.retire();
         try { dispose(record); }
-        catch (caught) { error = caught; }
+        catch (caught) { if (error === undefined) error = caught; else console.error("[Citry] component disposal failed:", caught); }
         finally {
           try {
             const transaction = record.app.transaction;
@@ -1741,7 +1961,10 @@
             if (error === undefined) error = caught;
             else console.error("[Citry] occurrence unmount failed:", caught);
           }
-          if (record.app.mounted.get(record.occurrenceId)?.record === record) record.app.mounted.delete(record.occurrenceId);
+          if (record.app.mounted.get(record.occurrenceId)?.record === record) {
+            record.app.mounted.delete(record.occurrenceId);
+            record.app.mountEpoch += 1;
+          }
           instanceRecords.delete(this);
         }
       }
@@ -1777,25 +2000,119 @@
   const loadedDefinitionUrls = new Map();
   const loadedScriptUrls = new Map();
   const loadedStyleUrls = new Map();
+  // Stylesheets each app has loaded or adopted, kept after the last owner is removed. The app
+  // keeps its component types for its whole life (app.types), so a server render may bring a
+  // removed type back; its stylesheet must still count as seen, or a type whose assets went
+  // through dependency hooks could never return. Keyed like loadedStyleUrls.
+  const admittedStyles = new Map();
+  const preloadedAssetLinks = new Map();
+  const preloadFetchAttributes = new Set(["integrity", "crossorigin", "referrerpolicy", "fetchpriority"]);
+  // The browser checks integrity only on a CORS response, and Citry's asset routes send the header
+  // that allows one, so every request for an owned file asks for CORS in anonymous mode, which
+  // sends cookies only to the same origin. Preload hints use the same value, because a hint
+  // with a different crossorigin is not reused.
+  const ownedCrossOrigin = "anonymous";
+  function ownedFetchAttributes(attrs) {
+    return Object.keys(attrs).some(name => name.toLowerCase() === "crossorigin")
+      ? attrs : {...attrs, crossorigin: ownedCrossOrigin};
+  }
+
+  function assetPreloadKey(url, destination, integrity, attrs, nonce) {
+    let resolved;
+    try { resolved = new URL(url, document.baseURI); }
+    catch { return null; }
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
+    return JSON.stringify([resolved.href, destination, integrity || null,
+      attrs.crossorigin === undefined ? null : attrs.crossorigin,
+      attrs.referrerpolicy === undefined ? null : attrs.referrerpolicy,
+      attrs.fetchpriority === undefined ? null : attrs.fetchpriority,
+      nonce || null]);
+  }
+
+  function createAssetPreloadBatch() {
+    const batch = new Map();
+    const append = (url, destination, integrity, attrs, nonce) => {
+      const fetchKey = assetPreloadKey(url, destination, integrity, attrs, nonce);
+      if (!fetchKey || batch.has(fetchKey)) return;
+      let entry = preloadedAssetLinks.get(fetchKey);
+      if (!entry) {
+        const link = document.createElement("link");
+        link.rel = "preload";
+        link.as = destination;
+        link.href = url;
+        if (integrity) link.integrity = integrity;
+        for (const name of ["crossorigin", "referrerpolicy", "fetchpriority"]) {
+          const value = attrs[name];
+          if (value === true) link.setAttribute(name, "");
+          else if (value !== undefined && value !== false) link.setAttribute(name, value);
+        }
+        if (nonce) link.nonce = nonce;
+        entry = {link, refs: 0};
+        preloadedAssetLinks.set(fetchKey, entry);
+        document.head.append(link);
+      }
+      entry.refs++;
+      batch.set(fetchKey, entry);
+    };
+    return {
+      add(appId, assets, nonce, isDefinition = false) {
+        for (const asset of assets) {
+          let url, integrity, attrs = {};
+          if (isDefinition) {
+            if (global.__citryRuntimeDefinitions?.[asset.id] || loadedDefinitionUrls.has(asset.url)) continue;
+            url = asset.url;
+            integrity = sriFromHex(asset.sha256);
+            attrs = ownedFetchAttributes(attrs);
+          } else {
+            normalizeScriptAsset(asset);
+            if (loadedScriptUrls.has(scriptRecordKey(appId, asset))) continue;
+            const source = asset.source;
+            attrs = source.attrs || {};
+            if (Object.keys(attrs).some(name => !preloadFetchAttributes.has(name))) continue;
+            url = source.url;
+            integrity = source.kind === "owned" ? sriFromHex(source.sha256) : attrs.integrity;
+            if (source.kind === "owned") attrs = ownedFetchAttributes(attrs);
+          }
+          append(url, "script", integrity, attrs, nonce);
+        }
+      },
+      addStyles(appId, assets, nonce) {
+        for (const asset of assets) {
+          normalizeStyleAsset(asset);
+          if (loadedStyleUrls.has(styleRecordKey(appId, asset.source.url))) continue;
+          const source = asset.source;
+          const attrs = source.attrs || {};
+          if (Object.keys(attrs).some(name => name !== "rel" && !preloadFetchAttributes.has(name))) continue;
+          const fetchAttrs = Object.fromEntries(Object.entries(attrs).filter(([name]) => preloadFetchAttributes.has(name)));
+          append(source.url, "style", source.kind === "owned" ? sriFromHex(source.sha256) : attrs.integrity,
+            source.kind === "owned" ? ownedFetchAttributes(fetchAttrs) : fetchAttrs, nonce);
+        }
+      },
+      cleanup() {
+        for (const [key, entry] of batch) {
+          entry.refs--;
+          if (!entry.refs && preloadedAssetLinks.get(key) === entry) {
+            entry.link.remove();
+            preloadedAssetLinks.delete(key);
+          }
+        }
+        batch.clear();
+      },
+    };
+  }
   function sriFromHex(value) {
     if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) throw new Error("invalid definition digest");
     return "sha256-" + btoa(String.fromCharCode(...value.match(/../g).map(part => parseInt(part, 16))));
   }
-  function canApplyOwnedIntegrity() {
-    // A sandboxed iframe without allow-same-origin has an opaque origin.  Its
-    // requests are cross-origin even when the URL points back to the hosting
-    // site, so browsers require CORS before they can validate SRI.  Explicit
-    // integrity supplied for an external asset is retained below.
-    return global.origin !== "null";
-  }
   function loadDefinition(asset, nonce) {
-    if (global.CitryStableDefinitions?.[asset.id]) return Promise.resolve();
+    if (global.__citryRuntimeDefinitions?.[asset.id]) return Promise.resolve();
     const prior = loadedDefinitionUrls.get(asset.url);
     if (prior) return prior;
     const promise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = asset.url;
-      if (canApplyOwnedIntegrity()) script.integrity = sriFromHex(asset.sha256);
+      script.integrity = sriFromHex(asset.sha256);
+      script.crossOrigin = ownedCrossOrigin;
       if (nonce) script.nonce = nonce;
       const finish = callback => {
         script.onload = null;
@@ -1911,9 +2228,11 @@
       if (name.toLowerCase() === "nonce") throw new Error("prepared assets cannot replace the bootstrap nonce");
       if (value === true) element.setAttribute(name, ""); else if (value !== false) element.setAttribute(name, value);
     }
-    if (source.kind === "owned" && canApplyOwnedIntegrity() &&
-        !Object.keys(attrs).some(name => name.toLowerCase() === "integrity"))
+    if (source.kind === "owned") {
       element.integrity = sriFromHex(source.sha256);
+      // Set before the element joins the document, which is when the browser starts the request.
+      if (ownedFetchAttributes(attrs) !== attrs) element.crossOrigin = ownedCrossOrigin;
+    }
     if (nonce) element.nonce = nonce;
   }
   function styleRecordKey(appId, url) {
@@ -1957,6 +2276,7 @@
     retireUnusedStyles();
   }
   function releaseAppStyles(appId) {
+    for (const [key, item] of admittedStyles) if (item.appId === appId) admittedStyles.delete(key);
     for (const record of loadedStyleUrls.values()) record.refs.delete(appId);
     retireUnusedStyles();
   }
@@ -1964,6 +2284,10 @@
     for (const [key, record] of loadedScriptUrls) {
       if (record.appId === appId) loadedScriptUrls.delete(key);
     }
+  }
+  // Only the same source counts: a changed descriptor at the same URL is a new asset.
+  function styleWasAdmitted(key, asset) {
+    return admittedStyles.get(key)?.identity === assetIdentity(asset);
   }
   function loadStyle(appId, asset, nonce, stage, knownInitial = false) {
     const key = styleRecordKey(appId, asset.source.url);
@@ -1974,8 +2298,26 @@
       if (stage) prior.stages.add(stage.token);
       return prior.promise;
     }
-    if (!knownInitial && !asset.lazyAllowed)
+    if (!knownInitial && !asset.lazyAllowed && !styleWasAdmitted(key, asset))
       throw new Error("lazy stylesheet loading is unsupported after custom dependency hooks");
+    // A mounted document links its initial stylesheets in <head>, so the served HTML paints with
+    // them. The browser runs no inline script before those links finish, so a served link is done
+    // here. It is adopted unless it failed: an integrity failure leaves no sheet, and an error
+    // status shows in its resource timing entry where the browser reports one (Safari does not).
+    // A failed link is replaced by a new request below, which reports the failure.
+    const served = knownInitial ? [...document.querySelectorAll('link[rel="stylesheet"][data-citry-vue-style-app]')]
+      .find(element => element.getAttribute("data-citry-vue-style-app") === appId &&
+        element.getAttribute("href") === asset.source.url) || null : null;
+    const servedFailed = served !== null && (!served.sheet ||
+      performance.getEntriesByName(served.href).some(entry => entry.responseStatus >= 400));
+    if (served && !servedFailed) {
+      const adopted = {element: served, refs: new Map(), stages: new Set(stage ? [stage.token] : []),
+        identity: assetIdentity(asset), promise: Promise.resolve()};
+      loadedStyleUrls.set(key, adopted);
+      admittedStyles.set(key, {appId, identity: adopted.identity});
+      return adopted.promise;
+    }
+    served?.remove();
     const link = document.createElement("link");
     const record = {element: link, refs: new Map(), stages: new Set(stage ? [stage.token] : []),
       identity: assetIdentity(asset)};
@@ -1996,6 +2338,7 @@
       document.head.append(link);
     });
     loadedStyleUrls.set(key, record);
+    admittedStyles.set(key, {appId, identity: record.identity});
     return record.promise;
   }
   function loadTypeScript(appId, asset, nonce, knownInitial = false) {
@@ -2064,10 +2407,11 @@
     const normalizedScripts = scripts.map(asset => normalizeScriptAsset(asset));
     const normalizedStyles = styles.map(asset => normalizeStyleAsset(asset, occurrenceTypes));
     const candidates = [
-      [normalizedScripts, loadedScriptUrls, asset => scriptRecordKey(appId, asset), "script"],
-      [normalizedStyles, loadedStyleUrls, asset => styleRecordKey(appId, asset.source.url), "stylesheet"],
+      [normalizedScripts, loadedScriptUrls, asset => scriptRecordKey(appId, asset), "script", () => false],
+      [normalizedStyles, loadedStyleUrls, asset => styleRecordKey(appId, asset.source.url), "stylesheet",
+        styleWasAdmitted],
     ];
-    for (const [assets, live, keyFor, label] of candidates) {
+    for (const [assets, live, keyFor, label, admitted] of candidates) {
       const seen = new Map();
       for (const asset of assets) {
         if (asset.owner.kind === "extension" && !extensionNames.has(asset.owner.extensionName))
@@ -2076,7 +2420,8 @@
         if (prior && prior.identity !== assetIdentity(asset))
           throw new Error(`prepared ${label} URL identity collision`);
         seen.set(key, {identity: assetIdentity(asset)});
-        if (enforceLazy && !live.has(key)) {
+        // A stylesheet this app loaded before is not lazy, even after its last owner left.
+        if (enforceLazy && !live.has(key) && !admitted(key, asset)) {
           if (asset.lazyAllowed !== true) throw new Error(`prepared unseen ${label} asset disallows lazy loading`);
           if (asset.owner.kind === "component" && configuration.allowLazyTypeAssets !== true)
             throw new Error("lazy type assets are unsupported by this dependency or JavaScript policy");
@@ -2086,7 +2431,7 @@
     return {scripts: normalizedScripts, styles: normalizedStyles};
   }
 
-  async function primeInitialAssets(manifest, configuration, extensionNames, lifecycle) {
+  async function primeInitialAssets(manifest, configuration, extensionNames, lifecycle, preloads) {
     if (!Array.isArray(manifest.scripts) || !Array.isArray(manifest.styles) || !Array.isArray(manifest.typePolicies))
       throw new Error("prepared manifest dependency assets must be arrays");
     normalizeTypePolicies(manifest.typePolicies);
@@ -2110,6 +2455,8 @@
       }
     }
     if (configuration.loadInitialAssets === true) {
+      preloads?.add(manifest.appId, manifest.definitions, configuration.nonce, true);
+      preloads?.add(manifest.appId, normalizedScripts, configuration.nonce);
       await waitForStartup(
         Promise.all(normalizedStyles.map(asset =>
           loadStyle(manifest.appId, asset, configuration.nonce, initialStyleStage, true))),
@@ -2148,6 +2495,7 @@
         record = {element, refs: new Map(), stages: new Set(), promise: Promise.resolve(),
           identity: assetIdentity(asset)};
         loadedStyleUrls.set(key, record);
+        admittedStyles.set(key, {appId: manifest.appId, identity: record.identity});
       } else if (record.identity !== assetIdentity(asset)) {
         throw new Error("prepared stylesheet URL identity collision");
       }
@@ -2194,17 +2542,23 @@
       claimedContextNames.add(name);
     }
     definitionRegistry(appId).templateContextNames = Object.freeze([...claimedContextNames].sort());
-    await waitForStartup(
-      primeInitialAssets(manifest, configuration, new Set(pluginEntries.map(([name]) => name)), lifecycle),
-      lifecycle,
-    );
-    lifecycle?.guard();
-    for (const asset of manifest.definitions) {
-      await waitForStartup(loadDefinition(asset, configuration.nonce), lifecycle);
+    const initialAssetPreloads = createAssetPreloadBatch();
+    try {
+      await waitForStartup(
+        primeInitialAssets(manifest, configuration, new Set(pluginEntries.map(([name]) => name)), lifecycle,
+          initialAssetPreloads),
+        lifecycle,
+      );
       lifecycle?.guard();
+      for (const asset of manifest.definitions) {
+        await waitForStartup(loadDefinition(asset, configuration.nonce), lifecycle);
+        lifecycle?.guard();
+      }
+    } finally {
+      initialAssetPreloads.cleanup();
     }
     for (const asset of manifest.definitions) {
-      registerDefinition(appId, asset.id, global.CitryStableDefinitions?.[asset.id], declaredDefinitions.get(asset.id));
+      registerDefinition(appId, asset.id, global.__citryRuntimeDefinitions?.[asset.id], declaredDefinitions.get(asset.id));
       registered.add(asset.id);
     }
     const componentTypes = {};
@@ -2416,15 +2770,18 @@
     };
     const addressSnapshot = (requireAddresses = false) =>
       validateAddresses([...ownedApp.occurrences.values()], requireAddresses);
+    // Translate one isolated target envelope into this app's occurrence ids. The result is built from
+    // new objects wherever an id changes and shares everything else with rawEnvelope, which is never
+    // written to; preflightResult freezes the shared parts once the combined envelope passes.
     const translateTargetEnvelope = (rawEnvelope, target, allocator) => {
-      const envelope = clone(rawEnvelope), incoming = new Map(envelope.occurrences.map(item => [item.id, item]));
+      const envelope = {...rawEnvelope}, incoming = new Map(envelope.occurrences.map(item => [item.id, item]));
       if (incoming.size !== envelope.occurrences.length || !incoming.has(envelope.rootId))
         throw new Error("invalid isolated prepared target snapshot");
       for (const item of incoming.values()) if (typeof item.id !== "string" ||
           !/^citryOccurrence[0-9A-Za-z]+$/.test(item.id))
         throw new Error("prepared Events incoming occurrence ID is invalid");
-      validateGraph(incoming, envelope.rootId);
-      normalizeMarkers(envelope.markers, incoming);
+      // The caller ran validateIsolatedEnvelope on this same object just before, which already checked
+      // its graph and markers, so the translation below can rely on them without checking again.
       const existingChildren = new Map();
       for (const item of ownedApp.occurrences.values()) {
         const key = item.parentId;
@@ -2441,12 +2798,21 @@
       const claimedExisting = allocator.claimedExisting;
       const mapped = new Map([[envelope.rootId, target.id]]);
       claimedExisting.add(target.id);
+      // A component that a caller outside the target wrote between the target's tags stays in that
+      // caller's call table after the Render (see keptOwnerIds). Giving its id to new content would
+      // leave two call tables naming one component, so new content never takes such an id.
+      const ownedInsideTarget = id => {
+        let cursor = allocator.callOwners.get(id);
+        while (cursor !== undefined && cursor !== null && cursor !== target.id)
+          cursor = ownedApp.occurrences.get(cursor)?.parentId;
+        return cursor === target.id;
+      };
       const visit = oldParent => {
         const newParent = mapped.get(oldParent);
         const candidates = existingChildren.get(newParent) || [];
         for (const child of incomingChildren.get(oldParent) || []) {
           const match = candidates.find(item => !claimedExisting.has(item.id) &&
-            item.placementKey === child.placementKey && item.typeKey === child.typeKey);
+            item.placementKey === child.placementKey && item.typeKey === child.typeKey && ownedInsideTarget(item.id));
           let id;
           if (match) id = match.id;
           else {
@@ -2467,15 +2833,32 @@
         if (typeof id !== "string" || !mapped.has(id)) throw new Error("prepared target references an unknown incoming occurrence");
         return mapped.get(id);
       };
+      // Only the call tables hold occurrence ids, so only they are rebuilt; the rest of the prepared
+      // data (opaque HTML, bindings, loop rows) stays shared with rawEnvelope. Object.fromEntries
+      // keeps any key, including "__proto__", as an own property, the same way the parsed JSON did.
       const translatePreparedData = value => {
-        const prepared = clone(value);
-        for (const call of Object.values(prepared.calls || {})) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+        const prepared = {...value};
+        // A non-object table is left as is but still iterated, so a string table fails with the same
+        // error as a malformed entry.
+        const rebuild = (table, entry) => table && typeof table === "object"
+          ? Object.fromEntries(Object.entries(table).map(entry))
+          : (Object.entries(table || {}).forEach(entry), table);
+        prepared.calls = rebuild(prepared.calls, ([localId, call]) => {
           if (call.key !== call.id) throw new Error("prepared component call key must equal its occurrence id");
-          call.id = resolve(call.id); call.key = call.id;
-          if (typeof call.parentId === "string") call.parentId = resolve(call.parentId);
-        }
-        for (const ids of Object.values(prepared.callRuns || {})) for (let index = 0; index < ids.length; index += 1)
-          ids[index] = resolve(ids[index]);
+          const next = {...call};
+          next.id = resolve(call.id); next.key = next.id;
+          if (typeof call.parentId === "string") next.parentId = resolve(call.parentId);
+          return [localId, next];
+        });
+        prepared.callRuns = rebuild(prepared.callRuns, ([runId, ids]) => {
+          const next = Array.isArray(ids) ? ids.slice() : clone(ids);
+          for (let index = 0; index < next.length; index += 1) next[index] = resolve(next[index]);
+          return [runId, next];
+        });
+        // Keep the shape exact: a table the server omitted must stay absent, not become undefined.
+        if (!own(value, "calls")) delete prepared.calls;
+        if (!own(value, "callRuns")) delete prepared.callRuns;
         return prepared;
       };
       envelope.rootId = resolve(envelope.rootId);
@@ -2488,17 +2871,20 @@
         const right = `${b.ownerId}\0${b.name}\0${b.occurrenceId}`;
         return left < right ? -1 : left > right ? 1 : 0;
       });
-      envelope.replacements = envelope.replacements.map(item => ({...item, ownerId: resolve(item.ownerId),
-        expectedRemountIds: item.expectedRemountIds.map(resolve).sort()})).sort((a,b) => {
-        const left = `${a.ownerId}\0${a.siteId}`, right = `${b.ownerId}\0${b.siteId}`;
-        return left < right ? -1 : left > right ? 1 : 0;
-      });
-      for (const style of envelope.styles || []) if (style.owner?.kind === "component" && Array.isArray(style.owner.occurrenceIds))
-        style.owner.occurrenceIds = style.owner.occurrenceIds.map(resolve).sort();
-      for (const [name, extension] of extensionEntries(envelope.extensions || {})) {
+      if (envelope.styles) envelope.styles = envelope.styles.map(style =>
+        style.owner?.kind === "component" && Array.isArray(style.owner.occurrenceIds)
+          ? {...style, owner: {...style.owner, occurrenceIds: style.owner.occurrenceIds.map(resolve).sort()}}
+          : style);
+      const extensions = extensionEntries(envelope.extensions || {});
+      // Replace the extensions object rather than writing into the one shared with rawEnvelope.
+      if (extensions.length && [...mapped].some(([before, after]) => before !== after))
+        envelope.extensions = {...envelope.extensions};
+      for (const [name, extension] of extensions) {
         const plugin = plugins.get(name)?.plugin;
         if ([...mapped].some(([before, after]) => before !== after)) {
           if (typeof plugin?.translateRevision !== "function") throw new Error("browser plugin cannot translate occurrence identities: " + name);
+          // The plugin gets its own frozen copy, and its answer is copied too, so plugin code
+          // never holds an object that the envelope also holds.
           const translated = plugin.translateRevision(detached(extension.payload), resolve);
           if (translated && typeof translated.then === "function") throw new Error("browser plugin occurrence translation must be synchronous: " + name);
           envelope.extensions[name] = {...extension, payload: detached(translated)};
@@ -2526,8 +2912,17 @@
           if (typeof occurrence.id !== "string") throw new Error("prepared Events incoming occurrence ID is invalid");
           allIncomingIds.add(occurrence.id);
         }
-        const allocator = {occupied: new Set(ownedApp.occurrences.keys()),
-          reserved: new Set([...ownedApp.occurrences.keys(), ...allIncomingIds]), claimedExisting: new Set(), ordinal: 0};
+        // Which component's call table names each component, and every id a call table names. A
+        // kept caller can still name a component an earlier Render removed (see keptOwnerIds), so
+        // those ids stay taken as well.
+        const callOwners = new Map();
+        for (const item of ownedApp.occurrences.values()) {
+          for (const binding of Object.values(item.preparedData.calls || {})) callOwners.set(binding.id, item.id);
+          for (const ids of Object.values(item.preparedData.callRuns || {})) for (const id of ids) callOwners.set(id, item.id);
+        }
+        const allocator = {occupied: new Set([...ownedApp.occurrences.keys(), ...callOwners.keys()]),
+          reserved: new Set([...ownedApp.occurrences.keys(), ...callOwners.keys(), ...allIncomingIds]),
+          claimedExisting: new Set(), callOwners, ordinal: 0};
         const handles = [], entries = [], targetIds = new Set();
         let combined = null;
         const canonical = value => {
@@ -2549,6 +2944,7 @@
         const mergedStyles = () => {
           const values = [], seen = new Map();
           for (const entry of entries) for (const raw of entry.envelope.styles || []) {
+            // Copies, because merging rewrites owner.occurrenceIds on them; style lists are short.
             const value = clone(raw);
             const key = canonical([value.source?.url, value.owner?.kind,
               value.owner?.typeKey || value.owner?.extensionName]);
@@ -2693,10 +3089,6 @@
           styles: mergedStyles(),
           typePolicies: merged("typePolicies", value => value.typeKey),
           updatedIds: [...new Set(entries.flatMap(entry => entry.envelope.updatedIds))].sort(),
-          replacements: entries.flatMap(entry => entry.envelope.replacements).sort((a,b) => {
-            const left = `${a.ownerId}\0${a.siteId}`, right = `${b.ownerId}\0${b.siteId}`;
-            return left < right ? -1 : left > right ? 1 : 0;
-          }),
         };
         const incomingTypes = new Map(combined.occurrences.map(item => [item.id, item.typeKey]));
         const policies = normalizeTypePolicies(combined.typePolicies);
@@ -2705,18 +3097,26 @@
         for (const typeKey of incomingTypes.values()) if (!ownedApp.types.has(typeKey) &&
             (configuration.allowLazyTypeAssets !== true || policies.get(typeKey) !== true))
           throw new Error("lazy component types are unsupported by this dependency or JavaScript policy");
-        const declared = preflightDefinitions(ownedApp, combined.definitions, combined.occurrences, combined.rootId);
+        const declared = preflightDefinitions(ownedApp, combined.definitions, combined.occurrences, combined.rootId,
+          keptOwnerIds(ownedApp, combined));
         const shadow = {...ownedApp, definitions: new Map(ownedApp.definitions)};
         for (const [id, definition] of declared) shadow.definitions.set(id, definition);
-        validateCombinedActions(shadow, clone(combined));
+        validateCombinedActions(shadow, combined);
         validateAddresses(combined.occurrences, true);
+        // Every check on the envelope's own content has passed. Freeze it, together with the
+        // translated per-target envelopes that plugins receive, so prepareRender and applyEnvelope
+        // can use it without copying it or checking it again. The bridge hands this host a result
+        // no one else holds, so it is safe to freeze the response objects the combined envelope shares.
+        for (const entry of entries) deepFreeze(entry.envelope);
+        deepFreeze(combined);
+        validatedEnvelopes.set(combined, declared);
         const firstIndex = result.actions.indexOf(renders[0]);
         const transformed = renders.length === 1 ? result : {...result, actions: [
           ...result.actions.slice(0, firstIndex), {...renders[0], prepared: combined},
           ...result.actions.slice(firstIndex + renders.length),
         ]};
         return {result: transformed, renderPlan: Object.freeze({handles: Object.freeze(handles), envelope: combined,
-          entries: Object.freeze(entries), replacedRootIds: Object.freeze([...targetIds])})};
+          entries: Object.freeze(entries), replacedRootIds: Object.freeze([...targetIds]), mountEpoch: ownedApp.mountEpoch})};
       },
       async prepareRender(action, source, signal, renderPlan) {
         if (signal?.aborted) throw new Error("prepared Events render was cancelled");
@@ -2801,29 +3201,56 @@
         if (!source || sources.get(source.stableId)?.generation !== source.generation)
           throw new Error("prepared Events source is stale before render preflight");
         guardHandles();
-        const declaredDefinitions = preflightDefinitions(
-          definitionRegistry(appId), envelope.definitions, envelope.occurrences, envelope.rootId);
-        const shadow = {...definitionRegistry(appId), definitions: new Map(definitionRegistry(appId).definitions)};
-        for (const [id, definition] of declaredDefinitions) shadow.definitions.set(id, definition);
-        validateCombinedActions(shadow, clone(envelope));
-        const declaredDefinitionIds = new Set(declaredDefinitions.keys());
-        const priorDefinitionKeys = new Set(Object.keys(global.CitryStableDefinitions || {}));
-        for (const asset of envelope.definitions) await wait(loadDefinition(asset, configuration.nonce));
-        for (const id of Object.keys(global.CitryStableDefinitions || {}))
-          if (!priorDefinitionKeys.has(id) && !declaredDefinitionIds.has(id))
-            throw new Error("prepared definition asset registered an undeclared definition");
-        for (const asset of envelope.definitions) if (!registered.has(asset.id)) {
-          registerDefinition(
-            appId, asset.id, global.CitryStableDefinitions?.[asset.id], declaredDefinitions.get(asset.id));
-          registered.add(asset.id);
+        // preflightResult already checked this frozen envelope, and guardHandles just confirmed that
+        // no revision was published since. The envelope is checked against the app again here only
+        // when that earlier check could now answer differently: a definition it declares was
+        // registered with other metadata, or a component mounted or unmounted since preflight.
+        // applyEnvelope repeats both checks right before it publishes.
+        const validated = validatedEnvelopes.get(envelope) !== undefined && renderPlan?.envelope === envelope;
+        const mountsMoved = () => !validated || definitionRegistry(appId).mountEpoch !== renderPlan.mountEpoch;
+        let declaredDefinitions;
+        if (validated) {
+          declaredDefinitions = validatedEnvelopes.get(envelope);
+          assertDeclaredDefinitionsCurrent(definitionRegistry(appId), declaredDefinitions);
+        } else {
+          declaredDefinitions = preflightDefinitions(
+            definitionRegistry(appId), envelope.definitions, envelope.occurrences, envelope.rootId,
+            keptOwnerIds(definitionRegistry(appId), envelope));
         }
-        validateCombinedActions(definitionRegistry(appId), clone(envelope));
+        if (mountsMoved()) {
+          const shadow = {...definitionRegistry(appId), definitions: new Map(definitionRegistry(appId).definitions)};
+          for (const [id, definition] of declaredDefinitions) shadow.definitions.set(id, definition);
+          validateCombinedActions(shadow, envelope);
+        }
+        const declaredDefinitionIds = new Set(declaredDefinitions.keys());
+        const priorDefinitionKeys = new Set(Object.keys(global.__citryRuntimeDefinitions || {}));
         const declaredOptionTypes = new Set(normalizedAssets.scripts.filter(asset => asset.registersOptions).map(asset => asset.owner.typeKey));
         const priorOptionTypes = new Set(registeredTypeOptions.keys());
-        for (const asset of normalizedAssets.scripts)
-          await wait(loadTypeScript(appId, asset, configuration.nonce));
-        await wait(Promise.all(normalizedAssets.styles.map(asset =>
-          loadStyle(appId, asset, configuration.nonce, attempt.styleStage))));
+        const updateAssetPreloads = createAssetPreloadBatch();
+        try {
+          updateAssetPreloads.add(appId, envelope.definitions, configuration.nonce, true);
+          updateAssetPreloads.add(appId, normalizedAssets.scripts, configuration.nonce);
+          updateAssetPreloads.addStyles(appId, normalizedAssets.styles, configuration.nonce);
+          for (const asset of envelope.definitions) await wait(loadDefinition(asset, configuration.nonce));
+          for (const id of Object.keys(global.__citryRuntimeDefinitions || {}))
+            if (!priorDefinitionKeys.has(id) && !declaredDefinitionIds.has(id))
+              throw new Error("prepared definition asset registered an undeclared definition");
+          for (const asset of envelope.definitions) if (!registered.has(asset.id)) {
+            registerDefinition(
+              appId, asset.id, global.__citryRuntimeDefinitions?.[asset.id], declaredDefinitions.get(asset.id));
+            registered.add(asset.id);
+          }
+          // Check against the registry before loading type scripts and styles whenever the answer
+          // from preflight may be out of date; applyEnvelope repeats this check at commit.
+          if (validated) assertDeclaredDefinitionsCurrent(definitionRegistry(appId), declaredDefinitions);
+          if (mountsMoved()) validateCombinedActions(definitionRegistry(appId), envelope);
+          for (const asset of normalizedAssets.scripts)
+            await wait(loadTypeScript(appId, asset, configuration.nonce));
+          await wait(Promise.all(normalizedAssets.styles.map(asset =>
+            loadStyle(appId, asset, configuration.nonce, attempt.styleStage))));
+        } finally {
+          updateAssetPreloads.cleanup();
+        }
         for (const typeKey of registeredTypeOptions.keys())
           if (!priorOptionTypes.has(typeKey) && !declaredOptionTypes.has(typeKey))
             throw new Error("prepared type asset registered undeclared Vue Options");
@@ -2835,14 +3262,18 @@
             };
             attempt.pluginStages.push(item);
             const entries = renderPlan?.entries;
+            // Plugins must not be able to change what the core holds. A validated envelope and
+            // its per-target envelopes are frozen whole already, so plugins read them directly;
+            // anything else gets a frozen copy.
+            const view = validated ? value => value : detached;
             const pending = Promise.resolve(entries?.length > 1
               ? installed.plugin.prepareRevisionBatch(entries.map(entry => ({
-                  payload: detached(entry.extensions.get(name).payload), rootId: entry.targetId,
-                })), detached(envelope))
+                  payload: view(entry.extensions.get(name).payload), rootId: entry.targetId,
+                })), view(envelope))
               : entries?.length === 1
-                ? installed.plugin.prepareRevision(detached(entries[0].extensions.get(name).payload),
-                    detached(entries[0].envelope))
-                : installed.plugin.prepareRevision(detached(incoming.payload), detached(envelope)));
+                ? installed.plugin.prepareRevision(view(entries[0].extensions.get(name).payload),
+                    view(entries[0].envelope))
+                : installed.plugin.prepareRevision(view(incoming.payload), view(envelope)));
             pending.then(stage => {
               item.stage = stage;
               item.hasStage = true;
@@ -3184,7 +3615,13 @@
       },
     });
     const root = manifest.occurrences.find(item => item.id === manifest.rootId);
-    const vueApp = V.createApp(componentTypes[root.typeKey], {citryId: root.id});
+    const hydrating = configuration.hydrate === true;
+    // Tests set this global before the page loads to see how much server HTML
+    // Vue reused. Recording it wraps the console and walks the DOM twice, so
+    // ordinary pages never pay for it.
+    const hydrationDiagnostics = hydrating && globalThis.__citryHydrationDiagnostics === true;
+    const vueAppFactory = hydrating ? V.createSSRApp : V.createApp;
+    const vueApp = vueAppFactory(componentTypes[root.typeKey], {citryId: root.id});
     vueApp.component("citry-opaque-html", opaqueHtmlComponent);
     vueApp.directive("citry-control", {
       mounted(element, binding) {
@@ -3336,7 +3773,61 @@
       }
       attachVueApp(appId, vueApp);
       lifecycle?.guard();
-      vueApp.mount(hostElement);
+      // The server writes Citry's HTML inside each element whose children Vue builds in the browser
+      // (a shell, marked data-allow-mismatch="children"), so the page shows it before this runtime
+      // starts. Vue keeps the attributes of any element it adopts under that marker, so the contents
+      // are removed here, in the same task as the mount below, and Vue builds them anew.
+      if (hydrating && configuration.emptyShells === true)
+        for (const shell of hostElement.querySelectorAll('[data-allow-mismatch="children"]')) shell.replaceChildren();
+      const hydrationBeforeElements = hydrationDiagnostics ? Array.from(hostElement.querySelectorAll("*")) : null;
+      const hydrationWarnings = hydrationDiagnostics ? [] : null;
+      const hydrationErrors = hydrationDiagnostics ? [] : null;
+      const hydrationStartedAt = hydrationDiagnostics ? performance.now() : 0;
+      const priorWarn = hydrationDiagnostics ? console.warn : null;
+      const priorError = hydrationDiagnostics ? console.error : null;
+      const priorWarnHandler = hydrationDiagnostics ? vueApp.config.warnHandler : null;
+      if (hydrationDiagnostics) {
+        console.warn = (...args) => {
+          hydrationWarnings.push(args.map(value => String(value)).join(" "));
+          priorWarn.apply(console, args);
+        };
+        console.error = (...args) => {
+          hydrationErrors.push(args.map(value => String(value)).join(" "));
+          priorError.apply(console, args);
+        };
+        vueApp.config.warnHandler = (message, instance, trace) => {
+          hydrationWarnings.push(String(message));
+          if (priorWarnHandler) priorWarnHandler(message, instance, trace);
+        };
+      }
+      let hydrationMountError = null;
+      try {
+        vueApp.mount(hostElement);
+      } catch (error) {
+        hydrationMountError = String(error);
+        throw error;
+      } finally {
+        if (hydrationDiagnostics) {
+          console.warn = priorWarn;
+          console.error = priorError;
+          vueApp.config.warnHandler = priorWarnHandler;
+          const hydrationAfterElements = Array.from(hostElement.querySelectorAll("*"));
+          const reusedElementCount = hydrationBeforeElements.filter(element => hostElement.contains(element)).length;
+          const mismatchCount = [...hydrationWarnings, ...hydrationErrors].filter(message =>
+            /hydration|mismatch/i.test(message)).length;
+          globalThis.__citryHydrationReport = Object.freeze({
+            beforeElementCount: hydrationBeforeElements.length,
+            afterElementCount: hydrationAfterElements.length,
+            reusedElementCount,
+            replacedElementCount: hydrationBeforeElements.length - reusedElementCount,
+            hydrationMs: performance.now() - hydrationStartedAt,
+            warnings: Object.freeze([...hydrationWarnings]),
+            errors: Object.freeze([...hydrationErrors]),
+            mismatchCount,
+            mountError: hydrationMountError,
+          });
+        }
+      }
       await waitForStartup(whenReady(appId), lifecycle);
       initialPublished = true;
       for (const {plugin, stage} of plugins.values()) plugin.commitRevision(stage);
@@ -3433,10 +3924,15 @@
     catch (caught) { if (error === undefined) error = caught; else console.error("[Citry] callback cleanup failed:", caught); }
     if (error !== undefined) throw error;
   }
-  function subscribeRecordEvent(record, name, handler) {
+  function subscribeRecordEvent(record, name, handler, subscriptions) {
     const unsubscribe = record.events.subscribe(name, handler);
-    const subscriptions = record.callbackSubscriptions;
     if (!subscriptions) return unsubscribe;
+    // The run that owns these subscriptions was already cleaned up or replaced by a newer run, so a listener it
+    // adds late would outlive it; drop it at once instead (after subscribe() has still validated the arguments).
+    if (record.callbackSubscriptions !== subscriptions) {
+      unsubscribe();
+      return () => {};
+    }
     let active = true;
     const off = () => {
       if (!active) return;
@@ -3458,11 +3954,14 @@
     const subscriptions = new Set();
     record.callbackScope = scope;
     record.callbackSubscriptions = subscriptions;
+    // Marks the synchronous part of this run, so `this.$onEvent` called inside it is released with the run.
+    record.callbackRunning = true;
     try {
       const cleanup = scope.run(() => callback({
         component,
         revision,
-        onEvent: (name, handler) => subscribeRecordEvent(record, name, handler),
+        // Bound to this run's set: a call from a timer or promise the run started still ends with the run.
+        onEvent: (name, handler) => subscribeRecordEvent(record, name, handler, subscriptions),
       }));
       if (cleanup !== undefined && typeof cleanup !== "function") throw new TypeError("onServerRender must return a function or undefined");
       record.callbackCleanup = cleanup;
@@ -3473,6 +3972,8 @@
       record.callbackCleanup = undefined;
       record.callbackSubscriptions = undefined;
       throw error;
+    } finally {
+      record.callbackRunning = false;
     }
   }
 
@@ -3507,7 +4008,7 @@
         !Array.isArray(envelope.definitions) || !Array.isArray(envelope.scripts) ||
         !Array.isArray(envelope.styles) || !Array.isArray(envelope.typePolicies) ||
         !Array.isArray(envelope.occurrences) || !Array.isArray(envelope.updatedIds) ||
-        !Array.isArray(envelope.replacements) || !Array.isArray(envelope.markers) ||
+        !Array.isArray(envelope.markers) ||
         own(envelope, "topologyChanges")) throw new Error("stale or malformed envelope");
     const subtree = new Map();
     for (const item of envelope.occurrences) {
@@ -3521,8 +4022,6 @@
         declaredUpdates.size !== envelope.updatedIds.length || declaredUpdates.size !== subtree.size ||
         [...subtree.keys()].some(id => !declaredUpdates.has(id)))
       throw new Error("subtree update ids must exactly cover its snapshot");
-    if (envelope.replacements.some(item => !item || !subtree.has(item.ownerId)))
-      throw new Error("subtree replacement owner lies outside its snapshot");
     normalizeMarkers(envelope.markers, subtree);
     return subtree;
   }
@@ -3558,6 +4057,49 @@
     return validateCombinedActions(app, expandSubtreeEnvelope(app, envelope, targetId));
   }
 
+  // One side of a revision for slot lookups: the committed or the incoming occurrences, each read
+  // with its own definition. It finds the caller of a component, which holds that component's fills.
+  function slotLookupSide(app, occurrences) {
+    let callers = null;
+    return {occurrences, callerOf(id) {
+      // Built on first use: most revisions replace no element that holds a slot outlet.
+      if (!callers) {
+        callers = new Map();
+        for (const occurrence of occurrences.values()) {
+          for (const call of app.definitions.get(occurrence.definitionId)?.localCalls || []) {
+            if (!call.fills.length) continue;
+            const binding = occurrence.preparedData.calls?.[call.localId];
+            if (binding) callers.set(binding.id, {ownerId: occurrence.id, call});
+          }
+        }
+      }
+      return callers.get(id);
+    }};
+  }
+  // Add the components a caller passed into one slot outlet of `receiverId`. A fill can pass on a
+  // slot of the caller itself, so the lookup repeats one level up for each outlet inside the fill.
+  function addSlotOccupantIds(side, receiverId, outletName, output, visited = new Set()) {
+    const step = JSON.stringify([receiverId, outletName]);
+    if (visited.has(step)) return;
+    visited.add(step);
+    const caller = side.callerOf(receiverId);
+    // No fill for this outlet means it shows its fallback, whose calls the receiver's site lists.
+    const fill = caller?.call.fills.find(item => item.name === outletName);
+    if (!fill) return;
+    const owner = side.occurrences.get(caller.ownerId);
+    for (const localId of fill.localDescendants) {
+      const call = owner.preparedData.calls?.[localId];
+      if (!call) throw new Error("slot fill references an absent ordinary local call");
+      output.push(call.id);
+    }
+    for (const runId of fill.localDescendantRuns) {
+      const run = owner.preparedData.callRuns?.[runId];
+      if (!Array.isArray(run)) throw new Error("slot fill references an absent ordinary call run");
+      output.push(...run);
+    }
+    for (const nested of fill.slotOutlets) addSlotOccupantIds(side, caller.ownerId, nested, output, visited);
+  }
+
   function validateCombinedActions(app, envelope) {
     plain(envelope, "combined envelope");
     if (envelope.protocol !== "citry-vue-prepared/1" || envelope.appId !== app.id ||
@@ -3565,11 +4107,11 @@
         envelope.rootId !== app.rootId || !Array.isArray(envelope.definitions) ||
         !Array.isArray(envelope.scripts) || !Array.isArray(envelope.styles) ||
         !Array.isArray(envelope.typePolicies) || !Array.isArray(envelope.occurrences) ||
-        !Array.isArray(envelope.updatedIds) || !Array.isArray(envelope.replacements) ||
-        !Array.isArray(envelope.markers) || own(envelope, "topologyChanges"))
+        !Array.isArray(envelope.updatedIds) || !Array.isArray(envelope.markers) || own(envelope, "topologyChanges"))
       throw new Error("stale or malformed combined envelope");
     const incoming = new Map(envelope.occurrences.map(item => [item.id, item]));
     normalizeMarkers(envelope.markers, incoming);
+    const keptOwners = keptOwnerIds(app, envelope);
     const staged = [], ids = new Set(), updatedIds = new Set(), nextDefinitionTypes = new Map(app.definitionTypes);
     for (const id of envelope.updatedIds) { if (typeof id !== "string" || updatedIds.has(id)) throw new Error("invalid updated occurrence ids"); updatedIds.add(id); }
     for (const action of envelope.occurrences) {
@@ -3585,7 +4127,7 @@
       if (boundType && boundType !== action.typeKey) throw new Error("render definition stable-type mismatch");
       nextDefinitionTypes.set(action.definitionId, action.typeKey);
       const definitionChanged = !prepared || prepared.definitionId !== action.definitionId;
-      validateOccurrenceCallRuns(incoming, action, nextDefinition);
+      validateOccurrenceCallRuns(incoming, action, nextDefinition, keptOwners.has(action.id));
       if (definitionChanged) {
         const priorDefinition = prepared && app.definitions.get(prepared.definitionId);
         if (!updatedIds.has(action.id) || nextDefinition.target !== ORDINARY_TARGET ||
@@ -3596,157 +4138,78 @@
       const serverShapeChanged = mounted ? signatureKey([...nextKeys].sort()) !==
         signatureKey([...mounted.record.serverKeys].sort()) : false;
       if (mounted) for (const key of nextKeys) if (!mounted.record.serverKeys.has(key) && (key in mounted.component || key.startsWith("$") || key.startsWith("_"))) throw new Error("later js_data/public collision: " + key);
-      const payloadChanged = added || JSON.stringify(prepared.serverData) !== JSON.stringify(action.serverData) || JSON.stringify(prepared.preparedData) !== JSON.stringify(action.preparedData);
-      if (payloadChanged && !updatedIds.has(action.id)) throw new Error("changed occurrence missing from updatedIds");
-      if (updatedIds.has(action.id)) staged.push({action: clone(action), ...(mounted || {}), nextKeys,
+      // Only an occurrence the server did not list as updated must keep its prior payload, so only
+      // those payloads are serialized and compared.
+      if (!updatedIds.has(action.id) && (added || JSON.stringify(prepared.serverData) !== JSON.stringify(action.serverData) ||
+          JSON.stringify(prepared.preparedData) !== JSON.stringify(action.preparedData)))
+        throw new Error("changed occurrence missing from updatedIds");
+      // Callers only read the staged action, so it can be the envelope's own object.
+      if (updatedIds.has(action.id)) staged.push({action, ...(mounted || {}), nextKeys,
         serverShapeChanged, definitionChanged, nextDefinition, added});
     }
-    validateGraph(incoming, app.rootId);
+    validateGraph(incoming, app.rootId, keptOwners);
     for (const id of updatedIds) if (!ids.has(id)) throw new Error("unknown explicitly updated occurrence");
     const removed = [];
     for (const id of app.occurrences.keys()) if (!incoming.has(id)) {
       removed.push(id);
     }
     const addedIds = new Set([...incoming.keys()].filter(id => !app.occurrences.has(id)));
-    // The browser owns the only authoritative accepted baseline. Derive keyed
-    // replacement declarations from that baseline and the incoming occurrence
-    // graph instead of relying on process-local server revision history. A
-    // server may still send declarations for older clients, but they must
-    // exactly agree with this derivation.
-    const derivedReplacements = [];
+    // The server keeps no page history, so only the browser holds both the committed and the
+    // incoming definition of a retained occurrence. A replacement site whose key differs between
+    // them is an element Vue replaces, and every component mounted inside it mounts again.
+    const expectedRemountIds = new Set();
+    const committedSide = slotLookupSide(app, app.occurrences), incomingSide = slotLookupSide(app, incoming);
     for (const item of staged.filter(item => item.definitionChanged && !item.added)) {
-      const priorOccurrence = app.occurrences.get(item.action.id);
-      const priorDefinition = app.definitions.get(priorOccurrence.definitionId);
-      if (!priorDefinition) throw new Error("retained occurrence has no prior render definition");
-      const before = new Map(priorDefinition.replacementSites.map(site => [site.siteId, site]));
+      const ownerId = item.action.id;
+      const prior = app.definitions.get(app.occurrences.get(ownerId).definitionId);
+      const before = new Map(prior.replacementSites.map(site => [site.siteId, site]));
       const after = new Map(item.nextDefinition.replacementSites.map(site => [site.siteId, site]));
       const changed = [...new Set([...before.keys(), ...after.keys()])]
-        .filter(id => before.get(id)?.key !== after.get(id)?.key).sort();
-      const siteRecords = [];
+        .filter(id => before.get(id)?.key !== after.get(id)?.key);
       for (const siteId of changed) {
-        const expectedForSite = new Set();
-        const coveredBySite = new Set();
-        for (const [site, occurrence] of [[before.get(siteId), priorOccurrence],
-          [after.get(siteId), incoming.get(item.action.id)]]) {
+        // A site that only one definition has still replaces what the other rendered there, so
+        // both definitions name the calls it holds, each through its own occurrence's call table.
+        for (const [site, side] of [[before.get(siteId), committedSide], [after.get(siteId), incomingSide]]) {
           if (!site) continue;
+          const occurrence = side.occurrences.get(ownerId);
+          const ids = [];
           for (const localId of site.localDescendants) {
-            const call = occurrence.preparedData.calls[localId];
+            const call = occurrence.preparedData.calls?.[localId];
             if (!call) throw new Error("replacement site references an absent ordinary local call");
-            coveredBySite.add(call.id);
-            if (incoming.has(call.id) && app.mounted.has(call.id)) expectedForSite.add(call.id);
+            ids.push(call.id);
           }
           for (const runId of site.localDescendantRuns) {
-            for (const id of occurrence.preparedData.callRuns[runId]) {
-              coveredBySite.add(id);
-              if (incoming.has(id) && app.mounted.has(id)) expectedForSite.add(id);
-            }
+            const run = occurrence.preparedData.callRuns?.[runId];
+            if (!Array.isArray(run)) throw new Error("replacement site references an absent ordinary call run");
+            ids.push(...run);
+          }
+          // A caller's component rendered through a slot outlet inside the element goes with it.
+          for (const outlet of site.slotOutlets) addSlotOccupantIds(side, ownerId, outlet, ids);
+          // Only a component that stays in the page and is mounted now can mount again.
+          for (const id of ids) if (incoming.has(id) && app.mounted.has(id)) {
+            let cursor = incoming.get(id).parentId;
+            while (cursor !== null && cursor !== ownerId) cursor = incoming.get(cursor).parentId;
+            if (cursor !== ownerId) throw new Error("expected remount is not a mounted descendant");
+            expectedRemountIds.add(id);
           }
         }
-        siteRecords.push({ownerId: item.action.id, siteId, coveredBySite, expectedForSite});
       }
-      // A lifecycle directive can be nested inside another changed directive
-      // in one definition.  Both metadata records then mention the same
-      // mounted component, but one remount must account for it only once.  A
-      // larger local coverage identifies the enclosing site; equal coverage
-      // falls back to the stable site order because the wire format carries
-      // no source path.
-      const assigned = new Map();
-      for (const record of siteRecords) {
-        for (const id of record.expectedForSite) {
-          const candidates = siteRecords.filter(candidate => candidate.expectedForSite.has(id));
-          candidates.sort((left, right) => right.coveredBySite.size - left.coveredBySite.size ||
-            (left.siteId < right.siteId ? -1 : left.siteId > right.siteId ? 1 : 0));
-          const owner = candidates[0];
-          if (!assigned.has(owner.siteId)) assigned.set(owner.siteId, new Set());
-          assigned.get(owner.siteId).add(id);
-        }
-      }
-      for (const record of siteRecords) {
-        derivedReplacements.push({ownerId: record.ownerId, siteId: record.siteId,
-          expectedRemountIds: [...(assigned.get(record.siteId) || [])].sort()});
-      }
-    }
-    const replacementSortKey = value => value && typeof value === "object" && !Array.isArray(value)
-      ? [typeof value.ownerId === "string" ? value.ownerId : "", typeof value.siteId === "string" ? value.siteId : ""]
-      : ["", ""];
-    const compareReplacementDeclarations = (left, right) => {
-      const [leftOwner, leftSite] = replacementSortKey(left), [rightOwner, rightSite] = replacementSortKey(right);
-      if (leftOwner !== rightOwner) return leftOwner < rightOwner ? -1 : 1;
-      if (leftSite !== rightSite) return leftSite < rightSite ? -1 : 1;
-      return 0;
-    };
-    // The generated declarations follow occurrence traversal order, which is
-    // not a protocol ordering guarantee.  Keep the derived effective list in
-    // the same strict order required of supplied declarations.
-    derivedReplacements.sort(compareReplacementDeclarations);
-    const suppliedReplacements = envelope.replacements;
-    // Compatibility is set-like with respect to declaration order, while the
-    // effective supplied list remains ordered and is checked below.  This lets
-    // an older server send the same valid declarations in a different
-    // traversal order without weakening the wire-order invariant.
-    const replacementSignature = values => signatureKey(values.map(value => value && typeof value === "object" && !Array.isArray(value)
-      ? {ownerId: value.ownerId, siteId: value.siteId, expectedRemountIds: value.expectedRemountIds}
-      : value).sort(compareReplacementDeclarations));
-    if (suppliedReplacements.length !== 0 &&
-        replacementSignature(suppliedReplacements) !== replacementSignature(derivedReplacements))
-      throw new Error("replacement metadata does not match client derivation");
-    const replacements = suppliedReplacements.length === 0 ? derivedReplacements : suppliedReplacements;
-    const derivedReplacementByKey = new Map(derivedReplacements.map(replacement =>
-      [JSON.stringify([replacement.ownerId, replacement.siteId]), replacement]));
-    const expectedRemountIds = new Set(), replacementSites = new Set();
-    let priorReplacementOwner, priorReplacementSite;
-    for (const replacement of replacements) {
-      plain(replacement, "replacement");
-      if (Object.keys(replacement).sort().join(",") !== "expectedRemountIds,ownerId,siteId" ||
-          typeof replacement.ownerId !== "string" || typeof replacement.siteId !== "string" || !Array.isArray(replacement.expectedRemountIds))
-        throw new Error("invalid replacement metadata");
-      const siteKey = JSON.stringify([replacement.ownerId, replacement.siteId]);
-      if (replacementSites.has(siteKey)) throw new Error("duplicate replacement site");
-      replacementSites.add(siteKey);
-      if (priorReplacementOwner !== undefined && (replacement.ownerId < priorReplacementOwner ||
-          (replacement.ownerId === priorReplacementOwner && replacement.siteId <= priorReplacementSite)))
-        throw new Error("replacement sites must be sorted");
-      priorReplacementOwner = replacement.ownerId;
-      priorReplacementSite = replacement.siteId;
-      const ownerStage = staged.find(item => item.action.id === replacement.ownerId);
-      if (!ownerStage?.definitionChanged) throw new Error("replacement owner must have a changed definition");
-      const declaredSite = ownerStage.nextDefinition.replacementSites.find(item => item.siteId === replacement.siteId);
-      const priorSite = app.definitions.get(app.occurrences.get(replacement.ownerId).definitionId)
-        .replacementSites.find(item => item.siteId === replacement.siteId);
-      if (!declaredSite && !priorSite) throw new Error("replacement site is absent from both definitions");
-      const derivedReplacement = derivedReplacementByKey.get(siteKey);
-      if (!derivedReplacement || signatureKey(replacement.expectedRemountIds) !==
-          signatureKey(derivedReplacement.expectedRemountIds))
-        throw new Error("expected remount ids do not match replacement descendant runs");
-      let priorRemountId = "";
-      for (const id of replacement.expectedRemountIds) {
-        if (typeof id !== "string" || expectedRemountIds.has(id) || !incoming.has(id) || id === replacement.ownerId)
-          throw new Error("invalid expected remount id");
-        if (priorRemountId && id < priorRemountId) throw new Error("expected remount ids must be sorted");
-        priorRemountId = id;
-        let cursor = incoming.get(id).parentId, descendant = false;
-        while (cursor !== null) {
-          if (cursor === replacement.ownerId) { descendant = true; break; }
-          cursor = incoming.get(cursor).parentId;
-        }
-        if (!descendant || !app.mounted.has(id)) throw new Error("expected remount is not a mounted descendant");
-        expectedRemountIds.add(id);
-      }
-    }
-    for (const item of staged.filter(item => item.definitionChanged && !item.added)) {
-      const prior = app.definitions.get(app.occurrences.get(item.action.id).definitionId);
-      const before = new Map(prior.replacementSites.map(site => [site.siteId, site.key]));
-      const after = new Map(item.nextDefinition.replacementSites.map(site => [site.siteId, site.key]));
-      const changed = [...new Set([...before.keys(), ...after.keys()])].filter(id => before.get(id) !== after.get(id)).sort();
-      const declared = replacements.filter(entry => entry.ownerId === item.action.id).map(entry => entry.siteId).sort();
-      if (signatureKey(changed) !== signatureKey(declared))
-        throw new Error("replacement metadata does not match changed definition sites: " + item.action.id);
+      // A runtime directive may change only on an element that is replaced, because Vue cannot
+      // uninstall a directive from an element it keeps.
       const beforeDirectives = new Map(prior.directiveSignature.map(value => [value.siteId, signatureKey(value)]));
       const afterDirectives = new Map(item.nextDefinition.directiveSignature.map(value => [value.siteId, signatureKey(value)]));
       const changedDirectives = [...new Set([...beforeDirectives.keys(), ...afterDirectives.keys()])]
         .filter(id => beforeDirectives.get(id) !== afterDirectives.get(id));
-      if (changedDirectives.some(id => !declared.some(site => id.startsWith(site + "D"))))
-        throw new Error("runtime directive change is outside a declared keyed replacement site");
+      if (changedDirectives.some(id => !changed.some(site => id.startsWith(site + "D"))))
+        throw new Error("runtime directive change is outside a changed keyed replacement site");
+    }
+    // A component that mounts again takes every component mounted below it along.
+    const directRemountIds = new Set(expectedRemountIds);
+    for (const id of incoming.keys()) {
+      if (expectedRemountIds.has(id) || !app.mounted.has(id)) continue;
+      let cursor = incoming.get(id).parentId;
+      while (cursor !== null && !directRemountIds.has(cursor)) cursor = incoming.get(cursor).parentId;
+      if (cursor !== null) expectedRemountIds.add(id);
     }
     const expectedNewIds = addedIds;
     return {snapshot: envelope, staged, removed, nextDefinitionTypes, expectedRemountIds, expectedNewIds};
@@ -3783,6 +4246,41 @@
       app.types.set(typeKey, type);
       app.typeTags.set(typeKey, tag);
       app.vueApp.component(tag, type);
+    }
+  }
+
+  // Vue moves a keyed element with insertBefore, and the browser drops focus from an element that
+  // leaves the document even for that instant. A server revision that reorders rows would then
+  // take the focus and caret away from the field the user is typing in, so remember them here.
+  function captureFocus() {
+    const element = global.document?.activeElement;
+    if (!element || element === global.document.body || element === global.document.documentElement) return null;
+    let selection = null;
+    try {
+      if (typeof element.selectionStart === "number")
+        selection = [element.selectionStart, element.selectionEnd, element.selectionDirection];
+    } catch {
+      // Inputs such as email or number have no selection API; focus alone is restored for them.
+    }
+    return {element, selection};
+  }
+  function restoreFocus(focus) {
+    // Only an element Vue kept, and only when nothing else took the focus: the page may have moved
+    // it on purpose, and an element Vue replaced is a new field.
+    if (!focus || !focus.element.isConnected) return;
+    const current = global.document.activeElement;
+    if (current !== focus.element) {
+      if (current && current !== global.document.body) return;
+      focus.element.focus({preventScroll: true});
+    }
+    // Reapply the range even when the field kept focus: restoring a dirty native value after the
+    // publication writes `.value`, which moves the caret to the end.
+    if (focus.selection) {
+      try {
+        focus.element.setSelectionRange(...focus.selection);
+      } catch {
+        // The field's type changed to one without a selection; keeping the focus is enough.
+      }
     }
   }
 
@@ -3880,63 +4378,23 @@
     }
   }
 
-  function captureFocusForPublication() {
-    const element = document.activeElement;
-    // Body/document focus is the browser's unfocused sentinel, so only retain a user control.
-    if (typeof HTMLElement !== "function" || !(element instanceof HTMLElement) ||
-        element === document.body || element === document.documentElement)
-      return null;
-    const isTextControl = (typeof HTMLInputElement === "function" && element instanceof HTMLInputElement) ||
-      (typeof HTMLTextAreaElement === "function" && element instanceof HTMLTextAreaElement);
-    if (!isTextControl) return null;
-    const snapshot = {element, selection: null};
-    if (isTextControl) {
-      // Keyed moves can clear an active control's range while Vue temporarily detaches it.
-      const start = element.selectionStart, end = element.selectionEnd;
-      if (Number.isInteger(start) && Number.isInteger(end)) {
-        snapshot.selection = {
-          start,
-          end,
-          direction: typeof element.selectionDirection === "string" ? element.selectionDirection : null,
-        };
-      }
-    }
-    return snapshot;
-  }
-
-  function restoreFocusAfterPublication(snapshot) {
-    const element = snapshot?.element;
-    if (!element?.isConnected) return;
-    const current = document.activeElement;
-    const focusWasLost = current === null || current === document || current === document.body ||
-      current === document.documentElement;
-    // A move to another connected element wins over the focus captured for this render.
-    if (!focusWasLost && current !== element) return;
-    if (current !== element) {
-      try { element.focus({preventScroll: true}); }
-      catch (_) { return; }
-    }
-    const selection = snapshot.selection;
-    if (!selection || typeof element.setSelectionRange !== "function") return;
-    // Server data may shorten the value, so keep the old range inside its new bounds.
-    const length = typeof element.value === "string" ? element.value.length : 0;
-    const start = Math.min(selection.start, length), end = Math.min(selection.end, length);
-    try {
-      if (selection.direction === null) element.setSelectionRange(start, end);
-      else element.setSelectionRange(start, end, selection.direction);
-    } catch (_) {
-      // A control whose type changed during the render no longer accepts text ranges.
-    }
-  }
-
   async function applyEnvelope(appId, envelope, targetId = envelope.rootId, pluginTransaction = null) {
     const app = definitionRegistry(appId);
     if (app.busy) throw new Error("concurrent server render rejected");
     if (app.terminal) throw new Error("Citry Vue app lifecycle is terminal");
-    const incoming = clone(envelope);
+    // The envelope that this app's own Events transaction prepared is frozen and passed every check
+    // on its own content, so it is used as is. Any other caller still owns its object and may change
+    // it while this function awaits, so it gets a private copy and the full definition checks.
+    const declared = validatedEnvelopes.get(envelope);
+    const validated = declared !== undefined && pluginTransaction?.acceptedTransaction?.envelope === envelope;
+    const incoming = validated ? envelope : clone(envelope);
     if (!Array.isArray(incoming.definitions) || !Array.isArray(incoming.occurrences))
       throw new Error("prepared envelope lacks definitions or occurrences");
-    preflightDefinitions(app, incoming.definitions, incoming.occurrences, incoming.rootId);
+    if (validated) assertDeclaredDefinitionsCurrent(app, declared);
+    else preflightDefinitions(app, incoming.definitions, incoming.occurrences, incoming.rootId,
+      pluginTransaction?.combined ? keptOwnerIds(app, incoming) : null);
+    // This check always runs: it compares the envelope with the mounted components and the current
+    // revision, which may have moved since preflight, and it produces the records the commit uses.
     const {snapshot, staged, removed, nextDefinitionTypes, expectedRemountIds, expectedNewIds} =
       pluginTransaction?.combined ? validateCombinedActions(app, incoming) : validateActions(app, incoming, targetId);
     app.busy = true;
@@ -3960,6 +4418,7 @@
       throw error;
     }
     try {
+      const focus = captureFocus();
       const callbackCleanupRecords = new Set();
       for (const item of staged) if (item.record && !item.added && !expectedRemountIds.has(item.action.id))
         callbackCleanupRecords.add(item.record);
@@ -3977,28 +4436,42 @@
         record.serverKeys = nextKeys;
       }
       for (const item of staged) if (item.record && item.definitionChanged && !item.added && !expectedRemountIds.has(item.action.id)) item.record.definition.value = {id: item.action.definitionId, render: item.nextDefinition.render, cache: []};
-      app.occurrences = new Map(snapshot.occurrences.map(item => [item.id, Object.freeze({...clone(item), serverData: clone(item.serverData)})]));
+      // The snapshot is either the frozen validated envelope or this call's private copy, so the app
+      // can keep its occurrences without another copy; freezing makes them safe to share later.
+      app.occurrences = new Map(snapshot.occurrences.map(item => [item.id, deepFreeze(item)]));
       app.markers = normalizeMarkers(snapshot.markers, app.occurrences);
       app.definitionTypes = nextDefinitionTypes;
       const changedIds = new Set(staged.map(item => item.action.id)), priorLive = app.snapshot.value;
+      // Components may write server data through Vue reactivity, so each changed one gets a writable copy.
       const nextLive = new Map([...app.occurrences].map(([id,item]) => [id, changedIds.has(id) || expectedRemountIds.has(id) ? {...item, serverData: V.reactive(clone(item.serverData))} : priorLive.get(id)]));
       // Removed instances keep their prior server data until Vue runs beforeUnmount in this flush.
       for (const id of removed) if (priorLive.has(id)) nextLive.set(id, priorLive.get(id));
-      const focusSnapshot = captureFocusForPublication();
       const nativeControlSnapshot = captureNativeControlState(app.hostElement);
       app.snapshot.value = nextLive;
-      for (const item of staged) if (item.record && !item.added && !expectedRemountIds.has(item.action.id)) item.record.live.value = nextLive.get(item.action.id);
+      for (const item of staged) if (item.record && !item.added && !expectedRemountIds.has(item.action.id))
+        item.record.live.value = nextLive.get(item.action.id);
       for (const item of staged) if (item.record && item.serverShapeChanged && !item.added &&
           !expectedRemountIds.has(item.action.id)) item.component.$forceUpdate();
       await V.nextTick();
       restoreNativeControlState(nativeControlSnapshot);
-      restoreFocusAfterPublication(focusSnapshot);
       if (app.terminal) throw new Error("render failed after prepared revision publication");
+      restoreFocus(focus);
       if (!app.mounted.has(app.rootId) || [...app.mounted.keys()].some(id => !app.occurrences.has(id)) ||
           removed.some(id => app.mounted.has(id))) throw new Error("rendered occurrence set does not match prepared snapshot");
       validateMountedParents(app);
+      // A browser condition (`v-if`) may show a component the page kept but had not mounted, for
+      // example when this revision sends a new `js_data` value. That is its first mount, not a
+      // remount, so it starts from this revision's data like a new occurrence.
+      const firstMountIds = new Set([...app.mounted.keys()].filter(id =>
+        !priorMounted.has(id) && !expectedRemountIds.has(id) && !expectedNewIds.has(id)));
+      for (const id of firstMountIds) {
+        const observed = app.transaction.newMounts.get(id);
+        if (!observed || observed.length !== 1 || observed[0] !== app.mounted.get(id).record.generation)
+          throw new Error("first mount generation is invalid");
+      }
       for (const id of app.mounted.keys())
-        if (!expectedRemountIds.has(id) && !expectedNewIds.has(id) && app.mounted.get(id)?.record !== priorMounted.get(id)?.record)
+        if (!expectedRemountIds.has(id) && !expectedNewIds.has(id) && !firstMountIds.has(id) &&
+            app.mounted.get(id)?.record !== priorMounted.get(id)?.record)
           throw new Error("unexpected descendant remount");
       for (const id of expectedRemountIds) {
         const mounted = app.mounted.get(id), old = oldAcceptedRecords.get(id);
@@ -4012,17 +4485,19 @@
         if (mounted && (!observed || observed.length !== 1 || observed[0] !== mounted.record.generation))
           throw new Error("new occurrence mount generation is invalid");
       }
-      const expectedMounted = new Set([...expectedRemountIds, ...expectedNewIds]);
+      const expectedMounted = new Set([...expectedRemountIds, ...expectedNewIds, ...firstMountIds]);
       if ([...app.transaction.newMounts.keys()].some(id => !expectedMounted.has(id)))
         throw new Error("unexpected descendant remount occurred");
       if (removed.length) app.snapshot.value = new Map([...app.snapshot.value].filter(([id]) => app.occurrences.has(id)));
-      const callbackIds = new Set([...staged.map(item => item.action.id), ...expectedRemountIds,
+      const callbackIds = new Set([...staged.map(item => item.action.id), ...expectedRemountIds, ...firstMountIds,
         ...(pluginTransaction?.callbackOwnerIds || [])]
         .filter(id => app.mounted.has(id)));
       app.revision = snapshot.revision;
       pluginTransaction?.commit();
       if (app.preparedHost) {
-        const stagedCallbackIds = new Set([...staged.map(item => item.action.id), ...expectedRemountIds]);
+        // A component mounted for the first time adopts this revision's Events context, as a new one does.
+        const stagedCallbackIds = new Set([...staged.map(item => item.action.id), ...expectedRemountIds,
+          ...firstMountIds]);
         const mounted = [...callbackIds].map(id => {
           const current = app.mounted.get(id);
           if (!current) throw new Error("prepared callback target is not mounted");
@@ -4042,6 +4517,9 @@
       await V.nextTick();
       if (app.terminal) throw new Error("render failed during onServerRender flush");
     } catch (error) {
+      // Disposing the app below also disposes the Events bridge, which rejects the pending call as
+      // stale and hides this cause, so report it before the page stops.
+      console.error("[Citry] a server render failed and the app has stopped:", error);
       app.terminal = true;
       try { app.vueApp?.unmount(); } catch (unmountError) { console.error("[Citry] terminal Vue disposal failed:", unmountError); }
       throw error;
@@ -4059,15 +4537,44 @@
     return result;
   }
 
-  global.CitryStable = {configure, registerDefinition, registerTypeOptions, registerBrowserPlugin, defineType: defineTypeWithCallback, startPrepared, attachVueApp, attachPreparedHost, whenReady, applyEnvelope, compilerRuntime, _apps: apps};
+  // The CSP nonce that authorized this runtime's own script tag. Read it now, while
+  // document.currentScript still points at that tag.
+  const documentNonce = document.currentScript?.nonce || document.currentScript?.getAttribute("nonce") || "";
+
+  // Starts a server-rendered document app. The server sends the app's configuration as a
+  // JSON data block (<script type="application/json" data-citry-vue-document="appId">),
+  // which the browser never runs, and a one-line module script that calls this function
+  // after the page is parsed. JSON.parse reads a large configuration much faster than the
+  // browser can compile the same data written as a JavaScript object.
+  function startDocument(appId) {
+    if (typeof appId !== "string" || !appId) throw new TypeError("[Citry] startDocument needs the app id");
+    // Compare attribute values instead of building a selector from the id, and require
+    // exactly one match, so a second block with the same id (for example markup injected
+    // into the page) stops the start instead of choosing between them.
+    const blocks = [...document.querySelectorAll('script[type="application/json"][data-citry-vue-document]')]
+      .filter(block => block.getAttribute("data-citry-vue-document") === appId);
+    if (blocks.length !== 1)
+      throw new Error(`[Citry] expected one configuration block for app ${appId}, found ${blocks.length}`);
+    // Under a nonce-based CSP the server stamps the data block with the same nonce as this
+    // runtime. A block without it did not come from the Citry render, so it is refused.
+    if (documentNonce && blocks[0].nonce !== documentNonce)
+      throw new Error(`[Citry] the configuration block for app ${appId} does not carry the page's CSP nonce`);
+    const configuration = JSON.parse(blocks[0].textContent);
+    if (configuration?.manifest?.appId !== appId)
+      throw new Error(`[Citry] the configuration block for app ${appId} describes a different app`);
+    // Report a failed start as an uncaught error on the page (window.onerror and the
+    // console see it), without leaving an unhandled promise rejection.
+    startPrepared(configuration).catch(error => queueMicrotask(() => { throw error; }));
+  }
+
+  global.__citryRuntime = {configure, registerDefinition, registerTypeOptions, registerBrowserPlugin, defineType: defineTypeWithCallback, startPrepared, startDocument, attachVueApp, attachPreparedHost, whenReady, applyEnvelope, compilerRuntime, _apps: apps};
   if (!global.CitryVueFragments?.installFragmentManager)
     throw new Error("Citry Vue fragment support is unavailable");
-  const fragmentDocumentNonce = document.currentScript?.nonce || document.currentScript?.getAttribute("nonce") || "";
   global.CitryVueFragments.installFragmentManager(
     global.Citry ||= {},
     (node, exceptAppId) => [...apps.values()].some(app => app.id !== exceptAppId &&
       app.hostElement instanceof Element && app.hostElement.contains(node)),
     startPrepared,
-    fragmentDocumentNonce,
+    documentNonce,
   );
 })(window);
