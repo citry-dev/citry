@@ -4,32 +4,37 @@
 
 ### Changed
 
-- Citry UI now requires `citry` 0.6.0 or newer, which the fixes below
-  depend on.
-- Component `attrs` mappings (and part mappings such as `input_attrs` or
-  `trigger_attrs`) now reject Vue directive names, those starting with `v-`,
-  `:`, `.`, `^`, `@`, or `#`, with an error that names the component. Write
-  Vue bindings and listeners on the component tag in your template instead,
-  for example `<c-CSplitButton @click="...">`.
-- `CMultiSelect` rejects inline event handler attributes such as `onclick`
-  in `attrs`, `trigger_attrs`, and `listbox_attrs` with an error that names
-  the input. Use the `onValueChange` callback or a Vue listener in your
-  template instead.
+- Citry UI now requires `citry` 0.6.0 or newer, whose Vue runtime its
+  components use.
+- **Breaking:** pass client inputs and callbacks to a component with Vue
+  prop bindings on its tag instead of `$c-props`.
+
+  ```citry-html
+  <!-- 0.2.2 -->
+  <c-CDialog $c-props="{ open }" />
+
+  <!-- 0.3.0 -->
+  <c-CDialog :open="open" />
+  ```
+
+- **Breaking:** component `attrs` mappings, and part mappings such as
+  `input_attrs` or `trigger_attrs`, reject Vue directive names (those
+  starting with `v-`, `:`, `.`, `^`, `@`, or `#`) with an error that names
+  the component. Write Vue bindings and listeners on the component tag in
+  your template instead, for example `<c-CSplitButton @click="...">`.
+- **Breaking:** `CMultiSelect` rejects inline event handler attributes
+  such as `onclick` in `attrs`, `trigger_attrs`, and `listbox_attrs` with
+  an error that names the input. Use the `onValueChange` callback or a Vue
+  listener in your template instead.
+- **Breaking:** content with Vue bindings that you write in a separate
+  component and pass into Tabs, Repeatable Form Collection, Sortable,
+  Splitter, Stepper, Tour, Transfer List, or Virtual List stops the render
+  with an error that names the content. Write such content inside the
+  group's tag or in a transparent component; there, `v-text`, `@click`,
+  `v-model`, and `@c-*` bindings read your component's data.
 
 ### Fixed
 
-- Vue bindings inside the content you give Tabs, Repeatable Form Collection,
-  Sortable, Splitter, Stepper, Tour, Transfer List, and Virtual List now read
-  your component's data, so `v-text`, `@click`, `v-model`, and `@c-*` Events
-  bindings there work instead of rendering empty or doing nothing. Write
-  such content inside the group's tag or in a transparent component: content
-  in an ordinary component that you pass into the group stops the render
-  with an error that names the content.
-- Inside a client i18n provider (`<c-i18n client>`), the default labels
-  and announcements that components update in the browser now translate
-  instead of failing with "message ... is not loaded". This affects many
-  interactive components, such as `CCombobox`, `CPagination`, `CDataGrid`,
-  `CTreeGrid`, and `CToastRegion`.
 - `CScrollArea` no longer calls `onScrollChange` for the scroll event its own
   offset restore causes when the area is moved to another place in the page
   before the next frame; the callback previously received that event with a
