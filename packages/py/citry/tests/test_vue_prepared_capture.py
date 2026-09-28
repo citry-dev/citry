@@ -563,7 +563,7 @@ def test_prepared_open_rejects_dynamic_vue_syntax_and_morph_metadata() -> None:
     assert node.render(CitryContext(variables={"attrs": {"v-show": "danger"}}))
     with typed_render_scope(vue=True), pytest.raises(ValueError, match="cannot introduce Vue syntax"):
         node.render(CitryContext(variables={"attrs": {"v-show": "danger"}}))
-    with pytest.raises(ValueError, match="morph metadata"):
+    with pytest.raises(TypeError, match="is not supported on the element <div>"):
         PreparedElementOpenNode(source, (0, 20), "div", (), (), False, False, (("morph", "ignore"),))
 
 
