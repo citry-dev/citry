@@ -74,16 +74,7 @@ The component template declares the referenced element:
 | --- | --- |
 | `component` | The live Vue public instance for this Citry component. |
 | `revision` | The accepted server revision visible to the component. |
-| [`onEvent`](#on-server-render-on-event) | A lifecycle-scoped function that subscribes to a server-dispatched event for this component instance and returns an unsubscribe function. |
-
-<h4 class="doc-heading" id="on-server-render-on-event"><code>onEvent</code> in the callback context</h4>
-
-The `onEvent` member belongs to the `onServerRender` callback context. It
-follows the component occurrence across accepted server renders and is cleaned
-up with that callback's cleanup. It does not require a component `Events`
-declaration. This lifecycle-scoped helper is separate from
-[`$onEvent`](#on-event), which is the instance API guarded by an `Events`
-declaration.
+| [`onEvent(name, handler)`](#on-server-render-on-event) | Listens for an event this component's server handler dispatches and returns a function that stops listening. |
 
 The callback runs when this component mounts and after an accepted server
 render that updates this component. An unrelated Vue update does not call it.
@@ -103,7 +94,24 @@ $component(({ component, revision, onEvent }) => {
 });
 ```
 
-<h3 class="doc-heading"><code>js_data()</code> members</h3>
+<h4 class="doc-heading" id="on-server-render-on-event"><code>onEvent</code> in the callback context</h4>
+
+`onEvent` takes the same arguments as [`$onEvent`](#on-event), but each
+listener lasts only as long as the callback run that added it. Citry removes
+it before the next callback and when the component unmounts, so a listener
+added on every run is never registered twice. Unlike `$onEvent`, calling it
+without an `Events` declaration is not an error, but it only receives events
+that this component's own Events handlers dispatch:
+
+```js
+$component(({ component, onEvent }) => {
+  onEvent("cart:changed", (detail) => {
+    component.$el.dataset.items = String(detail.count);
+  });
+});
+```
+
+<h3 class="doc-heading" id="js-data-members"><code>js_data()</code> members</h3>
 
 Every top-level key returned by
 [`Component.js_data()`][citry.Component.js_data] becomes a reactive member of
@@ -112,7 +120,10 @@ or assign it through `this` or the callback's `component` value.
 
 Citry updates the server-owned keys when an accepted server render updates the
 component. A key cannot collide with local Vue data, setup bindings, props,
-injections, methods, computed values, or reserved Citry names.
+injections, methods, computed values, or
+[names Citry reserves on the instance](/advanced/vue-runtime/#names-citry-reserves-on-the-component-instance).
+Python rejects a key that starts with `$` or `_`, or the key `citryId`, when
+the component renders.
 
 <h3 class="doc-heading" id="citry-vue"><code>Citry.vue</code></h3>
 
@@ -194,8 +205,17 @@ const stop = this.$onEvent("cart:changed", (detail) => {
 ```
 
 The callback receives the event detail and `stop()` removes that subscription.
-Subscriptions are released when the component is unmounted or remounted.
-`$onEvent` requires a component Events declaration.
+A listener added from `mounted()`, a method, or a timer lasts until the
+component is unmounted or remounted; a server render does not remove it.
+Call `$onEvent` once per instance, for example in `mounted()`, so the same
+listener is not added twice.
+
+A call made while this component's own `onServerRender` callback is still
+executing (not later from a timer or promise it started) belongs to that
+callback instead, like the callback's own [`onEvent`](#on-server-render): Citry
+removes the listener before it calls the callback again. After the component
+is unmounted, `$onEvent` adds nothing. `$onEvent` requires a component Events
+declaration.
 
 <h3 class="doc-heading" id="citry-events"><code>Citry.events</code></h3>
 
@@ -216,8 +236,48 @@ error behavior as `$sendEvent`. The other methods are:
 | --- | --- |
 | `on(name, callback)` | Listen page-wide for a server-dispatched event; the callback receives its detail. |
 | `configure({csrf, timeout, url, transport})` | Set defaults used by current and future event calls. |
-| `registerTransport(name, {send})` | Register a transport that returns a Citry event result envelope. |
+| `registerTransport(name, {send})` | Register a transport that returns a Citry event result envelope. See [custom transports](#custom-event-transports). |
 | `applyActions(actions)` | Apply a validated result action list from an intercepted or custom transport. |
+
+#### Custom event transports
+
+A custom transport replaces the browser's `fetch` for event calls. Citry calls
+`send(envelope, request)` for each call and expects the result envelope back,
+or a Promise for it:
+
+```js
+Citry.events.registerTransport("bridge", {
+  send(envelope, request) {
+    const get = request.method === "GET";
+    return bridge.request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: get ? undefined : JSON.stringify(envelope),
+      signal: request.signal,
+    });
+  },
+});
+Citry.events.configure({transport: "bridge"});
+```
+
+`request` describes the HTTP request the built-in transport would send. A
+`GET` handler carries its arguments in `url` and has no body, so send the
+envelope only for other methods:
+
+| Field | Value |
+| --- | --- |
+| `url` | The event endpoint, with the query string for a `GET` handler. |
+| `method` | The HTTP method, usually `POST`. |
+| `headers` | A fresh object with the request headers, including the CSRF token on non-`GET` calls. |
+| `signal` | An `AbortSignal` that fires when the call times out or Citry cancels it, for example because the component was removed. |
+
+Forward `request.headers` to the server with the envelope. When a handler
+returns a render, the server reads the `X-Citry-Vue-App`,
+`X-Citry-Vue-Occurrence`, and `X-Citry-Vue-Revision` headers to find the
+component the browser is showing. Without them, the call fails with "Vue
+Events requires current app, occurrence, and revision headers." A server
+bridge that calls `EventsDispatcher.dispatch` itself passes these headers in
+`TransportContext.headers`.
 
 Event calls also emit bubbling `citry:events:before`, `after`, `error`,
 `swapped`, and `stale` events. Their detail always includes `instance`,

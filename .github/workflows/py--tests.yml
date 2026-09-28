@@ -12,6 +12,7 @@ on:
       - "packages/js/citry-client/**"
       - "packages/protocol/**"
       - "benchmarks/i18n.py"
+      - "benchmarks/native_build.py"
       - "scripts/build_citry_core_pyodide_wheel.py"
       - "scripts/select_citry_core_qualification.py"
       - "scripts/sync_protocol_python.py"
@@ -41,6 +42,7 @@ on:
       - "packages/js/citry-client/**"
       - "packages/protocol/**"
       - "benchmarks/i18n.py"
+      - "benchmarks/native_build.py"
       - "scripts/build_citry_core_pyodide_wheel.py"
       - "scripts/select_citry_core_qualification.py"
       - "scripts/sync_protocol_python.py"
@@ -338,6 +340,7 @@ jobs:
           packages/py/citry/tests/e2e
           packages/py/citry_ui/citry_ui/components
           packages/py/citry_ui/citry_ui/quality/tests/e2e
+          packages/py/citry_ui/tests/e2e
           -m e2e
           --browser chromium
           -n 4

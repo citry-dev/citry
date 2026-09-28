@@ -102,6 +102,10 @@ class Tabs(Component):
     js = """
       $component(({ component }) => {
         const root = component.$el;
+        // The callback runs again after each server render, so the
+        // returned cleanup removes these listeners before that rerun.
+        const listeners = new AbortController();
+        const { signal } = listeners;
         const tabs = root.querySelectorAll(".demo-tabs__tab");
         const panels = root.querySelectorAll(".demo-tabs__panel");
 
@@ -126,7 +130,7 @@ class Tabs(Component):
         };
 
         tabs.forEach((tab, index) => {
-          tab.addEventListener("click", () => activate(tab));
+          tab.addEventListener("click", () => activate(tab), { signal });
           tab.addEventListener("keydown", (event) => {
             let nextIndex;
             if (event.key === "ArrowRight") {
@@ -142,8 +146,10 @@ class Tabs(Component):
             }
             event.preventDefault();
             activate(tabs[nextIndex], true);
-          });
+          }, { signal });
         });
+
+        return () => listeners.abort();
       });
     """
 

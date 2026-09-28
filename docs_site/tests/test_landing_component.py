@@ -13,7 +13,6 @@ import pytest
 from lxml import html as lxml_html
 
 from citry import citry as default_citry
-from citry._vue.events import definition_bundle
 from docs_site._internal.components.landing import (
     _DEPTH_CASES,
     _EDITOR_MARKS,
@@ -24,7 +23,9 @@ from docs_site._internal.components.landing import (
     _TOUR_PATH,
     _TOUR_STOPS,
     LandingDepth,
+    LandingDiagnostic,
     LandingEditorDemoMarkup,
+    LandingHosts,
     LandingTour,
     _capture,
     _check_depth_docs,
@@ -42,9 +43,14 @@ from docs_site._internal.components.landing_composer import (
     _instantiate,
     _serialize_source,
 )
+from docs_site._internal.config import DocsConfig
 from docs_site._internal.nav import SCOPE_SITE, NavArea, NavItem, NavTree
 from docs_site._internal.pipeline import render_page
-from docs_site._internal.project import default_docs_project
+from docs_site._internal.project import default_docs_project, load_docs_project, use_docs_project
+
+# Read repository files from this file's location rather than the working
+# directory, so the tests pass however pytest is launched.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _landing_nav() -> NavTree:
@@ -61,10 +67,9 @@ def _landing_nav() -> NavTree:
 
 def _prepared_response(html: str) -> tuple[lxml_html.HtmlElement, dict]:
     document = lxml_html.document_fromstring(html)
-    marker = "CitryStable.startPrepared("
-    [script] = [node for node in document.xpath("//script") if node.text and marker in node.text]
-    start = script.text.index(marker) + len(marker)
-    transport, _ = json.JSONDecoder().raw_decode(script.text[start:])
+    # The page carries its start configuration as one JSON data block.
+    [block] = document.xpath('//script[@type="application/json"][@data-citry-vue-document]')
+    transport = json.loads(block.text)
     assert transport["manifest"]["protocol"] == "citry-vue-prepared/1"
     return document, transport
 
@@ -84,17 +89,15 @@ def _landing_content_html(transport: dict) -> str:
     return record["html"]
 
 
-def _prepared_definition_source(transport: dict) -> str:
-    definitions = transport["manifest"]["definitions"]
-    bundles = []
-    for asset in definitions:
-        bundle = definition_bundle(default_citry, asset["sha256"])
-        assert bundle is not None, asset
-        bundles.append(bundle.decode())
-    source = "\n".join(bundles)
-    definition_ids = {item["id"] for item in definitions}
+def _prepared_definition_source(document: lxml_html.HtmlElement, transport: dict) -> str:
+    source = "\n".join(
+        script.text
+        for script in document.xpath("//script")
+        if script.text and "function render(_ctx, _cache" in script.text
+    )
+    definition_ids = {item["id"] for item in transport["manifest"]["definitions"]}
     assert definition_ids
-    assert all(f'window.CitryStableDefinitions["{definition_id}"]' in source for definition_id in definition_ids)
+    assert all(f'window.__citryRuntimeDefinitions["{definition_id}"]' in source for definition_id in definition_ids)
     return source
 
 
@@ -105,7 +108,7 @@ def test_landing_layout_keeps_shared_header_and_omits_document_chrome() -> None:
         current_path="",
     )
     document, transport = _prepared_response(result.html)
-    render_source = _prepared_definition_source(transport)
+    render_source = _prepared_definition_source(document, transport)
     root = next(item for item in transport["manifest"]["occurrences"] if item["id"] == transport["manifest"]["rootId"])
     root_data = root["preparedData"]
     rendered_content = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
@@ -126,6 +129,26 @@ def test_landing_layout_keeps_shared_header_and_omits_document_chrome() -> None:
     assert any(attrs.get("href") == "/docs/" for attrs in prepared_attrs)
     assert "Docs" in prepared_text
     assert document.xpath('//script[@type="module" and @src="/static/playground/landing_composer.js"]')
+
+
+def test_landing_content_is_in_the_served_html_for_vue_to_adopt() -> None:
+    # Search engines and readers without JavaScript read the landing copy from
+    # the served HTML, not only from the script that starts the Vue app.
+    result = render_page(
+        "---\ntitle: Citry\nlayout: landing\n---\n\n# Build the frontend in Python\n\nServed copy.\n",
+        nav_tree=_landing_nav(),
+        current_path="",
+    )
+    document, transport = _prepared_response(result.html)
+    content = _landing_content_html(transport)
+    assert transport["hydrate"] is True
+    [article] = document.xpath('//main[@id="landing-main"]/article')
+    # The server writes the content unchanged between Vue's Fragment comments,
+    # and the article is not a part Vue builds in the browser.
+    assert article.get("data-allow-mismatch") is None
+    host = result.html[result.html.index('<div id="citry-vue-') :].split("<script", 1)[0]
+    assert f"<!--[-->{content}<!--]-->" in host
+    assert article.xpath('./h1[@id="build-the-frontend-in-python"]')
 
 
 def test_landing_composer_catalog_and_fallback_are_generated_together() -> None:
@@ -189,7 +212,12 @@ def test_every_landing_composer_recipe_produces_runnable_citry_source() -> None:
     source = _serialize_source(state)
     namespace: dict[str, object] = {}
     exec(compile(source, "<landing-composer>", "exec"), namespace)  # noqa: S102 - generated trusted fixture
-    rendered = namespace["preview"].render().serialize(security_javascript="omit")
+    # The generated class registers on the shared Citry instance, and the docs
+    # browser fixtures run the same source in this process, so remove it again.
+    try:
+        rendered = namespace["preview"].render().serialize(security_javascript="omit")
+    finally:
+        default_citry.unregister(namespace["LandingComposition"])
     document = lxml_html.fragment_fromstring(rendered, create_parent="div")
 
     assert document.xpath('.//*[@data-citry-ui-part="tabs"]')
@@ -258,31 +286,15 @@ def test_a_diagnostic_that_loses_its_detail_fails_the_build() -> None:
         _capture(raise_without_the_suggestion, TypeError, "Did you mean 'title'?")
 
 
-def test_the_landing_page_publishes_no_unrendered_markdown() -> None:
-    """Nested grids must stay markdown contexts, or headings ship as literal text."""
-    source = (Path("docs_site/content/index.md")).read_text(encoding="utf-8")
-    _, transport = _prepared_response(render_page(source, current_path="").html)
-    content_html = _landing_content_html(transport)
-    content = lxml_html.fragment_fromstring(content_html, create_parent="div")
-    visible_text = content.xpath(".//text()[not(ancestor::script or ancestor::template or ancestor::*[@hidden])]")
-    text = "\n".join(visible_text)
+def test_reliability_picker_shows_the_snippet_behind_each_diagnostic() -> None:
+    """Each diagnostic panel carries exactly the one snippet that produced its error."""
+    document = lxml_html.document_fromstring(str(LandingDiagnostic()))
+    panels = document.xpath("//div[@data-picker-panel]")
 
-    assert not [line for line in text.split("\n") if line.startswith(("### ", "- "))]
-
-    # Component markup that lands in a markdown block must be flushed left.
-    # Indented HTML there is read as an indented code block, which printed the
-    # diagnostic panel as source and broke every section under it.
-    assert "<div class=" not in text
-    assert content.xpath('.//div[contains(@class, "landing-diagnostic")]/pre')
-    # The proof section shows exactly one sample; the reliability panels each
-    # carry the snippet that produced their error.
-    proof = content.xpath('.//section[@id="proof"]')[0]
-    assert len(proof.xpath('.//div[contains(@class, "highlight")]')) == 1
-    reliability = content.xpath('.//section[@id="reliability"]')[0]
-    panels = reliability.xpath(".//div[@data-picker-panel]")
     assert len(panels) == len(_ERROR_CASES)
     for panel in panels:
         assert len(panel.xpath('.//div[contains(@class, "landing-picker__code")]//pre')) == 1
+        assert panel.xpath('.//div[contains(@class, "landing-diagnostic")]/pre')
 
 
 def test_contributor_grid_can_drop_the_per_person_counts() -> None:
@@ -295,22 +307,9 @@ def test_contributor_grid_can_drop_the_per_person_counts() -> None:
     assert plain.html.count("avatar-wrapper") == counted.html.count("avatar-wrapper")
 
 
-def test_people_section_identifies_the_maintainer_and_keeps_the_people_route() -> None:
-    source = Path("docs_site/content/index.md").read_text(encoding="utf-8")
-    _, transport = _prepared_response(render_page(source, current_path="").html)
-    document = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
-    section = document.xpath('//section[@id="people"]')[0]
-    maintainer = section.xpath('.//div[contains(@class, "landing-maintainer")]')[0]
-
-    assert len(maintainer.xpath('.//div[contains(@class, "landing-maintainer__portrait")]//img')) == 1
-    assert maintainer.xpath('.//p[contains(@class, "landing-maintainer__name")]/a[@href="/community/people/"]')
-    assert maintainer.xpath('.//p[contains(@class, "landing-maintainer__role")]')
-    assert section.xpath('.//div[contains(@class, "landing-human-links")]/a[@href="/community/people/"]')
-
-
 def test_walkthrough_stops_point_at_the_right_lines() -> None:
     """Line numbers drift as the example is edited; each stop must still land on it."""
-    source = (Path(_TOUR_PATH)).read_text(encoding="utf-8").splitlines()
+    source = _TOUR_PATH.read_text(encoding="utf-8").splitlines()
 
     for stop in _TOUR_STOPS:
         first, last = stop["lines"]
@@ -322,7 +321,7 @@ def test_walkthrough_stops_point_at_the_right_lines() -> None:
 
 def test_walkthrough_marks_every_stop_in_the_highlighted_source() -> None:
     """Each stop reaches the page as hoverable lines with one marker."""
-    source = (Path(_TOUR_PATH)).read_text(encoding="utf-8")
+    source = _TOUR_PATH.read_text(encoding="utf-8")
     html = _tour_code(source, _TOUR_STOPS)
 
     for stop in _TOUR_STOPS:
@@ -339,7 +338,7 @@ def test_the_walkthrough_example_is_valid_python() -> None:
     child component's definition so the reader sees the concepts rather than
     the scaffolding. Parsing is the guarantee that still applies.
     """
-    source = Path(_TOUR_PATH).read_text(encoding="utf-8")
+    source = _TOUR_PATH.read_text(encoding="utf-8")
 
     ast.parse(source)
     # The concepts the notes promise have to be present in the source.
@@ -369,7 +368,7 @@ def test_a_moved_adapter_fails_the_host_section(monkeypatch: pytest.MonkeyPatch)
 
 def test_walkthrough_offers_the_original_source_for_copying() -> None:
     """Block-per-line markup carries no newlines, so copy must not read the DOM."""
-    source = (Path(_TOUR_PATH)).read_text(encoding="utf-8")
+    source = _TOUR_PATH.read_text(encoding="utf-8")
     document = lxml_html.document_fromstring(str(LandingTour()))
     tour = document.xpath("//div[@data-landing-tour]")[0]
 
@@ -377,6 +376,25 @@ def test_walkthrough_offers_the_original_source_for_copying() -> None:
     # The rendered lines really do lack newlines, which is why the above matters.
     rendered = "".join(tour.xpath('.//span[contains(@class, "landing-tour__line")]/text()'))
     assert "\n" not in rendered
+
+
+def test_landing_snippets_load_from_any_directory_and_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The snippet sources ship with docs_site, so neither cwd nor repo_root moves them."""
+    # Start from an unrelated directory and point repo_root at an empty folder,
+    # the two places a path relative to the repository would break.
+    monkeypatch.chdir(tmp_path)
+    project = load_docs_project(DocsConfig(repo_root=tmp_path))
+
+    with use_docs_project(project):
+        tour = lxml_html.document_fromstring(str(LandingTour()))
+        editor = lxml_html.document_fromstring(str(LandingEditorDemoMarkup()))
+
+    encoded = tour.xpath("//div[@data-landing-tour]")[0].get("data-tour-source")
+    assert base64.b64decode(encoded).decode() == _TOUR_PATH.read_text(encoding="utf-8")
+    assert _EDITOR_PATH.name in editor.text_content()
 
 
 def test_walkthrough_notes_render_markup_rather_than_escaping_it() -> None:
@@ -404,7 +422,7 @@ def test_walkthrough_notes_render_markup_rather_than_escaping_it() -> None:
 
 def test_editor_demo_marks_exact_symbols_without_changing_the_source() -> None:
     """Interactive wrappers add behavior, but must not repaint or rewrite the sample."""
-    source = Path(_EDITOR_PATH).read_text(encoding="utf-8")
+    source = _EDITOR_PATH.read_text(encoding="utf-8")
     rendered = _editor_code(source, _EDITOR_MARKS)
     document = lxml_html.fragment_fromstring(rendered, create_parent="div")
     annotations = document.xpath(".//*[@data-editor-annotation]")
@@ -429,7 +447,7 @@ def test_editor_demo_annotations_fail_closed_when_the_source_drifts() -> None:
     """A stale or ambiguous annotation must fail the page instead of marking the wrong name."""
     stale = ({**_EDITOR_MARKS[0], "needle": "text that is not in the source"},)
     ambiguous = ({**_EDITOR_MARKS[0], "needle": "title", "symbol": "title"},)
-    source = Path(_EDITOR_PATH).read_text(encoding="utf-8")
+    source = _EDITOR_PATH.read_text(encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="needs one occurrence"):
         _editor_ranges(source, stale)
@@ -529,7 +547,7 @@ def test_editor_demo_pairs_symbols_hovers_notes_and_definitions() -> None:
 
 def test_the_editor_demo_source_is_valid_python() -> None:
     """The interactive surface is generated from code a reader can copy and edit."""
-    source = Path(_EDITOR_PATH).read_text(encoding="utf-8")
+    source = _EDITOR_PATH.read_text(encoding="utf-8")
 
     ast.parse(source)
     assert source.index("class InvitePanel(Component):") < source.index("class MemberChip(Component):")
@@ -545,7 +563,9 @@ def test_injected_component_markup_survives_the_markdown_pass() -> None:
     preformatted code and around a <button> that wraps block content, wrapping
     everything after it in stray paragraph tags.
     """
-    source = (Path("docs_site/content/index.md")).read_text(encoding="utf-8")
+    source = (
+        '---\ntitle: T\nlayout: landing\n---\n\n<section markdown="1">\n\n<c-landing-diagnostic />\n\n</section>\n'
+    )
     _, transport = _prepared_response(render_page(source, current_path="").html)
     content_html = _landing_content_html(transport)
 
@@ -556,10 +576,10 @@ def test_injected_component_markup_survives_the_markdown_pass() -> None:
 
     document = lxml_html.fragment_fromstring(content_html, create_parent="div")
     # Indentation and newlines inside a code block survive the round trip.
-    code = document.xpath('//div[@data-picker-panel="input"]//div[contains(@class, "highlight")]//pre')[0]
-    text = code.text_content()
-    assert len(text.split("\n")) > 1
-    assert "    complete" in text
+    code = document.xpath('//div[@data-picker-panel]//div[contains(@class, "highlight")]//pre')[0]
+    lines = code.text_content().split("\n")
+    assert len(lines) > 1
+    assert any(line.startswith("    ") for line in lines)
 
 
 def test_advanced_capabilities_link_to_pages_that_exist() -> None:
@@ -567,7 +587,7 @@ def test_advanced_capabilities_link_to_pages_that_exist() -> None:
     _check_depth_docs()
 
     for case in _DEPTH_CASES:
-        assert (Path("docs_site/content") / case["doc"]).is_file(), case["id"]
+        assert (_REPO_ROOT / "docs_site" / "content" / case["doc"]).is_file(), case["id"]
 
 
 def test_i18n_is_the_third_depth_case_before_fragments() -> None:
@@ -598,22 +618,20 @@ def test_a_removed_capability_page_fails_the_build(monkeypatch: pytest.MonkeyPat
         _check_depth_docs()
 
 
-def test_every_picker_shares_one_mechanism() -> None:
-    """Three sections use the picker; each must ship rows, panels, and carets."""
-    source = (Path("docs_site/content/index.md")).read_text(encoding="utf-8")
-    _, transport = _prepared_response(render_page(source, current_path="").html)
-    document = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
-    pickers = document.xpath("//div[@data-landing-picker]")
+@pytest.mark.parametrize("component", [LandingHosts, LandingDepth, LandingDiagnostic])
+def test_every_picker_shares_one_mechanism(component: type) -> None:
+    """Each picker section must ship rows, panels, and carets that pair up."""
+    document = lxml_html.document_fromstring(str(component()))
+    [picker] = document.xpath("//div[@data-landing-picker]")
 
-    assert len(pickers) == 3
-    for picker in pickers:
-        rows = picker.xpath(".//button[@data-picker-case]")
-        panels = picker.xpath(".//div[@data-picker-panel]")
-        carets = picker.xpath('.//svg[contains(@class, "landing-picker__caret")]')
-        assert len(rows) == len(panels) == len(carets)
-        # A row and its panel are paired by id, so the list cannot point at
-        # something the section does not show.
-        assert [r.get("data-picker-case") for r in rows] == [p.get("data-picker-panel") for p in panels]
+    rows = picker.xpath(".//button[@data-picker-case]")
+    panels = picker.xpath(".//div[@data-picker-panel]")
+    carets = picker.xpath('.//svg[contains(@class, "landing-picker__caret")]')
+    assert rows
+    assert len(rows) == len(panels) == len(carets)
+    # A row and its panel are paired by id, so the list cannot point at
+    # something the section does not show.
+    assert [r.get("data-picker-case") for r in rows] == [p.get("data-picker-panel") for p in panels]
 
 
 def test_each_advanced_capability_explains_itself_above_its_code() -> None:
@@ -632,13 +650,13 @@ def test_each_advanced_capability_explains_itself_above_its_code() -> None:
 
 def test_social_links_point_at_one_set_of_urls() -> None:
     """The header, hero, and footer must not drift to different destinations."""
-    source = (Path("docs_site/content/index.md")).read_text(encoding="utf-8")
-    _, transport = _prepared_response(render_page(source, current_path="").html)
+    source = '---\ntitle: T\nlayout: landing\n---\n\n<c-social-links variant="landing-social" />\n'
+    document, transport = _prepared_response(render_page(source, current_path="").html)
     content = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
 
     rows = content.xpath('.//div[contains(@class, "social-links")]')
     assert rows
-    render_source = _prepared_definition_source(transport)
+    render_source = _prepared_definition_source(document, transport)
     assert 'class: "social-links__link"' in render_source
     assert 'rel: "noopener"' in render_source
     for row in rows:

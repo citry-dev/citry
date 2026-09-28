@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+import pytest
 from lxml import html as lxml_html
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
@@ -14,6 +15,7 @@ from docs_site._internal import serve
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
 from docs_site._internal.local_playground_runtime import (
+    CORE_WHEEL_ENV,
     LocalPlaygroundRuntime,
     LocalPlaygroundRuntimeError,
     load_local_playground_runtime,
@@ -38,12 +40,10 @@ def _client(tmp_path: Path) -> TestClient:
 
 def _prepared_configuration(html: str) -> dict[str, object]:
     document = lxml_html.document_fromstring(html)
-    marker = "CitryStable.startPrepared("
-    bootstraps = [script.text or "" for script in document.xpath("//script") if marker in (script.text or "")]
-    assert len(bootstraps) == 1
-    source = bootstraps[0]
-    start = source.index(marker) + len(marker)
-    configuration, _ = json.JSONDecoder().raw_decode(source[start:])
+    # The page carries its start configuration as one JSON data block.
+    blocks = document.xpath('//script[@type="application/json"][@data-citry-vue-document]')
+    assert len(blocks) == 1
+    configuration = json.loads(blocks[0].text or "")
     assert type(configuration) is dict
     return configuration
 
@@ -331,28 +331,21 @@ def _record_create_app(monkeypatch) -> list[LocalPlaygroundRuntime | None]:
         return Starlette()
 
     monkeypatch.setattr(serve, "create_app", fake_create_app)
+    # A developer shell may select a workspace core wheel; these tests describe
+    # the default authoring server unless they set the variable themselves.
+    monkeypatch.delenv(CORE_WHEEL_ENV, raising=False)
     return seen
 
 
 def test_create_local_app_keeps_the_generated_wheel_directory_alive(monkeypatch) -> None:
     built: list[Path] = []
-    core_wheel_path = Path("citry-core.whl")
 
-    monkeypatch.setenv("CITRY_PLAYGROUND_CORE_WHEEL", str(core_wheel_path))
-
-    def fake_build(*, repo_root: Path, output_dir: Path, core_wheel: Path) -> LocalPlaygroundRuntime:  # noqa: ARG001
+    def fake_build(*, repo_root: Path, output_dir: Path, core_wheel: Path | None) -> LocalPlaygroundRuntime:  # noqa: ARG001
         built.append(output_dir)
-        assert core_wheel == core_wheel_path
         return LocalPlaygroundRuntime(
             directory=output_dir,
             manifest_path=output_dir / "runtime.json",
-            wheel_names=frozenset(
-                {
-                    "citry_core-1.5.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
-                    "citry-0.4.2-py3-none-any.whl",
-                    "citry_ui-0.1.0-py3-none-any.whl",
-                }
-            ),
+            wheel_names=frozenset({"citry_ui-0.1.0-py3-none-any.whl"}),
         )
 
     monkeypatch.setattr(serve, "build_local_playground_runtime", fake_build)
@@ -364,13 +357,7 @@ def test_create_local_app_keeps_the_generated_wheel_directory_alive(monkeypatch)
         LocalPlaygroundRuntime(
             directory=built[0],
             manifest_path=built[0] / "runtime.json",
-            wheel_names=frozenset(
-                {
-                    "citry_core-1.5.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
-                    "citry-0.4.2-py3-none-any.whl",
-                    "citry_ui-0.1.0-py3-none-any.whl",
-                }
-            ),
+            wheel_names=frozenset({"citry_ui-0.1.0-py3-none-any.whl"}),
         )
     ]
     # The wheels are served from this directory for as long as the app lives.
@@ -380,30 +367,13 @@ def test_create_local_app_keeps_the_generated_wheel_directory_alive(monkeypatch)
     owner.cleanup()
 
 
-def test_create_local_app_uses_the_published_runtime_without_a_core_wheel(monkeypatch, capsys) -> None:
-    monkeypatch.delenv("CITRY_PLAYGROUND_CORE_WHEEL", raising=False)
-    seen = _record_create_app(monkeypatch)
-
-    app = serve.create_local_app()
-
-    assert isinstance(app, Starlette)
-    assert seen == [None]
-    printed = capsys.readouterr().out
-    assert "CITRY_PLAYGROUND_CORE_WHEEL is not set" in printed
-    assert "committed published runtime" in printed
-
-
 def test_create_local_app_serves_the_committed_runtime_when_the_local_wheel_is_rejected(monkeypatch, capsys) -> None:
     # The workspace Citry UI regularly needs an unreleased Citry, and the dev
     # server has to keep serving every other page while that is true.
     attempted: list[Path] = []
-    core_wheel_path = Path("citry-core.whl")
 
-    monkeypatch.setenv("CITRY_PLAYGROUND_CORE_WHEEL", str(core_wheel_path))
-
-    def fake_build(*, repo_root: Path, output_dir: Path, core_wheel: Path) -> LocalPlaygroundRuntime:  # noqa: ARG001
+    def fake_build(*, repo_root: Path, output_dir: Path, core_wheel: Path | None) -> LocalPlaygroundRuntime:  # noqa: ARG001
         attempted.append(output_dir)
-        assert core_wheel == core_wheel_path
         raise LocalPlaygroundRuntimeError("local Citry UI 0.1.0 does not accept the playground's Citry 0.3.1")
 
     monkeypatch.setattr(serve, "build_local_playground_runtime", fake_build)
@@ -417,7 +387,7 @@ def test_create_local_app_serves_the_committed_runtime_when_the_local_wheel_is_r
     assert not attempted[0].exists()
     printed = capsys.readouterr().out
     assert "does not accept the playground's Citry 0.3.1" in printed
-    assert "committed published runtime" in printed
+    assert "committed playground runtime" in printed
 
 
 def test_serve_404_for_unknown_page(tmp_path: Path) -> None:
@@ -533,3 +503,25 @@ def test_serve_blog_uses_stable_routes_and_previews_atom_feed(tmp_path: Path) ->
     link = root.find("atom:entry/atom:link", ns)
     assert link is not None
     assert link.attrib["href"] == "http://testserver/preview/blog/first-post/"
+
+
+def test_create_local_app_stops_when_the_requested_workspace_core_cannot_be_used(monkeypatch, tmp_path: Path) -> None:
+    # Falling back here would run the published Citry while the developer
+    # believes the browser checks exercise this checkout.
+    core_wheel = tmp_path / "citry_core-1.6.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+    core_wheel.write_bytes(b"wheel")
+    requested: list[Path | None] = []
+
+    def fake_build(*, repo_root: Path, output_dir: Path, core_wheel: Path | None) -> LocalPlaygroundRuntime:  # noqa: ARG001
+        requested.append(core_wheel)
+        raise LocalPlaygroundRuntimeError("local citry 0.5.0 does not accept citry-core 1.6.0")
+
+    monkeypatch.setattr(serve, "build_local_playground_runtime", fake_build)
+    seen = _record_create_app(monkeypatch)
+    monkeypatch.setenv(CORE_WHEEL_ENV, str(core_wheel))
+
+    with pytest.raises(LocalPlaygroundRuntimeError, match=r"does not accept citry-core 1\.6\.0"):
+        serve.create_local_app()
+
+    assert requested == [core_wheel]
+    assert seen == []

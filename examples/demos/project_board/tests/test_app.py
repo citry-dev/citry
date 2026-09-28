@@ -23,7 +23,7 @@ def test_page_and_citry_runtime_are_served() -> None:
     assert "<body" in page.text
     assert '<div id="citry-vue-' in page.text
     assert '"host":"#citry-vue-' in page.text
-    assert "CitryStable.startPrepared(" in page.text
+    assert "data-citry-vue-document" in page.text
     assert "/citry/citry.js" in page.text
     assert "ext/events" in page.text
     assert runtime.status_code == 200

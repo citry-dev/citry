@@ -17,14 +17,16 @@ _RUNTIME = Path(__file__).parents[1] / "static" / "playground" / "runtime.json"
 
 def test_executor_selects_vue_or_published_events_dispatcher() -> None:
     """The same executor supports workspace and published Citry runtimes."""
+    # The executor picks its dispatcher when it is loaded, so load it once
+    # normally and once with the renderer module hidden, as on a published
+    # Citry release that predates per-engine renderer selection.
     program = f"""
 import builtins
 import json
 import runpy
 
 adapter = runpy.run_path({_EXECUTOR.as_posix()!r})
-engine = adapter["citry"]
-workspace = adapter["_select_events_dispatcher"](engine)
+workspace = adapter["dispatcher_for"](adapter["citry"])
 
 real_import = builtins.__import__
 def missing_renderer(name, globals=None, locals=None, fromlist=(), level=0):
@@ -33,7 +35,10 @@ def missing_renderer(name, globals=None, locals=None, fromlist=(), level=0):
     return real_import(name, globals, locals, fromlist, level)
 
 builtins.__import__ = missing_renderer
-published = adapter["_select_events_dispatcher"](engine)
+published_adapter = runpy.run_path({_EXECUTOR.as_posix()!r})
+builtins.__import__ = real_import
+assert published_adapter["dispatcher_for"] is None
+published = published_adapter["EventsDispatcher"]()
 print(json.dumps({{"workspace": workspace._preferred_renderer, "published": published._preferred_renderer}}))
 """
     completed = subprocess.run(

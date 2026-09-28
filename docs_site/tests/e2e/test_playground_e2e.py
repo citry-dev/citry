@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import urllib.request
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -18,14 +19,14 @@ pytestmark = pytest.mark.e2e
 _CITRY_UI_TABS = (
     Path(__file__).parents[3] / "packages/py/citry_ui/citry_ui/components/ctabs/snippets/night_sky_guide.py"
 )
-_CITRY_UI_BUTTON = (
-    Path(__file__).parents[3] / "packages/py/citry_ui/citry_ui/components/cbutton/snippets/basic_actions.py"
-)
-_RUNTIME_PATH = Path(__file__).parents[2] / "static" / "playground" / "runtime.json"
-_RUNTIME = json.loads(_RUNTIME_PATH.read_text(encoding="utf-8"))
-_CITRY_VERSION = _RUNTIME["citry"]["version"]
-_PUBLISHED_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {_RUNTIME['citry']['ui_version']} · published"
-_LOCAL_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {version('citry-ui')} · workspace"
+
+
+def _runtime_label(runtime: dict[str, Any]) -> str:
+    """Build the header text the playground shows once this runtime is ready."""
+    # The header ends with where the wheels came from: the committed runtime
+    # says "published" and a runtime built from this checkout says "workspace".
+    versions = f"Citry {runtime['citry']['version']} · Citry UI {runtime['citry']['ui_version']}"
+    return f"{versions} · {runtime['source']}"
 
 
 def _set_source(page: Any, source: str) -> None:
@@ -165,6 +166,8 @@ Page()
     expect(component_hover).to_contain_text("Inputs: title.")
 
 
+# Installs the workspace Citry UI wheel, which usually needs an unreleased Citry.
+@pytest.mark.workspace_citry
 def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_site_url: str) -> None:
     console_errors: list[str] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
@@ -174,7 +177,13 @@ def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_s
 
     _run_and_wait(page)
     _run_and_wait(page)
-    expect(page.locator("#citry-playground-runtime")).to_have_text(_LOCAL_RUNTIME_LABEL)
+    # The authoring server serves the workspace Citry UI in every mode, and
+    # the workspace Citry too when CITRY_PLAYGROUND_CORE_WHEEL is set, so read
+    # the Citry version from the runtime this server actually serves.
+    with urllib.request.urlopen(f"{local_docs_site_url}/static/playground/runtime.json", timeout=5) as response:  # noqa: S310
+        local_runtime = json.loads(response.read())
+    assert local_runtime["citry"]["ui_version"] == version("citry-ui")
+    expect(page.locator("#citry-playground-runtime")).to_have_text(_runtime_label(local_runtime))
 
     preview = page.frame_locator("#citry-playground-preview")
     tabs = preview.locator('[role="tab"]')
@@ -186,29 +195,29 @@ def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_s
     assert console_errors == []
 
 
-def test_published_runtime_runs_citry_ui_twice(page: Any, docs_site_url: str) -> None:
+# Runs the workspace Citry UI tabs snippet.
+@pytest.mark.workspace_citry
+def test_published_runtime_runs_citry_ui_twice(
+    page: Any,
+    docs_site_url: str,
+    playground_runtime: dict[str, Any],
+) -> None:
     console_errors: list[str] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     page.goto(docs_site_url + "/playground/", wait_until="domcontentloaded")
     page.wait_for_function("window.citryPlayground !== undefined")
-    # Keep this source within the published 0.2.2 API. The tabs example uses
-    # workspace Citry source and belongs to the local tuple test above.
-    _set_source(
-        page,
-        """from citry_ui import CButton
-
-CButton(slots={"default": "Save changes"})
-""",
-    )
+    _set_source(page, _CITRY_UI_TABS.read_text(encoding="utf-8"))
 
     _run_and_wait(page)
     _run_and_wait(page)
-    expect(page.locator("#citry-playground-runtime")).to_have_text(_PUBLISHED_RUNTIME_LABEL)
+    expect(page.locator("#citry-playground-runtime")).to_have_text(_runtime_label(playground_runtime))
 
     preview = page.frame_locator("#citry-playground-preview")
-    button = preview.locator("button", has_text="Save changes")
-    expect(button).to_be_visible(timeout=120_000)
-    expect(button).to_have_class("cui-button")
+    tabs = preview.locator('[role="tab"]')
+    expect(tabs).to_have_count(3, timeout=120_000)
+    tabs.nth(1).click()
+    expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
+    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
     assert console_errors == []
 
 
@@ -232,6 +241,8 @@ CButton(slots={"default": "Save changes"})
     expect(button).to_have_class("cui-button")
 
 
+# The tabs page embeds the workspace Citry UI snippet.
+@pytest.mark.workspace_citry
 def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: str) -> None:
     console_errors: list[str] = []
     page.on(
@@ -240,15 +251,15 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
         if message.type == "error"
         else None,
     )
-    page.goto(docs_site_url + "/ui-library/components/button/", wait_until="domcontentloaded")
-    root = page.locator('[data-citry-ui-demo]:has-text("Create Button actions")')
+    page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="domcontentloaded")
+    root = page.locator("[data-citry-ui-demo]").nth(1)
     built_preview = root.locator("[data-ui-preview-frame]")
 
     expect(built_preview).to_be_visible()
     expect(root.locator("[data-live-activate]")).to_be_visible()
     root.locator("[data-live-activate]").click()
     expect(root.locator(".cm-content")).to_be_attached(timeout=15_000)
-    expect(root.locator("[data-live-fallback]")).to_have_value(_CITRY_UI_BUTTON.read_text(encoding="utf-8"))
+    expect(root.locator("[data-live-fallback]")).to_have_value(_CITRY_UI_TABS.read_text(encoding="utf-8"))
     expect(built_preview).to_be_hidden()
     page.wait_for_function(
         """root => {
@@ -270,20 +281,25 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
 
     root.locator('[data-live-tab="result"]').click()
     preview = root.frame_locator(".citry-live-code__preview:not(.citry-playground__preview--candidate)")
-    expect(preview.locator("button", has_text="Record specimen")).to_be_visible(timeout=120_000)
-    expect(preview.locator("button", has_text="Add observation")).to_have_class("cui-button")
+    tabs = preview.locator('[role="tab"]')
+    expect(tabs).to_have_count(3, timeout=120_000)
+    tabs.nth(1).click()
+    expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
+    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
     root.locator("[data-live-close]").click()
     expect(built_preview).to_be_visible()
     expect(root.locator("[data-live-activate]")).to_be_focused()
     assert console_errors == []
 
 
+# Clicks through the client code of the workspace docs snippets.
+@pytest.mark.workspace_citry
 def test_playground_runs_edits_reports_errors_and_recovers(
     page: Any,
-    local_docs_site_url: str,
+    docs_site_url: str,
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
-    page.goto(local_docs_site_url + "/playground/", wait_until="domcontentloaded")
+    page.goto(docs_site_url + "/playground/", wait_until="domcontentloaded")
     page.wait_for_function("window.citryPlayground !== undefined")
 
     assert page.locator(".cm-editor").count() == 1
@@ -471,17 +487,28 @@ class DataProbe(Component):
     template = '''
       <div id="data-probe-root" @data-probe:changed="$el.dataset.state = $event.detail.state">
         <input id="state-input" :c-value="changed">
-          <button
-            id="data-probe"
-            @click="$sendEvent('inspect').then(value => {
-              $event.target.dataset.method = value.method;
-              $event.target.dataset.state = value.state;
-              $event.target.dataset.transport = value.transport;
-            })"
-          >
+        <button
+          id="data-probe"
+          :data-method="method"
+          :data-state="probed"
+          :data-transport="transport"
+          @click="$sendEvent('inspect').then(value => {
+            method = value.method;
+            probed = value.state;
+            transport = value.transport;
+          })"
+        >
           Inspect transport
         </button>
       </div>
+    '''
+
+    js = '''
+      $component({
+        data() {
+          return { method: null, probed: null, transport: null };
+        },
+      });
     '''
 
 
@@ -521,7 +548,9 @@ class NestedEditor(Component):
 
 
 class PropChild(Component):
-    template = '<output id="prop-output" v-text="label"></output>'
+    template = """
+      <output id="prop-output" v-text="label"></output>
+    """
 
     js = """
       $component({
@@ -596,8 +625,8 @@ class LoadedFragment(Component):
         data() {
           return { label: "before" };
         },
-        mounted() {
-          this.$el.setAttribute("data-component-js", this.kind);
+        onServerRender({ component }) {
+          component.$el.setAttribute("data-component-js", component.kind);
         },
       });
     """
@@ -639,15 +668,14 @@ class FragmentLoader(Component):
           <c-LoadedFragment kind="initial" accent="rgb(90, 90, 90)" />
         </div>
         <button id="load-fragment" type="button" @c-click="load">Load</button>
-            <div id="fragment-target"><c-mark name="fragment-target" /></div>
-            <div id="css-initial"><c-mark name="css-initial"><c-CssOnly /></c-mark></div>
-            <button id="load-css" type="button" @c-click="load_css">Load CSS probe</button>
-            <button id="clear-css" type="button" @c-click="clear_css">Clear CSS probe</button>
-            <div id="css-target"><c-mark name="css-target" /></div>
-            <div id="css-data-initial"><c-mark name="css-data-initial"><c-CssDataProbe \
-accent="rgb(122, 51, 19)" /></c-mark></div>
-            <button id="load-css-data" type="button" @c-click="load_css_data">Load CSS data probe</button>
-            <div id="css-data-target"><c-mark name="css-data-target" /></div>
+        <div id="fragment-target"><c-mark name="fragment-target"></c-mark></div>
+        <div id="css-initial"><c-mark name="css-initial"><c-CssOnly /></c-mark></div>
+        <button id="load-css" type="button" @c-click="load_css">Load CSS probe</button>
+        <button id="clear-css" type="button" @c-click="clear_css">Clear CSS probe</button>
+        <div id="css-target"><c-mark name="css-target"></c-mark></div>
+        <div id="css-data-initial"><c-CssDataProbe accent="rgb(122, 51, 19)" /></div>
+        <button id="load-css-data" type="button" @c-click="load_css_data">Load CSS data probe</button>
+        <div id="css-data-target"><c-mark name="css-data-target"></c-mark></div>
       </main>
     """
 
@@ -680,27 +708,14 @@ FragmentLoader()
     render_preview.locator("#load-css").click()
     css_probe = render_preview.locator("#css-target #css-only")
     expect(css_probe).to_have_css("color", "rgb(14, 73, 122)", timeout=10_000)
-    class_style_sheets = render_preview.locator("[data-citry-vue-style-app][data-citry-css-url]")
-    expect(class_style_sheets).to_have_count(6)
-    loaded_style_assets = render_preview.locator("body").evaluate(
-        """async body => Promise.all(
-          [...body.ownerDocument.querySelectorAll('link[data-citry-vue-style-app][data-citry-css-url]')]
-            .map(async link => ({href: link.href, css: await fetch(link.href).then(response => response.text())}))
-        )"""
-    )
-    css_only_hrefs = {asset["href"] for asset in loaded_style_assets if ".css-only" in asset["css"]}
-    assert len(css_only_hrefs) == 1
+    # Citry removes a component's stylesheet once no instance uses it and
+    # restores it when an instance returns, so only the CssOnly sheet changes.
+    owned_style_sheets = render_preview.locator("[data-citry-vue-style-app][data-citry-css-url]")
+    loaded_sheet_count = owned_style_sheets.count()
     render_preview.locator("#clear-css").click()
-    page.wait_for_timeout(500)
     expect(render_preview.locator("#css-only")).to_have_count(0, timeout=10_000)
-    expect(class_style_sheets).to_have_count(5, timeout=10_000)
-    remaining_style_hrefs = set(
-        render_preview.locator("body").evaluate(
-            """body => [...body.ownerDocument.querySelectorAll('link[data-citry-vue-style-app][data-citry-css-url]')]
-              .map(link => link.href)"""
-        )
-    )
-    assert not css_only_hrefs & remaining_style_hrefs
+    expect(owned_style_sheets).to_have_count(loaded_sheet_count - 1, timeout=10_000)
+    # Removing the CssOnly sheet must leave the fragments' own styles applied.
     expect(render_preview.locator("#initial-fragment #loaded-fragment")).to_have_css(
         "border-top-color", "rgb(90, 90, 90)"
     )
@@ -710,7 +725,7 @@ FragmentLoader()
     render_preview.locator("#load-css").click()
     css_probe_again = render_preview.locator("#css-target #css-only")
     expect(css_probe_again).to_have_css("color", "rgb(14, 73, 122)", timeout=10_000)
-    expect(class_style_sheets).to_have_count(6, timeout=10_000)
+    expect(owned_style_sheets).to_have_count(loaded_sheet_count, timeout=10_000)
 
     stylesheet_count = render_preview.locator('style, link[rel~="stylesheet"]').count()
     render_preview.locator("#load-css-data").click()

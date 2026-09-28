@@ -22,7 +22,7 @@ def test_document_contains_prepared_vue_data_and_local_assets() -> None:
     assert "Project Explorer" in document
     assert "Atlas" in document
     assert "_ctx.tipsOpen = !_ctx.tipsOpen" in document
-    assert "CitryStable.startPrepared(" in document
+    assert "data-citry-vue-document" in document
     assert '"preparedData"' in document
     assert "<style" in document
     assert "<script" in document

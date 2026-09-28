@@ -145,15 +145,6 @@ class AccountDashboard(Component):
               attr='aria-label',
               name=name,
             )"
-            x-data="{
-              'accountName': accountName,
-              'balance': balanceText,
-              'completion': completionText,
-              'lazyMessage': lazyMessage,
-              'lazyText': '',
-              'localizedAmount': localizedAmount,
-              'parseState': parseState,
-            }"
           >
             <p class="i18n-demo__eyebrow">
               {{ tr("demo-account-kicker") }}
@@ -200,18 +191,14 @@ class AccountDashboard(Component):
             <section class="i18n-demo__browser">
               <h2>{{ tr("demo-account-browser-heading") }}</h2>
               <p
-                data-browser-status
-                v-text="$i18n.tr('demo-account-js-status')"
-              >{{ tr("demo-account-js-status") }}</p>
-              <p
-                x-text="$i18n.tr(
+                v-text="$i18n.tr(
                   'demo-account-live-status',
                   { name: accountName },
                 )"
               ></p>
               <output
-                x-text="$i18n.format.currency(
-                  balance,
+                v-text="$i18n.format.currency(
+                  balanceText,
                   'USD',
                   { format: 'account-balance' },
                 )"
@@ -220,22 +207,47 @@ class AccountDashboard(Component):
                 <span>{{ tr("demo-account-number-input-label") }}</span>
                 <input
                   type="text"
-                  x-model="localizedAmount"
+                  v-model="localizedAmount"
                   @input="parseState = $i18n.parse.number(
                     localizedAmount,
                     { format: 'editable-number' },
                   ).state"
                 />
               </label>
-              <p x-text="parseState"></p>
+              <p v-text="parseState"></p>
               <button type="button" @click="lazyText = $i18n.tr(lazyMessage)">
-                <span x-text="$i18n.tr('demo-account-load-detail')"></span>
+                <span v-text="$i18n.tr('demo-account-load-detail')"></span>
               </button>
-              <p x-text="lazyText"></p>
+              <p v-text="lazyText"></p>
             </section>
           </section>
         </div>
       </c-i18n>
+    """
+
+    js = """
+      $component({
+        data() {
+          // Browser-only text; the js_data() keys are already reactive
+          // members, so the template reads them without copying.
+          return { lazyText: "" };
+        },
+        onServerRender({ component }) {
+          // $i18n is the nearest client provider above this component. The
+          // <c-i18n client> element is inside this template, not above it,
+          // so without an outer provider there is nothing to translate with.
+          const i18n = component.$i18n;
+          if (!i18n) return;
+          // Citry stops effects created during the callback before each
+          // rerun and on unmount, so this one re-translates on locale
+          // changes without piling up.
+          Citry.vue.watchEffect(() => {
+            component.$el.dataset.browserStatus = i18n.tr(
+              "demo-account-js-status",
+            );
+          });
+        },
+      });
     """
 
     css = """
@@ -357,6 +369,41 @@ if __name__ == "__main__":
     sys.stdout.write("\n")
 
 
+class Tag(Component):
+    """Show one product tag; the parent decides whether it is highlighted."""
+
+    citry = app
+
+    class Kwargs:
+        label: str
+
+    class Slots:
+        pass
+
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,  # noqa: ARG002 - Citry supplies both declared schemas.
+    ) -> dict[str, object]:
+        return {"label": kwargs.label}
+
+    template = """
+      <span class="tag" :class="{ 'tag--active': highlight }">
+        {{ label }}
+      </span>
+    """
+
+    js = """
+      $component({
+        props: {
+          highlight: Boolean,
+        },
+      });
+    """
+
+
+# ProductCard is also the VS Code formatting fixture: its template, JS, and
+# CSS are deliberately untidy so the editor test can prove they get formatted.
 class ProductCard(Component):
     citry = app
 
@@ -392,17 +439,18 @@ class ProductCard(Component):
         return {"accent": kwargs.accent}
 
     template = """
-      <article class="card" x-data="{ open: false }">
+      <article class="card" :class="{ 'card--open': open }">
       <c-slot name="body" />
-      <c-for each="tag in tags"> <c-Tag c-label="tag" $c-props="{ highlight: open }" @click="open = !open" /> </c-for>
+      <c-for each="tag in tags"> <c-Tag #c-key="tag" c-label="tag" :highlight="open" @click="open = !open" /> </c-for>
       <c-empty> <p>{{ tr("product-card-no-tags") }}</p> </c-empty>
-      <button type="button" @c-click="like"> Like <span x-text="likes">{{ likes }}</span> </button>
+      <button type="button" @c-click="like"> Like <span>{{ likes }}</span> </button>
       <c-slot name="footer">No footer yet</c-slot>
       </article>
     """
 
     js = """
-      $component(({ component }) => {const cardEl = component.$el; animateLikes(cardEl, component.likes); });
+      $component({ data() { return { open: false }; },
+        onServerRender({ component }) {component.$el.dataset.likes = String(component.likes); } });
     """
 
     css = """

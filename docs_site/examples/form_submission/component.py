@@ -81,9 +81,11 @@ class ContactForm(Component):
 
     js = """
       $component(({ component }) => {
-        const root = component.$el;
-        const form = root.matches("form") ? root : root.querySelector("form");
-        const result = root.querySelector(".contact-form__result");
+        const form = component.$el;
+        const result = form.querySelector(".contact-form__result");
+        // The callback runs again after each server render, so the
+        // returned cleanup removes this listener before that rerun.
+        const listeners = new AbortController();
         form.addEventListener("submit", (event) => {
           // No server on a static site: intercept the submit and show the
           // response in the browser, built from the entered name.
@@ -95,6 +97,8 @@ class ContactForm(Component):
           box.className = "contact-form__thanks";
           box.textContent = `Thank you for your submission, ${name}!`;
           result.appendChild(box);
-        });
+        }, { signal: listeners.signal });
+
+        return () => listeners.abort();
       });
     """

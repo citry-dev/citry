@@ -5,28 +5,19 @@ import json
 from docs_site._internal.examples import get_example_registry
 from lxml import html as lxml_html
 
-from citry import citry as default_citry
-from citry._vue.events import definition_bundle
-
 
 def _prepared_render(page_html: str) -> tuple[dict, str]:
     document = lxml_html.document_fromstring(page_html)
-    marker = "CitryStable.startPrepared("
-    [bootstrap] = [node for node in document.xpath("//script") if node.text and marker in node.text]
-    transport, _ = json.JSONDecoder().raw_decode(bootstrap.text[bootstrap.text.index(marker) + len(marker) :])
+    # The page carries its start configuration as one JSON data block.
+    [block] = document.xpath('//script[@type="application/json"][@data-citry-vue-document]')
+    transport = json.loads(block.text)
     assert transport["manifest"]["protocol"] == "citry-vue-prepared/1"
-    definitions = transport["manifest"]["definitions"]
-    script_sources = [item["source"] for item in transport["manifest"]["scripts"] if item["source"]["kind"] == "owned"]
-    bundles = []
-    assets = [*definitions, *script_sources]
-    for digest in dict.fromkeys(asset["sha256"] for asset in assets):
-        bundle = definition_bundle(default_citry, digest)
-        assert bundle is not None, digest
-        bundles.append(bundle.decode())
-    source = "\n".join(bundles)
-    definition_ids = {item["id"] for item in definitions}
+    source = "\n".join(
+        node.text for node in document.xpath("//script") if node.text and "function render(_ctx, _cache" in node.text
+    )
+    definition_ids = {item["id"] for item in transport["manifest"]["definitions"]}
     assert definition_ids
-    assert all(f'window.CitryStableDefinitions["{definition_id}"]' in source for definition_id in definition_ids)
+    assert all(f'window.__citryRuntimeDefinitions["{definition_id}"]' in source for definition_id in definition_ids)
     return transport, source
 
 
@@ -53,5 +44,5 @@ def test_tabs_example_page_renders() -> None:
     # Tabs and panels are connected for assistive technology, and the shipped
     # script supports the standard horizontal-tab keyboard controls.
     assert panel_rows[0]["citryAttrs0"]["aria-labelledby"] == tab_rows[0]["citryAttrs0"]["id"]
-    assert 'event.key === "ArrowRight"' in source
-    assert 'event.key === "Home"' in source
+    assert 'event.key === "ArrowRight"' in html
+    assert 'event.key === "Home"' in html

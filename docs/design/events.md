@@ -230,6 +230,9 @@ from citry.ext.events import actions
 
 class CartIn:
     product_id: int
+    # The render ID of the header's CartBadge. The page passes it to
+    # AddToCart as the badge_id kwarg, and the button sends it back.
+    badge_id: str
 
 class AddToCart(Component):
     class Events:
@@ -238,7 +241,7 @@ class AddToCart(Component):
             return [
                 actions.Render(
                     CartBadge(count=cart.count),
-                    target="#cart-badge",
+                    target=f"render:{data.badge_id}",
                 ),
                 actions.Dispatch(
                     "cart:updated",
@@ -246,20 +249,24 @@ class AddToCart(Component):
                 ),
             ]
 
+    def js_data(self, kwargs, slots):
+        return {"badge_id": kwargs["badge_id"]}
+
     template = """
-      <button @c-click="add({ product_id: 42 })">
+      <button @c-click="add({ product_id: 42, badge_id: badge_id })">
         Add to cart
       </button>
     """
 ```
 
-Any other component can react with one function call, no wiring:
-```html
-<div x-init="
-  $onEvent('cart:updated', () => {
-    $sendEvent('refresh');
-  })
-">...</div>
+Any other component with an Events declaration can react with one
+function call, no wiring:
+```js
+$component({
+  mounted() {
+    this.$onEvent("cart:updated", () => this.$sendEvent("refresh"));
+  },
+});
 ```
 
 **4. Every handler is a real, typed endpoint.** No second routing layer,
@@ -1101,9 +1108,11 @@ anything when called:
 | `actions.Download(content, filename, content_type=...)` (v1.x) | none (escape) | A file download. Sugar over the raw-response escape below, so its handler uses `@event(bundle=False)`, runs through the per-event HTTP route, leaves State unchanged, and returns the download bare or as a list's only element. It cannot share a list or request with another result. The client accepts a successful attachment response for one call, buffers the blob, and starts the save only after the call survives timeout and supersession checks. |
 
 Every envelope-riding constructor also accepts the timing fields
-`delay` (seconds) and `wait` (4.3). `Render`'s `target` accepts a CSS
-selector string (all matches) and defaults to the calling instance
-(4.3). On an instance-less compatibility / no-JS HTTP request, a targetless
+`delay` (seconds) and `wait` (4.3). `Render`'s `target` accepts
+`"render:<id>"` for a mounted component occurrence or `"mark:<name>"` for a
+`<c-mark>` region of the handling component, and defaults to the calling
+instance. Any other target string is rejected when the action is
+constructed. On an instance-less compatibility / no-JS HTTP request, a targetless
 render instead supplies the whole response body; the internal compatibility
 translation consumes it before any action reaches a client.
 
@@ -1151,6 +1160,9 @@ from citry.ext.events import actions
 
 class CartIn:
     product_id: int
+    # The render ID of the header's CartBadge, sent by the browser call
+    # as in the add-to-cart example above.
+    badge_id: str
 
 class Events:
     def save(self, state: OrderState):
@@ -1165,7 +1177,7 @@ class Events:
         return [
             actions.Render(
                 CartBadge(count=cart.count),
-                target="#cart-badge",
+                target=f"render:{data.badge_id}",
             ),
             # dict coerces to Data -> resolves caller's promise
             {"count": cart.count},
@@ -1699,8 +1711,8 @@ dispatch fired just before a redirect reaches listeners on the outgoing
 page, which is usually not what a toast wants; the tool for that is the
 timing fields below.
 The dispatcher emits the same encode-time debug warning when a
-self-addressed action follows a selector-targeted render: the selector
-may resolve to a region that contains the caller, and that earlier
+self-addressed action follows a targeted render: the target may be a
+region that contains the caller, and that earlier
 render then retires the caller's anchor, so the later self-addressed
 action drops at apply time (per-action liveness, 5.5 machinery item
 4). The authoring note the docs teach for this class: dispatch before
@@ -2462,7 +2474,7 @@ does not promise a pre-runtime call queue; see the contract above.
 | `Citry.events.send(target, name, args?, opts?)` | Send an event to one mounted occurrence. `target` is a `render:<id>` (or bare render ID) or an `Element` inside that occurrence; the runtime resolves its class, token, pending updates and epoch. A global lookup must find exactly one occurrence across mounted apps. | `sendEvent(name, args?, opts?)` on the `$component` payload and `$sendEvent` on the native Vue component instance: the same call with the instance pre-bound. |
 | `Citry.events.on(name, fn)` | Listen for server-dispatched events (`Dispatch` actions) under their raw name, from any instance; returns the unsubscribe function. Sugar over `document.addEventListener` that unwraps `e.detail`. | `onEvent(name, fn)` / `$onEvent(name, fn)`: the same, filtered to events targeting that instance. |
 | `Citry.events.configure(opts)` | Set page-wide runtime defaults once, from the host page; fields below. | None page-wide; a one-off override rides `sendEvent`'s `opts` (e.g. a per-call `timeout`). |
-| `Citry.events.registerTransport(name, impl)` | Register a transport under a name: `impl` is `{send(envelope) -> Promise<resultEnvelope>, subscribe?}` (`subscribe` is the v2 push half, 6.1). The built-in fetch transport registers through this same function; selection is `configure({transport: name})`. | None (transports are page-level by nature). |
+| `Citry.events.registerTransport(name, impl)` | Register a transport under a name: `impl` is `{send(envelope, request) -> Promise<resultEnvelope>, subscribe?}`, where `request` is the `{url, method, headers, signal}` the built-in fetch transport would use, including the Vue app, occurrence and revision headers a Render action needs (`subscribe` is the v2 push half, 6.1). The built-in fetch transport is the default used while no transport named `fetch` is registered; selection is `configure({transport: name})`. | None (transports are page-level by nature). |
 | `Citry.events.applyActions(actions)` | The action interpreter as a public entry point: apply a result envelope's `actions` array. With a mounted target it fires the same `before`/`after`/`error`/`stale` lifecycle as a server call, using `event: "__external__"`; global-only actions retain their global behavior without a component lifecycle. | None. |
 
 What `configure` actually configures, field by field:
@@ -3272,11 +3284,11 @@ ones (or links keyed matches per the rule above), and no epoch
 comparison ties the apply to the target's past, because the target
 keeps no surviving counter. Continuity is owned by a region's own
 correlated self-renders, and by keyed matches, alone; a handler whose
-selector happens to resolve to its own region gets replace semantics,
+explicit target names its own region gets replace semantics,
 not the three-way split (self-continuity rides only the runtime's
 `render:` self-address). Races to one target from unrelated anchors (two
 different
-callers rendering into `#cart-badge`) stay last-write-wins in arrival
+callers rendering into the cart badge) stay last-write-wins in arrival
 order and are answered in userland by the ordering patterns the docs
 teach: render current truth, not deltas (a handler that renders truth
 leaves a briefly stale region that self-corrects on the next event),
@@ -3350,13 +3362,11 @@ option A mechanics):
    `retired`, 5.2) plus a debug log. That includes a self-addressed
    `event` action whose target id is dead, which drops rather than
    falling back to a document dispatch (that would change delivery
-   semantics silently). Liveness and its `retired` surface belong to
-instance-addressed work alone (the caller's anchor, `render:`
-   targets, the self-addressed defaults): a plain-selector target is
-   never live or dead, so a selector that stops matching, whatever
-   earlier action or host mutation removed its matches, surfaces only
-   4.3's zero-match warning, and one action never fires both
-   surfaces.
+   semantics silently). Every target is instance-addressed (the
+   caller's anchor, `render:` and `mark:` targets, the self-addressed
+   defaults), because `actions.Render` rejects any other target string
+   when the action is constructed, so this liveness rule covers every
+   action that names a target.
 5. **Recurring timers retire with their region, and never
    double-poll.** Retiring an anchor cancels the interval timers
    registered to it, or timers are keyed to the element with one timer
@@ -4447,7 +4457,8 @@ surprise. Concretely:
 
 - Handlers on a slotted component can freely return data, dispatch events,
   and surgically update regions inside it by rendering leaf components
-  into explicit targets (`Render(Badge(...), target="#badge")`).
+  into regions it declares with `<c-mark name="badge">`
+  (`Render(Badge(...), target="mark:badge")`).
 - A `render` action replaces the targeted subtree with exactly the tree
   the handler returned; nothing about the instance's original render is
   replayed. Fills are call-site content, so a handler that re-renders a

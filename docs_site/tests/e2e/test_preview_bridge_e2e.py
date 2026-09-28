@@ -188,11 +188,16 @@ def _render_through_preview_bridge(
     )
 
 
+def _configuration_start(html: str) -> int:
+    """Return where the JSON inside the page's start configuration data block begins."""
+    marker = '<script type="application/json" data-citry-vue-document="'
+    return html.index(">", html.index(marker)) + 1
+
+
 def _prepared_manifest(html: str) -> dict[str, Any]:
-    marker = "CitryStable.startPrepared("
-    start = html.index(marker) + len(marker)
+    start = _configuration_start(html)
     configuration, consumed = json.JSONDecoder().raw_decode(html[start:])
-    assert html[start + consumed :].startswith(").catch")
+    assert html[start + consumed :].startswith("</script>")
     manifest = configuration["manifest"]
     assert manifest["protocol"] == "citry-vue-prepared/1"
     return manifest
@@ -237,10 +242,10 @@ def test_preview_bridge_mounts_vue_before_committing_the_candidate(
         """body => {
           const doc = body.ownerDocument;
           const win = doc.defaultView;
-          const apps = win.CitryStable ? [...win.CitryStable._apps.values()] : [];
+          const apps = win.__citryRuntime ? [...win.__citryRuntime._apps.values()] : [];
           const app = apps[0];
           return {
-            stable: typeof win.CitryStable?.startPrepared === 'function',
+            runtime: typeof win.__citryRuntime?.startDocument === 'function',
             apps: apps.length,
             revision: app?.revision ?? null,
             mounted: app?.mounted?.size ?? 0,
@@ -248,20 +253,20 @@ def test_preview_bridge_mounts_vue_before_committing_the_candidate(
             legacyManifests: doc.querySelectorAll(
               'script[data-citry-graph], script[data-citry-events], script[data-citry]'
             ).length,
-            preparedBootstraps: [...doc.scripts].filter(script =>
-              script.textContent.includes('CitryStable.startPrepared(')
+            documentConfigurations: doc.querySelectorAll(
+              'script[type="application/json"][data-citry-vue-document]'
             ).length,
           };
         }"""
     )
     assert runtime == {
-        "stable": True,
+        "runtime": True,
         "apps": 1,
         "revision": 0,
         "mounted": expected_occurrences,
         "terminal": False,
         "legacyManifests": 0,
-        "preparedBootstraps": 1,
+        "documentConfigurations": 1,
     }
     assert page.evaluate("window.__previewCommitted") is True
     assert page.evaluate("window.__previewDiagnostics") == []

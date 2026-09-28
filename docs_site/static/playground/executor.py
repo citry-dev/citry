@@ -26,6 +26,14 @@ from citry.component_like import _resolve_component_like
 from citry.ext.events import EventRequest, EventsDispatcher, TransportContext
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, match_route
 
+# This file ships with the docs, while runtime.json may still pin a Citry
+# release that predates per-engine renderer selection. Fall back to a plain
+# dispatcher there so the pinned runtime keeps running every other feature.
+try:
+    from citry.ext.events.renderers import dispatcher_for
+except ImportError:
+    dispatcher_for = None
+
 PLAYGROUND_FILENAME = "<playground>"
 PLAYGROUND_MODULE_NAME = "__playground__"
 MAX_STREAM_CHARS = 65_536
@@ -37,6 +45,11 @@ MAX_ASSET_BYTES = 1024 * 1024
 MAX_ASSET_BATCH_BYTES = 4 * 1024 * 1024
 MAX_CATALOG_BYTES = 256 * 1024
 PLAYGROUND_EVENT_PATH = "/playground/events"
+# The Citry client sends these headers so the server can answer an event with
+# a Render action for the component on screen. The preview is untrusted code,
+# so no other header it forwards (cookies, CSRF, auth) may reach the dispatcher.
+FORWARDED_EVENT_HEADERS = ("X-Citry-Vue-App", "X-Citry-Vue-Occurrence", "X-Citry-Vue-Revision")
+MAX_EVENT_HEADER_CHARS = 256
 PLAYGROUND_ASSET_PREFIX = "/__citry_playground__"
 SUPPORTED_EVENT_ACTIONS = frozenset({"data", "event", "render", "state"})
 _ALLOWED_ASSET_ROUTES = frozenset(
@@ -57,35 +70,9 @@ _ALLOWED_ASSET_CONTENT_TYPES = frozenset({"text/css", "text/javascript"})
 class _RuntimeState:
     namespace: dict[str, Any] | None = None
     run_id: int | None = None
-    vue_app_id: str | None = None
-    vue_revision: int | None = None
-    vue_occurrences: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 _runtime_state = _RuntimeState()
-
-
-def _select_events_dispatcher(engine: Citry) -> EventsDispatcher:
-    """
-    Use Vue render encoding when the workspace runtime provides it.
-
-    The committed playground can still be loaded with the published Citry
-    runtime, whose public events API predates the private renderer selector.
-    Keep that runtime compatible by falling back to its public dispatcher.
-    """
-    try:
-        from citry.ext.events.renderers import dispatcher_for  # noqa: PLC0415
-    except ModuleNotFoundError as error:
-        if error.name != "citry.ext.events.renderers":
-            raise
-        return EventsDispatcher()
-    return dispatcher_for(engine)
-
-
-# The browser playground always runs the prepared Vue client when the local
-# runtime supports it. On an older published runtime this remains the public
-# HTML events dispatcher.
-_dispatcher = _select_events_dispatcher(citry)
 
 # The default Citry engine belongs only to this disposable Worker. Give it a
 # per-Worker secret so visitor components can use ordinary signed State without
@@ -101,56 +88,6 @@ citry.set_mounted_prefix(PLAYGROUND_ASSET_PREFIX)
 # mode includes the exception type and message in the structured handler error;
 # Citry still never sends a traceback over the Events protocol.
 logging.getLogger("citry").setLevel(logging.DEBUG)
-
-
-def _prepared_manifest_from_html(value: object) -> dict[str, object] | None:
-    """Extract the initial prepared Vue manifest from a serialized preview."""
-    if not isinstance(value, str):
-        return None
-    marker = "CitryStable.startPrepared("
-    try:
-        start = value.index(marker) + len(marker)
-        configuration, _end = json.JSONDecoder().raw_decode(value[start:])
-    except (ValueError, json.JSONDecodeError):
-        return None
-    if not isinstance(configuration, dict):
-        return None
-    manifest = configuration.get("manifest")
-    if not isinstance(manifest, dict) or manifest.get("protocol") != "citry-vue-prepared/1":
-        return None
-    return manifest
-
-
-def _remember_prepared_manifest(value: object) -> None:
-    """Remember the Vue request scope represented by an initial or revised view."""
-    if not isinstance(value, dict):
-        return
-    app_id = value.get("appId")
-    revision = value.get("revision")
-    occurrences = value.get("occurrences")
-    if not isinstance(app_id, str) or type(revision) is not int or not isinstance(occurrences, list):
-        return
-
-    occurrence_ids: dict[str, str] = {}
-    for occurrence in occurrences:
-        if not isinstance(occurrence, dict):
-            continue
-        occurrence_id = occurrence.get("id")
-        if not isinstance(occurrence_id, str):
-            continue
-        render_ids = {occurrence.get("renderId")}
-        event_context = occurrence.get("eventContext")
-        if isinstance(event_context, dict):
-            render_ids.add(event_context.get("serverRenderId"))
-        for render_id in render_ids:
-            if isinstance(render_id, str):
-                occurrence_ids[render_id] = occurrence_id
-
-    _runtime_state.vue_app_id = app_id
-    _runtime_state.vue_revision = revision
-    # A prepared Render response contains only the replaced subtree. Keep the
-    # caller mappings for components outside that subtree for later events.
-    _runtime_state.vue_occurrences.update(occurrence_ids)
 
 
 class PreviewContractError(Exception):
@@ -497,7 +434,22 @@ def _apply_playground_event_policy(envelope: object, response: object) -> dict[s
     return response
 
 
-def dispatch_event_json(envelope_json: str, run_id: int) -> str:
+def _forwarded_event_headers(headers_json: str) -> list[tuple[str, str]]:
+    """Keep the Vue request headers the preview forwarded and nothing else."""
+    raw = json.loads(headers_json)
+    if not isinstance(raw, dict):
+        raise TypeError("Playground event headers must be a JSON object.")
+    forwarded: list[tuple[str, str]] = []
+    for name in FORWARDED_EVENT_HEADERS:
+        value = raw.get(name)
+        # A missing header leaves the dispatcher to report which one the
+        # server needed; a malformed one is dropped, with the same result.
+        if isinstance(value, str) and 0 < len(value) <= MAX_EVENT_HEADER_CHARS:
+            forwarded.append((name, value))
+    return forwarded
+
+
+def dispatch_event_json(envelope_json: str, run_id: int, headers_json: str = "{}") -> str:
     """Dispatch one browser Events envelope against the displayed module."""
     if _runtime_state.namespace is None or _runtime_state.run_id != run_id:
         raise RuntimeError("This event belongs to a preview that is no longer active. Run the module again.")
@@ -505,25 +457,7 @@ def dispatch_event_json(envelope_json: str, run_id: int) -> str:
     envelope = json.loads(envelope_json)
     body = envelope_json.encode("utf-8")
     content_type = "application/citry-events+json"
-    headers_list: list[tuple[str, str]] = [("Content-Type", content_type)]
-    calls = envelope.get("calls") if isinstance(envelope, dict) else None
-    caller_render_id = None
-    if isinstance(calls, list) and calls and isinstance(calls[0], dict):
-        caller_render_id = calls[0].get("callerRenderId")
-    occurrence_id = _runtime_state.vue_occurrences.get(caller_render_id) if isinstance(caller_render_id, str) else None
-    if (
-        isinstance(_runtime_state.vue_app_id, str)
-        and type(_runtime_state.vue_revision) is int
-        and isinstance(occurrence_id, str)
-    ):
-        headers_list.extend(
-            [
-                ("X-Citry-Vue-App", _runtime_state.vue_app_id),
-                ("X-Citry-Vue-Occurrence", occurrence_id),
-                ("X-Citry-Vue-Revision", str(_runtime_state.vue_revision)),
-            ]
-        )
-    headers = RouteHeaders(headers_list)
+    headers = RouteHeaders([("Content-Type", content_type), *_forwarded_event_headers(headers_json)])
     request = EventRequest(
         method="POST",
         path=PLAYGROUND_EVENT_PATH,
@@ -540,19 +474,10 @@ def dispatch_event_json(envelope_json: str, run_id: int) -> str:
     # Reassert the host-owned prefix before fragment serialization in case the
     # visitor changed the default engine while handling an earlier event.
     citry.set_mounted_prefix(PLAYGROUND_ASSET_PREFIX)
-    response = _dispatcher.dispatch(envelope, context, request=request)
-    if isinstance(response, dict):
-        results = response.get("results")
-        if isinstance(results, list):
-            for result in results:
-                if not isinstance(result, dict) or result.get("ok") is not True:
-                    continue
-                actions = result.get("actions")
-                if not isinstance(actions, list):
-                    continue
-                for action in actions:
-                    if isinstance(action, dict) and action.get("action") == "render":
-                        _remember_prepared_manifest(action.get("prepared"))
+    # Use the engine's own route dispatcher so a Render action is encoded for
+    # the Vue renderer the browser advertises, exactly as a served app would.
+    dispatcher = EventsDispatcher() if dispatcher_for is None else dispatcher_for(citry)
+    response = dispatcher.dispatch(envelope, context, request=request)
     return json.dumps(_apply_playground_event_policy(envelope, response), allow_nan=False)
 
 
@@ -634,9 +559,6 @@ def run_source_json(source: str, run_id: int = 1) -> str:
     """Execute ``source`` and return the bounded result as a JSON string."""
     _runtime_state.namespace = None
     _runtime_state.run_id = None
-    _runtime_state.vue_app_id = None
-    _runtime_state.vue_revision = None
-    _runtime_state.vue_occurrences = {}
     sys.modules.pop(PLAYGROUND_MODULE_NAME, None)
     linecache.cache.pop(PLAYGROUND_FILENAME, None)
     stdout = io.StringIO()
@@ -675,7 +597,6 @@ def run_source_json(source: str, run_id: int = 1) -> str:
         catalog = _catalog_snapshot(namespace)
         _runtime_state.namespace = namespace
         _runtime_state.run_id = run_id
-        _remember_prepared_manifest(_prepared_manifest_from_html(html))
         diagnostic = None
     except BaseException as error:
         html = None
