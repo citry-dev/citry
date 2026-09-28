@@ -192,14 +192,17 @@ def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> N
     assert "-n" not in run_step["run"].split()
 
 
-def test_workspace_core_wheel_consumers_reject_ambiguous_cached_outputs() -> None:
+def test_docs_check_keeps_the_playground_on_the_published_pins() -> None:
+    # Docs check runs the playground against runtime.json's published pins and
+    # lets branch-only tests skip; a workspace Core wheel would opt it back in.
     docs_workflow = _load_workflow("repo--docs-check.yml")
-    docs_steps = {step.get("name", step.get("uses")): step for step in docs_workflow["jobs"]["docs-e2e"]["steps"]}
-    select = docs_steps["Select the workspace browser runtime artifact"]
-    assert select["shell"] == "bash"
-    assert "${#core_wheels[@]} -ne 1" in select["run"]
-    assert "-print -quit" not in select["run"]
+    steps = docs_workflow["jobs"]["docs-e2e"]["steps"]
+    assert all("CITRY_PLAYGROUND_CORE_WHEEL" not in step.get("run", "") for step in steps)
+    assert all("CITRY_PLAYGROUND_CORE_WHEEL" not in step.get("env", {}) for step in steps)
+    assert "CITRY_PLAYGROUND_CORE_WHEEL" not in docs_workflow["jobs"]["docs-e2e"].get("env", {})
 
+
+def test_workspace_core_wheel_consumers_reject_ambiguous_cached_outputs() -> None:
     publish_workflow = _load_workflow("py--citry--publish.yml")
     core_consumers = [
         step

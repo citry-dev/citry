@@ -190,8 +190,10 @@ Without `CITRY_PLAYGROUND_CORE_WHEEL`, the playground and `<c-live-code>`
 browser tests run against the release that `runtime.json` pins, because that
 is what the deployed docs serve. The docs check workflow
 ([`repo--docs-check.yml`](https://github.com/citry-dev/citry/blob/main/.github/workflows/repo--docs-check.yml))
-builds the Citry Core wheel above once, with the same pinned toolchain, and
-sets the variable, so its browser tests run this checkout's Citry.
+runs them this way too: it does not set the variable, so CI checks the
+playground the deployed docs serve and skips the tests below with their
+reason. Running them against this checkout's Citry is a local step: build the
+Core wheel above and set the variable.
 
 Some tests click through code from this checkout: the docs snippets, the
 Citry UI snippets, or the workspace Citry UI wheel. Between releases that code
