@@ -1345,8 +1345,8 @@ There is one release entry point. Individual package workflows are internal
 workers and must not be run by hand.
 
 ```text
-prepare release changes in the review working tree
-  -> copy the reviewed changes to a promotion branch and merge its PR
+prepare release changes on a branch from current main
+  -> open a pull request against main and merge it
   -> Prepare release candidate runs automatically
        -> determine which manifest versions do not have final tags
        -> qualify all selected packages concurrently
@@ -1379,9 +1379,10 @@ Prepare a release as follows:
 3. Sweep version references deliberately. Update live metadata and pins, but
    do not rewrite historical changelogs, dated research, fixtures, or unrelated
    versions merely because the number matches.
-4. Verify and copy the intended changes to a promotion branch, then merge its
-   pull request into `main` using the clean-worktree procedure below. A qualifying candidate is created automatically when the
-   release surfaces change. To retry candidate preparation or make an explicit
+4. Open a pull request with the release changes and merge it into `main`, as
+   described in [How changes reach `main`](#how-changes-reach-main). A
+   qualifying candidate is created automatically when the release surfaces
+   change. To retry candidate preparation or make an explicit
    selection, run **Prepare release candidate** with `auto` or a comma-separated
    list such as `citry-core,citry,citry-lsp,vscode-citry`.
 5. Inspect the candidate run and its selected package graph. Require the
@@ -1501,9 +1502,11 @@ change public package bytes. Retry a missed post by manually running **Notify
 Discord on Release** with the existing GitHub Release tag; do not rerun the
 package publisher merely to resend Discord.
 
-**`citry` pins one exact `citry-core` version** (`citry-core==1.7.0`, not a
-range). The runtime node classes in `citry.nodes` read the source that
-citry-core's compiler emits, so a citry-core release that changes that output
+**`citry` pins one exact `citry-core` version**, not a range. The pin lives in
+the `dependencies` list of
+[`packages/py/citry/pyproject.toml`](../packages/py/citry/pyproject.toml).
+The runtime node classes in `citry.nodes` read the source that citry-core's
+compiler emits, so a citry-core release that changes that output
 would otherwise reach an already-published `citry` that cannot read it. Raise
 the pin in the same change that bumps citry-core's version. That makes the two
 releases a pair, and the controller publishes and verifies `citry-core` before
@@ -1602,127 +1605,18 @@ grows; [issue 112](https://github.com/citry-dev/citry/issues/112) tracks that ch
 The current sole-maintainer process requires no second approver. Administrator
 control over repository settings remains an explicit trust boundary.
 
-### The `review` branch holds work that has not been read yet
+### How changes reach `main`
 
-Releases go out from `main`, but not everything committed has been read line by
-line. The `review` branch is where that unread work waits, so the editor's
-source-control panel doubles as the worklist:
+Every change lands on `main` through an ordinary branch and a pull request.
+Create a branch from current `origin/main`, commit the work there, push it,
+and open a pull request against `main`. The required checks must pass against
+an up-to-date base before the pull request merges, as described in
+[Main branch and release permissions](#main-branch-and-release-permissions).
+Releases start from `main` after the pull request merges.
 
-- **`main` is the reviewed baseline.** Local `main` tracks `origin/main`, so it
-  never reports as diverged and never prompts to sync.
-- **`review` carries everything not yet read**, branched at the commit `main`
-  held when the ledger was last reset. The `reviewed-baseline` tag names that
-  commit as a recovery point.
-- **Reading a file through means committing it on `review`.** The commit is the
-  audit record of what has been read.
-- **Do not pull generated commits into `review`.** The release workflow
-  commits generated snapshots to `main`. Verify their release source and build
-  checks, then let local `main` fetch those commits without copying those
-  generated files into the unread-work ledger.
-
-**`review` never merges into `main`, in either direction.** The gate works by
-having `HEAD` point at an old tree, so the two branches diverging is what makes
-it function, not damage to repair. The editor's "N behind, M ahead" indicator is
-cosmetic and stays lit; `review` has no upstream configured, so the editor is
-just comparing against `origin/main`. Merging `main` into `review` would refuse
-to run anyway, because it would have to overwrite hundreds of locally-modified
-files, and `git merge -s ours` is worse: it records "deliberately discard main's
-changes", so a later merge the other way would revert content on `main` to
-`review`'s older copies.
-
-A release therefore never comes from `review`. Assemble it on a promotion
-branch based on current `main`:
-
-```bash
-git fetch origin main --tags
-git worktree add -b release/package-update ../citry-release origin/main
-# Apply the explicit promotion manifest, inspect, test, and commit here.
-git -C ../citry-release push -u origin release/package-update
-gh pr create --base main --head release/package-update
-# Merge after the required checks pass, then remove the clean worktree.
-git worktree remove ../citry-release
-```
-
-If a clean `main` worktree already exists, reuse it only after verifying that
-it has no staged, modified, deleted, or untracked files and fast-forwarding it
-to `origin/main`. Create and switch to a promotion branch before applying any
-changes there. Do not force-remove a dirty worktree.
-
-Use this promotion sequence:
-
-1. In the original worktree, require the current branch to be `review`; record
-   the `review`, local `main`, `origin/main`, and `reviewed-baseline` SHAs plus
-   the current status. Read-only inspection is allowed, but do not stage,
-   commit, merge, rebase, reset, or move any ref from this worktree.
-2. Fetch `origin/main` and tags, record the fetched SHA, then create a clean
-   promotion branch and worktree from that commit. Keep local `main` tracking
-   the remote through fast-forward updates; reconcile any unexpected divergence
-   before proceeding.
-3. Write an explicit promotion manifest before copying anything. It has three
-   inputs:
-
-   - tracked modifications and deletions relative to `review`'s `HEAD`;
-   - non-ignored untracked files selected for promotion; and
-   - explicit preserve/delete decisions for paths that exist only on newer
-     `main`.
-
-   In automation, obtain the first two inputs with the NUL-delimited forms of
-   `git diff --name-status --no-renames -z HEAD` and
-   `git ls-files --others --exclude-standard -z`. Never copy ignored files,
-   caches, environments, generated `site/` output, or whole directories merely
-   because one child is in the manifest.
-4. Treat absence from `review` as ambiguous, not as a deletion instruction. A
-   path may have been added directly to `main` after `review`'s old baseline,
-   including generated version snapshots and release records. Preserve every
-   such main-only path unless the manifest explicitly names its exact deletion.
-   Conversely, when a maintainer deliberately removes a main-only path, apply
-   that exact deletion in the promotion worktree even though `review` cannot show
-   it as `D` in `git status`.
-5. Copy only the manifest's named existing files and apply only its named
-   deletions. Confirm the source worktree did not change during the copy. In the
-   promotion worktree, inspect `git status`, `git diff --check`, the name/status and
-   stat summaries, and the complete diff. Stop on an unexpected path or byte
-   difference.
-6. Run the agreed integration gate, stage only the manifest, inspect the staged
-   diff again, and commit on the promotion branch. If a necessary fix is made in the
-   release worktree, mirror it into the original working tree before finishing.
-7. Push the promotion branch and open a pull request targeting `main`. Fetch
-   current `main` and incorporate any intervening changes on the promotion
-   branch; resolve conflicts and rerun affected checks before merging. The
-   required Check must pass against an up-to-date base. Never push directly or
-   force-push to `main`.
-8. Merge the PR and fast-forward local `main` to the resulting remote commit.
-   Verify the remote SHA and required CI/deployment result. Remove the
-   throwaway worktree only after it is clean. Recheck that the original
-   worktree is still on the recorded `review` SHA with its index, working files,
-   and untracked files intact.
-
-Two additional rules came out of doing this five times:
-
-- **Copy named files, never whole trees.** A wholesale copy drags in whatever
-  other work is in progress on disk, and `main` may not be able to run it. Diff
-  each file into place and read the diff.
-- **Land any fix you make during the release in the working tree too**, not
-  only in the worktree. Otherwise the disk copy stays stale and committing the
-  tree later silently reverts the fix. The change then shows up in the panel as
-  an ordinary unread entry, which is accurate.
-
-Prepare candidates on `main`, then publish through **Release qualified
-packages** using the successful candidate run ID. Package workflows are
-internal workers; final tags are created after publication.
-
-The promotion worktree preserves the arrangement automatically. Keep the
-original `review` worktree's branch pointer, index, and files unchanged before,
-during, and after the promotion; `review` continues to point at its recorded
-pre-promotion baseline, so every unread modification and untracked file remains
-visible in the editor. Do not reset `review` to the new `main`: that makes the
-same bytes appear reviewed and hides newly tracked files from the worklist. If
-recovery is ever required, restore `review` to its recorded pre-promotion SHA
-(normally the `reviewed-baseline` recovery point) with a mixed reset so the disk
-contents remain intact.
-
-A tag cannot rebuild this arrangement: it only names a commit, while the panel
-is populated from the original worktree relative to `review`'s `HEAD`.
+For audits of older work, the `origin/review` branch and the
+`reviewed-baseline` tag keep the historical diff of changes that were
+committed before they were read line by line.
 
 ### Chronological Ordering
 
