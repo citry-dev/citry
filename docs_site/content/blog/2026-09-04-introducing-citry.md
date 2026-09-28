@@ -7,6 +7,14 @@ author_url: /community/people/
 tags: Project updates
 ---
 
+*Editor's note, September 28, 2026: this post describes Citry as it was when
+it was published. Starting with Citry 0.6.0, components use Vue for browser
+behavior instead of Alpine.js, so the Alpine.js parts of the examples below,
+such as `x-data`, `x-show`, `x-text`, and the handlers that change their
+values, do not run. To write the same components today, follow
+[Add browser behavior](/getting-started/browser-interactivity/) and
+[Call Python from a click](/getting-started/call-python/).*
+
 ## Citry is here
 
 Hi, I'm Juro, the maintainer of [django-components](https://github.com/django-components/django-components){: target="\_blank" rel="noopener"}.
@@ -14,7 +22,7 @@ After roughly 2-2.5 years of working towards bring the experience of React and
 Vue to Python, I'm proud to release [Citry](https://github.com/citry-dev/citry){: target="\_blank" rel="noopener"}.
 
 Citry is a fully typed frontend framework for Python with server events and
-compiled Vue interactivity, inspired by Livewire.
+Alpine.js, inspired by Vue and Livewire.
 
 How it works:
 

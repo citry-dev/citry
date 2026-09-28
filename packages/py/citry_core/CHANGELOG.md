@@ -4,9 +4,9 @@
 
 ### Removed
 
-- `analyze_component_members()` is no longer exported from
-  `citry_core.template_parser`. Citry's Vue runtime no longer reads
-  component JavaScript members this way.
+- **Breaking:** `citry_core.template_parser.analyze_component_members()` is
+  removed, with no replacement. Citry itself does not call it, so this
+  affects only code that imported it directly.
 
 ### Added
 

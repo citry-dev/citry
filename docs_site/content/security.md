@@ -160,6 +160,22 @@ Integrity error, a proxy or CDN in front of Citry is probably dropping
 URLs. Pages that are not sandboxed and live on the same origin as Citry keep
 working without it.
 
+### Keep the CORS header when a proxy or CDN serves Citry's files
+
+Citry loads its own files with `crossorigin="anonymous"`, so the browser
+sends each of those requests as a CORS request. Citry writes these URLs
+relative to the page's own site, and a same-origin response loads without
+any CORS header. Two setups make the requests cross-origin: the sandboxed
+iframes described above, and a CDN or HTML optimizer that rewrites Citry's
+asset URLs to point at another host.
+
+In either setup, the browser refuses a Citry file whose response lacks
+`Access-Control-Allow-Origin`. The page shows its server-rendered HTML, but
+its interactive components never start, and the console reports a CORS or
+Subresource Integrity error. Configure the proxy or CDN to pass Citry's
+`Access-Control-Allow-Origin: *` header through for Citry's asset URLs, or to
+add it.
+
 ## Apply a request CSP nonce centrally
 
 Generate a fresh unpredictable nonce for each response, place its matching
