@@ -206,7 +206,7 @@ def test_vue_i18n_formats_and_parsers_follow_locale(page: Any, serve_document: A
 
     parse_states = page.evaluate(
         """() => {
-          const service = [...CitryStable._apps.values()]
+          const service = [...__citryRuntime._apps.values()]
             .flatMap(app => [...app.mounted.values()])
             .map(value => value.component.$i18n).find(Boolean);
           const incomplete = service.parse.number('1,', {format: 'measurement'});

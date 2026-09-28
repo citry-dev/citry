@@ -2,14 +2,17 @@
 Cross-browser e2e for the ``fragment`` strategy (HTMX-style on-demand loading).
 
 Proves the full live path: an initial page loads the runtime, then fetches a
-fragment and inserts it; the runtime sees the fragment's manifest, fetches the
-component's JS and CSS from citry's ``/citry/ext/events/...`` routes, runs the JS,
-and applies the styles. This is what makes citry's fragments "just work" in
-the browser, and it exercises the live-server half of the harness.
+fragment and inserts it. For an interactive fragment the runtime sees the
+fragment's Vue manifest, fetches the component's JS and CSS from citry's
+mounted routes, waits for the styles, and mounts the component. A static
+fragment carries ordinary style and script tags for the inserting library to
+run. This exercises the live-server half of the harness.
 """
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
 import pytest
@@ -22,8 +25,8 @@ from citry.ext.dependencies.routes import script_url
 pytestmark = pytest.mark.e2e
 
 # The initial page: load the runtime, then fetch the fragment and drop it in.
-# innerHTML-inserted manifests are picked up by the runtime's MutationObserver,
-# which then fetches and runs the component's scripts.
+# innerHTML-inserted Vue fragment manifests are picked up by the runtime's
+# MutationObserver, which then fetches the component's assets and mounts it.
 _PAGE = """
 <html>
   <head><script src="/citry/citry.js"></script></head>
@@ -47,8 +50,12 @@ def test_fragment_scripts_load_on_demand(page: Any, serve_live: Any) -> None:
 
     class Frag(Component):
         citry = c
-        template = '<div class="frag">frag</div>'
-        js = "$component(({ component }) => { component.$el.setAttribute('data-n', String(component.n)); });"
+        template = '<div ref="root" class="frag">frag</div>'
+        js = """
+          $component(({ component }) => {
+            component.$refs.root.setAttribute('data-n', String(component.n));
+          });
+        """
 
         def js_data(self, kwargs: Any, slots: Any) -> dict[str, int]:
             return {"n": 42}
@@ -69,17 +76,18 @@ def test_fragment_callback_waits_for_component_css(page: Any, serve_live: Any) -
 
     class StyledProbe(Component):
         citry = c
-        template = '<div class="css-readiness-probe">probe</div>'
+        template = '<div ref="root" class="css-readiness-probe">probe</div>'
         css = ".css-readiness-probe { color: rgb(31, 41, 55); }"
         js = """
           $component(({ component }) => {
-            const root = component.$el;
+            const root = component.$refs.root;
             root.dataset.callbackColor = getComputedStyle(root).color;
           });
         """
 
     fragment_html = StyledProbe().render().serialize(deps_strategy="fragment")
     held_routes: list[Any] = []
+    # An interactive fragment serves its stylesheet by content digest.
     page.route("**/ext/events/assets/*.css", lambda route: held_routes.append(route))
 
     base = serve_live(c, _PAGE, fragment_html)
@@ -89,6 +97,8 @@ def test_fragment_callback_waits_for_component_css(page: Any, serve_live: Any) -
             break
         page.wait_for_timeout(10)
     assert len(held_routes) == 1
+    # The Vue fragment mounts only after its stylesheet loads, so neither the
+    # component nor its callback exists while the stylesheet is held.
     assert page.locator(".css-readiness-probe").count() == 0
 
     held_routes[0].continue_()
@@ -168,7 +178,16 @@ def test_fragment_local_dependency_assets_load_on_demand(page: Any, serve_live: 
             css = "fragment-dependency.css"
 
     fragment_html = Frag().render().serialize(deps_strategy="fragment")
-    base = serve_live(c, _PAGE, fragment_html)
+    # A static fragment carries ordinary style and script tags and relies on
+    # the inserting library to run its scripts, as htmx does. innerHTML never
+    # runs scripts, so insert through a contextual fragment, which does.
+    page_html = _PAGE.replace(
+        "document.getElementById('target').innerHTML = html;",
+        "const target = document.getElementById('target');"
+        " target.append(document.createRange().createContextualFragment(html));",
+    )
+    assert page_html != _PAGE
+    base = serve_live(c, page_html, fragment_html)
     page.goto(base + "/")
     page.wait_for_function("document.querySelector('#dependency-fragment')?.dataset.loaded === 'true'")
 
@@ -182,9 +201,9 @@ def test_fragment_local_dependency_assets_load_on_demand(page: Any, serve_live: 
 
 
 def test_content_page_dedupes_a_reused_components_css(page: Any, serve_live: Any) -> None:
-    # The initial prepared page and a later fragment share the same
-    # content-addressed stylesheet. Each prepared Vue app owns a style node,
-    # while the browser fetches the immutable URL only once.
+    # The initial page and a later fragment share the same content-addressed
+    # stylesheet. Each Vue app owns its own style node, while the browser
+    # fetches the immutable URL only once.
     c = Citry()
     c.set_mounted_prefix("/citry")
 
@@ -199,7 +218,6 @@ def test_content_page_dedupes_a_reused_components_css(page: Any, serve_live: Any
         template = "<html><head></head><body><c-card /></body></html>"
 
     page_html = Page().render().serialize()
-    page_html = page_html.replace("</body>", '<div id="target"></div></body>')
     fragment_html = Card().render().serialize(deps_strategy="fragment")
     requests: list[str] = []
     page.on("request", lambda request: requests.append(request.url))
@@ -207,20 +225,25 @@ def test_content_page_dedupes_a_reused_components_css(page: Any, serve_live: Any
     page.goto(base + "/")
 
     page.wait_for_selector(".card")
-    page.wait_for_function("() => CitryStable._apps.size === 1")
+    page.wait_for_function("() => __citryRuntime._apps.size === 1")
     initial_css_requests = [url for url in requests if "/citry/ext/events/assets/" in url and url.endswith(".css")]
     assert len(initial_css_requests) == 1
 
+    # The page's Vue app owns its mount element, and a fragment may not be
+    # inserted inside it, so give the fragment its own element beside it.
     page.evaluate(
-        "() => fetch('/fragment').then((r) => r.text())"
-        ".then((html) => { document.getElementById('target').innerHTML = html; })"
+        "() => fetch('/fragment').then((r) => r.text()).then((html) => {"
+        " const target = document.createElement('div'); target.id = 'target';"
+        " document.body.append(target); target.innerHTML = html; })"
     )
     page.wait_for_selector("#target .card")
-    page.wait_for_function("() => CitryStable._apps.size === 2")
+    page.wait_for_function("() => __citryRuntime._apps.size === 2")
     page.wait_for_function(
         "() => getComputedStyle(document.querySelector('#target .card')).color === 'rgb(0, 128, 128)'"
     )
 
+    # The fragment's app gets its own style node for the same URL, and the
+    # browser does not request the stylesheet a second time.
     css_requests = [url for url in requests if "/citry/ext/events/assets/" in url and url.endswith(".css")]
     assert css_requests == initial_css_requests
     styles = page.evaluate(
@@ -232,45 +255,62 @@ def test_content_page_dedupes_a_reused_components_css(page: Any, serve_live: Any
     assert len({item["url"] for item in styles}) == 1
 
 
-def test_content_page_dedupes_a_reused_components_js(page: Any, serve_live: Any) -> None:
-    # The initial prepared page and a later fragment share the same immutable
-    # component script, so it is fetched and executed once.
+def test_fragment_reuses_a_component_script_the_page_already_loaded(page: Any, serve_live: Any) -> None:
+    # The page and a later fragment both render Widget. The Vue runtime loads
+    # each component script once per page, keyed by its URL (which changes
+    # whenever the script's content changes), so the fragment must neither
+    # fetch the script again nor run the code a second time.
     c = Citry()
     c.set_mounted_prefix("/citry")
 
     class Widget(Component):
         citry = c
-        template = '<div class="widget">w</div>'
-        js = "window.__widgetRuns = (window.__widgetRuns || 0) + 1;"
+        template = """
+            <div class="widget">w</div>
+        """
+        js = """
+            window.__widgetRuns = (window.__widgetRuns || 0) + 1;
+        """
 
     class Page(Component):
         citry = c
-        template = "<html><head></head><body><c-widget /></body></html>"
+        template = """
+            <html><head></head><body><c-widget /></body></html>
+        """
 
     page_html = Page().render().serialize()
     page_html = page_html.replace("</body>", '<div id="target"></div></body>')
     fragment_html = Widget().render().serialize(deps_strategy="fragment")
-    requests: list[str] = []
-    page.on("request", lambda request: requests.append(request.url))
+    # Read the script URL from the fragment's own manifest, so the check
+    # follows whatever URL the server actually asks the browser to load.
+    manifest_json = re.search(
+        r'<script type="application/json" data-citry-vue-fragment>(.*?)</script>', fragment_html, re.DOTALL
+    )
+    assert manifest_json is not None
+    fragment_scripts = json.loads(manifest_json.group(1))["vue"]["prepared"]["manifest"]["scripts"]
+    [js_url] = [
+        asset["source"]["url"] for asset in fragment_scripts if asset["owner"].get("typeKey") == Widget.class_id
+    ]
+    assert js_url in page_html
+
+    # The runtime removes a script element once it has run, so count the
+    # browser's requests for the URL rather than elements in the document.
+    requested: list[str] = []
+    page.on("request", lambda request: requested.append(request.url) if request.url.endswith(js_url) else None)
+
     base = serve_live(c, page_html, fragment_html)
     page.goto(base + "/")
-
     page.wait_for_function("() => window.__widgetRuns === 1")
-    page.wait_for_selector(".widget")
-    page.wait_for_function("() => CitryStable._apps.size === 1")
-    initial_script_requests = [url for url in requests if "/citry/ext/events/definitions/" in url]
-    assert initial_script_requests
-    assert len(initial_script_requests) == len(set(initial_script_requests))
+    assert len(requested) == 1
 
+    # The page's Vue app owns its mount element, and a fragment may not be
+    # inserted inside it, so give the fragment its own element beside it.
     page.evaluate(
-        "() => fetch('/fragment').then((r) => r.text())"
-        ".then((html) => { document.getElementById('target').innerHTML = html; })"
+        "() => fetch('/fragment').then((r) => r.text()).then((html) => {"
+        " const target = document.createElement('div'); target.id = 'target';"
+        " document.body.append(target); target.innerHTML = html; })"
     )
     page.wait_for_selector("#target .widget")
-    page.wait_for_function("() => CitryStable._apps.size === 2")
-    page.wait_for_selector("#target script[data-citry-vue-fragment][data-citry-processed]", state="attached")
 
-    script_requests = [url for url in requests if "/citry/ext/events/definitions/" in url]
-    assert script_requests == initial_script_requests
-    assert page.locator(".widget").count() == 2
+    assert len(requested) == 1
     assert page.evaluate("() => window.__widgetRuns") == 1

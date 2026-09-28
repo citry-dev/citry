@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import hashlib
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,19 +19,20 @@ pytest.importorskip("playwright.sync_api")
 pytestmark = pytest.mark.e2e
 
 
-def _pause_fake_clock(page: Any) -> None:
-    # Clock calls are separate protocol commands. Choose an explicit future
-    # virtual timestamp, then set Date to it before pausing at that timestamp,
-    # so the target cannot become stale between the two commands.
-    target = page.evaluate("new Date(Date.now() + 1_000).toISOString()")
-    page.clock.set_fixed_time(target)
-    page.clock.pause_at(target)
-
-
 def _client_bundle_source(vue_root: Path) -> str:
     fragments_source = (vue_root / "fragments.js").read_text(encoding="utf-8")
     client_source = (vue_root / "client.js").read_text(encoding="utf-8")
     return f"{fragments_source}\n{client_source}"
+
+
+def _pause_clock_before_load(page: Any) -> None:
+    """Install a paused fake clock so only explicit run_for calls move timers."""
+    # An installed clock follows real time until it is paused. Pausing after
+    # navigation leaves a window where a slow page load or network round trip
+    # fires a poll timer early, so pause before the page starts its timers.
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    page.clock.install(time=start)
+    page.clock.pause_at(start + timedelta(seconds=1))
 
 
 def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycle(page: Any, serve_live: Any) -> None:
@@ -94,7 +95,7 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
         if route.request.post_data_json["calls"][0]["handlerName"] == "poll"
         else route.continue_(),
     )
-    page.clock.install()
+    _pause_clock_before_load(page)
     page.goto(serve_live(engine, Poller().render().serialize(), "") + "/")
 
     page.clock.run_for(3_000)
@@ -112,7 +113,7 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
             route.continue_()
     page.unroute(poll_route_pattern)
     page.wait_for_function(
-        "[...CitryStable._apps.values().next().value.mounted.values()].every("
+        "[...__citryRuntime._apps.values().next().value.mounted.values()].every("
         "({component}) => !component.$loading('poll'))"
     )
 
@@ -128,7 +129,7 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
     assert calls == []
     page.clock.run_for(10)
     page.wait_for_function(
-        "() => { const app=CitryStable._apps.values().next().value; "
+        "() => { const app=__citryRuntime._apps.values().next().value; "
         "return !app.mounted.get(app.rootId).component.$loading('poll'); }"
     )
     assert sorted(call["args"]["value"] for call in sent_calls()) == [1, 2]
@@ -136,7 +137,7 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
     calls.clear()
     page.clock.run_for(500)
     page.locator("#poll-refresh").click()
-    page.wait_for_function("CitryStable._apps.values().next().value.revision > 0")
+    page.wait_for_function("__citryRuntime._apps.values().next().value.revision > 0")
     page.clock.run_for(499)
     assert [call["handlerName"] for call in sent_calls()] == ["refresh"]
     page.clock.run_for(1)
@@ -147,30 +148,29 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
     with page.expect_request(poll_route_pattern):
         page.clock.run_for(10)
     page.wait_for_function(
-        "() => { const app=CitryStable._apps.values().next().value; "
+        "() => { const app=__citryRuntime._apps.values().next().value; "
         "return !app.mounted.get(app.rootId).component.$loading('poll'); }"
     )
     assert sorted(call["args"]["value"] for call in sent_calls() if call["handlerName"] == "poll") == [1, 2]
 
-    _pause_fake_clock(page)
     page.wait_for_function(
-        "() => [...CitryStable._apps.values().next().value.mounted.values()].every("
+        "() => [...__citryRuntime._apps.values().next().value.mounted.values()].every("
         "({component}) => !component.$loading('poll'))"
     )
     calls.clear()
-    page.evaluate("CitryStable._apps.values().next().value.mounted.values().next().value.component.show=false")
+    page.evaluate("__citryRuntime._apps.values().next().value.mounted.values().next().value.component.show=false")
     page.locator(".poller").first.wait_for(state="detached")
     assert (
         page.evaluate(
             """() => {
-              const app=CitryStable._apps.values().next().value;
+              const app=__citryRuntime._apps.values().next().value;
               const record=app.mounted.values().next().value.record;
               return record.eventTimingLifetimes?.size || 0;
             }"""
         )
         == 0
     )
-    assert page.evaluate("CitryStable._apps.values().next().value.polling?.lifetimes.size || 0") == 0
+    assert page.evaluate("__citryRuntime._apps.values().next().value.polling?.lifetimes.size || 0") == 0
     page.clock.run_for(2_000)
     assert calls == []
     assert faults == []
@@ -202,14 +202,14 @@ def test_native_poll_rechecks_lifetime_after_argument_side_effects(page: Any, se
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.clock.install()
+    _pause_clock_before_load(page)
     page.goto(serve_live(engine, Poller().render().serialize(), "") + "/")
     page.clock.run_for(1_000)
     page.locator("output").wait_for(state="detached")
     page.clock.run_for(2_000)
     assert calls == []
     assert faults == []
-    assert page.evaluate("!CitryStable._apps.values().next().value.terminal")
+    assert page.evaluate("!__citryRuntime._apps.values().next().value.terminal")
 
 
 def test_native_polling_argument_failure_uses_vue_terminal_boundary(page: Any, serve_live: Any) -> None:
@@ -235,10 +235,10 @@ def test_native_polling_argument_failure_uses_vue_terminal_boundary(page: Any, s
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.clock.install()
+    _pause_clock_before_load(page)
     page.goto(serve_live(engine, BrokenPoll().render().serialize(), "") + "/")
     page.clock.run_for(1_000)
-    page.wait_for_function("globalThis.CitryStable._apps.values().next().value.terminal === true")
+    page.wait_for_function("globalThis.__citryRuntime._apps.values().next().value.terminal === true")
     assert faults == ["Citry polling arguments must be a plain object"]
     page.clock.run_for(5_000)
     assert faults == ["Citry polling arguments must be a plain object"]
@@ -328,10 +328,9 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
         Object.defineProperty(document,'hidden',{configurable:true,get:()=>globalThis.__citryDocumentHidden});"""
     )
     page.route(event_url, route_poll)
-    page.clock.install()
+    _pause_clock_before_load(page)
     page.goto(serve_live(engine, RuntimePoll(revision=0).render().serialize(), "") + "/")
     page.locator("#runtime-poller").wait_for()
-    _pause_fake_clock(page)
 
     page.clock.run_for(1_000)
     wait_for_held_polls(1)
@@ -345,7 +344,7 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
 
     held_polls[0].continue_()
     page.wait_for_function(
-        "() => { const app=CitryStable._apps.values().next().value; "
+        "() => { const app=__citryRuntime._apps.values().next().value; "
         "return [...app.mounted.values()].every(({component}) => !component.$loading('poll')); }"
     )
     page.clock.run_for(500)
@@ -369,7 +368,7 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
     assert len(calls_for("poll")) == 2
     held_polls[1].continue_()
     page.wait_for_function(
-        "() => { const app=CitryStable._apps.values().next().value; "
+        "() => { const app=__citryRuntime._apps.values().next().value; "
         "return [...app.mounted.values()].every(({component}) => !component.$loading('poll')); }"
     )
 
@@ -384,7 +383,7 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
     assert len(calls_for("poll")) == 3
     held_polls[2].continue_()
     page.wait_for_function(
-        "() => { const app=CitryStable._apps.values().next().value; "
+        "() => { const app=__citryRuntime._apps.values().next().value; "
         "return [...app.mounted.values()].every(({component}) => !component.$loading('poll')); }"
     )
     page.unroute(event_url)
@@ -456,7 +455,7 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     def poll_lifetime_snapshot() -> dict[str, Any]:
         return page.evaluate(
             """() => {
-              const app=CitryStable._apps.values().next().value;
+              const app=__citryRuntime._apps.values().next().value;
               return {revision:app.revision,hidden:document.hidden,
                 pollingLifetimeCount:app.polling?.lifetimes.size || 0,
                 mounted:[...app.mounted.values()].map(({record})=>({
@@ -475,12 +474,11 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
         return sum(len(mounted["lifetimes"]) for mounted in snapshot["mounted"])
 
     page.route(event_url, route_poll)
-    page.clock.install()
+    _pause_clock_before_load(page)
     page.goto(serve_live(engine, PollRows(rows=["a", "b"]).render().serialize(), "") + "/")
     page.wait_for_function(
         "() => [...document.querySelectorAll('.row-poller')].map(node => node.dataset.row).join(',') === 'a,b'"
     )
-    _pause_fake_clock(page)
 
     page.clock.run_for(1_000)
     wait_for_poll_routes(1)
@@ -499,7 +497,7 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     assert first_poll["callerRenderId"] == second_poll["callerRenderId"]
     poll_routes[1].continue_()
     page.wait_for_function(
-        "() => { const app=CitryStable._apps.values().next().value; "
+        "() => { const app=__citryRuntime._apps.values().next().value; "
         "return [...app.mounted.values()].every(({component}) => "
         "!component.$loading('poll_a') && !component.$loading('poll_b')); }"
     )
@@ -539,7 +537,7 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     assert surviving_poll["handlerName"] == "poll_b"
     poll_routes[-1].continue_()
     page.wait_for_function(
-        "() => { const app=CitryStable._apps.values().next().value; "
+        "() => { const app=__citryRuntime._apps.values().next().value; "
         "return [...app.mounted.values()].every(({component}) => "
         "!component.$loading('poll_a') && !component.$loading('poll_b')); }"
     )
@@ -683,10 +681,9 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(page: Any
         else None,
     )
     base = serve_live(engine, Timed().render().serialize(), "")
-    page.clock.install()
+    _pause_clock_before_load(page)
     page.goto(base + "/")
     page.locator("#refresh").wait_for()
-    _pause_fake_clock(page)
 
     def wait_for_call_count(count: int) -> None:
         deadline = time.monotonic() + 5
@@ -717,7 +714,7 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(page: Any
     before = len(calls)
     page.locator("#pending").click()
     page.locator("#refresh").click()
-    page.wait_for_function("CitryStable._apps.values().next().value.revision > 0")
+    page.wait_for_function("__citryRuntime._apps.values().next().value.revision > 0")
     page.clock.run_for(130)
     page.wait_for_timeout(20)
     assert [(call["calls"][0]["handlerName"], call["calls"][0]["args"]) for call in calls[before:]] == [
@@ -727,7 +724,7 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(page: Any
 
     page.locator("#conditional").click()
     page.evaluate(
-        "CitryStable._apps.values().next().value.mounted.values().next().value.component.showConditional=false"
+        "__citryRuntime._apps.values().next().value.mounted.values().next().value.component.showConditional=false"
     )
     page.locator("#conditional").wait_for(state="detached")
     page.clock.run_for(130)
@@ -735,14 +732,14 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(page: Any
     assert len(calls) == before + 2
     assert (
         page.evaluate(
-            "CitryStable._apps.values().next().value.mounted.values().next().value.record."
+            "__citryRuntime._apps.values().next().value.mounted.values().next().value.record."
             "eventTimingLifetimes?.size || 0"
         )
         == 0
     )
 
     page.locator("#pending").click()
-    page.evaluate("CitryStable._apps.values().next().value.vueApp.unmount()")
+    page.evaluate("__citryRuntime._apps.values().next().value.vueApp.unmount()")
     page.clock.run_for(130)
     page.wait_for_timeout(20)
     assert len(calls) == before + 2
@@ -1004,7 +1001,7 @@ def test_native_state_control_debounces_and_preserves_the_live_draft(page: Any, 
     page.goto(base + "/")
     page.locator("#query").fill("native")
     assert page.locator("#query").input_value() == "native"
-    page.wait_for_function("CitryStable._apps.values().next().value.revision === 1")
+    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 1")
     assert page.evaluate("globalThis.__controlCallbackValue") == "native"
     assert page.locator("output").text_content() == "native"
     assert page.locator("#query").input_value() == "native"
@@ -1080,14 +1077,14 @@ def test_native_control_unmount_cancels_debounce_and_pending_custom_upgrade(page
     base = serve_live(engine, Cleanup().render().serialize(), "")
     page.goto(base + "/")
     page.locator("#cleanup-query").fill("pending")
-    page.evaluate("CitryStable._apps.values().next().value.vueApp.unmount()")
+    page.evaluate("__citryRuntime._apps.values().next().value.vueApp.unmount()")
     page.evaluate(
         "customElements.define('x-late',class extends HTMLElement{"
         "set value(v){globalThis.__lateWrites=(globalThis.__lateWrites||0)+1}})"
     )
     page.wait_for_timeout(150)
     assert page.evaluate("globalThis.__lateWrites || 0") == 0
-    assert page.evaluate("CitryStable._apps.size") == 0
+    assert page.evaluate("__citryRuntime._apps.size") == 0
 
 
 def test_native_control_recovers_when_live_input_type_becomes_valid_again(page: Any, serve_live: Any) -> None:
@@ -1112,10 +1109,10 @@ def test_native_control_recovers_when_live_input_type_becomes_valid_again(page: 
     base = serve_live(engine, Recovery().render().serialize(), "")
     page.goto(base + "/")
     page.evaluate("""() => {const el=document.querySelector('#recover');el.setAttribute('type','button');
-      CitryStable._apps.values().next().value.mounted.values().next().value.component.$forceUpdate()}""")
+      __citryRuntime._apps.values().next().value.mounted.values().next().value.component.$forceUpdate()}""")
     page.wait_for_timeout(0)
     page.evaluate("""() => {const el=document.querySelector('#recover');el.setAttribute('type','checkbox');
-      CitryStable._apps.values().next().value.mounted.values().next().value.component.$forceUpdate()}""")
+      __citryRuntime._apps.values().next().value.mounted.values().next().value.component.$forceUpdate()}""")
     page.wait_for_timeout(0)
     assert page.locator("#recover").is_checked()
 
@@ -1146,7 +1143,7 @@ def test_custom_control_setter_event_does_not_echo_to_server(page: Any, serve_li
     page.goto(base + "/")
     page.wait_for_timeout(100)
     assert page.eval_on_selector("#echo", "element => element.value") == "seed"
-    assert page.evaluate("CitryStable._apps.values().next().value.revision") == 0
+    assert page.evaluate("__citryRuntime._apps.values().next().value.revision") == 0
 
 
 def test_custom_control_setter_failure_is_local_and_recovers(page: Any, serve_live: Any) -> None:
@@ -1175,11 +1172,11 @@ def test_custom_control_setter_failure_is_local_and_recovers(page: Any, serve_li
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.goto(base + "/")
-    page.evaluate("""() => {const mounted=CitryStable._apps.values().next().value.mounted.values().next().value;
+    page.evaluate("""() => {const mounted=__citryRuntime._apps.values().next().value.mounted.values().next().value;
       mounted.record.state.values.value='bad';mounted.component.$forceUpdate()}""")
     page.wait_for_timeout(0)
     assert page.eval_on_selector("#setter", "element => element.value") == "good"
-    page.evaluate("""() => {const mounted=CitryStable._apps.values().next().value.mounted.values().next().value;
+    page.evaluate("""() => {const mounted=__citryRuntime._apps.values().next().value.mounted.values().next().value;
       mounted.record.state.values.value='recovered';mounted.component.$forceUpdate()}""")
     page.wait_for_timeout(0)
     assert page.eval_on_selector("#setter", "element => element.value") == "recovered"
@@ -1232,7 +1229,7 @@ def test_custom_control_getter_failure_and_non_json_value_do_not_adopt_or_send(p
     assert seen == []
     assert (
         page.evaluate(
-            "CitryStable._apps.values().next().value.mounted.values().next().value.record.state.values.value"
+            "__citryRuntime._apps.values().next().value.mounted.values().next().value.record.state.values.value"
         )
         == "seed"
     )
@@ -1246,7 +1243,7 @@ def test_custom_control_getter_failure_and_non_json_value_do_not_adopt_or_send(p
     assert seen == ["recovered"]
     assert (
         page.evaluate(
-            "CitryStable._apps.values().next().value.mounted.values().next().value.record.state.values.value"
+            "__citryRuntime._apps.values().next().value.mounted.values().next().value.record.state.values.value"
         )
         == "recovered"
     )
@@ -1375,14 +1372,14 @@ def test_supplied_slot_poll_uses_live_lexical_caller_scope(page: Any, serve_live
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.clock.install()
+    _pause_clock_before_load(page)
     page.goto(serve_live(engine, Owner().render().serialize(), "") + "/")
     page.locator("#slot-poll").wait_for()
 
     with page.expect_request(poll_endpoint):
         page.clock.run_for(1_000)
     page.wait_for_function(
-        "() => { const app=CitryStable._apps.values().next().value; "
+        "() => { const app=__citryRuntime._apps.values().next().value; "
         "return !app.mounted.get(app.rootId).component.$loading('poll'); }"
     )
     first_calls = [call for request in requests for call in request["calls"]]
@@ -1394,7 +1391,7 @@ def test_supplied_slot_poll_uses_live_lexical_caller_scope(page: Any, serve_live
     with page.expect_request(poll_endpoint):
         page.clock.run_for(1_000)
     page.wait_for_function(
-        "() => { const app=CitryStable._apps.values().next().value; "
+        "() => { const app=__citryRuntime._apps.values().next().value; "
         "return !app.mounted.get(app.rootId).component.$loading('poll'); }"
     )
     second_calls = [call for request in requests for call in request["calls"]]
@@ -1424,11 +1421,11 @@ def test_checkbox_invalid_state_value_is_local_and_next_boolean_recovers(page: A
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.goto(serve_live(engine, Checkbox().render().serialize(), "") + "/")
-    page.evaluate("""() => {const mounted=CitryStable._apps.values().next().value.mounted.values().next().value;
+    page.evaluate("""() => {const mounted=__citryRuntime._apps.values().next().value.mounted.values().next().value;
       mounted.record.state.values.enabled='invalid';mounted.component.$forceUpdate()}""")
     page.wait_for_timeout(0)
     assert page.locator("#checkbox-recovery").is_checked()
-    page.evaluate("""() => {const mounted=CitryStable._apps.values().next().value.mounted.values().next().value;
+    page.evaluate("""() => {const mounted=__citryRuntime._apps.values().next().value.mounted.values().next().value;
       mounted.record.state.values.enabled=false;mounted.component.$forceUpdate()}""")
     page.wait_for_timeout(0)
     assert not page.locator("#checkbox-recovery").is_checked()
@@ -1443,7 +1440,7 @@ def test_extension_styles_accumulate_for_the_app_lifetime_across_revision(page: 
             return BrowserPluginDescriptor(
                 1,
                 Script(
-                    content="CitryStable.registerBrowserPlugin('probe',1,()=>({install(){},prepareRevision(){return{}},activateRevision(){},commitRevision(){},abortRevision(){},rollbackRevision(){},dispose(){}}),[]);"
+                    content="__citryRuntime.registerBrowserPlugin('probe',1,()=>({install(){},prepareRevision(){return{}},activateRevision(){},commitRevision(){},abortRevision(){},rollbackRevision(){},dispose(){}}),[]);"
                 ),
             )
 
@@ -1487,7 +1484,7 @@ def test_extension_styles_accumulate_for_the_app_lifetime_across_revision(page: 
     page.wait_for_function("globalThis.__citryExternalRuns?.join() === '0'")
     assert page.evaluate("globalThis.__citryExternalRuns") == ["0"]
     page.locator("#rev").click()
-    page.wait_for_function("CitryStable._apps.values().next().value.revision === 1")
+    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 1")
     page.wait_for_function("globalThis.__citryExternalRuns?.join() === '0,1'")
     assert page.evaluate("globalThis.__citryExternalRuns") == ["0", "1"]
     urls = page.locator("style[data-citry-css-url],link[rel=stylesheet]").evaluate_all(
@@ -1522,10 +1519,10 @@ def test_external_prepared_asset_integrity_is_optional_and_identity_is_app_scope
     result = page.evaluate(
         """async ({vueSource,clientSource})=>{window.eval(vueSource);window.eval(clientSource);
           const helper=clientSource.match(/const HELPER_CONTRACT = "([^"]+)"/)[1],digest='a'.repeat(64),def='d';
-          CitryStableDefinitions={[def]:{render(){return Vue.h('p',{class:'external'},'ok')},
+          __citryRuntimeDefinitions={[def]:{render(){return Vue.h('p',{class:'external'},'ok')},
             target:'ordinary-vnodes/1',helperContract:helper,dynamicElements:[],directiveSignature:[],
-            replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}};CitryStable.registerTypeOptions('Root',digest,{});
-          CitryStable.registerBrowserPlugin('probe',1,()=>({install(){},prepareRevision(){return{}},
+            replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}};__citryRuntime.registerTypeOptions('Root',digest,{});
+          __citryRuntime.registerBrowserPlugin('probe',1,()=>({install(){},prepareRevision(){return{}},
             activateRevision(){},commitRevision(){},abortRevision(){},rollbackRevision(){},dispose(){}}),[]);
           const style=(url,attrs)=>({owner:{kind:'extension',extensionName:'probe'},
             source:{kind:'external',url,attrs},lazyAllowed:true});
@@ -1535,10 +1532,11 @@ def test_external_prepared_asset_integrity_is_optional_and_identity_is_app_scope
             occurrences:[{id,typeKey:'Root',definitionId:def,parentId:null,placementKey:null,serverData:{},preparedData:{calls:{}}}],
             definitions:[{id:def,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',helperContract:helper,
               dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]}],
-            replacements:[],scripts:[],styles:[style(url,attrs),...(duplicateAttrs?[style(url,duplicateAttrs)]:[])],
+            scripts:[],styles:[style(url,attrs),...(duplicateAttrs?[style(url,duplicateAttrs)]:[])],
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],
             extensions:{probe:{schemaVersion:1,payload:{},templateContextNames:[]}}});
-          const attempt=async(id,attrs,url='/external.css',duplicateAttrs=null)=>{try{await CitryStable.startPrepared({
+          const attempt=async(id,attrs,url='/external.css',duplicateAttrs=null)=>{
+            try{await __citryRuntime.startPrepared({
             manifest:manifest(id,id+'-root',attrs,url,duplicateAttrs),host:'#'+id,tags:{Root:'citry-root'},
             loadInitialAssets:true});return null}catch(error){return error.message}};
           return {noIntegrity:await attempt('a',{rel:'stylesheet'}),
@@ -1562,155 +1560,163 @@ def test_external_prepared_asset_integrity_is_optional_and_identity_is_app_scope
     }
 
 
-def test_opaque_sandbox_skips_only_citry_owned_asset_integrity(page: Any) -> None:
-    """Opaque preview frames can load Citry-owned assets without weakening normal SRI."""
+def test_initial_script_preloads_overlap_fetch_but_keep_serial_execution(page: Any) -> None:
     vue_root = Path(__file__).parents[2] / "citry" / "_vue"
-    definition_source = """
-      globalThis.CitryStableDefinitions = globalThis.CitryStableDefinitions || {};
-      globalThis.CitryStableDefinitions['asset-test-definition'] = {
-        render() {
-          return Vue.h('p', {id: 'owned-ready'}, globalThis.__ownedScriptLoaded ? 'ready' : 'missing');
-        },
-        target: 'ordinary-vnodes/1',
-        helperContract: globalThis.CitryStable.compilerRuntime.helperContract,
-        dynamicElements: [], directiveSignature: [], replacementSites: [], localCalls: [],
-        localCallRuns: [], opaqueHtmlSites: [], runtimeEventSites: [],
-      };
-    """
-    definition_digest = hashlib.sha256(definition_source.encode()).hexdigest()
-    page.route(
-        "http://citry.test/",
-        lambda route: route.fulfill(body="<main id='outer'></main>", content_type="text/html"),
-    )
-    page.route(
-        "http://citry.test/runtime.js",
-        lambda route: route.fulfill(
-            body=(vue_root / "runtime.js").read_text(encoding="utf-8"),
-            content_type="text/javascript",
-        ),
-    )
-    page.route(
-        "http://citry.test/definition.js",
-        lambda route: route.fulfill(body=definition_source, content_type="text/javascript"),
-    )
-    page.route(
-        "http://citry.test/owned.js",
-        lambda route: route.fulfill(
-            body="globalThis.__ownedScriptLoaded = true;",
-            content_type="text/javascript",
-        ),
-    )
-    page.route(
-        "http://citry.test/owned.css",
-        lambda route: route.fulfill(
-            body=":root { --owned-loaded: ready; }",
-            content_type="text/css",
-        ),
-    )
+    requests: list[str] = []
+    responses: list[str] = []
+
+    page.route("http://citry.test/", lambda route: route.fulfill(body='<div id="host"></div>'))
+
+    def route_script(route: Any) -> None:
+        name = "first" if route.request.url.endswith("/first.js") else "second"
+        requests.append(name)
+        if name == "first":
+            page.wait_for_timeout(250)
+        responses.append(name)
+        route.fulfill(body=f"window.__scriptOrder.push('{name}')", content_type="text/javascript")
+
+    page.route("http://citry.test/first.js", route_script)
+    page.route("http://citry.test/second.js", route_script)
     page.goto("http://citry.test/")
-    helper_contract = re.search(
-        r'const HELPER_CONTRACT = "([0-9a-f]+)"',
-        (vue_root / "client.js").read_text(encoding="utf-8"),
-    ).group(1)
     result = page.evaluate(
-        """({definitionDigest, helperContract}) => {
-          const cases = [
-            {
-              name: 'opaque', sandbox: true,
-              definitionDigest: '0'.repeat(64), scriptDigest: '1'.repeat(64), styleDigest: '2'.repeat(64),
-              scripts: true, styles: true,
-            },
-            {
-              name: 'definition-sri', sandbox: false,
-              definitionDigest: 'f'.repeat(64), scriptDigest: '1'.repeat(64), styleDigest: '2'.repeat(64),
-              scripts: false, styles: false,
-            },
-            {
-              name: 'script-sri', sandbox: false,
-              definitionDigest, scriptDigest: 'f'.repeat(64), styleDigest: '2'.repeat(64),
-              scripts: true, styles: false,
-            },
-            {
-              name: 'style-sri', sandbox: false,
-              definitionDigest, scriptDigest: '1'.repeat(64), styleDigest: 'f'.repeat(64),
-              scripts: false, styles: true,
-            },
-          ];
-          const makeManifest = ({name, definitionDigest, scriptDigest, styleDigest, scripts, styles}) => {
-            const occurrenceId = `${name}-root`;
-            return {
-              protocol: 'citry-vue-prepared/1', appId: `asset-${name}`, revision: 0,
-              rootId: occurrenceId, markers: [],
-              occurrences: [{id: occurrenceId, typeKey: 'Root', definitionId: 'asset-test-definition',
-                parentId: null, placementKey: null, serverData: {}, preparedData: {calls: {}}}],
-              definitions: [{id: 'asset-test-definition', url: '/definition.js', sha256: definitionDigest,
-                target: 'ordinary-vnodes/1', helperContract,
-                dynamicElements: [], directiveSignature: [], replacementSites: [], localCalls: [],
-                localCallRuns: [], opaqueHtmlSites: [], runtimeEventSites: []}],
-              replacements: [],
-              scripts: scripts ? [{owner: {kind: 'component', typeKey: 'Root'},
-                source: {kind: 'owned', url: '/owned.js', sha256: scriptDigest},
-                lazyAllowed: true, registersOptions: false}] : [],
-              styles: styles ? [{owner: {kind: 'component', typeKey: 'Root', occurrenceIds: [occurrenceId]},
-                source: {kind: 'owned', url: '/owned.css', sha256: styleDigest, attrs: {rel: 'stylesheet'}},
-                lazyAllowed: true}] : [],
-              typePolicies: [{typeKey: 'Root', lazyAllowed: true}], extensions: {},
-            };
-          };
-          const frameSource = configuration => `<!doctype html><html><body><div id="host"></div>
-            <script src="http://citry.test/runtime.js"></script>
-            <script>
-              (async () => {
-                const report = (state, error) => parent.postMessage({type: 'citry-owned-integrity',
-                  name: ${JSON.stringify(configuration.name)}, state, error: error || null,
-                  ready: document.querySelector('#owned-ready')?.textContent || null,
-                  style: getComputedStyle(document.documentElement).getPropertyValue('--owned-loaded').trim()}, '*');
-                try {
-                  CitryStable.registerTypeOptions('Root', 'a'.repeat(64), {});
-                  await CitryStable.startPrepared({
-                    manifest: ${JSON.stringify(makeManifest(configuration))}, host: '#host', tags: {Root: 'c-root'},
-                    loadInitialAssets: true, allowLazyTypeAssets: true,
-                  });
-                  report('ready');
-                } catch (error) {
-                  report('error', String(error?.message || error));
-                }
-              })();
-            </script></body></html>`;
-          return new Promise(resolve => {
-            const output = new Map();
-            const listener = event => {
-              if (event.data?.type !== 'citry-owned-integrity' || output.has(event.data.name)) return;
-              output.set(event.data.name, event.data);
-              if (output.size === cases.length) {
-                window.removeEventListener('message', listener);
-                resolve(cases.map(({name}) => output.get(name)));
-              }
-            };
-            window.addEventListener('message', listener);
-            for (const configuration of cases) {
-              const frame = document.createElement('iframe');
-              if (configuration.sandbox) frame.setAttribute('sandbox', 'allow-scripts');
-              frame.srcdoc = frameSource(configuration);
-              document.body.append(frame);
-            }
-            window.setTimeout(() => {
-              window.removeEventListener('message', listener);
-              resolve(cases.map(({name}) => output.get(name) || {name, state: 'timeout'}));
-            }, 10_000);
-          });
+        """async ({vueSource, clientSource}) => {
+          window.eval(vueSource); window.eval(clientSource); window.__scriptOrder=[];
+          const helper=clientSource.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
+          const digest='a'.repeat(64), definitionId='preload-root';
+          __citryRuntimeDefinitions={[definitionId]:{render(){return Vue.h('p','ready')},
+            target:'ordinary-vnodes/1',helperContract:helper,dynamicElements:[],directiveSignature:[],
+            replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}};
+          __citryRuntime.registerTypeOptions('Root',digest,{});
+          const occurrence={id:'preload-root',typeKey:'Root',definitionId,parentId:null,placementKey:null,
+            serverData:{},preparedData:{calls:{}}};
+          const definition={id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
+            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],
+            localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]};
+          const script=url=>({owner:{kind:'component',typeKey:'Root'},
+            source:{kind:'external',url,attrs:{}},lazyAllowed:true,registersOptions:false});
+          const manifest={protocol:'citry-vue-prepared/1',appId:'preload-order',revision:0,rootId:'preload-root',
+            markers:[],occurrences:[occurrence],definitions:[definition],scripts:[script('/first.js'),script('/second.js')],
+            styles:[],typePolicies:[{typeKey:'Root',lazyAllowed:true}],extensions:{}};
+          await __citryRuntime.startPrepared({manifest,host:'#host',tags:{Root:'citry-root'},loadInitialAssets:true});
+          return {order:window.__scriptOrder,
+            preloads:document.querySelectorAll('link[rel="preload"][as="script"]').length};
         }""",
-        {"definitionDigest": definition_digest, "helperContract": helper_contract},
+        {
+            "vueSource": (vue_root / "vue.js").read_text(encoding="utf-8"),
+            "clientSource": _client_bundle_source(vue_root),
+        },
     )
-    assert result[0]["state"] == "ready"
-    assert result[0]["ready"] == "ready"
-    assert result[0]["style"] == "ready"
-    assert result[1]["state"] == "error"
-    assert result[1]["error"] == "Citry Vue definition failed to load: /definition.js"
-    assert result[2]["state"] == "error"
-    assert result[2]["error"] == "Citry Vue type script failed to load: /owned.js"
-    assert result[3]["state"] == "error"
-    assert result[3]["error"] == "Citry Vue stylesheet failed to load: /owned.css"
+    assert requests == ["first", "second"]
+    assert responses == ["second", "first"]
+    assert result == {"order": ["first", "second"], "preloads": 0}
+
+
+def test_initial_preloaded_later_script_does_not_execute_after_first_registration_failure(page: Any) -> None:
+    vue_root = Path(__file__).parents[2] / "citry" / "_vue"
+    requests: list[str] = []
+    page.route("http://citry.test/", lambda route: route.fulfill(body='<div id="host"></div>'))
+
+    def route_script(route: Any) -> None:
+        name = "first" if route.request.url.endswith("/first.js") else "later"
+        requests.append(name)
+        route.fulfill(
+            body="window.__scriptRuns.push('first')" if name == "first" else "window.__scriptRuns.push('later')",
+            content_type="text/javascript",
+        )
+
+    page.route("http://citry.test/first.js", route_script)
+    page.route("http://citry.test/later.js", route_script)
+    page.goto("http://citry.test/")
+    result = page.evaluate(
+        """async ({vueSource, clientSource}) => {
+          window.eval(vueSource); window.eval(clientSource); window.__scriptRuns=[];
+          const helper=clientSource.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
+          const digest='a'.repeat(64), definitionId='preload-failure-root';
+          __citryRuntimeDefinitions={[definitionId]:{render(){return Vue.h('p','ready')},
+            target:'ordinary-vnodes/1',helperContract:helper,dynamicElements:[],directiveSignature:[],
+            replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}};
+          const occurrence={id:'preload-failure-root',typeKey:'Root',definitionId,parentId:null,placementKey:null,
+            serverData:{},preparedData:{calls:{}}};
+          const definition={id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
+            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],
+            localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]};
+          const script=(url,registersOptions)=>({owner:{kind:'component',typeKey:'Root'},
+            source:{kind:'external',url,attrs:{}},lazyAllowed:true,registersOptions});
+          const manifest={protocol:'citry-vue-prepared/1',appId:'preload-failure',revision:0,
+            rootId:'preload-failure-root',
+            markers:[],occurrences:[occurrence],definitions:[definition],
+            scripts:[script('/first.js',true),script('/later.js',false)],styles:[],
+            typePolicies:[{typeKey:'Root',lazyAllowed:true}],extensions:{}};
+          const failure=await __citryRuntime.startPrepared({manifest,host:'#host',tags:{Root:'citry-root'},
+            loadInitialAssets:true})
+            .then(()=>null,error=>error.message);
+          return {failure,runs:window.__scriptRuns,
+            preloads:document.querySelectorAll('link[rel="preload"][as="script"]').length};
+        }""",
+        {
+            "vueSource": (vue_root / "vue.js").read_text(encoding="utf-8"),
+            "clientSource": _client_bundle_source(vue_root),
+        },
+    )
+    assert requests == ["first", "later"]
+    assert result == {
+        "failure": "Citry Vue type script did not register its declared Options",
+        "runs": ["first"],
+        "preloads": 0,
+    }
+
+
+def test_initial_script_with_custom_attribute_falls_back_to_serial_element(page: Any) -> None:
+    vue_root = Path(__file__).parents[2] / "citry" / "_vue"
+    requests = 0
+    page.route("http://citry.test/", lambda route: route.fulfill(body='<div id="host"></div>'))
+
+    def route_script(route: Any) -> None:
+        nonlocal requests
+        requests += 1
+        route.fulfill(
+            body="window.__scriptAttribute=document.currentScript.getAttribute('data-probe')",
+            content_type="text/javascript",
+        )
+
+    page.route("http://citry.test/custom.js", route_script)
+    page.goto("http://citry.test/")
+    result = page.evaluate(
+        """async ({vueSource, clientSource}) => {
+          window.eval(vueSource); window.eval(clientSource);
+          const observed=[];
+          const observer=new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(node=>{
+            if(node instanceof HTMLLinkElement && node.rel==='preload') observed.push(node.href);
+          })));
+          observer.observe(document.head,{childList:true});
+          const helper=clientSource.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
+          const digest='a'.repeat(64), definitionId='custom-attribute-root';
+          __citryRuntimeDefinitions={[definitionId]:{render(){return Vue.h('p','ready')},
+            target:'ordinary-vnodes/1',helperContract:helper,dynamicElements:[],directiveSignature:[],
+            replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}};
+          __citryRuntime.registerTypeOptions('Root',digest,{});
+          const occurrence={id:'custom-attribute-root',typeKey:'Root',definitionId,parentId:null,placementKey:null,
+            serverData:{},preparedData:{calls:{}}};
+          const definition={id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
+            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],
+            localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]};
+          const asset={owner:{kind:'component',typeKey:'Root'},
+            source:{kind:'external',url:'/custom.js',attrs:{'data-probe':'kept'}},
+            lazyAllowed:true,registersOptions:false};
+          const manifest={protocol:'citry-vue-prepared/1',appId:'custom-attribute',revision:0,
+            rootId:'custom-attribute-root',markers:[],occurrences:[occurrence],definitions:[definition],
+            scripts:[asset],styles:[],typePolicies:[{typeKey:'Root',lazyAllowed:true}],extensions:{}};
+          await __citryRuntime.startPrepared({manifest,host:'#host',tags:{Root:'citry-root'},loadInitialAssets:true});
+          observer.disconnect();
+          return {observed,attribute:window.__scriptAttribute};
+        }""",
+        {
+            "vueSource": (vue_root / "vue.js").read_text(encoding="utf-8"),
+            "clientSource": _client_bundle_source(vue_root),
+        },
+    )
+    assert requests == 1
+    assert result == {"observed": [], "attribute": "kept"}
 
 
 def test_opaque_sandbox_fetches_content_addressed_vue_assets_with_cors(page: Any, serve_live: Any) -> None:
@@ -1800,26 +1806,26 @@ def test_terminal_app_releases_only_its_shared_stylesheet_reference(page: Any) -
           window.eval(vueSource); window.eval(clientSource);
           const helper=clientSource.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
           const digest='a'.repeat(64), definitionId='style-definition';
-          window.CitryStableDefinitions={[definitionId]:{render(){return Vue.h('p',{class:'shared'},'ready')},
+          window.__citryRuntimeDefinitions={[definitionId]:{render(){return Vue.h('p',{class:'shared'},'ready')},
             target:'ordinary-vnodes/1',helperContract:helper,dynamicElements:[],directiveSignature:[],
             replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}};
-          CitryStable.registerTypeOptions('Root',digest,{onServerRender({revision}){
+          __citryRuntime.registerTypeOptions('Root',digest,{onServerRender({revision}){
             if(revision===1)throw new Error('intentional stylesheet cleanup failure');
           }});
           const manifest=(appId,id)=>({protocol:'citry-vue-prepared/1',appId,revision:0,rootId:id,markers:[],
             occurrences:[{id,typeKey:'Root',definitionId,parentId:null,placementKey:null,serverData:{},preparedData:{calls:{}}}],
             definitions:[{id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
               helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]}],
-            replacements:[],scripts:[],styles:[{owner:{kind:'component',typeKey:'Root',occurrenceIds:[id]},
+            scripts:[],styles:[{owner:{kind:'component',typeKey:'Root',occurrenceIds:[id]},
               source:{kind:'owned',url:'/shared.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css',sha256:digest},lazyAllowed:true}],
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],extensions:{}});
-          await CitryStable.startPrepared({manifest:manifest('first-app','first-root'),host:'#first',
+          await __citryRuntime.startPrepared({manifest:manifest('first-app','first-root'),host:'#first',
             tags:{Root:'citry-root'}});
-          await CitryStable.startPrepared({manifest:manifest('second-app','second-root'),host:'#second',
+          await __citryRuntime.startPrepared({manifest:manifest('second-app','second-root'),host:'#second',
             tags:{Root:'citry-root'}});
           const fail=async(appId,id)=>{const envelope=manifest(appId,id);envelope.revision=1;
             envelope.baseRevision=0;envelope.updatedIds=[id];
-            try { await CitryStable.applyEnvelope(appId,envelope); } catch(error) { return error.message; }};
+            try { await __citryRuntime.applyEnvelope(appId,envelope); } catch(error) { return error.message; }};
           const firstFailure=await fail('first-app','first-root');
           const sharedCount=document.querySelectorAll('[data-citry-css-url]').length;
           const secondFailure=await fail('second-app','second-root');
@@ -1846,11 +1852,15 @@ def test_terminal_app_releases_only_its_shared_stylesheet_reference(page: Any) -
 def test_extension_script_loader_retries_and_restarts_same_app_id(page: Any) -> None:
     vue_root = Path(__file__).parents[2] / "citry" / "_vue"
     requests = {"healthy": 0, "failed": 0}
+    request_order: list[str] = []
 
     def route_asset(route: Any) -> None:
         kind = "failed" if route.request.url.endswith("/failed.js") else "healthy"
         requests[kind] += 1
         if kind == "failed":
+            request_order.append("failed-start")
+            page.wait_for_timeout(120)
+            request_order.append("failed-end")
             route.fulfill(status=404, body="missing")
         else:
             route.fulfill(body="window.__extensionRuns=(window.__extensionRuns||0)+1", content_type="text/javascript")
@@ -1858,17 +1868,23 @@ def test_extension_script_loader_retries_and_restarts_same_app_id(page: Any) -> 
     page.route("http://citry.test/", lambda route: route.fulfill(body='<div id="host"></div>'))
     page.route("http://citry.test/healthy.js", route_asset)
     page.route("http://citry.test/failed.js", route_asset)
+
+    def route_style(route: Any) -> None:
+        request_order.append("style")
+        route.fulfill(body=".preload-style-probe{display:none}", content_type="text/css")
+
+    page.route("http://citry.test/revision.css", route_style)
     page.goto("http://citry.test/")
     result = page.evaluate(
         """async ({vueSource,clientSource})=>{
           window.eval(vueSource); window.eval(clientSource);
           const helper=clientSource.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
           const digest='a'.repeat(64), definitionId='loader-root';
-          CitryStableDefinitions={[definitionId]:{render(){return Vue.h('p','ready')},
+          __citryRuntimeDefinitions={[definitionId]:{render(){return Vue.h('p',{class:'preload-style-probe'},'ready')},
             target:'ordinary-vnodes/1',helperContract:helper,dynamicElements:[],directiveSignature:[],
             replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}};
-          CitryStable.registerTypeOptions('Root',digest,{});
-          CitryStable.registerBrowserPlugin('probe',1,()=>({install(){},prepareRevision(){return{}},
+          __citryRuntime.registerTypeOptions('Root',digest,{});
+          __citryRuntime.registerBrowserPlugin('probe',1,()=>({install(){},prepareRevision(){return{}},
             activateRevision(){},commitRevision(){},abortRevision(){},rollbackRevision(){},dispose(){}}),[]);
           let capturedHost;
           window.CitryVueEvents={createVueEventsBridge(configuration){capturedHost=configuration.host;return{send(){}}}};
@@ -1880,23 +1896,31 @@ def test_extension_script_loader_retries_and_restarts_same_app_id(page: Any) -> 
           const extension={schemaVersion:1,payload:{},templateContextNames:[]};
           const script=url=>({owner:{kind:'extension',extensionName:'probe'},source:{kind:'external',url,attrs:{}},
             lazyAllowed:true,registersOptions:false});
-          const manifest=(revision,scripts=[])=>({protocol:'citry-vue-prepared/1',appId:'restartable',revision,
+          const style={owner:{kind:'extension',extensionName:'probe'},
+            source:{kind:'external',url:'/revision.css',attrs:{rel:'stylesheet'}},lazyAllowed:true};
+          const manifest=(revision,scripts=[],styles=[])=>({protocol:'citry-vue-prepared/1',
+            appId:'restartable',revision,
             ...(revision?{baseRevision:revision-1,updatedIds:['citryOccurrenceRoot']}:{rootId:'citryOccurrenceRoot'}),
             rootId:'citryOccurrenceRoot',markers:[],
-            occurrences:[occurrence(revision)],definitions:[definition],replacements:[],scripts,styles:[],
+            occurrences:[occurrence(revision)],definitions:[definition],scripts,styles,
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],extensions:{probe:extension}});
-          const start=async()=>CitryStable.startPrepared({manifest:manifest(0),host:'#host',tags:{Root:'c-root'},
+          const start=async()=>__citryRuntime.startPrepared({manifest:manifest(0),host:'#host',tags:{Root:'c-root'},
             endpoint:'/events',allowLazyTypeAssets:true});
-          const revise=async(url)=>{
-            const app=CitryStable._apps.get('restartable'), mounted=app.mounted.get('citryOccurrenceRoot');
+          const revise=async(url,includeStyle=true)=>{
+            const app=__citryRuntime._apps.get('restartable'), mounted=app.mounted.get('citryOccurrenceRoot');
             const source={stableId:'citryOccurrenceRoot',generation:mounted.record.generation};
-            const prepared=await capturedHost.prepareRender({prepared:manifest(1,[script(url)])},source);
+            const prepared=await capturedHost.prepareRender(
+              {prepared:manifest(1,[script(url)],includeStyle?[style]:[])},source);
             await capturedHost.commitRender(prepared,source);
           };
           let handle=await start();
           const failure=async()=>{try{await revise('/failed.js');return null}catch(error){return error.message}};
           const failures=[await failure(),await failure()];
+          const displayAfterFailures=getComputedStyle(document.querySelector('#host .preload-style-probe')).display;
+          const stylesAfterFailures=document.querySelectorAll('link[rel="stylesheet"][href="/revision.css"]').length;
+          const stylePreloadsAfterFailures=document.querySelectorAll('link[rel="preload"][as="style"]').length;
           await revise('/healthy.js');
+          const displayAfterSuccess=getComputedStyle(document.querySelector('#host .preload-style-probe')).display;
           const nodesAfterFirst=document.querySelectorAll('script[src$="healthy.js"],script[src$="failed.js"]').length;
           handle.app.unmount();
           document.querySelector('#host').replaceChildren();
@@ -1906,7 +1930,9 @@ def test_extension_script_loader_retries_and_restarts_same_app_id(page: Any) -> 
             'script[src$="healthy.js"],script[src$="failed.js"]'
           ).length;
           handle.app.unmount();
-          return {failures,runs:window.__extensionRuns,nodesAfterFirst,nodesAfterRestart};
+          return {failures,runs:window.__extensionRuns,nodesAfterFirst,nodesAfterRestart,
+            displayAfterFailures,stylesAfterFailures,stylePreloadsAfterFailures,
+            displayAfterSuccess};
         }""",
         {
             "vueSource": (vue_root / "vue.js").read_text(encoding="utf-8"),
@@ -1921,8 +1947,13 @@ def test_extension_script_loader_retries_and_restarts_same_app_id(page: Any) -> 
         "runs": 2,
         "nodesAfterFirst": 0,
         "nodesAfterRestart": 0,
+        "displayAfterFailures": "block",
+        "stylesAfterFailures": 0,
+        "stylePreloadsAfterFailures": 0,
+        "displayAfterSuccess": "none",
     }
     assert requests == {"healthy": 2, "failed": 2}
+    assert request_order.index("style") < request_order.index("failed-end")
 
 
 def test_native_events_prepare_cancellation_releases_attempt_resources(page: Any) -> None:
@@ -1937,12 +1968,12 @@ def test_native_events_prepare_cancellation_releases_attempt_resources(page: Any
           window.eval(vueSource); window.eval(clientSource);
           const helper=clientSource.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
           const digest='a'.repeat(64), definitionId='events-root';
-          CitryStableDefinitions={[definitionId]:{render(){return Vue.h('p','ready')},
+          __citryRuntimeDefinitions={[definitionId]:{render(){return Vue.h('p','ready')},
             target:'ordinary-vnodes/1',helperContract:helper,dynamicElements:[],directiveSignature:[],
             replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}};
-          CitryStable.registerTypeOptions('Root',digest,{});
+          __citryRuntime.registerTypeOptions('Root',digest,{});
           window.__pluginAborts=0;
-          CitryStable.registerBrowserPlugin('probe',1,()=>({install(){},
+          __citryRuntime.registerBrowserPlugin('probe',1,()=>({install(){},
             prepareRevision(payload){
               if(payload.phase!=='late'&&payload.phase!=='microtask')return {};
               window.__pluginPreparing=true;
@@ -1961,12 +1992,12 @@ def test_native_events_prepare_cancellation_releases_attempt_resources(page: Any
           const manifest=(revision,styles=[],phase='initial')=>({protocol:'citry-vue-prepared/1',appId:'events-app',
             revision,...(revision?{baseRevision:0,updatedIds:['citryOccurrenceRoot']}:{rootId:'citryOccurrenceRoot'}),
             rootId:'citryOccurrenceRoot',markers:[],
-            occurrences:[occurrence()],definitions:[definition],replacements:[],scripts:[],styles,
+            occurrences:[occurrence()],definitions:[definition],scripts:[],styles,
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],
             extensions:{probe:{schemaVersion:1,payload:{phase},templateContextNames:[]}}});
-          await CitryStable.startPrepared({manifest:manifest(0),host:'#host',tags:{Root:'c-root'},
+          await __citryRuntime.startPrepared({manifest:manifest(0),host:'#host',tags:{Root:'c-root'},
             endpoint:'/events',allowLazyTypeAssets:true});
-          const mounted=CitryStable._apps.get('events-app').mounted.get('citryOccurrenceRoot');
+          const mounted=__citryRuntime._apps.get('events-app').mounted.get('citryOccurrenceRoot');
           window.__eventsSource={stableId:'citryOccurrenceRoot',generation:mounted.record.generation};
           window.__eventsHost=capturedHost;
           const style={owner:{kind:'component',typeKey:'Root',occurrenceIds:['citryOccurrenceRoot']},
@@ -2040,13 +2071,13 @@ def test_disposed_events_commit_cannot_publish_into_reused_app_id(page: Any) -> 
           window.eval(vueSource); window.eval(clientSource);
           const helper=clientSource.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
           const digest='a'.repeat(64), definitionId='reuse-root';
-          CitryStableDefinitions={[definitionId]:{render(){return Vue.h('p',{class:'ready'},'ready')},
+          __citryRuntimeDefinitions={[definitionId]:{render(){return Vue.h('p',{class:'ready'},'ready')},
             target:'ordinary-vnodes/1',helperContract:helper,dynamicElements:[],directiveSignature:[],
             replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}};
-          CitryStable.registerTypeOptions('Root',digest,{onServerRender({revision}){
+          __citryRuntime.registerTypeOptions('Root',digest,{onServerRender({revision}){
             if(revision===1)queueMicrotask(()=>window.__disposeAtFinalTick())
           }});
-          CitryStable.registerBrowserPlugin('probe',1,()=>({install(){},prepareRevision(){return{}},
+          __citryRuntime.registerBrowserPlugin('probe',1,()=>({install(){},prepareRevision(){return{}},
             activateRevision(){},commitRevision(){
               if(window.__disposeInPluginCommit){window.__disposeInPluginCommit=false;window.__oldHandle.app.unmount()}
             },abortRevision(){},rollbackRevision(){},dispose(){}}),[]);
@@ -2063,14 +2094,14 @@ def test_disposed_events_commit_cannot_publish_into_reused_app_id(page: Any) -> 
           const manifest=(revision,url)=>({protocol:'citry-vue-prepared/1',appId:'reused-app',revision,
             ...(revision?{baseRevision:0,updatedIds:['citryOccurrenceRoot']}:{rootId:'citryOccurrenceRoot'}),
             rootId:'citryOccurrenceRoot',markers:[],occurrences:[occurrence()],
-            definitions:[definition],replacements:[],scripts:[],styles:[style(url)],
+            definitions:[definition],scripts:[],styles:[style(url)],
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],
             extensions:{probe:{schemaVersion:1,payload:{},templateContextNames:[]}}});
-          const start=url=>CitryStable.startPrepared({manifest:manifest(0,url),host:'#host',tags:{Root:'c-root'},
+          const start=url=>__citryRuntime.startPrepared({manifest:manifest(0,url),host:'#host',tags:{Root:'c-root'},
             endpoint:'/events',allowLazyTypeAssets:true,loadInitialAssets:true});
           let oldHandle=await start('/old.css');
           window.__oldHandle=oldHandle;
-          let mounted=CitryStable._apps.get('reused-app').mounted.get('citryOccurrenceRoot');
+          let mounted=__citryRuntime._apps.get('reused-app').mounted.get('citryOccurrenceRoot');
           let source={stableId:'citryOccurrenceRoot',generation:mounted.record.generation};
           const syncPrepared=await capturedHost.prepareRender({prepared:manifest(1,'/sync.css')},source,
             new AbortController().signal);
@@ -2082,7 +2113,7 @@ def test_disposed_events_commit_cannot_publish_into_reused_app_id(page: Any) -> 
           document.querySelector('#host').replaceChildren();
           oldHandle=await start('/old.css');
           window.__oldHandle=oldHandle;
-          mounted=CitryStable._apps.get('reused-app').mounted.get('citryOccurrenceRoot');
+          mounted=__citryRuntime._apps.get('reused-app').mounted.get('citryOccurrenceRoot');
           source={stableId:'citryOccurrenceRoot',generation:mounted.record.generation};
           const prepared=await capturedHost.prepareRender({prepared:manifest(1,'/old-revision.css')},source,
             new AbortController().signal);
@@ -2098,7 +2129,7 @@ def test_disposed_events_commit_cannot_publish_into_reused_app_id(page: Any) -> 
           const replacement=await replacementPending;
           const styles=[...document.querySelectorAll('[data-citry-css-url]')]
             .map(node=>node.getAttribute('data-citry-css-url'));
-          const alive=CitryStable._apps.get('reused-app')?.vueApp===replacement.app;
+          const alive=__citryRuntime._apps.get('reused-app')?.vueApp===replacement.app;
           replacement.app.unmount();
           return {syncResult,syncStyles,oldResult,styles,alive};
         }""",
@@ -2135,12 +2166,12 @@ def test_lazy_native_events_bridge_publishes_reactive_loading_and_error(page: An
           window.eval(clientSource);
           const helper=clientSource.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
           const digest='a'.repeat(64),definitionId='lazy-events-root';
-          CitryStableDefinitions={[definitionId]:{render(){return Vue.h('div',[
+          __citryRuntimeDefinitions={[definitionId]:{render(){return Vue.h('div',[
             Vue.h('output',{id:'loading'},String(this.$loading())),
             Vue.h('output',{id:'error'},this.$error()?.message||'')])},
             target:'ordinary-vnodes/1',helperContract:helper,dynamicElements:[],directiveSignature:[],
             replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}};
-          CitryStable.registerTypeOptions('Root',digest,{onServerRender({component,revision}){
+          __citryRuntime.registerTypeOptions('Root',digest,{onServerRender({component,revision}){
             if(revision===1)window.__callbackSawBridge=window.__bridgeCreates===1&&component.$loading()===false
           }});
           const definition={id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
@@ -2149,9 +2180,9 @@ def test_lazy_native_events_bridge_publishes_reactive_loading_and_error(page: An
             parentId:null,placementKey:null,serverData:{},
             preparedData:{calls:{}},...(eventContext?{eventContext}:{})});
           const base={protocol:'citry-vue-prepared/1',appId:'lazy-events-app',revision:0,rootId:'root',markers:[],
-            occurrences:[occurrence()],definitions:[definition],replacements:[],scripts:[],styles:[],
+            occurrences:[occurrence()],definitions:[definition],scripts:[],styles:[],
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],extensions:{}};
-          const handle=await CitryStable.startPrepared({manifest:base,host:'#host',tags:{Root:'c-root'},
+          const handle=await __citryRuntime.startPrepared({manifest:base,host:'#host',tags:{Root:'c-root'},
             endpoint:'/events',allowLazyTypeAssets:true});
           const before=window.__bridgeCreates;
           const descriptor={componentClassId:'Root_1',eventHandlers:{
@@ -2160,9 +2191,9 @@ def test_lazy_native_events_bridge_publishes_reactive_loading_and_error(page: An
           const context={serverRenderId:'server_1',stateToken:'token',
             publicState:{rows:[{id:1}],locked:{value:1}},
             componentClassId:'Root_1',descriptor};
-          await CitryStable.applyEnvelope('lazy-events-app',{...base,revision:1,baseRevision:0,
+          await __citryRuntime.applyEnvelope('lazy-events-app',{...base,revision:1,baseRevision:0,
             updatedIds:['root'],occurrences:[occurrence(context)]});
-          const mounted=CitryStable._apps.get('lazy-events-app').mounted.get('root');
+          const mounted=__citryRuntime._apps.get('lazy-events-app').mounted.get('root');
           const component=mounted.component,source={stableId:'root',generation:mounted.record.generation};
           const invalidArgsErrors=[];
           for(const invalid of [null,false,0,'',NaN]){
@@ -2223,7 +2254,7 @@ def test_lazy_native_events_bridge_publishes_reactive_loading_and_error(page: An
           const after={loading:document.querySelector('#loading').textContent,
             error:document.querySelector('#error').textContent,specific:component.$error('constructor')};
           const serverContext={...context,publicState:{rows:[{id:99}],locked:{value:2}}};
-          await CitryStable.applyEnvelope('lazy-events-app',{...base,revision:2,baseRevision:1,
+          await __citryRuntime.applyEnvelope('lazy-events-app',{...base,revision:2,baseRevision:1,
             updatedIds:['root'],occurrences:[occurrence(serverContext)]});
           const adoptedRows=[...component.$state.rows].map(row=>row.id);
           window.__call=null;
@@ -2239,7 +2270,7 @@ def test_lazy_native_events_bridge_publishes_reactive_loading_and_error(page: An
           const cleared=component.$error('constructor');
           const readonlyContext={...serverContext,publicState:{rows:[{id:10}],locked:{value:3}},
             descriptor:{...descriptor,writableStateFields:[]}};
-          await CitryStable.applyEnvelope('lazy-events-app',{...base,revision:3,baseRevision:2,
+          await __citryRuntime.applyEnvelope('lazy-events-app',{...base,revision:3,baseRevision:2,
             updatedIds:['root'],occurrences:[occurrence(readonlyContext)]});
           let wholeReadonlyError='';try{component.$state.rows=[{id:11}]}
           catch(error){wholeReadonlyError=String(error)}
@@ -2255,7 +2286,7 @@ def test_lazy_native_events_bridge_publishes_reactive_loading_and_error(page: An
           await stringCall;
           const currentRows=[...component.$state.rows].map(row=>({id:row.id}));
           const capturedRowsValue=[...capturedRows].map(row=>({id:row.id}));
-          await CitryStable.applyEnvelope('lazy-events-app',{...base,revision:4,baseRevision:3,
+          await __citryRuntime.applyEnvelope('lazy-events-app',{...base,revision:4,baseRevision:3,
             updatedIds:['root'],occurrences:[occurrence()]});
           let lostContextRestore='ok',capturedAfterLoss='';
           try{window.__eventsHost.restorePendingState(source,{rows:[{id:12}]})}
@@ -2902,7 +2933,7 @@ def test_component_boundary_event_args_keep_child_el_and_native_current_target(p
     assert page.locator("#boundary-emitter").count() == 1, (faults, page.content())
 
     def wait_for_event(expected_calls: int) -> None:
-        page.wait_for_function("() => !CitryStable._apps.values().next().value.busy")
+        page.wait_for_function("() => !__citryRuntime._apps.values().next().value.busy")
         deadline = time.monotonic() + 5
         while sum(len(request["calls"]) for request in requests) < expected_calls:
             if time.monotonic() >= deadline:
@@ -3018,7 +3049,7 @@ def test_component_boundary_authored_el_supports_text_and_empty_children(page: A
         while sum(len(request["calls"]) for request in requests) < expected_calls and time.monotonic() < deadline:
             page.wait_for_timeout(10)
         assert sum(len(request["calls"]) for request in requests) >= expected_calls
-        page.wait_for_function("() => ![...CitryStable._apps.values()][0].busy")
+        page.wait_for_function("() => ![...__citryRuntime._apps.values()][0].busy")
 
     trigger("__emitTextBoundary")
     trigger("__emitEmptyBoundary")

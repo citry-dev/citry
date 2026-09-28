@@ -114,13 +114,13 @@ def test_prepared_component_without_events_unmounts_cleanly(page, serve_document
     rendered = app.render_template('<main id="owner"><c-widget /></main>')
     page.goto(serve_document(rendered.serialize()))
     page.wait_for_selector("button.no-events")
-    page.wait_for_function("() => CitryStable._apps.size === 1")
+    page.wait_for_function("() => __citryRuntime._apps.size === 1")
     page.evaluate("""() => {
-      const [appId, record] = [...CitryStable._apps.entries()][0];
+      const [appId, record] = [...__citryRuntime._apps.entries()][0];
       globalThis.__noEventsAppId = appId;
       record.vueApp.unmount();
     }""")
-    page.wait_for_function("() => CitryStable._apps.size === 0")
+    page.wait_for_function("() => __citryRuntime._apps.size === 0")
     assert errors == []
 
 
@@ -175,7 +175,7 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
     assert errors == [], page.content()
     assert page.locator('[id^="citry-vue-"]').count() == 1, page.content()
     assert page.locator("script[data-citry-vue-fragment]").count() == 1, page.content()
-    assert page.evaluate("() => ({stable: !!window.CitryStable, manager: !!window.Citry?.fragments})") == {
+    assert page.evaluate("() => ({stable: !!window.__citryRuntime, manager: !!window.Citry?.fragments})") == {
         "stable": True,
         "manager": True,
     }
@@ -214,7 +214,7 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
       catch (error) {
         return {
           rejected: String(error),
-          alive: CitryStable._apps.has(source.vue.appId),
+          alive: __citryRuntime._apps.has(source.vue.appId),
           mounts: globalThis.__fragmentMounts,
           text: document.querySelector('button.fragment-value')?.textContent,
         };
@@ -239,13 +239,13 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
       valid.manifest.scripts = [];
       const invalid = structuredClone(valid);
       invalid.host = '#missing-concurrent-host';
-      const rejected = CitryStable.startPrepared(invalid).then(() => false, () => true);
-      const mounted = await CitryStable.startPrepared(valid);
-      return {rejected: await rejected, alive: CitryStable._apps.has(appId), mounted: mounted.appId === appId};
+      const rejected = __citryRuntime.startPrepared(invalid).then(() => false, () => true);
+      const mounted = await __citryRuntime.startPrepared(valid);
+      return {rejected: await rejected, alive: __citryRuntime._apps.has(appId), mounted: mounted.appId === appId};
     }""") == {"rejected": True, "alive": True, "mounted": True}
     page.evaluate("""() => {
-      const appId = [...CitryStable._apps.keys()].find(id => id.startsWith('fragment-concurrent-'));
-      CitryStable._apps.get(appId).vueApp.unmount();
+      const appId = [...__citryRuntime._apps.keys()].find(id => id.startsWith('fragment-concurrent-'));
+      __citryRuntime._apps.get(appId).vueApp.unmount();
       document.getElementById(appId).remove();
     }""")
     assert page.evaluate("""async () => {
@@ -304,7 +304,15 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
     stalled_routes = []
     fragment_mount_baseline = page.evaluate("() => globalThis.__fragmentMounts")
     page.route("**/stalled-fragment.css", lambda route: stalled_routes.append(route))
+    page.route(
+        "**/must-not-run-after-cancel.js",
+        lambda route: route.fulfill(
+            body="globalThis.__cancelledScriptRuns=(globalThis.__cancelledScriptRuns||0)+1",
+            content_type="text/javascript",
+        ),
+    )
     page.evaluate("""() => {
+      globalThis.__cancelledScriptRuns = 0;
       const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
       const manifest = structuredClone(source);
       const appId = 'fragment-cancelled-' + source.vue.appId;
@@ -338,15 +346,17 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
     assert len(stalled_routes) == 1
     assert "host changed while mounting" in page.evaluate("() => __cancelledResult")
     cancelled = page.evaluate("""() => ({
-      app: CitryStable._apps.has(__cancelledAppId),
+      app: __citryRuntime._apps.has(__cancelledAppId),
       style: document.querySelector('link[href$="/stalled-fragment.css"]') !== null,
-      script: performance.getEntriesByName(location.origin + '/must-not-run-after-cancel.js').length,
+      scriptFetches: performance.getEntriesByName(location.origin + '/must-not-run-after-cancel.js').length,
+      scriptRuns: globalThis.__cancelledScriptRuns,
       mounts: globalThis.__fragmentMounts,
     })""")
     assert cancelled == {
         "app": False,
         "style": False,
-        "script": 0,
+        "scriptFetches": 1,
+        "scriptRuns": 0,
         "mounts": fragment_mount_baseline,
     }
     reused = page.evaluate("""async () => {
@@ -359,17 +369,17 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
       await Citry.fragments.load(manifest);
       __stalledLink.onerror?.();
       await Promise.resolve();
-      return {alive: CitryStable._apps.has(__cancelledAppId), mounts: globalThis.__fragmentMounts};
+      return {alive: __citryRuntime._apps.has(__cancelledAppId), mounts: globalThis.__fragmentMounts};
     }""")
     assert reused == {"alive": True, "mounts": fragment_mount_baseline + 1}
     stalled_routes[0].fulfill(body=".fragment-value { color: rgb(7, 8, 9); }", content_type="text/css")
     page.evaluate("() => document.getElementById(__cancelledAppId).remove()")
-    page.wait_for_function("() => !CitryStable._apps.has(__cancelledAppId)")
+    page.wait_for_function("() => !__citryRuntime._apps.has(__cancelledAppId)")
 
     late_script_routes = []
     page.route("**/late-extension-script.js", lambda route: late_script_routes.append(route))
     page.evaluate("""() => {
-      CitryStable.registerBrowserPlugin('fragment_test', 1, () => ({
+      __citryRuntime.registerBrowserPlugin('fragment_test', 1, () => ({
         install() {}, prepareRevision() { return {}; }, activateRevision() {}, commitRevision() {},
         abortRevision() {}, rollbackRevision() {}, dispose() {},
       }));
@@ -436,9 +446,9 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
     late_script_routes[1].fulfill(body="", content_type="application/javascript")
     page.evaluate("() => __lateScriptSecond")
     assert len(late_script_routes) == 2
-    assert page.evaluate("() => CitryStable._apps.has(__lateScriptAppId)") is True
+    assert page.evaluate("() => __citryRuntime._apps.has(__lateScriptAppId)") is True
     page.evaluate("() => document.getElementById(__lateScriptAppId).remove()")
-    page.wait_for_function("() => !CitryStable._apps.has(__lateScriptAppId)")
+    page.wait_for_function("() => !__citryRuntime._apps.has(__lateScriptAppId)")
 
     page.evaluate("""async () => {
       const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
@@ -456,9 +466,9 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
         manifest.vue.prepared.manifest.scripts = [];
         await Citry.fragments.load(manifest);
       }
-      const throwingId = [...CitryStable._apps.keys()].find(id => id.startsWith('fragment-dispose-throwing-'));
-      const followingId = [...CitryStable._apps.keys()].find(id => id.startsWith('fragment-dispose-following-'));
-      const throwingApp = CitryStable._apps.get(throwingId).vueApp;
+      const throwingId = [...__citryRuntime._apps.keys()].find(id => id.startsWith('fragment-dispose-throwing-'));
+      const followingId = [...__citryRuntime._apps.keys()].find(id => id.startsWith('fragment-dispose-following-'));
+      const throwingApp = __citryRuntime._apps.get(throwingId).vueApp;
       globalThis.__restoreThrowingUnmount = throwingApp.unmount.bind(throwingApp);
       throwingApp.unmount = () => { throw new Error('expected fragment dispose failure'); };
       document.getElementById(throwingId).remove();
@@ -466,20 +476,28 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
       globalThis.__throwingId = throwingId;
       globalThis.__followingId = followingId;
     }""")
-    page.wait_for_function("() => !CitryStable._apps.has(__followingId)")
-    assert page.evaluate("() => CitryStable._apps.has(__throwingId)") is True
+    page.wait_for_function("() => !__citryRuntime._apps.has(__followingId)")
+    assert page.evaluate("() => __citryRuntime._apps.has(__throwingId)") is True
     expected_dispose_errors = [error for error in errors if "expected fragment dispose failure" in error]
     assert len(expected_dispose_errors) == 1
     errors.remove(expected_dispose_errors[0])
     page.evaluate("""() => {
       __restoreThrowingUnmount();
-      CitryStable._apps.delete(__throwingId);
+      __citryRuntime._apps.delete(__throwingId);
     }""")
 
     delayed_routes = []
     delayed_mount_baseline = page.evaluate("() => globalThis.__fragmentMounts")
     page.route("**/delayed-fragment.css", lambda route: delayed_routes.append(route))
+    page.route(
+        "**/must-not-run-after-css.js",
+        lambda route: route.fulfill(
+            body="globalThis.__relocatedScriptRuns=(globalThis.__relocatedScriptRuns||0)+1",
+            content_type="text/javascript",
+        ),
+    )
     page.evaluate("""() => {
+      globalThis.__relocatedScriptRuns = 0;
       const source = JSON.parse(document.querySelector('script[data-citry-vue-fragment]').textContent);
       const manifest = structuredClone(source);
       const appId = 'fragment-relocated-' + source.vue.appId;
@@ -515,11 +533,13 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
     assert len(delayed_routes) == 1
     delayed_routes[0].fulfill(body=".fragment-value { color: rgb(4, 5, 6); }", content_type="text/css")
     assert "host changed while mounting" in page.evaluate("() => __relocatedResult")
-    page.wait_for_function("() => !CitryStable._apps.has(__relocatedAppId)")
+    page.wait_for_function("() => !__citryRuntime._apps.has(__relocatedAppId)")
     assert page.locator('link[href$="/delayed-fragment.css"]').count() == 0
-    assert (
-        page.evaluate("() => performance.getEntriesByName(location.origin + '/must-not-run-after-css.js').length") == 0
-    )
+    assert page.evaluate("""() => ({
+      scriptFetches: performance.getEntriesByName(location.origin + '/must-not-run-after-css.js').length,
+      scriptRuns: globalThis.__relocatedScriptRuns,
+      scriptElements: document.querySelectorAll('script[src$="/must-not-run-after-css.js"]').length,
+    })""") == {"scriptFetches": 1, "scriptRuns": 0, "scriptElements": 0}
     assert page.evaluate("() => globalThis.__fragmentMounts") == delayed_mount_baseline
     assert (
         page.evaluate("""async () => {
@@ -533,7 +553,7 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
         is True
     )
     page.locator("#target").evaluate("node => { node.textContent = ''; }")
-    page.wait_for_function("() => CitryStable._apps.size === 0")
+    page.wait_for_function("() => __citryRuntime._apps.size === 0")
     assert errors == []
 
 
@@ -568,13 +588,20 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
         css = ".cancelled-startup { color: rgb(7, 8, 9); }"
         js = "$component({mounted(){window.__cancelledMounted=true}});"
 
-    def encoded(component: Component) -> str:
+    def encoded(component: Component) -> tuple[str, list[str]]:
         fragment = component.render().serialize(deps_strategy="fragment")
-        return base64.b64encode(fragment.encode()).decode()
+        # Stylesheets are addressed by content digest, so read each URL from
+        # the fragment manifest to delay exactly this fragment's styles.
+        manifest_json = fragment.split('<script type="application/json" data-citry-vue-fragment>', 1)[1]
+        manifest = json.loads(manifest_json.split("</script>", 1)[0])
+        style_urls = [style["source"]["url"] for style in manifest["vue"]["prepared"]["manifest"]["styles"]]
+        return base64.b64encode(fragment.encode()).decode(), style_urls
 
-    existing = encoded(Existing())
-    replacement = encoded(SlowReplacement())
-    cancelled = encoded(Cancelled())
+    existing, _ = encoded(Existing())
+    replacement, replacement_style_urls = encoded(SlowReplacement())
+    cancelled, cancelled_style_urls = encoded(Cancelled())
+    assert len(replacement_style_urls) == 1
+    assert len(cancelled_style_urls) == 1
     document = f"""
       <html><head><script src="/citry/citry.js"></script></head><body>
       <div id="replacement-host"></div><div id="cancel-host"></div>
@@ -598,7 +625,8 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
         time.sleep(0.35)
         route.continue_()
 
-    page.route("**/citry/ext/events/assets/*.css", slow_style)
+    page.route(f"**{replacement_style_urls[0]}", slow_style)
+    page.route(f"**{cancelled_style_urls[0]}", slow_style)
     page.goto(url)
     page.wait_for_selector(".slow-replacement", timeout=5_000)
     page.wait_for_timeout(500)
@@ -607,7 +635,8 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
     assert page.evaluate("() => window.__replacementMounted") is True
     assert page.evaluate("() => window.__cancelledMounted") is not True
     assert page.locator(".cancelled-startup").count() == 0
-    assert page.locator("link[data-citry-vue-style-app][data-citry-css-url]").count() == 1
+    assert page.locator(f'link[href="{replacement_style_urls[0]}"]').count() == 1
+    assert page.locator(f'link[href="{cancelled_style_urls[0]}"]').count() == 0
     assert page.locator(".slow-replacement").evaluate("node => getComputedStyle(node).color") == "rgb(4, 5, 6)"
     assert page_errors == []
     assert len(console_errors) == 1

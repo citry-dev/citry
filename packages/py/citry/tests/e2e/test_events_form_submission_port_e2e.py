@@ -15,7 +15,7 @@ from citry.ext.events import ViewEvents, actions
 
 pytestmark = pytest.mark.e2e
 
-READY = "window.CitryStable && CitryStable._apps.size === 1"
+READY = "window.__citryRuntime && __citryRuntime._apps.size === 1"
 
 
 def _form_port() -> tuple[Citry, str, type[Component]]:
@@ -65,7 +65,9 @@ def _form_port() -> tuple[Citry, str, type[Component]]:
               <input type="text" name="name" id="name" />
               <button type="submit">Submit through compatibility route</button>
             </form>
-            <c-mark name="thank-you" />
+            <div id="thank-you-container">
+              <c-mark name="thank-you"></c-mark>
+            </div>
           </section>
         """
 
@@ -82,9 +84,10 @@ def _form_port() -> tuple[Citry, str, type[Component]]:
 
 
 def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(page: Any, serve_live: Any) -> None:
-    """The old HTMX target becomes a Citry Render target and keeps the form page."""
-    engine, html, _ = _form_port()
+    """The old HTMX CSS target becomes a Citry marker target and keeps the form page."""
+    engine, html, contact_form = _form_port()
     requests: list[Any] = []
+    # Runtime event calls share one batched endpoint; the handler name travels in the body.
     page.on("request", lambda request: requests.append(request) if request.url.endswith("/ext/events/call") else None)
     base = serve_live(engine, html, "")
     page.goto(base + "/")
@@ -97,8 +100,13 @@ def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(page: 
     assert page.locator(".runtime-form").count() == 1
     assert len(requests) == 1
     assert requests[0].method == "POST"
-    assert json.loads(requests[0].post_data)["calls"][0]["handlerName"] == "post"
-    assert json.loads(requests[0].post_data)["calls"][0]["args"] == {"name": "John Doe"}
+    assert requests[0].url.endswith("/ext/events/call")
+    call = json.loads(requests[0].post_data)["calls"][0]
+    # The batched endpoint names the component in the body, so check the call
+    # still reaches ContactForm's handler rather than any handler named post.
+    assert call["componentClassId"] == contact_form.class_id
+    assert call["handlerName"] == "post"
+    assert call["args"] == {"name": "John Doe"}
 
 
 def test_view_events_native_form_reaches_the_verb_compatibility_route(page: Any, serve_live: Any) -> None:

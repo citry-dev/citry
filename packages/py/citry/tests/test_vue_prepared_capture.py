@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 import sys
+from html import unescape
 
 import pytest
 
@@ -26,16 +29,78 @@ from citry._vue.capture import (
 )
 from citry._vue.compiler import NativeCompiler
 from citry._vue.direct_capture import UnsupportedPreparedView, assemble_typed_render
-from citry._vue.leaf_program import PreparedLeafProgram
+from citry._vue.leaf_program import PreparedLeafProgram, _SpreadResolvedOpen, typed_leaf_parts
+from citry._vue.serialization import hydration_admission
 from citry.citry_context import CitryContext
+from citry.citry_render import CitryRender
 from citry.constness import ConstBodyCache
 from citry.ext.events.bindings import RUNTIME_CONTROL_ATTR
+from citry.ext.events.renderers import dispatcher_for
 from citry.nodes import ExprHtmlAttr, StaticHtmlAttr, TemplateNode
 from citry.slots import Slot
 
 
 def _assembled_view(render, **kwargs):
     return assemble_typed_render(render, **kwargs).view
+
+
+def test_presentation_markup_with_python_text_compiles_as_ordinary_vue() -> None:
+    app = Citry(autodiscover=False, extensions=[])
+
+    class Summary(Component):
+        citry = app
+        template = "<section><h4>{{ title }}</h4><span>{{ label }}</span></section>"
+
+        def template_data(self, _kwargs, _slots):
+            return {"title": "Total", "label": "ready"}
+
+    assembly = assemble_typed_render(render_prepared(Summary()), revision=0, tag_for_type=lambda _key: "x-summary")
+    [occurrence] = assembly.view.occurrences
+    compile_input = assembly.compile_inputs[occurrence.definition_id]
+    # Markup and Python text reach the browser as template source plus prepared
+    # values, never as one block of HTML.
+    assert "opaqueHtml" not in occurrence.prepared_data
+    assert compile_input.opaque_html_sites == ()
+    assert "<citry-opaque-html" not in compile_input.template
+    assert sorted(value for key, value in occurrence.prepared_data.items() if key.startswith("citryText")) == [
+        "Total",
+        "ready",
+    ]
+
+
+def test_repeated_leaf_shares_one_definition_and_keeps_each_value() -> None:
+    app = Citry(autodiscover=False, extensions=[])
+
+    class Summary(Component):
+        citry = app
+        template = "<section><span>{{ value }}</span></section>"
+
+        def template_data(self, kwargs, _slots):
+            return {"value": kwargs["value"]}
+
+    class Page(Component):
+        citry = app
+        template = "<main>{{ first }}{{ second }}</main>"
+
+        def template_data(self, _kwargs, _slots):
+            return {"first": Summary(value="10"), "second": Summary(value="11")}
+
+    assembly = assemble_typed_render(
+        render_prepared(Page()),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    summaries = [item for item in assembly.view.occurrences if item.type_key == Summary.class_id]
+    assert len(summaries) == 2
+    assert summaries[0].definition_id == summaries[1].definition_id
+    # The second occurrence reuses the first one's compiled definition, so
+    # only its own prepared text may differ.
+    assert [item.prepared_data for item in summaries] == [
+        {"calls": {}, "citryText0": "10"},
+        {"calls": {}, "citryText0": "11"},
+    ]
+    template = assembly.compile_inputs[summaries[0].definition_id].template
+    assert template == "<section><span>{{ $citryPrepared.citryText0 }}</span></section>"
 
 
 @pytest.mark.parametrize(
@@ -159,7 +224,7 @@ def test_prepared_verbatim_html_is_never_compiled_as_vue_source() -> None:
     assert "{{ unsafe }}" not in compiled_input.template
     assert "<citry-opaque-html" in compiled_input.template
     assert occurrence.prepared_data["opaqueHtml"] == {
-        "citryOpaque0": {"html": "<button @click='unsafe'>{{ unsafe }}</button>"}
+        "citryOpaque0": {"html": "<button @click='unsafe'>{{ unsafe }}</button>", "nodeCount": 1}
     }
 
 
@@ -449,27 +514,36 @@ def test_exact_scalar_text_is_escaped_only_when_static_html_is_materialized() ->
     assert "&lt;&amp;" in rendered.serialize(deps_strategy="ignore")
 
 
-def test_prepared_scalar_specialization_observes_live_component_like_registration() -> None:
+@pytest.mark.parametrize(
+    ("value_source", "expected"),
+    [("'<'", "&lt;"), ("17", "17"), ("1.5", "1.5"), ("True", "True")],
+)
+def test_prepared_scalar_specialization_observes_live_component_like_registration(
+    value_source: str,
+    expected: str,
+) -> None:
     source = """
 from citry import Citry, Component
 from citry.component_like import ComponentLike
 
 app = Citry(autodiscover=False, extensions=[])
+value = @VALUE@
 class Leaf(Component):
     citry = app
     template = '<p c-if="True">{{ value }}</p>'
     def template_data(self, kwargs, slots):
-        return {'value': '<'}
+        return {'value': value}
 
-assert '&lt;' in Leaf().render().serialize(deps_strategy='ignore')
-ComponentLike.register(str)
+assert @EXPECTED@ in Leaf().render().serialize(deps_strategy='ignore')
+ComponentLike.register(type(value))
 try:
     Leaf().render()
 except AttributeError as error:
     assert "__citry_element__" in str(error)
 else:
-    raise AssertionError('registered exact string bypassed live protocol dispatch')
+    raise AssertionError('registered exact scalar bypassed live protocol dispatch')
 """
+    source = source.replace("@VALUE@", value_source).replace("@EXPECTED@", repr(expected))
     result = subprocess.run([sys.executable, "-c", source], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
@@ -564,7 +638,7 @@ def test_native_prepared_compiler_executes_through_scoped_runtime() -> None:
     program = rendered.parts[0]
     assert isinstance(program, PreparedLeafProgram)
     assert program.prepared_data == {"citryAttrs0": {"title": "heading"}, "citryText0": "<body>"}
-    assert 'class="x" v-bind="preparedData.citryAttrs0"' in program.fragment.template
+    assert 'class="x" v-bind="$citryPrepared.citryAttrs0"' in program.fragment.template
 
 
 def test_authored_vue_attribute_stays_source_while_spread_cannot_create_one() -> None:
@@ -601,6 +675,42 @@ def test_events_rewrite_remains_resolved_data_not_compiler_source() -> None:
     assert "@c-click" not in program.fragment.template
     assert "v-on:click" in program.fragment.template
     assert set(program.prepared_data["eventBindings"]) == {"citryEvent12"}
+
+
+def test_poll_event_element_is_left_to_the_browser_inside_a_shell() -> None:
+    registry = Citry(secret="prepared-poll-ssr-test-secret", autodiscover=False)  # noqa: S106
+    registry.set_mounted_prefix("/citry")
+
+    class Poller(Component):
+        citry = registry
+
+        class PollArgs:
+            text: str
+
+        class Events:
+            def refresh(self, data: Poller.PollArgs):
+                return None
+
+        template = """<main><output @c-poll.2s='refresh({text: "hello"})'>waiting</output></main>"""
+
+    dispatcher_for(registry)
+    rendered = Poller().render()
+    html = rendered.serialize(ssr=True)
+
+    # The server does not write the poll directive's element for Vue to
+    # adopt, so the page still hydrates while <main> is a shell Vue fills and
+    # starts polling from in the browser. Until then the shell shows the
+    # element without its directive.
+    assert '"hydrate":true' in html
+    assert re.search(
+        r'<div id="citry-vue-[^"]+"><main data-allow-mismatch="children"><output>waiting</output></main></div>', html
+    )
+    assert "data-citry-vue-document" in html
+    admission = hydration_admission(rendered)
+    assert admission is not None
+    assert [(item.code, item.detail, item.outcome, item.shell_tag) for item in admission.declines] == [
+        ("unsupported-directive", "output", "shell", "main")
+    ]
 
 
 def test_poll_binding_is_typed_and_omits_legacy_dom_metadata() -> None:
@@ -829,10 +939,148 @@ def test_authored_vue_syntax_keeps_exact_source_with_unrelated_spread_attrs() ->
     )
     compiled = assembly.compile_inputs[assembly.view.occurrences[0].definition_id]
     assert 'v-show="shown"' in compiled.template
-    assert 'v-bind="preparedData.citryAttrs' in compiled.template
+    assert 'v-bind="$citryPrepared.citryAttrs' in compiled.template
     assert assembly.view.occurrences[0].prepared_data[
         next(key for key in assembly.view.occurrences[0].prepared_data if key.startswith("citryAttrs"))
     ] == {"title": "ok"}
+
+
+def test_plain_spread_with_builtin_i18n_wrapper_lazily_builds_typed_open() -> None:
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class PlainSpread(Component):
+        citry = registry
+        template = '<p c-bind="attrs">x</p>'
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"id": "ready", "hidden": False}}
+
+    rendered = render_prepared(PlainSpread())
+    program = rendered.parts[0]
+    assert isinstance(program, PreparedLeafProgram)
+    assert program.resolved_opens
+    resolved = next(iter(program.resolved_opens.values()))
+    assert type(resolved) is _SpreadResolvedOpen
+    assert resolved.prepared is None
+    assert program.prepared_data["citryAttrs0"] == {"id": "ready"}
+    typed = typed_leaf_parts(program)
+    opening = next(value for value in typed if isinstance(value, PreparedElementOpen))
+    assert opening.data_attrs == {"id": "ready"}
+    assert resolved.prepared is opening
+    assert rendered.serialize(deps_strategy="ignore").startswith('<p id="ready" data-cid-')
+
+
+@pytest.mark.parametrize(
+    ("source_attr", "expected_source"),
+    [
+        ("disabled", "disabled"),
+        ("title='single quoted'", "title='single quoted'"),
+        ('title="entity &amp; value"', 'title="entity &amp; value"'),
+        ("title=unquoted", "title=unquoted"),
+    ],
+)
+def test_authored_source_spelling_survives_lazy_spread_fallback(
+    source_attr: str,
+    expected_source: str,
+) -> None:
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class AuthoredSource(Component):
+        citry = registry
+        template = f'<p c-bind="attrs" {source_attr}>x</p>'
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"data-ready": "yes"}}
+
+    rendered = render_prepared(AuthoredSource())
+    program = rendered.parts[0]
+    assert isinstance(program, PreparedLeafProgram)
+    assert program.resolved_opens
+    resolved = next(iter(program.resolved_opens.values()))
+    assert type(resolved) is _SpreadResolvedOpen
+    assert resolved.prepared is None
+    serialized = rendered.serialize(deps_strategy="ignore")
+    assert expected_source in serialized
+    assert isinstance(resolved.prepared, PreparedElementOpen)
+
+
+def test_i18n_attribute_wrapper_forces_prepared_spread_fallback() -> None:
+    registry = Citry(
+        autodiscover=False,
+        extensions_defaults={
+            "i18n": {
+                "source_locale": "en-US",
+                "locales": ("en-US",),
+            }
+        },
+    )
+
+    class Translated(Component):
+        citry = registry
+        messages = "save = Save"
+        template = '<c-i18n c-client="True" tag="main"><button c-bind="attrs">Save</button></c-i18n>'
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"title": "Save"}}
+
+    rendered = render_prepared(Translated())
+
+    def parts(value):
+        if isinstance(value, CitryRender):
+            for part in value.parts:
+                yield from parts(part)
+        else:
+            yield value
+
+    rendered_parts = tuple(parts(rendered))
+    openings = [part for part in rendered_parts if isinstance(part, PreparedElementOpen)]
+    assert any(opening.tag == "button" for opening in openings)
+    assert not any(
+        isinstance(part, PreparedLeafProgram) and any(type(value) is dict for value in part.resolved_opens.values())
+        for part in rendered_parts
+    )
+
+
+def test_spread_with_resolved_attribute_extension_keeps_prepared_open() -> None:
+    calls = 0
+
+    class MarkAttrs(Extension):
+        name = "mark_attrs"
+
+        def on_attrs_resolved(self, ctx):
+            nonlocal calls
+            calls += 1
+            return {**ctx.attrs, "data-marked": "yes"}
+
+    registry = Citry(autodiscover=False, extensions=[MarkAttrs])
+
+    class ExtendedSpread(Component):
+        citry = registry
+        template = '<p c-bind="attrs">x</p>'
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"title": "ready"}}
+
+    rendered = render_prepared(ExtendedSpread())
+    opening = next(value for value in rendered.parts if isinstance(value, PreparedElementOpen))
+    assert opening.data_attrs == {"title": "ready", "data-marked": "yes"}
+    assert calls == 1
+    rendered.serialize(deps_strategy="ignore")
+    assert calls == 1
+
+
+def test_plain_spread_keeps_vue_syntax_rejection_strict() -> None:
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class UnsafeSpread(Component):
+        citry = registry
+        template = '<p c-bind="attrs">x</p>'
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"v-show": "open"}}
+
+    with pytest.raises(ValueError, match="cannot introduce Vue syntax"):
+        render_prepared(UnsafeSpread())
 
 
 def test_runtime_attr_hook_may_remove_but_not_replace_authored_vue_source() -> None:
@@ -868,7 +1116,7 @@ def test_runtime_attr_hook_may_remove_but_not_replace_authored_vue_source() -> N
     )
     compiled = assembly.compile_inputs[assembly.view.occurrences[0].definition_id]
     assert "v-show" not in compiled.template
-    assert 'v-bind="preparedData.citryAttrs' in compiled.template
+    assert 'v-bind="$citryPrepared.citryAttrs' in compiled.template
 
     with pytest.raises(ValueError, match="cannot introduce Vue syntax"):
         render_prepared(component(Citry(autodiscover=False, extensions=[ReplaceVue]))())
@@ -1320,6 +1568,7 @@ def test_supplied_fill_is_owned_by_caller_call_and_fallback_by_receiver() -> Non
                 local_calls=compile_inputs[definition.id].local_calls,
                 element_bindings=compile_inputs[definition.id].element_bindings,
                 local_call_runs=compile_inputs[definition.id].local_call_runs,
+                opaque_html_sites=compile_inputs[definition.id].opaque_html_sites,
             )
             for definition in view.definitions
         }
@@ -1600,7 +1849,10 @@ def test_runtime_spread_state_binding_uses_typed_provenance() -> None:
         template = '<input c-bind="attrs">'
 
     rendered = render_prepared(Search())
-    assert any(isinstance(part, PreparedLeafProgram) for part in rendered.parts)
+    program = next(part for part in rendered.parts if isinstance(part, PreparedLeafProgram))
+    # Runtime control metadata keeps the established typed path even for the
+    # transparent wrapper that is eligible for ordinary attribute projection.
+    assert all(type(value) is PreparedElementOpen for value in program.resolved_opens.values())
     assembly = assemble_typed_render(
         rendered,
         revision=0,
@@ -1884,3 +2136,111 @@ def test_prepared_element_key_rejects_another_authored_key(authored_key: str) ->
             revision=0,
             tag_for_type=lambda type_key: f"citry-component-{type_key.split('_', 1)[0].lower()}",
         )
+
+
+def _prepared_attribute_maps(html: str) -> list[dict[str, object]]:
+    """Return every element attribute map the page sends to Vue."""
+    payload = html.split(" data-citry-vue-document=", 1)[1].split(">", 1)[1].split("</script>", 1)[0]
+    manifest = json.loads(payload)["manifest"]
+    return [
+        value
+        for occurrence in manifest["occurrences"]
+        for key, value in occurrence["preparedData"].items()
+        if key.startswith("citryAttrs")
+    ]
+
+
+def _html_attribute_values(html: str) -> dict[str, str]:
+    """Return the decoded data-*/title attribute values of Python's HTML output."""
+    return {
+        name: unescape(value)
+        for name, value in re.findall(r'\s((?:data-[a-z]+|title))="([^"]*)"', html)
+        if not name.startswith(("data-cid", "data-citry"))
+    }
+
+
+_NON_SCALAR_ATTRIBUTE_VALUES = {
+    "data-d": {"id": "a"},
+    "data-l": [1, 2],
+    "data-f": 1.0,
+    "title": 2**60,
+    "data-m": Markup("a&amp;b"),
+}
+
+
+@pytest.mark.parametrize("shape", ["events", "spread", "simple-vue", "simple-vue-spread"])
+def test_prepared_attribute_values_match_python_html_text(shape: str) -> None:
+    # Vue turns a dict into "[object Object]", a list into "1,2", 1.0 into
+    # "1" and rounds a huge int, so a client render would set different text
+    # than the server HTML. Each value must reach Vue as Python's HTML text.
+    app = Citry(autodiscover=False)
+    app.set_mounted_prefix("/citry")
+    values = dict(_NON_SCALAR_ATTRIBUTE_VALUES)
+    if shape.startswith("simple-vue"):
+        # The generated evaluator reads only scalars.
+        values = {"data-f": 1.0, "title": 2**60}
+    attrs = " ".join(f'c-{name}="values[{name!r}]"' for name in values)
+    if shape == "simple-vue-spread":
+        attrs = 'c-bind="values"'
+
+    if shape in {"events", "spread"}:
+        opening = f"<button {attrs}" if shape == "events" else '<button c-bind="values"'
+
+        class Leaf(Component):
+            citry = app
+            template = f'{opening} type="button" @click="noop">x</button>'
+            js = """
+                $component({methods: {noop() {}}});
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"values": values}
+
+        rendered = Leaf().render()
+    else:
+
+        class Leaf(Component):  # type: ignore[no-redef]
+            citry = app
+            simple = "vue"
+            template = f"<p {attrs}>x</p>"
+            js = """
+                $component({});
+            """
+
+            @staticmethod
+            def template_data(kwargs, slots):  # noqa: ARG004
+                return {"values": values}
+
+        class Page(Component):
+            citry = app
+            template = """
+                <main><c-Leaf /><c-Leaf /></main>
+            """
+
+        rendered = Page().render()
+
+    expected = _html_attribute_values(rendered.serialize(deps_strategy="ignore"))
+    assert set(expected) == set(values)
+    maps = _prepared_attribute_maps(rendered.serialize())
+    assert maps
+    for attribute_map in maps:
+        assert {name: attribute_map[name] for name in values} == expected
+
+
+@pytest.mark.parametrize("name", ["^onclick", ".innerHTML", "V-ON:click", "#default", ".title", "^title"])
+def test_python_attrs_cannot_use_any_vue_directive_spelling(name: str) -> None:
+    # `^x` forces an attribute and `.x` sets a DOM property in Vue, so either
+    # prefix could turn Python data into an inline handler or raw HTML.
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class UnsafeSpread(Component):
+        citry = registry
+        template = """
+            <p c-bind="attrs">x</p>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {name: "window.__pwned = 1"}}
+
+    with pytest.raises(ValueError, match="cannot introduce Vue syntax"):
+        render_prepared(UnsafeSpread())

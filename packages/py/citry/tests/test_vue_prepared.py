@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -34,6 +37,21 @@ from citry._vue.prepared import (
     replace_definition_ids,
 )
 from citry._vue.protocol import DefinitionAsset, prepared_manifest, revision_envelope
+
+
+def test_browser_client_checks_the_helper_contract_the_compiler_emits() -> None:
+    # The browser refuses every definition whose helper contract differs from
+    # its own copy, so a hash updated on one side only breaks every page.
+    vue_dir = Path(vue_compiler.__file__).parent
+    # The value appears as the declaration and, in the bundle, as the guard
+    # that stops a second runtime copy with a different contract.
+    declaration = re.compile(r'(?:const HELPER_CONTRACT\s*=\s*|helperContract\s*!==\s*)"([0-9a-f]{64})"')
+    # client.js is the hand-written source and declares the value once.
+    assert declaration.findall((vue_dir / "client.js").read_text(encoding="utf-8")) == [HELPER_CONTRACT]
+    # runtime.js is the bundle the server sends, generated from client.js.
+    bundled = declaration.findall((vue_dir / "runtime.js").read_text(encoding="utf-8"))
+    assert len(bundled) >= 2
+    assert set(bundled) == {HELPER_CONTRACT}
 
 
 def _direct_definition_template(source: str) -> str:
@@ -90,18 +108,39 @@ def test_direct_definition_composer_preserves_bindings_calls_slots_and_utf8_span
 
     inputs = definition_compile_inputs(view)
     root_input = inputs["root-def"]
-    assert 'v-bind="preparedData.citryAttrsA"' in root_input.template
+    assert 'v-bind="$citryPrepared.citryAttrsA"' in root_input.template
     assert "v-slot:['citrySlotA']" in root_input.template
     assert '<slot name="citrySlotA" :key="JSON.stringify([preparedData.citryKeyA, 0])"></slot>' in root_input.template
     encoded = root_input.template.encode()
     call_start = encoded.find(b"<citry-child")
     assert root_input.local_calls[0]["sourceEnd"] == call_start + encoded[call_start:].find(b">") + 1
     assert root_input.element_bindings[0]["attrsBindingKey"] == "citryAttrsA"
-    assert "<slot v-if=\"preparedData.selectedSlots['citrySlotA']" in inputs["child-def"].template
+    assert "<slot v-if=\"$citryPrepared.selectedSlots['citrySlotA']" in inputs["child-def"].template
     with NativeCompiler() as compiler:
         compiled = compile_view(view, compiler)
     assert compiled.view.occurrences[0].definition_id == compiled.definitions["root-def"].id
     assert compiled.definitions["root-def"].directive_signature[0].name == "v-show"
+    # The compiler builds a complete hydration plan for Citry's generated
+    # slot names and outlets.
+    plans = {key: value.hydration_plan for key, value in compiled.definitions.items()}
+    assert all(plan is not None and plan.status == "complete" for plan in plans.values())
+    anchors = {
+        key: [(item.kind, item.origin, item.comment, item.path) for item in plan.anchors]
+        for key, plan in plans.items()
+        if plan is not None
+    }
+    assert anchors == {
+        # The forwarded slot outlet inside the root's slot fill.
+        "root-def": [("fragment", "slot", None, ("i:0:6d61696e", "i:1:736c6f74"))],
+        # The child's selected-slot outlet heads a `v-if` chain with no
+        # `v-else`; its text-only `<template v-else-if>` branch is wrapped
+        # in a Fragment, and no match renders `<!--v-if-->`.
+        "child-def": [
+            ("fragment", "slot", None, ("i:0:736c6f74",)),
+            ("fragment", "v-if-branch", None, ("i:1:74656d706c617465",)),
+            ("comment", "v-if", "v-if", ("i:0:736c6f74",)),
+        ],
+    }
 
 
 def test_compatibility_definition_composer_emits_native_state_metadata() -> None:
@@ -217,6 +256,254 @@ def test_compiled_identity_binds_preamble_and_compatibility_metadata() -> None:
     )
 
 
+def test_authored_text_plan_validator_binds_utf8_spans_and_compiler_source() -> None:
+    source = "<p>éX</p>"
+    encoded = source.encode("utf-8")
+    source_hash = hashlib.sha256(encoded).hexdigest()
+    plan = {
+        "source": "transformedTemplate",
+        "sourceSha256": source_hash,
+        "originalSourceSha256": source_hash,
+        "status": "unsupported",
+        "reasonCode": "atelier_text_mismatch",
+        "actions": [
+            {
+                "type": "rewrite",
+                "sourceStart": 3,
+                "sourceEnd": 6,
+                "originalStart": 3,
+                "originalEnd": 6,
+                "rule": "condense.whitespace",
+                "content": "é Y",
+            }
+        ],
+    }
+    response = {
+        "compiler": {"name": "vize_atelier_dom", "version": "0.420.0+citry.1"},
+        "transformedTemplate": source,
+        "transformedSourceSha256": source_hash,
+        "authoredTextPlan": plan,
+    }
+    validated = vue_compiler._validate_authored_text_plan(response, source)
+    assert validated.status == "unsupported"
+    assert validated.actions[0].source_start == 3
+    assert validated.actions[0].source_end == len("<p>éX".encode())
+    assert validated.actions[0].original_start == 3
+    assert validated.actions[0].original_end == len("<p>éX".encode())
+
+    complete = {
+        **response,
+        "authoredTextPlan": {
+            "source": "transformedTemplate",
+            "sourceSha256": source_hash,
+            "originalSourceSha256": source_hash,
+            "status": "complete",
+            "actions": [],
+        },
+    }
+    assert vue_compiler._validate_authored_text_plan(complete, source).status == "complete"
+
+    malformed = {
+        **response,
+        "authoredTextPlan": {**plan, "actions": [{**plan["actions"][0], "sourceStart": True}]},
+    }
+    with pytest.raises(RuntimeError, match="invalid spans"):
+        vue_compiler._validate_authored_text_plan(malformed, source)
+
+    split_character = {
+        **response,
+        "authoredTextPlan": {
+            **plan,
+            "actions": [{**plan["actions"][0], "sourceStart": 4}],
+        },
+    }
+    with pytest.raises(RuntimeError, match="splits a UTF-8 character"):
+        vue_compiler._validate_authored_text_plan(split_character, source)
+
+    mismatched_hash = {**response, "transformedSourceSha256": "0" * 64}
+    with pytest.raises(RuntimeError, match="hash"):
+        vue_compiler._validate_authored_text_plan(mismatched_hash, source)
+
+    overlap = {
+        **response,
+        "authoredTextPlan": {
+            **plan,
+            "actions": [
+                *plan["actions"],
+                {
+                    "type": "drop",
+                    "sourceStart": 5,
+                    "sourceEnd": 6,
+                    "rule": "condense.drop-whitespace",
+                },
+            ],
+        },
+    }
+    with pytest.raises(RuntimeError, match="invalid spans or rule"):
+        vue_compiler._validate_authored_text_plan(overlap, source)
+
+    wrong_original_span = {
+        **response,
+        "authoredTextPlan": {
+            **plan,
+            "actions": [{**plan["actions"][0], "originalEnd": 5}],
+        },
+    }
+    with pytest.raises(RuntimeError, match="does not map"):
+        vue_compiler._validate_authored_text_plan(wrong_original_span, source)
+
+    wrong_original_hash = {
+        **response,
+        "authoredTextPlan": {**plan, "originalSourceSha256": "0" * 64},
+    }
+    with pytest.raises(RuntimeError, match="targets a different source"):
+        vue_compiler._validate_authored_text_plan(wrong_original_hash, source)
+
+
+def test_hydration_plan_changes_the_compiled_identity() -> None:
+    response: dict[str, object] = {"transformedSourceSha256": "source", "codeSha256": "code"}
+    base = vue_compiler._compiled_content_id("request", response, "", "", (), ())
+    with_plan = {**response, "hydrationPlan": {"status": "complete", "anchors": [], "elements": []}}
+    assert base != vue_compiler._compiled_content_id("request", with_plan, "", "", (), ())
+
+
+def _hydration_response(source: str, plan: dict[str, object]) -> dict[str, object]:
+    source_hash = hashlib.sha256(source.encode()).hexdigest()
+    return {
+        "transformedTemplate": source,
+        "transformedSourceSha256": source_hash,
+        "hydrationPlan": {
+            "source": "transformedTemplate",
+            "sourceSha256": source_hash,
+            "originalSourceSha256": source_hash,
+            **plan,
+        },
+    }
+
+
+def test_hydration_plan_validator_reads_facts_and_rejects_malformed_records() -> None:
+    source = '<é v-if="a" :title="t"></é>'
+    opening_end = len('<é v-if="a" :title="t">'.encode())
+    title_start = len('<é v-if="a" '.encode())
+    attribute = {
+        "kind": "bind",
+        "name": "title",
+        "propKey": "title",
+        "hydration": "checked",
+        "sourceStart": title_start,
+        "sourceEnd": opening_end - 1,
+        "originalStart": title_start,
+        "originalEnd": opening_end - 1,
+    }
+    element = {
+        "vnode": "element",
+        "tag": "é",
+        "sourceStart": 0,
+        "sourceEnd": opening_end,
+        "originalStart": 0,
+        "originalEnd": opening_end,
+        "path": ["i:0:c3a9"],
+        "patchFlag": 0,
+        "dynamicProps": None,
+        "attributes": [attribute],
+    }
+    anchor = {
+        "kind": "comment",
+        "origin": "v-if",
+        "comment": "v-if",
+        "sourceStart": 0,
+        "sourceEnd": opening_end,
+        "originalStart": 0,
+        "originalEnd": opening_end,
+        "path": ["i:0:c3a9"],
+    }
+    response = _hydration_response(source, {"status": "complete", "anchors": [anchor], "elements": [element]})
+    plan = vue_compiler._validate_hydration_plan(response, source)
+    assert plan.status == "complete"
+    assert plan.anchors[0].comment == "v-if"
+    assert plan.anchors[0].path == ("i:0:c3a9",)
+    assert plan.elements[0].attributes[0].prop_key == "title"
+    assert plan.elements[0].attributes[0].original_end == opening_end - 1
+
+    # A compiler-inserted attribute has no compiler-input span.
+    inserted = {key: value for key, value in attribute.items() if not key.startswith("original")}
+    inserted_response = _hydration_response(
+        source,
+        {"status": "complete", "anchors": [], "elements": [{**element, "attributes": [inserted]}]},
+    )
+    assert (
+        vue_compiler._validate_hydration_plan(inserted_response, source).elements[0].attributes[0].original_start
+        is None
+    )
+
+    unsupported = _hydration_response(
+        source, {"status": "unsupported", "reasonCode": "unsupported_render_shape", "anchors": [], "elements": []}
+    )
+    assert vue_compiler._validate_hydration_plan(unsupported, source).reason_code == "unsupported_render_shape"
+
+    malformed: list[tuple[dict[str, object], str]] = [
+        (
+            {"status": "unsupported", "reasonCode": "unsupported_render_shape", "anchors": [anchor], "elements": []},
+            "carries facts",
+        ),
+        ({"status": "unsupported", "reasonCode": "guess", "anchors": [], "elements": []}, "unsupported reason"),
+        ({"status": "complete", "anchors": [{**anchor, "origin": "v-for"}], "elements": []}, "anchor"),
+        ({"status": "complete", "anchors": [{**anchor, "comment": ""}], "elements": []}, "anchor"),
+        ({"status": "complete", "anchors": [{**anchor, "sourceEnd": 999}], "elements": []}, "source span"),
+        ({"status": "complete", "anchors": [{**anchor, "path": [1]}], "elements": []}, "element path"),
+        (
+            {
+                "status": "complete",
+                "anchors": [],
+                "elements": [{**element, "attributes": [{**attribute, "originalStart": 1}]}],
+            },
+            "does not map",
+        ),
+        (
+            {
+                "status": "complete",
+                "anchors": [],
+                "elements": [{**element, "attributes": [{**attribute, "hydration": "maybe"}]}],
+            },
+            "attribute",
+        ),
+        ({"status": "complete", "anchors": [], "elements": [{**element, "dynamicProps": [1]}]}, "dynamic props"),
+    ]
+    for plan_fields, message in malformed:
+        with pytest.raises(RuntimeError, match=message):
+            vue_compiler._validate_hydration_plan(_hydration_response(source, plan_fields), source)
+    wrong_original = {**response, "hydrationPlan": {**response["hydrationPlan"], "originalSourceSha256": "0" * 64}}  # type: ignore[dict-item]
+    with pytest.raises(RuntimeError, match="different source"):
+        vue_compiler._validate_hydration_plan(wrong_original, source)
+
+
+def test_native_compiler_reports_where_the_render_creates_hydration_markers() -> None:
+    template = (
+        '<ul><li v-for="row in $citryPrepared.rows" :key="row.id" :aria-expanded="row.open">'
+        '{{ row.label }}</li></ul><p v-if="$citryPrepared.empty">none</p>'
+    )
+    with NativeCompiler() as compiler:
+        plan = compiler.compile(template, type_key="Rows").hydration_plan
+    assert plan is not None
+    assert plan.status == "complete"
+    encoded = template.encode()
+    assert [(item.kind, item.origin, item.comment) for item in plan.anchors] == [
+        ("fragment", "root", None),
+        ("fragment", "v-for", None),
+        ("comment", "v-if", "v-if"),
+    ]
+    loop = plan.anchors[1]
+    assert encoded[loop.original_start : loop.original_end].startswith(b"<li v-for=")
+    row = plan.elements[1]
+    assert row.tag == "li"
+    assert row.dynamic_props == ("aria-expanded",)
+    assert [(item.kind, item.prop_key, item.hydration) for item in row.attributes] == [
+        ("structural", None, "none"),
+        ("reserved", "key", "none"),
+        ("bind", "aria-expanded", "patched"),
+    ]
+
+
 def test_inprocess_native_compiler_discovers_multiple_directives_and_bounds_cache() -> None:
     with NativeCompiler() as compiler:
         compiled = compiler.compile('<input v-model="value" v-show="visible">', type_key="Input")
@@ -231,10 +518,10 @@ def test_inprocess_native_compiler_discovers_multiple_directives_and_bounds_cach
 
 def test_native_compiler_accepts_generated_prepared_data_loop_alias() -> None:
     template = (
-        '<ul><li v-for="preparedData in preparedData.citryLoop0" '
-        'v-bind="preparedData.citryAttrs0">{{ preparedData.citryText0 }}</li></ul>'
+        '<ul><li v-for="$citryPrepared in $citryPrepared.citryLoop0" '
+        'v-bind="$citryPrepared.citryAttrs0">{{ $citryPrepared.citryText0 }}</li></ul>'
     )
-    opening = '<li v-for="preparedData in preparedData.citryLoop0" v-bind="preparedData.citryAttrs0">'
+    opening = '<li v-for="$citryPrepared in $citryPrepared.citryLoop0" v-bind="$citryPrepared.citryAttrs0">'
     start = len(b"<ul>")
     end = start + len(opening.encode())
     with NativeCompiler() as compiler:
@@ -250,9 +537,9 @@ def test_native_compiler_accepts_generated_prepared_data_loop_alias() -> None:
                 },
             ),
         )
-    assert "_renderList(_ctx.preparedData.citryLoop0, (preparedData) =>" in compiled.javascript
-    assert "preparedData.citryAttrs0" in compiled.javascript
-    assert "preparedData.citryText0" in compiled.javascript
+    assert "_renderList(_ctx.$citryPrepared.citryLoop0, ($citryPrepared) =>" in compiled.javascript
+    assert "$citryPrepared.citryAttrs0" in compiled.javascript
+    assert "$citryPrepared.citryText0" in compiled.javascript
 
 
 def occurrence(
@@ -288,7 +575,7 @@ def test_definition_templates_keep_data_out_of_compiler_input_and_make_slots_dyn
     templates = definition_templates(view, tag_for_type=lambda key: f"citry-{key.lower()}")
     root_template = templates["root-def"]
     assert "malicious" not in root_template
-    assert "{{ preparedData['citryTextDanger'] }}" in root_template
+    assert "{{ $citryPrepared['citryTextDanger'] }}" in root_template
     assert "v-slot:['citrySlotabc123']" in root_template
 
 
@@ -310,19 +597,6 @@ def test_protocol_requires_exact_assets_and_known_updates() -> None:
     ] == ["root"]
     with pytest.raises(ValueError, match="unknown"):
         revision_envelope(app_id="app", base_revision=0, view=view, assets=(asset,), updated_ids=("other",))
-    replacement = ({"ownerId": "root", "siteId": "site", "expectedRemountIds": []},)
-    assert revision_envelope(
-        app_id="app", base_revision=0, view=view, assets=(asset,), updated_ids=("root",), replacements=replacement
-    )["replacements"] == list(replacement)
-    with pytest.raises(ValueError, match="unknown or unupdated"):
-        revision_envelope(
-            app_id="app",
-            base_revision=0,
-            view=view,
-            assets=(asset,),
-            updated_ids=("root",),
-            replacements=({"ownerId": "other", "siteId": "site", "expectedRemountIds": []},),
-        )
     with pytest.raises(ValueError, match="target"):
         prepared_manifest(
             app_id="app",
@@ -352,20 +626,33 @@ def test_protocol_requires_exact_declared_opaque_html_records() -> None:
         root = PreparedOccurrence("root", "Root", "root-def", {}, data, None, None)
         return prepared_manifest(app_id="app", view=PreparedView(0, "root", (root,), (definition,)), assets=(asset,))
 
-    assert (
-        manifest({"opaqueHtml": {"citryOpaque0": {"html": "<b>x</b>"}}})["occurrences"][0]["preparedData"][
-            "opaqueHtml"
-        ]["citryOpaque0"]["html"]
-        == "<b>x</b>"
-    )
+    record = {"html": "<b>x</b>", "nodeCount": 1}
+    assert manifest({"opaqueHtml": {"citryOpaque0": record}})["occurrences"][0]["preparedData"]["opaqueHtml"] == {
+        "citryOpaque0": record
+    }
     for malformed in (
         {},
         {"opaqueHtml": {}},
-        {"opaqueHtml": {"citryOpaque0": {"html": "x", "extra": True}}},
-        {"opaqueHtml": {"citryOpaque0": {"html": 1}}},
+        {"opaqueHtml": {"citryOpaque0": {"html": "x", "nodeCount": 1, "extra": True}}},
+        {"opaqueHtml": {"citryOpaque0": {"html": 1, "nodeCount": 1}}},
+        {"opaqueHtml": {"citryOpaque0": {"html": "x"}}},
+        {"opaqueHtml": {"citryOpaque0": {"html": "x", "nodeCount": -1}}},
+        {"opaqueHtml": {"citryOpaque0": {"html": "x", "nodeCount": True}}},
+        {"opaqueHtml": {"citryOpaque0": {"html": "", "nodeCount": 1}}},
     ):
         with pytest.raises(ValueError, match="opaque HTML"):
             manifest(malformed)
+
+    # An opaque site whose origin is neither raw nor markup is rejected before its record is read.
+    root = PreparedOccurrence(
+        "root", "Root", "root-def", {}, {"opaqueHtml": {"citryOpaque0": {"html": "<b>x</b>"}}}, None, None
+    )
+    for origin in ("grouped", "unknown"):
+        unknown_origin_asset = replace(asset, opaque_html_sites=({**site, "origin": origin},))
+        with pytest.raises(ValueError, match="opaque HTML site is invalid"):
+            prepared_manifest(
+                app_id="app", view=PreparedView(0, "root", (root,), (definition,)), assets=(unknown_origin_asset,)
+            )
 
 
 def test_prepared_graph_rejects_extra_root_parent_mismatch_and_wrong_slot_owner() -> None:
@@ -430,7 +717,7 @@ def test_native_compiler_binds_ordinary_target_and_final_definition_identity() -
             type_key="Root",
         )
     assert compiled.target == "ordinary-vnodes/1"
-    assert "window.CitryStable.compilerRuntime" in compiled.javascript
+    assert "window.__citryRuntime.compilerRuntime" in compiled.javascript
     assert "window.Vue=" not in compiled.javascript
     assert HELPER_CONTRACT in compiled.javascript
     assert compiled.id not in {"root-def", ""}

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-import importlib
+import importlib.util
+import re
+import sys
 import xml.etree.ElementTree as ET
 from collections import UserDict
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
+import citry_ui
 from citry import Citry, Component, Const, Extension, Slot
+from citry._vue import events as vue_events
 from citry._vue.capture import (
     PreparedAttribute,
     PreparedDynamicElementOpen,
@@ -27,12 +32,20 @@ from citry._vue.direct_capture import (
     assemble_typed_render,
 )
 from citry._vue.document import typed_document_shell
-from citry._vue.leaf_program import PreparedLeafProgram, typed_leaf_parts
+from citry._vue.leaf_program import PreparedLeafProgram, _SpreadResolvedOpen, typed_leaf_parts
 from citry._vue.prepared import PreparedOccurrence
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender, RenderFrame
 from citry.client_directives import ComponentTagClientBinding, ComponentTagClientBindingKind
 from citry.ext.events.renderers import dispatcher_for
+
+
+def _assembly(root):
+    return assemble_typed_render(
+        render_prepared_direct(root),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
 
 
 def _view(render):
@@ -153,27 +166,30 @@ def test_nested_ui_preview_slot_sites_are_assembled_without_collisions(module_na
     assert assembly.compile_inputs
 
 
-def test_ctabs_transparent_projection_puts_nested_calls_in_physical_definition() -> None:
-    import citry_ui
-
+def test_ctabs_content_keeps_nested_calls_and_vue_bindings_in_the_authors_definition() -> None:
     registry = Citry(autodiscover=False)
     registry.register_library(citry_ui)
 
     class Leaf(Component):
         citry = registry
         name = "projection-leaf"
-        template = "<em>leaf</em>"
+        template = """
+          <em>leaf</em>
+        """
 
     class Page(Component):
         citry = registry
         template = """
             <c-CTabs default_value="one" aria_label="Example">
-              <c-CTab value="one"><span>One @name #topic <c-projection-leaf #c-key="'tab-one'" /></span></c-CTab>
+              <c-CTab value="one"><span v-text="label">One <c-projection-leaf #c-key="'tab-one'" /></span></c-CTab>
               <c-CTabPanel value="one"><p>Panel one <c-projection-leaf #c-key="'panel-one'" /></p></c-CTabPanel>
-              <c-CTab value="two"><span>Two <c-projection-leaf #c-key="'tab-two'" /></span></c-CTab>
+              <c-CTab value="two"><span>Two @name #topic <c-projection-leaf #c-key="'tab-two'" /></span></c-CTab>
               <c-CTabPanel value="two"><p>Panel two <c-projection-leaf #c-key="'panel-two'" /></p></c-CTabPanel>
             </c-CTabs>
         """
+
+        def js_data(self, kwargs, slots):
+            return {"label": "Lexical"}
 
     assembly = assemble_typed_render(
         render_prepared_direct(Page()),
@@ -185,16 +201,376 @@ def test_ctabs_transparent_projection_puts_nested_calls_in_physical_definition()
     page_input = assembly.compile_inputs[page.definition_id]
     physical_input = assembly.compile_inputs[physical.definition_id]
 
-    # Declaration components remain calls in the lexical page slot. Their
-    # projected child output is assembled into CInternalTabs, so its nested
-    # calls must use the physical definition's preparedData.calls table.
-    assert "One @name #topic" in physical_input.template
-    assert "One @name #topic" not in page_input.template
-    assert not any(call["typeKey"] == Leaf.class_id for call in page_input.local_calls)
-    leaf_calls = [call for call in physical_input.local_calls if call["typeKey"] == Leaf.class_id]
+    # CInternalTabs draws the tab list, but the page wrote the tab content,
+    # and Vue compiles slot content in its author's render function. So the
+    # content travels as Vue slots to the page's call: its component calls
+    # use the page's $citryPrepared.calls table and its Vue bindings read
+    # the page's js_data. CInternalTabs only holds the slot outlets.
+    assert 'v-text="label"' in page_input.template
+    assert 'v-text="label"' not in physical_input.template
+    # Authored text that looks like an event or slot shorthand stays plain text.
+    assert "Two @name #topic" in page_input.template
+    assert "Two @name #topic" not in physical_input.template
+    assert not any(call["typeKey"] == Leaf.class_id for call in physical_input.local_calls)
+    leaf_calls = [call for call in page_input.local_calls if call["typeKey"] == Leaf.class_id]
     assert len(leaf_calls) == 4
-    assert len(physical.prepared_data["calls"]) == 4
-    assert all(physical.prepared_data["calls"][call["localId"]]["parentId"] == physical.id for call in leaf_calls)
+    assert all(page.prepared_data["calls"][call["localId"]]["parentId"] == physical.id for call in leaf_calls)
+    assert physical_input.template.count("<slot ") == 4
+
+
+def _declaration_receiver(registry: Citry) -> None:
+    """Register a component that stores its fill and a transparent component that renders it later."""
+    declarations: list[Slot] = []
+
+    class Declare(Component):
+        citry = registry
+        name = "declare"
+        template = """
+          <c-slot />
+        """
+
+        def template_data(self, kwargs, slots):
+            declarations.append(slots["default"])
+            return {}
+
+        def on_render(self):
+            return ""
+
+    class Receiver(Component):
+        citry = registry
+        name = "receiver"
+        transparent = True
+        template = """
+          <div class="receiver">{{ content }}</div>
+        """
+
+        def template_data(self, kwargs, slots):
+            declaration = declarations[-1]
+            return {"content": Slot(lambda _: declaration())}
+
+    class Physical(Component):
+        citry = registry
+        name = "physical"
+        template = """
+          <section><c-receiver /></section>
+        """
+
+        def js_data(self, kwargs, slots):
+            return {"unrelated": 1}
+
+
+def _definitions_containing(assembly, text: str) -> list[str]:
+    return sorted(
+        {
+            occurrence.type_key.split("_", 1)[0]
+            for occurrence in assembly.view.occurrences
+            if text in assembly.compile_inputs[occurrence.definition_id].template
+        }
+    )
+
+
+_AUTHOR_BINDINGS = '<span v-text="label"></span><button @click="count++">+</button><input v-model="text" />'
+
+
+def test_fill_rendered_by_a_transparent_receiver_in_another_component_compiles_with_its_author() -> None:
+    registry = Citry(autodiscover=False)
+    _declaration_receiver(registry)
+
+    class Author(Component):
+        citry = registry
+        name = "author"
+        template = f"""
+          <c-declare>{_AUTHOR_BINDINGS}<b>{{{{ note }}}}</b></c-declare>
+          <c-physical />
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"note": "python"}
+
+        def js_data(self, kwargs, slots):
+            return {"label": "Lexical", "count": 0, "text": ""}
+
+    assembly = _assembly(Author())
+
+    # The receiver sits inside Physical, which the author encloses, so the
+    # fill reaches Physical as a Vue slot and is compiled with the author.
+    for binding in ('v-text="label"', '@click="count++"', 'v-model="text"'):
+        assert _definitions_containing(assembly, binding) == ["Author"]
+    physical = next(item for item in assembly.view.occurrences if item.type_key.startswith("Physical_"))
+    assert assembly.compile_inputs[physical.definition_id].template.count("<slot ") == 1
+    author = next(item for item in assembly.view.occurrences if item.type_key.startswith("Author_"))
+    assert "python" in author.prepared_data.values()
+    assert "python" not in physical.prepared_data.values()
+
+
+def test_fill_forwarded_through_an_intermediate_component_compiles_with_its_author() -> None:
+    registry = Citry(autodiscover=False)
+    _declaration_receiver(registry)
+
+    class Middle(Component):
+        citry = registry
+        name = "middle"
+        template = """
+          <c-declare><c-slot /></c-declare>
+          <c-physical />
+        """
+
+    class Page(Component):
+        citry = registry
+        template = """
+          <c-middle><span v-text="label">m</span></c-middle>
+        """
+
+        def js_data(self, kwargs, slots):
+            return {"label": "Lexical"}
+
+    assembly = _assembly(Page())
+
+    # Middle writes the declaration, so its template passes the page's fill
+    # on through a slot outlet to the page's call.
+    assert _definitions_containing(assembly, 'v-text="label"') == ["Page"]
+    middle = next(item for item in assembly.view.occurrences if item.type_key.startswith("Middle_"))
+    assert assembly.compile_inputs[middle.definition_id].template.count("<slot ") == 1
+
+
+def test_keyed_instances_share_definitions_and_keep_fills_with_each_author() -> None:
+    registry = Citry(autodiscover=False)
+    _declaration_receiver(registry)
+
+    class Group(Component):
+        citry = registry
+        name = "group"
+        template = """
+          <c-declare><span v-text="label">{{ key }}</span></c-declare>
+          <c-physical />
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"key": kwargs["key"]}
+
+        def js_data(self, kwargs, slots):
+            return {"label": kwargs["key"]}
+
+    class Page(Component):
+        citry = registry
+        template = """
+          <c-for each="key in keys">
+            <c-group #c-key="key" c-key="key" />
+          </c-for>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"keys": ["a", "b"]}
+
+    assembly = _assembly(Page())
+    groups = [item for item in assembly.view.occurrences if item.type_key.startswith("Group_")]
+    physicals = [item for item in assembly.view.occurrences if item.type_key.startswith("Physical_")]
+    assert len(groups) == len(physicals) == 2
+    # Slot names come from call sites, not occurrence ids, so both
+    # instances compile to one definition each.
+    assert len({item.definition_id for item in groups}) == 1
+    assert len({item.definition_id for item in physicals}) == 1
+    assert _definitions_containing(assembly, 'v-text="label"') == ["Group"]
+    # Each instance keeps the Python text of its own fill.
+    assert sorted(
+        value for item in groups for key, value in item.prepared_data.items() if key.startswith("citryText")
+    ) == ["a", "b"]
+
+
+def test_transparent_receiver_fallback_stays_in_the_template_it_is_copied_into() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Receiver(Component):
+        citry = registry
+        name = "fallback-receiver"
+        transparent = True
+        template = """
+          <div><c-slot><span v-text="label">fallback</span></c-slot></div>
+        """
+
+    class Physical(Component):
+        citry = registry
+        name = "physical"
+        template = """
+          <section><c-fallback-receiver /></section>
+        """
+
+        def js_data(self, kwargs, slots):
+            return {"label": "Physical"}
+
+    class Page(Component):
+        citry = registry
+        template = """
+          <c-physical />
+        """
+
+    assembly = _assembly(Page())
+
+    # The receiver wrote its own fallback, and a transparent component's
+    # template is compiled with the component that calls it.
+    assert _definitions_containing(assembly, 'v-text="label"') == ["Physical"]
+    assert not any("<slot " in item.template for item in assembly.compile_inputs.values())
+
+
+def test_transparent_author_reached_inside_a_forwarded_fill_owns_its_fills_with_its_caller() -> None:
+    registry = Citry(autodiscover=False)
+    _declaration_receiver(registry)
+
+    class Box(Component):
+        citry = registry
+        name = "box"
+        template = """
+          <div class="box">{{ title }}<c-slot /></div>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"title": "box"}
+
+    class Wrap(Component):
+        citry = registry
+        name = "wrap"
+        transparent = True
+        template = """
+          <p class="wrap"><c-slot /></p>
+        """
+
+    class Writer(Component):
+        citry = registry
+        name = "writer"
+        transparent = True
+        template = """
+          <c-declare><span v-text="label">declared</span></c-declare>
+          <c-physical />
+          <c-wrap><b>{{ note }}</b></c-wrap>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"note": "wrapped"}
+
+    class Page(Component):
+        citry = registry
+        template = """
+          <c-box><c-writer /></c-box>
+        """
+
+        def js_data(self, kwargs, slots):
+            return {"label": "Page"}
+
+    assembly = _assembly(Page())
+    page = next(item for item in assembly.view.occurrences if item.type_key.startswith("Page_"))
+    page_template = assembly.compile_inputs[page.definition_id].template
+
+    # The assembler reaches Writer while building Box's occurrence, but
+    # Writer's template is copied into the page's fill for Box. Its fills
+    # therefore belong to the page: the declared fill is compiled there, and
+    # the Python value its copied fill shows is stored where the page reads it.
+    assert _definitions_containing(assembly, 'v-text="label"') == ["Page"]
+    wrapped_keys = re.findall(r"\$citryPrepared\.(citryText\w+)", page_template)
+    assert len(wrapped_keys) == 1
+    assert page.prepared_data[wrapped_keys[0]] == "wrapped"
+
+
+def _sibling_author_page(fill: str) -> Component:
+    registry = Citry(autodiscover=False)
+    _declaration_receiver(registry)
+
+    class Leaf(Component):
+        citry = registry
+        name = "leaf"
+        template = """
+          <em>leaf</em>
+        """
+
+    class Box(Component):
+        citry = registry
+        name = "box"
+        template = """
+          <div><c-slot /></div>
+        """
+
+    class Writer(Component):
+        # A transparent component inside the fill that writes a fill of its
+        # own: its template is compiled where the fill is copied, so its
+        # bindings read the same wrong component.
+        citry = registry
+        name = "writer"
+        transparent = True
+        template = """
+          <c-box><span v-text="label"></span></c-box>
+        """
+
+    class Author(Component):
+        citry = registry
+        name = "author"
+        template = f"""
+          <c-declare>{fill}</c-declare>
+        """
+
+        class Events:
+            def ping(self):
+                return None
+
+        def template_data(self, kwargs, slots):
+            return {"note": "python"}
+
+        def js_data(self, kwargs, slots):
+            return {"label": "Lexical", "count": 0}
+
+    class Root(Component):
+        citry = registry
+        template = """
+          <c-author />
+          <c-physical />
+        """
+
+    return Root()
+
+
+@pytest.mark.parametrize(
+    ("fill", "binding"),
+    [
+        ('<span v-text="label"></span>', "v-text on <span>"),
+        ('<button @click="count++">+</button>', "@click on <button>"),
+        ('<input v-model="label" />', "v-model on <input>"),
+        ('<button @c-click="ping">ping</button>', "a Citry Events binding on <button>"),
+        ('<i ref="thing"></i>', "ref on <i>"),
+        ('<p v-for="item in 3" v-text="item"></p>', "v-for on <p>"),
+        ('<c-leaf :title="label" />', ":title on the call to Leaf"),
+        ('<c-if cond="note"><b :title="label">x</b></c-if>', ":title on <b>"),
+        ('<b :title="this.label">x</b>', ":title on <b>"),
+        ("<c-writer />", "v-text on <span>"),
+    ],
+)
+def test_fill_from_outside_the_receivers_tree_is_rejected_when_it_uses_vue_data(fill: str, binding: str) -> None:
+    # Vue passes slots only down the component tree, so a fill whose author
+    # is a sibling of the receiver's component cannot become a Vue slot.
+    with pytest.raises(UnsupportedPreparedView) as error:
+        _assembly(_sibling_author_page(fill))
+    message = str(error.value)
+    assert f"({binding})" in message
+    assert "'default' fill written by Author at line 2 of Author's template" in message
+    assert "Receiver renders it inside Physical, which Author does not contain" in message
+
+
+@pytest.mark.parametrize(
+    "fill",
+    [
+        "<b>{{ note }}</b>",
+        "<span v-text=\"'literal'\"></span>",
+        '<button @click="$event.preventDefault()">+</button>',
+        '<p v-if="Math.max(1, 2) > 1" v-else-if="false">x</p>',
+        "<c-leaf :title=\"'fixed'\" />",
+    ],
+)
+def test_fill_from_outside_the_receivers_tree_is_copied_when_it_reads_no_vue_data(fill: str) -> None:
+    assembly = _assembly(_sibling_author_page(fill))
+    physical = next(item for item in assembly.view.occurrences if item.type_key.startswith("Physical_"))
+    # With no Vue data to read, copying the fill into the receiving template
+    # renders the same result as a slot would.
+    assert "<slot " not in assembly.compile_inputs[physical.definition_id].template
+    assert not any("<slot " in item.template for item in assembly.compile_inputs.values())
+    if "note" in fill:
+        assert "python" in physical.prepared_data.values()
 
 
 def _binding_open(name: str) -> PreparedElementOpen:
@@ -317,7 +693,7 @@ def test_repeated_forwarded_multi_slot_fills_keep_nested_calls_with_the_lexical_
 
 
 def test_native_compiler_authenticates_generic_browser_binding_operand() -> None:
-    opening = '<p :title="$probe(preparedData.citryBinding0)">'
+    opening = '<p :title="$probe($citryPrepared.citryBinding0)">'
     compiled = NativeCompiler().compile(
         opening + "initial</p>",
         type_key="BrowserBinding",
@@ -331,9 +707,9 @@ def test_native_compiler_authenticates_generic_browser_binding_operand() -> None
             },
         ),
     )
-    assert "preparedData.citryBinding0" in compiled.javascript
+    assert "$citryPrepared.citryBinding0" in compiled.javascript
 
-    underscored_opening = '<p :title="$probe_helper(preparedData.citryBinding0, () => ({name}))">'
+    underscored_opening = '<p :title="$probe_helper($citryPrepared.citryBinding0, () => ({name}))">'
     underscored = NativeCompiler().compile(
         underscored_opening + "initial</p>",
         type_key="BrowserBindingUnderscoredHelper",
@@ -351,12 +727,12 @@ def test_native_compiler_authenticates_generic_browser_binding_operand() -> None
 
     with pytest.raises(ValueError, match="browser binding does not match"):
         NativeCompiler().compile(
-            '<p :title="$probe(preparedData.citryBinding0extra)">initial</p>',
+            '<p :title="$probe($citryPrepared.citryBinding0extra)">initial</p>',
             type_key="BrowserBindingMismatch",
             element_bindings=(
                 {
                     "sourceStart": 0,
-                    "sourceEnd": len(b'<p :title="$probe(preparedData.citryBinding0extra)">'),
+                    "sourceEnd": len(b'<p :title="$probe($citryPrepared.citryBinding0extra)">'),
                     "attrsBindingKey": None,
                     "keyBindingKey": None,
                     "browserBindingKeys": ["citryBinding0"],
@@ -365,11 +741,11 @@ def test_native_compiler_authenticates_generic_browser_binding_operand() -> None
         )
 
     for invalid_expression in (
-        "$probe(preparedData['citryBinding0'])",
+        "$probe($citryPrepared['citryBinding0'])",
         "$probe(other.citryBinding0)",
-        "$probe(preparedData.citryBinding0, namedThunk)",
-        "$probe(preparedData.citryBinding0, (...values) => values)",
-        "preparedData.citryBinding0",
+        "$probe($citryPrepared.citryBinding0, namedThunk)",
+        "$probe($citryPrepared.citryBinding0, (...values) => values)",
+        "$citryPrepared.citryBinding0",
     ):
         opening = f'<p :title="{invalid_expression}">'
         with pytest.raises(ValueError, match="browser binding does not match"):
@@ -386,7 +762,7 @@ def test_native_compiler_authenticates_generic_browser_binding_operand() -> None
                     },
                 ),
             )
-    literal_opening = "<p :title=\"$probe('preparedData.citryBinding0')\">"
+    literal_opening = "<p :title=\"$probe('$citryPrepared.citryBinding0')\">"
     with pytest.raises(ValueError, match="browser binding does not match"):
         NativeCompiler().compile(
             literal_opening + "initial</p>",
@@ -403,7 +779,7 @@ def test_native_compiler_authenticates_generic_browser_binding_operand() -> None
         )
 
 
-def test_generic_browser_bindings_assemble_from_leaf_typed_fallback() -> None:
+def test_generic_browser_bindings_assemble_from_leaf_typed_fallback(monkeypatch) -> None:
     registry = Citry()
 
     class Root(Component):
@@ -436,6 +812,11 @@ def test_generic_browser_bindings_assemble_from_leaf_typed_fallback() -> None:
         for part in parts
     ]
     object.__setattr__(leaf, "cached_typed_parts", tuple(parts))
+
+    def fail(_leaf):
+        raise AssertionError("cached browser-binding fallback rebuilt typed parts")
+
+    monkeypatch.setattr("citry._vue.leaf_program.typed_leaf_parts", fail)
     assembly = assemble_typed_render(
         rendered,
         revision=0,
@@ -443,14 +824,46 @@ def test_generic_browser_bindings_assemble_from_leaf_typed_fallback() -> None:
         template_context_names=("$probe",),
     )
     compile_input = next(iter(assembly.compile_inputs.values()))
-    assert ':title="$probe(preparedData.citryBinding' in compile_input.template
-    assert "{{ $probe(preparedData.citryBinding" in compile_input.template
+    assert ':title="$probe($citryPrepared.citryBinding' in compile_input.template
+    assert "{{ $probe($citryPrepared.citryBinding" in compile_input.template
     compiled = NativeCompiler().compile(
         compile_input.template,
         type_key="BrowserBindingLeaf",
         element_bindings=compile_input.element_bindings,
     )
     assert "$probe" in compiled.javascript
+
+
+def test_generated_leaf_assembly_keeps_output_without_typed_materialization(monkeypatch) -> None:
+    registry = Citry()
+
+    class Root(Component):
+        citry = registry
+        template = "<p>{{ value }}</p>"
+
+        def template_data(self, kwargs, slots):
+            return {"value": "hello"}
+
+    def tag_for_type(type_key):
+        return "x-" + type_key.lower().replace("_", "-")
+
+    control_render = render_prepared_direct(Root())
+    control_assembly = assemble_typed_render(control_render, revision=0, tag_for_type=tag_for_type)
+    control_html = control_render.serialize(deps_strategy="ignore")
+
+    def fail(_leaf):
+        raise AssertionError("ordinary generated leaf requested typed parts")
+
+    monkeypatch.setattr("citry._vue.leaf_program.typed_leaf_parts", fail)
+    optimized_render = render_prepared_direct(Root())
+    optimized_assembly = assemble_typed_render(optimized_render, revision=0, tag_for_type=tag_for_type)
+    optimized_html = optimized_render.serialize(deps_strategy="ignore")
+
+    def strip_cid(html):
+        return re.sub(r' data-cid-[^=]+=""', "", html)
+
+    assert strip_cid(optimized_html) == strip_cid(control_html) == "<p>hello</p>"
+    assert optimized_assembly.compile_inputs == control_assembly.compile_inputs
 
 
 def test_generic_browser_binding_values_expression_preserves_comparisons() -> None:
@@ -577,9 +990,9 @@ def test_slot_free_keyed_component_run_keeps_one_and_two_member_definition_stabl
         for occurrence in assembly.view.occurrences
         if occurrence.parent_id is not None
     )
-    assert "preparedData.calls[citryOccurrenceId]" not in inputs[0].template
+    assert "$citryPrepared.calls[citryOccurrenceId]" not in inputs[0].template
     assert ':key="citryOccurrenceId"' in inputs[0].template
-    assert '<component v-for="citryOccurrenceId in preparedData.callRuns.citryRun0"' in inputs[0].template
+    assert '<component v-for="citryOccurrenceId in $citryPrepared.callRuns.citryRun0"' in inputs[0].template
     with NativeCompiler() as compiler:
         compiled = compiler.compile(
             inputs[0].template,
@@ -589,7 +1002,7 @@ def test_slot_free_keyed_component_run_keeps_one_and_two_member_definition_stabl
             local_call_runs=inputs[0].local_call_runs,
         )
     assert compiled.local_call_runs[0]["runId"] == "citryRun0"
-    assert compiled.local_call_runs[0]["collectionExpression"] == "preparedData.callRuns.citryRun0"
+    assert compiled.local_call_runs[0]["collectionExpression"] == "$citryPrepared.callRuns.citryRun0"
     assert compiled.local_call_runs[0]["idExpression"] == "citryOccurrenceId"
     assert compiled.local_call_runs[0]["keyExpression"] == "citryOccurrenceId"
     assert compiled.local_calls == ()
@@ -916,7 +1329,7 @@ def test_direct_supplied_fill_and_invoked_fallback_keep_distinct_lexical_owners(
     receiver_template = assembly.compile_inputs[receiver_occurrence.definition_id].template
     assert "v-slot:['citrySlot" in caller_template
     assert '="{ $i18n, $probe }"' in caller_template
-    assert "preparedData.selectedSlots" in receiver_template
+    assert "$citryPrepared.selectedSlots" in receiver_template
     assert ':$i18n="$i18n"' in receiver_template
     assert ':$probe="$probe"' in receiver_template
     assert assembly.compile_inputs[caller.definition_id].template_context_names == ("$i18n", "$probe")
@@ -1177,7 +1590,7 @@ def test_flattened_projection_namespaces_lexical_text_after_physical_key() -> No
     assert len(projected_keys) == 1
     assert physical.prepared_data[projected_keys[0]] == "lexical"
     assert root.prepared_data[projected_keys[0]] == "lexical"
-    assert f"preparedData.{projected_keys[0]}" in assembly.compile_inputs[root.definition_id].template
+    assert f"$citryPrepared.{projected_keys[0]}" in assembly.compile_inputs[root.definition_id].template
 
 
 def test_component_call_preserves_native_vue_props_events_and_refs() -> None:
@@ -1379,6 +1792,49 @@ def test_component_call_accepts_single_quoted_spaced_unicode_binding_source() ->
     )
     parent = next(item for item in assembly.view.occurrences if item.type_key == Parent.class_id)
     assert ':disabled="blocked"' in assembly.compile_inputs[parent.definition_id].template
+
+
+@pytest.mark.parametrize(
+    ("attribute", "compiled_text"),
+    [
+        # A statement handler is compiled from the raw attribute text, so an
+        # escaped `<` would reach the browser as `&_ctx.lt;`.
+        ('@input="short = $event.target.value.length < 3"', "$event.target.value.length < 3"),
+        ('@input="a = 1; b = a > 0 && ok"', "_ctx.a > 0 && _ctx.ok"),
+        # A value holding a double quote keeps the author's single quotes.
+        ("@input='label = \"<\" + x'", '"<" + _ctx.x'),
+        (":title=\"a < b ? 'lt' : 'ge'\"", "_ctx.a < _ctx.b ? 'lt' : 'ge'"),
+    ],
+)
+def test_component_call_writes_authored_vue_bindings_verbatim(attribute: str, compiled_text: str) -> None:
+    registry = Citry(autodiscover=False)
+
+    class Child(Component):
+        citry = registry
+        template = "child"
+
+    class Parent(Component):
+        citry = registry
+        template = f"<c-Child {attribute} />"
+
+    assembly = assemble_typed_render(
+        render_prepared_direct(Parent()),
+        revision=0,
+        tag_for_type=lambda key: "x-" + key.lower().replace("_", "-"),
+    )
+    parent = next(item for item in assembly.view.occurrences if item.type_key == Parent.class_id)
+    compile_input = assembly.compile_inputs[parent.definition_id]
+    assert attribute in compile_input.template
+    with NativeCompiler() as compiler:
+        compiled = compiler.compile(
+            compile_input.template,
+            type_key=Parent.class_id,
+            local_calls=compile_input.local_calls,
+            element_bindings=compile_input.element_bindings,
+            local_call_runs=compile_input.local_call_runs,
+        )
+    assert compiled_text in compiled.javascript
+    assert "&_ctx." not in compiled.javascript
 
 
 @pytest.mark.parametrize(
@@ -1724,7 +2180,7 @@ def test_dynamic_element_void_and_nested_same_tag_keep_exact_alias_structure() -
     assert len(aliases) == len(set(aliases)) == 3
     assert compile_input.template.index(f"</{aliases[1]}>") < compile_input.template.index(f"</{aliases[0]}>")
     assert f"</{aliases[2]}>" in compile_input.template
-    assert f'<{aliases[2]} v-bind="preparedData.' in compile_input.template
+    assert f'<{aliases[2]} v-bind="$citryPrepared.' in compile_input.template
 
 
 def test_dynamic_element_rejects_tag_dependent_vue_directives() -> None:
@@ -1760,7 +2216,7 @@ def test_dynamic_element_uses_evaluated_key_as_occurrence_data() -> None:
     compile_input = assembly.compile_inputs[occurrence.definition_id]
     assert occurrence.prepared_data["citryKey0"] == "row"
     assert occurrence.prepared_data["citryAttrs0"] == {}
-    assert ':key="preparedData.citryKey0"' in compile_input.template
+    assert ':key="$citryPrepared.citryKey0"' in compile_input.template
     assert compile_input.element_bindings[0]["keyBindingKey"] == "citryKey0"
 
     class Conflict(Component):
@@ -2069,7 +2525,7 @@ def test_prepared_root_markers_project_to_multi_roots_and_child_physical_roots()
     ]
     assert marker_values == [{"data-probe": "own", "data-flag": ""}]
     child_template = assembly.compile_inputs[child.definition_id].template
-    assert child_template.count('v-bind="preparedData.citryAttrs') == 2
+    assert child_template.count('v-bind="$citryPrepared.citryAttrs') == 2
     child_input = assembly.compile_inputs[child.definition_id]
     with NativeCompiler() as compiler:
         compiled = compiler.compile(
@@ -2080,7 +2536,7 @@ def test_prepared_root_markers_project_to_multi_roots_and_child_physical_roots()
             local_call_runs=child_input.local_call_runs,
             dynamic_elements=child_input.dynamic_elements,
         )
-    assert compiled.javascript.count("preparedData.citryAttrs") >= 2
+    assert compiled.javascript.count("$citryPrepared.citryAttrs") >= 2
 
 
 def test_prepared_root_markers_follow_static_depth_across_typed_descendants() -> None:
@@ -2123,7 +2579,7 @@ def test_prepared_root_markers_follow_static_depth_across_typed_descendants() ->
     assert len(marked) == 1
     parent = next(item for item in assembly.view.occurrences if item.type_key == Parent.class_id)
     template = assembly.compile_inputs[parent.definition_id].template
-    assert template.count('v-bind="preparedData.citryAttrs') == 2
+    assert template.count('v-bind="$citryPrepared.citryAttrs') == 2
     marker_maps = [
         value for value in parent.prepared_data.values() if type(value) is dict and value.get("data-probe") == "root"
     ]
@@ -2160,7 +2616,7 @@ def test_prepared_root_markers_follow_a_root_slot_to_its_physical_fill() -> None
         if key.startswith("citryAttrs")
     )
     assert "data-slot-probe" not in assembly.compile_inputs[parent.definition_id].template
-    assert 'v-bind="preparedData.citryAttrs' in assembly.compile_inputs[parent.definition_id].template
+    assert 'v-bind="$citryPrepared.citryAttrs' in assembly.compile_inputs[parent.definition_id].template
 
 
 @pytest.mark.parametrize("marker", ["key", 'ref="root"', ':data-probe="value"'])
@@ -2724,7 +3180,7 @@ def test_slot_fallback_component_is_compiled_once_outside_supplied_slot_branch()
     compiler_input = assembly.compile_inputs[root.definition_id]
     assert compiler_input.template.count("<slot ") == 1
     assert len(compiler_input.local_calls) == 1
-    assert compiler_input.template.count("preparedData.calls.") == 2
+    assert compiler_input.template.count("$citryPrepared.calls.") == 2
 
 
 def test_fragment_metadata_uses_utf8_byte_offsets_through_nested_fill_rebasing() -> None:
@@ -2850,18 +3306,19 @@ def test_assembly_detaches_each_ingress_value_once_and_owns_prepared_containers(
     assert occurrence.server_data == {"nested": {"value": "server"}}
     assert len(attrs_keys) == 1
     loop_records = occurrence.prepared_data["citryLoop0"]
+    # A structured attribute value travels as the text Python's HTML writes.
     assert [record[attrs_keys[0]] for record in loop_records] == [
-        {"title": ["original", [1, 2]]},
-        {"title": ["original", [1, 2]]},
+        {"title": "['original', (1, 2)]"},
+        {"title": "['original', (1, 2)]"},
     ]
     assert loop_records[0][attrs_keys[0]] is not loop_records[1][attrs_keys[0]]
 
     server["nested"]["value"] = "mutated"
     attrs["title"][0] = "mutated"
     assert occurrence.server_data == {"nested": {"value": "server"}}
-    assert all(record[attrs_keys[0]] == {"title": ["original", [1, 2]]} for record in loop_records)
-    loop_records[0][attrs_keys[0]]["title"][0] = "first only"
-    assert loop_records[1][attrs_keys[0]] == {"title": ["original", [1, 2]]}
+    assert all(record[attrs_keys[0]] == {"title": "['original', (1, 2)]"} for record in loop_records)
+    loop_records[0][attrs_keys[0]]["title"] = "first only"
+    assert loop_records[1][attrs_keys[0]] == {"title": "['original', (1, 2)]"}
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf")])
@@ -2870,37 +3327,63 @@ def test_assembly_rejects_nonfinite_prepared_values(bad: float) -> None:
 
     class Root(Component):
         citry = registry
-        template = '<div c-title="value"></div>'
+        template = "<div>x</div>"
 
-        def template_data(self, kwargs, slots):
-            return {"value": bad}
-
+    rendered = Root().render()
     with pytest.raises(ValueError, match="finite numbers"):
         assemble_typed_render(
-            Root().render(),
+            rendered,
             revision=0,
+            server_data={rendered.frame.render_id: {"value": bad}},
             tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
         )
 
 
 def test_assembly_rejects_cycles_in_prepared_values() -> None:
     registry = Citry()
-    attrs: dict[str, object] = {}
-    attrs["title"] = attrs
+    server: dict[str, object] = {}
+    server["self"] = server
 
     class Root(Component):
         citry = registry
-        template = '<div c-bind="attrs"></div>'
+        template = "<div>x</div>"
 
-        def template_data(self, kwargs, slots):
-            return {"attrs": attrs}
-
+    rendered = Root().render()
     with pytest.raises(ValueError, match="must not contain a cycle"):
         assemble_typed_render(
-            Root().render(),
+            rendered,
             revision=0,
+            server_data={rendered.frame.render_id: server},
             tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
         )
+
+
+def test_assembly_sends_nonfinite_and_cyclic_attribute_values_as_html_text() -> None:
+    # An attribute value is sent as the text Python's HTML writes for it, so
+    # values that are not strict JSON still reach Vue as that same text.
+    registry = Citry()
+    cyclic: dict[str, object] = {}
+    cyclic["title"] = cyclic
+
+    class Root(Component):
+        citry = registry
+        template = '<div c-data-nan="nan" c-data-inf="inf" c-bind="cyclic"></div>'
+
+        def template_data(self, kwargs, slots):
+            return {"nan": float("nan"), "inf": float("inf"), "cyclic": cyclic}
+
+    rendered = Root().render()
+    assembly = assemble_typed_render(
+        rendered,
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    (attrs,) = [
+        value for key, value in assembly.view.occurrences[0].prepared_data.items() if key.startswith("citryAttrs")
+    ]
+    assert attrs == {"data-nan": "nan", "data-inf": "inf", "title": "{'title': {...}}"}
+    html = rendered.serialize(deps_strategy="ignore")
+    assert 'data-nan="nan" data-inf="inf" title="{&#39;title&#39;: {...}}"' in html
 
 
 def test_builder_owned_manifest_matches_strict_public_occurrence_freeze() -> None:
@@ -3016,7 +3499,7 @@ def test_leaf_program_reuses_nested_loop_source_and_records_each_occurrence() ->
     assert len(leaves) == 2
     assert leaves[0].definition_id == leaves[1].definition_id
     compiler_input = assembly.compile_inputs[leaves[0].definition_id]
-    assert compiler_input.template.count('v-for="preparedData in preparedData.citryLoop') == 2
+    assert compiler_input.template.count('v-for="$citryPrepared in $citryPrepared.citryLoop') == 2
     assert {item.prepared_data["citryText0"] for item in leaves} == {"A", "B"}
     with NativeCompiler() as compiler:
         compiled = compiler.compile(
@@ -3305,7 +3788,7 @@ def test_leaf_program_keeps_class_merging_on_general_attribute_resolver() -> Non
     assert all(isinstance(value, PreparedElementOpen) for value in program.resolved_opens.values())
 
 
-def test_leaf_program_retains_resolved_spread_data_in_typed_opens() -> None:
+def test_leaf_program_projects_resolved_spread_data_and_lazily_builds_typed_open() -> None:
     registry = Citry(autodiscover=False, extensions=[])
     attrs = {"id": "second", "CLASS": "selected", "hidden": False}
 
@@ -3320,28 +3803,14 @@ def test_leaf_program_retains_resolved_spread_data_in_typed_opens() -> None:
     program = rendered.parts[0]
     assert isinstance(program, PreparedLeafProgram)
     assert program.resolved_opens
-    assert all(isinstance(value, PreparedElementOpen) for value in program.resolved_opens.values())
+    resolved = next(iter(program.resolved_opens.values()))
+    assert type(resolved) is _SpreadResolvedOpen
+    assert resolved.prepared is None
+    assert program.prepared_data["citryAttrs0"] == {"ID": "second", "class": "base selected"}
     assert 'ID="second"' in rendered.serialize(deps_strategy="ignore")
     assert 'class="base selected"' in rendered.serialize(deps_strategy="ignore")
     assert "hidden" not in program.prepared_data["citryAttrs0"]
-
-
-def test_leaf_program_spread_keeps_separate_static_and_prepared_snapshots() -> None:
-    registry = Citry(autodiscover=False, extensions=[])
-
-    class Leaf(Component):
-        citry = registry
-        template = '<p c-bind="attrs" c-if="True">x</p>'
-
-        def template_data(self, kwargs, slots):
-            return {"attrs": {"title": "original"}}
-
-    rendered = Leaf().render()
-    program = rendered.parts[0]
-    assert isinstance(program, PreparedLeafProgram)
-    assert rendered.serialize(deps_strategy="ignore").count('title="original"') == 1
-    program.prepared_data["citryAttrs0"]["title"] = "prepared mutation"
-    assert rendered.serialize(deps_strategy="ignore").count('title="original"') == 1
+    assert isinstance(resolved.prepared, PreparedElementOpen)
 
 
 def test_leaf_program_spread_structured_fallback_uses_resolved_values_and_authored_spans_once() -> None:
@@ -3458,12 +3927,15 @@ def test_compiled_attribute_plan_uses_general_case_insensitive_merge_and_custom_
     collision = Collision().render()
     program = collision.parts[0]
     assert isinstance(program, PreparedLeafProgram)
-    assert all(isinstance(value, PreparedElementOpen) for value in program.resolved_opens.values())
+    resolved = next(iter(program.resolved_opens.values()))
+    assert type(resolved) is _SpreadResolvedOpen
+    assert resolved.prepared is None
     assert 'ID="second"' in collision.serialize(deps_strategy="ignore")
+    assert isinstance(resolved.prepared, PreparedElementOpen)
     assert not any(isinstance(part, PreparedLeafProgram) for part in Hooked().render().parts)
 
 
-def test_whole_leaf_artifact_reuse_matches_general_assembly_and_validates_each_occurrence() -> None:
+def test_whole_leaf_artifact_reuse_matches_general_assembly_across_occurrences() -> None:
     registry = Citry(autodiscover=False, extensions=[])
 
     class Leaf(Component):
@@ -3497,10 +3969,400 @@ def test_whole_leaf_artifact_reuse_matches_general_assembly_and_validates_each_o
     assert shared.view == general.view
     assert shared.compile_inputs == general.compile_inputs
 
-    invalid_render = Root().render()
-    leaves = [part for part in invalid_render.parts if isinstance(part, CitryRender)]
-    invalid_program = leaves[1].parts[0]
-    assert isinstance(invalid_program, PreparedLeafProgram)
-    invalid_program.prepared_data["citryLoop0"][0]["citryAttrs0"]["title"] = float("nan")
-    with pytest.raises(ValueError, match="finite numbers"):
-        assemble(invalid_render)
+
+def _slot_sites(template: str, pattern: str) -> list[str]:
+    return re.findall(pattern, template)
+
+
+def test_two_instances_of_one_slot_receiver_share_one_definition() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = registry
+        name = "card"
+        template = """
+            <article><c-slot /></article>
+        """
+
+    class Root(Component):
+        citry = registry
+        template = """
+            <c-card #c-key="'one'"><b>first</b></c-card>
+            <c-card #c-key="'two'"><i>second</i></c-card>
+        """
+
+    def assemble(anchor: str | None):
+        return assemble_typed_render(
+            render_prepared_direct(Root()),
+            revision=0,
+            root_occurrence_id=anchor,
+            tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+        )
+
+    assembly = assemble(None)
+    cards = [item for item in assembly.view.occurrences if item.type_key == Card.class_id]
+    assert len(cards) == 2
+    # The slot name is part of the receiver's compiled template, so a name
+    # derived from the receiving instance would give each card its own
+    # definition.
+    assert len({card.definition_id for card in cards}) == 1
+    card_template = assembly.compile_inputs[cards[0].definition_id].template
+    outlet_sites = set(_slot_sites(card_template, r'<slot [^>]*name="(citrySlot[^"]+)"'))
+    root = next(item for item in assembly.view.occurrences if item.id == assembly.view.root_id)
+    fill_sites = _slot_sites(assembly.compile_inputs[root.definition_id].template, r"v-slot:\['(citrySlot[^']+)'\]")
+    assert len(outlet_sites) == 1
+    assert fill_sites == [*outlet_sites, *outlet_sites]
+
+    # An Events update renders the same component under the occurrence id the
+    # browser already holds. Definitions must not depend on that id, or every
+    # update would ship new definitions and remount the slot content.
+    anchored = assemble("citryOccurrenceUpdateAnchor")
+    assert anchored.compile_inputs == assembly.compile_inputs
+
+
+def test_forwarded_outlet_in_keyed_children_keeps_one_site_per_key() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Inner(Component):
+        citry = registry
+        name = "inner"
+        template = """
+            <article><c-slot /></article>
+        """
+
+    class Card(Component):
+        citry = registry
+        name = "card"
+        template = """
+            <c-for each="item in items">
+              <c-inner #c-key="item"><c-slot c-bind="{'item': item}" /></c-inner>
+            </c-for>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"items": kwargs["items"]}
+
+    class Root(Component):
+        citry = registry
+        template = """
+            <c-card #c-key="'one'" c-items="items">
+              <c-fill name="default" data="slot"><b>{{ slot.item }}</b></c-fill>
+            </c-card>
+            <c-card #c-key="'two'" c-items="items">
+              <c-fill name="default" data="slot"><b>{{ slot.item }}</b></c-fill>
+            </c-card>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"items": kwargs["items"]}
+
+    def sites_by_item(items: list[str]) -> tuple[list[dict[str, str]], set[str]]:
+        assembly = assemble_typed_render(
+            render_prepared_direct(Root(items=items)),
+            revision=0,
+            tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+        )
+        view = assembly.view
+        root = next(item for item in view.occurrences if item.id == view.root_id)
+        root_template = assembly.compile_inputs[root.definition_id].template
+        pairs = re.findall(r"v-slot:\['(citrySlot[^']+)'\]><b>\{\{ \$citryPrepared\.(\w+) \}\}", root_template)
+        assert len(pairs) == 2 * len(items)
+        # Each card's fill runs once per forwarded outlet, with that item's
+        # slot data, so every item within one card needs its own slot name;
+        # the second card reuses the same names on its own call.
+        per_card = [
+            {root.prepared_data[key]: site for site, key in pairs[start : start + len(items)]}
+            for start in (0, len(items))
+        ]
+        assert all(len(set(mapping.values())) == len(items) for mapping in per_card)
+        definitions = {item.definition_id for item in view.occurrences if item.type_key != Root.class_id}
+        return per_card, definitions
+
+    first, first_definitions = sites_by_item(["x", "y"])
+    reordered, _ = sites_by_item(["y", "x"])
+    # Both cards and all four inner components share their class definitions.
+    assert len(first_definitions) == 2
+    assert first[0] == first[1]
+    # The slot name follows the item's key, so reordering moves each fill with
+    # its keyed child instead of swapping contents between children.
+    assert reordered == first
+
+
+def _unfilled_slot_outlets(assembly) -> list[tuple[str, str]]:
+    """Return (type, slot name) for each required outlet whose call carries no fill."""
+    # Vue renders an outlet from the fill on the component's own call, so an
+    # outlet whose call has no fill of that name silently renders nothing in
+    # the browser. An outlet guarded by selectedSlots is required only when
+    # the supplied branch is selected; an unguarded outlet passes on a fill
+    # and is always required.
+    outlet = re.compile(
+        r"<slot (?:v-if=\"\$citryPrepared\.selectedSlots\['([^']+)'\] === 'supplied'\" )?"
+        r"name=\"([^\"]+)\""
+    )
+    holders: dict[str, tuple[PreparedOccurrence, str]] = {}
+    for item in assembly.view.occurrences:
+        for local_id, entry in (item.prepared_data.get("calls") or {}).items():
+            holders[entry["id"]] = (item, local_id)
+    missing = []
+    for item in assembly.view.occurrences:
+        template = assembly.compile_inputs[item.definition_id].template
+        selected = item.prepared_data.get("selectedSlots") or {}
+        required = [name for key, name in outlet.findall(template) if not key or selected.get(key) == "supplied"]
+        if not required or item.id not in holders:
+            continue
+        holder, local_id = holders[item.id]
+        holder_template = assembly.compile_inputs[holder.definition_id].template
+        start = holder_template.rfind("<", 0, holder_template.index(f"$citryPrepared.calls.{local_id}.id"))
+        tag = re.match(r"<([\w-]+)", holder_template[start:]).group(1)
+        depth = 0
+        for match in re.finditer(rf"<{re.escape(tag)}[\s>]|</{re.escape(tag)}>", holder_template[start:]):
+            depth += -1 if match.group(0).startswith("</") else 1
+            if depth == 0:
+                call_text = holder_template[start : start + match.end()]
+                break
+        fills = set(re.findall(r"v-slot:\['([^']+)'\]", call_text))
+        missing.extend((item.type_key, name) for name in required if name not in fills)
+    return missing
+
+
+def test_transparent_wrapper_inside_a_fill_keeps_nested_calls_with_the_fill_author() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Box(Component):
+        citry = registry
+        name = "box"
+        template = """
+            <section><c-slot /></section>
+        """
+
+    class Group(Component):
+        citry = registry
+        name = "group"
+        transparent = True
+        template = """
+            <c-slot />
+        """
+
+    class Root(Component):
+        citry = registry
+        # Root authors both fills. The transparent group only wraps the inner
+        # box, so the inner call and its fill must stay in Root's definition,
+        # where Vue creates the slot closures that render them.
+        template = """
+            <c-box #c-key="'outer'">
+              <b>outer</b>
+              <c-group><c-box #c-key="'inner'"><i>inner</i></c-box></c-group>
+            </c-box>
+        """
+
+    assembly = assemble_typed_render(
+        render_prepared_direct(Root()),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    boxes = [item for item in assembly.view.occurrences if item.type_key == Box.class_id]
+    assert len(boxes) == 2
+    assert len({box.definition_id for box in boxes}) == 1
+    root = next(item for item in assembly.view.occurrences if item.id == assembly.view.root_id)
+    assert {entry["id"] for entry in root.prepared_data["calls"].values()} == {box.id for box in boxes}
+    root_template = assembly.compile_inputs[root.definition_id].template
+    [outlet_site] = set(
+        _slot_sites(assembly.compile_inputs[boxes[0].definition_id].template, r'name="(citrySlot[^"]+)"')
+    )
+    assert _slot_sites(root_template, r"v-slot:\['(citrySlot[^']+)'\]") == [outlet_site, outlet_site]
+    assert "<slot " not in root_template
+    assert _unfilled_slot_outlets(assembly) == []
+
+
+def test_keyed_receivers_in_a_loop_keep_calls_inside_their_fills_apart() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Label(Component):
+        citry = registry
+        name = "label"
+        template = """
+            <span>{{ text }}</span>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"text": kwargs["text"]}
+
+    class Menu(Component):
+        citry = registry
+        name = "menu"
+        template = """
+            <nav><c-slot /></nav>
+        """
+
+    class Root(Component):
+        citry = registry
+        # Every menu shares one slot name, so the unkeyed label call in each
+        # fill must still count as a separate call site per menu.
+        template = """
+            <c-for each="item in items">
+              <c-menu #c-key="item"><c-label c-text="item" /></c-menu>
+            </c-for>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"items": kwargs["items"]}
+
+    def labels_by_item(items: list[str]) -> dict[str, str]:
+        assembly = assemble_typed_render(
+            render_prepared_direct(Root(items=items)),
+            revision=0,
+            tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+        )
+        menus = [item for item in assembly.view.occurrences if item.type_key == Menu.class_id]
+        assert len({menu.definition_id for menu in menus}) == 1
+        assert _unfilled_slot_outlets(assembly) == []
+        return {
+            item.prepared_data["citryText0"]: item.id
+            for item in assembly.view.occurrences
+            if item.type_key == Label.class_id
+        }
+
+    first = labels_by_item(["a", "b", "c"])
+    assert len(set(first.values())) == 3
+    # Each label keeps its occurrence id when the menus reorder.
+    assert labels_by_item(["c", "a", "b"]) == first
+
+
+def test_flattened_projection_keys_do_not_split_definitions_per_instance() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Physical(Component):
+        citry = registry
+        name = "physical"
+        template = """
+            <section>{{ own }}<c-slot /></section>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"own": "physical"}
+
+    class Transparent(Component):
+        citry = registry
+        name = "transparent"
+        transparent = True
+        template = """
+            <c-physical><c-slot /></c-physical>
+        """
+
+    class Mid(Component):
+        citry = registry
+        name = "mid"
+        # The lexical value is written into the physical definition under a
+        # renamed key; that key must not depend on which Mid instance wrote it.
+        template = """
+            <c-transparent><b>{{ lexical }}</b></c-transparent>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"lexical": kwargs["v"]}
+
+    class Root(Component):
+        citry = registry
+        template = """
+            <c-mid #c-key="'a'" v="1" /><c-mid #c-key="'b'" v="2" />
+        """
+
+    assembly = assemble_typed_render(
+        render_prepared_direct(Root()),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    mids = [item for item in assembly.view.occurrences if item.type_key == Mid.class_id]
+    assert len(mids) == 2
+    assert len({mid.definition_id for mid in mids}) == 1
+
+
+def test_benchmark_page_supplies_every_passed_on_slot_at_its_call(monkeypatch) -> None:
+    # The benchmark page passes TabItem fills up through several components
+    # before their author supplies them; each outlet must still find its fill.
+    fixture_spec = importlib.util.spec_from_file_location(
+        "citry_benchmark_slot_fixture", Path(__file__).parent / "test_benchmark_citry.py"
+    )
+    assert fixture_spec is not None
+    assert fixture_spec.loader is not None
+    fixture = importlib.util.module_from_spec(fixture_spec)
+    monkeypatch.setitem(sys.modules, fixture_spec.name, fixture)
+    fixture_spec.loader.exec_module(fixture)
+    assemblies = []
+
+    def record(*args, **kwargs):
+        assemblies.append(assemble_typed_render(*args, **kwargs))
+        return assemblies[-1]
+
+    monkeypatch.setattr(vue_events, "assemble_typed_render", record)
+    fixture.render(fixture.gen_render_data())
+
+    assert assemblies
+    assert _unfilled_slot_outlets(assemblies[-1]) == []
+
+
+def test_compiled_definitions_name_slot_outlets_in_replaced_elements_and_fills_in_calls() -> None:
+    engine = Citry(autodiscover=False)
+
+    class Leaf(Component):
+        citry = engine
+        template = """
+            <b>leaf</b>
+        """
+
+    class Frame(Component):
+        citry = engine
+        template = """
+            <section><div v-show="true"><c-slot name="default" /></div></section>
+        """
+
+    class Middle(Component):
+        citry = engine
+        template = """
+            <c-frame><c-fill name="default"><c-slot name="default" /></c-fill></c-frame>
+        """
+
+    class Caller(Component):
+        citry = engine
+        template = """
+            <article>
+              <c-frame><c-fill name="default"><c-leaf /></c-fill></c-frame>
+              <c-middle><c-fill name="default"><c-leaf /></c-fill></c-middle>
+            </article>
+        """
+
+    assembly = assemble_typed_render(
+        render_prepared_direct(Caller()),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    compiled = vue_events.native_compile_view(NativeCompiler())(assembly)
+    occurrences = {item.type_key: item for item in assembly.view.occurrences}
+    frame = compiled[occurrences[Frame.class_id].definition_id]
+    caller = compiled[occurrences[Caller.class_id].definition_id]
+    middle = compiled[occurrences[Middle.class_id].definition_id]
+
+    # The element around the outlet names it, so replacing that element
+    # tells the browser to look for the caller's fill.
+    [site] = frame.replacement_sites
+    [outlet] = site["slotOutlets"]
+    assert f'name="{outlet}"' in assembly.compile_inputs[occurrences[Frame.class_id].definition_id].template
+
+    # The caller's fill for that outlet names the leaf call inside it.
+    calls = {call["typeKey"]: call for call in caller.local_calls}
+    leaf_ids = {call["localId"] for call in caller.local_calls if call["typeKey"] == Leaf.class_id}
+    [fill] = calls[Frame.class_id]["fills"]
+    assert fill["name"] == outlet
+    assert len(fill["localDescendants"]) == 1
+    assert set(fill["localDescendants"]) <= leaf_ids
+    assert fill["slotOutlets"] == []
+
+    # Middle passes its own slot on, so its fill names that outlet and the
+    # browser repeats the lookup in the caller.
+    [middle_fill] = middle.local_calls[0]["fills"]
+    assert middle_fill["localDescendants"] == []
+    assert len(middle_fill["slotOutlets"]) == 1
+
+    # A call without fills and a site without outlets keep their exact shape.
+    assert all("fills" not in call for call in caller.local_calls if call["typeKey"] == Leaf.class_id)
+    assert all("slotOutlets" not in site for site in caller.replacement_sites)

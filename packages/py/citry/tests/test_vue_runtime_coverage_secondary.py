@@ -10,12 +10,16 @@ paths that protect the browser-facing protocol.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import re
 from types import SimpleNamespace
 
 import pytest
 
 from citry import Citry, Component
+from citry._owned_resource import _OwnedResource
+from citry._serialization_security import _ScriptSecurityMaterializer
 from citry._vue.capture import PreparedAttribute, PreparedElementOpen, render_prepared_direct
 from citry._vue.events import (
     DirectVueEventsProducer,
@@ -40,7 +44,13 @@ from citry._vue.prepared import (
     PreparedView,
     TextBinding,
 )
-from citry._vue.serialization import VueSerializationPlan, _HostValidator, _record_component_has_js
+from citry._vue.serialization import (
+    VueSerializationPlan,
+    _HostValidator,
+    _insert_script_preloads,
+    _manifest_script_preloads,
+    _record_component_has_js,
+)
 from citry.citry_context import CitryContext
 from citry.citry_render import CitryRender
 from citry.ext.dependencies.types import DependencyRecord, Script, Style
@@ -231,6 +241,204 @@ def test_vue_serialization_plan_validates_hook_output_and_can_defer_assets() -> 
         deferred_to_dependency_manager=True,
     )
     assert deferred.finalize('<div id="mount"></div>') == '<div id="mount"></div>'
+
+
+def test_document_vue_preloads_follow_validated_script_assets_in_the_head() -> None:
+    external_integrity = "sha384-" + base64.b64encode(hashlib.sha384(b"external").digest()).decode("ascii")
+    manifest = {
+        "definitions": [
+            {"url": "/citry/ext/events/definitions/root.js", "sha256": "a" * 64},
+            {"url": "javascript:alert(1)", "sha256": "b" * 64},
+        ],
+        "scripts": [
+            {
+                "source": {
+                    "kind": "owned",
+                    "url": "/citry/ext/events/assets/owned.js",
+                    "sha256": "c" * 64,
+                    "attrs": {"crossorigin": "anonymous", "fetchpriority": "high"},
+                }
+            },
+            {
+                "source": {
+                    "kind": "external",
+                    "url": "https://cdn.example.test/lib.js?one=1&two=2",
+                    "attrs": {
+                        "integrity": external_integrity,
+                        "crossorigin": True,
+                        "referrerpolicy": "no-referrer",
+                    },
+                }
+            },
+            {
+                "source": {
+                    "kind": "external",
+                    "url": "https://cdn.example.test/custom.js",
+                    "attrs": {"data-custom": "x"},
+                }
+            },
+            {
+                "source": {
+                    "kind": "external",
+                    "url": "data:text/javascript,alert(1)",
+                    "attrs": {},
+                }
+            },
+        ],
+    }
+    preloads = _manifest_script_preloads(manifest)
+    assert [item.url for item in preloads] == [
+        "/citry/ext/events/definitions/root.js",
+        "/citry/ext/events/assets/owned.js",
+        "https://cdn.example.test/lib.js?one=1&two=2",
+    ]
+
+    runtime = Script(url="/citry/citry.js")
+    runtime._owned_resource = _OwnedResource(
+        url=runtime.url or "",
+        content="runtime bytes",
+        content_type="text/javascript",
+    )
+    security = _ScriptSecurityMaterializer(collect_integrity=True, csp_nonce="response-nonce")
+    plan = VueSerializationPlan(
+        shell_html='<div id="mount"></div>',
+        host_id="mount",
+        configuration="{}",
+        scripts=(runtime, Script(content="globalThis.bootstrapReady = true", wrap=False)),
+        styles=(),
+        script_security=security,
+        javascript_policy=None,
+        render_context=CitryContext(),
+        validate_metadata=lambda: None,
+        initial_script_preloads=preloads,
+    )
+    document = (
+        '<!doctype html><html><head><meta charset="utf-8">'
+        '<meta http-equiv="Content-Security-Policy" content="script-src \'nonce-response-nonce\'">'
+        '<link rel="stylesheet" href="/site.css"></head><body><div id="mount"></div></body></html>'
+    )
+    output = security.finalize(plan.finalize(document))
+    head = output[output.index("<head>") : output.index("</head>")]
+    assert head.index('<meta charset="utf-8">') < head.index("Content-Security-Policy")
+    assert head.index('href="/site.css"') < head.index('href="/citry/citry.js"')
+    assert head.index('href="/citry/citry.js"') < head.index('href="/citry/ext/events/definitions/root.js"')
+    assert head.count('rel="preload" as="script"') == 4
+    assert 'href="https://cdn.example.test/lib.js?one=1&amp;two=2"' in head
+    assert f'integrity="{external_integrity}" crossorigin' in head
+    assert 'referrerpolicy="no-referrer" nonce="response-nonce"' in head
+    assert 'fetchpriority="high" nonce="response-nonce"' in head
+    assert "data-custom" not in head
+    assert "javascript:alert" not in head
+    assert 'href="/citry/citry.js"' not in output[output.index("<body>") :]
+    assert output.index("</head>") < output.index('<script nonce="response-nonce"')
+    runtime_digest = base64.b64encode(hashlib.sha384(b"runtime bytes").digest()).decode("ascii")
+    # The runtime hint repeats the tag's crossorigin, or the browser would not reuse it.
+    assert (
+        f'href="/citry/citry.js" integrity="sha384-{runtime_digest}" crossorigin="anonymous" nonce="response-nonce"'
+        in head
+    )
+    # Owned definitions ask for CORS so integrity also works in an opaque-origin frame.
+    assert 'href="/citry/ext/events/definitions/root.js" integrity="sha256-' in head
+    definition_hint = re.search(r'<link[^>]*definitions/root\.js"[^>]*>', head)
+    assert definition_hint is not None
+    assert 'crossorigin="anonymous"' in definition_hint.group()
+    runtime_tag = re.search(r'<script[^>]*src="/citry/citry\.js"[^>]*>', output)
+    assert runtime_tag is not None
+    assert f'integrity="sha384-{runtime_digest}"' in runtime_tag.group()
+    assert 'crossorigin="anonymous"' in runtime_tag.group()
+    assert 'nonce="response-nonce"' in runtime_tag.group()
+
+    unsupported_runtime = Script(url="/citry/custom-runtime.js", attrs={"data-custom": "x"})
+    unsupported_runtime._owned_resource = _OwnedResource(
+        url=unsupported_runtime.url or "",
+        content="runtime bytes",
+        content_type="text/javascript",
+    )
+    unsupported_plan = VueSerializationPlan(
+        shell_html='<div id="mount"></div>',
+        host_id="mount",
+        configuration="{}",
+        scripts=(unsupported_runtime, Script(content="globalThis.bootstrapReady = true", wrap=False)),
+        styles=(),
+        script_security=None,
+        javascript_policy=None,
+        render_context=CitryContext(),
+        validate_metadata=lambda: None,
+        initial_script_preloads=preloads,
+    )
+    unsupported_output = unsupported_plan.finalize('<html><head></head><body><div id="mount"></div></body></html>')
+    unsupported_head = unsupported_output[unsupported_output.index("<head>") : unsupported_output.index("</head>")]
+    assert 'href="/citry/custom-runtime.js"' not in unsupported_head
+    assert 'href="/citry/ext/events/definitions/root.js"' in unsupported_head
+    assert 'href="/citry/ext/events/assets/owned.js"' in unsupported_head
+    assert 'href="https://cdn.example.test/lib.js?one=1&amp;two=2"' in unsupported_head
+    assert 'data-custom="x"' not in unsupported_head
+
+    from citry.ext.dependencies.emission import _VUE_RUNTIME_SCRIPT_KEY, VUE_RUNTIME_EMITTED_KEY
+
+    app = Citry(autodiscover=False)
+    app.set_mounted_prefix("/citry")
+    managed_runtime = Script(url="/citry/citry.js")
+    managed_runtime._owned_resource = _OwnedResource(
+        url=managed_runtime.url or "",
+        content="runtime bytes",
+        content_type="text/javascript",
+    )
+    events_runtime = Script(url="/citry/ext/events/runtime.js")
+    events_runtime._owned_resource = _OwnedResource(
+        url=events_runtime.url or "",
+        content="events runtime bytes",
+        content_type="text/javascript",
+    )
+    managed_context = CitryContext(
+        component=SimpleNamespace(citry=app),
+        extra={VUE_RUNTIME_EMITTED_KEY: True, _VUE_RUNTIME_SCRIPT_KEY: managed_runtime},
+    )
+    managed_plan = VueSerializationPlan(
+        shell_html='<div id="mount"></div>',
+        host_id="mount",
+        configuration="{}",
+        scripts=(events_runtime, Script(content="globalThis.bootstrapReady = true", wrap=False)),
+        styles=(),
+        script_security=None,
+        javascript_policy=None,
+        render_context=managed_context,
+        validate_metadata=lambda: None,
+        initial_script_preloads=preloads,
+    )
+    managed_output = managed_plan.finalize(
+        '<html><head><script src="/citry/citry.js"></script></head><body><div id="mount"></div></body></html>'
+    )
+    managed_head = managed_output[managed_output.index("<head>") : managed_output.index("</head>")]
+    assert 'href="/citry/citry.js"' in managed_head
+    assert 'href="/citry/ext/events/runtime.js"' not in managed_head
+    assert 'href="/citry/ext/events/definitions/root.js"' in managed_head
+    assert 'href="/citry/ext/events/assets/owned.js"' in managed_head
+
+    link = '<link rel="preload" as="script" href="/early.js"/>'
+    assert _insert_script_preloads('<head><base href="https://other.test/"></head>', link) == (
+        '<head><base href="https://other.test/"></head>'
+    )
+    assert _insert_script_preloads("<main>fragment</main>", link) == "<main>fragment</main>"
+    assert _insert_script_preloads(f"<head>{'x' * 65_536}</head>", link) == f"<head>{'x' * 65_536}</head>"
+    long_body = "<head></head><body>" + ("x" * 100_000) + "</body>"
+    assert _insert_script_preloads(long_body, link).startswith(f"<head>{link}</head>")
+
+    deferred = VueSerializationPlan(
+        '<div id="mount"></div>',
+        "mount",
+        "{}",
+        (runtime,),
+        (),
+        None,
+        None,
+        CitryContext(),
+        lambda: None,
+        deferred_to_dependency_manager=True,
+        initial_script_preloads=preloads,
+    )
+    fragment = '<div id="mount"></div>'
+    assert deferred.finalize(fragment) == fragment
 
 
 def test_explicit_id_generator_makes_vue_app_id_deterministic() -> None:

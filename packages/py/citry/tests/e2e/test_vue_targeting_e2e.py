@@ -123,7 +123,7 @@ def test_address_preflight_rejects_before_immediate_state_commit(
     _watch_citry_ready(page)
     page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
     _wait_for_citry_ready(page)
-    revision = page.evaluate("[...CitryStable._apps.values()][0].revision")
+    revision = page.evaluate("[...__citryRuntime._apps.values()][0].revision")
     html = page.locator("#target-panel").first.inner_html()
 
     page.locator("#corrupt-address").click()
@@ -141,7 +141,7 @@ def test_address_preflight_rejects_before_immediate_state_commit(
     assert len(response_tokens) == 2
     assert response_tokens[0] != request_tokens[0]
     assert request_tokens[1] == request_tokens[0]
-    assert page.evaluate("[...CitryStable._apps.values()][0].revision") == revision
+    assert page.evaluate("[...__citryRuntime._apps.values()][0].revision") == revision
     assert page.locator("#target-panel").first.inner_html() == html
     assert any(message in value for value in page.evaluate("window.__addressErrors"))
     assert any(message in value for value in errors)
@@ -262,7 +262,7 @@ def test_runtime_event_reference_preflight_rejects_before_state_and_dom_commit(
     def caller_state_and_app_context() -> dict[str, Any]:
         return page.evaluate(
             """renderId => {
-              const app=[...CitryStable._apps.values()][0];
+              const app=[...__citryRuntime._apps.values()][0];
               const occurrence=[...app.occurrences.values()].find(item=>item.renderId===renderId);
               if(!occurrence)throw new Error('caller occurrence is missing from the mounted app');
               return {count:app.mounted.get(occurrence.id).component.$state.count,
@@ -305,7 +305,7 @@ def test_i18n_plugin_translates_only_occurrence_references_without_mutating_inpu
     result = page.evaluate(
         """source => {
           let factory;
-          window.CitryStable={registerBrowserPlugin(_name,_version,value){factory=value}};
+          window.__citryRuntime={registerBrowserPlugin(_name,_version,value){factory=value}};
           window.eval(source);
           const plugin=factory({vue:{shallowRef:value=>({value})},
             occurrence(){return null},occurrenceId(){return null}});
@@ -333,8 +333,8 @@ def test_real_coordinator_persists_i18n_translation_into_plugin_preparation(page
         """async ({runtimeSource,i18nSource}) => {
           window.eval(runtimeSource);
           const seen=[];let enterI18n;
-          const register=CitryStable.registerBrowserPlugin.bind(CitryStable);
-          CitryStable.registerBrowserPlugin=(name,version,factory,names)=>register(name,version,host=>{
+          const register=__citryRuntime.registerBrowserPlugin.bind(__citryRuntime);
+          __citryRuntime.registerBrowserPlugin=(name,version,factory,names)=>register(name,version,host=>{
             const plugin=factory(host),prepare=plugin.prepareRevision.bind(plugin);
             plugin.prepareRevision=(payload,snapshot)=>{seen.push(structuredClone(payload));
               if(window.__stallI18n)return new Promise((resolve,reject)=>{enterI18n();window.__resolveI18n=()=>{
@@ -343,10 +343,10 @@ def test_real_coordinator_persists_i18n_translation_into_plugin_preparation(page
             return plugin;
           },names);
           window.eval(i18nSource);
-          const helper=CitryStable.compilerRuntime.helperContract,digest='a'.repeat(64),definitionId='definition';
-          CitryStableDefinitions={[definitionId]:{render(){return Vue.h('div')},target:'ordinary-vnodes/1',
+          const helper=__citryRuntime.compilerRuntime.helperContract,digest='a'.repeat(64),definitionId='definition';
+          __citryRuntimeDefinitions={[definitionId]:{render(){return Vue.h('div')},target:'ordinary-vnodes/1',
             helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]}};
-          CitryStable.registerTypeOptions('Root',digest,{});
+          __citryRuntime.registerTypeOptions('Root',digest,{});
           let capturedHost;
           const realEvents=CitryVueEvents;
           window.CitryVueEvents={...realEvents,createVueEventsBridge(options){
@@ -372,11 +372,11 @@ def test_real_coordinator_persists_i18n_translation_into_plugin_preparation(page
             source:{kind:'external',url:'data:text/css,.target%7Bcolor:green%7D',attrs:{rel:'stylesheet'}}});
           const initial={protocol:'citry-vue-prepared/1',appId:'app',revision:0,
             rootId:'citryOccurrenceRoot',markers:[],
-            occurrences:[occurrence('citryOccurrenceRoot','server_root')],definitions:[definition],replacements:[],scripts:[],
+            occurrences:[occurrence('citryOccurrenceRoot','server_root')],definitions:[definition],scripts:[],
             styles:[baseStyle('citryOccurrenceRoot')],
             typePolicies:[{typeKey:'Root',lazyAllowed:false}],extensions:extensions('citryOccurrenceRoot')};
           document.body.innerHTML='<div id="app"></div>';
-          await CitryStable.startPrepared({manifest:initial,host:'#app',tags:{Root:'c-root'},endpoint:'/events',
+          await __citryRuntime.startPrepared({manifest:initial,host:'#app',tags:{Root:'c-root'},endpoint:'/events',
             loadInitialAssets:true,allowLazyTypeAssets:true});
           if(!capturedHost)throw new Error('real Events host was not captured after bootstrap');
           const incomingId='citryOccurrenceIncoming';
@@ -385,7 +385,7 @@ def test_real_coordinator_persists_i18n_translation_into_plugin_preparation(page
             styles:[baseStyle(incomingId)],extensions:extensions(incomingId)};
           const action={action:'render',target:'render:server_root',swap:'morph',renderer:'vue-prepared/1',
             prepared:revision};
-          const mounted=CitryStable._apps.get('app').mounted.get('citryOccurrenceRoot');
+          const mounted=__citryRuntime._apps.get('app').mounted.get('citryOccurrenceRoot');
           const source={stableId:'citryOccurrenceRoot',generation:mounted.record.generation};
           const failure=mutate=>{const candidate=structuredClone(action);mutate(candidate.prepared);
             try{capturedHost.preflightResult({ok:true,sendSequence:1,actions:[candidate]},source);return ''}
@@ -409,7 +409,7 @@ def test_real_coordinator_persists_i18n_translation_into_plugin_preparation(page
           const stalePending=capturedHost.prepareRender(action,source,new AbortController().signal,planned.renderPlan)
             .then(()=>'',error=>error.message);
           await entered;
-          const app=CitryStable._apps.get('app'),savedMounted=app.mounted.get('citryOccurrenceRoot');
+          const app=__citryRuntime._apps.get('app'),savedMounted=app.mounted.get('citryOccurrenceRoot');
           app.mounted.delete('citryOccurrenceRoot');window.__resolveI18n();
           const staleTarget=await stalePending;
           app.mounted.set('citryOccurrenceRoot',savedMounted);window.__stallI18n=false;

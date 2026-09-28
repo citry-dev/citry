@@ -20,7 +20,7 @@ import pytest
 
 from citry import Citry, Component, Const, Extension, const_value, constness, is_const
 from citry._vue.capture import PreparedConstantNode, PreparedExprNode, PreparedTextValue
-from citry._vue.leaf_program import LeafProgramNode
+from citry._vue.leaf_program import LeafProgramNode, _SimpleJsonCodegen
 from citry.constness import (
     _MAX_UNROLL_ITERATIONS,
     _UNFREEZABLE,
@@ -35,15 +35,49 @@ from citry.nodes import ComponentNode, ExprHtmlAttr, ExprNode, FillNode, ForNode
 
 
 def _track_prepared_expression(monkeypatch, expression):
+    """Record each evaluation of a bare-name expression on whichever path runs it."""
     original = PreparedExprNode.evaluate
+    original_build = _SimpleJsonCodegen.build
+    original_render = LeafProgramNode.render
     calls = []
+    seen_leaves = set()
 
     def evaluate(self, variables, *, sandboxed=True):
         if self.expr.strip() == expression:
             calls.append(tuple(const_value(variables[name]) for name in self.used_vars))
         return original(self, variables, sandboxed=sandboxed)
 
+    # A live leaf whose inputs are plain JSON runs a generated evaluator that
+    # reads the name straight from the variables, never calling
+    # PreparedExprNode.evaluate. Count one evaluation per run of a program
+    # that reads the name, so a live value is still seen once per render.
+    def build(builder):
+        program = original_build(builder)
+        if expression not in dict(builder._read_set.roots):
+            return program
+        original_program_evaluate = program.evaluate
+
+        def program_evaluate(context, variables, *args):
+            calls.append((const_value(variables[expression]),))
+            return original_program_evaluate(context, variables, *args)
+
+        object.__setattr__(program, "evaluate", program_evaluate)
+        return program
+
+    # Compiled templates, and the generated program stored on each leaf, are
+    # shared across Citry instances. Rebuild a leaf's program under this
+    # helper so an earlier test's program cannot hide evaluations;
+    # monkeypatch puts the original program back afterwards.
+    def render(self, context):
+        if id(self) not in seen_leaves:
+            seen_leaves.add(id(self))
+            monkeypatch.setattr(self, "_simple_json_program", None)
+            monkeypatch.setattr(self, "_simple_json_compile_attempted", False)
+        return original_render(self, context)
+
     monkeypatch.setattr(PreparedExprNode, "evaluate", evaluate)
+    monkeypatch.setattr(_SimpleJsonCodegen, "build", build)
+    monkeypatch.setattr(LeafProgramNode, "render", render)
     return calls
 
 
@@ -1854,6 +1888,24 @@ class TestExpressionConstPropagation:
 
 
 class TestConstThroughTypedKwargs:
+    def test_default_typed_kwargs_mapping_preserves_const_metadata(self, monkeypatch):
+        # Without a template_data override, the base method hands the typed
+        # Kwargs to the template, and the Const marker still reaches it, so the
+        # expression is computed once and reused by the second render.
+        c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "cols")
+
+        class Card(Component):
+            citry = c
+            template = "<p>{{ cols }}</p>"
+
+            class Kwargs:
+                cols: int
+
+        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
+        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c2="">3</p>'
+        assert calls == [(3,)]
+
     def test_marker_survives_the_typed_kwargs_view(self, monkeypatch):
         # The auto-converted dataclass Kwargs stores values as-is, so the
         # marker flows whether template_data reads the typed view or the raw

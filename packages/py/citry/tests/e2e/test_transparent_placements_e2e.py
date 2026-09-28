@@ -40,5 +40,5 @@ def test_transparent_control_flow_and_fill_have_one_browser_boundary(page: Any, 
     base = serve_live(app, Document(visible=True).render().serialize(), "")
     page.goto(base + "/")
     page.wait_for_function("window.receiverReady && document.querySelector('b').textContent === 'hello'")
-    assert page.evaluate("() => CitryStable._apps.size") == 1
+    assert page.evaluate("() => __citryRuntime._apps.size") == 1
     assert errors == []

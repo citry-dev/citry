@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 
 import pytest
 
@@ -16,7 +17,7 @@ from citry._vue.events import (
     native_compile_view,
     style_asset,
 )
-from citry._vue.serialization import _component_tags_for_manifest, _prepare_initial_result
+from citry._vue.serialization import _component_tags_for_manifest, _prepare_initial_result, hydration_admission
 from citry.browser_render import BrowserPluginDescriptor, BrowserRenderContribution
 from citry.component import ComponentMeta
 from citry.ext.dependencies.types import Script, Style
@@ -211,6 +212,112 @@ def test_default_producer_second_preparation_observes_new_component_name() -> No
     assert first_tags[Root.class_id] != second_tags[Root.class_id]
 
 
+@pytest.mark.parametrize(
+    ("security_javascript", "security_csp", "expected_js_scans", "expected_csp_scans"),
+    [
+        ("allow", "off", 0, 0),
+        ("warn", "warn", 1, 1),
+    ],
+)
+def test_settled_opaque_html_scans_follow_effective_security_modes(
+    monkeypatch,
+    security_javascript: str,
+    security_csp: str,
+    expected_js_scans: int,
+    expected_csp_scans: int,
+) -> None:
+    from citry._csp_validation import _CspRenderValidator
+    from citry._javascript_policy import _JavascriptPolicy
+
+    registry = Citry(
+        autodiscover=False,
+        security_javascript=security_javascript,
+        security_csp=security_csp,
+    )
+
+    class RawPage(Component):
+        citry = registry
+        template = "<main><c-raw><em>raw</em></c-raw></main>"
+
+    javascript_scans: list[str] = []
+    csp_scans: list[str] = []
+    original_javascript_scan = _JavascriptPolicy.validate_settled_html
+    original_csp_scan = _CspRenderValidator.validate_settled_html
+
+    def count_javascript_scan(self, html: str, **kwargs):
+        javascript_scans.append(html)
+        return original_javascript_scan(self, html, **kwargs)
+
+    def count_csp_scan(self, html: str, **kwargs):
+        csp_scans.append(html)
+        return original_csp_scan(self, html, **kwargs)
+
+    monkeypatch.setattr(_JavascriptPolicy, "validate_settled_html", count_javascript_scan)
+    monkeypatch.setattr(_CspRenderValidator, "validate_settled_html", count_csp_scan)
+
+    payload = default_events_producer(registry).prepare_from_render(
+        render_prepared_direct(RawPage()),
+        citry=registry,
+        app_id="opaque-policy-modes",
+        revision=0,
+    )
+
+    assert payload["occurrences"]
+    assert len(javascript_scans) == expected_js_scans
+    assert len(csp_scans) == expected_csp_scans
+
+
+@pytest.mark.parametrize(
+    ("security_javascript", "security_csp", "expected_warning", "expected_error"),
+    [
+        ("allow", "off", None, None),
+        ("warn", "off", "security_javascript='warn'", None),
+        ("forbid", "off", None, "security_javascript='forbid'"),
+        ("allow", "strict", None, "strict-CSP incompatibility"),
+    ],
+)
+def test_opaque_active_handler_obeys_effective_security_policy(
+    security_javascript: str,
+    security_csp: str,
+    expected_warning: str | None,
+    expected_error: str | None,
+) -> None:
+    import warnings
+
+    registry = Citry(
+        autodiscover=False,
+        security_javascript=security_javascript,
+        security_csp=security_csp,
+    )
+
+    class RawPage(Component):
+        citry = registry
+        template = '<main><c-raw><button onclick="window.x=1">raw</button></c-raw></main>'
+
+    producer = default_events_producer(registry)
+    render = render_prepared_direct(RawPage())
+    if expected_error is not None:
+        with pytest.raises(ValueError, match=expected_error):
+            producer.prepare_from_render(render, citry=registry, app_id="opaque-active-handler", revision=0)
+        return
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        payload = producer.prepare_from_render(
+            render,
+            citry=registry,
+            app_id="opaque-active-handler",
+            revision=0,
+        )
+
+    assert payload["occurrences"]
+    messages = [str(item.message) for item in caught]
+    if expected_warning is None:
+        assert messages == []
+    else:
+        assert any(expected_warning in message for message in messages)
+
+
 def test_default_producer_keeps_custom_metaclass_tag_path_uncached(monkeypatch) -> None:
     registry = Citry(autodiscover=False)
 
@@ -390,7 +497,7 @@ def test_direct_events_producer_uses_selected_credentials_and_one_bundle() -> No
     assert len(published) == 1
     digest, javascript = next(iter(published.items()))
     assert payload["definitions"][0]["url"] == f"/definitions/{digest}.js"
-    assert b"CitryStableDefinitions" in javascript
+    assert b"__citryRuntimeDefinitions" in javascript
 
     prepared_render = render_prepared_direct(Board())
     encoded_render = VuePreparedRenderEncoder(producer).encode(actions.Render(prepared_render), "render:old", context)
@@ -624,10 +731,343 @@ def test_default_events_renderer_bootstraps_selected_render_without_rendering_tw
     html = rendered.serialize()
     assert 'id="citry-vue-' in html
     assert "></div>" in html
-    assert "CitryStable.startPrepared" in html
+    assert "data-citry-vue-document" in html
     assert '"endpoint":"/citry/ext/events/call"' in html
     assert '"eventBaseUrl":"/citry/ext/events/e/"' in html
     assert 'src="/citry/citry.js"' in html
+
+
+def test_public_vue_serializer_compiles_before_materializing_html_frames(monkeypatch) -> None:
+    import importlib
+
+    registry = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = registry
+        template = "<button :title=\"'ready'\">ready</button>"
+
+    producer = default_events_producer(registry)
+    compile_view = producer._compile_view
+    compiled: list[object] = []
+
+    def record_compile(assembly):
+        result = compile_view(assembly)
+        compiled.append(assembly)
+        return result
+
+    monkeypatch.setattr(producer, "_compile_view", record_compile)
+    serializer = importlib.import_module("citry.serialize")
+    build_frame = serializer._build_frame
+
+    def require_early_compile(*args, **kwargs):
+        assert len(compiled) == 1
+        return build_frame(*args, **kwargs)
+
+    monkeypatch.setattr(serializer, "_build_frame", require_early_compile)
+    html = Page().render().serialize()
+
+    assert "data-citry-vue-document" in html
+    assert len(compiled) == 1
+
+
+def test_hydrated_text_follows_vue_whitespace_across_ssr_on_off_on() -> None:
+    from citry._vue.capture import PreparedStaticRun
+
+    registry = Citry(autodiscover=False)
+
+    class Child(Component):
+        citry = registry
+        template = "<p>child</p>"
+        js = "$component({});"
+
+    class Page(Component):
+        citry = registry
+        template = "<main>a \n  b<c-Child /></main>"
+
+    class PreChild(Component):
+        citry = registry
+        template = "<b>a \n  b</b>"
+
+    class PrePage(Component):
+        citry = registry
+        template = "<pre><c-PreChild /></pre>"
+
+    rendered = Page().render()
+    authored_part = next(part for part in rendered.parts if type(part) is PreparedStaticRun and "a \n  b" in part.html)
+    assert registry.settings.ssr is True
+    ssr_on = rendered.serialize()
+    ssr_off = rendered.serialize(ssr=False)
+    ssr_on_again = rendered.serialize(ssr=True)
+    ssr_off_again = rendered.serialize(ssr=False)
+
+    # The host is written as Vue's render condenses the text; the rendered
+    # part keeps its authored bytes, so every later serialization agrees.
+    assert "<main>a b<p>child</p></main>" in ssr_on
+    assert '"hydrate":true' in ssr_on
+    assert '"hydrate":true' not in ssr_off
+    assert ssr_on_again == ssr_on
+    assert ssr_off_again == ssr_off
+    assert authored_part.html == "<main>a \n  b"
+
+    disabled_registry = Citry(autodiscover=False, ssr=False)
+
+    class DisabledChild(Component):
+        citry = disabled_registry
+        template = "<p>child</p>"
+        js = "$component({});"
+
+    class DisabledPage(Component):
+        citry = disabled_registry
+        template = "<main>a \n  b<c-DisabledChild /></main>"
+
+    disabled_render = DisabledPage().render()
+    assert '"hydrate":true' not in disabled_render.serialize()
+    assert '"hydrate":true' in disabled_render.serialize(ssr=True)
+
+    # A page with no component JavaScript has no Vue host, so the SSR
+    # setting changes nothing and <pre> keeps its authored whitespace.
+    pre_render = PrePage().render()
+    pre_off = pre_render.serialize(ssr=False)
+    pre_on = pre_render.serialize(ssr=True)
+    assert pre_on == pre_off
+    assert "a \n  b" in pre_on
+
+
+def test_hydrated_host_drops_whitespace_between_elements_on_off_on() -> None:
+    from citry._vue.capture import PreparedStaticRun
+
+    registry = Citry(autodiscover=False)
+
+    class Leaf(Component):
+        citry = registry
+        template = "<span>leaf</span>"
+        js = "$component({});"
+
+    class Page(Component):
+        citry = registry
+        template = "<div><p>first</p>\n  <p>second</p><c-Leaf /></div>"
+
+    rendered = Page().render()
+    authored_part = next(part for part in rendered.parts if type(part) is PreparedStaticRun)
+    ssr_on = rendered.serialize(ssr=True)
+    ssr_off = rendered.serialize(ssr=False)
+    ssr_on_again = rendered.serialize(ssr=True)
+
+    # Vue's compiler drops whitespace-only text between elements, so the
+    # host does too, while the rendered part keeps its authored bytes.
+    assert re.search(
+        r'<div id="citry-vue-[^"]+"><div><p>first</p><p>second</p><span>leaf</span></div></div>',
+        ssr_on,
+    )
+    assert '"hydrate":true' in ssr_on
+    assert '"hydrate":true' not in ssr_off
+    assert ssr_on_again == ssr_on
+    assert authored_part.html.startswith("<div><p>first</p>\n  <p>second</p>")
+
+
+@pytest.mark.parametrize(
+    ("root_tag", "root_text", "leaf_template", "leaf_text"),
+    [
+        # Vue compiles every leaf's text and condenses its whitespace, so the
+        # server writes Vue's result whichever tags surround the text.
+        (
+            "article",
+            "root alpha \n  branch",
+            "<section><strong>leaf alpha \n  branch</strong><em>end</em></section>",
+            "<strong>leaf alpha branch</strong>",
+        ),
+        (
+            "div",
+            "root beta \n  branch",
+            "<span><em><strong>leaf beta \n  branch</strong></em></span>",
+            "<strong>leaf beta branch</strong>",
+        ),
+        (
+            "div",
+            "root gamma \n  branch",
+            "<div><p>leaf gamma \n  branch</p></div>",
+            "<p>leaf gamma branch</p>",
+        ),
+    ],
+)
+def test_hydrated_text_matches_vue_condensed_whitespace(
+    root_tag: str, root_text: str, leaf_template: str, leaf_text: str
+) -> None:
+    from citry.citry_render import CitryRender
+
+    registry = Citry(autodiscover=False)
+
+    class Leaf(Component):
+        citry = registry
+        template = leaf_template
+        js = "$component({});"
+
+    class Page(Component):
+        citry = registry
+        template = f"<{root_tag}>{root_text}<c-Leaf /></{root_tag}>"
+
+    rendered = Page().render()
+    html = rendered.serialize(ssr=True)
+    leaf_render = next(part for part in rendered.parts if isinstance(part, CitryRender))
+    normalized_root_text = root_text.replace(" \n  ", " ")
+
+    written = html.split("<script", 1)[0]
+
+    assert '"hydrate":true' in html
+    assert f">{normalized_root_text}<" in written
+    assert leaf_text in written
+    # Vue adopts this HTML, so it carries no server render-id markers.
+    assert f"data-cid-{rendered.frame.render_id}" not in html
+    assert f"data-cid-{leaf_render.frame.render_id}" not in html
+
+
+@pytest.mark.parametrize("default_ssr", [True, False])
+def test_ssr_setting_does_not_change_static_no_javascript_html(default_ssr: bool) -> None:
+    registry = Citry(autodiscover=False, ssr=default_ssr)
+
+    class Static(Component):
+        citry = registry
+        template = "<main>static text \n  keeps its source bytes</main>"
+
+    rendered = Static().render()
+    default_html = rendered.serialize()
+
+    assert default_html == rendered.serialize(ssr=True)
+    assert default_html == rendered.serialize(ssr=False)
+    assert "static text \n  keeps its source bytes" in default_html
+    assert '"hydrate":true' not in default_html
+
+
+def test_parser_repairing_p_div_tree_is_written_as_an_empty_shell() -> None:
+    from citry._vue.serialization import hydration_admission
+
+    registry = Citry(autodiscover=False)
+
+    class BlockChild(Component):
+        citry = registry
+        template = "<div>block child</div>"
+        js = "$component({});"
+
+    class ParagraphPage(Component):
+        citry = registry
+        template = "<p>parent before<c-BlockChild />parent after</p>"
+
+    rendered = ParagraphPage().render()
+    html = rendered.serialize(ssr=True)
+
+    # The browser would close <p> before the <div>, so the server never
+    # writes that content: <p> is written empty (its contents would be
+    # repaired too) and Vue builds its children.
+    assert '"hydrate":true' in html
+    assert re.search(
+        r'<div id="citry-vue-[^"]+"><p data-allow-mismatch="children"></p></div>',
+        html,
+    )
+    assert "block child" not in html.split("<script", 1)[0]
+    admission = hydration_admission(rendered)
+    assert admission is not None
+    assert admission.hydrated
+    assert [(item.code, item.detail, item.outcome, item.shell_tag) for item in admission.declines] == [
+        ("parser-repair", "div", "shell", "p")
+    ]
+
+
+def test_python_text_with_entity_characters_is_escaped_and_hydrated() -> None:
+    from citry._vue.serialization import hydration_admission
+
+    registry = Citry(autodiscover=False)
+
+    class Leaf(Component):
+        citry = registry
+        template = "<span>leaf</span>"
+        js = "$component({});"
+
+    class PythonTextPage(Component):
+        citry = registry
+        template = "<main>{{ label }}<c-Leaf /></main>"
+
+        def template_data(self, kwargs, slots):
+            return {"label": "Python & entity text <tag>"}
+
+    rendered = PythonTextPage().render()
+    html = rendered.serialize(ssr=True)
+
+    # The server escapes the text exactly as Vue's text node reads back, so
+    # `&` and `<` no longer need an empty shell: Vue adopts the text as written.
+    assert '"hydrate":true' in html
+    assert re.search(
+        r'<div id="citry-vue-[^"]+"><main>Python &amp; entity text &lt;tag&gt;<span>leaf</span></main></div>',
+        html,
+    )
+    admission = hydration_admission(rendered)
+    assert admission is not None
+    assert admission.hydrated
+    assert admission.declines == ()
+
+
+def test_text_mutating_custom_serialize_hook_falls_back_to_client_mount() -> None:
+    class MutateSerializedText(Extension):
+        name = "mutate_serialized_text"
+
+        def on_serialize(self, ctx):
+            output = ctx.html + "<aside>citry-hook-source-text</aside>"
+            return output.replace("citry-hook-source-text", "citry-hook-mutated-text", 1)
+
+    registry = Citry(autodiscover=False, extensions=[MutateSerializedText])
+
+    class Leaf(Component):
+        citry = registry
+        template = "<span>leaf text</span>"
+        js = "$component({});"
+
+    class Page(Component):
+        citry = registry
+        template = "<main>parent text<c-Leaf /></main>"
+
+    rendered = Page().render()
+    html = rendered.serialize(ssr=True)
+
+    assert '"hydrate":true' not in html
+    # The page mounts in the browser, but its host still carries Citry's
+    # ordinary server HTML so the content is in the served page.
+    host = re.search(r'<div id="citry-vue-[^"]+">(.*?)</div>', html)
+    assert host is not None
+    assert "parent text" in host.group(1)
+    assert "leaf text" in host.group(1)
+    admission = hydration_admission(rendered)
+    assert admission is not None
+    assert (admission.reason, admission.server_html) == ("custom-hooks", True)
+    assert "<aside>citry-hook-mutated-text</aside>" in html
+
+
+def test_class_replaced_dependencies_serialize_hook_declines_hydration(monkeypatch) -> None:
+    from citry.ext.dependencies.extension import DependenciesExtension
+
+    registry = Citry(autodiscover=False)
+
+    class Leaf(Component):
+        citry = registry
+        template = "<span>leaf</span>"
+        js = "$component({});"
+
+    class Page(Component):
+        citry = registry
+        template = "<main>owned host<c-Leaf /></main>"
+
+    rendered = Page().render()
+    assert '"hydrate":true' in rendered.serialize(ssr=True)
+
+    def replace_host(extension, ctx):
+        del extension
+        return ctx.html.replace("<main>owned host", "<main>replaced host", 1)
+
+    monkeypatch.setattr(DependenciesExtension, "on_serialize", replace_host)
+    html = rendered.serialize(ssr=True)
+
+    assert '"hydrate":true' not in html
+    # The page mounts in the browser; its host carries the ordinary server
+    # HTML, which Vue replaces when it mounts.
+    assert re.search(r'<div id="citry-vue-[^"]+"><main data-cid-[a-z0-9]+="">owned host', html)
 
 
 def test_mounted_renderer_without_initial_events_keeps_lazy_events_endpoint_available() -> None:
@@ -656,7 +1096,7 @@ def test_unconfigured_engine_keeps_static_serialization() -> None:
     html = rendered.serialize()
     assert html.startswith("<p ")
     assert html.endswith(">plain</p>")
-    assert "CitryStable" not in html
+    assert "__citryRuntime" not in html
 
 
 def test_vue_document_preserves_physical_shell_and_replaces_logical_body() -> None:
@@ -674,9 +1114,9 @@ def test_vue_document_preserves_physical_shell_and_replaces_logical_body() -> No
     assert 'lang="en"' in html.split("<head>", 1)[0]
     assert "data-cid-" in html.split("<head>", 1)[0]
     assert '<head><title>Example</title></head><body class="page">' in html
-    assert '<div id="citry-vue-' in html
-    assert '<button id="dynamic"' not in html
-    assert "CitryStable.startPrepared" in html
+    # The body's content moves into the generated Vue host.
+    assert re.search(r'<body class="page"><div id="citry-vue-[^"]+"><button id="dynamic"', html)
+    assert "data-citry-vue-document" in html
     assert "</body></html>" in html
 
 
@@ -688,11 +1128,39 @@ def test_vue_document_append_dependencies_execute_before_bootstrap() -> None:
         template = "<!doctype html><html><head></head><body><button :title=\"'ready'\">ready</button></body></html>"
 
     html = Page().render().serialize(deps_position="append")
-    assert html.index("Citry interactive runtime") < html.index("CitryStable.startPrepared")
+    data_block = html.index('<script type="application/json" data-citry-vue-document=')
+    assert html.index("Citry interactive runtime") < data_block
     assert html.index("Citry interactive runtime") < html.rindex("</body>")
-    assert html.index("CitryStable.startPrepared") < html.rindex("</body>")
+    assert data_block < html.rindex("</body>")
     assert html.rindex("</html>") > html.rindex("</script>")
     assert html.count('id="citry-vue-') == 1
+
+
+@pytest.mark.parametrize("nonce", [None, "requestNonce"])
+def test_vue_document_starts_the_app_from_a_module_script_after_the_runtime(nonce: str | None) -> None:
+    # A module script waits for the whole page to be parsed, so starting the
+    # app never delays the first paint; the runtime stays a classic script
+    # so plugin scripts between the two can still register with it.
+    registry = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = registry
+        template = "<!doctype html><html><head></head><body><button :title=\"'ready'\">ready</button></body></html>"
+
+    html = Page().render().serialize(csp_nonce=nonce)
+    nonce_attr = f' nonce="{nonce}"' if nonce else ""
+    # The configuration travels in a JSON data block that the start script
+    # right after it names by app id; both carry the nonce so a strict CSP
+    # lets the start script run and keeps the pair recognizable as Citry's.
+    tags = re.search(
+        rf'<script type="application/json" data-citry-vue-document="([^"]+)"{nonce_attr}>[^<]*</script>'
+        rf'<script type="module"{nonce_attr}>__citryRuntime\.startDocument\("\1"\);</script>',
+        html,
+    )
+    assert tags is not None
+    assert html.count('type="module"') == 1
+    assert html.index("Citry interactive runtime") < tags.start()
+    assert tags.end() <= html.rindex("</body>")
 
 
 def test_vue_document_javascript_omit_keeps_static_body() -> None:
@@ -706,7 +1174,7 @@ def test_vue_document_javascript_omit_keeps_static_body() -> None:
 
     html = Page().render().serialize(security_javascript="omit")
     assert '<button id="kept"' in html
-    assert "CitryStable.startPrepared" not in html
+    assert "data-citry-vue-document" not in html
     assert 'id="citry-vue-' not in html
 
 
@@ -741,7 +1209,7 @@ def test_vue_document_does_not_defer_a_component_in_the_physical_head() -> None:
     html = Page().render().serialize()
     assert "<title" in html
     assert "Selected child title</title>" in html
-    assert "CitryStable.startPrepared" in html
+    assert "data-citry-vue-document" in html
 
 
 def test_vue_document_allows_dependency_placeholders_around_prepared_body() -> None:
@@ -755,7 +1223,7 @@ def test_vue_document_allows_dependency_placeholders_around_prepared_body() -> N
         )
 
     html = Page().render().serialize()
-    assert "CitryStable.startPrepared" in html
+    assert "data-citry-vue-document" in html
     assert html.count('id="citry-vue-') == 1
 
 
@@ -931,7 +1399,7 @@ def test_same_compiled_slots_render_static_then_prepared() -> None:
     assert prepared.render_target == "prepared"
     html = prepared.serialize()
     assert "supplied" in html
-    assert "CitryStable.startPrepared" not in html
+    assert "data-citry-vue-document" not in html
 
 
 def test_default_events_producer_publishes_engine_owned_route_asset() -> None:

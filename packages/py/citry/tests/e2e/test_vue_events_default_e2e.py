@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 import pytest
 
 from citry import Citry, Component, Extension
+from citry._vue.serialization import hydration_admission
 from citry.ext.events import EventError, actions, event
 from citry.ext.events.renderers import dispatcher_for
 
@@ -50,7 +52,7 @@ def _wait_for_two_runtime_rows(page: Any, faults: list[str], console_errors: lis
                 main: document.querySelector('main')?.outerHTML,
                 buttons: document.querySelectorAll('button').length,
                 ready: document.readyState,
-                definitions: Object.fromEntries(Object.entries(window.CitryStableDefinitions || {})
+                definitions: Object.fromEntries(Object.entries(window.__citryRuntimeDefinitions || {})
                     .map(([id, value]) => [id, {
                         directiveSignature: value.directiveSignature,
                         replacementSites: value.replacementSites,
@@ -60,14 +62,11 @@ def _wait_for_two_runtime_rows(page: Any, faults: list[str], console_errors: lis
                         runtimeEventSites: value.runtimeEventSites,
                     }])),
                 declared: (() => {
-                    const script = [...document.scripts].find(item =>
-                        item.textContent.includes('CitryStable.startPrepared('),
+                    const block = document.querySelector(
+                        'script[type="application/json"][data-citry-vue-document]',
                     );
-                    if (!script) return 'no bootstrap script';
-                    const text = script.textContent;
-                    const start = text.indexOf('CitryStable.startPrepared(') + 'CitryStable.startPrepared('.length;
-                    const end = text.indexOf(').catch', start);
-                    try { return JSON.parse(text.slice(start, end)).manifest.definitions; }
+                    if (!block) return 'no configuration block';
+                    try { return JSON.parse(block.textContent).manifest.definitions; }
                     catch (error) { return String(error); }
                 })(),
             })"""
@@ -178,7 +177,7 @@ def _grouped_marker_page(engine: Citry, shape: str) -> type[Component]:
 def _grouped_marker_state(page: Any) -> dict[str, Any]:
     return page.evaluate(
         """() => {
-          const app=[...CitryStable._apps.values()][0];
+          const app=[...__citryRuntime._apps.values()][0];
           const occurrence=app?.occurrences.get(app.rootId);
           const component=app?.mounted.get(app.rootId)?.component;
           const read=id=>document.querySelector(`#${id}`)?.textContent ?? null;
@@ -262,10 +261,12 @@ def test_vue_events_callback_subscriptions_and_root_lifecycle_do_not_stale_or_st
         citry = engine
         State = PageState
         template = '<main><button id="refresh" @c-click="refresh">{{ count }}</button></main>'
-        js = """$component({onServerRender({revision, onEvent}){
+        # `$onEvent` inside the run and the run's own `onEvent` are both released
+        # with the run, and the returned cleanup runs before the next run starts.
+        js = """$component({onServerRender({component, revision, onEvent}){
           (globalThis.__vueCallbackTimeline ||= []).push(['run', revision]);
+          component.$onEvent('ping', detail => (globalThis.__vueEventSeen ||= []).push({revision, detail}));
           const stop = onEvent('ping', detail => {
-            (globalThis.__vueEventSeen ||= []).push({revision, detail});
             globalThis.__vueCallbackTimeline.push(['event', revision, detail]);
           });
           return ()=>{
@@ -357,6 +358,148 @@ def test_vue_events_callback_subscriptions_and_root_lifecycle_do_not_stale_or_st
 
 
 @pytest.mark.e2e
+def test_custom_transport_forwards_request_context_for_a_render(page: Any, serve_live: Any) -> None:
+    # A custom transport that relays the envelope with the request it is given
+    # must be able to receive a Render of the component on screen, which the
+    # server can only build from the Vue app, occurrence and revision headers.
+    engine = Citry(secret="vue-events-custom-transport-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class PageState:
+        count: int = 0
+
+        def render(self):
+            return Page(count=self.count)
+
+    class Page(Component):
+        citry = engine
+        State = PageState
+        template = '<main><button id="refresh" @c-click="refresh">{{ count }}</button></main>'
+
+        def template_data(self, kwargs, slots):
+            return kwargs
+
+        class Events:
+            def refresh(self, state: PageState):
+                state.count += 1
+                return state.render()
+
+    dispatcher_for(engine)
+    page_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.goto(serve_live(engine, Page(count=0).render().serialize(), "") + "/")
+    page.wait_for_function("document.querySelector('#refresh')?.textContent === '0'")
+    page.evaluate(
+        """() => {
+          window.__relayed = [];
+          Citry.events.registerTransport('relay', {
+            async send(envelope, request) {
+              window.__relayed.push({
+                method: request.method,
+                vueHeaders: Object.keys(request.headers).filter(name => name.startsWith('X-Citry-Vue-')).sort(),
+                signal: request.signal instanceof AbortSignal,
+              });
+              const response = await fetch(request.url, {
+                method: request.method,
+                headers: request.headers,
+                body: JSON.stringify(envelope),
+                signal: request.signal,
+              });
+              return response.json();
+            },
+          });
+          Citry.events.configure({transport: 'relay'});
+        }"""
+    )
+
+    for count in (1, 2):
+        page.locator("#refresh").click()
+        page.wait_for_function(f"document.querySelector('#refresh')?.textContent === '{count}'")
+
+    assert (
+        page.evaluate("window.__relayed")
+        == [
+            {
+                "method": "POST",
+                "vueHeaders": ["X-Citry-Vue-App", "X-Citry-Vue-Occurrence", "X-Citry-Vue-Revision"],
+                "signal": True,
+            },
+        ]
+        * 2
+    )
+    assert page_errors == []
+
+
+@pytest.mark.e2e
+def test_instance_on_event_listeners_outlive_server_renders(page: Any, serve_live: Any) -> None:
+    # Only a listener added while onServerRender runs (its `onEvent`, or
+    # `$onEvent` called synchronously inside it) is released with that run.
+    # One added later from a hook, method or timer lives as long as the
+    # instance, and an `onEvent` from a run that already ended adds nothing.
+    engine = Citry(secret="vue-events-instance-listener-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class PageState:
+        count: int = 0
+
+        def render(self):
+            return Page(count=self.count)
+
+    class Page(Component):
+        citry = engine
+        State = PageState
+        template = '<main><button id="refresh" @c-click="refresh">{{ count }}</button></main>'
+        js = """$component({
+          mounted() {
+            this.$onEvent('ping', detail => (globalThis.__mountedSeen ||= []).push(detail.count));
+          },
+          onServerRender({component, revision, onEvent}) {
+            (globalThis.__runOnEvents ||= []).push(onEvent);
+            onEvent('ping', detail => (globalThis.__runSeen ||= []).push({revision, count: detail.count}));
+            if (revision === 0) {
+              queueMicrotask(() => component.$onEvent(
+                'ping', detail => (globalThis.__laterSeen ||= []).push(detail.count)));
+            }
+          },
+        });"""
+
+        def template_data(self, kwargs, slots):
+            return kwargs
+
+        class Events:
+            def refresh(self, state: PageState):
+                state.count += 1
+                return [state.render(), actions.Dispatch("ping", {"count": state.count})]
+
+    dispatcher_for(engine)
+    page_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.goto(serve_live(engine, Page(count=0).render().serialize(), "") + "/")
+    page.wait_for_function("document.querySelector('#refresh')?.textContent === '0'")
+
+    for count in (1, 2):
+        page.locator("#refresh").click()
+        page.wait_for_function(f"document.querySelector('#refresh')?.textContent === '{count}'")
+        page.wait_for_function(f"globalThis.__runSeen?.length === {count}")
+
+    # A late call through the first run's onEvent must not subscribe.
+    page.evaluate("globalThis.__runOnEvents[0]('ping', () => (globalThis.__staleSeen ||= []).push(1))")
+    page.locator("#refresh").click()
+    page.wait_for_function("document.querySelector('#refresh')?.textContent === '3'")
+    page.wait_for_function("globalThis.__runSeen?.length === 3")
+
+    assert page.evaluate("globalThis.__mountedSeen") == [1, 2, 3]
+    assert page.evaluate("globalThis.__laterSeen") == [1, 2, 3]
+    assert page.evaluate("globalThis.__runSeen") == [
+        {"revision": 1, "count": 1},
+        {"revision": 2, "count": 2},
+        {"revision": 3, "count": 3},
+    ]
+    assert page.evaluate("globalThis.__staleSeen ?? null") is None
+    assert page_errors == []
+
+
+@pytest.mark.e2e
 def test_marker_render_repeats_owner_callback_and_cleans_previous_scope_once(page: Any, serve_live: Any) -> None:
     engine = Citry(secret="vue-marker-callback-cleanup-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -413,7 +556,7 @@ def test_marker_render_repeats_owner_callback_and_cleans_previous_scope_once(pag
         try:
             page.wait_for_function(
                 """() => {
-                  const app=[...CitryStable._apps.values()][0];
+                  const app=[...__citryRuntime._apps.values()][0];
                   const component=app?.mounted.get(app.rootId)?.component;
                   return Boolean(component) && !app.busy && !component.$loading('refresh');
                 }""",
@@ -422,7 +565,7 @@ def test_marker_render_repeats_owner_callback_and_cleans_previous_scope_once(pag
         except _PlaywrightTimeoutError as error:
             state = page.evaluate(
                 """() => {
-                  const app=[...CitryStable._apps.values()][0];
+                  const app=[...__citryRuntime._apps.values()][0];
                   const component=app?.mounted.get(app.rootId)?.component;
                   const occurrence=app?.occurrences.get(app.rootId);
                   let loading, loadingError;
@@ -448,7 +591,7 @@ def test_marker_render_repeats_owner_callback_and_cleans_previous_scope_once(pag
         page_state = page.evaluate(
             """() => ({text:document.querySelector('#marker-value')?.textContent,
             lifecycle:globalThis.__markerLifecycle, html:document.querySelector('main')?.outerHTML,
-            appCount:globalThis.CitryStable?._apps?.size})"""
+            appCount:globalThis.__citryRuntime?._apps?.size})"""
         )
         pytest.fail(
             f"marker update did not apply: {error}; state={page_state}; faults={faults}; "
@@ -469,7 +612,7 @@ def test_marker_render_repeats_owner_callback_and_cleans_previous_scope_once(pag
         page_state = page.evaluate(
             """() => ({text:document.querySelector('#marker-value')?.textContent,
             lifecycle:globalThis.__markerLifecycle, html:document.querySelector('main')?.outerHTML,
-            appCount:globalThis.CitryStable?._apps?.size})"""
+            appCount:globalThis.__citryRuntime?._apps?.size})"""
         )
         pytest.fail(
             f"second marker update did not apply: {error}; state={page_state}; faults={faults}; "
@@ -524,7 +667,7 @@ def test_disjoint_marker_group_commits_together_and_deduplicates_owner_work(page
     )
     page.goto(serve_live(engine, group_page().render().serialize(), "") + "/")
     page.wait_for_function(
-        """() => { const app=[...CitryStable._apps.values()][0];
+        """() => { const app=[...__citryRuntime._apps.values()][0];
           return app?.browserPlugins?.length === 1 &&
             document.querySelector('#group-locale')?.textContent === 'en-US' &&
             globalThis.__groupLifecycle?.length === 1; }""",
@@ -548,7 +691,7 @@ def test_disjoint_marker_group_commits_together_and_deduplicates_owner_work(page
                 timeout=5_000,
             )
             page.wait_for_function(
-                """() => { const app=[...CitryStable._apps.values()][0];
+                """() => { const app=[...__citryRuntime._apps.values()][0];
                   const component=app?.mounted.get(app.rootId)?.component;
                   return Boolean(app) && !app.busy && !component?.$loading('refresh'); }""",
                 timeout=5_000,
@@ -580,7 +723,7 @@ def test_disjoint_marker_group_commits_together_and_deduplicates_owner_work(page
             timeout=5_000,
         )
         page.wait_for_function(
-            """() => { const app=[...CitryStable._apps.values()][0];
+            """() => { const app=[...__citryRuntime._apps.values()][0];
               const component=app?.mounted.get(app.rootId)?.component;
               return Boolean(app) && !app.busy && !component?.$loading('refresh'); }""",
             timeout=5_000,
@@ -755,7 +898,7 @@ def test_marker_group_rejections_leave_state_and_dom_uncommitted(
         )
 
     page.wait_for_function(
-        """() => { const app=[...CitryStable._apps.values()][0];
+        """() => { const app=[...__citryRuntime._apps.values()][0];
           const component=app?.mounted.get(app.rootId)?.component;
           return Boolean(app) && !app.busy && !component?.$loading('refresh'); }""",
         timeout=5_000,
@@ -788,7 +931,7 @@ def test_marker_group_rejections_leave_state_and_dom_uncommitted(
             pytrace=False,
         )
     page.wait_for_function(
-        """() => { const app=[...CitryStable._apps.values()][0];
+        """() => { const app=[...__citryRuntime._apps.values()][0];
           const component=app?.mounted.get(app.rootId)?.component;
           return Boolean(app) && !app.busy && !component?.$loading('refresh'); }""",
         timeout=5_000,
@@ -944,7 +1087,7 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
     page.wait_for_function(
         "() => [...document.querySelectorAll('#rows label')].map(label => label.dataset.key).join(',') === 'b,a'"
     )
-    page.wait_for_function("[...CitryStable._apps.values()][0].revision === 1", timeout=5000)
+    page.wait_for_function("[...__citryRuntime._apps.values()][0].revision === 1", timeout=5000)
     assert [page.locator("#rows label").nth(index).get_attribute("data-key") for index in range(2)] == ["b", "a"]
     assert [page.locator(f'[data-key="{key}"] input').input_value() for key in ("a", "b")] == [
         "local-a",
@@ -968,7 +1111,7 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
         }"""
     )
     page.wait_for_function(
-        "[...CitryStable._apps.values()][0].revision === 2 && ![...CitryStable._apps.values()][0].busy",
+        "[...__citryRuntime._apps.values()][0].revision === 2 && ![...__citryRuntime._apps.values()][0].busy",
         timeout=5000,
     )
     focus_state = page.evaluate(
@@ -1001,14 +1144,14 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
         }"""
     )
     page.wait_for_function(
-        "[...CitryStable._apps.values()][0].revision === 3 && ![...CitryStable._apps.values()][0].busy",
+        "[...__citryRuntime._apps.values()][0].revision === 3 && ![...__citryRuntime._apps.values()][0].busy",
         timeout=3000,
     )
     assert page.evaluate("document.activeElement?.id") == "focus-sentinel"
 
     page.locator("#remove-a").click()
     page.wait_for_function(
-        "[...CitryStable._apps.values()][0].revision === 4 && ![...CitryStable._apps.values()][0].busy",
+        "[...__citryRuntime._apps.values()][0].revision === 4 && ![...__citryRuntime._apps.values()][0].busy",
         timeout=5000,
     )
     try:
@@ -1169,7 +1312,7 @@ def test_unmounted_component_js_app_runs_without_events_routes(page: Any, serve_
 
     html = LocalCounter().render().serialize()
     assert "ext/events/call" not in html
-    assert "CitryStable.startPrepared" in html
+    assert "data-citry-vue-document" in html
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.goto(serve_document(html))
@@ -1217,7 +1360,7 @@ def test_imperative_send_preserves_structured_event_error_for_caller(page: Any, 
         "message": "Invalid form.",
         "fieldErrors": {"email": "Use a valid address."},
     }
-    assert page.evaluate("[...CitryStable._apps.values()][0].terminal") is False
+    assert page.evaluate("[...__citryRuntime._apps.values()][0].terminal") is False
     assert faults == []
 
 
@@ -1242,7 +1385,7 @@ def test_server_render_callback_failure_remains_terminal(page: Any, serve_live: 
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.goto(serve_live(engine, Broken().render().serialize(), "") + "/")
     page.locator("#break-callback").click()
-    page.wait_for_function("globalThis.CitryStable._apps.size === 0")
+    page.wait_for_function("globalThis.__citryRuntime._apps.size === 0")
     assert len(faults) == 1
     assert faults[0].startswith("The Vue Events bridge was disposed")
 
@@ -1322,6 +1465,73 @@ def test_dispatch_uses_one_canonical_live_root_for_every_vue_root_shape(page: An
     ]
     assert page.evaluate("globalThis.__secondRootEvents") == 0
     assert page.evaluate("globalThis.__descendantEvents") == 0
+    assert faults == []
+
+
+@pytest.mark.e2e
+def test_a_removed_component_comes_back_with_its_stylesheet(page: Any, serve_live: Any) -> None:
+    page.set_default_timeout(5_000)
+    engine = Citry(secret="vue-returning-style-owner-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    # A component with its own Dependencies may not load assets the page never
+    # had. This one was on the first page, so it may come back.
+    class Badge(Component):
+        citry = engine
+        template = """
+            <p id="badge" class="returning-owner">badge</p>
+        """
+
+        class Dependencies:
+            css = ["/returning-owner.css"]
+
+    class Panel(Component):
+        citry = engine
+
+        class Kwargs:
+            shown: bool = True
+
+        class State(Kwargs):
+            pass
+
+        class Events:
+            def toggle(self, state):
+                state.shown = not state.shown
+                return Panel(shown=state.shown)
+
+        def template_data(self, kwargs, slots):
+            return {"shown": kwargs.shown}
+
+        template = """
+            <main>
+              <button id="toggle" @c-click="toggle">toggle</button>
+              <c-if cond="shown"><c-badge /></c-if>
+            </main>
+        """
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.route(
+        "**/returning-owner.css",
+        lambda route: route.fulfill(body=".returning-owner{color:rgb(12, 34, 56)}", content_type="text/css"),
+    )
+    page.goto(serve_live(engine, Panel().render().serialize(), "") + "/")
+    sheet = '[data-citry-css-url="/returning-owner.css"]'
+    color = "element => getComputedStyle(element).color"
+    page.locator("#badge").wait_for()
+    assert page.locator("#badge").evaluate(color) == "rgb(12, 34, 56)"
+
+    # Removing the last owner removes its stylesheet from the page.
+    page.locator("#toggle").click()
+    page.locator("#badge").wait_for(state="detached")
+    page.locator(sheet).wait_for(state="detached")
+
+    # Bringing the component back loads the same stylesheet again.
+    page.locator("#toggle").click()
+    page.locator("#badge").wait_for()
+    assert page.locator(sheet).count() == 1
+    assert page.locator("#badge").evaluate(color) == "rgb(12, 34, 56)"
     assert faults == []
 
 
@@ -1482,8 +1692,8 @@ def test_two_serialized_vue_apps_share_runtime_without_reset(page: Any, serve_do
         citry = engine
         template = '<button class="local-counter" @click="count += 1" v-text="count"></button>'
         js = """$component((()=>{
-          (globalThis.__citryVueIdentities ??= []).push(CitryStable.compilerRuntime);
-          return {setup(){return {count: CitryStable.compilerRuntime.ref(0)};}};
+          (globalThis.__citryVueIdentities ??= []).push(__citryRuntime.compilerRuntime);
+          return {setup(){return {count: __citryRuntime.compilerRuntime.ref(0)};}};
         })());"""
 
     first = LocalCounter().render()
@@ -1498,7 +1708,7 @@ def test_two_serialized_vue_apps_share_runtime_without_reset(page: Any, serve_do
         "<!doctype html><html><body>"
         f'<section id="first-app">{first_html}</section>'
         "<script>globalThis.__vueAfterFirst=globalThis.Vue;"
-        "globalThis.__citryVueAfterFirst=globalThis.CitryStable.compilerRuntime;</script>"
+        "globalThis.__citryVueAfterFirst=globalThis.__citryRuntime.compilerRuntime;</script>"
         f'<section id="second-app">{second_html}</section>'
         "</body></html>"
     )
@@ -1506,9 +1716,9 @@ def test_two_serialized_vue_apps_share_runtime_without_reset(page: Any, serve_do
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.goto(serve_document(html))
     page.wait_for_timeout(500)
-    assert page.evaluate("__vueAfterFirst === Vue && __citryVueAfterFirst === CitryStable.compilerRuntime")
+    assert page.evaluate("__vueAfterFirst === Vue && __citryVueAfterFirst === __citryRuntime.compilerRuntime")
     assert page.evaluate(
-        "__citryVueIdentities.length >= 1 && __citryVueIdentities.every(x => x === CitryStable.compilerRuntime)"
+        "__citryVueIdentities.length >= 1 && __citryVueIdentities.every(x => x === __citryRuntime.compilerRuntime)"
     )
     assert page.locator("#first-app .local-counter").text_content() == "0", (faults, page.content())
     assert page.locator("#second-app .local-counter").text_content() == "0", (faults, page.content())
@@ -1519,6 +1729,1302 @@ def test_two_serialized_vue_apps_share_runtime_without_reset(page: Any, serve_do
         " && document.querySelector('#second-app .local-counter')?.textContent === '1'"
     )
     assert faults == []
+
+
+@pytest.mark.e2e
+def test_selected_static_hydration_reuses_one_parent_leaf_root(page: Any, serve_document: Any) -> None:
+    engine = Citry(autodiscover=False)
+    calls = {"parent": 0, "leaf": 0}
+
+    class Leaf(Component):
+        citry = engine
+        template = '<span class="leaf-card" title="Leaf title" aria-label="Leaf accessible name">leaf value</span>'
+        js = "$component({});"
+
+        def template_data(self, kwargs, slots):
+            calls["leaf"] += 1
+            return {"label": "leaf value"}
+
+    class Parent(Component):
+        citry = engine
+        template = (
+            '<main class="page-shell" title="Page title" aria-label="Page content" '
+            'style="color: red; margin-top: 2px" data-note="A &quot;quoted&quot; &amp; marked">'
+            "a \n  b<c-leaf /></main>"
+        )
+
+        def template_data(self, kwargs, slots):
+            calls["parent"] += 1
+            return {}
+
+    control_render = Parent().render()
+    assert calls == {"parent": 1, "leaf": 1}
+    control_html = control_render.serialize(ssr=False)
+    assert calls == {"parent": 1, "leaf": 1}
+    assert '"hydrate":true' not in control_html
+    warnings: list[str] = []
+    faults: list[str] = []
+    page.on("console", lambda message: warnings.append(message.text) if message.type in {"warning", "error"} else None)
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    _watch_citry_ready(page)
+    page.goto(serve_document(control_html))
+    _wait_for_citry_ready(page)
+    control_dom = page.evaluate(
+        """() => {
+          const node = document.querySelector('[id^="citry-vue-"]').firstElementChild;
+          const facts = [node, ...node.querySelectorAll('*')].map(element => ({
+            tag: element.tagName.toLowerCase(),
+            attrs: [...element.attributes]
+              .filter(attr => !attr.name.startsWith('data-cid-') && attr.name !== 'style')
+              .map(attr => [attr.name, attr.value])
+              .sort(([left], [right]) => left.localeCompare(right)),
+            text: element.textContent,
+          }));
+          const style = getComputedStyle(node);
+          return {facts, style: {raw: node.getAttribute('style'), color: style.color, marginTop: style.marginTop}};
+        }"""
+    )
+    assert warnings == [], warnings
+    assert faults == [], faults
+    warnings.clear()
+    faults.clear()
+
+    page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+    rendered = Parent().render()
+    assert calls == {"parent": 2, "leaf": 2}
+    html = rendered.serialize(ssr=True)
+    assert calls == {"parent": 2, "leaf": 2}
+    assert '"hydrate":true' in html
+    assert "a b<span" in html
+    assert "a \n  b" not in html
+    app_id = html.split('id="citry-vue-', 1)[1].split('"', 1)[0]
+    before_bootstrap = html.index('<script type="application/json" data-citry-vue-document=')
+    bootstrap_tag = html.rfind("<script", 0, before_bootstrap)
+    capture = (
+        f'<script>window.__hydrationRoot=document.querySelector("#citry-vue-{app_id}").firstElementChild;'
+        f'window.__hydrationBody=document.querySelector("#citry-vue-{app_id}").innerHTML;</script>'
+    )
+    html = html[:bootstrap_tag] + capture + html[bootstrap_tag:]
+    page.goto(serve_document(html))
+    _wait_for_citry_ready(page)
+    page.wait_for_function("window.__citryHydrationReport !== undefined")
+    parity = page.evaluate(
+        """control => {
+          const host = document.querySelector('[id^="citry-vue-"]');
+          const domFacts = node => [node, ...node.querySelectorAll('*')].map(element => ({
+            tag: element.tagName.toLowerCase(),
+            attrs: [...element.attributes]
+              .filter(attr => !attr.name.startsWith('data-cid-') && attr.name !== 'style')
+              .map(attr => [attr.name, attr.value])
+              .sort(([left], [right]) => left.localeCompare(right)),
+            text: element.textContent,
+          }));
+          const current = domFacts(host.firstElementChild);
+          const style = getComputedStyle(host.firstElementChild);
+          return {sameNode: host.firstElementChild === window.__hydrationRoot,
+            sameDom: JSON.stringify(current) === JSON.stringify(control.facts),
+            style: {raw: host.firstElementChild.getAttribute('style'), color: style.color,
+              marginTop: style.marginTop},
+            controlStyle: control.style,
+            initialHtml: window.__hydrationBody, currentHtml: host.innerHTML,
+            probe: window.__citryHydrationReport,
+            rootAttrs: [host.firstElementChild.getAttribute('class'),
+              host.firstElementChild.getAttribute('title'),
+              host.firstElementChild.getAttribute('aria-label'),
+              host.firstElementChild.getAttribute('data-note')],
+            leafAttrs: [host.querySelector('span')?.getAttribute('class'),
+              host.querySelector('span')?.getAttribute('title'),
+              host.querySelector('span')?.getAttribute('aria-label')]};
+        }""",
+        control_dom,
+    )
+    assert parity["sameNode"], (parity, warnings, faults)
+    assert parity["sameDom"], (parity, warnings, faults)
+    assert "a b" in parity["initialHtml"]
+    assert "a \n  b" not in parity["initialHtml"]
+    assert parity["probe"]["mountError"] is None
+    assert parity["probe"]["mismatchCount"] == 0
+    assert parity["probe"]["reusedElementCount"] == 2
+    assert parity["probe"]["replacedElementCount"] == 0
+    assert parity["rootAttrs"] == [
+        "page-shell",
+        "Page title",
+        "Page content",
+        'A "quoted" & marked',
+    ]
+    assert parity["style"]["color"] == parity["controlStyle"]["color"] == "rgb(255, 0, 0)"
+    assert parity["style"]["marginTop"] == parity["controlStyle"]["marginTop"] == "2px"
+    assert parity["style"]["raw"] == "color: red; margin-top: 2px"
+    assert parity["controlStyle"]["raw"] == "color: red; margin-top: 2px;"
+    assert parity["leafAttrs"] == ["leaf-card", "Leaf title", "Leaf accessible name"]
+    assert page.locator("main > span").text_content() == "leaf value"
+    # Hydrated HTML carries no data-cid-<id> markers, like the client-mounted host.
+    assert f"data-cid-{rendered.frame.render_id}" not in parity["currentHtml"]
+    leaf_render = next(part for part in rendered.parts if hasattr(part, "frame"))
+    assert f"data-cid-{leaf_render.frame.render_id}" not in parity["currentHtml"]
+    assert warnings == [], warnings
+    assert faults == [], faults
+
+
+@pytest.mark.e2e
+def test_static_physical_document_shell_hydrates_with_csr_parity(page: Any, serve_document: Any) -> None:
+    engine = Citry(autodiscover=False)
+    calls = {"page": 0, "leaf": 0}
+
+    class Page(Component):
+        citry = engine
+        template = (
+            "<!doctype html><html lang='en'><head><title>document shell</title></head>"
+            '<body class="page-body" data-shell="A &quot;B&quot;">'
+            "<main><span>stable body</span><c-leaf /></main></body></html>"
+        )
+        js = """$component({onServerRender(){
+          (globalThis.__documentScopes ||= []).push('page');
+        }});"""
+
+        def template_data(self, kwargs, slots):
+            calls["page"] += 1
+            return {}
+
+    class Leaf(Component):
+        citry = engine
+        template = "<em>leaf body</em>"
+        js = """$component({onServerRender(){
+          (globalThis.__documentScopes ||= []).push('leaf');
+        }});"""
+
+        def template_data(self, kwargs, slots):
+            calls["leaf"] += 1
+            return {}
+
+    rendered = Page().render()
+    assert calls == {"page": 1, "leaf": 1}
+    leaf_render = next(part for part in rendered.parts if hasattr(part, "frame"))
+    control_html = rendered.serialize(ssr=False)
+    assert calls == {"page": 1, "leaf": 1}
+    warnings: list[str] = []
+    faults: list[str] = []
+    page.on("console", lambda message: warnings.append(message.text) if message.type in {"warning", "error"} else None)
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    _watch_citry_ready(page)
+    page.goto(serve_document(control_html))
+    _wait_for_citry_ready(page)
+    control_dom = page.evaluate(
+        """() => {
+          const root = document.querySelector('[id^="citry-vue-"]').firstElementChild;
+          return [root, ...root.querySelectorAll('*')].map(element => ({
+            tag: element.tagName.toLowerCase(), text: element.textContent,
+            attrs: [...element.attributes].filter(attr => !attr.name.startsWith('data-cid-'))
+              .map(attr => [attr.name, attr.value]).sort(([left], [right]) => left.localeCompare(right)),
+          }));
+        }"""
+    )
+    warnings.clear()
+    faults.clear()
+
+    page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+    hydrated_html = rendered.serialize(ssr=True)
+    assert calls == {"page": 1, "leaf": 1}
+    assert '"hydrate":true' in hydrated_html
+    assert hydrated_html.startswith("<!doctype html>")
+    assert "<head><title>document shell</title></head>" in hydrated_html
+    assert "<body " in hydrated_html
+    assert "</body></html>" in hydrated_html
+    # The page's <html> sits outside the Vue host, so both serializations mark
+    # it the same way; only the host's own contents drop the data-cid markers.
+    page_marker = f"<html lang='en' data-cid-{rendered.frame.render_id}=\"\">"
+    assert page_marker in control_html
+    assert page_marker in hydrated_html
+    host_body = hydrated_html.split('id="citry-vue-', 1)[1].split("</div>", 1)[0]
+    assert "data-cid-" not in host_body
+    assert f"data-cid-{leaf_render.frame.render_id}" not in hydrated_html
+    app_id = hydrated_html.split('id="citry-vue-', 1)[1].split('"', 1)[0]
+    before_bootstrap = hydrated_html.index('<script type="application/json" data-citry-vue-document=')
+    bootstrap_tag = hydrated_html.rfind("<script", 0, before_bootstrap)
+    capture = (
+        f'<script>window.__hydrationRoot=document.querySelector("#citry-vue-{app_id}").firstElementChild;'
+        f'window.__hydrationNodes=[window.__hydrationRoot,...window.__hydrationRoot.querySelectorAll("*")];'
+        f'window.__hydrationBody=document.querySelector("#citry-vue-{app_id}").innerHTML;</script>'
+    )
+    hydrated_html = hydrated_html[:bootstrap_tag] + capture + hydrated_html[bootstrap_tag:]
+    page.goto(serve_document(hydrated_html))
+    _wait_for_citry_ready(page)
+    page.wait_for_function("window.__citryHydrationReport !== undefined")
+    result = page.evaluate(
+        """control => {
+          const host = document.querySelector('[id^="citry-vue-"]');
+          const currentNodes = [host.firstElementChild, ...host.firstElementChild.querySelectorAll('*')];
+          const facts = currentNodes.map(element => ({tag: element.tagName.toLowerCase(),
+            text: element.textContent,
+            attrs: [...element.attributes].filter(attr => !attr.name.startsWith('data-cid-'))
+              .map(attr => [attr.name, attr.value]).sort(([left], [right]) => left.localeCompare(right))}));
+          return {sameNode: host.firstElementChild === window.__hydrationRoot,
+            sameNodes: currentNodes.length === window.__hydrationNodes.length
+              && currentNodes.every((node, index) => node === window.__hydrationNodes[index]),
+            sameDom: JSON.stringify(facts) === JSON.stringify(control),
+            initialHtml: window.__hydrationBody,
+            probe: window.__citryHydrationReport,
+            shell: {doctype: document.doctype?.name,
+              htmlLang: document.documentElement.getAttribute('lang'),
+              headTitle: document.head.querySelector('title')?.textContent,
+              bodyClass: document.body.getAttribute('class'),
+              bodyShell: document.body.getAttribute('data-shell'),
+              scopes: window.__documentScopes || []}};
+        }""",
+        control_dom,
+    )
+    assert result["sameNode"], result
+    assert result["sameNodes"], result
+    assert result["sameDom"], result
+    assert result["probe"]["mountError"] is None
+    assert result["probe"]["mismatchCount"] == 0
+    assert result["probe"]["reusedElementCount"] >= 3
+    assert result["probe"]["replacedElementCount"] == 0
+    assert result["shell"] == {
+        "doctype": "html",
+        "htmlLang": "en",
+        "headTitle": "document shell",
+        "bodyClass": "page-body",
+        "bodyShell": 'A "B"',
+        "scopes": ["leaf", "page"],
+    }
+    assert page.locator('[id^="citry-vue-"] main > span').text_content() == "stable body"
+    assert page.locator('[id^="citry-vue-"] main > em').text_content() == "leaf body"
+    assert f"data-cid-{leaf_render.frame.render_id}" not in page.locator('[id^="citry-vue-"]').inner_html()
+    assert warnings == [], warnings
+    assert faults == [], faults
+
+
+@pytest.mark.e2e
+def test_plain_python_text_hydrates_with_csr_parity(page: Any, serve_document: Any) -> None:
+    engine = Citry(autodiscover=False)
+    calls = 0
+    escaped_calls = 0
+
+    class Page(Component):
+        citry = engine
+        template = "<main>{{ label }}</main>"
+        js = "$component({});"
+
+        def template_data(self, kwargs, slots):
+            nonlocal calls
+            calls += 1
+            return {"label": "hello"}
+
+    rendered = Page().render()
+    assert calls == 1
+    control_html = rendered.serialize(ssr=False)
+    page.on("pageerror", lambda error: pytest.fail(str(error)))
+    _watch_citry_ready(page)
+    page.goto(serve_document(control_html))
+    _wait_for_citry_ready(page)
+    control_facts = page.evaluate(
+        """() => [document.querySelector('[id^="citry-vue-"]').firstElementChild,
+          ...document.querySelector('[id^="citry-vue-"]').firstElementChild.querySelectorAll('*')]
+          .map(element => ({tag: element.tagName.toLowerCase(), text: element.textContent,
+            attrs: [...element.attributes].filter(attr => !attr.name.startsWith('data-cid-'))
+              .map(attr => [attr.name, attr.value]).sort(([a], [b]) => a.localeCompare(b))}))"""
+    )
+
+    page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+    hydrated_html = rendered.serialize(ssr=True)
+    assert calls == 1
+    assert '"hydrate":true' in hydrated_html
+    assert "hello</main>" in hydrated_html
+    app_id = hydrated_html.split('id="citry-vue-', 1)[1].split('"', 1)[0]
+    before_bootstrap = hydrated_html.index('<script type="application/json" data-citry-vue-document=')
+    bootstrap_tag = hydrated_html.rfind("<script", 0, before_bootstrap)
+    capture = (
+        f'<script>window.__hydrationRoot=document.querySelector("#citry-vue-{app_id}").firstElementChild;'
+        f'window.__hydrationHtml=document.querySelector("#citry-vue-{app_id}").innerHTML;</script>'
+    )
+    hydrated_html = hydrated_html[:bootstrap_tag] + capture + hydrated_html[bootstrap_tag:]
+    warnings: list[str] = []
+    page.on("console", lambda message: warnings.append(message.text) if message.type in {"warning", "error"} else None)
+    page.goto(serve_document(hydrated_html))
+    _wait_for_citry_ready(page)
+    page.wait_for_function("window.__citryHydrationReport !== undefined")
+    result = page.evaluate(
+        """control => {
+          const host = document.querySelector('[id^="citry-vue-"]');
+          const facts = [host.firstElementChild, ...host.firstElementChild.querySelectorAll('*')]
+            .map(element => ({tag: element.tagName.toLowerCase(), text: element.textContent,
+              attrs: [...element.attributes].filter(attr => !attr.name.startsWith('data-cid-'))
+                .map(attr => [attr.name, attr.value]).sort(([a], [b]) => a.localeCompare(b))}));
+          return {sameNode: host.firstElementChild === window.__hydrationRoot,
+            sameDom: JSON.stringify(facts) === JSON.stringify(control),
+            initialHtml: window.__hydrationHtml,
+            text: host.firstElementChild.textContent,
+            probe: window.__citryHydrationReport};
+        }""",
+        control_facts,
+    )
+    assert result["sameNode"], result
+    assert result["sameDom"], result
+    assert "hello</main>" in result["initialHtml"]
+    assert result["text"] == "hello"
+    assert result["probe"]["mountError"] is None
+    assert result["probe"]["mismatchCount"] == 0
+    assert result["probe"]["reusedElementCount"] >= 1
+    assert result["probe"]["replacedElementCount"] == 0
+    assert warnings == [], warnings
+
+    class EscapedPage(Component):
+        citry = engine
+        template = "<main>{{ label }}</main>"
+        js = "$component({});"
+
+        def template_data(self, kwargs, slots):
+            nonlocal escaped_calls
+            escaped_calls += 1
+            return {"label": "Python & entity text <b>unsafe</b>"}
+
+    escaped_render = EscapedPage().render()
+    assert escaped_calls == 1
+    # Text with markup characters is written escaped, exactly as Vue would set
+    # it, so the page still hydrates and the characters never become elements.
+    escaped_html = escaped_render.serialize(ssr=True)
+    assert '"hydrate":true' in escaped_html
+    assert "<b>unsafe</b>" not in escaped_html
+    assert "<main>Python &amp; entity text &lt;b&gt;unsafe&lt;/b&gt;</main>" in escaped_html
+    page.goto(serve_document(escaped_html))
+    _wait_for_citry_ready(page)
+    page.wait_for_function("window.__citryHydrationReport !== undefined")
+    escaped_result = page.evaluate(
+        """() => {
+          const main = document.querySelector('[id^="citry-vue-"] main');
+          return {text: main.textContent, html: main.innerHTML,
+            unexpectedElement: main.querySelector('b') !== null,
+            hydrationProbe: window.__citryHydrationReport};
+        }"""
+    )
+    assert escaped_result["text"] == "Python & entity text <b>unsafe</b>"
+    assert escaped_result["html"] == "Python &amp; entity text &lt;b&gt;unsafe&lt;/b&gt;"
+    assert escaped_result["unexpectedElement"] is False
+    assert escaped_result["hydrationProbe"]["mountError"] is None
+    assert escaped_result["hydrationProbe"]["mismatchCount"] == 0
+    assert escaped_result["hydrationProbe"]["replacedElementCount"] == 0
+    assert escaped_result["hydrationProbe"]["reusedElementCount"] == 1
+    assert escaped_calls == 1
+    assert warnings == [], warnings
+
+
+@pytest.mark.e2e
+def test_events_page_hydrates_then_renders_updated_summary(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="events-ssr-revision-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+    calls = {"page": 0, "summary": 0}
+    event_calls: list[int] = []
+
+    class Summary(Component):
+        citry = engine
+        template = """\
+<section id="summary"><h4>Total</h4><span id="value">{{ value }}</span></section>\
+"""
+
+        def template_data(self, kwargs, slots):
+            calls["summary"] += 1
+            return kwargs
+
+    class Page(Component):
+        citry = engine
+        template = """\
+<main><button id="advance" @c-click="advance">advance</button>\
+<c-summary c-value="value" />\
+<aside id="neighbor">Keep</aside></main>\
+"""
+
+        class State:
+            value: int = 10
+
+        class Events:
+            def advance(self, state: Page.State):
+                event_calls.append(state.value)
+                state.value += 1
+                return actions.Render(Page(value=state.value))
+
+        def template_data(self, kwargs, slots):
+            calls["page"] += 1
+            return {"value": int(kwargs.get("value", 10))}
+
+    dispatcher_for(engine)
+    page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+    faults: list[str] = []
+    console_faults: list[str] = []
+    event_requests: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "console",
+        lambda message: console_faults.append(message.text) if message.type in {"warning", "error"} else None,
+    )
+    page.on(
+        "request",
+        lambda request: event_requests.append(request.url) if request.url.endswith("/ext/events/call") else None,
+    )
+
+    rendered = Page(value=10).render()
+    assert calls == {"page": 1, "summary": 1}
+    html = rendered.serialize(ssr=True)
+    assert calls == {"page": 1, "summary": 1}
+    assert '"hydrate":true' in html
+    app_id = html.split('id="citry-vue-', 1)[1].split('"', 1)[0]
+    bootstrap_call = html.index('<script type="application/json" data-citry-vue-document=')
+    bootstrap_tag = html.rfind("<script", 0, bootstrap_call)
+    capture = f"""<script>
+      const host=document.querySelector('#citry-vue-{app_id}');
+      const main=host.querySelector('main');
+      window.__eventsSsrNodes={{main,button:main.querySelector('#advance'),
+        summary:main.querySelector('#summary'),value:main.querySelector('#value'),
+        neighbor:main.querySelector('#neighbor')}};
+      window.__eventsSsrHtml=host.innerHTML;
+    </script>"""
+    html = html[:bootstrap_tag] + capture + html[bootstrap_tag:]
+
+    _watch_citry_ready(page)
+    page.goto(serve_live(engine, html, "") + "/")
+    _wait_for_citry_ready(page)
+    page.wait_for_function("window.__citryHydrationReport !== undefined")
+    initial = page.evaluate(
+        """() => {
+          const host=document.querySelector('[id^="citry-vue-"]');
+          const main=host.querySelector('main');
+          const current={main,button:main.querySelector('#advance'),
+            summary:main.querySelector('#summary'),value:main.querySelector('#value'),
+            neighbor:main.querySelector('#neighbor')};
+          return {sameNodes:Object.keys(current).every(key =>
+              current[key] === window.__eventsSsrNodes[key]),
+            hasSourceEventAttribute:current.button.hasAttribute('@c-click'),
+            html:window.__eventsSsrHtml, probe:window.__citryHydrationReport};
+        }"""
+    )
+    assert initial["sameNodes"], initial
+    assert initial["hasSourceEventAttribute"] is False
+    assert '<span id="value">10</span>' in initial["html"]
+    assert initial["probe"]["mountError"] is None
+    assert initial["probe"]["mismatchCount"] == 0
+    assert initial["probe"]["reusedElementCount"] >= 4
+    assert page.locator("#neighbor").text_content() == "Keep"
+
+    with page.expect_response("**/ext/events/call") as response:
+        page.locator("#advance").click()
+    assert response.value.ok, response.value.text()
+    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 1")
+    page.wait_for_function("document.querySelector('#value')?.textContent === '11'")
+    updated = page.evaluate(
+        """() => ({summary:document.querySelector('#summary').outerHTML,
+          main:document.querySelector('[id^="citry-vue-"] main').outerHTML,
+          neighborStable:document.querySelector('#neighbor') === window.__eventsSsrNodes.neighbor,
+          probe:window.__citryHydrationReport})"""
+    )
+    assert updated["summary"] == '<section id="summary"><h4>Total</h4><span id="value">11</span></section>'
+    assert '<aside id="neighbor">Keep</aside>' in updated["main"]
+    assert updated["neighborStable"] is True
+    assert updated["probe"]["mountError"] is None
+    assert updated["probe"]["mismatchCount"] == 0
+    assert event_requests
+    assert len(event_requests) == 1, event_requests
+    assert event_calls == [10]
+    assert calls == {"page": 2, "summary": 2}
+    assert console_faults == [], console_faults
+    assert faults == [], faults
+
+
+@pytest.mark.e2e
+def test_recorded_python_if_for_nested_page_hydrates_with_csr_parity(page: Any, serve_live: Any) -> None:
+    engine = Citry(autodiscover=False)
+    calls = {"page": 0, "leaf": 0}
+
+    class Leaf(Component):
+        citry = engine
+        template = """\
+<section id="group">\
+<span id="branch" c-if="show">{{ label }}</span>\
+<c-for each="item in items"><strong class="item">{{ item }}</strong></c-for>\
+</section>\
+"""
+        js = "$component({});"
+
+        def template_data(self, _kwargs, _slots):
+            calls["leaf"] += 1
+            return {"show": True, "label": "before raw", "items": ["first item"]}
+
+    class Page(Component):
+        citry = engine
+        template = "<main><c-leaf /></main>"
+        js = "$component({});"
+
+        def template_data(self, _kwargs, _slots):
+            calls["page"] += 1
+            return {}
+
+    faults: list[str] = []
+    console_faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "console",
+        lambda message: console_faults.append(message.text) if message.type in {"warning", "error"} else None,
+    )
+
+    rendered = Page().render()
+    assert calls == {"page": 1, "leaf": 1}
+    control_html = rendered.serialize(ssr=False)
+    assert calls == {"page": 1, "leaf": 1}
+    _watch_citry_ready(page)
+    page.goto(serve_live(engine, control_html, "") + "/")
+    _wait_for_citry_ready(page)
+    control = page.evaluate(
+        """() => {
+          const host=document.querySelector('[id^="citry-vue-"]');
+          const main=host.querySelector('main');
+          const group=main.querySelector('#group');
+          const facts=[main, ...main.querySelectorAll('*')].map(element => ({
+            tag:element.tagName.toLowerCase(),
+            attrs:[...element.attributes].filter(attr => !attr.name.startsWith('data-cid-'))
+              .map(attr => [attr.name, attr.value]).sort(([a], [b]) => a.localeCompare(b)),
+            text:element.textContent,
+          }));
+          return {facts, group:group.outerHTML};
+        }"""
+    )
+    assert '<span id="branch">before raw</span>' in control["group"]
+    assert '<strong class="item">first item</strong>' in control["group"]
+    assert console_faults == [], console_faults
+    assert faults == [], faults
+    console_faults.clear()
+    faults.clear()
+
+    page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+    html = rendered.serialize(ssr=True)
+    assert calls == {"page": 1, "leaf": 1}
+    assert '"hydrate":true' in html
+    # The configuration block opens the start tags, and its JSON starts right
+    # after its opening tag.
+    bootstrap_tag = html.index('<script type="application/json" data-citry-vue-document="')
+    payload_start = html.index(">", bootstrap_tag) + 1
+    configuration, _ = json.JSONDecoder().raw_decode(html[payload_start:])
+    manifest = configuration["manifest"]
+    # The component renders as ordinary Vue output: no definition declares a
+    # block of Python HTML, and no occurrence carries one.
+    assert all(not definition["opaqueHtmlSites"] for definition in manifest["definitions"])
+    assert all("opaqueHtml" not in occurrence["preparedData"] for occurrence in manifest["occurrences"])
+    app_id = html.split('id="citry-vue-', 1)[1].split('"', 1)[0]
+    capture = f"""<script>
+      const host=document.querySelector('#citry-vue-{app_id}');
+      const main=host.querySelector('main');
+      window.__pythonGroupControlFacts={json.dumps(control["facts"])};
+      window.__pythonGroupServerNodes={{main,group:main.querySelector('#group'),
+        branch:main.querySelector('#branch'),item:main.querySelector('.item')}};
+    </script>"""
+    html = html[:bootstrap_tag] + capture + html[bootstrap_tag:]
+    page.goto(serve_live(engine, html, "") + "/")
+    _wait_for_citry_ready(page)
+    page.wait_for_function("window.__citryHydrationReport !== undefined")
+    result = page.evaluate(
+        """() => {
+          const host=document.querySelector('[id^="citry-vue-"]');
+          const main=host.querySelector('main');
+          const current={main,group:main.querySelector('#group'),
+            branch:main.querySelector('#branch'),item:main.querySelector('.item')};
+          const facts=[main, ...main.querySelectorAll('*')].map(element => ({
+            tag:element.tagName.toLowerCase(),
+            attrs:[...element.attributes].filter(attr => !attr.name.startsWith('data-cid-'))
+              .map(attr => [attr.name, attr.value]).sort(([a], [b]) => a.localeCompare(b)),
+            text:element.textContent,
+          }));
+          return {sameNodes:Object.keys(current).every(key =>
+              current[key]===window.__pythonGroupServerNodes[key]),
+            sameDom:JSON.stringify(facts)===JSON.stringify(window.__pythonGroupControlFacts),
+            probe:window.__citryHydrationReport};
+        }"""
+    )
+    assert result["sameNodes"], result
+    assert result["sameDom"], result
+    assert result["probe"]["mountError"] is None
+    assert result["probe"]["mismatchCount"] == 0
+    assert result["probe"]["reusedElementCount"] >= 3
+    assert calls == {"page": 1, "leaf": 1}
+    assert console_faults == [], console_faults
+    assert faults == [], faults
+
+
+@pytest.mark.e2e
+def test_recorded_python_if_for_group_renders_complete_update_after_event(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="python-branch-loop-ssr-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+    calls = {"page": 0, "leaf": 0}
+    leaf_render_id = ""
+    event_calls = 0
+
+    class Leaf(Component):
+        citry = engine
+        template = """\
+<section id="group">\
+<c-if cond="show"><span id="branch">{{ label }}</span></c-if>\
+<c-else><strong id="branch">{{ label }}</strong></c-else>\
+<c-for each="item in items"><strong class="item">{{ item }}</strong></c-for>\
+</section>\
+"""
+
+        def template_data(self, kwargs, _slots):
+            nonlocal leaf_render_id
+            calls["leaf"] += 1
+            leaf_render_id = self.id
+            return kwargs
+
+    class Page(Component):
+        citry = engine
+        template = """\
+<main><button id="advance" @c-click="advance">advance</button>{{ leaf }}<aside id="neighbor">keep</aside></main>\
+"""
+
+        class Events:
+            def advance(self):
+                nonlocal event_calls
+                event_calls += 1
+                return actions.Render(
+                    Leaf(show=False, label="after & <raw>", items=[]),
+                    target=f"render:{leaf_render_id}",
+                )
+
+        def template_data(self, _kwargs, _slots):
+            calls["page"] += 1
+            return {
+                "leaf": Leaf(show=True, label="before & <raw>", items=["first & <b>"]),
+            }
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    console_faults: list[str] = []
+    event_requests: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "console",
+        lambda message: console_faults.append(message.text) if message.type in {"warning", "error"} else None,
+    )
+    page.on(
+        "request",
+        lambda request: event_requests.append(request.url) if request.url.endswith("/ext/events/call") else None,
+    )
+
+    rendered = Page().render()
+    assert calls == {"page": 1, "leaf": 1}
+    control_html = rendered.serialize(ssr=False)
+    assert calls == {"page": 1, "leaf": 1}
+    _watch_citry_ready(page)
+    page.goto(serve_live(engine, control_html, "") + "/")
+    _wait_for_citry_ready(page)
+    control = page.evaluate(
+        """() => {
+          const host=document.querySelector('[id^="citry-vue-"]');
+          const main=host.querySelector('main');
+          const facts=[main, ...main.querySelectorAll('*')].map(element => ({
+            tag:element.tagName.toLowerCase(),
+            attrs:[...element.attributes].filter(attr => !attr.name.startsWith('data-cid-'))
+              .map(attr => [attr.name, attr.value]).sort(([a], [b]) => a.localeCompare(b)),
+            text:element.textContent,
+          }));
+          return {facts, group:main.querySelector('#group').outerHTML};
+        }"""
+    )
+    assert control["group"].startswith('<section id="group"')
+    assert '<span id="branch">before &amp; &lt;raw&gt;</span>' in control["group"]
+    assert '<strong class="item">first &amp; &lt;b&gt;</strong>' in control["group"]
+    assert console_faults == [], console_faults
+    assert faults == [], faults
+    console_faults.clear()
+    faults.clear()
+
+    html = rendered.serialize(ssr=False)
+    assert calls == {"page": 1, "leaf": 1}
+    assert '"hydrate":true' not in html
+    # The configuration block opens the start tags, and its JSON starts right
+    # after its opening tag.
+    bootstrap_tag = html.index('<script type="application/json" data-citry-vue-document="')
+    payload_start = html.index(">", bootstrap_tag) + 1
+    configuration, _ = json.JSONDecoder().raw_decode(html[payload_start:])
+    manifest = configuration["manifest"]
+    # The component renders as ordinary Vue output: no definition declares a
+    # block of Python HTML, and no occurrence carries one.
+    assert all(not definition["opaqueHtmlSites"] for definition in manifest["definitions"])
+    assert all("opaqueHtml" not in occurrence["preparedData"] for occurrence in manifest["occurrences"])
+    app_id = html.split('id="citry-vue-', 1)[1].split('"', 1)[0]
+    assert f'<div id="citry-vue-{app_id}"></div>' in html
+    capture = f"""<script>
+      window.__pythonGroupControlFacts={json.dumps(control["facts"])};
+    </script>"""
+    html = html[:bootstrap_tag] + capture + html[bootstrap_tag:]
+    # Ask for the hydration report, so its absence below shows the page
+    # mounted in the browser rather than that nobody asked.
+    page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+    page.goto(serve_live(engine, html, "") + "/")
+    _wait_for_citry_ready(page)
+    initial = page.evaluate(
+        """() => {
+          const host=document.querySelector('[id^="citry-vue-"]');
+          const main=host.querySelector('main');
+          const current={main,button:main.querySelector('#advance'),
+            group:main.querySelector('#group'),branch:main.querySelector('#branch'),
+            item:main.querySelector('.item'),neighbor:main.querySelector('#neighbor')};
+          window.__pythonGroupInitialNodes=current;
+          const facts=[main, ...main.querySelectorAll('*')].map(element => ({
+            tag:element.tagName.toLowerCase(),
+            attrs:[...element.attributes].filter(attr => !attr.name.startsWith('data-cid-'))
+              .map(attr => [attr.name, attr.value]).sort(([a], [b]) => a.localeCompare(b)),
+            text:element.textContent,
+          }));
+          return {sameDom:JSON.stringify(facts) === JSON.stringify(window.__pythonGroupControlFacts),
+            group:current.group.outerHTML,probe:window.__citryHydrationReport ?? null};
+        }"""
+    )
+    assert initial["sameDom"], initial
+    assert '<span id="branch">before &amp; &lt;raw&gt;</span>' in initial["group"]
+    assert '<strong class="item">first &amp; &lt;b&gt;</strong>' in initial["group"]
+    assert initial["probe"] is None
+
+    with page.expect_response("**/ext/events/call") as response:
+        page.locator("#advance").click()
+    assert response.value.ok, response.value.text()
+    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 1")
+    page.wait_for_function("document.querySelector('#branch')?.tagName === 'STRONG'")
+    updated = page.evaluate(
+        """() => {
+          const group=document.querySelector('#group');
+          const clean=group.cloneNode(true);
+          for(const node of [clean, ...clean.querySelectorAll('*')])
+            for(const attr of [...node.attributes])
+              if(attr.name.startsWith('data-cid-')) node.removeAttribute(attr.name);
+          return {html:clean.outerHTML,itemCount:group.querySelectorAll('.item').length,
+            neighborStable:document.querySelector('#neighbor')===window.__pythonGroupInitialNodes.neighbor,
+            probe:window.__citryHydrationReport ?? null};
+        }"""
+    )
+    assert updated["html"] == '<section id="group"><strong id="branch">after &amp; &lt;raw&gt;</strong></section>'
+    assert updated["html"] != initial["group"]
+    assert updated["itemCount"] == 0
+    assert updated["neighborStable"] is True
+    assert updated["probe"] is None
+    assert calls == {"page": 1, "leaf": 2}
+    assert event_calls == 1
+    assert len(event_requests) == 1, event_requests
+    assert console_faults == [], console_faults
+    assert faults == [], faults
+
+
+@pytest.mark.e2e
+def test_plain_component_root_preserves_parent_fallthrough_in_csr_and_ssr(page: Any, serve_live: Any) -> None:
+    engine = Citry(autodiscover=False)
+    parent_js = """\
+$component({
+      data(){return {label:'Initial title',visible:true};},
+      methods:{updateTitle(){this.label='Updated title';
+              globalThis.__fallthroughUpdates=(globalThis.__fallthroughUpdates||0)+1;},
+            onChildClick(){this.label='Clicked title';
+              globalThis.__fallthroughClicks=(globalThis.__fallthroughClicks||0)+1;}},
+      mounted(){globalThis.__fallthroughUpdates=0;globalThis.__fallthroughClicks=0;
+        globalThis.__fallthroughUpdateTitle=()=>this.updateTitle();
+        globalThis.__fallthroughSetVisible=value=>{this.visible=value;}}
+    });"""
+
+    class PlainChild(Component):
+        citry = engine
+        template = """\
+<section>child</section>"""
+
+    class OrdinaryChild(Component):
+        citry = engine
+        template = """\
+<section v-show="visible">child</section>"""
+        js = """\
+$component({data(){return {visible:true};}});"""
+
+    class NoInheritChild(Component):
+        citry = engine
+        template = """\
+<section>child</section>"""
+        js = """\
+$component({inheritAttrs:false});"""
+
+    class PlainPage(Component):
+        citry = engine
+        template = """\
+<main>
+  <c-plain-child
+    :title="label"
+    @click="onChildClick"
+  />
+</main>"""
+        js = parent_js
+
+    class OrdinaryPage(Component):
+        citry = engine
+        template = """\
+<main>
+  <c-ordinary-child
+    :title="label"
+    @click="onChildClick"
+  />
+</main>"""
+        js = parent_js
+
+    class NoInheritPage(Component):
+        citry = engine
+        template = """\
+<main>
+  <c-no-inherit-child
+    :title="label"
+    @click="onChildClick"
+  />
+</main>"""
+        js = parent_js
+
+    page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+    _watch_citry_ready(page)
+    faults: list[str] = []
+    console_faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "console",
+        lambda message: console_faults.append(message.text) if message.type in {"warning", "error"} else None,
+    )
+    observations: dict[str, dict[str, Any]] = {}
+
+    for page_type, ssr_modes in (
+        (PlainPage, (False, True)),
+        (OrdinaryPage, (False, True)),
+        (NoInheritPage, (False,)),
+    ):
+        for use_ssr in ssr_modes:
+            rendered = page_type().render()
+            html = rendered.serialize(ssr=use_ssr)
+            hydrates = '"hydrate":true' in html
+            if use_ssr:
+                # Both children are called with fallthrough attributes and a
+                # listener, which the server does not write, so <main> is written as a shell and Vue builds the
+                # child inside it while the rest of the page hydrates. Until then the shell shows Citry's HTML.
+                assert hydrates, html[:500]
+                assert re.search(r'<main data-allow-mismatch="children">.+</main>', html, re.DOTALL)
+                assert '"emptyShells":true' in html
+                admission = hydration_admission(rendered)
+                assert admission is not None
+                assert admission.shell_count == 1, admission
+                assert [(item.code, item.outcome, item.shell_tag) for item in admission.declines] == [
+                    ("component-attrs", "shell", "main")
+                ], admission
+            else:
+                assert hydrates is False
+
+            server_root_capture = ""
+            if use_ssr and hydrates:
+                app_id = html.split('id="citry-vue-', 1)[1].split('"', 1)[0]
+                bootstrap_tag = html.index('<script type="application/json" data-citry-vue-document="')
+                server_root_capture = (
+                    f"<script>window.__fallthroughServerRoot="
+                    f"document.querySelector('#citry-vue-{app_id} section');</script>"
+                )
+                html = html[:bootstrap_tag] + server_root_capture + html[bootstrap_tag:]
+
+            console_start = len(console_faults)
+            fault_start = len(faults)
+            page.goto(serve_live(engine, html, "") + "/")
+            _wait_for_citry_ready(page)
+            if hydrates:
+                page.wait_for_function("window.__citryHydrationReport !== undefined")
+            initial = page.evaluate(
+                """() => {
+                  const root=document.querySelector('main section');
+                  window.__fallthroughMountedRoot=root;
+                  return {title:root?.getAttribute('title'),id:root?.id,
+                    text:root?.textContent,rootHtml:root?.outerHTML,
+                    sameServerRoot:window.__fallthroughServerRoot === root,
+                    serverRootMissing:window.__fallthroughServerRoot === null,
+                    probe:window.__citryHydrationReport ?? null};
+                }"""
+            )
+            page.locator("main section").click()
+            page.wait_for_timeout(50)
+            after_initial_click = page.evaluate(
+                """() => ({title:document.querySelector('main section')?.getAttribute('title'),
+                  clickCount:window.__fallthroughClicks,
+                  sameRoot:document.querySelector('main section')===window.__fallthroughMountedRoot})"""
+            )
+            page.evaluate("window.__fallthroughUpdateTitle()")
+            page.wait_for_function("window.__fallthroughUpdates === 1")
+            page.wait_for_timeout(50)
+            after_data_update = page.evaluate(
+                """() => ({title:document.querySelector('main section')?.getAttribute('title'),
+                  updateCount:window.__fallthroughUpdates,
+                  sameRoot:document.querySelector('main section')===window.__fallthroughMountedRoot})"""
+            )
+            observations[f"{page_type.__name__} ssr={use_ssr}"] = {
+                "initial": initial,
+                "afterInitialClick": after_initial_click,
+                "afterDataUpdate": after_data_update,
+                "hydrated": hydrates,
+                "errors": faults[fault_start:],
+                "warnings": console_faults[console_start:],
+            }
+
+    for name, observed in observations.items():
+        assert observed["initial"]["text"] == "child", (name, observed)
+        assert observed["afterDataUpdate"]["updateCount"] == 1, (name, observed)
+        assert observed["afterInitialClick"]["sameRoot"] is True, (name, observed)
+        if name.startswith("NoInheritPage"):
+            assert observed["initial"]["title"] is None, (name, observed)
+            assert observed["afterInitialClick"]["title"] is None, (name, observed)
+            assert observed["afterInitialClick"]["clickCount"] == 0, (name, observed)
+            assert observed["afterDataUpdate"]["title"] is None, (name, observed)
+        else:
+            assert observed["initial"]["title"] == "Initial title", (name, observed)
+            assert observed["afterInitialClick"]["title"] == "Clicked title", (name, observed)
+            assert observed["afterInitialClick"]["clickCount"] == 1, (name, observed)
+            assert observed["afterDataUpdate"]["title"] == "Updated title", (name, observed)
+        assert observed["errors"] == [], (name, observed)
+        assert observed["warnings"] == [], (name, observed)
+        if observed["hydrated"]:
+            # The <main> shell arrives with Citry's HTML for the child, which
+            # the runtime removes before Vue hydrates, so Vue builds each
+            # child root itself and keeps the shell with no mismatch and no
+            # replaced element.
+            assert observed["initial"]["serverRootMissing"] is False, (name, observed)
+            assert observed["initial"]["sameServerRoot"] is False, (name, observed)
+            assert observed["initial"]["probe"]["mountError"] is None, (name, observed)
+            assert observed["initial"]["probe"]["mismatchCount"] == 0, (name, observed)
+            assert observed["initial"]["probe"]["replacedElementCount"] == 0, (name, observed)
+        else:
+            assert observed["initial"]["probe"] is None, (name, observed)
+
+    assert observations["PlainPage ssr=True"]["hydrated"] is True
+    assert observations["OrdinaryPage ssr=True"]["hydrated"] is True
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("use_ssr", [False, True], ids=["mounted", "hydrated"])
+def test_caller_v_show_controls_component_root(page: Any, serve_live: Any, use_ssr: bool) -> None:
+    engine = Citry(secret="vue-show-component-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class PageState:
+        count: int = 0
+
+        def render(self):
+            return Page(count=self.count)
+
+    class Child(Component):
+        citry = engine
+        template = """\
+<section>child {{ count }}</section>"""
+
+        def template_data(self, kwargs, slots):
+            return kwargs
+
+    class Page(Component):
+        citry = engine
+        State = PageState
+        template = """\
+<main>
+  <button id="refresh" @c-click="refresh">refresh</button>
+  <c-child v-show="visible" c-count="count" />
+</main>"""
+        js = """\
+$component({
+  data(){return {visible:true};},
+  mounted(){globalThis.__setVisible=value=>{this.visible=value;};}
+});"""
+
+        def template_data(self, kwargs, slots):
+            return kwargs
+
+        class Events:
+            def refresh(self, state: PageState):
+                state.count += 1
+                return state.render()
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    warnings: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "console",
+        lambda message: warnings.append(message.text) if message.type in {"warning", "error"} else None,
+    )
+    page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+    rendered = Page(count=0).render()
+    html = rendered.serialize(ssr=use_ssr)
+    assert ('"hydrate":true' in html) is use_ssr
+    if use_ssr:
+        # The shown value lives in browser data, so the server leaves the
+        # call to Vue: <main> is a shell and Vue builds its content.
+        admission = hydration_admission(rendered)
+        assert admission is not None
+        assert [(item.code, item.outcome, item.shell_tag) for item in admission.declines] == [
+            ("unsupported-directive", "shell", "main")
+        ], admission
+
+    _watch_citry_ready(page)
+    page.goto(serve_live(engine, html, "") + "/")
+    _wait_for_citry_ready(page)
+    if use_ssr:
+        page.wait_for_function("window.__citryHydrationReport !== undefined")
+        probe = page.evaluate("window.__citryHydrationReport")
+        assert probe["mountError"] is None, probe
+        assert probe["mismatchCount"] == 0, probe
+        assert probe["replacedElementCount"] == 0, probe
+    root_state = """() => {
+      const root=document.querySelector('main section');
+      return {text:root?.textContent, display:root?.style.display,
+        shown:root ? root.getClientRects().length > 0 : null,
+        sameRoot:root === window.__vShowRoot};
+    }"""
+    page.evaluate("window.__vShowRoot=document.querySelector('main section')")
+    initial = page.evaluate(root_state)
+    assert initial == {"text": "child 0", "display": "", "shown": True, "sameRoot": True}
+
+    page.evaluate("window.__setVisible(false)")
+    page.wait_for_function("document.querySelector('main section')?.style.display === 'none'")
+    assert page.evaluate(root_state) == {"text": "child 0", "display": "none", "shown": False, "sameRoot": True}
+
+    page.evaluate("window.__setVisible(true)")
+    page.wait_for_function("document.querySelector('main section')?.style.display === ''")
+    assert page.evaluate(root_state) == {"text": "child 0", "display": "", "shown": True, "sameRoot": True}
+
+    # A server Render replaces the child's content but keeps the caller's
+    # browser value, so a hidden child stays hidden and can be shown again.
+    page.evaluate("window.__setVisible(false)")
+    page.wait_for_function("document.querySelector('main section')?.style.display === 'none'")
+    page.locator("#refresh").click()
+    page.wait_for_function("document.querySelector('main section')?.textContent === 'child 1'")
+    assert page.evaluate(root_state) == {"text": "child 1", "display": "none", "shown": False, "sameRoot": True}
+    page.evaluate("window.__setVisible(true)")
+    page.wait_for_function("document.querySelector('main section')?.style.display === ''")
+    assert page.evaluate(root_state) == {"text": "child 1", "display": "", "shown": True, "sameRoot": True}
+    assert faults == [], faults
+    assert warnings == [], warnings
+
+
+@pytest.mark.e2e
+def test_server_render_switches_between_shown_and_plain_calls(page: Any, serve_live: Any) -> None:
+    # Python picks a different authored call on each render. Each call has
+    # its own Vue key, so Vue replaces the child instead of carrying the old
+    # call's hidden root over to the plain call.
+    engine = Citry(secret="vue-show-switch-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class PageState:
+        shown: bool = True
+
+        def render(self):
+            return Page(shown=self.shown)
+
+    class Child(Component):
+        citry = engine
+        template = """\
+<section>child</section>"""
+
+    class Page(Component):
+        citry = engine
+        State = PageState
+        template = """\
+<main>
+  <button id="flip" @c-click="flip">flip</button>
+  <c-if cond="shown">
+    <c-child v-show="visible" />
+  </c-if>
+  <c-else>
+    <c-child />
+  </c-else>
+</main>"""
+        js = """\
+$component({data(){return {visible:false};}});"""
+
+        def template_data(self, kwargs, slots):
+            return kwargs
+
+        class Events:
+            def flip(self, state: PageState):
+                state.shown = not state.shown
+                return state.render()
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on("console", lambda message: faults.append(message.text) if message.type == "error" else None)
+    _watch_citry_ready(page)
+    page.goto(serve_live(engine, Page(shown=True).render().serialize(ssr=False), "") + "/")
+    _wait_for_citry_ready(page)
+    display = "() => document.querySelector('main section')?.style.display"
+    assert page.evaluate(display) == "none"
+    page.locator("#flip").click()
+    page.wait_for_function(f"({display})() === ''")
+    page.locator("#flip").click()
+    page.wait_for_function(f"({display})() === 'none'")
+    assert faults == [], faults
+
+
+@pytest.mark.e2e
+def test_caller_v_show_through_a_component_root_rejects_a_several_root_leaf(page: Any, serve_live: Any) -> None:
+    # The server sees only that Child's root is another component, so the
+    # browser reports the several-root Leaf that Vue would silently skip.
+    engine = Citry(autodiscover=False)
+
+    class Leaf(Component):
+        citry = engine
+        template = """\
+<p>first</p>
+<p>second</p>"""
+
+    class Child(Component):
+        citry = engine
+        template = """\
+<c-leaf />"""
+
+    class Page(Component):
+        citry = engine
+        template = """\
+<main>
+  <c-child v-show="visible" />
+</main>"""
+        js = """\
+$component({data(){return {visible:false};}});"""
+
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.goto(serve_live(engine, Page().render().serialize(ssr=False), "") + "/")
+    deadline = time.monotonic() + 5
+    while not faults and time.monotonic() < deadline:
+        page.wait_for_timeout(50)
+    assert any(
+        "A 'v-show' or custom directive on a Citry component needs one root element, but component Leaf_" in fault
+        for fault in faults
+    ), faults
+
+
+@pytest.mark.e2e
+def test_static_component_site_hydrates_with_sibling_and_csr_parity(page: Any, serve_document: Any) -> None:
+    engine = Citry(autodiscover=False)
+    calls = {"page": 0, "summary": 0}
+
+    class Summary(Component):
+        citry = engine
+        template = """\
+<section title="face 😀" id="summary"><h4>Summary 😀</h4></section>"""
+
+        @staticmethod
+        def js_data(_kwargs, _slots):
+            return {"ready": True}
+
+        def template_data(self, kwargs, slots):
+            calls["summary"] += 1
+            return {}
+
+    class Page(Component):
+        citry = engine
+        template = """\
+<main>
+  <c-summary />
+  <aside id="following">Next</aside>
+</main>"""
+
+        def template_data(self, kwargs, slots):
+            calls["page"] += 1
+            return {}
+
+    rendered = Page().render()
+    assert calls == {"page": 1, "summary": 1}
+    control_html = rendered.serialize(ssr=False)
+    assert '"hydrate":true' not in control_html
+    assert calls == {"page": 1, "summary": 1}
+
+    control_warnings: list[str] = []
+    control_faults: list[str] = []
+    page.on(
+        "console",
+        lambda message: control_warnings.append(message.text) if message.type in {"warning", "error"} else None,
+    )
+    page.on("pageerror", lambda error: control_faults.append(str(error)))
+    _watch_citry_ready(page)
+    page.goto(serve_document(control_html))
+    _wait_for_citry_ready(page)
+    control_dom = page.evaluate(
+        """() => {
+          const main = document.querySelector('[id^="citry-vue-"] main');
+          const facts = [main, ...main.querySelectorAll('*')].map(element => ({
+            tag: element.tagName.toLowerCase(),
+            attrs: [...element.attributes]
+              .filter(attr => !attr.name.startsWith('data-cid-'))
+              .map(attr => [attr.name, attr.value]).sort(([a], [b]) => a.localeCompare(b)),
+            text: element.textContent,
+          }));
+          return {facts, children: [...main.children].map(element => element.id)};
+        }"""
+    )
+    assert control_warnings == [], control_warnings
+    assert control_faults == [], control_faults
+    assert control_dom["children"] == ["summary", "following"]
+
+    page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+    hydrated_html = rendered.serialize(ssr=True)
+    assert calls == {"page": 1, "summary": 1}
+    assert '"hydrate":true' in hydrated_html
+    assert '<section title="face 😀" id="summary">' in hydrated_html
+    assert '<aside id="following">Next</aside>' in hydrated_html
+
+    # The configuration block opens the start tags, and its JSON starts right
+    # after its opening tag.
+    bootstrap_tag = hydrated_html.index('<script type="application/json" data-citry-vue-document="')
+    payload_start = hydrated_html.index(">", bootstrap_tag) + 1
+    configuration, _ = json.JSONDecoder().raw_decode(hydrated_html[payload_start:])
+    manifest = configuration["manifest"]
+    # The component renders as ordinary Vue output: no definition declares a
+    # block of Python HTML, and no occurrence carries one.
+    assert all(not definition["opaqueHtmlSites"] for definition in manifest["definitions"])
+    assert all("opaqueHtml" not in occurrence["preparedData"] for occurrence in manifest["occurrences"])
+
+    app_id = hydrated_html.split('id="citry-vue-', 1)[1].split('"', 1)[0]
+    capture = f"""<script>
+      const host = document.querySelector('#citry-vue-{app_id}');
+      const main = host.querySelector('main');
+      window.__summaryServerNodes = {{main, summary:main.querySelector('#summary'),
+        heading:main.querySelector('#summary h4'), sibling:main.querySelector('#following')}};
+      window.__summaryServerHtml = host.innerHTML;
+    </script>"""
+    hydrated_html = hydrated_html[:bootstrap_tag] + capture + hydrated_html[bootstrap_tag:]
+    control_warnings.clear()
+    control_faults.clear()
+    page.goto(serve_document(hydrated_html))
+    _wait_for_citry_ready(page)
+    page.wait_for_function("window.__citryHydrationReport !== undefined")
+    result = page.evaluate(
+        """control => {
+          const host = document.querySelector('[id^="citry-vue-"]');
+          const main = host.querySelector('main');
+          const nodes = [main, ...main.querySelectorAll('*')];
+          const facts = nodes.map(element => ({tag: element.tagName.toLowerCase(),
+            attrs: [...element.attributes].filter(attr => !attr.name.startsWith('data-cid-'))
+              .map(attr => [attr.name, attr.value]).sort(([a], [b]) => a.localeCompare(b)),
+            text: element.textContent}));
+          const current = {main, summary:main.querySelector('#summary'),
+            heading:main.querySelector('#summary h4'), sibling:main.querySelector('#following')};
+          return {sameNodes: Object.keys(current).every(key =>
+              current[key] === window.__summaryServerNodes[key]),
+            sameDom: JSON.stringify(facts) === JSON.stringify(control.facts),
+            childIds: [...main.children].map(element => element.id),
+            siblingAlignment: current.summary.nextElementSibling === current.sibling
+              && current.sibling.parentElement === main,
+            serverHtml: window.__summaryServerHtml, probe: window.__citryHydrationReport};
+        }""",
+        control_dom,
+    )
+    assert result["sameNodes"], result
+    assert result["sameDom"], result
+    assert result["childIds"] == control_dom["children"] == ["summary", "following"]
+    assert result["siblingAlignment"], result
+    assert '<section title="face 😀" id="summary">' in result["serverHtml"]
+    assert '<aside id="following">Next</aside>' in result["serverHtml"]
+    assert result["probe"]["mountError"] is None
+    assert result["probe"]["mismatchCount"] == 0
+    assert result["probe"]["replacedElementCount"] == 0
+    assert control_warnings == [], control_warnings
+    assert control_faults == [], control_faults
 
 
 @pytest.mark.e2e
@@ -2397,7 +3903,7 @@ def test_native_runtime_debounce_keeps_pending_work_across_reordered_revision(pa
     def timing_snapshot() -> dict[str, Any]:
         return page.evaluate(
             """() => {
-              const app=CitryStable._apps.values().next().value;
+              const app=__citryRuntime._apps.values().next().value;
               const record=app.mounted.get(app.rootId).record;
               return {revision:app.revision,generation:record.generation,terminal:app.terminal,
                 sameElement:document.querySelector('#runtime-debounce')===window.__retainedDebounceElement,
@@ -2483,7 +3989,7 @@ def test_native_runtime_event_dispatch_errors_reach_vue_error_handler(page: Any,
     page.locator("#async-error").wait_for()
     page.evaluate(
         """() => {
-          const app = [...CitryStable._apps.values()][0];
+          const app = [...__citryRuntime._apps.values()][0];
           app.vueApp.config.errorHandler = (error, _instance, info) => {
             __runtimeEventVueErrors.push({message: error.message, info});
           };
@@ -2625,7 +4131,7 @@ def test_event_response_is_rejected_after_source_generation_changes(page: Any, s
     page.goto(serve_live(engine, Parent().render().serialize(), "") + "/")
     _wait_for_citry_ready(page)
     initial_generation = page.evaluate(
-        """()=>{const app=[...CitryStable._apps.values()][0];return [...app.mounted.values()]
+        """()=>{const app=[...__citryRuntime._apps.values()][0];return [...app.mounted.values()]
           .find(item=>item.record.occurrenceId!==app.rootId).record.generation}"""
     )
     page.locator("#slow-child").click()
@@ -2634,12 +4140,12 @@ def test_event_response_is_rejected_after_source_generation_changes(page: Any, s
     page.locator("#toggle-slow-child").click()
     page.wait_for_function("document.querySelector('#slow-child')?.textContent === '0'")
     page.wait_for_function(
-        "window.__citryGenerationSettled === true && [...CitryStable._apps.values()][0]?.busy === false"
+        "window.__citryGenerationSettled === true && [...__citryRuntime._apps.values()][0]?.busy === false"
     )
     assert page.locator("#slow-child").text_content() == "0"
     assert len(requests) == 1
     app_state = page.evaluate(
-        """()=>{const app=[...CitryStable._apps.values()][0];const child=[...app.mounted.values()]
+        """()=>{const app=[...__citryRuntime._apps.values()][0];const child=[...app.mounted.values()]
           .find(item=>item.record.occurrenceId!==app.rootId);
           return {revision:app.revision,generation:child.record.generation}}"""
     )
@@ -2749,7 +4255,7 @@ def test_empty_call_run_adds_a_component_with_options_and_events(page: Any, serv
     page.wait_for_function("document.querySelectorAll('.run-child').length === 2")
     retained = page.evaluate(
         """() => {
-          const app = [...CitryStable._apps.values()][0];
+          const app = [...__citryRuntime._apps.values()][0];
           globalThis.__retainedRuns = Object.fromEntries(
             [...document.querySelectorAll('.run-child')].map(element => {
               const mounted = [...app.mounted].find(([, value]) => value.component.$el === element);
@@ -2769,7 +4275,7 @@ def test_empty_call_run_adds_a_component_with_options_and_events(page: Any, serv
     assert (
         page.evaluate(
             """() => {
-          const app = [...CitryStable._apps.values()][0];
+          const app = [...__citryRuntime._apps.values()][0];
           return Object.fromEntries(
             [...document.querySelectorAll('.run-child')].map(element => {
               const retained = globalThis.__retainedRuns[element.dataset.item];
@@ -2787,7 +4293,7 @@ def test_empty_call_run_adds_a_component_with_options_and_events(page: Any, serv
     assert (
         page.evaluate(
             """() => {
-          const app = [...CitryStable._apps.values()][0];
+          const app = [...__citryRuntime._apps.values()][0];
           const retained = globalThis.__retainedRuns['0'];
           return [...app.mounted].find(([, value]) => value.component.$el === retained.element)?.[0];
         }"""
@@ -2797,3 +4303,50 @@ def test_empty_call_run_adds_a_component_with_options_and_events(page: Any, serv
     assert page.evaluate("[__firstChildRuns, __secondChildRuns]") == [1, 1]
     assert faults == []
     assert console == []
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    ("leaf_template", "leaf_text"),
+    [
+        # Vue compiles every leaf and condenses its whitespace, so client
+        # mount and hydration show the same condensed text whatever the tags.
+        ("<section><strong>leaf \n  text</strong></section>", "leaf text"),
+        ("<section><p>leaf \n  text</p></section>", "leaf text"),
+    ],
+)
+def test_nested_leaf_whitespace_matches_client_mount_after_hydration(
+    page: Any, serve_live: Any, leaf_template: str, leaf_text: str
+) -> None:
+    engine = Citry(autodiscover=False)
+
+    class Leaf(Component):
+        citry = engine
+        template = leaf_template
+        js = "$component({});"
+
+    class Page(Component):
+        citry = engine
+        template = "<article>root \n  text<c-leaf /></article>"
+
+    engine.set_mounted_prefix("/citry")
+    rendered = Page().render()
+    warnings: list[str] = []
+    page.on("console", lambda message: warnings.append(message.text) if message.type in {"warning", "error"} else None)
+    _watch_citry_ready(page)
+    observed = {}
+    for ssr in (False, True):
+        if ssr:
+            page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
+        html = rendered.serialize(ssr=ssr)
+        assert ('"hydrate":true' in html) is ssr
+        page.goto(serve_live(engine, html, "") + "/")
+        page.wait_for_function("window.__citryReadyApps?.length === 1")
+        observed[ssr] = page.evaluate(
+            """() => ({leaf: document.querySelector('section').firstElementChild.textContent,
+              probe: window.__citryHydrationReport || null})"""
+        )
+    assert observed[False]["leaf"] == observed[True]["leaf"] == leaf_text
+    assert observed[True]["probe"]["mismatchCount"] == 0
+    assert observed[True]["probe"]["replacedElementCount"] == 0
+    assert warnings == [], warnings

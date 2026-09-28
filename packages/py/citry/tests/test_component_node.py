@@ -212,10 +212,11 @@ class TestComponentNodeAttrs:
 
     def test_special_character_attr_names_become_kwargs(self):
         # Kwarg names on a component tag are not limited to Python
-        # identifiers: hyphenated and `#`-prefixed names land in raw_kwargs
-        # under their literal spelling, and the bare `#my-id` becomes True
-        # like any other bare attr. Names that are special elsewhere but not
-        # to citry (HTML's `data-id`, Vue's `v-if`) pass through the same way.
+        # identifiers: hyphenated names land in raw_kwargs under their literal
+        # spelling, and a bare attr becomes True. A name that is special in
+        # HTML but not to citry (`data-id`) passes through the same way. Vue
+        # directives and `#name` slot shorthand are not kwargs; see
+        # test_vue_component_directives.py.
         c = Citry()
         seen = {}
 
@@ -236,14 +237,13 @@ class TestComponentNodeAttrs:
                     <c-card
                         na-me="fzz"
                         data-id="123"
-                        v-if="isVisible"
-                        #my-id
+                        my-flag
                     />
                 </main>
             """
 
         Page().render().serialize()
-        assert seen == {"na-me": "fzz", "data-id": "123", "v-if": "isVisible", "#my-id": True}
+        assert seen == {"na-me": "fzz", "data-id": "123", "my-flag": True}
 
     def test_colon_named_attr_is_a_literal_kwarg(self):
         # A colon in an attr name is not special to citry: the kwarg arrives

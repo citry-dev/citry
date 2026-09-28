@@ -49,5 +49,5 @@ def test_simple_content_under_transparent_owner_initializes_in_browser(
     base = serve_live(app, Document(dynamic=dynamic, target=Box).render().serialize(), "")
     page.goto(base + "/")
     page.wait_for_function("window.receiverReady && document.querySelector('b').textContent === 'hello'")
-    assert page.evaluate("() => CitryStable._apps.size") == 1
+    assert page.evaluate("() => __citryRuntime._apps.size") == 1
     assert errors == []

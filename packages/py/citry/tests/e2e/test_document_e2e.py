@@ -29,6 +29,7 @@ def _build_page() -> type[Component]:
     class Widget(Component):
         citry = c
         template = '<div class="widget">hi</div>'
+        # `js_data()` keys become properties of the mounted Vue instance.
         js = "$component(({ component }) => { component.$el.setAttribute('data-label', component.label); });"
         css = ".widget { color: var(--accent); }"
 
@@ -89,7 +90,10 @@ def _build_scoped_css_page() -> type[Component]:
     return Page
 
 
-def _build_dependency_order_page(probe_kind: str, probe_first: bool) -> type[Component]:
+def _build_dependency_order_page(
+    probe_kind: str,
+    probe_first: bool,
+) -> type[Component]:
     c = Citry()
 
     class Alpha(Component):
@@ -171,18 +175,18 @@ def _build_no_data_js_page() -> type[Component]:
         citry = c
         template = """
           <section id="no-data-widget">
-            <span id="immediate-marker">pending</span>
             <button type="button">run</button>
             <output></output>
           </section>
         """
         js = """
           var citryE2eNoGlobalLeak = 123;
-          var citryE2eImmediateMarker = 'immediate';
+          // Top-level script code runs once when the page loads the script.
+          globalThis.__citryE2eScriptRuns = (globalThis.__citryE2eScriptRuns || 0) + 1;
           $component(({ component }) => {
             const root = component.$el;
-            root.querySelector('#immediate-marker').textContent = citryE2eImmediateMarker;
-            root.dataset.nullData = String(Object.keys(component.$data).length === 0);
+            // Without `js_data()`, the instance receives no server keys.
+            root.dataset.hasLabel = String('label' in component);
             root.querySelector('button').addEventListener('click', () => {
               root.querySelector('output').textContent = 'clicked';
             });
@@ -258,12 +262,12 @@ def test_component_js_runs_and_receives_data(page: Any, serve_document: Any) -> 
     assert page.locator(".widget").get_attribute("data-label") == "ran"
 
 
-def test_component_js_without_data_runs_immediately_and_stays_scoped(page: Any, serve_document: Any) -> None:
+def test_component_js_without_data_runs_once_and_stays_scoped(page: Any, serve_document: Any) -> None:
     html = _build_no_data_js_page()().render().serialize(deps_strategy="document")
     page.goto(serve_document(html))
-    page.wait_for_function("document.querySelector('#no-data-widget')?.dataset.nullData === 'true'")
+    page.wait_for_function("document.querySelector('#no-data-widget')?.dataset.hasLabel === 'false'")
 
-    assert page.locator("#immediate-marker").text_content() == "immediate"
+    assert page.evaluate("() => globalThis.__citryE2eScriptRuns") == 1
     assert page.evaluate("() => typeof window.citryE2eNoGlobalLeak") == "undefined"
     page.locator("#no-data-widget button").click()
     assert page.locator("#no-data-widget output").text_content() == "clicked"
@@ -400,15 +404,11 @@ def test_component_and_dependency_assets_execute_in_bucket_order(
     assert styles == {"color": "rgb(12, 34, 56)", "background": "rgb(210, 220, 230)"}
 
 
-def test_component_and_dependency_css_applies_without_javascript(browser: Any, serve_document: Any) -> None:
-    html = (
-        _build_dependency_order_page("component", probe_first=False)()
-        .render()
-        .serialize(
-            deps_strategy="document",
-            security_javascript="omit",
-        )
-    )
+def test_component_and_dependency_css_apply_without_javascript(browser: Any, serve_document: Any) -> None:
+    # The server writes the page's component HTML by default, which is what
+    # this test styles with JavaScript turned off.
+    page_class = _build_dependency_order_page("component", probe_first=False)
+    html = page_class().render().serialize(deps_strategy="document")
     context = browser.new_context(java_script_enabled=False)
     page = context.new_page()
     try:
