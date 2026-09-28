@@ -6,8 +6,9 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Changed
 
-- Support Citry's Vue authoring model. This requires Citry 0.6.0 or newer,
-  so upgrade `citry` and `citry-lsp` together.
+- The language server understands Vue templates and component
+  JavaScript. It requires Citry 0.6.0 or newer, so upgrade `citry` and
+  `citry-lsp` together.
 - Hovers and type checks cover every field of the `onServerRender`
   context, including `state`, `sendEvent`, `loading`, `error`, `i18n`,
   `els`, and `id`, and `$component({ init })` is checked like

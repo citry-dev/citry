@@ -134,7 +134,9 @@ value but reports it as unverified; it never downloads third-party code during
 serialization. Set `crossorigin` on that `Script` yourself: the browser checks
 the digest only when the third-party host sends CORS headers.
 
-This option provides byte identity and hash metadata. It works together
+This option makes the browser run a Citry script only when its bytes
+match the hash Citry reports, and gives you those hashes for your CSP
+header. It works together
 with `security_csp="strict"`, but does not turn on strict CSP validation
 by itself.
 

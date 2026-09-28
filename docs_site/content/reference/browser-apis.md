@@ -45,7 +45,7 @@ plain bindings object or `undefined` synchronously.
 <h3 class="doc-heading" id="on-server-render"><code>onServerRender</code></h3>
 
 Add `onServerRender` when work must run after the initial mount and again after
-an accepted server render that updates this component:
+each server render that the page applies to this component:
 
 ```js
 $component({
@@ -144,8 +144,8 @@ Every top-level key returned by
 the live Vue instance. Templates can read it directly, and JavaScript can read
 or assign it through `this` or the callback's `component` value.
 
-Citry updates the server-owned keys when an accepted server render updates the
-component. A key cannot collide with local Vue data, setup bindings, props,
+Citry updates the server-owned keys each time the page applies a server
+render to the component. A key cannot collide with local Vue data, setup bindings, props,
 injections, methods, computed values, or
 [names Citry reserves on the instance](/advanced/vue-runtime/#names-citry-reserves-on-the-component-instance).
 Python rejects a key that starts with `$` or `_`, or the key `citryId`, when

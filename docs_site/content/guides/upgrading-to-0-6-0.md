@@ -20,10 +20,12 @@ You need to act if your project has any of these:
 - a custom Events transport, or page scripts that use `Citry.*` globals;
 - `LintSettings` or `Component.Lint` with the Alpine rule names;
 - an extension that adds page dependencies;
-- `citry-ui` components or the `citry-lsp` language server.
+- `citry-ui` components or the `citry-lsp` language server;
+- `#c-ignore` on an element or a component tag;
+- several worker processes that serve interactive pages.
 
-A project that only renders static HTML from Python needs to upgrade the
-packages and nothing else.
+A project that only renders static HTML from Python only needs to upgrade
+the packages and remove any `#c-ignore` markers.
 
 ## Upgrade the packages together
 
@@ -205,6 +207,33 @@ bindings by their spelling:
   `.debounce` or `.throttle` `@c-*` binding, or `@c-poll`, on a component
   tag stops the render. Put it on an element in the child's template.
 
+## Remove `#c-ignore`
+
+In 0.5.1, `#c-ignore` on an element or a component tag kept its content
+out of updates. In 0.6.0 Vue updates everything it renders, so
+`#c-ignore` raises an error, on static pages too. On a component tag the
+error comes when the template loads; on an element, when the component
+renders.
+
+Remove the marker. For content that a browser library manages, such as a
+chart, render an element with a `ref` and let component JavaScript hand
+that element to the library:
+
+```citry-html
+{# 0.5.1 #}
+<div class="chart" #c-ignore>
+  <canvas></canvas>
+</div>
+
+{# 0.6.0 #}
+<div class="chart">
+  <canvas ref="chart"></canvas>
+</div>
+```
+
+See [React after a server render](/concepts/client-interactivity/#react-after-a-server-render)
+for the component JavaScript that starts and stops the library.
+
 ## Write Vue bindings in the template, not in Python
 
 In 0.5.1, Python could build Alpine code as a string and write it into an
@@ -329,6 +358,16 @@ lists the rest.
   read-only". Assign the whole field: `$state.tags = [...$state.tags, "new"]`.
 - **Wait for `citry:ready` before calling `Citry.events.send`.** A call
   made before the page's Vue app mounts rejects instead of waiting.
+- **Set security modes on the `Citry` instance.** On a page with Events,
+  pass `security_csp` and `security_javascript` to `Citry(...)`. Passing
+  a different value to `serialize()` raises `ValueError`, because a later
+  server render of that page must keep the same policy.
+- **Update `citry:events:stale` listeners.** The event reports
+  `superseded`, `retired`, `epoch`, `disposed`, or `version`. A listener
+  that checks for `cancelled` or `timeout` never sees them.
+- **Stop reading `data-citry-events` script tags.** Pages no longer carry
+  them, so page code that parsed them finds nothing. Read Events values
+  inside the component through `$state`, `$loading`, and `$error`.
 
 ## Replace removed browser globals
 
@@ -379,6 +418,15 @@ Also check these settings and hooks:
   See [Security](/security/#choose-a-csp-compatibility-mode).
 - **`OnDependenciesContext.before_manifest`** raises `RuntimeError` on an
   interactive page. Append those tags to `ctx.scripts` instead.
+- **`OnSerializeContext` and `OnDependenciesContext`** gain a
+  `selected_render` field, the render being serialized. Code that builds
+  these contexts with positional arguments, such as an extension test,
+  now fails or passes values to the wrong fields. Build them with
+  keyword arguments.
+- **Ownership APIs** are removed: the `citry.ownership` and
+  `citry.ownership_manifest` modules and the `ownership` parameters of
+  `CitryContext` and `CitryElement`. Delete imports of these modules and
+  those arguments.
 - **`<c-raw>` and `Markup` inside an interactive component** must hold a
   complete HTML fragment: every tag closed, no stray `<`. Otherwise the render
   stops with `opaque HTML must be a self-contained strict fragment`.
@@ -386,6 +434,18 @@ Also check these settings and hooks:
   `<html>` must put its content inside one `<body>` element. Otherwise
   serialization stops with an error such as "Interactive Vue document
   serialization requires one well-ordered body element."
+
+## Share the cache between worker processes
+
+On a deployment with several worker processes, an interactive page can
+load without starting: the browser console shows 404 responses for
+component code or stylesheets. The worker that rendered the page stored
+them in the Citry cache, and another worker, with its own in-memory
+cache, answered the request.
+
+Point every worker at one shared cache backend, such as Redis or
+DiskCache. See
+[Share the cache between worker processes](/web-frameworks/#share-the-cache-between-worker-processes).
 
 ## Clean up integrations
 
@@ -400,7 +460,7 @@ Also check these settings and hooks:
 - **Render cache:** entries saved by Citry 0.5.x count as misses and are
   saved again on the next render. You do not need to clear the cache.
 
-## New in 0.6.0 you may want
+## Features to adopt after upgrading
 
 - Interactive pages send their content in the served HTML, so search engines
   and readers without JavaScript see it. Tune this with `ssr` and
@@ -434,18 +494,27 @@ Also check these settings and hooks:
 7. Move `c-:attr`, `c-@event`, and Vue keys in `c-bind` into the template.
 8. Check component tags for `:x`, `v-*`, and `ref` attributes the child read
    as kwargs, and for `x-on:`.
-9. Replace `data`, `scope`, `props`, `effect`, `reactive`, `provide`, and
-   `inject` in `$component` callbacks.
-10. Replace `$provide`, `$inject`, and `$unprovide` with Vue `provide` and
+9. Remove `#c-ignore` from elements and component tags.
+10. Replace `data`, `scope`, `props`, `graph`, `effect`, `reactive`,
+    `provide`, `inject`, and `unprovide` in `$component` callbacks.
+11. Replace `$provide`, `$inject`, and `$unprovide` with Vue `provide` and
     `inject`.
-11. Rename `js_data()` keys that start with `$` or `_`, and a component named
+12. Rename `js_data()` keys that start with `$` or `_`, and a component named
     `mark`.
-12. Change CSS-selector render targets to `render:<id>` or `mark:<name>`.
-13. Forward `request.headers` in custom transports.
-14. Remove uses of `Citry.alpine`, `Citry.manager`, and `Citry.i18n`.
-15. Rename the Alpine lint settings and diagnostic codes.
-16. Move `before_manifest` tags to `scripts`.
-17. Remove `citry-htmx.js`, `hx-ext="citry-fragments"`, and `data-cid-*` or
+13. Change CSS-selector render targets to `render:<id>` or `mark:<name>`.
+14. Forward `request.headers` in custom transports.
+15. Set `security_csp` and `security_javascript` on the `Citry` instance
+    for pages with Events.
+16. Update `citry:events:stale` listeners that check for `cancelled` or
+    `timeout`, and code that reads `data-citry-events` script tags.
+17. Remove uses of `Citry.alpine`, `Citry.manager`, and `Citry.i18n`.
+18. Rename the Alpine lint settings and diagnostic codes.
+19. Move `before_manifest` tags to `scripts`, build `OnSerializeContext`
+    and `OnDependenciesContext` with keyword arguments, and remove
+    `citry.ownership` imports and `ownership=` arguments.
+20. On a deployment with several workers, configure a shared cache
+    backend.
+21. Remove `citry-htmx.js`, `hx-ext="citry-fragments"`, and `data-cid-*` or
     `data-citry-key` selectors.
-18. Open each interactive page and check the browser console for `[Citry]`
+22. Open each interactive page and check the browser console for `[Citry]`
     errors.

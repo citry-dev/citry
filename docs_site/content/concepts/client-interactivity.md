@@ -47,8 +47,8 @@ class Counter(Component):
     """
 ```
 
-The returned value must be JSON-serializable. When an accepted server render
-updates this component, Citry updates these keys on its live Vue instance.
+The returned value must be JSON-serializable. When the page
+applies a server render that updates this component, Citry updates these keys on its live Vue instance.
 Member assignment such as `this.count += 1` remains available for local
 browser changes.
 
@@ -95,7 +95,7 @@ $component({
 ## React after a server render
 
 Use `onServerRender` when an integration must inspect the updated DOM or start
-work again after an accepted server render that updates this component:
+work again after each server render that the page applies to this component:
 
 ```js
 $component({

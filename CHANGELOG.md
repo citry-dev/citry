@@ -18,13 +18,16 @@ Upgrading from 0.5.x? Follow
   `Citry(ssr=False)`, or skip it for small pages with
   `Citry(ssr_element_threshold=...)`.
 - Component templates accept Vue directives, bindings, props, events,
-  slots, keyed lists, and custom directives. A component tag also accepts
+  slots, keyed lists, and custom directives, except `v-once`, `v-memo`,
+  and Vue's `<Teleport>`, `<Transition>`, `<Suspense>`, and
+  `<KeepAlive>`. A component tag also accepts
   `v-if`/`v-else-if`/`v-else`, `v-model`, `v-show`, and custom directives;
   a directive that has no meaning there, such as `v-for` on a component
   tag, stops the template from compiling with a hint.
 - `$component({...})` takes Vue Options, `Citry.vue` exposes Vue's
   Composition API, and `onServerRender({ component, revision, onEvent })`
-  runs after mount and after each server render of the component.
+  runs after mount and after each server render that the page applies to
+  the component.
   `onEvent` listens for events that the component's server handlers
   dispatch.
 - Added `simple = "vue"` for components that need their own Vue state and
@@ -103,7 +106,8 @@ Upgrading from 0.5.x? Follow
   such as `@click="if (ok) save()"`, stops the render with a Vue compile
   error. Add the `;`: `@click="if (ok) save();"`. Alpine-only modifiers
   such as `.outside`, `.window`, `.debounce`, and `.throttle` on `@event`
-  have no effect.
+  stop the listener from running; remove them and handle the case in a
+  method.
 - **Breaking:** content with Vue bindings that you write in a separate
   component and pass into a group component, such as citry-ui's `CTabs`,
   stops the render with an error that names the content and line. Write
@@ -115,8 +119,7 @@ Upgrading from 0.5.x? Follow
   `Mark` or registered as `mark` fails with `AlreadyRegistered`. Rename it.
 - **Breaking:** `<c-raw>` content and `Markup` inside an interactive
   component must be a complete HTML fragment, and an interactive page
-  template must put its content in one `<body>`. `v-once` is not
-  supported in component templates.
+  template must put its content in one `<body>`.
 - **Breaking:** `actions.Render` and `Citry.events.applyActions` no longer
   accept CSS selectors as targets, a `swap` other than `"morph"`, or a
   target that matches several places. Name the region with `<c-mark>`.
@@ -144,6 +147,8 @@ Upgrading from 0.5.x? Follow
     gone.
   - `Citry.events.send` called before `citry:ready` rejects.
   - Pages no longer carry `data-citry-events` JSON script tags.
+  - Elements that Vue renders carry no `data-cid-*` attributes; only
+    static output has them. Reach an element through a Vue `ref`.
 - **Breaking:** the `Citry.alpine`, `Citry.manager`, and `Citry.i18n`
   browser globals and `window.Alpine` are removed. Fragments load their
   own assets, and component JavaScript reads i18n from `component.$i18n`.
@@ -183,8 +188,12 @@ Upgrading from 0.5.x? Follow
   `citry.ownership` and `citry.ownership_manifest` modules, the Alpine
   names in `citry.analysis`, and the `ownership` parameters of
   `CitryContext` and `CitryElement`.
-- **Breaking:** `#c-ignore` on a component tag raises an error when the
-  template loads, as it already did on an element.
+- **Breaking:** `#c-ignore` no longer keeps content out of updates, and
+  it raises an error, on static pages too. On a component tag the error
+  comes when the template loads; on an element, when the component
+  renders. Remove it, and keep content that a browser library manages
+  inside an element that component JavaScript reaches through a Vue
+  `ref`.
 - **Breaking:** when several worker processes serve interactive pages,
   configure a shared cache backend such as Redis or DiskCache. Pages link
   compiled component code and stylesheets that any worker reads from that
@@ -222,8 +231,8 @@ Upgrading from 0.5.x? Follow
 - Events handlers declared with `PUT`, `DELETE`, or another method now
   work: the browser sends the handler's method, and the mounted per-event
   route accepts it while keeping each handler's 405 and CSRF checks.
-- `GET` Events calls reject argument names and values that are not valid
-  text instead of silently replacing characters.
+- `GET` Events calls reject argument names and values that contain broken
+  Unicode (unpaired surrogates) instead of silently replacing characters.
 
 
 ## v0.5.1

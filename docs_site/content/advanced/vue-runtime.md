@@ -43,10 +43,10 @@ the component types, validates the prepared component graph, and coordinates
 accepted server revisions with the live instances. Composition API helpers
 from the pinned runtime are available through `Citry.vue`.
 
-## React to accepted server renders
+## React to server renders the page applies
 
 Use the `onServerRender` option for work that must run after initial mount and
-after an accepted server render that updates this component:
+after each server render that the page applies to this component:
 
 ```js
 $component({

@@ -104,7 +104,7 @@ choice when a value must not appear in the page token.
 | Polling | Handwritten | Rich poll object | Application code | htmx | `@c-poll.<time>="handler"`, hidden-tab pause | **v1** |
 | Dynamic poll retiming | Handwritten | `PollUpdate` | Application code | htmx | Re-render a different binding or use app code | **Dropped** |
 | Viewport trigger | Handwritten | `unicorn:visible` | Alpine/plugin | htmx trigger | IntersectionObserver or Vue integration | **Dropped** |
-| Morph opt-out | Manual | `unicorn:ignore` | Alpine morph controls | `no_morph` helper | No opt-out: Vue updates every element it renders, and `#c-ignore` stops the render with an error | **Dropped** |
+| Morph opt-out | Manual | `unicorn:ignore` | Alpine morph controls | `no_morph` helper | No opt-out: Vue updates every element it renders. `#c-ignore` raises an error, on a component tag when the template loads and on an element when the component renders. Keep content that a browser library manages inside an element reached through a Vue `ref` | **Dropped** |
 | Stable item identity | Manual ids | Component key | Component id | Path id | `#c-key` gives Vue sibling identity at its authored position | **v1** |
 | Single element root | Not required by core | Required | Required | Root attrs required | Supported | **v1** |
 | Multi-root component | Supported by core | - | - | - | Logical root group | **v1** |
