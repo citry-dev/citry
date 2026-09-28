@@ -143,6 +143,31 @@ class TestUrlRouteHandlerAsync:
             URLRoute("solo", handler_async=_pick_async)
 
 
+class TestUrlRouteMethods:
+    def test_uppercase_method_tuples_are_accepted(self):
+        route = URLRoute("echo", handler=_echo, methods=("POST", "PUT"))
+        assert route.methods == ("POST", "PUT")
+
+    @pytest.mark.parametrize(
+        ("methods", "error", "message"),
+        [
+            # A string is iterable, so it must not pass as a list of one-letter methods.
+            ("GET", TypeError, r"must be a tuple of HTTP method names, e\.g\. \(\"POST\",\); got 'GET'\."),
+            (["GET"], TypeError, r"must be a tuple of HTTP method names"),
+            (("GET", 1), TypeError, r"must be a tuple of HTTP method names"),
+            ((), ValueError, r"must name at least one HTTP method; got an empty tuple\."),
+            # Adapters compare methods exactly, so a lowercase name would answer 405 to everything.
+            (("get",), ValueError, r"contains 'get', which is not an uppercase HTTP method name\."),
+            (("BAD METHOD",), ValueError, r"contains 'BAD METHOD'"),
+        ],
+    )
+    def test_invalid_methods_are_rejected_when_the_route_is_built(
+        self, methods: object, error: type[Exception], message: str
+    ):
+        with pytest.raises(error, match=message):
+            URLRoute("echo", handler=_echo, methods=methods)  # type: ignore[arg-type]
+
+
 class TestAsgiAdapter:
     """The neutral request under FastAPI/Starlette, through the mounted ASGI app."""
 

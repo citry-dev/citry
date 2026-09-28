@@ -145,13 +145,30 @@ def _store_asset(
     digest: str,
     content: bytes,
 ) -> None:
-    """Publish one asset before the page that links it is sent, so any worker sharing the cache can serve it."""
+    """
+    Publish one asset before the page that links it is sent, so any worker sharing the cache can serve it.
+
+    An error from the cache backend (a lost connection, a full store) is not
+    caught: it fails the render that is about to link the asset. Rendering the
+    page anyway would send a link that other workers answer with 404, so a
+    loud failure is the safer outcome, as it is for ``Dependencies`` files.
+
+    Every entry is written without a TTL. With the default ``InMemoryCache``,
+    which has no size limit, each distinct compiled bundle or stylesheet
+    therefore stays in memory until the process exits. The number of entries
+    grows with changes to component code (each edit produces new bytes and a
+    new digest), not with the number of requests, since every render of the
+    same code reuses the same digest. ``InMemoryCache(max_entries=...)`` or a
+    backend with its own eviction bounds it, at a cost: an open page that later
+    asks for an asset the cache has dropped gets a 404 for it.
+    """
     local = store.setdefault(citry, OrderedDict())
     _remember_locally(local, digest, content, kind)
     # ``has`` before ``set`` sends the (possibly large) body to a shared
     # backend only when it is missing, including after that backend evicted
     # it. No TTL: an open page can load a component's code at any later
-    # time, so an entry that expired would break that page.
+    # time, so an entry that expired would break that page. Backend errors
+    # propagate on purpose (see the docstring).
     key = _asset_cache_key(kind, digest)
     if not citry.cache.has(key):
         citry.cache.set(key, content.decode())

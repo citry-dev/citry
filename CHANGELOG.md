@@ -146,6 +146,8 @@ Upgrading from 0.5.x? Follow
     `disposed`, or `version`. The `cancelled` and `timeout` reasons are
     gone.
   - `Citry.events.send` called before `citry:ready` rejects.
+  - `Citry.events.applyActions` rejects an action with an unknown field
+    or a list with gaps, instead of ignoring the extra data.
   - Pages no longer carry `data-citry-events` JSON script tags.
   - Elements that Vue renders carry no `data-cid-*` attributes; only
     static output has them. Reach an element through a Vue `ref`.
@@ -199,6 +201,10 @@ Upgrading from 0.5.x? Follow
   compiled component code and stylesheets that any worker reads from that
   cache; with each worker's default in-memory cache, another worker
   answers those links with 404.
+- **Breaking:** `URLRoute` checks `methods` when you build a route: pass
+  a non-empty tuple of uppercase HTTP method names such as `("GET",)`.
+  A lowercase name, which a framework adapter could never match, raises
+  `ValueError`.
 - Upgrade `citry-ui` to 0.3.0 and `citry-lsp` to the release that requires
   Citry 0.6.0 together with Citry. `citry-lsp` 0.1.7 fails to import with
   Citry 0.6.0, and `citry-ui` 0.2.x components render without browser

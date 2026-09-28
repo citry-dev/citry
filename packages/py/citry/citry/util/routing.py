@@ -173,10 +173,14 @@ class URLRoute:
         URLRoute("cache/{class_id}.{script_type}", handler=serve_script, name="citry_cached_script")
         URLRoute("ext/", children=[URLRoute("my_ext/status", handler=status)])
 
-    ``methods`` is always a tuple, so an adapter can iterate it to register
-    or check the route. Adapters answer any other method with 405 (``HEAD``
-    is always admitted). When a route admits more methods than its handler
-    serves, the handler answers 405 for the rest.
+    ``methods`` is always a non-empty tuple of uppercase HTTP method names
+    (``("GET",)``, ``("POST", "PUT")``), so an adapter can iterate it to
+    register or check the route. Any other value raises ``TypeError`` (not a
+    tuple of strings) or ``ValueError`` (empty, or a name that is not an
+    uppercase HTTP method token such as ``"get"``) when the route is built.
+    Adapters answer any other method with 405 (``HEAD`` is always
+    admitted). When a route admits more methods than its handler serves,
+    the handler answers 405 for the rest.
     """
 
     path: str
@@ -203,6 +207,32 @@ class URLRoute:
                 " route served only under ASGI, pass the async function as handler instead."
             )
             raise ValueError(msg)
+        _validate_route_methods(self.methods)
+
+
+# An HTTP method is an RFC 9110 token. Adapters compare the request's method
+# with these names exactly, so a lowercase name would never match and the
+# route would answer 405 to every request; only uppercase tokens are accepted.
+_ROUTE_METHOD_RE = re.compile(r"[!#$%&'*+.^_`|~0-9A-Z-]+")
+
+
+def _validate_route_methods(methods: object) -> None:
+    """Reject a ``URLRoute.methods`` value the adapters could not register."""
+    # A bare string is iterable, so ("GET") silently becoming "G", "E", "T" is caught here first.
+    if not isinstance(methods, tuple) or not all(isinstance(method, str) for method in methods):
+        msg = f'URLRoute(methods=...) must be a tuple of HTTP method names, e.g. ("POST",); got {methods!r}.'
+        raise TypeError(msg)
+    # A route that admits no method could never be reached.
+    if not methods:
+        msg = "URLRoute(methods=...) must name at least one HTTP method; got an empty tuple."
+        raise ValueError(msg)
+    invalid = next((method for method in methods if _ROUTE_METHOD_RE.fullmatch(method) is None), None)
+    if invalid is not None:
+        msg = (
+            f"URLRoute(methods=...) contains {invalid!r}, which is not an uppercase HTTP method name."
+            ' Write method names in uppercase, e.g. ("GET", "POST").'
+        )
+        raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
