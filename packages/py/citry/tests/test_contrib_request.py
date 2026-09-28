@@ -372,20 +372,25 @@ class TestWsgiAdapter:
         assert status == "200 OK"
         assert json.loads(body) == {"echo": {"n": 1, "s": "x"}, "content_type": "application/json"}
 
-    def test_none_methods_delegates_admission_to_the_handler(self):
+    def test_declared_methods_gate_the_handler(self):
         seen = []
 
         def handler(request):
             seen.append(request.method)
-            return RouteResponse(content="delegated")
+            return RouteResponse(content="served")
 
-        engine = _engine(URLRoute("delegated", handler=handler, methods=None))
-        status, _headers, body = self._call(
-            engine,
-            {"REQUEST_METHOD": "PATCH", "PATH_INFO": "/ext/probe/delegated", "wsgi.input": io.BytesIO()},
-        )
+        engine = _engine(URLRoute("gated", handler=handler, methods=("PATCH",)))
 
-        assert (status, body, seen) == ("200 OK", b"delegated", ["PATCH"])
+        def call(method):
+            environ = {"REQUEST_METHOD": method, "PATH_INFO": "/ext/probe/gated", "wsgi.input": io.BytesIO()}
+            status, _headers, body = self._call(engine, environ)
+            return status, body
+
+        # A declared method reaches the handler; an undeclared one is
+        # answered by the adapter without running it.
+        assert call("PATCH") == ("200 OK", b"served")
+        assert call("PUT")[0] == "405 Method Not Allowed"
+        assert seen == ["PATCH"]
 
     def test_response_headers_reach_the_client(self):
         engine = _engine(URLRoute("headers", handler=_with_headers))

@@ -92,6 +92,12 @@ DEFINITION_PATH = "ext/events/definitions/{digest}.js"
 STYLE_ASSET_PATH = "ext/events/assets/{digest}.css"
 RUNTIME_PATH = "ext/events/runtime.js"
 EVENT_PATH = "ext/events/e/{class_id}/{event}"
+# The methods the per-event route admits at the host adapter. Handlers can
+# register after the routes are mounted (Django snapshots its URL set once),
+# so the route admits the standard methods a handler declares with
+# `@event(methods=...)`, and `_prepare` answers 405 with the resolved
+# handler's own `Allow` list.
+EVENT_ROUTE_METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
 
 # The committed browser bundle built from packages/js/citry-client.
 EVENTS_RUNTIME_SRC = Path(__file__).parents[2] / "_vue" / "runtime.js"
@@ -282,7 +288,7 @@ def events_routes(citry: Citry) -> list[URLRoute]:
             handler=serve_event,
             handler_async=serve_event_async,
             name="citry_events_dispatch",
-            methods=None,
+            methods=EVENT_ROUTE_METHODS,
         ),
     ]
 
