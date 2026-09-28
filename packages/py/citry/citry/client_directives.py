@@ -170,7 +170,10 @@ _COMPONENT_TAG_DIRECTIVE_HINTS = {
     "show": "Write 'v-show' without an argument or modifiers.",
     "model": "Name the prop after 'v-model:', or write 'v-model' alone for 'modelValue'.",
     "bind": "Bind an object with a plain 'v-bind=\"...\"', or bind each prop as ':name=\"...\"'.",
-    "on": "Write each listener as '@event=\"...\"' or 'v-on:event=\"...\"'.",
+    "on": (
+        "Write each listener as '@event=\"...\"' or 'v-on:event=\"...\"', "
+        "or bind a listener object with a plain 'v-on=\"...\"'."
+    ),
     "prop": "Pass the value as a component prop with ':name=\"...\"'.",
 }
 # Vue's own directives that never pass through a component tag unchanged.
@@ -231,7 +234,7 @@ def unsupported_component_tag_directive_message(key: str, *, tag_name: str) -> s
     Explain why a Vue directive cannot sit on a Citry component tag.
 
     Returns ``None`` for the directives a component tag carries: ``v-bind``
-    and ``v-on`` (with their ``:`` and ``@`` forms), the ``v-if`` chain,
+    and ``v-on`` (with their ``:`` and ``@`` forms and their object forms), the ``v-if`` chain,
     ``v-model``, a bare ``v-show``, and custom directives. The template
     parser reports the same wording for directly authored attributes; this
     covers keys that only appear at render time.
@@ -239,14 +242,14 @@ def unsupported_component_tag_directive_message(key: str, *, tag_name: str) -> s
     directive = _vue_directive_name(key)
     if directive is None:
         return None
-    # Props, one props object, and listeners cross the boundary; the
-    # argument-less `v-bind.prop` and `v-on` object forms have no translation.
+    # Props, one props object, listeners, and one listener object cross the
+    # boundary; the argument-less `v-bind.prop` form has no translation.
     # The condition directives and `v-show` take no argument or modifiers.
     # `v-model:` or `v-on:` with nothing after the colon names no prop or event.
     _, colon, argument = key.partition(":")
     empty_argument = bool(colon) and (not argument or argument.startswith("."))
     if not empty_argument:
-        if key in {"v-bind", "v-show", *_CONDITION_KEYS} or key.startswith(("v-bind:", "v-on:")):
+        if key in {"v-bind", "v-on", "v-show", *_CONDITION_KEYS} or key.startswith(("v-bind:", "v-on:")):
             return None
         if key.startswith("v-") and (directive == "model" or _is_custom_vue_directive(directive)):
             return None
