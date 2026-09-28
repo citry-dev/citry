@@ -21,8 +21,8 @@ cookies, sessions, or any other request data, so the response does not depend
 on who asks, and browsers never share a response to a credentialed request
 that carries a wildcard. The header therefore lets a page read only what an
 anonymous request for the same URL returns. A file built from one render's
-``css_data()`` or ``js_data()`` is public to anyone who has its URL, so those
-methods must not return secrets. Routes that run events, read request data, or answer per user must not
+``css_data()`` is public to anyone who has its URL, so that
+method must not return secrets. Routes that run events, read request data, or answer per user must not
 send it. The value does not depend on the request's ``Origin``, so the
 response needs no ``Vary`` header.
 """

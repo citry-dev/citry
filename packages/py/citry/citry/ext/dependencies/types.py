@@ -38,10 +38,9 @@ DependencyKind: TypeAlias = Literal["core", "component", "variables", "extra"]
 """
 What a dependency is for:
 
-- ``"core"``: required for citry itself to work (the client-side manager).
+- ``"core"``: required for citry itself to work (Citry's browser runtime).
 - ``"component"``: a component's own ``Component.js`` / ``Component.css``.
-- ``"variables"``: a generated script carrying ``js_data()`` / ``css_data()``
-  values.
+- ``"variables"``: a generated stylesheet carrying ``css_data()`` values.
 - ``"extra"``: anything else, e.g. entries from a ``Dependencies`` class.
 """
 
@@ -64,7 +63,7 @@ class DependencyRecord(NamedTuple):
     component_id: str
     """The render id of the component instance (``component.id``)."""
     js_vars_hash: str | None = None
-    """Hash of the instance's ``js_data()`` result, or ``None`` when it has none."""
+    """Always ``None``: ``js_data()`` values reach the browser inside the page's Vue app data."""
     css_vars_hash: str | None = None
     """Hash of the instance's ``css_data()`` result, or ``None`` when it has none."""
     component_class: type[Component] | None = None

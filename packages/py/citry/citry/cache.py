@@ -2,18 +2,22 @@
 The pluggable cache backend.
 
 Citry stores derived content in a cache: replayable component and named-fragment
-render artifacts, the dependencies extension's processed JS/CSS scripts, and
-optional server-held Events State. The backend is pluggable so deployments with
-multiple processes can point all of them at one shared store::
+render artifacts, the dependencies extension's processed JS/CSS scripts and
+served ``Dependencies`` files, optional server-held Events State, and the
+compiled Vue definition bundles and stylesheets that interactive pages load.
+The backend is pluggable so deployments with multiple processes can point all
+of them at one shared store::
 
     app = Citry(cache=MyRedisCache())          # any object with the 4 methods
     app = Citry(cache="myproj.caches.Cache")   # or an import string
 
 When no cache is given, each ``Citry`` instance gets its own
-:class:`InMemoryCache`. That is right for a single process; with multiple
-workers, content written by one process (for example the JS-variables scripts
-behind fragment requests) is not visible to the others, so production setups
-that use fragments should configure a shared backend.
+:class:`InMemoryCache`. That is right for a single process. With multiple
+workers, content written by one process is not visible to the others: a page
+rendered by one worker links a Vue definition bundle or a ``css_data()``
+stylesheet by URL, and the browser may fetch that URL from another worker,
+which answers 404. Production setups with more than one worker should
+configure a shared backend.
 
 Values are strings on purpose (citry stores JSON), so any string store can be
 adapted in a few lines.

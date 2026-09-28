@@ -10,6 +10,7 @@ the rejection rule that keeps that value safe and deterministic.
 from __future__ import annotations
 
 import gc
+import hashlib
 from copy import deepcopy
 from dataclasses import replace
 from types import SimpleNamespace
@@ -1941,25 +1942,44 @@ def test_direct_relationship_helpers_cover_session_and_slot_execution_boundaries
 
 
 def test_vue_events_cache_collision_eviction_and_collected_engine_are_explicit() -> None:
-    """Content-addressed assets reject collisions and remain bounded by engine lifetime."""
+    """Content-addressed assets reject collisions, keep a bounded local copy, and fall back to the cache."""
     app = Citry(autodiscover=False)
     producer = default_events_producer(app)
 
-    producer._publish_bundle("same", b"first")
-    with pytest.raises(RuntimeError, match="bundle digest collision"):
-        producer._publish_bundle("same", b"different")
-    for index in range(130):
-        producer._publish_bundle(f"bundle-{index}", str(index).encode())
-    assert vue_events.definition_bundle(app, "bundle-0") is None
-    assert vue_events.definition_bundle(app, "bundle-129") == b"129"
+    def digest(content: bytes) -> str:
+        # Real sha256 digests, because reads from the cache discard bytes
+        # that do not match the digest they are stored under.
+        return hashlib.sha256(content).hexdigest()
 
-    producer._publish_style("same-style", b"first")
-    with pytest.raises(RuntimeError, match="stylesheet asset digest collision"):
-        producer._publish_style("same-style", b"different")
-    for index in range(130):
-        producer._publish_style(f"style-{index}", str(index).encode())
-    assert vue_events.style_asset(app, "style-0") is None
-    assert vue_events.style_asset(app, "style-129") == b"129"
+    cases = (
+        ("definition", producer._publish_bundle, vue_events.definition_bundle, vue_events._BUNDLES, "bundle"),
+        ("style", producer._publish_style, vue_events.style_asset, vue_events._STYLE_ASSETS, "stylesheet asset"),
+    )
+    for kind, publish, load, store, label in cases:
+        # A digest reused for different bytes is a collision, whichever bytes are real.
+        first = f"{kind}-first".encode()
+        publish(digest(first), first)
+        with pytest.raises(RuntimeError, match=f"{label} digest collision"):
+            publish(digest(first), b"different")
+
+        contents = [f"{kind}-{index}".encode() for index in range(vue_events._LOCAL_ASSET_LIMIT + 2)]
+        for content in contents:
+            publish(digest(content), content)
+        local = store[app]
+        # This process keeps only the newest assets in memory ...
+        assert len(local) == vue_events._LOCAL_ASSET_LIMIT
+        assert digest(contents[0]) not in local
+        assert local[digest(contents[-1])] == contents[-1]
+        # ... while the engine's cache still serves an evicted one, which
+        # then returns to the local map without growing it past the limit.
+        assert load(app, digest(contents[0])) == contents[0]
+        assert digest(contents[0]) in local
+        assert len(local) == vue_events._LOCAL_ASSET_LIMIT
+        # Once the cache loses it too, the asset is gone (the route's 404).
+        evicted = contents[2]
+        assert digest(evicted) not in local
+        app.cache.delete(vue_events._asset_cache_key(kind, digest(evicted)))
+        assert load(app, digest(evicted)) is None
 
     del app
     gc.collect()

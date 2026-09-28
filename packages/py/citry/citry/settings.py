@@ -334,10 +334,12 @@ class CitrySettings:
         lint: Template lint severities and analysis-only variables. Runtime
             globals are discovered from ``Citry.template_globals`` and do not
             need to be repeated here.
-        security_csp: CSP compatibility policy for Citry-managed output.
-            ``"off"`` preserves current behavior, ``"warn"`` reports
-            incompatibilities without changing output, and ``"strict"``
-            enforces Citry's strict-CSP contract.
+        security_csp: Content Security Policy check for rendered output.
+            Citry scans the final HTML for raw ``<script>`` and ``<style>``
+            elements, inline ``on*`` attributes, and ``javascript:`` URLs.
+            ``"off"`` skips the check, ``"warn"`` keeps the output and emits
+            one ``RuntimeWarning`` listing what it found, and ``"strict"``
+            raises instead of returning that output.
         security_javascript: JavaScript delivery policy. ``"allow"`` keeps
             current behavior, ``"warn"`` inventories client requirements,
             ``"omit"`` leaves Citry-managed JavaScript out, and ``"forbid"``
@@ -363,9 +365,9 @@ class CitrySettings:
             another type raises ``TypeError`` and a negative value raises
             ``ValueError`` when the settings are created.
         id_generator: A function returning the per-render id stamped on each
-            component instance (``component.id``, which drives the
-            ``data-cid-<id>`` markers that scope a component's CSS and JS on the
-            page). Given as a callable or a ``"path.to.func"`` import string;
+            component instance (``component.id``; static output also writes it
+            into each component root's ``data-cid-<id>`` attribute). Given as
+            a callable or a ``"path.to.func"`` import string;
             passing a class also works: it is called once, and the resulting
             object is used as the generator (handy when the generator keeps
             state, like a counter). ``None`` uses the built-in generator. Override

@@ -14,8 +14,10 @@ nothing from the host packages::
 
 Which to pick:
 - ``DiskCache`` shares across worker processes on one host with
-no extra service (the usual answer for the multi-worker fragment requirement,
-docs/design/dependencies.md section 8.3);
+no extra service. That is the usual answer when several workers must serve
+the Vue definition bundles, stylesheets, and generated scripts that another
+worker rendered a link to (see ``citry.cache`` for the full list of what
+citry stores).
 - ``RedisCache`` shares across hosts.
 - For a Django project, ``citry.contrib.django.DjangoCache`` reuses the cache
 the project already configured.

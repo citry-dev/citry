@@ -452,7 +452,7 @@ def _resolve_records(
 
     Per record: the class's ``Dependencies`` entries, its own
     ``Component.js``/``css`` (read through the cache), and the variables
-    script/stylesheet for the instance's hashed ``js_data()``/``css_data()``.
+    stylesheet for the instance's hashed ``css_data()``.
     ``Component.on_dependencies`` may adjust each record's lists. The final
     order is: core entries first, then all ``Dependencies`` entries, then all
     component scripts (a vendored lib from a ``Dependencies`` class loads
@@ -578,36 +578,10 @@ def _resolve_records(
         instance_scripts: list[Dependency] = list(cls_scripts)
         instance_styles: list[Dependency] = list(cls_styles)
 
-        # The variables scripts generated for this instance's data hashes.
-        # Unlike class scripts these cannot be rebuilt on a cache miss (the
-        # data existed only during the render). Legacy fragment output retains
-        # its URL on a miss; integrity mode fails because it cannot prove bytes.
-        # A shared cache backend prevents the miss across processes.
-        if cls_uses_oncomp and record.js_vars_hash is not None:
-            if as_urls:
-                if attach_owned_resources:
-                    resource = _cached_js_resource(comp_cls, record.js_vars_hash)
-                    if resource is None:
-                        msg = (
-                            f"Cannot prove the response bytes for JavaScript data {record.js_vars_hash!r} "
-                            f"of {comp_cls.class_id!r}."
-                        )
-                        raise RuntimeError(msg)
-                    instance_scripts.append(
-                        _owned_script(resource, kind="variables", origin_class_id=comp_cls.class_id)
-                    )
-                else:
-                    instance_scripts.append(
-                        Script(
-                            url=script_url(comp_cls, "js", record.js_vars_hash),
-                            kind="variables",
-                            origin_class_id=comp_cls.class_id,
-                        )
-                    )
-            else:
-                vars_js = get_script("js", comp_cls, record.js_vars_hash)
-                if vars_js is not None:
-                    instance_scripts.append(vars_js)
+        # The css_data() stylesheet generated for this instance's data hash.
+        # Unlike class scripts it cannot be rebuilt on a cache miss (the data
+        # existed only during the render), so a URL served by another process
+        # needs a shared cache backend.
         if record.css_vars_hash is not None:
             if as_urls:
                 instance_styles.append(
@@ -700,17 +674,15 @@ def _owned_script(
     return script
 
 
-def _cached_js_resource(comp_cls: type[Component], variables_hash: str | None = None) -> _OwnedResource | None:
-    dependency = (
-        get_component_script("js", comp_cls) if variables_hash is None else get_script("js", comp_cls, variables_hash)
-    )
+def _cached_js_resource(comp_cls: type[Component]) -> _OwnedResource | None:
+    dependency = get_component_script("js", comp_cls)
     if dependency is None:
         return None
     if not isinstance(dependency, Script) or dependency.content is None:
         msg = f"Cached JavaScript for component {comp_cls.class_id!r} is not an inline Script."
         raise TypeError(msg)
     return _OwnedResource(
-        url=script_url(comp_cls, "js", variables_hash),
+        url=script_url(comp_cls, "js"),
         content=dependency.content,
         content_type="text/javascript",
     )
