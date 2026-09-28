@@ -798,9 +798,9 @@ def test_revision_postpublication_callback_failure_disposes_plugin_once(page: An
         "message": "revision callback failure",
         "log": [
             "activate",
-            "callback:component,onEvent,revision:0",
+            "callback:component,els,error,i18n,id,loading,onEvent,revision,sendEvent,state:0",
             "commit",
-            "callback:component,onEvent,revision:1",
+            "callback:component,els,error,i18n,id,loading,onEvent,revision,sendEvent,state:1",
             "dispose",
         ],
         "apps": 0,

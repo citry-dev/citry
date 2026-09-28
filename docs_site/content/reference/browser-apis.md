@@ -75,6 +75,19 @@ The component template declares the referenced element:
 | `component` | The live Vue public instance for this Citry component. |
 | `revision` | The accepted server revision visible to the component. |
 | [`onEvent(name, handler)`](#on-server-render-on-event) | Listens for an event this component's server handler dispatches and returns a function that stops listening. |
+| `id` | The component's current server render ID, the value `Citry.events.send()` accepts and the `instance` in `citry:events:*` details. `null` when the component has none. Read-only. |
+| `els` | A new array of the component's connected top-level elements each time you read it. |
+| `state` | The same object as [`component.$state`](#state), or `null` when the component declares no `Events`. |
+| `sendEvent(name, args?, opts?)` | Calls [`component.$sendEvent`](#send-event). |
+| `loading(name?)` | Calls [`component.$loading`](#loading). |
+| `error(name?)` | Calls [`component.$error`](#error). |
+| `i18n` | The same service as [`component.$i18n`](#i18n), or `null` outside a client i18n provider. |
+
+`state`, `sendEvent`, `loading`, `error`, and `i18n` repeat instance helpers,
+so code written either way reads the same values. On a component without
+`Events`, `loading()` returns
+`false`, `error()` returns `null`, and `sendEvent()` returns a rejected
+Promise that says the component declares no `Events` class.
 
 The callback runs when this component mounts and after an accepted server
 render that updates this component. An unrelated Vue update does not call it.
@@ -91,6 +104,19 @@ The callback form of `$component` is shorthand for `onServerRender`:
 ```js
 $component(({ component, revision, onEvent }) => {
   console.log(component, revision, onEvent);
+});
+```
+
+`init` is another name for `onServerRender` in the object form, and receives
+the same context. A definition that names both is an error when its script
+loads:
+
+```js
+$component({
+  props: { label: String },
+  init({ component, els }) {
+    els[0]?.setAttribute("title", component.label);
+  },
 });
 ```
 
@@ -124,6 +150,35 @@ injections, methods, computed values, or
 [names Citry reserves on the instance](/advanced/vue-runtime/#names-citry-reserves-on-the-component-instance).
 Python rejects a key that starts with `$` or `_`, or the key `citryId`, when
 the component renders.
+
+<h3 class="doc-heading" id="i18n"><code>$i18n</code></h3>
+
+Read the browser translation service of the nearest client-enabled
+`<c-i18n>` provider. Templates use `$i18n`, component JavaScript uses
+`this.$i18n` or `component.$i18n`, and the value is `null` outside a client
+provider. The service has these members:
+
+| Member | Meaning |
+| --- | --- |
+| `context` | Readonly locale, fallback, direction, time-zone, and revision data. |
+| `status` | Readonly provider loading state. |
+| `tr(message, values?, options?)` | Return loaded message text. Use `{ attr: "name" }` for a Fluent attribute. |
+| `resolve(message, values?, options?)` | Return frozen `{ text, locale, direction, usedFallback }` metadata. |
+| `format` | Named number, percent, currency, date, time, datetime, relative-time, list, and unit formatters. |
+| `parse` | Strict number and percent parsers. |
+| `ensureMessages(messages)` | Load one message ID or a list before a dynamic synchronous lookup. |
+| `switchLocale(locale)` | Switch this provider's subtree to another locale. |
+| `subscribe(callback)` | Call back now and after each context change; returns a function that stops the calls. |
+| `bind(options)` | Keep a browser-created element translated; returns `refresh()` and `dispose()`. |
+
+```citry-html
+<c-i18n tag="section" client>
+  <output v-text="$i18n.tr('my-app-status')"></output>
+  <button @click="$i18n.switchLocale('cs-CZ')">Čeština</button>
+</c-i18n>
+```
+
+See [Browser i18n](/i18n/browser/) for `$c-tr`, message loading, and `bind()`.
 
 <h3 class="doc-heading" id="citry-vue"><code>Citry.vue</code></h3>
 
@@ -191,7 +246,8 @@ const result = await this.$sendEvent("preview", {page: 2});
 ```
 
 The method returns a Promise for the handler's data result and rejects with a
-structured event error. Use declarative `@c-*` bindings when no browser code
+structured event error. An unknown handler name, or a component that declares
+no `Events`, also rejects the Promise instead of throwing. Use declarative `@c-*` bindings when no browser code
 needs the returned result.
 
 <h3 class="doc-heading" id="on-event"><code>$onEvent</code></h3>
@@ -284,6 +340,29 @@ Event calls also emit bubbling `citry:events:before`, `after`, `error`,
 `class`, and `event`; `after` adds `ok`, `error` adds `error`, `swapped` adds
 `els`, and `stale` adds `reason`. The `before` event is cancellable with
 `preventDefault()`.
+
+`stale` fires when a call's result will not reach the page. Its `reason` says
+why:
+
+| `reason` | What happened |
+| --- | --- |
+| `superseded` | A newer call to the same handler replaced this one. This happens only for a handler declared with `@event(latest_wins=True)`. |
+| `retired` | The component was removed or replaced before the call finished. |
+| `epoch` | The page accepted a newer result for the component first, so the rest of this one was dropped. |
+| `disposed` | The page's Vue app was shut down. |
+| `version` | The server no longer accepts the State token this page holds, usually because the app was deployed or its signing secret changed after the page loaded. |
+
+For `version`, the call also rejects with a `stale_state` error, and Citry
+asks the user once per page whether to reload. To show your own message
+instead, cancel the event:
+
+```js
+document.addEventListener("citry:events:stale", (event) => {
+  if (event.detail.reason !== "version") return;
+  event.preventDefault();
+  showUpdateBanner();
+});
+```
 
 The Events guides cover [State](/events/state/), [template
 bindings](/events/bindings/), [returned actions](/events/actions/), and

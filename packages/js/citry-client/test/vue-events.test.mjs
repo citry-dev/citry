@@ -755,6 +755,84 @@ test("latestCallWins supersedes an active predecessor and drops its response", a
   );
 });
 
+const errorResponse = (envelope, error) =>
+  new Response(
+    JSON.stringify({
+      protocol: "citry-events/1",
+      requestId: envelope.requestId,
+      results: [{ ok: false, sendSequence: envelope.calls[0].sendSequence, error }],
+    }),
+    { status: error.status },
+  );
+
+const staleStateError = {
+  status: 409,
+  code: "stale_state",
+  message: "The state token is stale (expired or rotated out); reload the page to get a fresh one.",
+};
+
+test("a stale_state answer reports a cancelable version notification before the error", async () => {
+  const lifecycle = [];
+  let prompts = 0;
+  const host = {
+    ...basicHost(),
+    lifecycle(kind, _source, event, detail) {
+      lifecycle.push([kind, event, detail]);
+      return true;
+    },
+    promptReload() {
+      prompts += 1;
+    },
+  };
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async (_url, init) => errorResponse(JSON.parse(init.body), staleStateError),
+  });
+  const source = { stableId: "board", generation: 1 };
+  await assert.rejects(bridge.send({ source, handler: "move" }), (error) => error.code === "stale_state");
+  assert.deepEqual(
+    lifecycle.map(([kind, event, detail]) => [kind, event, kind === "error" ? detail.error.code : detail]),
+    [
+      ["before", "move", undefined],
+      ["stale", "move", { reason: "version" }],
+      ["error", "move", "stale_state"],
+      ["after", "move", { ok: false }],
+    ],
+  );
+  // The bridge asks the host each time; the host keeps the once-per-page rule.
+  await assert.rejects(bridge.send({ source, handler: "move" }), (error) => error.code === "stale_state");
+  assert.equal(prompts, 2);
+});
+
+test("a cancelled version notification skips the reload prompt, and other errors never prompt", async () => {
+  const kinds = [];
+  let prompts = 0;
+  let answer = staleStateError;
+  const host = {
+    ...basicHost(),
+    lifecycle(kind, _source, _event, detail) {
+      kinds.push(kind === "stale" ? `stale:${detail.reason}` : kind);
+      return kind !== "stale";
+    },
+    promptReload() {
+      prompts += 1;
+    },
+  };
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async (_url, init) => errorResponse(JSON.parse(init.body), answer),
+  });
+  const source = { stableId: "board", generation: 1 };
+  await assert.rejects(bridge.send({ source, handler: "move" }), (error) => error.code === "stale_state");
+  assert.equal(prompts, 0);
+  answer = { status: 403, code: "invalid_state", message: "The state token is invalid." };
+  await assert.rejects(bridge.send({ source, handler: "move" }), (error) => error.code === "invalid_state");
+  assert.equal(prompts, 0);
+  assert.deepEqual(kinds, ["before", "stale:version", "error", "after", "before", "error", "after"]);
+});
+
 test("Vue Events cancellation is reported by after without an error lifecycle", async () => {
   const lifecycle = [];
   let fetched = false;

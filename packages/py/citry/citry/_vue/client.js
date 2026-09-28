@@ -20,6 +20,15 @@
   }
 
   const apps = new Map();
+  // Ask at most once per page: a deploy tends to make every following call stale at once, and asking again
+  // after the user declined would nag. One page may run several apps, so the flag lives outside them.
+  let reloadPrompted = false;
+  function promptReload() {
+    if (reloadPrompted) return;
+    reloadPrompted = true;
+    if (global.confirm("This page and the server are running different versions of the app. Reload to get back in sync?"))
+      global.location.reload();
+  }
   const registeredTypeOptions = new Map();
   const browserPluginFactories = new Map();
   const instanceRecords = new WeakMap();
@@ -1780,8 +1789,16 @@
       Object.defineProperty(this, "$error", {enumerable: false, configurable: true, value: record.events.error});
       Object.defineProperty(this, "$state", {enumerable: false, configurable: true, value: record.state.facade});
       Object.defineProperty(this, "$sendEvent", {enumerable: false, configurable: true, value: (name, args, opts) => {
-        requireEventHandler(record, name);
-        return record.app.eventSend(record, name, args, opts);
+        // Callers await the result, so every failure, even a bad name, arrives as a rejection they can catch.
+        try {
+          if (!record.events?.descriptor)
+            throw new Error("this component declares no Events class, so $sendEvent('" + String(name) +
+              "') has nothing to call; add a `class Events` to the component");
+          requireEventHandler(record, name);
+          return record.app.eventSend(record, name, args, opts);
+        } catch (error) {
+          return Promise.reject(error);
+        }
       }});
       Object.defineProperty(this, "$onEvent", {enumerable: false, configurable: true, value: (name, callback) => {
         if (!record.events?.descriptor)
@@ -1989,6 +2006,16 @@
       throw new Error("invalid Vue type options identity");
     if (typeof options === "function") options = {onServerRender: options};
     plain(options, "Vue type options");
+    // `init` is the 0.5.1 name of the initializer. Vue would drop the unknown option without a word, and the
+    // initializer would never run, so it is renamed here, and a definition naming both is ambiguous.
+    if (own(options, "init")) {
+      if (own(options, "onServerRender"))
+        throw new Error("$component() got both `init` and `onServerRender`; `init` is the older name of " +
+          "`onServerRender`, so keep only `onServerRender`");
+      if (typeof options.init !== "function") throw new TypeError("$component() `init` must be a function");
+      const {init, ...rest} = options;
+      options = {...rest, onServerRender: init};
+    }
     const prior = registeredTypeOptions.get(typeKey);
     if (prior) {
       if (prior.sourceHash !== sourceHash) throw new Error("Vue type options identity collision");
@@ -2661,26 +2688,6 @@
       if (!mounted || mounted.record.generation !== source.generation)
         throw new Error("Citry Events dispatch source is stale or retired");
       return liveComponentCarrier(mounted.component);
-    };
-    const liveRootElements = (component, seen = new Set(), output = []) => {
-      const visit = vnode => {
-        if (!vnode || typeof vnode !== "object" || seen.has(vnode)) return;
-        seen.add(vnode);
-        if (vnode.component?.subTree) { visit(vnode.component.subTree); return; }
-        if (vnode.type === V.Fragment && Array.isArray(vnode.children)) {
-          for (const child of vnode.children) visit(child);
-          return;
-        }
-        if (typeof Element === "function" && vnode.el instanceof Element && vnode.el.isConnected) {
-          if (!output.includes(vnode.el)) output.push(vnode.el);
-          return;
-        }
-        if (Array.isArray(vnode.children)) for (const child of vnode.children) visit(child);
-      };
-      visit(component?.$?.subTree);
-      if (!output.length && typeof Element === "function" && component?.$el instanceof Element && component.$el.isConnected)
-        output.push(component.$el);
-      return output;
     };
     const componentContains = (component, element) =>
       liveRootElements(component).some(root => root === element || root.contains(element));
@@ -3395,9 +3402,11 @@
         return carrier.dispatchEvent(new CustomEvent(`citry:events:${kind}`, {
           detail: details,
           bubbles: true,
-          cancelable: kind === "before",
+          // A page cancels a version-skew notification to replace the default reload prompt.
+          cancelable: kind === "before" || (kind === "stale" && extra.reason === "version"),
         }));
       },
+      promptReload,
       redirect(url) { global.location.assign(url); },
       updateUrl(url, mode) { global.history[mode === "push" ? "pushState" : "replaceState"]({}, "", url); },
       takePendingState(source, handlerName) {
@@ -3948,6 +3957,29 @@
     record.events?.dispose?.();
     disposeCallbacks(record);
   }
+  // The connected DOM elements a component renders at its top level, in order. A fragment or a child
+  // component root contributes its own top-level elements, so this matches what the user sees.
+  function liveRootElements(component, seen = new Set(), output = []) {
+    const visit = vnode => {
+      if (!vnode || typeof vnode !== "object" || seen.has(vnode)) return;
+      seen.add(vnode);
+      if (vnode.component?.subTree) { visit(vnode.component.subTree); return; }
+      if (vnode.type === V.Fragment && Array.isArray(vnode.children)) {
+        for (const child of vnode.children) visit(child);
+        return;
+      }
+      if (typeof Element === "function" && vnode.el instanceof Element && vnode.el.isConnected) {
+        if (!output.includes(vnode.el)) output.push(vnode.el);
+        return;
+      }
+      if (Array.isArray(vnode.children)) for (const child of vnode.children) visit(child);
+    };
+    visit(component?.$?.subTree);
+    if (!output.length && typeof Element === "function" && component?.$el instanceof Element && component.$el.isConnected)
+      output.push(component.$el);
+    return output;
+  }
+
   async function runCallback(component, record, callback, revision) {
     if (!callback) return;
     const scope = V.effectScope(true);
@@ -3957,12 +3989,24 @@
     // Marks the synchronous part of this run, so `this.$onEvent` called inside it is released with the run.
     record.callbackRunning = true;
     try {
-      const cleanup = scope.run(() => callback({
+      const context = {
         component,
         revision,
         // Bound to this run's set: a call from a timer or promise the run started still ends with the run.
         onEvent: (name, handler) => subscribeRecordEvent(record, name, handler, subscriptions),
-      }));
+        // The remaining fields repeat instance helpers under the names a 0.5.1 initializer destructured,
+        // so such an initializer keeps working. Getters read the current value at each access, because a
+        // later server render may replace the occurrence, its State, or the root elements.
+        get id() { return record.app.occurrences.get(record.occurrenceId)?.renderId ?? null; },
+        get els() { return liveRootElements(component); },
+        // 0.5.1 gave a component without Events a null `state`, and code tests for that to tell the two apart.
+        get state() { return record.events?.descriptor ? component.$state : null; },
+        get i18n() { return component.$i18n ?? null; },
+        sendEvent: (name, args, opts) => component.$sendEvent(name, args, opts),
+        loading: name => component.$loading(name),
+        error: name => component.$error(name),
+      };
+      const cleanup = scope.run(() => callback(context));
       if (cleanup !== undefined && typeof cleanup !== "function") throw new TypeError("onServerRender must return a function or undefined");
       record.callbackCleanup = cleanup;
     } catch (error) {

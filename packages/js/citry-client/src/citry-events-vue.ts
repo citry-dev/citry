@@ -74,6 +74,11 @@ export interface VueEventsHost {
     event: string,
     detail?: JsonObject,
   ): boolean | undefined;
+  /**
+   * Offers the user a reload after a call failed because the page and the server run different app
+   * versions. The bridge calls it only when no `stale` listener cancelled the version notification.
+   */
+  promptReload?(): void;
   takePendingState?(source: VueEventSource, handler: string): JsonObject | undefined;
   restorePendingState?(source: VueEventSource, updates: JsonObject): void;
 }
@@ -769,6 +774,14 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
             if (error instanceof VueEventStale) {
               lifecycle("stale", job.input.source, job.input.handler, { reason: error.reason });
             } else if (!(error instanceof VueEventCancellation)) {
+              // The server answers `stale_state` when the page's State token no longer verifies, which is
+              // what a deploy does to an open page. Reported before `error`, and a listener may cancel it
+              // to replace the reload prompt; the call still rejects with the server's error either way.
+              if (
+                activityError(error).code === "stale_state" &&
+                lifecycle("stale", job.input.source, job.input.handler, { reason: "version" })
+              )
+                options.host.promptReload?.();
               lifecycle("error", job.input.source, job.input.handler, {
                 error: activityError(error) as JsonObject,
               });
