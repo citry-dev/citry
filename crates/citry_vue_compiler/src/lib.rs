@@ -1213,7 +1213,13 @@ fn walk(
                     // of its authored call, whose Vue key changes whenever the
                     // call does, so Vue unmounts the old child and its root
                     // instead of the browser comparing directive signatures.
-                    runtime_lifecycle: runtime_implementation.is_some() && !local_call_site,
+                    // The native-control ownership marker still needs Vue's
+                    // `withDirectives` wrapper, but it is browser-only
+                    // bookkeeping with no server replacement site, so it stays
+                    // out of the lifecycle signature.
+                    runtime_lifecycle: runtime_implementation.is_some()
+                        && !local_call_site
+                        && d.name != "citry-vue-owned",
                     runtime_implementation,
                     static_input_type,
                 }

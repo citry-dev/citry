@@ -481,6 +481,12 @@ impl Reader {
                 .elements
                 .get(1)
                 .and_then(ArrayExpressionElement::as_expression);
+            // The native-control ownership marker only records, in the
+            // browser, which properties Vue owns; it writes nothing into the
+            // HTML, so the server can render its element as if it were absent.
+            if first.and_then(callee) == Some("_directive_citry_vue_owned") {
+                continue;
+            }
             directives = match (first.and_then(callee), value, &directives) {
                 // Only one `v-show` per element, with no argument or modifiers.
                 (Some("_vShow"), Some(value), Directives::None) if entry.elements.len() == 2 => {
