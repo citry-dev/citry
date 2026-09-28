@@ -23,7 +23,7 @@ defining the exact fields and checks.
 - [`descriptor.schema.json`](descriptor.schema.json) defines one component
   class descriptor from the browser manifest.
 - [`manifest.schema.json`](manifest.schema.json) defines the complete
-  `data-citry-events` JSON block.
+  manifest the server builds before it hands each record to its component.
 - [`validate.py`](validate.py) checks the package without third-party
   dependencies.
 - [`python/`](python/) contains the canonical, standard-library-only Python
@@ -37,12 +37,14 @@ defining the exact fields and checks.
 ## Who follows this contract
 
 The Python server's [`emission.py`](../../../py/citry/citry/ext/events/emission.py)
-writes manifests and its
+builds and validates manifests, and
+[`_vue/events.py`](../../../py/citry/citry/_vue/events.py) copies each
+component's records into the page's Vue app data. Its
 [`dispatcher.py`](../../../py/citry/citry/ext/events/dispatcher.py) accepts
 calls and produces results. The browser's
-[`citry-events.ts`](../../../js/citry-client/src/citry-events.ts) reads
-manifests, creates calls, validates complete result envelopes, and applies
-their actions.
+[`citry-events-vue.ts`](../../../js/citry-client/src/citry-events-vue.ts)
+checks each component's records, creates calls, validates complete result
+envelopes, and applies their actions.
 
 The shared examples keep both sides honest:
 
@@ -55,11 +57,11 @@ The shared examples keep both sides honest:
   the real Python dispatcher.
 - [`test_events_protocol_package.py`](../../../py/citry/tests/test_events_protocol_package.py)
   exercises the schemas and package validator.
-- [`test_events_applier_e2e.py`](../../../py/citry/tests/e2e/test_events_applier_e2e.py)
-  replays the result examples through the browser action interpreter.
-- [`test_events_transport_e2e.py`](../../../py/citry/tests/e2e/test_events_transport_e2e.py)
-  checks browser-created calls, strict result validation, HTTP transport, and
-  full live round trips.
+- [`runtime.test.mjs`](js/test/runtime.test.mjs) replays the shared examples
+  through the TypeScript validators the browser uses.
+- [`test_vue_events_default_e2e.py`](../../../py/citry/tests/e2e/test_vue_events_default_e2e.py)
+  sends real calls from Vue components in a browser, over the built-in and a
+  custom transport, and applies the server's results.
 
 The tooling reports two different facts. A shared mutation starts with valid
 JSON, breaks one field, and proves both implementations report the same path
@@ -97,10 +99,12 @@ python -m pytest \
   packages/py/citry/tests/test_events_protocol_package.py \
   packages/py/citry/tests/test_events_conformance.py
 
-# Browser reader and transport. Repeat with Firefox and WebKit before release.
+# TypeScript validators used by the browser.
+pnpm --dir packages/protocol/events/v1/js run check
+
+# Browser round trips. Repeat with Firefox and WebKit before release.
 python -m pytest \
-  packages/py/citry/tests/e2e/test_events_applier_e2e.py \
-  packages/py/citry/tests/e2e/test_events_transport_e2e.py \
+  packages/py/citry/tests/e2e/test_vue_events_default_e2e.py \
   --browser chromium
 ```
 

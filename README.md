@@ -20,7 +20,7 @@ Livewire.
 Citry works with FastAPI, Django, Flask, Starlette, ASGI, and WSGI
 applications.
 
-**Citry 0.4 is the public beta.** It supports Python 3.10 through 3.14.
+**Citry is in public beta.** It supports Python 3.10 through 3.14.
 
 [Read the docs](https://citry.dev/docs/) ·
 [Try the playground](https://citry.dev/playground/) ·
@@ -174,11 +174,11 @@ The [web-framework guide](https://citry.dev/web-frameworks/) shows the right
 startup and routing setup for each host.
 
 Want a complete project instead of an integration excerpt? Copy the
-[FastAPI starter](https://github.com/citry-dev/citry/tree/citry%400.4.6/examples/starters/fastapi)
+[FastAPI starter](https://github.com/citry-dev/citry/tree/citry%400.6.0/examples/starters/fastapi)
 or choose from the
-[standalone, Django, Flask, ASGI, and WSGI starter matrix](https://github.com/citry-dev/citry/tree/citry%400.4.6/examples).
+[standalone, Django, Flask, ASGI, and WSGI starter matrix](https://github.com/citry-dev/citry/tree/citry%400.6.0/examples).
 The collection also includes complete Project Board and
-[HTMX integration](https://github.com/citry-dev/citry/tree/citry%400.4.6/examples/demos/htmx)
+[HTMX integration](https://github.com/citry-dev/citry/tree/citry%400.6.0/examples/demos/htmx)
 demos. Each project has its own dependencies, lockfile, and tests. Every web
 starter includes a browser interaction powered by Citry Events. The HTMX demo
 uses HTMX for every request and page update.

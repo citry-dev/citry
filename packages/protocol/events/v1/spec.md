@@ -482,15 +482,15 @@ Actions are a closed v1 vocabulary:
 | `redirect` | `url` | `delay`, `wait` | Navigate the page. |
 | `url` | `url`, `mode` | `delay`, `wait` | Push or replace browser history without navigation. `mode` is `push` or `replace`. |
 
-A render action's `html` is the complete fragment, including any inert Citry
-graph, Events, and dependency manifest tags needed by the inserted content.
+A render action's `html` is the complete fragment, including the inert JSON
+and asset tags the inserted content needs, such as its Events records.
 The v1 swaps are `morph`, `replace`, `inner`, `append`, `prepend`, `remove`,
 and `none`.
 
 When a handler changes State but does not render, the server places a `state`
 action before the handler's own actions. Code triggered while later actions
 run therefore sees the fresh token. A rendered fragment carries its fresh
-token in its Events manifest instead.
+token in its Events records instead.
 
 ### Targets
 
@@ -577,11 +577,11 @@ Clients advertise the swaps, action kinds, and renderers they can apply:
 ```
 
 All arrays contain unique known values. The object and its arrays are strict.
-Either key may be omitted; an omitted key uses that key's v1 baseline. The
+Any key may be omitted; an omitted key uses that key's v1 baseline. The
 server never emits outside the advertised set. In particular, it downgrades a
 `morph` render to `replace` for a client that did not advertise morphing.
 
-When the complete `capabilities` object is absent, both keys use
+When the complete `capabilities` object is absent, all three keys use
 `CAPABILITIES_BASELINE_V1`:
 
 ```json
@@ -608,9 +608,10 @@ it back verbatim. The server binding that minted it owns its internal format
 and verifies it.
 
 The plain public State values are separate. They appear only in
-`publicState` inside the browser manifest, where Alpine bindings can read them.
-Server-only values never appear there. A refreshed token arrives through a
-rendered fragment's manifest or a `state` action.
+`publicState` inside the component's Events record, where browser code reads
+them to set up the component's reactive State. Server-only values never appear
+there. A refreshed token arrives in the Events records of a new render or
+through a `state` action.
 
 ## How the browser learns what it can call
 
@@ -619,15 +620,8 @@ not contain: which handler names a component class exposes, which State fields
 the browser may write, which State values belong to one rendered occurrence,
 and which opaque token that occurrence must send back.
 
-The server places that information in inert JSON. Before embedding it in HTML,
-the server escapes `<` as `\u003c`, so State containing `</script>` cannot
-close the script element. This escaping is what **script-safe JSON** means
-here; parsing restores the original value.
-
-```html
-<script type="application/json" data-citry-events>{...}</script>
-```
-
+For each render, the server first builds one Events manifest for every
+component in it that declares Events, and validates the whole manifest.
 [`manifest.schema.json`](manifest.schema.json) defines the complete shape. A
 typical manifest is:
 
@@ -659,9 +653,20 @@ typical manifest is:
 }
 ```
 
-Manifest entries are named JSON objects embedded directly in the inert script
-block. A browser parses the tag as JSON, never executes its contents, and
-validates the full manifest before publishing its class and instance records.
+The manifest does not travel to the browser as one object. The server copies
+each instance record, together with its class record, into that component's
+entry in the page's Vue app data. The app data is inert JSON, carried in a
+`<script type="application/json">` tag in the page or fragment, or in the
+`prepared` object of a `vue-prepared/1` render action. Before embedding JSON in
+HTML, the server escapes `<` as `\u003c`, so State containing `</script>`
+cannot close the script element. This escaping is what **script-safe JSON**
+means here; parsing restores the original value. The browser parses the tag as
+JSON and never executes its contents.
+
+Before a component sends a call, the browser checks that component's records:
+the class record must pass the descriptor checks and name the same
+`componentClassId` as the instance. A component whose records fail the check
+cannot send calls; the browser rejects the call instead of sending it.
 
 ### Top-level fields
 
@@ -706,7 +711,7 @@ Each instance record requires:
 
 | Field | Meaning |
 |---|---|
-| `renderId` | The rendered occurrence ID used by `data-cid-*` markers and `render:` action targets. |
+| `renderId` | The rendered occurrence ID that `render:` action targets and a call's `callerRenderId` name. |
 | `componentClassId` | A class ID present in `componentClasses` in the same manifest. |
 | `stateToken` | A non-empty opaque token, or `null` for a stateless instance. |
 | `publicState` | Open application data used to initialize the reactive browser State object. |
@@ -731,8 +736,8 @@ relationships that are clearer in code:
 
 The server validates a complete call envelope before running its first
 handler. The browser validates a complete result envelope before applying its
-first action, and a complete Events manifest before publishing any of its new
-records. A failure rejects that whole incoming unit.
+first action. The server validates a complete Events manifest before it hands
+any record to a component. A failure rejects that whole unit.
 
 ## HTTP adapters
 
@@ -907,7 +912,7 @@ A server binding passes when it:
 A browser reader passes when it:
 
 1. accepts every valid manifest and rejects every invalid manifest before
-   registry mutation;
+   using any of its records;
 2. validates a complete result before any action side effect;
 3. applies every valid result example with the documented ordering, targeting,
    State, and send-order behavior.

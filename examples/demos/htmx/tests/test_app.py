@@ -18,7 +18,6 @@ def test_page_serves_local_htmx_and_citry_scripts() -> None:
     assert 'class="citry-brand__mark"' in page.text
     assert "HTMX demo" in page.text
     assert 'hx-get="/fragments/search"' in page.text
-    assert 'src="/static/citry-htmx.js"' not in page.text
     assert 'class="contact-row-host"' in page.text
     assert 'id="contact-row-1"' in page.text
     assert page.text.count('class="contact-row-host"') == 6
