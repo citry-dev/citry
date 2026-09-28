@@ -24,7 +24,9 @@ The combined runtime also carries the hand-written prepared coordinator,
 `_vue/client.js`, with its comments and indentation removed. Edit
 `client.js`, then run the build so `runtime.js` picks up the change.
 Generated files are committed so installed Citry applications never compile
-browser code at startup.
+browser code at startup. The `citry` wheel ships only `_vue/runtime.js` and
+the i18n plugin; the other `_vue/*.js` files are build inputs that stay in the
+repository.
 
 Run the package checks with:
 

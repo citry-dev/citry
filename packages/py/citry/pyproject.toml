@@ -131,7 +131,9 @@ Changelog = "https://github.com/citry-dev/citry/blob/main/CHANGELOG.md"
 Issues = "https://github.com/citry-dev/citry/issues"
 
 [tool.setuptools.package-data]
-# Non-Python files shipped inside the package: the type-checking marker and
-# the readable dependency-manager source, its generated delivery companion,
-# and the extension runtimes served or inlined by the web integrations.
-citry = ["py.typed", "_vue/*.js", "ext/i18n/client/*.js"]
+# Non-Python files shipped inside the package: the type-checking marker, the
+# bundled browser runtime (`_vue/runtime.js`) that pages load or inline, and
+# the i18n Vue plugin. The other `_vue/*.js` files are the sources that
+# `packages/js/citry-client` bundles into `runtime.js`, so installs never read
+# them and they stay in the repository only.
+citry = ["py.typed", "_vue/runtime.js", "ext/i18n/client/*.js"]

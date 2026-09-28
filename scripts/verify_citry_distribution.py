@@ -36,11 +36,14 @@ if TYPE_CHECKING:
 REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry"
-# The package carries readable and generated client runtimes. The budget includes
-# the accepted post-start lifecycle and pending Events discovery improvements,
-# plus the reusable browser programs in `_vue/leaf_program.py` (1,199,379 bytes
-# measured when the cap was last raised, leaving about 5 KB of headroom).
-MAX_WHEEL_BYTES: Final = 1_176 * 1024
+# `packages/js/citry-client` bundles these inputs into `_vue/runtime.js`, and an
+# install reads only that bundle, so package-data leaves them out of the wheel
+# and the sdist. Paths are relative to the `citry` package directory.
+REPOSITORY_ONLY_SOURCES: Final = frozenset({"_vue/client.js", "_vue/events.js", "_vue/fragments.js", "_vue/vue.js"})
+# The package carries the bundled browser runtime, the i18n Vue plugin, and the
+# reusable browser programs in `_vue/leaf_program.py`. The wheel measured
+# 1,088,694 bytes when this cap was set, leaving about 61 KB of headroom.
+MAX_WHEEL_BYTES: Final = 1_124 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
     'uvicorn>=0.49; extra == "ext-preview"',
     'playwright>=1.62.0; extra == "ext-preview"',
@@ -130,7 +133,10 @@ def source_inventory(root: Path = SOURCE_ROOT) -> dict[str, str]:
     for path in sorted(root.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
             continue
-        inventory[path.relative_to(root).as_posix()] = sha256_bytes(path.read_bytes())
+        relative = path.relative_to(root).as_posix()
+        if relative in REPOSITORY_ONLY_SOURCES:
+            continue
+        inventory[relative] = sha256_bytes(path.read_bytes())
     return inventory
 
 
@@ -241,6 +247,8 @@ def _checkout_sdist_files() -> dict[str, bytes]:
     result = {name: (PACKAGE_ROOT / name).read_bytes() for name in ("LICENSE", "README.md", "pyproject.toml")}
     for path in sorted(SOURCE_ROOT.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
+            continue
+        if path.relative_to(SOURCE_ROOT).as_posix() in REPOSITORY_ONLY_SOURCES:
             continue
         result[path.relative_to(PACKAGE_ROOT).as_posix()] = path.read_bytes()
     # Setuptools' default sdist contract includes top-level test_*.py modules,
@@ -579,9 +587,9 @@ root = importlib.resources.files("citry")
 delivered_runtime = root.joinpath("_vue/runtime.js")
 assert delivered_runtime.is_file()
 assert _runtime_js() == delivered_runtime.read_text(encoding="utf-8")
-assert root.joinpath("_vue/vue.js").is_file()
-assert root.joinpath("_vue/client.js").is_file()
-assert root.joinpath("_vue/events.js").is_file()
+# The bundle inputs stay in the repository; only the bundled runtime ships.
+for bundle_input in ("vue.js", "client.js", "events.js", "fragments.js"):
+    assert not root.joinpath("_vue", bundle_input).is_file(), bundle_input
 assert root.joinpath("ext/i18n/client/vue-plugin.source.js").is_file()
 assert root.joinpath("py.typed").is_file()
 
