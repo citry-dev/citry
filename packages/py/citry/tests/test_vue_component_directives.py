@@ -72,7 +72,6 @@ class TestRejectedDirectives:
             ('v-If="open"', "names are lowercase"),
             ('v-model:="q"', "Name the prop after 'v-model:'"),
             ('v-bind.prop="props"', "bind each prop as ':name=\"...\"'"),
-            ('v-on="listeners"', "Write each listener as '@event=\"...\"'"),
             ('.value="text"', "Pass the value as a component prop with ':name=\"...\"'."),
             ('c-v-for="row in rows"', "Repeat the component with '<c-for>'"),
         ],

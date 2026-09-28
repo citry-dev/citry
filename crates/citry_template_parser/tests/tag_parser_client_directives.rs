@@ -137,7 +137,6 @@ mod tests {
                 "'v-bind.prop'",
                 "':name=",
             ),
-            (r#"<c-child v-on="listeners" />"#, "'v-on'", "'@event="),
             (r#"<c-child .value="text" />"#, "'.value'", "':name="),
             (
                 r#"<c-child c-v-for="row in rows" />"#,

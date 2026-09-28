@@ -1838,7 +1838,9 @@ fn component_tag_directive_hint(directive: &str) -> &'static str {
         "bind" => {
             "Bind an object with a plain 'v-bind=\"...\"', or bind each prop as ':name=\"...\"'."
         }
-        "on" => "Write each listener as '@event=\"...\"' or 'v-on:event=\"...\"'.",
+        "on" => {
+            "Write each listener as '@event=\"...\"' or 'v-on:event=\"...\"', or bind a listener object with a plain 'v-on=\"...\"'."
+        }
         "prop" => "Pass the value as a component prop with ':name=\"...\"'.",
         _ if directive.to_ascii_lowercase() != directive => {
             "Vue's own directives and Citry's 'v-c-*' and 'v-citry-*' names are lowercase."
@@ -1882,9 +1884,9 @@ fn validate_component_tag_vue_directives(
             .as_ref()
             .is_some_and(|value| !value.content.trim().is_empty());
         // Props (`v-bind:name`, or one `v-bind` object) and listeners
-        // (`v-on:event`) cross the boundary. The argument-less `v-bind.prop`
-        // and `v-on` object forms have no component-call translation, and
-        // the condition directives and `v-show` take neither an argument nor
+        // (`v-on:event`, or one `v-on` object) cross the boundary. The
+        // argument-less `v-bind.prop` form has no component-call translation,
+        // and the condition directives and `v-show` take neither an argument nor
         // modifiers, just as on an element.
         // `v-model:` or `v-on:` with nothing after the colon names no prop or event.
         let empty_argument = logical_name
@@ -1892,6 +1894,7 @@ fn validate_component_tag_vue_directives(
             .is_some_and(|(_, rest)| rest.is_empty() || rest.starts_with('.'));
         let supported = !empty_argument
             && (logical_name == "v-bind"
+                || logical_name == "v-on"
                 || logical_name.starts_with("v-bind:")
                 || logical_name.starts_with("v-on:")
                 || matches!(logical_name, "v-show" | "v-if" | "v-else-if" | "v-else")
