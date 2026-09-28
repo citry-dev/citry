@@ -18,7 +18,7 @@ inputs:
       - {id: label, name: label, type: 'str | None', default: {kind: literal, value: null}, effect: Optionally names the list.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted copied list attributes without replacing semantics, children, or runtime fields.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted copied list attributes without replacing semantics, children, or runtime fields. Vue directive names are rejected.'}
   - id: clist-item-server-inputs
     component: CListItem
     channel: server
@@ -29,8 +29,8 @@ inputs:
       - {id: current, name: current, type: bool, default: {kind: literal, value: false}, effect: Emits aria-current=page on an enabled link.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds li classes.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds li inline styles.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied li attributes without replacing Item semantics.}
-      - {id: surface-attrs, name: surface_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied static/link/Button surface attributes without replacing its identity or behavior.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied li attributes without replacing Item semantics. Vue directive names are rejected.'}
+      - {id: surface-attrs, name: surface_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied static/link/Button surface attributes without replacing its identity or behavior. Vue directive names are rejected.'}
 
 slots:
   - id: clist-slots

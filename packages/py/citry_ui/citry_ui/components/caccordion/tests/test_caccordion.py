@@ -292,30 +292,46 @@ def test_item_is_direct_only_and_nested_accordion_is_panel_only():
 
 
 @pytest.mark.parametrize(
-    ("destination", "attribute"),
+    ("destination", "attribute", "message"),
     [
-        ("attrs", "aria-label"),
-        ("attrs", "popover"),
-        ("heading_attrs", "x-show"),
-        ("trigger_attrs", "popovertarget"),
-        ("trigger_attrs", ":commandfor"),
-        ("panel_attrs", "popover"),
-        ("panel_attrs", "x-show.immediate"),
-        ("panel_attrs", "aria-label"),
-        ("panel_attrs", ":aria-roledescription"),
-        ("actions_attrs", "aria-live"),
-        ("actions_attrs", "aria-roledescription"),
+        ("attrs", "aria-label", "cannot override owned attribute"),
+        ("attrs", "popover", "cannot override owned attribute"),
+        ("attrs", "data-citry-hostile", "reserved Citry runtime attribute"),
+        ("attrs", "v-bind:data-state", "Vue directive"),
+        ("attrs", "v-if", "Vue directive"),
+        ("attrs", "V-IF", "Vue directive"),
+        ("heading_attrs", "v-show", "Vue directive"),
+        ("trigger_attrs", "popovertarget", "cannot override owned attribute"),
+        ("trigger_attrs", ":commandfor", "Vue directive"),
+        ("trigger_attrs", "@click", "Vue directive"),
+        ("panel_attrs", "popover", "cannot override owned attribute"),
+        ("panel_attrs", "v-html", "Vue directive"),
+        ("panel_attrs", "aria-label", "cannot override owned attribute"),
+        ("panel_attrs", ".aria-roledescription", "Vue directive"),
+        ("actions_attrs", "aria-live", "cannot override owned attribute"),
+        ("actions_attrs", "#default", "Vue directive"),
     ],
 )
 def test_owned_attribute_and_directive_aliases_are_rejected(
     destination: str,
     attribute: str,
+    message: str,
 ):
-    with pytest.raises(ValueError, match="cannot"):
+    with pytest.raises(ValueError, match=message):
         _render_template(
             _basic_template(first_inputs=f'c-{destination}="mapping"'),
             {"mapping": {attribute: "x"}},
         )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render_template(
+        _basic_template(first_inputs='c-heading_attrs="mapping"'),
+        {"mapping": {"x-show": "open", "data-note": "a.b"}},
+    )
+
+    assert 'x-show="open"' in html
+    assert 'data-note="a.b"' in html
 
 
 def test_attributes_are_copied_and_hostile_identity_strings_are_detrusted():

@@ -48,6 +48,7 @@ from docs_site._internal.guards import (
     rendered_markdown,
     single_h1,
     snippet_path,
+    stray_markup,
     ui_library_projection,
     versions_manifest,
 )
@@ -106,6 +107,7 @@ POST_BUILD_GUARDS: list[Guard] = [
     html_wellformed.check,
     rendered_css.check,
     rendered_markdown.check,
+    stray_markup.check,
     single_h1.check,
     alt_text.check,
     headings.check,

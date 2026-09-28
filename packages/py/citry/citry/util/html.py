@@ -24,6 +24,7 @@ same ``Markup`` class directly.
 
 from __future__ import annotations
 
+import json
 from types import BuiltinFunctionType
 from typing import TYPE_CHECKING, Any
 
@@ -83,4 +84,23 @@ _CACHEABLE_ESCAPE_BACKEND = (
     and _escape_to_str_impl.__name__ == "_escape_inner"
 )
 
-__all__ = ["Markup", "escape", "escape_to_str"]
+
+def script_json(value: object, *, sort_keys: bool = False, ensure_ascii: bool = True) -> str:
+    r"""
+    Serialize ``value`` as JSON text that is safe inside a ``<script>`` element.
+
+    The HTML parser reads a script element's text until the first ``</script``
+    and treats ``<!--`` followed by ``<script`` as a nested comment that can hide
+    the real end tag. Both sequences start with ``<``, and in JSON text a ``<``
+    can only occur inside a string, so writing every ``<`` as the escape
+    ``\u003c`` keeps the element intact while ``JSON.parse`` (or a JavaScript
+    parser) still reads the same value. ``ensure_ascii`` also escapes U+2028 and
+    U+2029, which older JavaScript parsers reject inside a string literal.
+
+    Non-finite numbers are rejected, because ``JSON.parse`` cannot read them.
+    """
+    text = json.dumps(value, allow_nan=False, separators=(",", ":"), sort_keys=sort_keys, ensure_ascii=ensure_ascii)
+    return text.replace("<", "\\u003c")
+
+
+__all__ = ["Markup", "escape", "escape_to_str", "script_json"]

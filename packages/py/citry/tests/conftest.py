@@ -38,6 +38,18 @@ def _deterministic_render_ids(monkeypatch):
     monkeypatch.setattr("citry.component.gen_render_id", lambda: f"c{next(counter)}")
 
 
+def _uses_pytest_playwright(item: pytest.Item) -> bool:
+    # pytest-playwright's ``playwright`` fixture starts the sync runtime, and
+    # ``page``, ``context``, and ``browser`` all depend on it. Check where the
+    # fixture is defined, not only its name: a test module may define its own
+    # fake fixture under one of these names that starts nothing.
+    fixture_info = getattr(item, "_fixtureinfo", None)
+    definitions = fixture_info.name2fixturedefs.get("playwright", ()) if fixture_info is not None else ()
+    # A conftest may wrap the plugin's fixture under the same name, so check every definition.
+    return any(definition.func.__module__.startswith("pytest_playwright") for definition in definitions)
+
+
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """
     Run sync-Playwright E2E cases after tests that call ``asyncio.run``.
@@ -48,5 +60,13 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     ``asyncio.run``. Stable-partitioning the E2E marker to the end preserves
     order within both groups and lets the two valid test styles share one
     repository-wide invocation.
+
+    A test that asks for a Playwright fixture is an E2E test whether or not
+    its module says so. It gets the marker here, before ``-m`` selection runs,
+    so a forgotten marker cannot put a browser test among the ordinary tests
+    of a pytest-xdist worker, where it would break every later ``asyncio.run``.
     """
+    for item in items:
+        if item.get_closest_marker("e2e") is None and _uses_pytest_playwright(item):
+            item.add_marker(pytest.mark.e2e)
     items.sort(key=lambda item: item.get_closest_marker("e2e") is not None)

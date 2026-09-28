@@ -103,6 +103,12 @@ the documented anatomy without making generated classes or arrow markup public.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ccalendar/snippets/styling.py" title="Customize Calendar" />
 
+`attrs` accepts ordinary native, ARIA, and data attributes for the root. It
+rejects the attributes Calendar sets itself (such as `role` and `tabindex`),
+Citry runtime attributes, and any Vue directive syntax: names starting with
+`v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component
+tag in your template instead.
+
 Use `CDateInput` when browser-owned editing and picker UI are preferable. Use
 `CDatePicker` for a popup field composed from DateInput and Calendar, and
 `CDateRange` when the application value is an ordered start/end pair.

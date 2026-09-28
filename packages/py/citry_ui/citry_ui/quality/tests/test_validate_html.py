@@ -1,60 +1,43 @@
+import re
+
 import pytest
 
 from citry_ui.quality.validate_html import HtmlQualificationError, qualify_nu_result
 
 
-def test_nu_result_records_alpine_directives_without_hiding_other_information():
+def test_nu_result_counts_information_without_gating_on_it():
     report = qualify_nu_result(
         {
             "version": "test",
-            "messages": [
-                {
-                    "type": "error",
-                    "message": "Attribute “x-data” not allowed on element “section” at this point.",
-                },
-                {
-                    "type": "error",
-                    "message": "Attribute “x-text” not allowed on element “output” at this point.",
-                },
-                {"type": "info", "message": "A non-gating recommendation."},
-            ],
+            "messages": [{"type": "info", "message": "A non-gating recommendation."}],
         },
         scenario="tabs.overview",
     )
 
     assert report.errors == 0
-    assert report.alpine_directives == ("x-data", "x-text")
     assert report.css_anchor_features == ()
     assert report.css_container_features == ()
     assert report.information == 1
 
 
-def test_nu_result_records_alpines_shorthand_spellings():
-    # `@event` and `:attr` are Alpine's shorthands for `x-on:` and `x-bind:`, so
-    # Nu rejects them for the same reason it rejects the `x-` forms.
-    report = qualify_nu_result(
-        {
-            "version": "test",
-            "messages": [
-                {
-                    "type": "error",
-                    "message": "Attribute “@submit.prevent” not allowed on element “form” at this point.",
-                },
-                {
-                    "type": "error",
-                    "message": "Attribute “@reset” not allowed on element “form” at this point.",
-                },
-                {
-                    "type": "error",
-                    "message": "Attribute “:style” not allowed on element “div” at this point.",
-                },
-            ],
-        },
-        scenario="button.states",
-    )
-
-    assert report.errors == 0
-    assert report.alpine_directives == (":style", "@reset", "@submit.prevent")
+@pytest.mark.parametrize("attribute", ["v-show", "v-if", ":style", "@submit.prevent", "@c-click"])
+def test_nu_result_rejects_directive_attributes_that_leaked_into_output(attribute: str):
+    # The browser reads bindings from compiled definitions, so a
+    # directive-shaped attribute in served HTML is a leak, not framework syntax.
+    with pytest.raises(HtmlQualificationError, match=re.escape(attribute)):
+        qualify_nu_result(
+            {
+                "version": "test",
+                "messages": [
+                    {
+                        "type": "error",
+                        "lastLine": 7,
+                        "message": f"Attribute “{attribute}” not allowed on element “div” at this point.",
+                    }
+                ],
+            },
+            scenario="button.states",
+        )
 
 
 def test_nu_result_records_css_anchor_features_without_hiding_other_css_errors():
@@ -284,26 +267,6 @@ def test_nu_result_rejects_an_invalid_min_inline_anchor_size_value():
             },
             scenario="popover.states",
             source="min-inline-size: anchor-size(not-a-real-dimension);",
-        )
-
-
-def test_nu_result_still_rejects_citrys_own_event_syntax():
-    # `@c-*` is Citry's event syntax, which the server consumes and never
-    # renders. Meeting one in output means it leaked, so it stays an error even
-    # though it looks like an Alpine shorthand.
-    with pytest.raises(HtmlQualificationError, match="@c-click"):
-        qualify_nu_result(
-            {
-                "version": "test",
-                "messages": [
-                    {
-                        "type": "error",
-                        "lastLine": 7,
-                        "message": "Attribute “@c-click” not allowed on element “button” at this point.",
-                    }
-                ],
-            },
-            scenario="button.states",
         )
 
 

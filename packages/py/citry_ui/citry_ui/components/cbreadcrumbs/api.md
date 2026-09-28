@@ -72,3 +72,9 @@ Override public link, current, separator, focus, and spacing variables or stable
 parts.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cbreadcrumbs/snippets/customization.py" title="Customize Breadcrumbs with public CSS" />
+
+`attrs`, `list_attrs`, and each record's `attrs` accept ordinary native, ARIA,
+and data attributes. They reject the attributes Breadcrumbs sets itself (such
+as `role`, `href`, and `aria-current`), Citry runtime attributes, and any Vue
+directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue
+bindings and listeners on the component tag in your template instead.

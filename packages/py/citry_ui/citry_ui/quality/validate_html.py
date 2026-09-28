@@ -12,19 +12,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-# Alpine's three attribute spellings, all of which Nu reports as not allowed
-# because HTML permits no attribute outside `data-*` and its own fixed set:
-# the `x-` directives, `@event` for `x-on:event`, and `:attr` for `x-bind:attr`.
-#
-# `@c-` is deliberately left out. That prefix is Citry's own event syntax, which
-# the server consumes and never renders, so meeting one in output means it
-# leaked rather than that Nu failed to recognize Alpine. `@citry-...` is
-# unaffected: only the exact `@c-` prefix is excluded.
-_ALPINE_ATTRIBUTE = r"(?:x-[a-z][a-z0-9_.:-]*|@(?!c-)[a-z][a-z0-9_.:-]*|:[a-z][a-z0-9_.-]*)"
-_ALPINE_ATTRIBUTE_ERROR = re.compile(
-    rf"^Attribute “(?P<attribute>{_ALPINE_ATTRIBUTE})” "
-    r"not allowed on element “[a-z][a-z0-9-]*” at this point\.$"
-)
 _CSS_ANCHOR_PROPERTY_ERROR = re.compile(
     r"^CSS: “(?P<property>anchor-name|position-anchor|position-area|"
     r"position-try-fallbacks|position-visibility)”: Property “(?P=property)” "
@@ -68,7 +55,6 @@ class HtmlReport:
     scenario: str
     checker_version: str
     errors: int
-    alpine_directives: tuple[str, ...]
     css_anchor_features: tuple[str, ...]
     css_container_features: tuple[str, ...]
     information: int
@@ -146,9 +132,16 @@ def _known_css_container_feature(finding: dict[str, Any], message: str, source: 
 
 
 def qualify_nu_result(result: dict[str, Any], *, scenario: str, source: str | None = None) -> HtmlReport:
-    """Reject Nu errors except checked Alpine and browser-CSS compatibility gaps."""
+    """
+    Reject Nu errors except checked browser-CSS compatibility gaps.
+
+    Rendered Citry HTML carries no framework attribute syntax: the browser
+    runtime reads Vue bindings from the compiled definitions, never from the
+    served markup. A directive-shaped attribute such as `v-if`, `:class`,
+    `@click`, or `@c-click` in the output therefore means a binding leaked,
+    and Nu's "not allowed" error for it stays a failure.
+    """
     unexpected: list[dict[str, Any]] = []
-    alpine_directives: set[str] = set()
     css_anchor_features: set[str] = set()
     css_container_features: set[str] = set()
     information = 0
@@ -158,12 +151,6 @@ def qualify_nu_result(result: dict[str, Any], *, scenario: str, source: str | No
         message = str(finding.get("message", ""))
         if finding_type != "error":
             information += 1
-            continue
-        alpine = _ALPINE_ATTRIBUTE_ERROR.fullmatch(message)
-        if alpine is not None:
-            # Recorded rather than discarded: the report lists every directive
-            # that was tolerated, so the exemption stays visible in CI output.
-            alpine_directives.add(alpine.group("attribute"))
             continue
         css_anchor_feature = _known_css_anchor_feature(finding, message, source)
         if css_anchor_feature is not None:
@@ -191,7 +178,6 @@ def qualify_nu_result(result: dict[str, Any], *, scenario: str, source: str | No
         scenario=scenario,
         checker_version=str(result.get("version", "unknown")),
         errors=0,
-        alpine_directives=tuple(sorted(alpine_directives)),
         css_anchor_features=tuple(sorted(css_anchor_features)),
         css_container_features=tuple(sorted(css_container_features)),
         information=information,

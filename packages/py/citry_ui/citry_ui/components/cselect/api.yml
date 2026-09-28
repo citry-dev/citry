@@ -29,7 +29,7 @@ inputs:
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted nonconflicting root attributes.}
-      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted relationships events and accessible naming to the combobox Button.}
+      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted relationships and accessible naming to the combobox Button.}
       - {id: listbox-attrs, name: listbox_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted nonconflicting Listbox attributes.}
   - id: cselect-client-inputs
     component: CSelect

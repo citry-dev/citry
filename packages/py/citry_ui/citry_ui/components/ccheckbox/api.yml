@@ -35,7 +35,7 @@ inputs:
         effect: Places authored label and description at the logical start or end of the control.
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds neutral-root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds neutral-root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned attributes to the neutral root. Structural ownership directives, `for`, `role`, `tabindex`, `contenteditable`, and `aria-hidden` are rejected.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned attributes to the neutral root. Vue directive syntax, `for`, `role`, `tabindex`, `contenteditable`, and `aria-hidden` are rejected.'}
       - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned attributes to the native input, including static Form ownership and merged ARIA IDREFs. Label-free standalone usage requires one static ARIA name.'}
 
   - id: ccheckbox-client-inputs

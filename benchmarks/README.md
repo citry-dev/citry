@@ -35,7 +35,8 @@ It compares an equivalent literal tree with 100 warm message resolutions and
 locales and checks compile time, raw and compressed artifact size, and peak
 memory. Five warmups and 30 render samples enforce the release limits in
 `docs/design/i18n.md` section 14.3. Build `citry-core` in release mode first; a
-debug native extension invalidates the timing result.
+debug native extension invalidates the timing result, so the runner exits on
+one.
 
 ## How it works
 
@@ -78,13 +79,19 @@ uv pip install django==6.0.6 django-components==0.152.0 jinja2==3.1.6
 
 # 2. REQUIRED: build the Rust extension in release mode. The default debug
 #    build makes citry's Rust-backed paths many times slower and invalidates
-#    every citry number. The runner cannot detect which build is installed.
+#    every citry number, so the runners exit on a debug build.
 cd packages/py/citry_core && ../../../.venv/bin/maturin develop --release && cd ../../..
 
 # 3. Run the comparison
 .venv/bin/python benchmarks/compare.py            # full: 5 rounds per cell
 .venv/bin/python benchmarks/compare.py --quick    # smoke: 2 rounds, no import column
 ```
+
+`compare.py`, `client.py` and `i18n.py` read `citry_core._rust.BUILD_PROFILE`
+before measuring and exit with the rebuild command when it is `"debug"`. To
+measure a debug build on purpose, for example to profile with debug
+assertions on, set `CITRY_BENCH_ALLOW_DEBUG_NATIVE=1`; the runner then prints
+a warning on stderr and continues.
 
 One more trap: the very first run after rebuilding the extension loads the
 fresh `.so` cold (disk cache, macOS code signing), which can inflate the first
@@ -273,6 +280,7 @@ benchmarks/
     client.py    graph-first browser startup, adoption, morph, and heap runner
     client_scenario.py reusable production-shaped browser workload and payload sizing
     compare.py   the comparison runner (one table per scenario size)
+    native_build.py  the check that makes the runners exit on a debug build
     utils.py     marker slicing shared by runners
     plot.py      draws the project README chart from the large-scenario table
 ```
@@ -287,3 +295,10 @@ benchmarks), and more engines beyond the Django family (MiniJinja, JinjaX,
 django-cotton, ...); see the design doc's section 8. Jinja2 is the first
 beyond-Django-family engine, ported for both scenarios
 (`test_benchmark_jinja2_small.py` and `test_benchmark_jinja2.py`).
+
+## Framework interaction suite
+
+The maintained [web suite](web/README.md) measures initial browser readiness and
+server actions with isolated application environments and retained payload sizes.
+Its initial native runs are diagnostic; the linked design defines publication
+qualification and the broader framework cohort.

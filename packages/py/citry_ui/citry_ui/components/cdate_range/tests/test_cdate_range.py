@@ -222,6 +222,36 @@ def test_attrs_reject_owned_root_attributes(attribute: str) -> None:
         _render('<c-CDateRange c-attrs="attrs" />', {"attrs": {attribute: "hostile"}})
 
 
+@pytest.mark.parametrize(
+    "attribute",
+    [
+        "v-bind:aria-label",
+        ":aria-labelledby",
+        ".data-open",
+        "v-if",
+        "V-IF",
+        "v-for",
+        "v-html",
+        "v-model",
+        "@click",
+        "v-on:click",
+        "#default",
+    ],
+)
+def test_attrs_reject_vue_directives(attribute: str) -> None:
+    # A static accessible name is allowed, but a binding to it is not: Python
+    # attrs are data and every directive spelling is refused by name.
+    message = f"CDateRange attrs cannot contain the Vue directive {attribute!r}"
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _render('<c-CDateRange c-attrs="attrs" />', {"attrs": {attribute: "hostile"}})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render('<c-CDateRange c-attrs="attrs" />', {"attrs": {"x-data": "{}", "hx-get": "/dates"}})
+    assert 'x-data="{}"' in _root(html)
+    assert 'hx-get="/dates"' in _root(html)
+
+
 def test_accessible_name_override_and_form_owner_work_without_field() -> None:
     html = _render(
         '<c-CForm id="booking"><c-CDateRange start_name="from" end_name="to" '

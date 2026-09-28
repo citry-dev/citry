@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Self
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
 from client_scenario import build_client_scenario, payload_sizes
+from native_build import require_release_build
 from playwright.sync_api import sync_playwright
 
 from citry.contrib.wsgi import wsgi_app
@@ -400,6 +401,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.rounds < 1:
         parser.error("--rounds must be positive")
+    # The server renders each page through citry_core; a debug build would
+    # inflate every server-side timing this runner reports.
+    require_release_build()
     if len(args.counts) > 1 and not args._single:
         result = {"metadata": {}, "counts": {}}
         for count in args.counts:

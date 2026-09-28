@@ -148,7 +148,12 @@ jobs:
           --source-ref "$REF_NAME"
           --runtime docs_site/static/playground/runtime.json
 
+      # Right after publication, main normally still holds the released source,
+      # so the browser tests that run this checkout's Citry UI snippets apply
+      # to the new pins too. Without this they would be skipped.
       - name: Test the published browser runtime
+        env:
+          CITRY_PLAYGROUND_PINS_MATCH_CHECKOUT: "1"
         run: >-
           uv run --no-sync pytest docs_site/tests/e2e/test_playground_e2e.py
           -k published_runtime

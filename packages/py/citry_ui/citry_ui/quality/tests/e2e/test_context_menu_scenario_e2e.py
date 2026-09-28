@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
-from citry_ui.quality.routes import build_scenario, render_scenario
+from citry_ui.quality.routes import build_scenario
 
 pytestmark = pytest.mark.e2e
 
@@ -52,12 +52,12 @@ def _record_context_default(page: Any, selector: str, key: str) -> None:
     )
 
 
-def test_context_menu_quality_invocation_native_paths_layers_and_axe(page: Any) -> None:
+def test_context_menu_quality_invocation_native_paths_layers_and_axe(page: Any, open_scenario: Any) -> None:
     console_errors: list[str] = []
     page_errors: list[str] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: page_errors.append(str(error)))
-    page.set_content(render_scenario("context-menu.states"), wait_until="load")
+    open_scenario("context-menu.states")
     _wait_for_all_ready(page)
 
     basic = page.locator("#quality-context-menu-basic")

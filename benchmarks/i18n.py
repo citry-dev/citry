@@ -1,7 +1,7 @@
 """
 Measure the final server i18n path against an equivalent literal tree.
 
-Run this with a release build of ``citry-core``. The workload and thresholds
+Run this with a release build of ``citry-core``; it exits on a debug build. The workload and thresholds
 come from ``docs/design/i18n.md`` section 14.3: 100 warm message resolutions,
 20 named formats, five warmups, and 30 measured samples.
 """
@@ -20,6 +20,8 @@ import sys
 import time
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
+
+from native_build import require_release_build
 
 from citry import Citry, Component, FormatRegistry, NumberFormat
 from citry_core.i18n import CatalogCompiler
@@ -258,6 +260,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="print the complete machine-readable report")
     args = parser.parse_args()
+    # The release gates below are timing budgets; a debug build fails them
+    # for the wrong reason.
+    require_release_build()
     report = run()
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

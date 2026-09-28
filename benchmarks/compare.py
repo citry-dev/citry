@@ -30,7 +30,7 @@ Usage (from the repository root):
 IMPORTANT: build the Rust extension in release mode first
 (`.venv/bin/maturin develop --release` in packages/py/citry_core). The default
 debug build makes citry's Rust-backed paths ~12x slower and invalidates every
-citry number. This runner cannot detect the build profile; see README.md.
+citry number, so the runner exits on a debug build (see native_build.py).
 
 Results are RELATIVE, not absolute: compare rows within a run, never numbers
 across machines or runs. See docs/design/benchmarking.md and benchmarks/README.md.
@@ -46,6 +46,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from native_build import require_release_build
 from utils import get_benchmark_script
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -205,12 +206,9 @@ def main() -> None:
     rounds = 2 if args.quick else args.rounds
     test_types = [t for t in TEST_TYPES if not (args.quick and t == "import")]
 
-    print(
-        "NOTE: citry numbers are only meaningful with a RELEASE build of citry_core\n"
-        "(`.venv/bin/maturin develop --release` in packages/py/citry_core). The default\n"
-        "debug build is many times slower on the Rust-backed paths, and this runner\n"
-        "cannot detect which build is installed.",
-    )
+    # Every cell runs in a subprocess of this interpreter, so checking the
+    # extension here covers the whole run.
+    require_release_build()
 
     results: dict[str, dict[str, float]] = {}
     for engine in ENGINES:

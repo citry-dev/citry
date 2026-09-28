@@ -146,9 +146,16 @@ def test_invalid_server_inputs_fail_deterministically(kwargs, error, match):
         "data-size",
         "data-citry-ui-part",
         "@click",
+        "v-on:click",
         ":stroke",
-        "x-data",
-        "x-bind:aria-label",
+        ".viewBox",
+        "v-bind:aria-label",
+        "V-BIND:role",
+        "v-if",
+        "V-IF",
+        "v-for",
+        "v-html",
+        "#default",
         "c-if",
         "onclick",
         "onClick",
@@ -163,6 +170,16 @@ def test_invalid_server_inputs_fail_deterministically(kwargs, error, match):
 def test_owned_or_executable_svg_attributes_are_rejected(attribute: str):
     with pytest.raises(ValueError, match="cannot"):
         _render(CIcon(name="leaf", attrs={attribute: "consumer"}))
+
+
+def test_python_attrs_reject_vue_directives_before_rendering():
+    with pytest.raises(ValueError, match=re.escape("CIcon attrs cannot contain the Vue directive 'v-html'")):
+        _render(CIcon(name="leaf", attrs={"v-html": "markup"}))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(CIcon(name="leaf", attrs={"x-data": "{}"}))
+    assert 'x-data="{}"' in html
 
 
 @pytest.mark.parametrize(

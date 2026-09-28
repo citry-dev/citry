@@ -62,6 +62,13 @@ An uncanceled reset restores the server value. Controlled state receives a
 reset request and waits for its owner. `form` supports an external native Form;
 inside `CForm`, Rating cannot redirect ownership.
 
+`attrs` and `input_attrs` accept ordinary native, ARIA, and data attributes.
+They reject the attributes the component sets itself (such as the root's
+`role` and each radio's `name`), Citry runtime attributes, and any Vue
+directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue
+bindings and listeners on the component tag in your template instead, for
+example `<c-CRating :title="hint" :onValueChange="save">`.
+
 ## Localize accessible value names
 
 `citry-ui-rating-value` names each exact choice and updates in place beneath a

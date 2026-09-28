@@ -60,14 +60,16 @@ mod tests {
 
     #[test]
     fn test_kwarg_special_chars_in_key() {
-        // <c-my-tag :key="v1" .key="v2" @click.stop="handler" attr:key="val" />
+        // A leading `.` is Vue's property shorthand, which component tags
+        // reject, so the dot sits inside the second key here.
+        // <c-my-tag :key="v1" k.ey="v2" @click.stop="handler" attr:key="val" />
         // 0         1         2         3         4         5         6
         // 0123456789012345678901234567890123456789012345678901234567890123456789
-        let input = r#"<c-my-tag :key="v1" .key="v2" @click.stop="handler" attr:key="val" />"#;
+        let input = r#"<c-my-tag :key="v1" k.ey="v2" @click.stop="handler" attr:key="val" />"#;
         let actual = parse_template(input, None, None).unwrap();
         let expected = template(vec![node_elem(self_closing_node(start_tag(
             token(
-                r#"<c-my-tag :key="v1" .key="v2" @click.stop="handler" attr:key="val" />"#,
+                r#"<c-my-tag :key="v1" k.ey="v2" @click.stop="handler" attr:key="val" />"#,
                 0,
                 1,
                 1,
@@ -75,7 +77,7 @@ mod tests {
             token("c-my-tag", 1, 1, 2),
             vec![
                 static_attr(token(":key", 10, 1, 11), token("v1", 16, 1, 17)),
-                static_attr(token(".key", 20, 1, 21), token("v2", 26, 1, 27)),
+                static_attr(token("k.ey", 20, 1, 21), token("v2", 26, 1, 27)),
                 static_attr(token("@click.stop", 30, 1, 31), token("handler", 43, 1, 44)),
                 static_attr(token("attr:key", 52, 1, 53), token("val", 62, 1, 63)),
             ],

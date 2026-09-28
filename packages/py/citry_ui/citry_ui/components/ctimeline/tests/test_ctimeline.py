@@ -164,12 +164,47 @@ def test_item_outside_timeline_and_direct_nested_timeline_fail():
         "<c-CTimeline c-attrs=\"{'role':'presentation'}\"><c-CTimelineItem>A</c-CTimelineItem></c-CTimeline>",
         "<c-CTimeline c-attrs=\"{'aria-label':'Shadow'}\"><c-CTimelineItem>A</c-CTimelineItem></c-CTimeline>",
         "<c-CTimeline><c-CTimelineItem c-attrs=\"{'aria-current':'page'}\">A</c-CTimelineItem></c-CTimeline>",
-        "<c-CTimeline><c-CTimelineItem c-attrs=\"{'x-html':'unsafe'}\">A</c-CTimelineItem></c-CTimeline>",
     ],
 )
-def test_owned_or_replacing_attrs_fail(source: str):
-    with pytest.raises(ValueError, match="cannot"):
+def test_owned_attrs_fail(source: str):
+    with pytest.raises(ValueError, match="cannot override owned attribute"):
         _render(source)
+
+
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CTimeline", ":aria-label"),
+        ("CTimeline", "v-bind:role"),
+        ("CTimeline", "V-IF"),
+        ("CTimeline", "@click"),
+        ("CTimelineItem", "v-html"),
+        ("CTimelineItem", ".aria-current"),
+        ("CTimelineItem", "#default"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(owner: str, attribute: str):
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    root_attrs, item_attrs = (attrs, "") if owner == "CTimeline" else ("", attrs)
+    source = f"<c-CTimeline {root_attrs}><c-CTimelineItem {item_attrs}>A</c-CTimelineItem></c-CTimeline>"
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        _render(source)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(
+        "<c-CTimeline c-attrs=\"{'x-data': '{}', 'hx-get': '/events'}\">"
+        "<c-CTimelineItem>A</c-CTimelineItem></c-CTimeline>"
+    )
+
+    root = re.search(r'<ol[^>]+data-citry-ui-part="timeline"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/events"' in root.group(0)
 
 
 def test_css_uses_public_variable_private_fallbacks_and_environment_rules():

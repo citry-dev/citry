@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._validation import reject_owned_attrs
 
 CCardTag = Literal["div", "article", "section", "li"]
@@ -63,6 +63,14 @@ def _copy_attrs(
         raise TypeError(msg)
     reject_owned_attrs(attrs, owned, f"CCard {input_name}")
     for key in attrs or {}:
+        # A Vue directive could rebind the part's owned attributes or change
+        # its structure, so none may arrive through Python data.
+        if is_vue_directive_attribute(key):
+            msg = (
+                f"CCard {input_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
+            raise ValueError(msg)
         normalized = key.lower()
         if normalized.startswith(_RESERVED_RUNTIME_PREFIXES):
             msg = f"CCard {input_name} cannot contain reserved Citry runtime attribute {key!r}."

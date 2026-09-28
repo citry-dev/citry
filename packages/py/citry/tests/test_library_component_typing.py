@@ -9,12 +9,14 @@ from citry import CacheConfig, Citry, Component, DependenciesConfig, I18n, Libra
 from citry import Events as EventsBase
 
 if TYPE_CHECKING:
+    from typing import Literal
+
     assert_type(LibraryComponent.class_id, str)
     assert_type(LibraryComponent.definition_id, str)
     assert_type(LibraryComponent.citry, Citry)
     assert_type(LibraryComponent.transparent, bool)
-    assert_type(LibraryComponent.simple, bool)
-    assert_type(Component.simple, bool)
+    assert_type(LibraryComponent.simple, bool | Literal["vue"])
+    assert_type(Component.simple, bool | Literal["vue"])
     assert_type(LibraryComponent.name, str | None)
     assert_type(LibraryComponent.template, str | None)
     assert_type(LibraryComponent.template_file, str | None)
