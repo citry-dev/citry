@@ -1,5 +1,18 @@
 # Release notes
 
+## Unreleased
+
+### Removed
+
+- `analyze_component_members()` is no longer exported from
+  `citry_core.template_parser`. Citry's Vue runtime no longer reads
+  component JavaScript members this way.
+
+### Added
+
+- `BUILD_PROFILE` reports whether the native extension is a debug or a
+  release build.
+
 ## v1.7.1
 
 _11 Sep 2026_

@@ -1113,7 +1113,6 @@ message that names the directive and says what to write instead:
 | `v-html`, `v-text` | a prop or a fill rendered inside the child |
 | `v-show`, `v-if`, `v-else-if`, or `v-else` with an argument or modifiers | the plain directive |
 | `.name`, `v-bind.prop`, or another argument-less `v-bind` modifier | `:name` props |
-| `v-on` object form | `@event` listeners |
 | `v-once`, `v-memo`, `v-cloak`, `v-pre`, `v-is` | the same directive on an element in the child's template |
 | `v-c-*`, `v-citry-*` | nothing: Citry reserves these names for its own browser runtime |
 | a built-in name with capitals (`v-If`, `v-On:click`) | the lowercase name |
