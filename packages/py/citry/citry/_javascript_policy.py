@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from citry.citry_render import CitryRender
     from citry.settings import SecurityJavascriptMode
 
-_EVENTS_ATTRIBUTES = frozenset({"data-cev-bind", "data-cev-on", "data-cev-poll"})
 _LEADING_URL_SPACE = "".join(chr(codepoint) for codepoint in range(0x21))
 _DependencyT = TypeVar("_DependencyT", bound="Dependency")
 
@@ -440,7 +439,8 @@ class _JavascriptPolicy:
                 and _handler_only_control(
                     tag,
                     attr_map,
-                    activation_attrs + (["data-cev-on"] if has_managed_handler else []),
+                    activation_attrs,
+                    has_managed_handler=has_managed_handler,
                     inside_form=inherited_inside_form,
                 )
             ):
@@ -620,7 +620,8 @@ def _script_executable_for_policy(script: Script) -> tuple[bool, str | None]:
 
 
 def _is_activation_attribute(name: str) -> bool:
-    return name.startswith(("x-", "v-", "@", ":")) or name in _EVENTS_ATTRIBUTES
+    # Vue directive spellings in settled HTML need the browser runtime to mean anything.
+    return name.startswith(("v-", "@", ":"))
 
 
 def _is_omit_hazard(name: str, node: Any, html: str, attrs: dict[str, str]) -> bool:
@@ -633,9 +634,6 @@ def _is_omit_hazard(name: str, node: Any, html: str, attrs: dict[str, str]) -> b
         # than reconstructing DOM parentage. Conservatively warn because a
         # source token cannot prove that the browser-visible fallback survives.
         return True
-    if base in {"x-show", "v-show"}:
-        style = attrs.get("style", "").replace(" ", "").translate(_ASCII_LOWER)
-        return "hidden" in attrs or "display:none" in style
     bound = base[1:] if base.startswith(":") else base.removeprefix("v-bind:")
     if bound == "hidden":
         return "hidden" in attrs
@@ -649,11 +647,14 @@ def _handler_only_control(
     attrs: dict[str, str],
     activation_attrs: list[str],
     *,
+    has_managed_handler: bool,
     inside_form: bool,
 ) -> bool:
-    has_handler = any(
-        name == "v-on" or name.startswith(("@", "v-on:")) or name in {"data-cev-on", "data-cev-poll"}
-        for name in activation_attrs
+    # A Citry-managed handler is marked on the element by the omission scan,
+    # while an authored Vue handler, including the object form `v-on="..."`,
+    # appears as its own activation attribute.
+    has_handler = has_managed_handler or any(
+        name == "v-on" or name.startswith(("@", "v-on:")) for name in activation_attrs
     )
     if not has_handler:
         return False

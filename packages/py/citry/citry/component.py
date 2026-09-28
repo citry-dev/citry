@@ -59,9 +59,14 @@ from contextvars import ContextVar
 from difflib import get_close_matches
 from hashlib import md5
 from re import sub
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
-from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
+from citry._class_introspection import (
+    _advance_component_declaration_generation,
+    _safe_class_text,
+    _static_class_dict,
+    _static_class_mro,
+)
 from citry._linting import _validate_component_lint
 from citry._nested_declarations import (
     NestedClassDeclaration,
@@ -95,6 +100,20 @@ from citry.util.misc import get_import_path, to_dict
 
 _DEFER_INPUT_FINALIZATION: ContextVar[bool] = ContextVar("citry_defer_input_finalization", default=False)
 _DATA_SCHEMA_NAMES = ("Kwargs", "Slots", "TemplateData", "JsData", "CssData")
+# Class attributes that the asset loaders fill as caches of loaded content.
+# Writing one does not change what the class declares, so it leaves the
+# declaration count alone; otherwise every first render would invalidate the
+# caches built from class declarations.
+_LOADED_CONTENT_CACHE_NAMES = frozenset(
+    {
+        "_citry_template",
+        "_resolved_js",
+        "_resolved_css",
+        "_resolved_messages",
+        "_citry_simple_template",
+        "_citry_component_script_capture",
+    }
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -322,6 +341,10 @@ class ComponentMeta(LibraryComponentMeta):
             )
             raise AttributeError(msg)
         super().__setattr__(name, value)
+        # Caches built from class declarations (simple='vue' admission) key on
+        # this count, so a changed declaration is checked again on next use.
+        if name not in _LOADED_CONTENT_CACHE_NAMES:
+            _advance_component_declaration_generation()
 
     def __delattr__(cls, name: str) -> None:  # noqa: N805
         """Keep the concrete component's owning Citry attribute present."""
@@ -359,6 +382,10 @@ class ComponentMeta(LibraryComponentMeta):
             )
             raise AttributeError(msg)
         super().__delattr__(name)
+        # A removed declaration can re-expose an inherited one, so caches
+        # built from class declarations must be rebuilt as well.
+        if name not in _LOADED_CONTENT_CACHE_NAMES:
+            _advance_component_declaration_generation()
 
     @property
     def class_id(cls) -> str:  # noqa: N805
@@ -475,8 +502,8 @@ class ComponentMeta(LibraryComponentMeta):
             ),
             False,
         )
-        if type(simple) is not bool:
-            msg = f"Component {name}.simple must be an exact bool; got {simple!r}."
+        if not (type(simple) is bool or (type(simple) is str and simple == "vue")):
+            msg = f"Component {name}.simple must be False, True, or 'vue'; got {simple!r}."
             raise ValueError(msg)
         type.__setattr__(cls, "_definition_id", _new_definition_id())
         # Purity never inherits implicitly: a subclass may add ambient reads
@@ -543,7 +570,7 @@ class ComponentMeta(LibraryComponentMeta):
             extensions.on_component_class_created(cls)
             extensions._init_component_class(cls)
 
-            if simple:
+            if simple is True:
                 declaration = validate_simple_declaration(
                     cls, Component, extension_names=(ext.class_name for ext in extensions._extensions)
                 )
@@ -685,20 +712,20 @@ class Component(metaclass=ComponentMeta):
     the same as for any component.
     """
 
-    simple: ClassVar[bool] = False
+    simple: ClassVar[bool | Literal["vue"]] = False
     """
     Render a presentation template inside its caller's render frame.
 
-    A simple component has no independent instance, component hooks or browser
-    identity. Unsupported declarations and invocations raise errors. The flag
-    inherits to subclasses, which are checked independently, and is fixed after
-    class definition.
+    ``simple=True`` renders in its caller's HTML frame. ``simple="vue"`` opts
+    into an instance-free Vue occurrence with its own browser identity.
+    Unsupported declarations and invocations raise errors. The setting inherits
+    to subclasses and is fixed after class definition.
 
-    Use the default data method or a synchronous static ``template_data(kwargs,
-    slots)`` method. A template can accept optional default content, but the
-    class cannot declare its own JS, CSS, messages, instance hooks or instance
-    configuration. The data callback still runs for each invocation; this flag
-    does not make the component pure.
+    For ``simple="vue"``, use the default data method or a synchronous static
+    ``template_data(kwargs, slots)`` method. Authored component JS/CSS and static
+    ``js_data`` or ``css_data`` callbacks are supported; slots, child calls,
+    provide/inject, instance hooks and instance configuration are not. The data
+    callback runs for every invocation; neither mode makes the component pure.
 
     See [Simple components](/advanced/simple-components/) for the full contract
     and [Performance](/advanced/performance/) to compare the available options.
@@ -885,9 +912,10 @@ class Component(metaclass=ComponentMeta):
     Lint: ClassVar[type | None] = None
     """Optional per-component template-lint settings.
 
-    Define a nested ``Lint`` class with
-    ``rule_unknown_template_variable`` and/or ``template_variables``. Nested
-    declarations compose through the component C3 order. Assign ``None`` to
+    Define a nested ``Lint`` class with any of the rule severities
+    (``rule_*``) and variable mappings that [`LintSettings`][citry.LintSettings]
+    accepts. Nested declarations compose in the same order Python uses to
+    resolve methods across base classes. Assign ``None`` to
     return to the Citry instance's application lint policy.
     """
 
@@ -1190,12 +1218,20 @@ class Component(metaclass=ComponentMeta):
         them as instance values. Each rendered occurrence receives its own
         mutable value graph.
 
+        A key cannot start with ``$`` or ``_``, and cannot be ``citryId``,
+        because Vue and Citry already use those names on the instance.
+
         Args:
             kwargs: The keyword arguments passed to the component.
             slots: The slot fills passed to the component.
 
         Returns:
             A dict of JS variables, or None for no variables.
+
+        Raises:
+            ValueError: When rendering, if a returned key starts with ``$``
+                or ``_`` or is ``citryId``. The message names the component
+                and the key.
 
         """
         return None

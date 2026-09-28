@@ -47,7 +47,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from citry._owned_resource import _OwnedResource
+from citry._owned_resource import PUBLIC_ASSET_CORS_HEADERS, _OwnedResource
 from citry._protocol.events import (
     ProtocolValueError,
     add_route_identity,
@@ -105,13 +105,6 @@ MAX_ENVELOPE_BYTES = 1024 * 1024
 
 _JSON_CONTENT_TYPE = "application/json"
 _NO_STORE = ("Cache-Control", "no-store")
-_IMMUTABLE_ASSET_HEADERS = (
-    ("Cache-Control", "public, max-age=31536000, immutable"),
-    # These bytes are content addressed and carry no request credentials, so
-    # opaque preview frames can fetch the public asset without opening event
-    # or action responses to cross-origin reads.
-    ("Access-Control-Allow-Origin", "*"),
-)
 
 
 ################################################
@@ -226,7 +219,9 @@ def events_routes(citry: Citry) -> list[URLRoute]:
         return RouteResponse(
             content.decode(),
             content_type="text/javascript",
-            headers=_IMMUTABLE_ASSET_HEADERS,
+            # Content-addressed and public; the CORS header lets the browser
+            # check the integrity the runtime puts on this request.
+            headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", "public, max-age=31536000, immutable")),
         )
 
     def serve_style_asset(_request: RouteRequest, *, digest: str) -> RouteResponse:
@@ -240,7 +235,9 @@ def events_routes(citry: Citry) -> list[URLRoute]:
         return RouteResponse(
             content.decode(),
             content_type="text/css",
-            headers=_IMMUTABLE_ASSET_HEADERS,
+            # Content-addressed and public; the CORS header lets the browser
+            # check the integrity the runtime puts on this request.
+            headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", "public, max-age=31536000, immutable")),
         )
 
     # Each dispatch route is a sync/async pair: the plain handler is what the

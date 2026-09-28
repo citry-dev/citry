@@ -33,12 +33,14 @@ its own props and slots, never an inherited context.
 
 from __future__ import annotations
 
+import abc
 from contextlib import nullcontext
 from contextvars import ContextVar
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from difflib import get_close_matches
-from typing import TYPE_CHECKING, Any, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast
 
+from citry._class_introspection import _component_declaration_generation, _static_class_dict, _static_class_mro
 from citry._pure import (
     PureBodyPlan,
     PureInteriorBody,
@@ -48,16 +50,17 @@ from citry._pure import (
     pure_body_lookup,
     store_pure_body,
 )
-from citry._vue.capture import prepared_render_active, typed_render_scope
+from citry._vue.capture import coalesce_prepared_static_nodes, prepared_render_active, typed_render_scope
 from citry._vue.direct import direct_render_scope
-from citry.assets import load_template
+from citry.assets import _TEMPLATE_CACHE, load_template
 from citry.citry_context import CitryContext
-from citry.citry_element import CitryElement
+from citry.citry_element import CitryElement, _PreparedCallMetadata
 from citry.citry_render import (
     _VALUE_CONTEXT,
     CitryRender,
     DeferredComponent,
     RenderFrame,
+    SimpleVueRecord,
     _render_slot_value,
 )
 from citry.citry_template import CitryTemplate, DeclaredSlot
@@ -98,6 +101,7 @@ from citry.util.exception import (
     set_template_origin_error_message,
     set_template_position_error_message,
 )
+from citry.util.id import gen_render_id, validate_render_id
 from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
 from citry.util.misc import get_fields, is_generator, to_dict
 from citry_core.template_parser import ForeignSpan, ParseOptions, compile_template, parse_template
@@ -107,6 +111,7 @@ if TYPE_CHECKING:
     from contextlib import AbstractContextManager
 
     from citry._vue.direct import DirectExecutionFrame
+    from citry._vue.leaf_program import LeafCallChildren, LeafProgramNode, PreparedLeafProgram
     from citry.citry_render import OnRenderGenerator, RenderPart, RenderReplacement
     from citry.component import Component
     from citry.nodes import BodyItem, Node
@@ -120,6 +125,635 @@ if TYPE_CHECKING:
 # threaded through each node and slot; a concurrent render on another thread or
 # task keeps its own value. None means no per-render override was given.
 _render_globals: ContextVar[dict[str, Any] | None] = ContextVar("citry_render_globals", default=None)
+
+
+@dataclass(frozen=True, slots=True)
+class _SimpleVueAdmission:
+    """
+    The per-class answer to "can a ``simple='vue'`` call skip the Component instance".
+
+    Every call of the same class would otherwise repeat the same checks: the
+    scan of the class and its bases, the nested declarations, the dependency lists, the extension
+    hooks, and the template plan. ``_simple_vue_admission`` computes this record
+    once and reuses it while every input it read is unchanged; see
+    ``_simple_vue_admission_key`` for that list.
+    """
+
+    # The engine and class state this record was computed from.
+    key: tuple[object, ...]
+    # The loaded template the plan was built from; compared by identity.
+    template: CitryTemplate | None
+    # A reason the class itself is incompatible with simple='vue', or None.
+    rejection: str | None
+    # The engine (not the class) needs the ordinary render path for this class.
+    renders_ordinarily: bool
+    # The static data callbacks to call, or None where the class keeps the
+    # base default (kwargs as template data, no js_data or css_data).
+    template_data_callback: Callable[[Any, dict[str, Any]], Any] | None
+    js_data_callback: Callable[[Any, dict[str, Any]], Any] | None
+    css_data_callback: Callable[[Any, dict[str, Any]], Any] | None
+    # The admitted evaluator for the class template; None when not admitted.
+    leaf_node: LeafProgramNode | None
+    # Whether the class declares any secondary Dependencies at all.
+    has_dependencies: bool
+    # Each plain (non-component) base between the class and Component, with
+    # its namespace values at computation time. Writes to these classes do
+    # not move the component declaration count, so each call compares them.
+    plain_bases: tuple[tuple[type, tuple[tuple[str, object], ...]], ...] = ()
+
+
+# The class attribute that holds a class's admission record. Keeping the
+# record on the class (instead of a module-level table) lets the class and the
+# callbacks the record holds be collected together. It is written with
+# type.__setattr__, so storing it does not count as a declaration change.
+_SIMPLE_VUE_ADMISSION_ATTR = "_citry_simple_vue_admission"
+
+
+def _reject_simple_vue(component_class: type[Any], reason: str) -> NoReturn:
+    """Raise the named error for a class or call that cannot use ``simple='vue'``."""
+    raise TypeError(f"Component {component_class.__name__} simple='vue' is unsupported: {reason}.")
+
+
+def _simple_vue_admission_key(component_class: type[Component]) -> tuple[object, ...]:
+    """
+    Snapshot everything outside the template that an admission record depends on.
+
+    A record is reused only while this tuple compares equal, so each entry
+    names one way the answer can change:
+
+    - the component declaration count moves when any component class assigns
+      or deletes an authored attribute after definition;
+    - the extension manager and its extension tuple identify the installed
+      extensions and, through them, the hook dispatch cache;
+    - the Cache extension revision moves on ``reset_template()``,
+      ``reset_files()``, ``Citry.clear()`` and alias removal;
+    - the i18n registry generation moves when a component registers or
+      unregisters, when message sources load or reload, and on clear;
+    - ``abc.get_cache_token()`` moves when any class is registered as
+      ``ComponentLike`` (or with any other ABC), which changes value dispatch.
+
+    The loaded template is compared separately, by identity.
+    """
+    extensions = component_class.citry.extensions
+    by_name = extensions._extensions_by_name
+    i18n = by_name.get("i18n")
+    return (
+        _component_declaration_generation(),
+        extensions,
+        extensions._extensions,
+        cast("Any", by_name["cache"])._revision,
+        None if i18n is None else cast("Any", i18n)._registry_generation,
+        abc.get_cache_token(),
+    )
+
+
+def _simple_vue_admission(component_class: type[Component]) -> _SimpleVueAdmission:
+    """Return the current admission record for a ``simple='vue'`` class, rebuilding it when stale."""
+    key = _simple_vue_admission_key(component_class)
+    namespace = vars(component_class)
+    admission = cast("_SimpleVueAdmission | None", namespace.get(_SIMPLE_VUE_ADMISSION_ATTR))
+    # A reset or reload replaces the class's loaded template object, so the
+    # identity check catches template changes the key tuple does not cover.
+    if (
+        admission is not None
+        and admission.key == key
+        and admission.template is namespace.get(_TEMPLATE_CACHE)
+        and _plain_bases_unchanged(admission.plain_bases)
+    ):
+        return admission
+    admission = _compute_simple_vue_admission(component_class, key)
+    type.__setattr__(component_class, _SIMPLE_VUE_ADMISSION_ATTR, admission)
+    return admission
+
+
+def _plain_base_snapshot(base: type) -> tuple[tuple[str, object], ...]:
+    """Record a plain base's namespace so a later write to it can be detected."""
+    return tuple(_static_class_dict(base).items())
+
+
+def _plain_bases_unchanged(plain_bases: tuple[tuple[type, tuple[tuple[str, object], ...]], ...]) -> bool:
+    """Whether every recorded plain base still has the same names bound to the same objects."""
+    # Most components have no plain bases, so this loop usually does nothing.
+    for base, snapshot in plain_bases:
+        current = _static_class_dict(base)
+        if len(current) != len(snapshot):
+            return False
+        for name, value in snapshot:
+            if current.get(name, _MISSING_MEMBER) is not value:
+                return False
+    return True
+
+
+# Distinguishes a deleted member from one bound to None.
+_MISSING_MEMBER = object()
+
+
+def _compute_simple_vue_admission(
+    component_class: type[Component],
+    key: tuple[object, ...],
+) -> _SimpleVueAdmission:
+    """
+    Run every class-level ``simple='vue'`` check once.
+
+    Checks run in two groups. The first group looks only at what the class
+    declares (members, nested declarations, messages, dependencies, data
+    callbacks, template); a failure there is recorded as a rejection so each
+    call raises the same named error. The second group looks at engine state
+    the class does not control (extension hooks and i18n settings); a failure
+    there makes the calls render as ordinary components instead.
+    """
+    from types import FunctionType  # noqa: PLC0415
+
+    from citry._nested_declarations import _get_nested_class_declarations  # noqa: PLC0415
+    from citry._vue.leaf_program import compile_leaf_program  # noqa: PLC0415
+    from citry.assets import _find_pair_declaration  # noqa: PLC0415
+    from citry.component import Component as ComponentBase  # noqa: PLC0415
+    from citry.ext.dependencies.extension import DependenciesExtension  # noqa: PLC0415
+    from citry.ext.events.extension import EventsExtension  # noqa: PLC0415
+    from citry.ext.i18n.extension import I18nExtension  # noqa: PLC0415
+
+    # Component subclasses report their own writes through the declaration
+    # count; plain bases do not, so the namespaces of the plain bases the scan
+    # below reads (those before Component in the MRO) are recorded instead.
+    mro = _static_class_mro(component_class)
+    scanned_bases = mro[: mro.index(ComponentBase)] if ComponentBase in mro else mro
+    plain_bases = tuple(
+        (base, _plain_base_snapshot(base)) for base in scanned_bases if not isinstance(base, type(ComponentBase))
+    )
+
+    def rejected(reason: str, template: CitryTemplate | None = None) -> _SimpleVueAdmission:
+        return _SimpleVueAdmission(
+            key=key,
+            template=template,
+            rejection=reason,
+            renders_ordinarily=False,
+            template_data_callback=None,
+            js_data_callback=None,
+            css_data_callback=None,
+            leaf_node=None,
+            has_dependencies=False,
+            plain_bases=plain_bases,
+        )
+
+    class_metadata = {
+        _SIMPLE_VUE_ADMISSION_ATTR,
+        "__module__",
+        "__doc__",
+        "__qualname__",
+        "__dict__",
+        "__weakref__",
+        "__annotations__",
+        "__classcell__",
+        "__slots__",
+        "__firstlineno__",
+        "__static_attributes__",
+        "__type_params__",
+    }
+    static_data_callbacks = {"template_data", "js_data", "css_data"}
+    unsupported_instance_members = {
+        "on_render",
+        "on_component_input",
+        "on_component_rendered",
+        "on_dependencies",
+        "provide",
+        "unprovide",
+        "inject",
+    }
+    # Every authored member between the class and Component must be data,
+    # a nested class, or a plain static function; anything that needs an
+    # instance cannot run without one.
+    for base in _static_class_mro(component_class):
+        if base is ComponentBase:
+            break
+        for member, value in _static_class_dict(base).items():
+            if member in class_metadata:
+                continue
+            if member in unsupported_instance_members or member.startswith("on_"):
+                return rejected(f"instance member {member} is not supported")
+            if member in static_data_callbacks:
+                continue
+            if type(value) is staticmethod:
+                if type(value.__func__) is FunctionType:
+                    continue
+                return rejected(f"static member {member} must wrap a Python function")
+            if isinstance(value, type):
+                continue
+            if type(value) in (FunctionType, classmethod, property):
+                return rejected(f"instance member {member} is not supported")
+            if any("__get__" in _static_class_dict(value_type) for value_type in _static_class_mro(type(value))):
+                return rejected(f"descriptor {member} is not supported")
+
+    for declaration_name in ("Events", "Cache", "I18n", "State"):
+        if _get_nested_class_declarations(component_class, declaration_name):
+            return rejected(f"{declaration_name} configuration is not supported")
+    if _get_nested_class_declarations(component_class, "Slots"):
+        slots_fields = get_fields(component_class.Slots) if component_class.Slots is not None else []
+        if slots_fields is None or slots_fields:
+            return rejected("nonempty Slots configuration is not supported")
+    # Messages on this class (or a base) would need the per-instance i18n
+    # collector. Messages on some other registered class are engine state and
+    # are handled with the extension hooks below.
+    _messages_owner, inline_messages, messages_file = _find_pair_declaration(
+        component_class, "messages", "messages_file"
+    )
+    if inline_messages is not None or messages_file is not None:
+        return rejected("component messages are not supported")
+    dependencies = component_class.get_dependencies()
+    if dependencies.css:
+        return rejected("secondary CSS dependencies are unsupported for simple='vue'")
+    if dependencies.js:
+        return rejected("secondary JavaScript dependencies are unsupported for simple='vue'")
+
+    template_data_member: object | None = None
+    js_data_member: object | None = None
+    css_data_member: object | None = None
+    for base in _static_class_mro(component_class):
+        base_namespace = _static_class_dict(base)
+        if template_data_member is None and "template_data" in base_namespace:
+            template_data_member = base_namespace["template_data"]
+        if js_data_member is None and "js_data" in base_namespace:
+            js_data_member = base_namespace["js_data"]
+        if css_data_member is None and "css_data" in base_namespace:
+            css_data_member = base_namespace["css_data"]
+        if template_data_member is not None and js_data_member is not None and css_data_member is not None:
+            break
+    if template_data_member is not ComponentBase.template_data and type(template_data_member) is not staticmethod:
+        return rejected("template_data must use the base default or be declared as a static method")
+    for callback_name, callback_member, base_callback in (
+        ("js_data", js_data_member, ComponentBase.js_data),
+        ("css_data", css_data_member, ComponentBase.css_data),
+    ):
+        if callback_member is not base_callback and type(callback_member) is not staticmethod:
+            return rejected(f"{callback_name} must use the base default or be declared as a static method")
+
+    compiled = _get_compiled_template(component_class, prepared=True)
+    if compiled is None or compiled.prepared_generate is None:
+        return rejected("a prepared template is required", compiled)
+    extensions = component_class.citry.extensions
+    # The plan depends on how extensions transform the compiled template, so
+    # its cache key names each extension's template hooks.
+    extension_key = tuple(
+        (
+            id(extension),
+            getattr(type(extension), "on_template_foreign_compiled", None),
+            getattr(type(extension), "on_template_compiled", None),
+            getattr(type(extension), "on_attrs_resolved", None),
+        )
+        for extension in extensions._extensions
+    )
+    plan_key = (
+        "simple-vue-leaf-calls",
+        compiled.template_id,
+        compiled.origin,
+        compiled.kind,
+        extension_key,
+    )
+    # The plan is stored on the loaded template, so a rebuilt admission for an
+    # unchanged template and extension set reuses it and on_template_compiled
+    # runs once per plan.
+    with compiled.compile_lock:
+        cached_plan = compiled.prepared_standalone_bodies.get(plan_key)
+        if cached_plan is None:
+            generated = compiled.prepared_generate()
+            foreign_resolved = extensions.on_template_foreign_compiled(
+                component_class,
+                generated,
+                provider_metadata=compiled.foreign_provider_metadata,
+                template_id=compiled.template_id,
+                origin=compiled.origin,
+                template_kind=compiled.kind,
+            )
+            transformed = extensions.on_template_compiled(
+                component_class,
+                foreign_resolved,
+                template_id=compiled.template_id,
+                origin=compiled.origin,
+                template_kind=compiled.kind,
+            )
+            typed = coalesce_prepared_static_nodes(transformed)
+            compiled_leaf = compile_leaf_program(typed, allow_static_only=True, allow_calls=True)
+            cached_plan = (
+                [compiled_leaf]
+                if compiled_leaf is not None and compiled_leaf.static_instance_free_template_supported()
+                else []
+            )
+            compiled.prepared_standalone_bodies[plan_key] = cached_plan
+            compiled.prepared_standalone_bodies.move_to_end(plan_key)
+            while len(compiled.prepared_standalone_bodies) > 64:
+                compiled.prepared_standalone_bodies.popitem(last=False)
+        else:
+            compiled.prepared_standalone_bodies.move_to_end(plan_key)
+    if len(cached_plan) != 1:
+        return rejected(
+            "the template uses slots, a child call that passes content, c-bind or Vue bindings, "
+            "or an expression the instance-free renderer cannot evaluate",
+            compiled,
+        )
+    leaf_node = cast("LeafProgramNode", cached_plan[0])
+
+    # Engine state from here on. Only the built-in extensions are known to
+    # leave an instance-free render unchanged; the i18n extension qualifies
+    # only while no catalog can apply to this render.
+    def known_lifecycle_hook(extension: object, hook_name: str) -> bool:
+        extension_type = type(extension)
+        implementation = getattr(extension_type, hook_name, None)
+        if extension_type is DependenciesExtension:
+            return implementation is getattr(DependenciesExtension, hook_name, None)
+        if extension_type is EventsExtension:
+            return implementation is getattr(EventsExtension, hook_name, None)
+        if extension_type is I18nExtension:
+            i18n = cast("I18nExtension", extension)
+            return (
+                implementation is getattr(I18nExtension, hook_name, None)
+                and not i18n.configured
+                and not i18n._has_registered_message_source()
+            )
+        return False
+
+    renders_ordinarily = any(
+        not known_lifecycle_hook(extension, hook_name)
+        for hook_name in (
+            "on_component_input",
+            "on_component_data",
+            "on_component_rendered",
+            "on_render_context_merge",
+        )
+        for extension in extensions._extensions_with_hook(hook_name)
+    ) or not leaf_node.static_instance_free_hooks_supported(extensions)
+
+    return _SimpleVueAdmission(
+        key=key,
+        template=compiled,
+        rejection=None,
+        renders_ordinarily=renders_ordinarily,
+        template_data_callback=_static_data_callback(template_data_member),
+        js_data_callback=_static_data_callback(js_data_member),
+        css_data_callback=_static_data_callback(css_data_member),
+        leaf_node=leaf_node,
+        has_dependencies=bool(dependencies),
+        plain_bases=plain_bases,
+    )
+
+
+def _static_data_callback(member: object) -> Callable[[Any, dict[str, Any]], Any] | None:
+    """Unwrap an admitted staticmethod; the base default method maps to None."""
+    if type(member) is staticmethod:
+        return cast("Callable[[Any, dict[str, Any]], Any]", member.__func__)
+    return None
+
+
+def _simple_vue_renders_ordinarily(component_class: type[Component]) -> bool:
+    """Whether engine state sends this admitted ``simple='vue'`` class through ordinary rendering."""
+    admission = _simple_vue_admission(component_class)
+    return admission.rejection is None and admission.renders_ordinarily
+
+
+def _render_simple_vue_leaf(
+    element: CitryElement,
+    parent_context: CitryContext,
+) -> SimpleVueRecord | None:
+    """
+    Render one admitted ``simple='vue'`` occurrence without a Python Component.
+
+    Returns None for a class that is not ``simple='vue'``, and also when
+    engine state (an extension hook, configured i18n, or messages on another
+    registered component) requires the ordinary path. That decision is made
+    before the render ID or any data callback, so the ordinary render that
+    follows runs each callback exactly once.
+    """
+    component_class = element.comp_cls
+    if component_class.simple != "vue":
+        return None
+
+    from citry.ext.dependencies.emission import EXTRA_KEY  # noqa: PLC0415
+    from citry.ext.dependencies.extension import _DependencyCacheCapture  # noqa: PLC0415
+    from citry.ext.dependencies.scripts import has_component_asset  # noqa: PLC0415
+    from citry.ext.dependencies.types import DependencyRecord  # noqa: PLC0415
+
+    try:
+        # The call shape belongs to this invocation, so it is checked every time.
+        if (
+            type(element) is not CitryElement
+            or component_class.transparent
+            or component_class.pure
+            or component_class._citry_dynamic_selector
+            or element.slots
+            or element.component_tag_client_bindings
+            or element.element_morph_metadata is not None
+        ):
+            _reject_simple_vue(
+                component_class,
+                "calls must be registered, nontransparent leaf components without slots, component-tag bindings, "
+                "or instance effects",
+            )
+        # Registration can change between calls without touching any key the
+        # admission record watches, so identity is checked every time.
+        if component_class.citry.get_component_by_class_id(component_class.class_id) is not component_class:
+            _reject_simple_vue(component_class, "the component must remain registered in its owning Citry instance")
+
+        admission = _simple_vue_admission(component_class)
+        if admission.rejection is not None:
+            _reject_simple_vue(component_class, admission.rejection)
+
+        metadata = element.prepared_call_metadata
+        if metadata is None:
+            # Only a direct root call carries no call metadata.
+            if parent_context.component is not None:
+                _reject_simple_vue(component_class, "a template-authored, slot-free component call is required")
+        elif type(metadata) is not _PreparedCallMetadata or metadata.slot_free_body is not True:
+            _reject_simple_vue(component_class, "a template-authored, slot-free component call is required")
+        elif parent_context.component is None and not metadata.simple_vue_callers:
+            # With no component around it, a template call can only come
+            # from a simple='vue' template, which names its callers.
+            _reject_simple_vue(component_class, "a direct root call cannot carry child-call metadata")
+
+        # Engine state needs the ordinary path. Nothing observable has run
+        # yet, so the caller renders this call as a regular component.
+        if admission.renders_ordinarily:
+            return None
+        leaf_node = cast("LeafProgramNode", admission.leaf_node)
+
+        # Match Component.__init__: allocate and validate the render ID before
+        # the typed schema can reject this occurrence.
+        render_id = (
+            component_class.citry.id_generator() if component_class.citry.id_generator is not None else gen_render_id()
+        )
+        render_id = validate_render_id(render_id)
+        kwargs, _kwargs_const = _construct_data_schema(
+            element.kwargs,
+            component_class.Kwargs,
+            provenance_only=True,
+        )
+        # Callbacks run in the ordinary order: template_data, js_data, css_data.
+        template_data_callback = admission.template_data_callback
+        template_data = kwargs if template_data_callback is None else template_data_callback(kwargs, {})
+        template_data = _normalize_data(template_data, component_class.TemplateData)
+        js_data_callback = admission.js_data_callback
+        js_data = _normalize_data(
+            None if js_data_callback is None else js_data_callback(kwargs, {}),
+            component_class.JsData,
+        )
+        # This path skips on_component_data, so the callback's own keys are
+        # the final ones the browser will receive.
+        _check_js_data_keys(component_class, js_data)
+        css_data_callback = admission.css_data_callback
+        css_data = _normalize_data(
+            None if css_data_callback is None else css_data_callback(kwargs, {}),
+            component_class.CssData,
+        )
+        instance_globals = component_class.citry.template_globals
+        render_globals = _render_globals.get()
+        if instance_globals or render_globals:
+            template_data = _merge_const_mappings(
+                _const_mapping(instance_globals),
+                _const_mapping(render_globals or {}),
+                template_data,
+            )
+        variables = dict(template_data)
+        calls: dict[tuple[int, str], tuple[Any, dict[str, object], str | None]] | None = (
+            {} if leaf_node.fragment.calls else None
+        )
+        leaf = leaf_node.render_static_instance_free(
+            variables,
+            component_name=component_class.__name__,
+            calls=calls,
+        )
+        if calls is not None:
+            _defer_simple_vue_calls(
+                component_class,
+                leaf,
+                calls,
+                parent_context,
+                metadata,
+                admission,
+            )
+
+        css_capture = None
+        if css_data:
+            from citry.ext.dependencies.scripts import _cache_component_css_vars_capture  # noqa: PLC0415
+
+            css_capture = _cache_component_css_vars_capture(component_class, css_data)
+        css_vars_hash = None if css_capture is None else css_capture.variables_hash
+        has_js_asset = has_component_asset("js", component_class)
+        has_css_asset = has_component_asset("css", component_class)
+        # The parent owns the dependency set, so this record goes in at the
+        # position where an ordinary child render would have merged it.
+        if has_js_asset or has_css_asset or admission.has_dependencies:
+            records = parent_context.extra.setdefault(EXTRA_KEY, {})
+            if type(records) is not dict:
+                _reject_simple_vue(component_class, "dependency records changed type during instance-free rendering")
+            records[
+                DependencyRecord(
+                    class_id=component_class.class_id,
+                    component_id=render_id,
+                    css_vars_hash=css_vars_hash,
+                    component_class=component_class,
+                )
+            ] = _DependencyCacheCapture(css=css_capture)
+
+        return SimpleVueRecord(
+            component_class=component_class,
+            class_id=component_class.class_id,
+            render_id=render_id,
+            call_metadata=metadata,
+            js_data=dict(js_data),
+            leaf=leaf,
+            prepared_data=leaf.prepared_data,
+            css_vars_hash=css_vars_hash,
+            root_markers=() if css_vars_hash is None else (f"data-ccss-{css_vars_hash}",),
+        )
+    except Exception as error:
+        call_metadata = element.prepared_call_metadata
+        callers = call_metadata.simple_vue_callers if type(call_metadata) is _PreparedCallMetadata else ()
+        set_component_error_message(
+            error, [*_component_path(parent_context.component), *callers, component_class.__name__]
+        )
+        raise
+
+
+def _defer_simple_vue_calls(
+    component_class: type[Component],
+    leaf: PreparedLeafProgram,
+    calls: dict[tuple[int, str], tuple[Any, dict[str, object], str | None]],
+    parent_context: CitryContext,
+    metadata: _PreparedCallMetadata | None,
+    admission: _SimpleVueAdmission,
+) -> None:
+    """
+    Turn the calls a ``simple='vue'`` template made into deferred children.
+
+    Each child gets the same element, call metadata and provided values that
+    ``ComponentNode.render`` would give it inside an ordinary parent. The
+    render loop then renders it as usual, so the child's own mode decides
+    how it renders. A ``simple='vue'`` parent has no Python instance, so the
+    child's ``parent`` is the nearest ordinary component above it (None at
+    the root); ``simple_vue_callers`` keeps the skipped names for error
+    messages.
+    """
+    from citry._vue.direct import active_execution  # noqa: PLC0415
+
+    children = cast("LeafCallChildren", leaf.call_children)
+    registered = component_class.citry._registry._name_to_cls
+    for call in leaf.fragment.calls:
+        # Recorded even when the loop is empty; a name that resolves to no
+        # registered class, or to a class that cannot be called here, gets
+        # no loop, like ForNode.render.
+        run_class = registered.get(call.node.name) if call.node.key is not None else None
+        if run_class is not None and run_class.simple is not True and not run_class.transparent:
+            children.run_types[call.key] = run_class.class_id
+    callers = (*(() if metadata is None else metadata.simple_vue_callers), component_class.__name__)
+    origin = admission.template.origin if admission.template is not None else None
+    parent_component = parent_context.component
+    direct_parent_execution = active_execution()
+    for site, (call, kwargs, key) in calls.items():
+        node = call.node
+        child_class = component_class.citry.get(node.name)
+        # These children do not render as a component of their own: they
+        # write their HTML into their caller's template, which a simple='vue'
+        # template compiled once cannot take in.
+        if child_class.simple is True or child_class.transparent or child_class._citry_dynamic_selector:
+            kind = "simple=True" if child_class.simple is True else "transparent or dynamic"
+            _reject_simple_vue(
+                component_class,
+                f"its template calls {child_class.__name__}, a {kind} component that renders into its "
+                "caller's template; wrap that call in an ordinary component or use an ordinary parent",
+            )
+        element = CitryElement(
+            child_class,
+            kwargs,
+            {},
+            prepared_call_metadata=_PreparedCallMetadata(
+                node.source,
+                node.position,
+                key,
+                origin,
+                slot_free_body=True,
+                simple_vue_callers=callers,
+            ),
+        )
+        children.index[site] = len(children.parts)
+        children.parts.append(
+            DeferredComponent(
+                element,
+                cast("Component", parent_component),
+                parent_context.provides,
+                direct_parent_execution=direct_parent_execution,
+            )
+        )
+
+
+def _simple_vue_child_tasks(record: SimpleVueRecord, parent_context: CitryContext) -> list[_RenderTask]:
+    """Queue the children a ``simple='vue'`` occurrence called, in template order."""
+    children = record.leaf.call_children
+    if children is None:
+        return []
+    # The children's dependencies go where the record's own dependency
+    # record went: the context of the nearest enclosing render.
+    return [
+        _RenderTask(part, _DeferredComponentPosition(children.parts, index, parent_context))
+        for index, part in enumerate(children.parts)
+        if isinstance(part, DeferredComponent)
+    ]
 
 
 def render_impl(
@@ -146,7 +780,46 @@ def render_impl(
     """
     value_token = _VALUE_CONTEXT.set(None)
     try:
-        if element.comp_cls.simple and parent is None:
+        if element.comp_cls.simple == "vue" and parent is None:
+            owner = element.comp_cls.citry
+            root_context = CitryContext(
+                component=None,
+                provides=provides,
+                sandboxed=owner.settings.sandbox_expressions,
+            )
+            render_token = _render_globals.set(render_globals) if render_globals is not None else None
+            try:
+                with _component_like_render_scope(owner):
+                    record = _render_simple_vue_leaf(element, root_context)
+            finally:
+                if render_token is not None:
+                    _render_globals.reset(render_token)
+            # None means engine state needs the ordinary path; nothing ran
+            # yet, so the ordinary root render below is the only render.
+            if record is not None:
+                root_render = CitryRender(
+                    parts=[record],
+                    context=root_context,
+                    owner_citry=owner,
+                    render_target="prepared",
+                )
+                if record.leaf.call_children is None:
+                    return root_render
+                # The children render through the ordinary render loop, in
+                # the same scopes an ordinary root render sets up.
+                with (
+                    nullcontext() if prepared_render_active() else typed_render_scope(direct=True, vue=False),
+                    direct_render_scope(),
+                    _component_like_render_scope(owner),
+                    pure_body_cache_scope(),
+                ):
+                    render_token = _render_globals.set(render_globals) if render_globals is not None else None
+                    try:
+                        return _settle_render(root_render, finalize_root=False)
+                    finally:
+                        if render_token is not None:
+                            _render_globals.reset(render_token)
+        if element.comp_cls.simple is True and parent is None:
             # A standalone template supplies an explicit owner for a root simple
             # call. Embedded calls already carry their actual insertion context.
             return element.comp_cls.citry.render_template(
@@ -460,14 +1133,31 @@ def _settle_render(
                 from citry._vue.direct import direct_execution_scope  # noqa: PLC0415
 
                 with direct_execution_scope(task.deferred.direct_parent_execution):
-                    child = _render_one_traced(
+                    simple_record = _render_simple_vue_leaf(
                         task.deferred.element,
-                        task.deferred.parent,
-                        task.deferred.provides,
+                        task.position.parent_context,
+                    )
+                    child = (
+                        None
+                        if simple_record is not None
+                        else _render_one_traced(
+                            task.deferred.element,
+                            task.deferred.parent,
+                            task.deferred.provides,
+                        )
                     )
             except Exception as error:  # noqa: BLE001
                 bubble(error)
                 continue
+            if simple_record is not None:
+                _replace_in_parts(task.position.parts, task.position.idx, task.deferred, simple_record)
+                # Render the children it called next, before its later
+                # siblings, as an ordinary parent's children would be.
+                if simple_record.leaf.call_children is not None:
+                    stack.extend(reversed(_simple_vue_child_tasks(simple_record, task.position.parent_context)))
+                continue
+            if child is None:
+                raise AssertionError("ordinary deferred rendering did not produce a result")
             if child.cache_hit:
                 _replace_in_parts(task.position.parts, task.position.idx, task.deferred, child.render)
                 _merge_dependencies(task.position.parent_context, child.render.context)
@@ -561,6 +1251,11 @@ def _scan_deferred_parts(
             continue
         if isinstance(part, DeferredComponent):
             tasks.append(_RenderTask(part, _DeferredComponentPosition(current_parts, i, context)))
+        elif type(part) is SimpleVueRecord:
+            # A root simple='vue' render holds its called children in its
+            # leaf; they share the enclosing context.
+            if part.leaf.call_children is not None:
+                tasks.extend(_simple_vue_child_tasks(part, context))
         else:
             unwrapped = part
             if isinstance(unwrapped, CitryRender):
@@ -749,6 +1444,11 @@ def _component_path(component: Component | None) -> list[str]:
     names: list[str] = []
     while component is not None:
         names.append(type(component).__name__)
+        # simple='vue' components between this one and its parent have no
+        # instance to walk through, so their names come from the call.
+        metadata = getattr(component, "_prepared_call_metadata", None)
+        if type(metadata) is _PreparedCallMetadata:
+            names.extend(reversed(metadata.simple_vue_callers))
         component = component.parent
     names.reverse()
     return names
@@ -779,7 +1479,9 @@ def _render_one_with_error_path(
     try:
         return _render_one(element, parent, provides)
     except Exception as err:
-        set_component_error_message(err, [*_component_path(parent), element.comp_cls.__name__])
+        metadata = element.prepared_call_metadata
+        callers = metadata.simple_vue_callers if type(metadata) is _PreparedCallMetadata else ()
+        set_component_error_message(err, [*_component_path(parent), *callers, element.comp_cls.__name__])
         raise
 
 
@@ -906,7 +1608,14 @@ def _render_one(
     comp_cls = element.comp_cls
     from citry._vue.capture import prepared_render_active  # noqa: PLC0415
 
-    if comp_cls.simple:
+    # A simple='vue' class reaches this path only when engine state (not the
+    # class) needs ordinary rendering; any other arrival skipped the checks.
+    if comp_cls.simple == "vue" and not _simple_vue_renders_ordinarily(comp_cls):
+        raise TypeError(
+            "simple='vue' calls must pass through the instance-free leaf renderer; "
+            "this invocation reached the ordinary component-instance path"
+        )
+    if comp_cls.simple is True:
         from citry._simple_runtime import SimpleElement, prepare_simple_element, render_simple  # noqa: PLC0415
 
         if not isinstance(element, SimpleElement):
@@ -944,6 +1653,17 @@ def _render_one(
             component._selector_call_shape = (element.contains_fills, element.has_range_directives)
         elif type(element) is _SyntheticMarkElement:
             component._citry_mark_replacement = True
+    if element.component_tag_client_bindings and comp_cls.transparent and not comp_cls._citry_dynamic_selector:
+        # A transparent component renders no Vue component of its own, so a
+        # prop, listener, or `v-show` on its tag would have nothing to reach.
+        # `<c-component>` is the exception: it forwards them to its target.
+        names = ", ".join(repr(binding.key) for binding in element.component_tag_client_bindings)
+        msg = (
+            f"{names} cannot be used on the tag of the transparent component {comp_cls.__name__!r}: "
+            "it renders its content in place and has no Vue component to receive props, listeners, or 'v-show'. "
+            "Put the binding on an element inside it."
+        )
+        raise TypeError(msg)
     component._component_tag_client_bindings = element.component_tag_client_bindings
     # Private dynamic-element directives must be visible to input hooks, but
     # never enter the user kwargs those hooks can replace.
@@ -1082,6 +1802,9 @@ def _render_one(
     with direct_receiver_scope(context):
         extensions.on_component_data(component, context, tpl_data, js_data, css_data)
         _restore_const_identities(tpl_data, component._const_candidates)
+    # Checked after the extensions ran, because an extension may add keys, and
+    # before the template renders, so the error comes before any browser output.
+    _check_js_data_keys(comp_cls, js_data)
     context.js_data = js_data
 
     # 5. ``provides`` are the entries this component inherited plus any
@@ -1203,7 +1926,9 @@ def _render_one(
                         PREPARED_CONST_PRECOMPUTE_ADAPTER,
                         coalesce_prepared_static_nodes,
                     )
-                    from citry._vue.leaf_program import compile_leaf_program  # noqa: PLC0415
+                    from citry._vue.leaf_program import (  # noqa: PLC0415
+                        compile_leaf_program,
+                    )
 
                     specialized = precompute_const_parts(
                         transformed,
@@ -1225,9 +1950,12 @@ def _render_one(
                         for extension in attrs_hooks
                     )
                     program = (
-                        compile_leaf_program(typed, allow_i18n_passthrough=allow_i18n_passthrough)
+                        compile_leaf_program(
+                            typed,
+                            allow_i18n_passthrough=allow_i18n_passthrough,
+                        )
                         if template_override is None
-                        and not comp_cls.simple
+                        and comp_cls.simple is False
                         and not comp_cls.pure
                         and not comp_cls.transparent
                         and not is_tracing()
@@ -1255,7 +1983,9 @@ def _render_one(
                         format_key=("vue-prepared", is_tracing()),
                     )
                 else:
-                    prepared_key = (signature, visible_names, is_tracing())
+                    # The ABC token keeps a later ComponentLike registration
+                    # from reusing text a constant value was written as.
+                    prepared_key = (signature, visible_names, is_tracing(), abc.get_cache_token())
                     with compiled.compile_lock:
                         cached_body = compiled.prepared_standalone_bodies.get(prepared_key)
                         if cached_body is None:
@@ -1269,7 +1999,7 @@ def _render_one(
                 # One transparent class serves every standalone source. Its
                 # body cache must therefore include the immutable template
                 # record rather than using the class-keyed shared cache.
-                standalone_key = (signature, visible_names)
+                standalone_key = (signature, visible_names, abc.get_cache_token())
                 with compiled.compile_lock:
                     cached_body = compiled.standalone_bodies.get(standalone_key)
                     if cached_body is None:
@@ -1545,7 +2275,7 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
         # Deferred like a <c-child> tag in the template: the render_impl loop
         # renders it, so a replacement chain can never exhaust the Python
         # call stack.
-        if value.comp_cls.simple:
+        if value.comp_cls.simple is True:
             from citry._simple_runtime import simple_deferred  # noqa: PLC0415
 
             return [simple_deferred(value, context)]
@@ -1933,6 +2663,69 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
         if template is not None:
             origin = template.origin
     set_template_position_error_message(err, source, position, component_name, origin)
+
+
+# Every js_data() key becomes a member of the component's Vue instance in the
+# browser. Vue and Citry already own every instance name that starts with "$"
+# or "_", and Citry adds the "citryId" prop to every component, so the browser
+# runtime refuses those keys when the component mounts. Python knows these
+# names without seeing the component's JavaScript, so it rejects them at render
+# time, before any HTML leaves the server. A key that matches a name the
+# component's JavaScript defines (a prop, data(), setup(), method, computed
+# value, or injection) can only be detected in the browser, which reports it
+# when the component mounts.
+_RESERVED_JS_DATA_PREFIXES = ("$", "_")
+_RESERVED_JS_DATA_NAMES = frozenset({"citryId"})
+
+# Names that already passed the check above. A component returns the same few
+# keys on every render, so a set lookup replaces the prefix test after the
+# first render. The cap keeps components that build keys from data (for
+# example one key per row ID) from growing the set without limit; past it,
+# new names are still checked, just not remembered.
+_ACCEPTED_JS_DATA_KEYS: set[str] = set()
+_ACCEPTED_JS_DATA_KEYS_LIMIT = 4096
+
+
+def _check_js_data_keys(component_class: type[Any], js_data: Mapping[str, object]) -> None:
+    """Reject a ``js_data()`` key that the browser runtime would refuse at mount."""
+    accepted = _ACCEPTED_JS_DATA_KEYS
+    for key in js_data:
+        if key in accepted:
+            continue
+        # Only a non-string key is skipped here, because the prepared-data
+        # conversion rejects it with its own error. A str subclass is still
+        # checked, since it reaches the browser as an ordinary string.
+        if not isinstance(key, str):
+            continue
+        if key.startswith(_RESERVED_JS_DATA_PREFIXES) or key in _RESERVED_JS_DATA_NAMES:
+            raise ValueError(_reserved_js_data_key_message(component_class, key))
+        if len(accepted) < _ACCEPTED_JS_DATA_KEYS_LIMIT:
+            accepted.add(key)
+
+
+def _reserved_js_data_key_message(component_class: type[Any], key: str) -> str:
+    """Explain why one ``js_data()`` key is refused and suggest a usable name."""
+    if key in _RESERVED_JS_DATA_NAMES:
+        reason = f"Citry uses {key!r} as a prop on every component's Vue instance"
+    else:
+        reason = (
+            f"Vue and Citry reserve names that start with {key[0]!r} on the component's Vue instance, "
+            "so the browser would refuse this key when the component mounts"
+        )
+    # Strip the reserved prefix so the suggestion is usually the name the
+    # author meant; fall back to a generic hint when nothing usable remains.
+    stripped = key.lstrip("".join(_RESERVED_JS_DATA_PREFIXES))
+    # A name that starts with a digit could not be read from a template
+    # expression, so it is not worth suggesting.
+    if stripped and stripped != key and not stripped[0].isdigit() and stripped not in _RESERVED_JS_DATA_NAMES:
+        suggestion = f", for example to {stripped!r}"
+    else:
+        suggestion = " to a name that starts with a letter"
+    return (
+        f"The JavaScript data for component {component_class.__name__} (from js_data() or an extension's "
+        f"on_component_data) contains the key {key!r}, but {reason}. "
+        f"Rename the key{suggestion}."
+    )
 
 
 def _normalize_data(

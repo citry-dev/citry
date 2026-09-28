@@ -31,9 +31,6 @@ from citry_core.template_parser import (
     analyze_browser_source as analyze_browser_source_rust,
 )
 from citry_core.template_parser import (
-    analyze_component_members as analyze_component_members_rust,
-)
-from citry_core.template_parser import (
     analyze_component_source as analyze_component_source_rust,
 )
 
@@ -68,6 +65,9 @@ class BrowserExpression:
     transform: BrowserExpressionTransform = "identity"
     attribute_start_index: int | None = None
     attribute_end_index: int | None = None
+    # Names an enclosing `c-for` or `c-fill` binds in Python. The browser never
+    # sees them, so a Vue expression that reads one reads Vue state instead.
+    python_bindings: tuple[str, ...] = ()
 
     @property
     def canonical_attribute(self) -> str:
@@ -114,18 +114,6 @@ class BrowserMember:
 
     owner: str
     name: str
-    start_index: int
-    end_index: int
-
-
-@dataclass(frozen=True, slots=True)
-class BrowserComponentMember:
-    """One static member whose owner resolves to a callback context binding."""
-
-    context_name: str
-    name: str
-    owner_start_index: int
-    owner_end_index: int
     start_index: int
     end_index: int
 
@@ -299,7 +287,14 @@ class BrowserComponentSection:
 
 @dataclass(frozen=True, slots=True)
 class BrowserComponentMemberReference:
-    """One component-instance member reference with an authenticated receiver."""
+    """
+    One component-instance member reference with an authenticated receiver.
+
+    The span normally covers the member name in `receiver.name`. For `$i18n`
+    only, it may cover a read of a local variable that holds
+    `receiver.$i18n` and is never reassigned (`const i18n = component.$i18n`),
+    so read the span to learn the identifier written at the call site.
+    """
 
     receiver: str
     name: str
@@ -570,6 +565,7 @@ def browser_expressions(
         base_index=0,
         bindings=(),
         ambient_names=(),
+        python_names=(),
     )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
@@ -743,19 +739,6 @@ def _component_section_state(value: str) -> Literal["absent", "complete", "unkno
     if value == "unknown":
         return "unknown"
     raise ValueError(f"native component analysis reported an unknown section state {value!r}")
-
-
-def browser_component_members(source: str) -> tuple[BrowserComponentMember, ...]:
-    """Return static property accesses on unchanged component callback parameters."""
-    valid, members = analyze_component_members_rust(source)
-    if not valid:
-        return ()
-    size = len(source.encode("utf-8"))
-    return tuple(
-        BrowserComponentMember(context, name, owner_start, owner_end, start, end)
-        for context, name, owner_start, owner_end, start, end in members
-        if 0 <= owner_start < owner_end <= size and 0 <= start < end <= size
-    )
 
 
 def analyze_browser_component_source(source: str) -> BrowserComponentSourceAnalysis:
@@ -1094,18 +1077,77 @@ def browser_member_literal_calls(
     return tuple(found)
 
 
+def _owner_is_accepted(
+    expression: BrowserExpression,
+    tokens: tuple[_Token, ...],
+    boundaries: list[int],
+    index: int,
+    proven_owner_spans: frozenset[tuple[int, int]] | None,
+) -> bool:
+    """Decide whether the owner token at ``index`` starts an i18n call we can trust."""
+    if proven_owner_spans is None:
+        # Without a proof, only a bare name counts: `x.$i18n.tr()` could be any
+        # object's property that happens to share the name.
+        return not (index > 0 and tokens[index - 1].source in {".", "?."})
+    # The caller proved which exact reads hold the service, so a same-named
+    # variable elsewhere (a shadowing parameter, another object) is skipped.
+    owner = tokens[index]
+    owner_span = (
+        expression.start_index + boundaries[owner.start],
+        expression.start_index + boundaries[owner.end],
+    )
+    return owner_span in proven_owner_spans
+
+
+def component_js_i18n_owners(source: str) -> tuple[frozenset[str], frozenset[tuple[int, int]]]:
+    """
+    Find the reads in component JavaScript that hold the component's i18n service.
+
+    The analyzer proves `component.$i18n` and `this.$i18n` reads, plus reads of a
+    local variable that stores one of them and is never reassigned
+    (`const i18n = component.$i18n`). Pass the results to the i18n call finders
+    as ``owners`` and ``proven_owner_spans``.
+
+    Args:
+        source: Authored component JavaScript.
+
+    Returns:
+        The identifiers written at those reads, and their exact UTF-8 spans.
+        Both are empty when the source is not valid JavaScript.
+
+    """
+    analysis = analyze_browser_component_source(source)
+    if not analysis.valid:
+        return frozenset(), frozenset()
+    spans = frozenset(
+        (member.start_index, member.end_index) for member in analysis.member_references if member.name == "$i18n"
+    )
+    # A span covers either `$i18n` in `component.$i18n` or a variable read, so
+    # the identifier a call is written against is the spanned source text.
+    encoded = source.encode("utf-8")
+    names = frozenset(encoded[start:end].decode("utf-8") for start, end in spans)
+    return names, spans
+
+
 def browser_i18n_profile_calls(
     expression: BrowserExpression,
     owners: frozenset[str] = frozenset({"$i18n"}),
+    *,
+    proven_owner_spans: frozenset[tuple[int, int]] | None = None,
 ) -> tuple[BrowserI18nProfileCall, ...]:
-    """Return literal profile names from direct browser i18n calls."""
+    """
+    Return literal profile names from direct browser i18n calls.
+
+    Pass ``proven_owner_spans`` to accept only owners at those exact UTF-8
+    spans, such as the spans from `component_js_i18n_owners()`.
+    """
     tokens = _tokens(expression.source)
     boundaries = _utf8_boundaries(expression.source)
     found: list[BrowserI18nProfileCall] = []
     for index, owner in enumerate(tokens):
         if owner.kind != "identifier" or owner.source not in owners or index + 5 >= len(tokens):
             continue
-        if index > 0 and tokens[index - 1].source in {".", "?."}:
+        if not _owner_is_accepted(expression, tokens, boundaries, index, proven_owner_spans):
             continue
         first_separator, namespace, second_separator, operation, opening = tokens[index + 1 : index + 6]
         if (
@@ -1152,15 +1194,22 @@ def browser_i18n_profile_calls(
 def browser_i18n_message_calls(
     expression: BrowserExpression,
     owners: frozenset[str] = frozenset({"$i18n"}),
+    *,
+    proven_owner_spans: frozenset[tuple[int, int]] | None = None,
 ) -> tuple[BrowserI18nMessageCall, ...]:
-    """Return direct browser ``tr()`` calls whose message ID is literal."""
+    """
+    Return direct browser ``tr()`` calls whose message ID is literal.
+
+    Pass ``proven_owner_spans`` to accept only owners at those exact UTF-8
+    spans, such as the spans from `component_js_i18n_owners()`.
+    """
     tokens = _tokens(expression.source)
     boundaries = _utf8_boundaries(expression.source)
     found: list[BrowserI18nMessageCall] = []
     for index, owner in enumerate(tokens):
         if owner.kind != "identifier" or owner.source not in owners or index + 4 >= len(tokens):
             continue
-        if index > 0 and tokens[index - 1].source in {".", "?."}:
+        if not _owner_is_accepted(expression, tokens, boundaries, index, proven_owner_spans):
             continue
         separator, member, opening, message = tokens[index + 1 : index + 5]
         if (
@@ -1201,8 +1250,15 @@ def browser_i18n_bind_calls(
     owners: frozenset[str] = frozenset({"i18n"}),
     *,
     authenticated_owner_spans: frozenset[tuple[int, int]] = frozenset(),
+    proven_owner_spans: frozenset[tuple[int, int]] | None = None,
 ) -> tuple[BrowserI18nBindCall, ...]:
-    """Return bounded object-literal ``i18n.bind()`` preload roots."""
+    """
+    Return bounded object-literal ``i18n.bind()`` preload roots.
+
+    ``authenticated_owner_spans`` also admits owners written after a dot, such
+    as ``component.$i18n``. Pass ``proven_owner_spans`` instead to accept only
+    owners at those exact UTF-8 spans.
+    """
     tokens = _tokens(expression.source)
     boundaries = _utf8_boundaries(expression.source)
     found: list[BrowserI18nBindCall] = []
@@ -1213,8 +1269,11 @@ def browser_i18n_bind_calls(
             expression.start_index + boundaries[owner.start],
             expression.start_index + boundaries[owner.end],
         )
-        authenticated = owner_span in authenticated_owner_spans
-        if index > 0 and tokens[index - 1].source in {".", "?."} and not authenticated:
+        if proven_owner_spans is None:
+            authenticated = owner_span in authenticated_owner_spans
+            if index > 0 and tokens[index - 1].source in {".", "?."} and not authenticated:
+                continue
+        elif owner_span not in proven_owner_spans:
             continue
         separator, member, opening = tokens[index + 1 : index + 4]
         if separator.source not in {".", "?."} or member.source != "bind" or opening.source != "(":
@@ -1689,12 +1748,22 @@ def _collect_browser_expressions(
     base_index: int,
     bindings: tuple[BrowserBinding, ...],
     ambient_names: tuple[str, ...],
+    python_names: tuple[str, ...],
 ) -> None:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
         node = element._0
         introduced = _node_browser_bindings(node, base_index)
+        # The parser records the Python names a `c-for` loop or `c-fill`
+        # binding introduces. The body always sees them. The node's own
+        # attributes see them only for the `c-for` shorthand, because
+        # `<li c-for="i in items" :title="i">` repeats the element itself.
+        python_introduced = tuple(token.content for token in node.introduced_variables)
+        descendant_python = (*python_names, *python_introduced)
+        own_python = (
+            descendant_python if any(attr.key.content == "c-for" for attr in node.start_tag.attrs) else python_names
+        )
         loop_bindings = tuple(binding for binding in introduced if binding.kind == "v-for")
         descendant_ambient = _i18n_descendant_ambient(node, ambient_names)
         authored_tag = node.start_tag.name.content
@@ -1725,6 +1794,7 @@ def _collect_browser_expressions(
                         transform="dynamic-slot",
                         attribute_start_index=base_index + attr.key.start_index,
                         attribute_end_index=base_index + attr.key.end_index,
+                        python_bindings=own_python,
                     )
                 )
             if attr.kind == HtmlAttrKind.Template:
@@ -1740,6 +1810,9 @@ def _collect_browser_expressions(
                         base_index=base_index + inner.start_index + nested_start,
                         bindings=(*bindings, *loop_bindings),
                         ambient_names=descendant_ambient,
+                        # A nested template renders in the same Python scope
+                        # as the attribute that holds it.
+                        python_names=own_python,
                     )
                 continue
             canonical_attribute = _ascii_lower(attr.key.content)
@@ -1786,6 +1859,7 @@ def _collect_browser_expressions(
                     transform,
                     base_index + attr.key.start_index,
                     base_index + attr.key.end_index,
+                    own_python,
                 )
             )
         body = getattr(node, "body", None)
@@ -1797,6 +1871,7 @@ def _collect_browser_expressions(
                 base_index=base_index,
                 bindings=(*bindings, *introduced),
                 ambient_names=descendant_ambient,
+                python_names=descendant_python,
             )
 
 
@@ -2737,7 +2812,6 @@ __all__ = [
     "BrowserComponentBinding",
     "BrowserComponentCall",
     "BrowserComponentContextName",
-    "BrowserComponentMember",
     "BrowserComponentMemberReference",
     "BrowserComponentPropContribution",
     "BrowserComponentPropFinding",
@@ -2769,7 +2843,6 @@ __all__ = [
     "browser_bindings",
     "browser_client_prop_accepts",
     "browser_completion_at",
-    "browser_component_members",
     "browser_component_prop_findings",
     "browser_component_prop_sites",
     "browser_component_props",
@@ -2787,6 +2860,7 @@ __all__ = [
     "browser_member_at",
     "browser_member_literal_calls",
     "browser_state_bindings",
+    "component_js_i18n_owners",
     "mark_literal_findings",
     "python_event_handler_coordinates",
 ]

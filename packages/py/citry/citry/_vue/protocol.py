@@ -33,7 +33,6 @@ def revision_envelope(
     view: PreparedViewMetadata,
     assets: tuple[DefinitionAsset, ...],
     updated_ids: tuple[str, ...],
-    replacements: tuple[dict[str, object], ...] = (),
     definition_ids: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if view.revision != base_revision + 1:
@@ -43,37 +42,9 @@ def revision_envelope(
     known = {item.id for item in view.occurrences}
     if not set(updated_ids) <= known:
         raise ValueError("updated occurrence id is unknown")
-    prior_key: tuple[str, str] | None = None
-    seen_remounts: set[str] = set()
-    for replacement in replacements:
-        if set(replacement) != {"ownerId", "siteId", "expectedRemountIds"}:
-            raise ValueError("invalid replacement metadata shape")
-        owner, site, ids = replacement["ownerId"], replacement["siteId"], replacement["expectedRemountIds"]
-        if (
-            not isinstance(owner, str)
-            or not isinstance(site, str)
-            or not isinstance(ids, list)
-            or any(not isinstance(item, str) for item in ids)
-        ):
-            raise ValueError("invalid replacement metadata values")
-        if owner not in known or owner not in updated_ids or any(item not in known or item == owner for item in ids):
-            raise ValueError("replacement metadata references unknown or unupdated occurrences")
-        parents = {item.id: item.parent_id for item in view.occurrences}
-        for item in ids:
-            cursor = parents[item]
-            while cursor is not None and cursor != owner:
-                cursor = parents[cursor]
-            if cursor != owner:
-                raise ValueError("expected remount is not below its replacement owner")
-        key = (owner, site)
-        if (prior_key is not None and key <= prior_key) or ids != sorted(set(ids)) or seen_remounts.intersection(ids):
-            raise ValueError("replacement metadata must be sorted and unique")
-        prior_key = key
-        seen_remounts.update(ids)
     return prepared_manifest(app_id=app_id, view=view, assets=assets, definition_ids=definition_ids) | {
         "baseRevision": base_revision,
         "updatedIds": list(updated_ids),
-        "replacements": list(replacements),
     }
 
 
@@ -143,11 +114,20 @@ def prepared_manifest(
         opaque = occurrence.prepared_data.get("opaqueHtml", {})
         if type(opaque) is not dict:
             raise ValueError("prepared opaque HTML values must be an exact object")
-        declared = {item["key"] for item in asset.opaque_html_sites}
-        if set(opaque) != declared:
+        declared = {item["key"]: item for item in asset.opaque_html_sites}
+        if set(opaque) != set(declared):
             raise ValueError("prepared opaque HTML values do not match definition declarations")
         for key, record in opaque.items():
-            if type(record) is not dict or set(record) != {"html"} or type(record["html"]) is not str:
+            # The browser mounts each record as one static vnode: its HTML and the number of
+            # top-level nodes that HTML parses into, which Vue needs to adopt a written block.
+            if (
+                type(record) is not dict
+                or set(record) != {"html", "nodeCount"}
+                or type(record["html"]) is not str
+                or type(record["nodeCount"]) is not int
+                or not 0 <= record["nodeCount"] <= 2**53 - 1
+                or (record["html"] == "" and record["nodeCount"] != 0)
+            ):
                 raise ValueError(f"prepared opaque HTML record {key!r} is invalid")
     return {
         "protocol": "citry-vue-prepared/1",
@@ -184,7 +164,6 @@ def prepared_manifest(
             }
             for item in view.occurrences
         ],
-        "replacements": [],
     }
 
 
@@ -352,7 +331,7 @@ def _validate_local_call_runs(runs: tuple[dict[str, object], ...]) -> None:
         source_start, source_end, loop_start, loop_end = spans
         if not (loop_start == source_start and loop_end == source_end and source_start < source_end):
             raise ValueError("local call-run source spans are not ordered")
-        if run["collectionExpression"] != f"preparedData.callRuns.{run_id}":
+        if run["collectionExpression"] != f"$citryPrepared.callRuns.{run_id}":
             raise ValueError("local call-run collection expression is invalid")
         if run["idExpression"] != "citryOccurrenceId":
             raise ValueError("local call-run id expression is invalid")
@@ -363,8 +342,11 @@ def _validate_local_call_runs(runs: tuple[dict[str, object], ...]) -> None:
 def _validate_local_calls(calls: tuple[dict[str, object], ...]) -> None:
     seen: set[str] = set()
     for call in calls:
-        if type(call) is not dict or set(call) != {"localId", "typeKey", "componentTag", "bindings"}:
+        # `fills` is present only on a call with fills written inside it.
+        if type(call) is not dict or set(call) - {"fills"} != {"localId", "typeKey", "componentTag", "bindings"}:
             raise ValueError("local call metadata has an invalid shape")
+        if "fills" in call and (type(call["fills"]) is not list or not call["fills"]):
+            raise ValueError("local call fills are invalid")
         local_id = call["localId"]
         if type(local_id) is not str or re.fullmatch(r"citryCall[0-9A-Za-z]+", local_id) is None:
             raise ValueError("local call id is invalid")
@@ -386,6 +368,10 @@ def _validate_local_calls(calls: tuple[dict[str, object], ...]) -> None:
                 "event",
                 "ref-static",
                 "ref-expression",
+                "show",
+                "condition",
+                "model",
+                "directive",
             }:
                 raise ValueError("local call binding kind is invalid")
             if any(type(binding[key]) is not str for key in ("name", "value")):

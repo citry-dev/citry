@@ -23,7 +23,6 @@ from citry._browser_expressions import (
     BrowserComponentBinding,
     BrowserComponentCall,
     BrowserComponentContextName,
-    BrowserComponentMember,
     BrowserComponentMemberReference,
     BrowserComponentPropContribution,
     BrowserComponentPropFinding,
@@ -53,7 +52,6 @@ from citry._browser_expressions import (
     browser_bindings,
     browser_client_prop_accepts,
     browser_completion_at,
-    browser_component_members,
     browser_component_prop_findings,
     browser_component_prop_sites,
     browser_component_props,
@@ -72,13 +70,14 @@ from citry._browser_expressions import (
     browser_member_literal_calls,
     browser_state_binding_target_errors,
     browser_state_bindings,
+    component_js_i18n_owners,
     mark_literal_findings,
 )
 from citry._browser_expressions import (
     python_event_handler_coordinates as _python_event_handler_coordinates,
 )
 from citry._diagnostic_catalog import (
-    COMPONENT_JS_UNKNOWN_DATA_MEMBER,
+    COMPONENT_JS_UNKNOWN_MEMBER,
     COMPONENT_JS_UNKNOWN_VARIABLE,
     FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
     FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
@@ -88,6 +87,7 @@ from citry._diagnostic_catalog import (
     FORMAT_PROVIDER_INVALID,
     FORMAT_PROVIDER_UNAVAILABLE,
     TEMPLATE_UNKNOWN_VARIABLE,
+    VUE_PYTHON_VARIABLE,
     VUE_UNKNOWN_VARIABLE,
 )
 from citry._diagnostics import render_diagnostic
@@ -235,6 +235,7 @@ class VueLintConsumer:
     known_names: frozenset[str]
     rule_unknown_vue_variable: Literal["ignore", "warning", "error"]
     namespace_policy: Literal["closed", "unknown"] = "closed"
+    rule_vue_python_variable: Literal["ignore", "warning", "error"] = "warning"
 
     def __post_init__(self) -> None:
         if type(self.known_names) is not frozenset or any(
@@ -251,6 +252,13 @@ class VueLintConsumer:
             raise ValueError(msg)
         if self.namespace_policy not in {"closed", "unknown"}:
             msg = f"Unknown Vue namespace policy: {self.namespace_policy!r}"
+            raise ValueError(msg)
+        if type(self.rule_vue_python_variable) is not str or self.rule_vue_python_variable not in {
+            "ignore",
+            "warning",
+            "error",
+        }:
+            msg = f"Unknown Vue Python-variable rule severity: {self.rule_vue_python_variable!r}"
             raise ValueError(msg)
 
 
@@ -404,6 +412,57 @@ COMPONENT_JS_AMBIENT_NAMES = frozenset(
 )
 
 
+# Component JavaScript runs as an ordinary browser script, so Citry's own
+# global and the page's DOM interfaces are in scope there. Vue template
+# expressions cannot reach them, so these stay out of VUE_AMBIENT_NAMES.
+_COMPONENT_JS_BROWSER_GLOBALS = frozenset(
+    {
+        "AbortController",
+        "AbortSignal",
+        "Blob",
+        "CSS",
+        "Citry",
+        "DOMParser",
+        "DOMRect",
+        "DataTransfer",
+        "DocumentFragment",
+        "File",
+        "FileReader",
+        "FocusEvent",
+        "FormData",
+        "Headers",
+        "InputEvent",
+        "IntersectionObserver",
+        "KeyboardEvent",
+        "MouseEvent",
+        "MutationObserver",
+        "Node",
+        "NodeList",
+        "PointerEvent",
+        "Request",
+        "ResizeObserver",
+        "Response",
+        "ShadowRoot",
+        "SubmitEvent",
+        "Text",
+        "WebSocket",
+        "alert",
+        "confirm",
+        "crypto",
+        "customElements",
+        "getComputedStyle",
+        "innerHeight",
+        "innerWidth",
+        "matchMedia",
+        "prompt",
+        "requestIdleCallback",
+        "self",
+    }
+)
+# Every element interface, such as HTMLInputElement or SVGPathElement.
+_DOM_ELEMENT_INTERFACE = re.compile(r"(?:HTML|SVG)[A-Za-z]*Element")
+
+
 VUE_AMBIENT_NAMES = frozenset(
     {
         *COMPONENT_JS_AMBIENT_NAMES,
@@ -537,10 +596,13 @@ def lint_unknown_vue_variables(
             severity: Literal["warning", "error"] = (
                 "error" if any(consumer.rule_unknown_vue_variable == "error" for consumer in active) else "warning"
             )
+            # A Python loop or slot variable of the same name is the likely
+            # cause, so say so in the one finding this span gets.
+            variant = "python" if _is_python_bound(reference.name, expression) else "default"
             findings.append(
                 VueLintFinding(
                     name=reference.name,
-                    message=render_diagnostic(VUE_UNKNOWN_VARIABLE, name=reference.name),
+                    message=render_diagnostic(VUE_UNKNOWN_VARIABLE, variant=variant, name=reference.name),
                     code=VUE_UNKNOWN_VARIABLE,
                     severity=severity,
                     start_index=reference.start_index,
@@ -548,6 +610,126 @@ def lint_unknown_vue_variables(
                 )
             )
     return tuple(findings)
+
+
+def lint_vue_python_variables(
+    expressions: Sequence[BrowserExpression],
+    consumers: Sequence[VueLintConsumer],
+) -> tuple[VueLintFinding, ...]:
+    """
+    Warn when a Vue expression reads a name that a Python loop or slot binds there.
+
+    Inside `<li c-for="item in items" :title="item">`, Python renders one `li`
+    per item, but Vue evaluates `item` later in the browser against the
+    component's Vue state, so the binding never sees the loop value.
+
+    When a closed browser namespace proves the name missing, the
+    unknown-variable rule already reports the read as an error that names the
+    Python variable, so this rule stays quiet to give each read one finding.
+    It covers the remaining cases: an open namespace that cannot prove the
+    name missing, an unknown-variable rule set to ``"ignore"``, and a
+    component whose browser data also defines the name. In the last case Vue
+    shows the component's value without any error, so the message names both
+    meanings of the name.
+
+    Args:
+        expressions: Browser expressions with their enclosing Python bindings.
+        consumers: Every proven component that consumes this physical template.
+
+    Returns:
+        Findings in expression and source order. No consumer means no finding,
+        matching the unknown-variable rule, because syntax-only analysis cannot
+        prove which browser names exist.
+
+    """
+    if not consumers:
+        return ()
+    findings: list[VueLintFinding] = []
+    for expression in expressions:
+        # Most expressions sit outside any Python loop, so skip parsing them.
+        if not expression.python_bindings:
+            continue
+        analysis = analyze_browser_expression(expression)
+        if not analysis.valid:
+            continue
+        # A Vue `v-for` or slot alias, or a Vue helper, owns the name in the
+        # browser, so the expression reads the value the author bound there.
+        lexical = frozenset((*VUE_AMBIENT_NAMES, *expression.bindings))
+        for reference in analysis.references:
+            if reference.name in lexical or not _is_python_bound(reference.name, expression):
+                continue
+            # The unknown-variable rule reports this read already.
+            if any(
+                consumer.namespace_policy == "closed"
+                and reference.name not in consumer.known_names
+                and consumer.rule_unknown_vue_variable != "ignore"
+                for consumer in consumers
+            ):
+                continue
+            active = [consumer for consumer in consumers if consumer.rule_vue_python_variable != "ignore"]
+            if not active:
+                continue
+            severity: Literal["warning", "error"] = (
+                "error" if any(consumer.rule_vue_python_variable == "error" for consumer in active) else "warning"
+            )
+            # When the component's browser data also defines the name, Vue shows
+            # that value instead of the loop value and nothing fails, so the
+            # message names both meanings rather than calling the name missing.
+            # Only a component that reports the read decides which message it gets.
+            browser_known = any(reference.name in consumer.known_names for consumer in active)
+            attribute = _python_attribute_for(expression, reference.name)
+            if attribute is not None:
+                variant = "browser-attribute" if browser_known else "attribute"
+                message = render_diagnostic(
+                    VUE_PYTHON_VARIABLE, variant=variant, name=reference.name, attribute=attribute
+                )
+            else:
+                message = render_diagnostic(
+                    VUE_PYTHON_VARIABLE, variant="browser" if browser_known else "default", name=reference.name
+                )
+            findings.append(
+                VueLintFinding(
+                    name=reference.name,
+                    message=message,
+                    code=VUE_PYTHON_VARIABLE,
+                    severity=severity,
+                    start_index=reference.start_index,
+                    end_index=reference.end_index,
+                )
+            )
+    return tuple(findings)
+
+
+def _is_python_bound(name: str, expression: BrowserExpression) -> bool:
+    """Return whether an enclosing `c-for` or `c-fill` binds this JavaScript name in Python."""
+    # The parser stores Python names NFKC-normalized, as Python itself does,
+    # so `ﬁ` in JavaScript must match the Python loop variable `fi`.
+    return _identifier_identity(name) in {_identifier_identity(item) for item in expression.python_bindings}
+
+
+# `:name` or `v-bind:name` with no modifiers. A modifier such as `.prop` or
+# `.camel` changes what the binding sets, so `c-name` would not be equivalent.
+_VUE_BOUND_ATTRIBUTE = re.compile(r"(?::|v-bind:)([A-Za-z_][A-Za-z0-9_:-]*)")
+# Vue treats these bindings as instructions, not HTML attributes.
+_VUE_SPECIAL_BINDINGS = frozenset({"key", "ref", "is"})
+
+
+def _python_attribute_for(expression: BrowserExpression, name: str) -> str | None:
+    """Return the attribute that `c-<attribute>="<name>"` can set from Python instead."""
+    # Only a plain element attribute bound to exactly the Python name has an
+    # equivalent `c-` attribute. Anything else gets the general suggestion:
+    # `:title="item + label"` also reads Vue state, and a component tag's
+    # `:title` is a Vue prop, where `c-title` would become a Python kwarg.
+    if expression.host != "vue" or expression.evaluator == "raw" or expression.source.strip() != name:
+        return None
+    match = _VUE_BOUND_ATTRIBUTE.fullmatch(expression.attribute)
+    if match is None:
+        return None
+    attribute = match.group(1)
+    # `:c-name` binds Citry State, so prefixing it again would name nothing.
+    if attribute.startswith("c-") or attribute in _VUE_SPECIAL_BINDINGS:
+        return None
+    return attribute
 
 
 def lint_csp_compatibility(
@@ -579,7 +761,11 @@ def lint_unknown_component_js_variables(
         return ()
     findings: list[ComponentJsLintFinding] = []
     for reference in analysis.references:
-        if reference.name in COMPONENT_JS_AMBIENT_NAMES:
+        if (
+            reference.name in COMPONENT_JS_AMBIENT_NAMES
+            or reference.name in _COMPONENT_JS_BROWSER_GLOBALS
+            or _DOM_ELEMENT_INTERFACE.fullmatch(reference.name)
+        ):
             continue
         missing = [consumer for consumer in consumers if reference.name not in consumer.known_names]
         active = [consumer for consumer in missing if consumer.rule_unknown_component_js_variable != "ignore"]
@@ -624,36 +810,172 @@ _JSON_OBJECT_MEMBERS = frozenset(
 def lint_unknown_component_js_members(
     source: str,
     known_data_names: frozenset[str] | None,
+    *,
+    severity: Literal["ignore", "warning", "error"] = "error",
 ) -> tuple[ComponentJsLintFinding, ...]:
     """
-    Check static callback data members against a proven closed namespace.
+    Report `this.<name>` and `component.<name>` reads the component instance lacks.
+
+    The JavaScript analyzer proves which reads target the live Vue instance:
+    `this.<name>` in Vue Options methods, computed values, `data()`, lifecycle
+    hooks, `provide()`, and `watch` handlers, and `component.<name>` in an
+    `onServerRender` callback. Each name must then be a
+    `js_data()` key or a name the Vue Options declare (props, `data()`, `setup`,
+    methods, computed values, injections).
 
     Args:
         source: Authored component JavaScript.
-        known_data_names: Fields available to every owner, or None when the
-            namespace is open or cannot be established.
+        known_data_names: `js_data()` keys available to every owning component,
+            or None when that namespace is open or cannot be established.
+        severity: The `rule_unknown_component_js_member` severity that applies
+            to this source. `"ignore"` reports nothing.
 
     Returns:
-        Errors on unknown field names. Dynamic keys, shadowed bindings, and
-        reassigned callback parameters are excluded by the JavaScript analyzer.
+        Findings at the given severity for unknown member names, in source
+        order. Nothing is reported when the source is invalid, when any Vue
+        Options section cannot be read statically, or when the source may add
+        members at run time.
+
+    Raises:
+        ValueError: If `severity` is not `"ignore"`, `"warning"`, or `"error"`.
 
     """
-    if known_data_names is None:
+    if severity not in {"ignore", "warning", "error"}:
+        msg = f"Unknown component-JavaScript-member rule severity: {severity!r}"
+        raise ValueError(msg)
+    # An ignored rule skips the source analysis, not only the findings.
+    if known_data_names is None or severity == "ignore":
         return ()
-    return tuple(
-        ComponentJsLintFinding(
+    reported: Literal["warning", "error"] = "warning" if severity == "warning" else "error"
+    analysis = analyze_browser_component_source(source)
+    # An Options section built at run time (a spread, a computed data() result)
+    # can declare any name, so no missing name can be proven.
+    if not analysis.valid or any(section.state == "unknown" for section in analysis.sections):
+        return ()
+    assigned = _assigned_instance_member_names(source, analysis)
+    if assigned is None:
+        return ()
+    known = (
+        known_data_names
+        | {item.exposed_name for item in analysis.public_names}
+        | assigned
+        | _RUNTIME_INSTANCE_MEMBERS
+        | _JSON_OBJECT_MEMBERS
+    )
+    findings: dict[tuple[int, int], ComponentJsLintFinding] = {}
+    for member in analysis.member_references:
+        # Vue's own instance API and every extension's instance helper start
+        # with $ or _, and plugins can add them, so they are never "unknown".
+        if member.name.startswith(("$", "_")) or member.name in known:
+            continue
+        findings[(member.start_index, member.end_index)] = ComponentJsLintFinding(
             name=member.name,
-            message=render_diagnostic(COMPONENT_JS_UNKNOWN_DATA_MEMBER, name=member.name),
-            code=COMPONENT_JS_UNKNOWN_DATA_MEMBER,
-            severity="error",
+            message=render_diagnostic(COMPONENT_JS_UNKNOWN_MEMBER, name=member.name),
+            code=COMPONENT_JS_UNKNOWN_MEMBER,
+            severity=reported,
             start_index=member.start_index,
             end_index=member.end_index,
         )
-        for member in browser_component_members(source)
-        # The browser decodes data with JSON.parse, so ordinary Object.prototype
-        # members remain available even when no JSON field declares them.
-        if member.context_name == "data" and member.name not in known_data_names | _JSON_OBJECT_MEMBERS
-    )
+    return tuple(findings[span] for span in sorted(findings))
+
+
+# Citry adds this prop to every component itself, so authored Options never
+# declare it.
+_RUNTIME_INSTANCE_MEMBERS = frozenset({"citryId"})
+
+# A property write such as `this.timer = ...` or `vm.count += 1`. Vue lets code
+# add plain properties to an instance this way, so a later read is not a typo.
+_PROPERTY_WRITE = re.compile(
+    r"\.\s*([A-Za-z_$][\w$]*)\s*(?:(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?![=>])|\+\+|--)"
+)
+_PROPERTY_PREFIX_UPDATE = re.compile(r"(?:\+\+|--)\s*[\w$.]*\.\s*([A-Za-z_$][\w$]*)")
+# A member used as a `for` target, as in `for (this.key of keys)`.
+_PROPERTY_FOR_TARGET = re.compile(r"\bfor\s*\([^;)]*?\.\s*([A-Za-z_$][\w$]*)\s+(?:of|in)\b")
+# A member name inside a destructuring pattern.
+_PATTERN_MEMBER = re.compile(r"\.\s*([A-Za-z_$][\w$]*)")
+# Calls that can add arbitrary properties to their first argument.
+_BULK_PROPERTY_WRITE = re.compile(
+    r"\b(?:Object\s*\.\s*(?:assign|defineProperty|defineProperties)|Reflect\s*\.\s*(?:set|defineProperty))\s*\(\s*"
+    r"([A-Za-z_$][\w$]*)"
+)
+
+
+def _assigned_instance_member_names(
+    source: str,
+    analysis: BrowserComponentSourceAnalysis,
+) -> frozenset[str] | None:
+    """
+    Collect property names the source writes, or None when writes are unbounded.
+
+    This reads the source text rather than resolving receivers, so it also
+    counts writes to unrelated objects. Over-counting only skips findings, which
+    keeps the rule from reporting a member the component really adds.
+    """
+    # A class body gives `this` a different meaning that the analyzer does not
+    # separate from the component, so nothing about `this` can be proven.
+    if re.search(r"\bclass\b", source):
+        return None
+    names = {match.group(1) for match in _PROPERTY_WRITE.finditer(source)}
+    names.update(match.group(1) for match in _PROPERTY_PREFIX_UPDATE.finditer(source))
+    names.update(match.group(1) for match in _PROPERTY_FOR_TARGET.finditer(source))
+    # `[this.x] = pair` and `({ a: this.y } = obj)` write every member named
+    # inside the pattern. A `const`/`let`/`var` pattern only declares locals.
+    destructuring: list[tuple[int, int]] = []
+    for match in re.finditer(rf"[}}\]]\s*{_ASSIGNMENT_OPERATOR}", source):
+        opening = _matching_opening_bracket(source, match.start())
+        if opening is None:
+            return None
+        if re.search(r"\b(?:const|let|var)\s*$", source[:opening]):
+            continue
+        destructuring.append((opening, match.start()))
+        names.update(member.group(1) for member in _PATTERN_MEMBER.finditer(source, opening, match.start()))
+    component_names = {binding.local_name for binding in analysis.bindings if binding.name == "component"}
+    # A local copy (`const self = this`) is the same instance under another name.
+    aliases = {
+        match.group(1)
+        for match in re.finditer(r"([A-Za-z_$][\w$]*)\s*=\s*(this|[A-Za-z_$][\w$]*)\s*[;,\n)]", source)
+        if match.group(2) == "this" or match.group(2) in component_names
+    }
+    instance = "|".join(re.escape(name) for name in sorted({"this"} | component_names | aliases))
+    # `Object.assign(this, ...)` or `this[key] = value` can add names the text
+    # never spells out.
+    if any(match.group(1) in {"this"} | component_names | aliases for match in _BULK_PROPERTY_WRITE.finditer(source)):
+        return None
+    if re.search(rf"(?<![\w$.])(?:{instance})\s*(?:\?\.)?\s*\[[^\]]*\]\s*{_ASSIGNMENT_OPERATOR}", source):
+        return None
+    # A reassigned callback parameter no longer holds the component, so its
+    # members say nothing about the instance. That includes a destructuring
+    # assignment such as `({ component } = next)`; a `const`/`let`/`var`
+    # declaration pattern creates a new variable instead, so it is skipped.
+    for name in component_names:
+        if re.search(rf"(?<![\w$.]){re.escape(name)}\s*{_ASSIGNMENT_OPERATOR}", source):
+            return None
+        for opening, closing in destructuring:
+            if re.search(rf"(?<![\w$.]){re.escape(name)}(?![\w$])", source[opening:closing]):
+                return None
+    return frozenset(names)
+
+
+def _matching_opening_bracket(source: str, closing: int) -> int | None:
+    """Return the index of the bracket that `source[closing]` closes, if any."""
+    pairs = {"}": "{", "]": "["}
+    stack: list[str] = []
+    for index in range(closing, -1, -1):
+        character = source[index]
+        if character in pairs:
+            stack.append(pairs[character])
+        elif character in "{[":
+            # A mismatched bracket means strings or comments confused the
+            # count, so the caller must not trust the result.
+            if not stack or stack.pop() != character:
+                return None
+            if not stack:
+                return index
+    return None
+
+
+# `=` or a compound assignment such as `+=`, but not `==`, `===`, or `=>`.
+_ASSIGNMENT_OPERATOR = r"(?:(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?![=>]))"
 
 
 def _identifier_identity(name: str) -> str:
@@ -3827,7 +4149,6 @@ __all__ = [
     "BrowserComponentBinding",
     "BrowserComponentCall",
     "BrowserComponentContextName",
-    "BrowserComponentMember",
     "BrowserComponentMemberReference",
     "BrowserComponentPropContribution",
     "BrowserComponentPropFinding",
@@ -3898,7 +4219,6 @@ __all__ = [
     "browser_bindings",
     "browser_client_prop_accepts",
     "browser_completion_at",
-    "browser_component_members",
     "browser_component_prop_findings",
     "browser_component_prop_sites",
     "browser_component_props",
@@ -3919,6 +4239,7 @@ __all__ = [
     "browser_state_bindings",
     "build_inferred_template_shadow",
     "build_schema_template_shadow",
+    "component_js_i18n_owners",
     "component_name_match",
     "css_data_completion_at",
     "css_data_reference_at",
@@ -3935,6 +4256,7 @@ __all__ = [
     "lint_unknown_component_js_variables",
     "lint_unknown_template_variables",
     "lint_unknown_vue_variables",
+    "lint_vue_python_variables",
     "mark_literal_findings",
     "merge_json_wire_types",
     "prepare_python_component_assets",

@@ -5,8 +5,8 @@ Authored ``@c-*`` event/poll bindings and ``:c-*`` State controls are
 validated after template compilation and retained only on typed prepared
 element nodes and travel in the prepared browser configuration. Runtime State
 controls contributed by ``c-bind`` use a private, producer-authenticated Python
-carrier until typed capture consumes them. The ``data-cev-*`` namespace remains
-reserved so authored or extension-forged legacy carriers fail closed.
+carrier until typed capture consumes them. The ``data-cev-*`` namespace is
+reserved, so an authored or extension-forged ``data-cev-*`` attribute fails closed.
 
 Design: ``docs/design/events.md`` section 5.1.
 """
@@ -267,8 +267,6 @@ def _input_type_is_browser_dynamic(attr_names: list[str], *, include_python_attr
         if folded in {".type", ":type"} or folded.startswith((".type.", ":type.")):
             return True
         if folded == "v-bind:type" or folded.startswith("v-bind:type."):
-            return True
-        if folded == "x-bind:type" or folded.startswith("x-bind:type."):
             return True
     return False
 
@@ -1068,7 +1066,7 @@ def _compiled_location(
 def _element_of(tag_name: str, attrs: list[_Attr]) -> _Element:
     """Adapt compiled attributes to the shared static target classifier."""
     element = _state_binding_element(tag_name, [(attr.name, attr.value) for attr in attrs])
-    # Vue/Alpine browser-side bindings can replace a literal input type after
+    # Vue browser-side bindings can replace a literal input type after
     # server compilation; keep that uncertainty in the shared descriptor.
     names = [attr.name for attr in attrs]
     if _input_type_is_browser_dynamic(names, include_python_attrs=True):

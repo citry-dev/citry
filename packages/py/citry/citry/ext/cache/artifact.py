@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
 from dataclasses import dataclass
 from typing import Literal, TypeAlias, cast
+
+from citry._component_introspection import _installed_citry_version
+from citry._vue.compiler import HELPER_CONTRACT
+from citry._vue.leaf_program import LEAF_TEMPLATE_CONTRACT_DESCRIPTOR
 
 from .errors import CacheArtifactError, _CacheArtifactCompatibilityError, _CacheArtifactOversizedError
 from .limits import (
@@ -20,6 +25,17 @@ from .limits import (
 _ARTIFACT_VERSION = 1
 _CITRY_COMPATIBILITY_VERSION = 1
 _CREATED_BY = "citry-python"
+# A stored leaf program keeps compiled Vue template text and the prepared data
+# it reads, and replay hands both to the current compiler and browser runtime.
+# Hashing both of their contracts into every entry lets a lookup recognize an
+# entry written by a Citry build that generated a different template or targeted
+# a different runtime, and treat it as a miss that the next render replaces. The
+# installed Citry version joins them so every release also starts from misses,
+# which covers a stored shape that changed without a contract edit. The integer
+# versions above stay at 1 before Citry 1.0.0, so they cannot do this.
+_RENDER_CONTRACT = hashlib.sha256(
+    f"{HELPER_CONTRACT}\n{LEAF_TEMPLATE_CONTRACT_DESCRIPTOR}\n{_installed_citry_version()}".encode()
+).hexdigest()
 _ROOT_MARKER_RE = re.compile(r'([^\s=/><]+)(?:="([^"<>]*)")?\Z')
 
 
@@ -492,6 +508,7 @@ def _artifact_to_wire(artifact: CachedRenderArtifact) -> dict[str, object]:
     return {
         "artifact_version": _ARTIFACT_VERSION,
         "citry_version": _CITRY_COMPATIBILITY_VERSION,
+        "render_contract": _RENDER_CONTRACT,
         "created_by": _CREATED_BY,
         "root_frame": artifact.root_frame,
         "frames": [_frame_to_wire(frame) for frame in artifact.frames],
@@ -659,11 +676,25 @@ def _part_to_wire(part: ArtifactPart) -> list[object]:
 
 def _artifact_from_wire(value: object) -> CachedRenderArtifact:
     root = _require_object(value, "artifact")
+    for version_value, path, expected in (
+        (root.get("artifact_version"), "artifact.artifact_version", _ARTIFACT_VERSION),
+        (root.get("citry_version"), "artifact.citry_version", _CITRY_COMPATIBILITY_VERSION),
+    ):
+        try:
+            _require_exact_int(version_value, path, expected=expected)
+        except CacheArtifactError as error:
+            raise _CacheArtifactCompatibilityError(str(error)) from error
+    # Compare the contract before the exact field set, so an entry from a build
+    # that wrote no contract field is reported as incompatible, not corrupt.
+    if root.get("render_contract") != _RENDER_CONTRACT:
+        msg = "artifact.render_contract does not match this Citry build's template and runtime contract."
+        raise _CacheArtifactCompatibilityError(msg)
     _require_fields(
         root,
         {
             "artifact_version",
             "citry_version",
+            "render_contract",
             "created_by",
             "root_frame",
             "frames",
@@ -671,14 +702,6 @@ def _artifact_from_wire(value: object) -> CachedRenderArtifact:
         },
         "artifact",
     )
-    for version_value, path, expected in (
-        (root["artifact_version"], "artifact.artifact_version", _ARTIFACT_VERSION),
-        (root["citry_version"], "artifact.citry_version", _CITRY_COMPATIBILITY_VERSION),
-    ):
-        try:
-            _require_exact_int(version_value, path, expected=expected)
-        except CacheArtifactError as error:
-            raise _CacheArtifactCompatibilityError(str(error)) from error
     if root["created_by"] != _CREATED_BY:
         raise CacheArtifactError(f"Invalid artifact.created_by value {root['created_by']!r}.")
     root_frame = _require_nonnegative_int(root["root_frame"], "artifact.root_frame")
@@ -779,6 +802,10 @@ def _prepared_call_from_wire(value: object, path: str) -> ArtifactPreparedCall:
             "ref-static",
             "ref-expression",
             "citry-handler",
+            "show",
+            "condition",
+            "model",
+            "directive",
         }:
             raise CacheArtifactError(f"{path}[6][{index}][0] has an unknown binding kind.")
         binding_source = _require_string(binding[3], f"{path}[6][{index}][3]")

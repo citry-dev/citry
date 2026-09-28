@@ -14,7 +14,13 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry.attrs import _html_attr_identity, merge_attrs
-from citry.citry_render import CitryRender, _default_value_dispatch_for, _render_value
+from citry.citry_render import (
+    CitryRender,
+    SimpleVueRecord,
+    _default_value_dispatch_for,
+    _render_value,
+    simple_vue_called_components,
+)
 from citry.constness import const_value
 from citry.nodes import ElementAttrsNode, ElementKeyNode, ExprHtmlAttr, ExprNode, ForNode, Node
 from citry.util.html import Markup
@@ -578,7 +584,11 @@ class StaticRunStructure:
 
 
 class PreparedStaticRunNode(Node):
-    def __init__(self, html: str, root_structure: StaticRunStructure | None = None) -> None:
+    def __init__(
+        self,
+        html: str,
+        root_structure: StaticRunStructure | None = None,
+    ) -> None:
         self._prepared = PreparedStaticRun(html, root_structure)
 
     def render(self, context: CitryContext) -> PreparedStaticRun:  # noqa: ARG002
@@ -1053,9 +1063,22 @@ class PreparedElementCloseNode(Node):
         return self._prepared
 
 
+# Vue reads a name starting with one of these as a directive or binding:
+# `v-if`, `v-bind:x`, `:x`, `.x` (sets a DOM property), `^x` (forces an
+# attribute), `@x` (listener) and `#x` (slot).
+_VUE_DIRECTIVE_PREFIXES = ("v-", ":", ".", "^", "@", "#")
+
+
+def is_vue_directive_name(name: str) -> bool:
+    """Return whether Vue would treat an attribute name as a directive or binding."""
+    # Python-resolved names are data. Vue must never read one as code, and
+    # HTML names are case-insensitive, so `V-ON:click` must not slip past.
+    return name.casefold().startswith(_VUE_DIRECTIVE_PREFIXES)
+
+
 def _reject_executable_dynamic_attrs(attrs: Mapping[str, object], *, tag: str) -> None:
     for name in attrs:
-        if name.startswith(("v-", "@", ":")):
+        if is_vue_directive_name(name):
             raise ValueError(
                 f"Python-resolved attribute {name!r} on <{tag}> cannot introduce Vue syntax; "
                 "Vue directives and bindings must be authored statically in the template."
@@ -1254,6 +1277,20 @@ def _validate_prepared_render(render: CitryRender) -> None:
                 # non-empty raw strings.
                 continue
             elif isinstance(part, leaf_types):
+                continue
+            elif type(part) is SimpleVueRecord:
+                if type(part.leaf) is not PreparedLeafProgram:
+                    raise TypeError("simple='vue' rendering contains an invalid instance-free leaf record")
+                if part.leaf.call_children is None:
+                    continue
+                for called in simple_vue_called_components(part):
+                    if type(called) is SimpleVueRecord:
+                        if type(called.leaf) is not PreparedLeafProgram:
+                            raise TypeError("simple='vue' rendering contains an invalid instance-free leaf record")
+                    elif isinstance(called, CitryRender):
+                        pending.append(called)
+                    else:
+                        raise TypeError("prepared Vue rendering contains an unresolved runtime part")
                 continue
             elif isinstance(part, Placeholder) and part.key in {"deps:css", "deps:js"}:
                 # Dependency insertion points are consumed by the ordinary

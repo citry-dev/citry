@@ -4,23 +4,31 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import re
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
-from html import unescape
-from html.parser import HTMLParser
-from typing import TYPE_CHECKING, TypeAlias, TypeGuard, TypeVar, cast
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from html import escape, unescape
+from itertools import pairwise
+from typing import TYPE_CHECKING, Any, TypeAlias, TypeGuard, TypeVar, cast
 
 from citry.attrs import _html_attr_identity, validate_html_attr_name
-from citry.citry_render import CitryRender, Placeholder, PreparedComponentBinding, RenderDecoration, RenderPart
+from citry.citry_render import (
+    CitryRender,
+    Placeholder,
+    PreparedComponentBinding,
+    RenderDecoration,
+    RenderFrame,
+    RenderPart,
+    SimpleVueRecord,
+)
 from citry.client_directives import ComponentTagClientBindingKind
 from citry.components.mark import validate_mark_name
-from citry.constness import const_value, is_const
 from citry.util.html import Markup
+from citry_core.template_parser import analyze_browser_source
 
 from .capture import (
+    PreparedAttribute,
     PreparedDynamicElementClose,
     PreparedDynamicElementOpen,
     PreparedElementClose,
@@ -34,11 +42,13 @@ from .capture import (
     is_authenticated_browser_binding,
     is_authenticated_dynamic_element_open,
     is_native_state_tag,
+    is_vue_directive_name,
     vue_owned_native_marker,
     vue_owned_native_properties,
 )
 from .compiler import (
     DefinitionCompileInput,
+    _authored_vue_attr,
     _DynamicElementDeclaration,
     _ElementBindingDeclaration,
     _generated_event_args,
@@ -48,7 +58,6 @@ from .compiler import (
     _LocalCallRunDeclaration,
     _OpaqueHtmlDeclaration,
     _RuntimeEventDeclaration,
-    _vue_attribute_escape,
 )
 from .direct import (
     DirectCallRunRender,
@@ -56,28 +65,14 @@ from .direct import (
     DirectProjectionRender,
     DirectPythonComponentRender,
 )
+from .json_data import _copy_evaluated_json, _json_plain, _vue_attribute_value
 from .leaf_program import (
+    LeafCallChildren,
+    LeafProgramFragment,
     PreparedLeafProgram,
+    typed_leaf_parts,
 )
-from .leaf_program import (
-    _Close as _LeafClose,
-)
-from .leaf_program import (
-    _For as _LeafFor,
-)
-from .leaf_program import (
-    _If as _LeafIf,
-)
-from .leaf_program import (
-    _Open as _LeafOpen,
-)
-from .leaf_program import (
-    _Static as _LeafStatic,
-)
-from .leaf_program import (
-    _Text as _LeafText,
-)
-from .opaque_html import mark_opaque_html, reject_cross_boundary_html
+from .opaque_html import mark_opaque_html, opaque_html_record, reject_cross_boundary_html
 from .prepared import (
     PreparedMarker,
     PreparedOccurrence,
@@ -87,6 +82,7 @@ from .prepared import (
 if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.citry_context import CitryContext
+    from citry.citry_element import _PreparedCallMetadata
     from citry.component import Component
 
 TagForType = Callable[[str], str]
@@ -101,6 +97,11 @@ class Assembly:
     render_to_occurrence: Mapping[str, str]
     occurrence_to_render: Mapping[str, str]
     compile_inputs: Mapping[str, DefinitionCompileInput]
+    # Occurrences whose caller wrote `v-show` or a custom directive on the
+    # component tag, mapped to the child's class name, the authored tag, and
+    # the first such directive, so the compiled child's root can be checked
+    # once every definition is compiled.
+    root_directive_occurrences: Mapping[str, tuple[str, str, str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,8 +177,22 @@ def _matches_cache_replay_identity(
         return False
 
 
-def _run_eligible_component(value: object) -> TypeGuard[CitryRender]:
+def _run_eligible_component(value: object) -> TypeGuard[CitryRender | SimpleVueRecord]:
     """Whether one selected child has the exact bounded call-run proof."""
+    if type(value) is SimpleVueRecord:
+        from citry.citry_element import _PreparedCallMetadata  # noqa: PLC0415
+
+        metadata = value.call_metadata
+        return bool(
+            value.component_class.simple == "vue"
+            and value.component_class.class_id == value.class_id
+            and type(value.leaf) is PreparedLeafProgram
+            and type(metadata) is _PreparedCallMetadata
+            and metadata.slot_free_body is True
+            and type(metadata.source) is str
+            and type(metadata.source_span) is tuple
+            and type(metadata.explicit_key) is str
+        )
     if type(value) is not CitryRender or not value.frame.is_component_root:
         return False
     prepared = value.frame.prepared_occurrence
@@ -193,6 +208,18 @@ def _run_eligible_component(value: object) -> TypeGuard[CitryRender]:
         and not prepared.component_tag_client_bindings
         and value.frame.class_id
     )
+
+
+def _run_member_metadata(
+    value: CitryRender | SimpleVueRecord,
+) -> tuple[str | None, Any | None]:
+    # The type checker forbids subclasses of the final SimpleVueRecord, so
+    # isinstance acts like an exact type check and narrows ``value`` to
+    # CitryRender below.
+    if isinstance(value, SimpleVueRecord):
+        return value.class_id, value.call_metadata
+    prepared = value.frame.prepared_occurrence
+    return value.frame.class_id, None if prepared is None else prepared.call
 
 
 @dataclass(slots=True)
@@ -214,7 +241,7 @@ class _DefinitionFragment:
 
     def append(self, text: str) -> None:
         self.chunks.append(text)
-        self.byte_length += len(text.encode())
+        self.byte_length += len(text.encode("utf-8"))
 
     def extend(self, other: _DefinitionFragment) -> None:
         offset = self.byte_length
@@ -240,105 +267,12 @@ class _DefinitionFragment:
         )
 
 
-@dataclass(slots=True)
-class _SlotKeyScope:
-    """One active keyed element whose slot descendants need stable VNode keys."""
-
-    expression: str
-    ordinal: int = 0
-
-
 @dataclass(frozen=True, slots=True)
 class _FillFragment:
     site_id: str
     public_name: str
     lexical_owner: str
     body: _DefinitionFragment
-
-
-_AUTHORED_VUE_BINDING = re.compile(r"^(?:v-|:|@|#)")
-
-
-def _has_authored_vue_binding(attributes: object) -> bool:
-    """Return whether structured attributes contain an authored Vue binding."""
-    candidate_attributes: tuple[object, ...] = tuple(cast("Iterable[object]", attributes or ()))
-    return any(
-        getattr(attribute, "origin", None) == "source"
-        and _AUTHORED_VUE_BINDING.match(str(getattr(attribute, "name", "")))
-        for attribute in candidate_attributes
-    )
-
-
-class _VueBindingAttributeParser(HTMLParser):
-    """Find Vue binding names in opening tags, never in ordinary text."""
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=False)
-        self.found = False
-
-    def _inspect(self, attributes: list[tuple[str, str | None]]) -> None:
-        self.found = self.found or any(_AUTHORED_VUE_BINDING.match(name) for name, _ in attributes)
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        del tag
-        self._inspect(attrs)
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        del tag
-        self._inspect(attrs)
-
-
-def _contains_vue_binding_in_template(template: str) -> bool:
-    parser = _VueBindingAttributeParser()
-    parser.feed(template)
-    parser.close()
-    return parser.found
-
-
-def _structured_leaf_vue_binding(value: object) -> tuple[bool, bool]:
-    """Return ``(metadata_complete, has_binding)`` for leaf operations."""
-    if isinstance(value, (tuple, list)):
-        results = [_structured_leaf_vue_binding(item) for item in value]
-        return all(complete for complete, _ in results), any(found for _, found in results)
-    if isinstance(value, _LeafOpen):
-        return True, _has_authored_vue_binding(value.authored_attributes)
-    if isinstance(value, (_LeafStatic, _LeafText, _LeafClose)):
-        return True, False
-    if isinstance(value, _LeafIf):
-        complete, found = _structured_leaf_vue_binding(value.branches)
-        return complete, found
-    if isinstance(value, _LeafFor):
-        body_complete, body_found = _structured_leaf_vue_binding(value.body)
-        empty_complete, empty_found = _structured_leaf_vue_binding(value.empty)
-        return body_complete and empty_complete, body_found or empty_found
-    return False, False
-
-
-def _contains_authored_vue_binding(parts: Sequence[RenderPart]) -> bool:
-    """Whether projected authored markup needs its lexical Vue scope."""
-    for part in parts:
-        if isinstance(part, PreparedElementOpen):
-            if _has_authored_vue_binding(part.attrs):
-                return True
-            continue
-        if isinstance(part, PreparedDynamicElementOpen):
-            if _has_authored_vue_binding(part.authored_attrs):
-                return True
-            continue
-        if isinstance(part, PreparedLeafProgram):
-            metadata_complete, has_binding = _structured_leaf_vue_binding(part.operations)
-            if has_binding or (not metadata_complete and _contains_vue_binding_in_template(part.fragment.template)):
-                return True
-            continue
-        if isinstance(part, (CitryRender, RenderDecoration)):
-            # A nested component owns its own Vue scope. Its internal
-            # directives must not force the containing projection to move out
-            # of the physical definition.
-            if part.frame.is_component_root:
-                continue
-            if _contains_authored_vue_binding(tuple(part.parts)):
-                return True
-    return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -397,51 +331,17 @@ def _rebase_metadata(values: list[_RebasableMetadataT], offset: int) -> list[_Re
     )
 
 
-def _json_plain(value: object, _ancestors: set[int] | None = None) -> object:
-    if is_const(value):
-        return _json_plain(const_value(value), _ancestors)
-    from citry.ext.i18n.bindings import CapturedTranslationText  # noqa: PLC0415
-
-    if type(value) is CapturedTranslationText:
-        return str(value)
-    if value is None or type(value) in {bool, int, str}:
-        return value
-    if type(value) is float:
-        if not math.isfinite(value):
-            raise ValueError("prepared Vue data must contain only finite numbers")
-        return value
-    if isinstance(value, Mapping):
-        if any(not isinstance(key, str) for key in value):
-            raise TypeError("prepared Vue data object keys must be strings")
-        ancestors = set() if _ancestors is None else _ancestors
-        if id(value) in ancestors:
-            raise ValueError("prepared Vue data must not contain a cycle")
-        ancestors.add(id(value))
-        try:
-            return {str(key): _json_plain(item, ancestors) for key, item in value.items()}
-        finally:
-            ancestors.remove(id(value))
-    if isinstance(value, (list, tuple)):
-        ancestors = set() if _ancestors is None else _ancestors
-        if id(value) in ancestors:
-            raise ValueError("prepared Vue data must not contain a cycle")
-        ancestors.add(id(value))
-        try:
-            return [_json_plain(item, ancestors) for item in value]
-        finally:
-            ancestors.remove(id(value))
-    raise TypeError(f"prepared Vue data must be strict JSON, got {type(value).__name__}")
-
-
 def _json_attribute_map(values: Mapping[str, object]) -> dict[str, object]:
     """
     Encode resolved HTML attributes for Vue's object binding.
 
-    Keep JSON booleans intact. Vue's object binding serializes a custom
+    Each value except ``True`` is sent as the text Python's HTML output gives
+    it (see _vue_attribute_value), so a client render sets the same attribute
+    text as the server HTML. Keep JSON booleans intact. Vue's object binding serializes a custom
     attribute whose value is ``true`` as ``"true"``; converting it to the
     empty string here would change the public prepared-attribute contract.
     """
-    return {name: _json_plain(value) for name, value in values.items()}
+    return {name: _json_plain(_vue_attribute_value(value)) for name, value in values.items()}
 
 
 def _json_presence_attribute_map(values: Mapping[str, object]) -> dict[str, object]:
@@ -468,9 +368,22 @@ def assemble_typed_render(
     if type(revision) is not int or revision < 0:
         raise ValueError("prepared revision must be a nonnegative exact integer")
     root_component = render.context.component
+    root_simple_record: SimpleVueRecord | None = None
     if root_component is None:
-        raise UnsupportedPreparedView("prepared root has no current component registry")
-    citry = root_component.citry
+        if len(render.parts) == 1 and type(render.parts[0]) is SimpleVueRecord:
+            root_simple_record = cast("SimpleVueRecord", render.parts[0])
+        citry = render.owner_citry
+        if (
+            root_simple_record is None
+            or citry is None
+            or root_simple_record.component_class.citry is not citry
+            or citry.get_component_by_class_id(root_simple_record.class_id) is not root_simple_record.component_class
+        ):
+            raise UnsupportedPreparedView("prepared root has no matching owning component registry")
+    else:
+        citry = root_component.citry
+        if render.owner_citry is not None and render.owner_citry is not citry:
+            raise UnsupportedPreparedView("prepared root owner does not match its current component registry")
     if expected_citry is not None and citry is not expected_citry:
         raise UnsupportedPreparedView("prepared root belongs to a different Citry engine")
     mark_class = citry.get("mark")
@@ -482,12 +395,15 @@ def assemble_typed_render(
     occurrence_fields: list[tuple[str, str, str | None, str | None, Mapping[str, object], dict[str, object]]] = []
     occurrence_definition_ids: list[str | None] = []
     compile_inputs: dict[str, DefinitionCompileInput] = {}
+    root_directive_occurrences: dict[str, tuple[str, str, str]] = {}
     definitions: dict[str, _AssembledDefinition] = {}
     render_to_occurrence: dict[str, str] = {}
     occurrence_to_render: dict[str, str] = {}
     prepared_by_occurrence: dict[str, dict[str, object]] = {}
     occurrence_types: dict[str, str] = {}
     occurrence_parents: dict[str, str | None] = {}
+    # Each child occurrence's placement key names its call site and explicit
+    # key without any occurrence id; slot names are built from these.
     occurrence_placement_keys: dict[str, str | None] = {}
     reference_parents: defaultdict[str, list[str]] = defaultdict(list)
     binding_counts_by_owner: defaultdict[str, defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -497,6 +413,23 @@ def assemble_typed_render(
     seen_render_ids: set[str] = set()
     seen_occurrence_ids: set[str] = set()
     flattened_transparent_receivers: set[str] = set()
+    # A transparent component has no Vue definition: its template is copied
+    # into the template of the component whose calls the assembler was
+    # building when it reached it. Vue compiles a fill in the template of
+    # its author, so a fill written by a transparent component belongs to
+    # that component's template, recorded here by render id.
+    transparent_template_owners: dict[str, str] = {}
+    # Class names of transparent renders, so an error about a fill can name
+    # the transparent component that wrote or received it.
+    transparent_class_names: dict[str, str] = {}
+    # While a fill that must be copied outside its author's component tree
+    # is assembled, each entry collects the bindings in it that read the
+    # author's browser data, keyed by the author's occurrence. It stays
+    # empty on every other path, so ordinary pages pay one list check.
+    # The component whose template receives the copy is tracked too: a
+    # transparent component reached inside the fill is compiled there, so
+    # its reads count against the fill as well.
+    browser_read_trackers: list[tuple[str, str, list[str]]] = []
     # A flattened projection can copy lexical bindings into a physical
     # occurrence before that occurrence emits its own bindings.  Keep the
     # physical namespace reservations separate from the lexical counters so a
@@ -506,6 +439,9 @@ def assemble_typed_render(
     tags_by_type: dict[str, str] = {}
     types_by_tag: dict[str, str] = {}
     leaf_artifacts: dict[tuple[str, int], _LeafDefinitionArtifact] = {}
+    # Definitions of simple='vue' templates that call children, keyed by
+    # class, template and the element text written for each call.
+    leaf_call_artifacts: dict[tuple[str, int, tuple[str, ...]], _LeafDefinitionArtifact] = {}
     markers: list[PreparedMarker] = []
 
     context_binding_attrs = "".join(f' :{name}="{name}"' for name in template_context_names)
@@ -518,12 +454,77 @@ def assemble_typed_render(
     ) -> None:
         if part.vue_errors:
             raise UnsupportedPreparedView(part.vue_errors[0])
+        # The generated evaluator writes only strict JSON (see
+        # _copy_evaluated_json), so its data only needs a copy. Other leaf
+        # data is still checked and converted value by value.
+        convert = _copy_evaluated_json if part.prepared_data_evaluated_plain else _json_plain
         for key, prepared_value in part.prepared_data.items():
             if key in data_values:
                 raise UnsupportedPreparedView("duplicate prepared leaf-program binding key")
-            data_values[key] = _json_plain(prepared_value)
+            # PreparedOccurrence owns this public boundary; keep it isolated
+            # even when the evaluator used a private direct projection path.
+            data_values[key] = convert(prepared_value)
             if projected_data_keys is not None:
                 projected_data_keys.add(key)
+
+    def note_browser_read(owner_id: str, description: str) -> None:
+        """Record a binding that reads the browser data of ``owner_id``'s Vue instance."""
+        # Only fills being copied outside their author's tree are checked,
+        # and only bindings that read that author's data count against them.
+        for author_owner, receiving_owner, reads in browser_read_trackers:
+            if owner_id in {author_owner, receiving_owner}:
+                reads.append(description)
+
+    def class_name_of(render_id: str | None, occurrence: str) -> str:
+        """Name the component that owns a render, preferring the transparent component itself."""
+        if render_id is not None and render_id in transparent_class_names:
+            return transparent_class_names[render_id]
+        try:
+            return citry.get_component_by_class_id(occurrence_types[occurrence]).__name__
+        except KeyError:
+            return occurrence_types.get(occurrence, "an unknown component")
+
+    def describe_fill_outside_author(
+        part: DirectProjectionRender, author_owner: str, physical_owner: str, first_read: str
+    ) -> str:
+        fill_source = part.fill_source
+        author = class_name_of(fill_source.lexical_render_id, author_owner)
+        receiver = class_name_of(part.receiver_render_id, physical_owner)
+        physical = class_name_of(None, physical_owner)
+        location = ""
+        if isinstance(fill_source.source, str):
+            # Spans are byte offsets into the author's template source.
+            line = fill_source.source.encode("utf-8")[: fill_source.span[0]].count(b"\n") + 1
+            location = f" at line {line} of {author}'s template"
+        return (
+            f"the {fill_source.public_name!r} fill written by {author}{location} uses {author}'s Vue data or "
+            f"handlers ({first_read}), but {receiver} renders it inside {physical}, which {author} does not "
+            f"contain. Vue gives a fill its author's data only inside the author's component tree. Write the "
+            f"fill in a component that contains {physical} (for a citry_ui group such as CTabs, write the "
+            f"declarations inside the group's tag or in a transparent component), or make the fill read only "
+            f"Python values."
+        )
+
+    def note_attribute_reads(owner_id: str, tag: str, attrs: Sequence[PreparedAttribute]) -> None:
+        for attr in attrs:
+            if attr.origin == "source" and _source_attribute_reads_instance(
+                attr.name, str(attr.value), template_context_names
+            ):
+                note_browser_read(owner_id, f"{attr.name} on <{tag}>")
+
+    def note_event_reads(owner_id: str, tag: str, part: PreparedElementOpen | PreparedDynamicElementOpen) -> None:
+        # The browser sends a Citry Events binding for the component whose
+        # template holds it, so a copied binding reaches the wrong handler
+        # even when its arguments are literals.
+        if (
+            part.event_bindings
+            or part.poll_bindings
+            or part.control_bindings
+            or part.runtime_event_bindings
+            or part.runtime_poll_bindings
+            or part.runtime_events_candidate
+        ):
+            note_browser_read(owner_id, f"a Citry Events binding on <{tag}>")
 
     def merge_projected_data(
         lexical_values: dict[str, object],
@@ -583,8 +584,24 @@ def assemble_typed_render(
             raise UnsupportedPreparedView("component tag mapping is not injective")
         return tag
 
+    def call_path(ancestor: str, descendant: str, error: str) -> tuple[str, ...]:
+        """Return the placement keys of the calls leading from ancestor down to descendant."""
+        # Placement keys come from the call site and its explicit key, never
+        # from an occurrence id, so this path is the same for every instance
+        # of the ancestor. It is empty when both are the same occurrence.
+        path: list[str] = []
+        current = descendant
+        while current != ancestor:
+            placement = occurrence_placement_keys.get(current)
+            parent = occurrence_parents.get(current)
+            if placement is None or parent is None or len(path) > len(occurrence_parents):
+                raise UnsupportedPreparedView(error)
+            path.append(placement)
+            current = parent
+        return tuple(reversed(path))
+
     def transform_component(
-        value: CitryRender,
+        value: CitryRender | SimpleVueRecord,
         parent_id: str | None,
         occurrence_id: str,
         placement_key: str | None = None,
@@ -592,9 +609,18 @@ def assemble_typed_render(
         physical_parent_stack: tuple[str, ...] = (),
         marker_owner_id: str | None = None,
     ) -> str:
-        frame = value.frame
-        selected_transparent_root = parent_id is None and frame.is_transparent_root
-        ordinary_component_root = frame.is_component_root and not frame.is_transparent_root
+        # A simple='vue' record is its own frame. The type checker
+        # forbids subclasses of the final SimpleVueRecord, so isinstance acts
+        # like an exact type check and narrows
+        # ``value`` for the checker at each branch below.
+        is_simple = isinstance(value, SimpleVueRecord)
+        frame: SimpleVueRecord | RenderFrame = value if isinstance(value, SimpleVueRecord) else value.frame
+        selected_transparent_root = (
+            not isinstance(value, SimpleVueRecord) and parent_id is None and value.frame.is_transparent_root
+        )
+        ordinary_component_root = isinstance(value, SimpleVueRecord) or (
+            value.frame.is_component_root and not value.frame.is_transparent_root
+        )
         if not (selected_transparent_root or ordinary_component_root) or frame.render_id is None:
             raise UnsupportedPreparedView("prepared component must be a nontransparent component root")
         if frame.render_id in seen_render_ids:
@@ -604,8 +630,8 @@ def assemble_typed_render(
         seen_render_ids.add(frame.render_id)
         seen_occurrence_ids.add(occurrence_id)
         occurrence_to_render[occurrence_id] = frame.render_id
-        raw_frame_data: object = value.context.js_data
-        if server_data is not None:
+        raw_frame_data: object = value.js_data if isinstance(value, SimpleVueRecord) else value.context.js_data
+        if server_data is not None and not is_simple:
             if frame.render_id not in server_data:
                 raise UnsupportedPreparedView("component occurrence has no captured js_data")
             raw_frame_data = server_data[frame.render_id]
@@ -622,13 +648,22 @@ def assemble_typed_render(
         except KeyError as error:
             raise UnsupportedPreparedView("component occurrence has no current registered class") from error
         component_tag(type_key, component_class)
-        live_component = value.context.component
+        live_component = None if isinstance(value, SimpleVueRecord) else value.context.component
         live_identity = (
-            live_component is not None and live_component.citry is citry and type(live_component) is component_class
+            value.component_class is component_class and component_class.citry is citry
+            if isinstance(value, SimpleVueRecord)
+            else live_component is not None
+            and live_component.citry is citry
+            and type(live_component) is component_class
         )
-        if not live_identity and not _matches_cache_replay_identity(value.context, citry, component_class):
+        cache_replay_identity = not isinstance(value, SimpleVueRecord) and _matches_cache_replay_identity(
+            value.context, citry, component_class
+        )
+        if not live_identity and not cache_replay_identity:
             raise UnsupportedPreparedView("prepared component does not match its engine registry identity")
         if component_class is mark_class:
+            if is_simple:
+                raise UnsupportedPreparedView("a simple='vue' record cannot own a prepared marker")
             if not live_identity:
                 raise UnsupportedPreparedView("prepared marker lost its engine-owned component identity")
             marker_name = validate_mark_name(getattr(live_component, "_citry_mark_name", None))
@@ -643,18 +678,11 @@ def assemble_typed_render(
         occurrence_fields.append((occurrence_id, type_key, parent_id, placement_key, frame_data, prepared_values))
         occurrence_definition_ids.append(None)
         render_to_occurrence[frame.render_id] = occurrence_id
-        local_identity_keys: set[tuple[tuple[object, ...], tuple[str, ...], object]] = set()
-        # Transparent roots keep their own key namespace: the wrapper we emit for a
-        # transparent render sits at the same source span and route as the ordinary
-        # call it wraps, so sharing `local_identity_keys` would reject that pair as a
-        # duplicate even though only one of them owns the key.
-        local_transparent_identity_keys: set[tuple[tuple[object, ...], tuple[str, ...], object]] = set()
-        python_counts_by_route: defaultdict[tuple[str, ...], int] = defaultdict(int)
-        slot_site_counts: defaultdict[tuple[tuple[object, ...], tuple[str, ...]], int] = defaultdict(int)
-        dynamic_site_index = 0
-        active_projected_data_keys: list[set[str] | None] = []
-        active_projected_data_containers: list[set[str] | None] = []
-        own_root_markers = _prepared_root_markers((*frame.root_markers, *value.context._get_root_markers()))
+        own_root_markers = (
+            _prepared_root_markers(value.root_markers)
+            if isinstance(value, SimpleVueRecord)
+            else _prepared_root_markers((*value.frame.root_markers, *value.context._get_root_markers()))
+        )
         root_marker_values = dict(own_root_markers)
         marker_identities = {_html_attr_identity(name) for name in root_marker_values}
         for name, marker_value in inherited_root_markers:
@@ -663,6 +691,61 @@ def assemble_typed_render(
                 root_marker_values[name] = marker_value
                 marker_identities.add(identity)
         root_markers = tuple(root_marker_values.items())
+
+        value_parts = [value.leaf] if isinstance(value, SimpleVueRecord) else value.parts
+        if (
+            isinstance(value, SimpleVueRecord)
+            and value.leaf.call_children is not None
+            and (root_markers or not value.leaf.fragment.calls_unconditional)
+        ):
+            # Which calls a row makes depends on its c-if branches and c-for
+            # items, and root markers go onto the elements themselves, so
+            # this occurrence's definition is built from its recorded values
+            # (with each child at its call) the way an ordinary one is.
+            value_parts = typed_leaf_parts(value.leaf)
+
+        if not root_markers and not isinstance(value, RenderDecoration):
+            parts = value_parts
+            if len(parts) == 1 and isinstance(parts[0], PreparedLeafProgram):
+                candidate_leaf = parts[0]
+                candidate_artifact = leaf_artifacts.get((type_key, id(candidate_leaf.fragment)))
+                if (
+                    candidate_artifact is not None
+                    and candidate_leaf.cached_typed_parts is not None
+                    and any(
+                        isinstance(part, PreparedElementOpen) and part.browser_bindings
+                        for part in candidate_leaf.cached_typed_parts
+                    )
+                ):
+                    candidate_artifact = None
+                if candidate_artifact is not None:
+                    existing_definition = definitions.get(candidate_artifact.definition_id)
+                    if existing_definition is not None:
+                        attach_leaf_data(candidate_leaf, prepared_values)
+                        existing_input = compile_inputs.get(candidate_artifact.definition_id)
+                        if (
+                            existing_definition.type_key != type_key
+                            or existing_input != candidate_artifact.compile_input
+                        ):
+                            raise AssertionError("prepared definition hash collision")
+                        occurrence_definition_ids[occurrence_index] = candidate_artifact.definition_id
+                        return occurrence_id  # early cached leaf return
+
+        local_identity_keys: set[tuple[tuple[object, ...], tuple[str, ...], object]] = set()
+        # Transparent roots keep their own key namespace: the wrapper we emit for a
+        # transparent render sits at the same source span and route as the ordinary
+        # call it wraps, so sharing `local_identity_keys` would reject that pair as a
+        # duplicate even though only one of them owns the key.
+        local_transparent_identity_keys: set[tuple[tuple[object, ...], tuple[str, ...], object]] = set()
+        python_counts_by_route: defaultdict[tuple[str, ...], int] = defaultdict(int)
+        slot_site_counts: defaultdict[tuple[tuple[object, ...], tuple[str, ...]], int] = defaultdict(int)
+        keyed_slot_counts: defaultdict[tuple[tuple[object, ...], tuple[str, ...], tuple[str, ...]], int] = defaultdict(
+            int
+        )
+        dynamic_site_index = 0
+
+        active_projected_data_keys: list[set[str] | None] = []
+        active_projected_data_containers: list[set[str] | None] = []
 
         def data_key(prefix: str, source: str, span: tuple[int, int], owner_id: str) -> str:
             del source, span
@@ -688,12 +771,15 @@ def assemble_typed_render(
                     # The lexical owner already uses this compact ordinal in
                     # its own namespace, but the physical definition cannot
                     # reuse it. Keep the ordinary key when possible and use a
-                    # deterministic owner/occurrence suffix only on collision.
-                    key = f"citry{prefix}p{_digest(occurrence_id, owner_id, prefix, index)[:20]}"
+                    # deterministic suffix only on collision. The key lands in
+                    # the compiled template, so it is built from the binding's
+                    # position alone, which is the same for every instance;
+                    # the loop below keeps it unique.
+                    key = f"citry{prefix}p{_digest('projected', prefix, index)[:20]}"
                     suffix = 0
                     while key in physical_values or key in reserved_keys:
                         suffix += 1
-                        key = f"citry{prefix}p{_digest(occurrence_id, owner_id, prefix, index, suffix)[:20]}"
+                        key = f"citry{prefix}p{_digest('projected', prefix, index, suffix)[:20]}"
                 reserved_keys.add(key)
                 projected_keys = active_projected_data_keys[-1]
                 if projected_keys is not None:
@@ -737,7 +823,7 @@ def assemble_typed_render(
             fills: tuple[_FillFragment, ...],
             *,
             definition_owner_id: str,
-            slot_key_scopes: Sequence[_SlotKeyScope] = (),
+            child_placement_key: str,
         ) -> None:
             if len({fill.site_id for fill in fills}) != len(fills):
                 raise UnsupportedPreparedView("prepared component call has duplicate supplied fill sites")
@@ -758,32 +844,24 @@ def assemble_typed_render(
                                 "deferred direct slot lexical owner is not an ancestor of its receiver"
                             )
                         ancestor = parent
-                    supplied_fills[occurrence_id].append(fill)
-                    output.append(
-                        f'<slot name="{fill.site_id}"{context_binding_attrs}'
-                        f"{_slot_key_attr(_next_slot_key(slot_key_scopes))}></slot>"
+                    # The fill's author is further up, so pass it on through a
+                    # slot outlet written here. This text is compiled into the
+                    # definition of definition_owner_id (a component body
+                    # carried into a child keeps its own owner), and Vue
+                    # resolves the outlet against that component's own slots,
+                    # so its call is the one that must carry the fill.
+                    #
+                    # Slot names are built without occurrence ids so instances
+                    # can share definitions, which lets two receivers below one
+                    # definition use the same name. Rename the passed-on slot
+                    # after the child call it goes through; that call's
+                    # placement key is the same for every instance.
+                    forwarded_site_id = f"citrySlot{_digest('forwarded', fill.site_id, child_placement_key)[:16]}"
+                    supplied_fills[definition_owner_id].append(
+                        _FillFragment(forwarded_site_id, fill.public_name, fill.lexical_owner, fill.body)
                     )
+                    output.append(f'<slot name="{forwarded_site_id}"{context_binding_attrs}></slot>')
                 output.append("</template>")
-
-        def receiver_placement_path(receiver_owner: str, lexical_owner: str) -> tuple[str, ...] | None:
-            """Return a receiver's stable path below its lexical owner."""
-            if receiver_owner == lexical_owner:
-                return ()
-            path: list[str] = []
-            cursor = receiver_owner
-            visited: set[str] = set()
-            while cursor != lexical_owner:
-                if cursor in visited:
-                    raise UnsupportedPreparedView("prepared component ancestry contains a cycle")
-                visited.add(cursor)
-                parent = occurrence_parents.get(cursor)
-                placement_key = occurrence_placement_keys.get(cursor)
-                if parent is None or placement_key is None:
-                    return None
-                path.append(placement_key)
-                cursor = parent
-            path.reverse()
-            return tuple(path)
 
         def transform_parts(
             parts: Sequence[RenderPart],
@@ -795,16 +873,23 @@ def assemble_typed_render(
             call_run: DirectCallRunRender | None = None,
             project_root_markers: bool = True,
             parent_element_stack: tuple[str, ...] = (),
+            parent_element_keys: tuple[str | None, ...] | None = None,
             projected_data: bool = False,
-            slot_key_scopes: Sequence[_SlotKeyScope] = (),
         ) -> _DefinitionFragment:
             nonlocal dynamic_site_index
             output = _DefinitionFragment.empty()
             dynamic_stack: list[tuple[str, str]] = []
             element_stack = list(parent_element_stack)
+            # The `#c-key` of each open element, in step with element_stack
+            # (None for an unkeyed one). A slot outlet inside keyed rows takes
+            # its identity from these keys, so it follows its row when the rows
+            # reorder. A body that starts a new component inherits no keys.
+            element_keys: list[str | None] = (
+                [None] * len(element_stack) if parent_element_keys is None else list(parent_element_keys)
+            )
+            if len(element_keys) != len(element_stack):
+                raise AssertionError("prepared element keys must follow the element stack")
             inherited_element_depth = len(element_stack)
-            element_key_scopes: list[_SlotKeyScope | None] = [None] * inherited_element_depth
-            active_slot_key_scopes = list(slot_key_scopes)
             dom_depth = 0
             data_values = prepared_by_occurrence[data_owner_id]
             projected_keys: set[str] | None = set() if projected_data and data_owner_id != occurrence_id else None
@@ -819,7 +904,8 @@ def assemble_typed_render(
             # ordinary component body and diverge only while a transparent
             # projection is being folded into another definition.
             call_values = prepared_by_occurrence[call_owner_id]
-            run_first: dict[int, list[CitryRender]] = {}
+
+            run_first: dict[int, list[CitryRender | SimpleVueRecord]] = {}
             run_followers: set[int] = set()
 
             if call_run is not None:
@@ -833,11 +919,10 @@ def assemble_typed_render(
                 call_node = call_run.call_node
                 matching = not root_markers and all(
                     _run_eligible_component(candidate)
-                    and candidate.frame.class_id == call_run.child_type_key
-                    and candidate.frame.prepared_occurrence is not None
-                    and candidate.frame.prepared_occurrence.call is not None
-                    and candidate.frame.prepared_occurrence.call.source is call_node.source
-                    and candidate.frame.prepared_occurrence.call.source_span == call_node.position
+                    and (member_type := _run_member_metadata(candidate)[0]) == call_run.child_type_key
+                    and (member_metadata := _run_member_metadata(candidate)[1]) is not None
+                    and member_metadata.source is call_node.source
+                    and member_metadata.source_span == call_node.position
                     for candidate in parts
                 )
                 if not matching:
@@ -849,8 +934,8 @@ def assemble_typed_render(
                         containing_slot=containing_slot,
                         project_root_markers=project_root_markers,
                         parent_element_stack=tuple(element_stack),
+                        parent_element_keys=tuple(element_keys),
                         projected_data=projected_data,
-                        slot_key_scopes=tuple(active_slot_key_scopes),
                     )
                 if parts:
                     run_first[0] = [candidate for candidate in parts if _run_eligible_component(candidate)]
@@ -864,7 +949,7 @@ def assemble_typed_render(
                     tag = component_tag(call_run.child_type_key)
                     start = output.byte_length
                     output.append(
-                        f'<component v-for="citryOccurrenceId in preparedData.callRuns.{run_id}" '
+                        f'<component v-for="citryOccurrenceId in $citryPrepared.callRuns.{run_id}" '
                         f':is="\'{tag}\'" :citry-id="citryOccurrenceId" :key="citryOccurrenceId">'
                     )
                     source_end = output.byte_length
@@ -892,55 +977,105 @@ def assemble_typed_render(
                     receiver_owner = _stable_owner(part.receiver_render_id, render_to_occurrence)
                     if receiver_owner is None:
                         raise UnsupportedPreparedView("direct slot ownership has no prepared occurrence")
-                    lexical_owner = _stable_owner(fill_source.lexical_render_id, render_to_occurrence)
-                    if lexical_owner is None:
-                        raise UnsupportedPreparedView("direct slot ownership has no prepared occurrence")
-                    relative_receiver_path = receiver_placement_path(receiver_owner, lexical_owner)
-                    source_key: tuple[object, ...] = (
+                    # The slot name is written into the compiled templates, so
+                    # it must be the same for every instance and every render
+                    # of this structure. Occurrence ids differ per instance,
+                    # and an Events update renders its target under the id the
+                    # browser already holds, so they cannot be used. Name the
+                    # receiver by the placement keys from it down to this
+                    # occurrence: they are the same for every instance and
+                    # still separate one outlet passed into several keyed
+                    # children of the same receiver.
+                    source_key = (
                         occurrence_types[occurrence_id],
                         fill_source.kind,
                         part.source,
                         part.span,
-                        receiver_owner,
+                        # A receiver always encloses the outlets it forwards, so
+                        # a receiver that is not an ancestor means the slot
+                        # result was moved.
+                        call_path(receiver_owner, occurrence_id, "direct slot result moved outside its receiver"),
                     )
-                    if not placement_route or receiver_owner == occurrence_id:
-                        # A slot site is part of the receiver's reusable
-                        # definition.  Occurrence IDs are unique per
-                        # instance, so an unscoped site and a site rooted at
-                        # the current component receiver must use the stable
-                        # receiver type in their identity.
-                        receiver_type = occurrence_types.get(receiver_owner)
-                        if receiver_type is None:
-                            raise UnsupportedPreparedView("direct slot receiver has no prepared component type")
-                        source_key = (*source_key[:-1], receiver_type)
-                    # The reusable definition being assembled must not inherit
-                    # the receiver's path under its lexical caller.  That
-                    # path distinguishes flattened descendants when they are
-                    # projected into another definition, but it would make
-                    # ordinary instances of the same component produce
-                    # occurrence-specific definitions.
-                    if relative_receiver_path is not None and (receiver_owner != occurrence_id or placement_route):
-                        source_key = (*source_key, relative_receiver_path)
                     site_identity = (source_key, placement_route)
                     site_index = slot_site_counts[site_identity]
                     slot_site_counts[site_identity] += 1
-                    # Keep the ordinal scoped by the transparent placement
-                    # route and the receiver path relative to the lexical
-                    # owner, so sibling wrappers retain distinct stable sites
-                    # when their keyed order changes.
+                    # Positional ordinals alone make a slot inside a keyed
+                    # transparent wrapper change identity when sibling wrappers
+                    # reorder. Scope the ordinal by its placement route instead.
                     site_digest = (
                         _digest(source_key, site_index)
                         if not placement_route
                         else _digest(source_key, placement_route, site_index)
                     )
                     site_id = f"citrySlot{site_digest[:16]}"
+                    # Python writes one outlet per row of a keyed element (a
+                    # table row), and the slot name stays positional so the
+                    # compiled template does not change with the row data. Vue
+                    # keys the outlet's content by its position too, so a row
+                    # that moves would rebuild it. Give the outlet a key from
+                    # the enclosing element keys, sent as data, so the content
+                    # moves with its row.
+                    element_key_route = tuple(key for key in element_keys if key is not None)
+                    slot_key = None
+                    if element_key_route:
+                        keyed_identity = (source_key, placement_route, element_key_route)
+                        keyed_index = keyed_slot_counts[keyed_identity]
+                        keyed_slot_counts[keyed_identity] += 1
+                        slot_key = f"citrySlotKey{_digest(*keyed_identity, keyed_index)[:24]}"
+                    lexical_owner = _stable_owner(fill_source.lexical_render_id, render_to_occurrence)
+                    if lexical_owner is None:
+                        raise UnsupportedPreparedView("direct slot ownership has no prepared occurrence")
+                    # Vue compiles a fill in its author's render function and
+                    # reads the fill's values from that component's
+                    # $citryPrepared. A transparent author has no render
+                    # function of its own: its template, and so every fill it
+                    # writes, is compiled in the template it was copied into.
+                    # That component owns the fill, not the occurrence where
+                    # the assembler happened to reach the transparent author.
+                    lexical_owner = transparent_template_owners.get(fill_source.lexical_render_id, lexical_owner)
+                    # A transparent receiver has no Vue definition to take a
+                    # slot, so its fill is copied into the template being
+                    # built when that template is its author's.
                     flattened_transparent_receiver = (
-                        not nested_template and part.receiver_render_id in flattened_transparent_receivers
+                        not nested_template
+                        and part.receiver_render_id in flattened_transparent_receivers
+                        and lexical_owner == call_owner_id
                     )
+                    # Otherwise the template being built belongs to another
+                    # component. When the author encloses the receiver, the
+                    # ordinary branch below turns the fill into a Vue slot
+                    # that is passed up to the author's call. Vue passes slots
+                    # only down the component tree, so an author outside it
+                    # (a sibling) cannot supply one: copying is the only way
+                    # to place the fill, and it is safe only when the fill
+                    # reads no browser data.
+                    copied_outside_author = False
+                    if (
+                        not nested_template
+                        and not flattened_transparent_receiver
+                        and part.receiver_render_id in flattened_transparent_receivers
+                    ):
+                        try:
+                            call_path(lexical_owner, receiver_owner, "fill author does not enclose its receiver")
+                        except UnsupportedPreparedView:
+                            flattened_transparent_receiver = True
+                            copied_outside_author = True
+                    # Calls inside this body are counted and keyed in the
+                    # lexical owner's namespace, so two receivers that share
+                    # one slot name must still give their bodies different
+                    # routes. The keyed call path from the lexical owner to
+                    # the receiver separates them without an occurrence id.
+                    # A receiver outside the owner's subtree is rejected
+                    # further down, so it only needs some route here.
+                    try:
+                        receiver_route = call_path(lexical_owner, receiver_owner, "slot receiver is outside its owner")
+                    except UnsupportedPreparedView:
+                        receiver_route = ()
+                    body_route_step = site_id if not receiver_route else f"{site_id}@{_digest(receiver_route)[:16]}"
                     # The selection predicate below is emitted into the
                     # current fragment. A supplied outer slot can project that
                     # fragment into its lexical owner's definition, so store
-                    # the value in the preparedData context that evaluates it.
+                    # the value in the occurrence data (`$citryPrepared`) that evaluates it.
                     # When the result moves to a different receiver, that
                     # receiver still owns the eventual outlet predicate.
                     if not nested_template and not flattened_transparent_receiver:
@@ -953,54 +1088,45 @@ def assemble_typed_render(
                         previous_selection = selected_slots.setdefault(site_id, selection)
                         if previous_selection != selection:
                             raise UnsupportedPreparedView("one prepared slot site selected conflicting sources")
+                        if slot_key is not None:
+                            # The outlet's key is read where its selection is.
+                            slot_keys = selection_data.setdefault("slotKeys", {})
+                            if type(slot_keys) is not dict:
+                                raise AssertionError("prepared slotKeys container changed type")
+                            if slot_keys.setdefault(site_id, slot_key) != slot_key:
+                                raise UnsupportedPreparedView("one prepared slot site received conflicting keys")
+                    fill_reads: list[str] = []
+                    if copied_outside_author:
+                        browser_read_trackers.append((lexical_owner, call_owner_id, fill_reads))
                     selected = transform_parts(
                         list(part.parts),
-                        placement_route=(*placement_route, site_id),
+                        placement_route=(*placement_route, body_route_step),
                         data_owner_id=lexical_owner,
                         # A flattened transparent receiver contributes its
-                        # selected body directly to this definition.  A real
+                        # selected body directly to the fragment being built,
+                        # which belongs to this fragment's call owner (the fill
+                        # author when this body sits inside a fill).  A real
                         # receiver instead carries a supplied fill back to its
                         # lexical caller, where Vue creates the slot closure.
                         # Keep those destinations separate from the lexical
                         # value owner: using the intermediate receiver here
                         # makes every forwarded call declaration land in the
-                        # wrong preparedData.calls table.
-                        call_owner_id=occurrence_id if flattened_transparent_receiver else lexical_owner,
+                        # wrong $citryPrepared.calls table.
+                        call_owner_id=call_owner_id if flattened_transparent_receiver else lexical_owner,
                         containing_slot=part,
                         project_root_markers=project_root_markers and dom_depth == 0,
                         parent_element_stack=tuple(element_stack),
+                        parent_element_keys=tuple(element_keys),
                         projected_data=projected_data or flattened_transparent_receiver,
-                        slot_key_scopes=tuple(active_slot_key_scopes),
                     )
+                    if copied_outside_author:
+                        browser_read_trackers.pop()
+                        if fill_reads:
+                            raise UnsupportedPreparedView(
+                                describe_fill_outside_author(part, lexical_owner, receiver_owner, fill_reads[0])
+                            )
                     if flattened_transparent_receiver:
-                        if lexical_owner == occurrence_id or not _contains_authored_vue_binding(tuple(part.parts)):
-                            output.extend(selected)
-                            continue
-
-                        # A transparent receiver can be folded into a
-                        # physical definition without making its authored
-                        # body part of that definition's Vue scope.  Keep
-                        # the body as a native slot closure owned by the
-                        # lexical caller.  This is the same relationship we
-                        # use for an ordinary supplied fill; the only
-                        # difference is that the transparent receiver has no
-                        # component tag at which to emit the outlet.
-                        selected_slots = prepared_by_occurrence[occurrence_id].setdefault("selectedSlots", {})
-                        if type(selected_slots) is not dict:
-                            raise AssertionError("prepared selectedSlots container changed type")
-                        previous_selection = selected_slots.setdefault(site_id, "supplied")
-                        if previous_selection != "supplied":
-                            raise UnsupportedPreparedView("one prepared slot site selected conflicting sources")
-                        supplied_fills[occurrence_id].append(
-                            _FillFragment(site_id, part.public_name, lexical_owner, selected)
-                        )
-                        _append_slot_outlet(
-                            output,
-                            site_id,
-                            _DefinitionFragment.empty(),
-                            context_binding_attrs,
-                            _next_slot_key(active_slot_key_scopes),
-                        )
+                        output.extend(selected)
                         continue
                     fill = _FillFragment(site_id, part.public_name, lexical_owner, selected)
                     output_owner = (
@@ -1028,23 +1154,13 @@ def assemble_typed_render(
                                 f"container_lexical={containing_lexical!r}"
                             )
                         supplied_fills[receiver_owner].append(fill)
-                        output.append(
-                            f'<slot name="{site_id}"{context_binding_attrs}'
-                            f"{_slot_key_attr(_next_slot_key(active_slot_key_scopes))}></slot>"
-                        )
+                        output.append(f'<slot name="{site_id}"{context_binding_attrs}></slot>')
                     elif nested_template:
                         supplied_fills[output_owner].append(fill)
-                        output.append(
-                            f'<slot name="{site_id}"{context_binding_attrs}'
-                            f"{_slot_key_attr(_next_slot_key(active_slot_key_scopes))}></slot>"
-                        )
+                        output.append(f'<slot name="{site_id}"{context_binding_attrs}></slot>')
                     elif lexical_owner == output_owner:
                         _append_slot_outlet(
-                            output,
-                            site_id,
-                            selected,
-                            context_binding_attrs,
-                            _next_slot_key(active_slot_key_scopes),
+                            output, site_id, selected, context_binding_attrs, keyed=slot_key is not None
                         )
                     else:
                         supplied_fills[output_owner].append(fill)
@@ -1053,7 +1169,7 @@ def assemble_typed_render(
                             site_id,
                             _DefinitionFragment.empty(),
                             context_binding_attrs,
-                            _next_slot_key(active_slot_key_scopes),
+                            keyed=slot_key is not None,
                         )
                     continue
                 if isinstance(part, RenderDecoration) and (
@@ -1068,8 +1184,8 @@ def assemble_typed_render(
                         call_run=call_run,
                         project_root_markers=project_root_markers,
                         parent_element_stack=tuple(element_stack),
+                        parent_element_keys=tuple(element_keys),
                         projected_data=projected_data,
-                        slot_key_scopes=tuple(active_slot_key_scopes),
                     )
                     wrapped = _DefinitionFragment.empty()
                     wrapped.extend(
@@ -1081,8 +1197,8 @@ def assemble_typed_render(
                             containing_slot=containing_slot,
                             project_root_markers=False,
                             parent_element_stack=tuple(element_stack),
+                            parent_element_keys=tuple(element_keys),
                             projected_data=projected_data,
-                            slot_key_scopes=tuple(active_slot_key_scopes),
                         )
                     )
                     wrapped.extend(decorated)
@@ -1108,8 +1224,8 @@ def assemble_typed_render(
                             call_run=eligible_run,
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
+                            parent_element_keys=tuple(element_keys),
                             projected_data=projected_data,
-                            slot_key_scopes=tuple(active_slot_key_scopes),
                         )
                     )
                     continue
@@ -1124,14 +1240,19 @@ def assemble_typed_render(
                             containing_slot=containing_slot,
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
+                            parent_element_keys=tuple(element_keys),
                             projected_data=projected_data,
-                            slot_key_scopes=tuple(active_slot_key_scopes),
                         )
                     )
                     continue
-                if type(part) in {CitryRender, DirectPythonComponentRender, RenderDecoration}:
-                    render_part = cast("CitryRender", part)
-                    if not render_part.frame.is_component_root:
+                if type(part) in {CitryRender, DirectPythonComponentRender, RenderDecoration, SimpleVueRecord}:
+                    # The other two classes in the set subclass CitryRender, so
+                    # ``part`` is a CitryRender or a SimpleVueRecord. The type
+                    # checker forbids record subclasses, so isinstance agrees
+                    # with an exact check.
+                    render_part = cast("CitryRender | SimpleVueRecord", part)
+                    simple_part = isinstance(render_part, SimpleVueRecord)
+                    if not isinstance(render_part, SimpleVueRecord) and not render_part.frame.is_component_root:
                         validate_flattened_render_identity(render_part, "transparent")
                         transparent_render_id = render_part.frame.render_id
                         if transparent_render_id is not None:
@@ -1141,6 +1262,18 @@ def assemble_typed_render(
                             ):
                                 flattened_transparent_receivers.add(transparent_render_id)
                             prior_owner = render_to_occurrence.setdefault(transparent_render_id, occurrence_id)
+                            # The body below is copied into the template that
+                            # call_owner_id compiles, so fills this component
+                            # writes are compiled there too.
+                            prior_template_owner = transparent_template_owners.setdefault(
+                                transparent_render_id, call_owner_id
+                            )
+                            if prior_template_owner != call_owner_id:
+                                raise UnsupportedPreparedView(
+                                    "transparent prepared render was copied into two component templates"
+                                )
+                            if render_part.frame.class_name:
+                                transparent_class_names[transparent_render_id] = render_part.frame.class_name
                             # A supplied slot can carry an ordinary transparent
                             # Python render through the receiver's physical
                             # occurrence. Its values remain owned by the slot's
@@ -1218,8 +1351,8 @@ def assemble_typed_render(
                             containing_slot=containing_slot,
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
+                            parent_element_keys=tuple(element_keys),
                             projected_data=projected_data,
-                            slot_key_scopes=tuple(active_slot_key_scopes),
                         )
                         if wrapper_key is None:
                             output.extend(transparent_body)
@@ -1229,7 +1362,7 @@ def assemble_typed_render(
                         # when the transparent body has zero or one root node.
                         keyed_body = _DefinitionFragment.empty()
                         wrapper_start = keyed_body.byte_length
-                        keyed_body.append(f'<template v-if="true" :key="preparedData.{wrapper_binding}">')
+                        keyed_body.append(f'<template v-if="true" :key="$citryPrepared.{wrapper_binding}">')
                         keyed_body.element_bindings.append(
                             {
                                 "sourceStart": wrapper_start,
@@ -1242,12 +1375,26 @@ def assemble_typed_render(
                         keyed_body.append('<template v-if="false"></template></template>')
                         output.extend(keyed_body)
                         continue
-                    child_prepared = render_part.frame.prepared_occurrence
-                    metadata = child_prepared.call if child_prepared is not None else None
-                    python_call = type(part) is DirectPythonComponentRender
+                    child_prepared = (
+                        None if isinstance(render_part, SimpleVueRecord) else render_part.frame.prepared_occurrence
+                    )
+                    metadata = (
+                        render_part.call_metadata
+                        if isinstance(render_part, SimpleVueRecord)
+                        else child_prepared.call
+                        if child_prepared is not None
+                        else None
+                    )
+                    python_call = type(part) is DirectPythonComponentRender or (
+                        isinstance(render_part, SimpleVueRecord) and render_part.python_composition
+                    )
                     if metadata is None and not python_call:
                         raise UnsupportedPreparedView("nested component has no prepared call metadata")
-                    child_type = render_part.frame.class_id
+                    child_type = (
+                        render_part.class_id
+                        if isinstance(render_part, SimpleVueRecord)
+                        else render_part.frame.class_id
+                    )
                     if not child_type:
                         raise UnsupportedPreparedView("nested component has no stable class id")
                     if python_call:
@@ -1269,11 +1416,9 @@ def assemble_typed_render(
                         members: list[tuple[str, str, str, tuple[_FillFragment, ...]]] = []
                         run_component_tag: str | None = None
                         for member in run_group:
-                            member_prepared = member.frame.prepared_occurrence
-                            member_metadata = member_prepared.call if member_prepared is not None else None
+                            member_type, member_metadata = _run_member_metadata(member)
                             if member_metadata is None:
                                 raise UnsupportedPreparedView("call-run member has no prepared call metadata")
-                            member_type = member.frame.class_id
                             if not member_type:
                                 raise UnsupportedPreparedView("call-run member has no stable class id")
                             member_base = (
@@ -1317,7 +1462,7 @@ def assemble_typed_render(
                             run_values[run_id] = [member_id for member_id, _, _, _ in members]
                             start = output.byte_length
                             output.append(
-                                f'<component v-for="citryOccurrenceId in preparedData.callRuns.{run_id}" '
+                                f'<component v-for="citryOccurrenceId in $citryPrepared.callRuns.{run_id}" '
                                 f':is="\'{run_component_tag}\'" :citry-id="citryOccurrenceId" '
                                 ':key="citryOccurrenceId">'
                             )
@@ -1343,15 +1488,15 @@ def assemble_typed_render(
                             calls[local_id] = {"id": member_id, "key": member_id, "parentId": occurrence_id}
                             start = output.byte_length
                             output.append(
-                                f'<{tag} :citry-id="preparedData.calls.{local_id}.id" '
-                                f':key="preparedData.calls.{local_id}.key">'
+                                f'<{tag} :citry-id="$citryPrepared.calls.{local_id}.id" '
+                                f':key="$citryPrepared.calls.{local_id}.key">'
                             )
                             opening_end = output.byte_length
                             append_child_fills(
                                 output,
                                 member_fills,
                                 definition_owner_id=call_owner_id,
-                                slot_key_scopes=tuple(active_slot_key_scopes),
+                                child_placement_key=member_placement_key,
                             )
                             output.append(f"</{tag}>")
                             output.local_calls.append(
@@ -1410,12 +1555,32 @@ def assemble_typed_render(
                     call_bindings: list[_LocalCallBindingDeclaration] = []
                     seen_binding_spans: set[tuple[int, int]] = set()
                     emitted_listener_names: set[str] = set()
-                    if child_prepared is None:
+                    # A simple='vue' record carries no component-tag bindings;
+                    # every other nested component must have its prepared metadata.
+                    component_bindings: tuple[PreparedComponentBinding, ...] = ()
+                    child_call: _PreparedCallMetadata | None = None
+                    if child_prepared is not None:
+                        component_bindings = child_prepared.component_tag_client_bindings
+                        child_call = child_prepared.call
+                    elif not simple_part:
                         raise UnsupportedPreparedView("nested component has no prepared occurrence metadata")
-                    for component_binding in child_prepared.component_tag_client_bindings:
+                    for component_binding in component_bindings:
                         if type(component_binding) is not PreparedComponentBinding:
                             raise UnsupportedPreparedView(
                                 "component call component_binding metadata changed after capture"
+                            )
+                        if browser_read_trackers and (
+                            component_binding.kind is ComponentTagClientBindingKind.CITRY_HANDLER
+                            or _vue_binding_reads_instance(
+                                component_binding.key,
+                                component_binding.value if component_binding.value != "" else None,
+                                template_context_names,
+                            )
+                        ):
+                            note_browser_read(
+                                data_owner_id,
+                                f"{component_binding.key} on the call to "
+                                f"{citry.get_component_by_class_id(child_type).__name__}",
                             )
                         if not component_binding.authenticated:
                             raise UnsupportedPreparedView(
@@ -1440,19 +1605,15 @@ def assemble_typed_render(
                                 )
                             line, column = _line_column(str(component_binding.source), component_binding.span[0])
                             child_class = citry.get_component_by_class_id(child_type)
-                            # Component-tag Events are authored by the
-                            # lexical caller. A slot body can be physically
-                            # assembled while visiting its receiver (for
-                            # example CForm), but the handler still belongs to
-                            # the component that supplied that slot. Resolve
-                            # against the data owner instead of the physical
-                            # receiver so nested library components retain the
-                            # caller's Events contract.
-                            binding_owner_type = occurrence_types[data_owner_id]
-                            binding_owner_class = citry.get_component_by_class_id(binding_owner_type)
+                            # The binding is stored on the data owner and the
+                            # browser dispatches it from that instance, so its
+                            # handler must come from that class. Inside a
+                            # supplied fill this is the fill's author, not the
+                            # receiver whose occurrence is being captured.
+                            handler_class = citry.get_component_by_class_id(occurrence_types[data_owner_id])
                             compiled_event = compile_citry_boundary_binding(
-                                events_extension.resolve(binding_owner_class),
-                                binding_owner_class.__name__,
+                                events_extension.resolve(handler_class),
+                                handler_class.__name__,
                                 f"c-{getattr(child_class, 'name', None) or child_class.__name__}",
                                 component_binding.key,
                                 component_binding.value,
@@ -1488,6 +1649,9 @@ def assemble_typed_render(
                                 raise UnsupportedPreparedView(
                                     "timed component-boundary Events bindings are unsupported in prepared Vue"
                                 )
+                            # A body folded into another definition must carry
+                            # this table along, as the element event sites do.
+                            projected_data_container("eventBindings")
                             event_values = data_values.setdefault("eventBindings", {})
                             if type(event_values) is not dict:
                                 raise AssertionError("prepared eventBindings container changed type")
@@ -1497,9 +1661,13 @@ def assemble_typed_render(
                                 raise UnsupportedPreparedView(
                                     "one prepared component event site has conflicting authored metadata"
                                 )
+                            # Vue calls a component listener from the parent's
+                            # render, and the emitted payload need not be an
+                            # Event, so `$el` is the child's root element that
+                            # the runtime looks up from the call id.
                             authored_args = _generated_event_args(
                                 event_component_binding["args"],
-                                el_expression=f"$citryEvents.componentRoot(preparedData.calls.{local_id}.id)",
+                                el_expression=f"$citryEvents.componentRoot($citryPrepared.calls.{local_id}.id)",
                             )
                             generated_value = (
                                 f"$citryEvents.dispatchComponent('{component_binding_id}', $event{authored_args})"
@@ -1531,6 +1699,24 @@ def assemble_typed_render(
                             raise UnsupportedPreparedView(
                                 "runtime component component_binding provenance is valid only for Citry handlers"
                             )
+                        # Vue hands `v-show` and a custom directive to the
+                        # element the child renders at its root, so that root
+                        # is checked after compilation. The first one names
+                        # the error.
+                        if (
+                            component_binding.kind
+                            in {ComponentTagClientBindingKind.SHOW, ComponentTagClientBindingKind.DIRECTIVE}
+                            and child_id not in root_directive_occurrences
+                        ):
+                            child_class = citry.get_component_by_class_id(child_type)
+                            root_directive_occurrences[child_id] = (
+                                child_class.__name__,
+                                _authored_call_tag(
+                                    child_call,
+                                    f"c-{(getattr(child_class, 'name', None) or child_class.__name__).lower()}",
+                                ),
+                                component_binding.key,
+                            )
                         if component_binding.kind is ComponentTagClientBindingKind.EVENT:
                             listener_name = (
                                 f"v-on:{component_binding.key[1:]}"
@@ -1544,7 +1730,16 @@ def assemble_typed_render(
                             emitted_listener_names.add(listener_name)
                         output.append(" ")
                         component_binding_start = output.byte_length
-                        source_attr = f'{component_binding.key}="{_vue_attribute_escape(component_binding.value)}"'
+                        try:
+                            # `v-else` and a valueless custom directive keep
+                            # their bare authored form.
+                            source_attr = (
+                                component_binding.key
+                                if component_binding.value == ""
+                                else _authored_vue_attr(component_binding.key, component_binding.value)
+                            )
+                        except ValueError as error:
+                            raise UnsupportedPreparedView(str(error)) from error
                         output.append(source_attr)
                         call_bindings.append(
                             {
@@ -1555,8 +1750,8 @@ def assemble_typed_render(
                                 "sourceEnd": output.byte_length,
                             }
                         )
-                    output.append(f' :citry-id="preparedData.calls.{local_id}.id"')
-                    output.append(f' :key="preparedData.calls.{local_id}.key"')
+                    output.append(f' :citry-id="$citryPrepared.calls.{local_id}.id"')
+                    output.append(f' :key="$citryPrepared.calls.{local_id}.key"')
                     output.append(">")
                     opening_end = output.byte_length
                     fills = tuple(supplied_fills.pop(child_id, ()))
@@ -1564,7 +1759,7 @@ def assemble_typed_render(
                         output,
                         fills,
                         definition_owner_id=call_owner_id,
-                        slot_key_scopes=tuple(active_slot_key_scopes),
+                        child_placement_key=placement_key,
                     )
                     output.append(f"</{tag}>")
                     output.local_calls.append(
@@ -1599,11 +1794,12 @@ def assemble_typed_render(
                     opaque_values = data_values.setdefault("opaqueHtml", {})
                     if type(opaque_values) is not dict:
                         raise AssertionError("prepared opaqueHtml container changed type")
-                    prior = opaque_values.setdefault(key, {"html": html})
-                    if prior != {"html": html}:
+                    record = opaque_html_record(html)
+                    prior = opaque_values.setdefault(key, record)
+                    if prior != record:
                         raise UnsupportedPreparedView("one prepared opaque HTML site produced conflicting bytes")
                     start = output.byte_length
-                    output.append(f'<citry-opaque-html :record="preparedData.opaqueHtml.{key}">')
+                    output.append(f'<citry-opaque-html :record="$citryPrepared.opaqueHtml.{key}">')
                     end = output.byte_length
                     output.append("</citry-opaque-html>")
                     output.opaque_html_sites.append(
@@ -1637,20 +1833,14 @@ def assemble_typed_render(
                         for operation, tag in structure.tag_transitions:
                             if operation == "open":
                                 element_stack.append(tag)
-                                element_key_scopes.append(None)
+                                element_keys.append(None)
                             elif (
                                 operation == "close"
                                 and len(element_stack) > inherited_element_depth
                                 and element_stack[-1] == tag
                             ):
                                 element_stack.pop()
-                                element_scope = element_key_scopes.pop()
-                                if element_scope is not None:
-                                    if not active_slot_key_scopes or active_slot_key_scopes[-1] is not element_scope:
-                                        raise UnsupportedPreparedView(
-                                            "prepared static key scope changed during text capture"
-                                        )
-                                    active_slot_key_scopes.pop()
+                                element_keys.pop()
                             else:
                                 raise UnsupportedPreparedView(
                                     "prepared static tag transitions changed during text capture"
@@ -1663,8 +1853,19 @@ def assemble_typed_render(
                         raise UnsupportedPreparedView("duplicate prepared text binding key")
                     data_values[key] = _json_plain(part.value)
                     text_browser_binding = part.browser_binding
+                    if (
+                        browser_read_trackers
+                        and text_browser_binding is not None
+                        and text_browser_binding.values_expression is not None
+                        and _vue_expression_reads_instance(
+                            text_browser_binding.values_expression,
+                            handler=False,
+                            allowed_names=template_context_names,
+                        )
+                    ):
+                        note_browser_read(data_owner_id, f"the values of {text_browser_binding.helper}() in text")
                     if text_browser_binding is None:
-                        output.append(f"{{{{ preparedData.{key} }}}}")
+                        output.append(f"{{{{ $citryPrepared.{key} }}}}")
                     else:
                         if (
                             not is_authenticated_browser_binding(text_browser_binding)
@@ -1682,7 +1883,7 @@ def assemble_typed_render(
                             if text_browser_binding.values_expression is None
                             else f", () => ({text_browser_binding.values_expression})"
                         )
-                        output.append(f"{{{{ {text_browser_binding.helper}(preparedData.{operand_key}{thunk}) }}}}")
+                        output.append(f"{{{{ {text_browser_binding.helper}($citryPrepared.{operand_key}{thunk}) }}}}")
                     continue
                 if isinstance(part, (PreparedTrustedHtmlValue, Markup)):
                     serialized = part.html if isinstance(part, PreparedTrustedHtmlValue) else str(part)
@@ -1701,7 +1902,7 @@ def assemble_typed_render(
                             value = value[1:]
                         key = data_key("Text", serialized, (0, len(serialized.encode())), data_owner_id)
                         data_values[key] = value
-                        output.append(f"{{{{ preparedData.{key} }}}}")
+                        output.append(f"{{{{ $citryPrepared.{key} }}}}")
                         continue
                     reject_cross_boundary_html(serialized)
                     html = mark_opaque_html(
@@ -1713,11 +1914,12 @@ def assemble_typed_render(
                     opaque_values = data_values.setdefault("opaqueHtml", {})
                     if type(opaque_values) is not dict:
                         raise AssertionError("prepared opaqueHtml container changed type")
-                    prior = opaque_values.setdefault(key, {"html": html})
-                    if prior != {"html": html}:
+                    record = opaque_html_record(html)
+                    prior = opaque_values.setdefault(key, record)
+                    if prior != record:
                         raise UnsupportedPreparedView("one prepared opaque HTML site produced conflicting bytes")
                     start = output.byte_length
-                    output.append(f'<citry-opaque-html :record="preparedData.opaqueHtml.{key}">')
+                    output.append(f'<citry-opaque-html :record="$citryPrepared.opaqueHtml.{key}">')
                     end = output.byte_length
                     output.append("</citry-opaque-html>")
                     output.opaque_html_sites.append(
@@ -1725,6 +1927,11 @@ def assemble_typed_render(
                     )
                     continue
                 if isinstance(part, PreparedLeafProgram):
+                    if browser_read_trackers and part.fragment.browser_requirements:
+                        # A compiled leaf keeps its bindings only as template
+                        # text, so a leaf that needs Vue or Events counts as
+                        # reading its component rather than being parsed here.
+                        note_browser_read(data_owner_id, "a compiled Vue or Events binding")
                     attach_leaf_data(part, data_values, projected_keys)
                     fragment = _DefinitionFragment(
                         [part.fragment.template],
@@ -1733,12 +1940,21 @@ def assemble_typed_render(
                         [cast("_ElementBindingDeclaration", dict(value)) for value in part.fragment.element_bindings],
                         [],
                         [],
+                        # Leaf programs write no opaque HTML, so they add no sites.
                         [],
                         [cast("_RuntimeEventDeclaration", dict(value)) for value in part.fragment.runtime_event_sites],
                     )
                     output.extend(fragment)
                     continue
                 if isinstance(part, PreparedElementOpen):
+                    if browser_read_trackers:
+                        note_attribute_reads(data_owner_id, part.tag, part.attrs)
+                        note_event_reads(data_owner_id, part.tag, part)
+                        for browser_binding in part.browser_bindings:
+                            if browser_binding.values_expression is not None and _vue_expression_reads_instance(
+                                browser_binding.values_expression, handler=False, allowed_names=template_context_names
+                            ):
+                                note_browser_read(data_owner_id, f"{browser_binding.name} on <{part.tag}>")
                     browser_attrs: list[str] = []
                     browser_keys: list[str] = []
                     for browser_binding in part.browser_bindings:
@@ -1758,8 +1974,8 @@ def assemble_typed_render(
                             if browser_binding.values_expression is None
                             else f", () => ({browser_binding.values_expression})"
                         )
-                        expression = _vue_attribute_escape(
-                            f"{browser_binding.helper}(preparedData.{operand_key}{thunk})"
+                        expression = escape(
+                            f"{browser_binding.helper}($citryPrepared.{operand_key}{thunk})", quote=True
                         )
                         directive = f":{browser_binding.name}"
                         browser_attrs.append(f'{directive}="{expression}"')
@@ -1846,9 +2062,7 @@ def assemble_typed_render(
                                     "one prepared control site has conflicting authored metadata"
                                 )
                     unsafe_data_attrs = [name for name in effective_data_attrs if _unsafe_dynamic_dom_property(name)]
-                    executable_data_attrs = [
-                        name for name in effective_data_attrs if name.startswith(("v-", "@", ":"))
-                    ]
+                    executable_data_attrs = [name for name in effective_data_attrs if is_vue_directive_name(name)]
                     if executable_data_attrs:
                         raise UnsupportedPreparedView(
                             f"Python-resolved attributes cannot introduce Vue syntax: {executable_data_attrs!r}"
@@ -1924,15 +2138,12 @@ def assemble_typed_render(
                         runtime_events_key,
                     )
                     if not part.is_void:
-                        element_scope = (
-                            None
-                            if prepared_key_binding is None
-                            else _SlotKeyScope(f"preparedData.{prepared_key_binding}")
-                        )
-                        element_key_scopes.append(element_scope)
-                        if element_scope is not None:
-                            active_slot_key_scopes.append(element_scope)
                         element_stack.append(part.tag.lower())
+                        element_keys.append(
+                            json.dumps(element_metadata["key"], sort_keys=True, separators=(",", ":"))
+                            if "key" in element_metadata
+                            else None
+                        )
                         dom_depth += 1
                     continue
                 if isinstance(part, PreparedDynamicElementOpen):
@@ -1940,12 +2151,13 @@ def assemble_typed_render(
                         raise UnsupportedPreparedView(
                             "dynamic element opening lacks exact validated producer provenance"
                         )
+                    if browser_read_trackers:
+                        note_attribute_reads(data_owner_id, part.tag, part.authored_attrs)
+                        note_event_reads(data_owner_id, part.tag, part)
                     invalid_attrs = [
                         name
                         for name in part.attrs
-                        if type(name) is not str
-                        or name.startswith(("@", ":", "v-", "#"))
-                        or _unsafe_dynamic_dom_property(name)
+                        if type(name) is not str or is_vue_directive_name(name) or _unsafe_dynamic_dom_property(name)
                     ]
                     if invalid_attrs:
                         raise UnsupportedPreparedView(
@@ -2026,6 +2238,9 @@ def assemble_typed_render(
                     output.append(f"<{alias}")
                     for attr in part.authored_attrs:
                         output.append(f" {attr.value}")
+                    # A native form control marks which of its properties an
+                    # authored or Python binding owns, so the browser keeps a
+                    # user's unsaved edit only in the properties nothing binds.
                     native_marker = (
                         vue_owned_native_marker(
                             vue_owned_native_properties(
@@ -2038,14 +2253,14 @@ def assemble_typed_render(
                         if is_native_state_tag(part.tag)
                         else ""
                     )
-                    output.append(f' v-bind="preparedData.{attrs_key}"')
+                    output.append(f' v-bind="$citryPrepared.{attrs_key}"')
                     if native_marker:
                         output.append(f" {native_marker}")
                     key_key = None
                     if part.key is not None:
                         key_key = data_key("Key", alias, (0, 0), data_owner_id)
                         data_values[key_key] = _json_plain(part.key)
-                        output.append(f' :key="preparedData.{key_key}"')
+                        output.append(f' :key="$citryPrepared.{key_key}"')
                     for generated_attr in _event_directive_attrs(part):
                         output.append(f" {generated_attr}")
                     runtime_events_key = None
@@ -2057,7 +2272,8 @@ def assemble_typed_render(
                             for binding in (*part.runtime_event_bindings, *part.runtime_poll_bindings)
                         )
                         output.append(
-                            f' v-citry-runtime-events="$citryEvents.runtimeEvents(preparedData.{runtime_events_key})"'
+                            " v-citry-runtime-events="
+                            f'"$citryEvents.runtimeEvents($citryPrepared.{runtime_events_key})"'
                         )
                     # The generated alias is a custom element to the parser even
                     # when its validated runtime tag is void. Emit an ordinary
@@ -2092,11 +2308,10 @@ def assemble_typed_render(
                         output.append(f"</{alias}>")
                     else:
                         dynamic_stack.append((part.tag, alias))
-                        element_scope = None if key_key is None else _SlotKeyScope(f"preparedData.{key_key}")
-                        element_key_scopes.append(element_scope)
-                        if element_scope is not None:
-                            active_slot_key_scopes.append(element_scope)
                         element_stack.append(part.tag.lower())
+                        element_keys.append(
+                            None if part.key is None else json.dumps(part.key, sort_keys=True, separators=(",", ":"))
+                        )
                         dom_depth += 1
                     continue
                 if isinstance(part, PreparedDynamicElementClose):
@@ -2106,22 +2321,14 @@ def assemble_typed_render(
                     output.append(f"</{alias}>")
                     if len(element_stack) <= inherited_element_depth or element_stack.pop() != part.tag.lower():
                         raise UnsupportedPreparedView("dynamic element stack changed during text capture")
-                    element_scope = element_key_scopes.pop()
-                    if element_scope is not None:
-                        if not active_slot_key_scopes or active_slot_key_scopes[-1] is not element_scope:
-                            raise UnsupportedPreparedView("prepared dynamic key scope changed during text capture")
-                        active_slot_key_scopes.pop()
+                    element_keys.pop()
                     dom_depth -= 1
                     continue
                 if isinstance(part, PreparedElementClose):
                     output.append(f"</{part.tag}>")
                     if len(element_stack) <= inherited_element_depth or element_stack.pop() != part.tag.lower():
                         raise UnsupportedPreparedView("prepared element stack changed during text capture")
-                    element_scope = element_key_scopes.pop()
-                    if element_scope is not None:
-                        if not active_slot_key_scopes or active_slot_key_scopes[-1] is not element_scope:
-                            raise UnsupportedPreparedView("prepared element key scope changed during text capture")
-                        active_slot_key_scopes.pop()
+                    element_keys.pop()
                     dom_depth -= 1
                     continue
                 if isinstance(part, Placeholder) and part.key in {"deps:css", "deps:js"}:
@@ -2143,7 +2350,57 @@ def assemble_typed_render(
             active_projected_data_containers.pop()
             return output
 
-        raw_parts = list(value.parts)
+        if isinstance(value, SimpleVueRecord) and value.leaf.call_children is not None and value_parts == [value.leaf]:
+            # Every row of this template makes the same calls at the same
+            # places, so all its rows share one definition: the compiled
+            # template with each child's component element written at its
+            # call. Each child is still assembled as an ordinary call.
+            call_leaf = value.leaf
+            call_fragment_source = call_leaf.fragment
+            call_children = cast("LeafCallChildren", call_leaf.call_children).parts
+            if len(call_children) != len(call_fragment_source.calls):
+                raise UnsupportedPreparedView("simple='vue' called children do not match the template's calls")
+            attach_leaf_data(call_leaf, prepared_values)
+            call_outputs = [
+                transform_parts([child], parent_element_stack=(*physical_parent_stack, *call.element_stack))
+                for call, child in zip(call_fragment_source.calls, call_children, strict=True)
+            ]
+            # The element text names the child's tag and call id, both fixed
+            # by the call site and the child's class, so equal text means an
+            # equal definition.
+            call_artifact_key = (
+                type_key,
+                id(call_fragment_source),
+                tuple("".join(item.chunks) for item in call_outputs),
+            )
+            call_artifact = leaf_call_artifacts.get(call_artifact_key)
+            if call_artifact is None:
+                combined = _DefinitionFragment.empty()
+                segments = _leaf_template_segments(call_fragment_source)
+                for segment, call_output in zip(segments, [*call_outputs, None], strict=True):
+                    combined.extend(segment)
+                    if call_output is not None:
+                        combined.extend(call_output)
+                call_compile_input = combined.compile_input(template_context_names)
+                call_artifact = _LeafDefinitionArtifact(
+                    _definition_id(type_key, call_compile_input), call_compile_input
+                )
+                leaf_call_artifacts[call_artifact_key] = call_artifact
+            call_definition_id = call_artifact.definition_id
+            existing_call_definition = definitions.get(call_definition_id)
+            if existing_call_definition is not None:
+                if (
+                    existing_call_definition.type_key != type_key
+                    or compile_inputs.get(call_definition_id) != call_artifact.compile_input
+                ):
+                    raise AssertionError("prepared definition hash collision")
+            else:
+                definitions[call_definition_id] = _AssembledDefinition(call_definition_id, type_key)
+                compile_inputs[call_definition_id] = call_artifact.compile_input
+            occurrence_definition_ids[occurrence_index] = call_definition_id
+            return occurrence_id
+
+        raw_parts = list(value_parts)
         logical_parts = _logical_typed_body(raw_parts)
         selected_parts: list[RenderPart] = (
             [value]
@@ -2152,17 +2409,16 @@ def assemble_typed_render(
         )
         leaf = selected_parts[0] if len(selected_parts) == 1 else None
         if root_markers and isinstance(leaf, PreparedLeafProgram):
-            from citry._vue.leaf_program import typed_leaf_parts  # noqa: PLC0415
-
             selected_parts = typed_leaf_parts(leaf)
             leaf = None
         artifact = leaf_artifacts.get((type_key, id(leaf.fragment))) if isinstance(leaf, PreparedLeafProgram) else None
-        if isinstance(leaf, PreparedLeafProgram):
-            from citry._vue.leaf_program import typed_leaf_parts  # noqa: PLC0415
-
-            typed_leaf = typed_leaf_parts(leaf)
+        if isinstance(leaf, PreparedLeafProgram) and leaf.cached_typed_parts is not None:
+            # Generated leaf programs cannot carry extension browser bindings;
+            # only a cached typed fallback needs this scan.  Avoid rebuilding
+            # ordinary generated parts just to discover that fact.
+            typed_leaf = leaf.cached_typed_parts
             if any(isinstance(part, PreparedElementOpen) and part.browser_bindings for part in typed_leaf):
-                selected_parts = typed_leaf
+                selected_parts = list(typed_leaf)
                 leaf = None
                 artifact = None
         if isinstance(leaf, PreparedLeafProgram):
@@ -2180,22 +2436,12 @@ def assemble_typed_render(
                     tuple(dict(value) for value in leaf.fragment.runtime_event_sites),
                 )
             else:
-                fragment = transform_parts(selected_parts, parent_element_stack=physical_parent_stack)
+                fragment = transform_parts(
+                    selected_parts,
+                    parent_element_stack=physical_parent_stack,
+                )
                 compile_input = fragment.compile_input(template_context_names)
-            structural = json.dumps(
-                {
-                    "template": compile_input.template,
-                    "localCalls": compile_input.local_calls,
-                    "elementBindings": compile_input.element_bindings,
-                    "localCallRuns": compile_input.local_call_runs,
-                    "dynamicElements": compile_input.dynamic_elements,
-                    "runtimeEventSites": compile_input.runtime_event_sites,
-                    "templateContextNames": compile_input.template_context_names,
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-            definition_id = hashlib.sha256((type_key + "\0" + structural).encode()).hexdigest()
+            definition_id = _definition_id(type_key, compile_input)
             artifact = _LeafDefinitionArtifact(definition_id, compile_input)
             if isinstance(leaf, PreparedLeafProgram):
                 leaf_artifacts[(type_key, id(leaf.fragment))] = artifact
@@ -2214,7 +2460,13 @@ def assemble_typed_render(
         occurrence_definition_ids[occurrence_index] = definition_id
         return occurrence_id
 
+    root_record: SimpleVueRecord | None = root_simple_record
     root_type = render.frame.class_id
+    if root_record is not None:
+        root_type = root_record.class_id
+    elif not root_type and len(render.parts) == 1 and type(render.parts[0]) is SimpleVueRecord:
+        root_record = cast("SimpleVueRecord", render.parts[0])
+        root_type = root_record.class_id
     if not root_type:
         raise UnsupportedPreparedView("root component has no stable class id")
     root_id = f"citryOccurrence{_digest('root', root_type)[:24]}" if root_occurrence_id is None else root_occurrence_id
@@ -2222,7 +2474,7 @@ def assemble_typed_render(
         raise UnsupportedPreparedView("prepared root occurrence id is not a string")
     if re.fullmatch(r"citryOccurrence[0-9A-Za-z]+", root_id) is None:
         raise UnsupportedPreparedView("prepared root occurrence id is not generated-safe")
-    transform_component(render, None, root_id, marker_owner_id=root_id)
+    transform_component(root_record or render, None, root_id, marker_owner_id=root_id)
     if any(supplied_fills.values()):
         raise UnsupportedPreparedView("selected direct fills were not consumed by their receiver call")
     placements: set[tuple[str, str]] = set()
@@ -2277,7 +2529,13 @@ def assemble_typed_render(
         for occurrence_id, render_id in occurrence_to_render.items()
     ):
         raise AssertionError("canonical prepared occurrence render identity changed ownership")
-    return Assembly(view, dict(render_to_occurrence), dict(occurrence_to_render), compile_inputs)
+    return Assembly(
+        view,
+        dict(render_to_occurrence),
+        dict(occurrence_to_render),
+        compile_inputs,
+        root_directive_occurrences,
+    )
 
 
 def _logical_typed_body(parts: list[RenderPart]) -> list[RenderPart]:
@@ -2320,8 +2578,81 @@ def _stable_owner(render_id: str | None, owners: Mapping[str, str]) -> str | Non
     return owner
 
 
+def _authored_call_tag(call: _PreparedCallMetadata | None, fallback: str) -> str:
+    """Return the tag name the author wrote for a call, for error messages."""
+    if call is None:
+        return fallback
+    # Call spans are byte offsets into the authored template source.
+    start = call.source_span[0]
+    head = call.source.encode()[start : start + 256].decode(errors="ignore")
+    match = re.match(r"<([^\s/>]+)", head)
+    return match.group(1) if match else fallback
+
+
 def _digest(*values: object) -> str:
     return hashlib.sha256(json.dumps(values, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _definition_id(type_key: str, compile_input: DefinitionCompileInput) -> str:
+    """Name a definition by a hash of its class and everything the native compiler reads."""
+    structural = json.dumps(
+        {
+            "template": compile_input.template,
+            "localCalls": compile_input.local_calls,
+            "elementBindings": compile_input.element_bindings,
+            "localCallRuns": compile_input.local_call_runs,
+            "dynamicElements": compile_input.dynamic_elements,
+            "opaqueHtmlSites": compile_input.opaque_html_sites,
+            "runtimeEventSites": compile_input.runtime_event_sites,
+            "templateContextNames": compile_input.template_context_names,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256((type_key + "\0" + structural).encode()).hexdigest()
+
+
+def _leaf_template_segments(fragment: LeafProgramFragment) -> list[_DefinitionFragment]:
+    """
+    Cut a simple='vue' template at its call positions, keeping each binding with its piece.
+
+    The template holds no element for its calls, so the pieces are the text
+    between calls (one more piece than calls). Each element binding and
+    runtime event site lies inside one piece, because a call never falls
+    inside an element's opening tag; its byte offsets are moved to count
+    from the start of that piece.
+    """
+    encoded = fragment.template.encode("utf-8")
+    cuts = [0, *(call.offset for call in fragment.calls), len(encoded)]
+    segments: list[_DefinitionFragment] = []
+    for start, end in pairwise(cuts):
+        segment = _DefinitionFragment.empty()
+        segment.append(encoded[start:end].decode("utf-8"))
+        segment.element_bindings.extend(
+            _rebase_metadata(
+                [
+                    cast("_ElementBindingDeclaration", dict(value))
+                    for value in fragment.element_bindings
+                    if start <= cast("int", value["sourceStart"]) and cast("int", value["sourceEnd"]) <= end
+                ],
+                -start,
+            )
+        )
+        segment.runtime_event_sites.extend(
+            _rebase_metadata(
+                [
+                    cast("_RuntimeEventDeclaration", dict(value))
+                    for value in fragment.runtime_event_sites
+                    if start <= cast("int", value["sourceStart"]) and cast("int", value["sourceEnd"]) <= end
+                ],
+                -start,
+            )
+        )
+        segments.append(segment)
+    placed = sum(len(item.element_bindings) + len(item.runtime_event_sites) for item in segments)
+    if placed != len(fragment.element_bindings) + len(fragment.runtime_event_sites):
+        raise UnsupportedPreparedView("a simple='vue' call split an element binding")
+    return segments
 
 
 def _checked_component_tag(type_key: str, tag_for_type: TagForType) -> str:
@@ -2344,8 +2675,120 @@ def _source_attribute_target(name: str) -> str | None:
     return None
 
 
+# Names a Vue template expression may read without a component instance.
+# This is Vue's own list of template globals (runtime-core
+# `isGloballyAllowed`, 3.5.42); any other free name reads the instance.
+_VUE_TEMPLATE_GLOBALS = frozenset(
+    {
+        "Array",
+        "BigInt",
+        "Boolean",
+        "Date",
+        "Error",
+        "Infinity",
+        "Intl",
+        "JSON",
+        "Map",
+        "Math",
+        "NaN",
+        "Number",
+        "Object",
+        "RegExp",
+        "Set",
+        "String",
+        "Symbol",
+        "console",
+        "decodeURI",
+        "decodeURIComponent",
+        "encodeURI",
+        "encodeURIComponent",
+        "isFinite",
+        "isNaN",
+        "parseFloat",
+        "parseInt",
+        "undefined",
+    }
+)
+_THIS_KEYWORD = re.compile(r"(?<![\w$.])this(?![\w$])")
+# Directives that take no expression and so read nothing.
+_VALUELESS_VUE_DIRECTIVES = frozenset({"v-else", "v-cloak", "v-pre", "v-once"})
+
+
+def _vue_expression_reads_instance(value: str, *, handler: bool, allowed_names: Sequence[str]) -> bool:
+    """Return whether one Vue expression reads data from the component instance that compiles it."""
+    # `this` is the instance itself, and the analyzer does not report it
+    # as a free name.
+    if _THIS_KEYWORD.search(value):
+        return True
+    valid, references = analyze_browser_source(value, "statement" if handler else "expression")
+    # An expression the analyzer cannot parse cannot be shown to be safe.
+    if not valid:
+        return True
+    for name, _start, _end in references:
+        if name in _VUE_TEMPLATE_GLOBALS or name in allowed_names:
+            continue
+        # Vue gives an inline handler its event as `$event`, not from the instance.
+        if handler and name == "$event":
+            continue
+        return True
+    return False
+
+
+def _vue_binding_reads_instance(name: str, value: str | None, allowed_names: Sequence[str]) -> bool:
+    """
+    Return whether one authored Vue binding reads its component instance.
+
+    ``value`` is None for a binding written without a value. The answer is
+    used to reject a fill that Vue would compile in the wrong component, so
+    every form this function cannot prove harmless counts as a read.
+    """
+    folded = name.casefold()
+    # A template ref registers on the instance that compiles it.
+    if folded == "ref" or _source_attribute_target(name) == "ref":
+        return True
+    if not is_vue_directive_name(name):
+        return False
+    if folded in _VALUELESS_VUE_DIRECTIVES:
+        return False
+    # These always read or write instance state (v-model assigns to it,
+    # v-for and v-slot bind names used below them), and a dynamic argument
+    # is itself an expression read from the instance.
+    if folded.startswith(("v-model", "v-for", "v-slot", "#", ":[", ".[", "^[", "@[", "v-bind:[", "v-on:[")):
+        return True
+    handler = folded.startswith(("@", "v-on"))
+    expression = folded.startswith((":", ".", "^", "v-bind", "v-if", "v-else-if", "v-show", "v-text", "v-html"))
+    if not handler and not expression:
+        # A custom directive resolves against the instance's registered
+        # directives, so it cannot move to another component.
+        return True
+    if value is None:
+        # `@click` alone does nothing; `:id` alone is Vue's shorthand for `:id="id"`.
+        return not handler
+    return _vue_expression_reads_instance(value, handler=handler, allowed_names=allowed_names)
+
+
+def _source_attribute_reads_instance(name: str, text: str, allowed_names: Sequence[str]) -> bool:
+    """Return whether one authored attribute, given as its source text, reads its component instance."""
+    if not (name.casefold() == "ref" or is_vue_directive_name(name)):
+        return False
+    if not text.startswith(name):
+        return True
+    rest = text[len(name) :].lstrip()
+    if not rest:
+        return _vue_binding_reads_instance(name, None, allowed_names)
+    if not rest.startswith("="):
+        return True
+    raw = rest[1:].strip()
+    # The parser keeps the attribute exactly as written, quoted or not.
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}:
+        raw = raw[1:-1]
+    return _vue_binding_reads_instance(name, unescape(raw), allowed_names)
+
+
 def _unsafe_dynamic_dom_property(name: str) -> bool:
-    normalized = name.casefold()
+    # A `.` or `^` prefix only selects how Vue writes the name, so check the
+    # name it writes: `^onclick` would still install an inline handler.
+    normalized = name.casefold().lstrip(".^")
     return normalized in {"innerhtml", "outerhtml", "textcontent", "innertext"} or normalized.startswith("on")
 
 
@@ -2377,7 +2820,7 @@ def _append_static_root_projection(
     openings: tuple[StaticRunOpening, ...],
 ) -> None:
     """Add one generated data binding to every physical root in authored static HTML."""
-    replacement = f'v-bind="preparedData.{attrs_key}"'
+    replacement = f'v-bind="$citryPrepared.{attrs_key}"'
     cursor = 0
     for opening in openings:
         output.append(html[cursor : opening.insert_at])
@@ -2397,33 +2840,27 @@ def _append_static_root_projection(
     output.append(html[cursor:])
 
 
-def _next_slot_key(scopes: Sequence[_SlotKeyScope]) -> str | None:
-    """Return a stable key for one slot under the nearest keyed element."""
-    if not scopes:
-        return None
-    scope = scopes[-1]
-    ordinal = scope.ordinal
-    scope.ordinal += 1
-    return f"JSON.stringify([{scope.expression}, {ordinal}])"
-
-
-def _slot_key_attr(expression: str | None) -> str:
-    return "" if expression is None else f' :key="{expression}"'
-
-
 def _append_slot_outlet(
     output: _DefinitionFragment,
     site_id: str,
     fallback: _DefinitionFragment,
     context_binding_attrs: str = "",
-    slot_key_expression: str | None = None,
+    *,
+    keyed: bool = False,
 ) -> None:
+    # Vue keys each v-if branch by its position in the template. Inside a
+    # keyed row that position moves with the data, so the branch then takes
+    # its key from `slotKeys`, which follows the row key.
+    key = f' :key="$citryPrepared.slotKeys[{site_id!r}]"' if keyed else ""
+    fallback_key = f" :key=\"$citryPrepared.slotKeys[{site_id!r}] + ':fallback'\"" if keyed else ""
     output.append(
-        f"<slot v-if=\"preparedData.selectedSlots[{site_id!r}] === 'supplied'\" "
-        f'name="{site_id}"{context_binding_attrs}{_slot_key_attr(slot_key_expression)}></slot>'
+        f"<slot v-if=\"$citryPrepared.selectedSlots[{site_id!r}] === 'supplied'\"{key} "
+        f'name="{site_id}"{context_binding_attrs}></slot>'
     )
     if fallback.chunks:
-        output.append(f"<template v-else-if=\"preparedData.selectedSlots[{site_id!r}] === 'fallback'\">")
+        output.append(
+            f"<template v-else-if=\"$citryPrepared.selectedSlots[{site_id!r}] === 'fallback'\"{fallback_key}>"
+        )
         output.extend(fallback)
         output.append("</template>")
 
@@ -2439,6 +2876,7 @@ def _append_element_open(
 ) -> None:
     start = output.byte_length
     attrs = list(part.authored_attrs)
+    # Same property-ownership marker as a dynamic element; see there.
     native_marker = (
         vue_owned_native_marker(
             vue_owned_native_properties(part.tag, part.attrs, part.data_attrs, has_spread=part.has_spread)
@@ -2449,14 +2887,14 @@ def _append_element_open(
     if native_marker:
         attrs.append(native_marker)
     if attrs_binding_key is not None:
-        attrs.append(f'v-bind="preparedData.{attrs_binding_key}"')
+        attrs.append(f'v-bind="$citryPrepared.{attrs_binding_key}"')
     if key_binding_key is not None:
-        attrs.append(f':key="preparedData.{key_binding_key}"')
+        attrs.append(f':key="$citryPrepared.{key_binding_key}"')
     # Reactive projections own their checked destinations after the static
     # prepared fallback spread has supplied the initial server value.
     attrs.extend(browser_attrs or ())
     if runtime_events_key is not None:
-        attrs.append(f'v-citry-runtime-events="$citryEvents.runtimeEvents(preparedData.{runtime_events_key})"')
+        attrs.append(f'v-citry-runtime-events="$citryEvents.runtimeEvents($citryPrepared.{runtime_events_key})"')
     attrs.extend(_event_directive_attrs(part))
     rendered_attrs = "" if not attrs else " " + " ".join(attrs)
     output.append(f"<{part.tag}{rendered_attrs}>")

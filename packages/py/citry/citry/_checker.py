@@ -68,6 +68,7 @@ from citry.analysis import (
     browser_literal_wire_type,
     browser_state_binding_target_errors,
     browser_state_bindings,
+    component_js_i18n_owners,
     discover_python_templates,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
@@ -76,6 +77,7 @@ from citry.analysis import (
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
     lint_unknown_vue_variables,
+    lint_vue_python_variables,
     mark_literal_findings,
 )
 from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
@@ -643,7 +645,10 @@ def _check_template(
             )
     for expression in browser_hosts:
         findings.extend(_browser_i18n_profile_findings(source.origin, source.content, expression, i18n_profiles or {}))
-    for finding in lint_unknown_vue_variables(browser_hosts, vue_lint_consumers):
+    for finding in (
+        *lint_unknown_vue_variables(browser_hosts, vue_lint_consumers),
+        *lint_vue_python_variables(browser_hosts, vue_lint_consumers),
+    ):
         line, column = _byte_offset_coordinates(source.content, finding.start_index)
         end_line, end_column = _byte_offset_coordinates(source.content, finding.end_index)
         findings.append(
@@ -810,10 +815,11 @@ def _browser_i18n_profile_findings(
     profiles: dict[str, dict[str, frozenset[str]]],
     *,
     owners: frozenset[str] = frozenset({"$i18n"}),
+    proven_owner_spans: frozenset[tuple[int, int]] | None = None,
 ) -> list[CheckFinding]:
     findings: list[CheckFinding] = []
     operation_names = {"relativeTime": "relative_time"}
-    for call in browser_i18n_profile_calls(expression, owners):
+    for call in browser_i18n_profile_calls(expression, owners, proven_owner_spans=proven_owner_spans):
         operation = operation_names.get(call.operation, call.operation)
         known = profiles.get(call.namespace, {}).get(operation)
         if known is None or call.profile in known:
@@ -1516,6 +1522,7 @@ def _checker_vue_lint_consumer(
         known_names=frozenset(known_names),
         rule_unknown_vue_variable=lint.rule_unknown_vue_variable,
         namespace_policy=namespace_policy,
+        rule_vue_python_variable=lint.rule_vue_python_variable,
     )
 
 
@@ -1704,13 +1711,11 @@ def _check_browser_source(
 ) -> list[CheckFinding]:
     """Check component initializer variables and literal server calls."""
     consumers: list[ComponentJsLintConsumer] = []
-    i18n = engine.extensions.get_extension("i18n")
-    i18n_configured = getattr(i18n, "configured", False) is True
+    member_rules: set[str] = set()
     for component in source.consumers:
         lint = _component_lint_info(engine, component)
+        member_rules.add(lint.rule_unknown_component_js_member)
         known_names = {variable.name for variable in lint.component_js_globals}
-        if i18n_configured:
-            known_names.add("i18n")
         consumers.append(
             ComponentJsLintConsumer(
                 known_names=frozenset(known_names),
@@ -1729,8 +1734,18 @@ def _check_browser_source(
         )
         for finding in lint_unknown_component_js_variables(source.content, consumers)
     ]
-    # Shared assets must have a closed data contract for every consumer before
-    # a missing key becomes an error; runtime-only shapes remain unchecked.
+    # A missing instance member is reported only when every consumer's
+    # js_data() keys are known ahead of time; a component whose keys are only
+    # set at run time is not checked. One source can serve several components,
+    # so the strictest of their member severities applies, as for the variable
+    # rule above, and the language server resolves it the same way.
+    member_severity: Literal["ignore", "warning", "error"] = (
+        "error"
+        if "error" in member_rules or not member_rules
+        else "warning"
+        if "warning" in member_rules
+        else "ignore"
+    )
     findings.extend(
         _browser_source_finding(
             source.origin,
@@ -1742,7 +1757,9 @@ def _check_browser_source(
             finding.severity,
         )
         for finding in lint_unknown_component_js_members(
-            source.content, _shared_js_data_names(engine, source.consumers)
+            source.content,
+            _shared_js_data_names(engine, source.consumers),
+            severity=member_severity,
         )
     )
     expression = BrowserExpression(
@@ -1752,13 +1769,17 @@ def _check_browser_source(
         "statement",
         "component-js",
     )
+    # Only reads the analyzer proves hold `component.$i18n` or `this.$i18n`
+    # are i18n calls; another object that happens to be named `i18n` is not.
+    i18n_owners, i18n_owner_spans = component_js_i18n_owners(source.content)
     findings.extend(
         _browser_i18n_profile_findings(
             source.origin,
             source.content,
             expression,
             profiles,
-            owners=frozenset({"i18n"}),
+            owners=i18n_owners,
+            proven_owner_spans=i18n_owner_spans,
         )
     )
     event_names = _shared_event_names(source.consumers)

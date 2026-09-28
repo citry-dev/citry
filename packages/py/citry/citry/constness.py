@@ -84,6 +84,7 @@ Example:
 
 from __future__ import annotations
 
+import abc
 from collections import OrderedDict
 from collections.abc import Mapping
 from contextvars import ContextVar
@@ -1061,7 +1062,7 @@ leaves ample headroom while still capping misuse (see the ``ConstBodyCache``
 docstring).
 """
 
-_CacheKey: TypeAlias = "tuple[ReferenceType[type[Component]], ConstSignature, frozenset[str], Hashable | None]"
+_CacheKey: TypeAlias = "tuple[ReferenceType[type[Component]], ConstSignature, frozenset[str], Hashable | None, object]"
 
 
 class ConstBodyCache:
@@ -1074,11 +1075,14 @@ class ConstBodyCache:
     already computed; the entry for a render with no ``Const`` inputs is the
     plain compiled body that all such renders share. Keys are
     ``(weak component-class reference, ConstSignature, visible variable
-    names, private output format)``. The weak reference lets an unregistered component class be
+    names, private output format, ABC registration state)``. The weak reference lets an unregistered component class be
     collected without waiting for this cache's LRU limit. Variable names
     participate because Citry binders reject an already-visible name; two
     otherwise equal renders with different context shapes may therefore need
-    different optimized bodies.
+    different optimized bodies. ``abc.get_cache_token()`` moves when a class
+    such as ``str`` is registered as ``ComponentLike``; a body that already
+    wrote a constant value as text must then be rebuilt, because that value
+    now renders through the component-like protocol.
 
     The cache lives on a ``Citry`` instance (``Citry._const_body_cache``), but
     holds each component class weakly. A class can therefore be collected
@@ -1125,7 +1129,7 @@ class ConstBodyCache:
         runs under the lock and the result is stored; if it raises, nothing is
         cached and the error propagates (so the next render retries).
         """
-        key = (ref(comp_cls), signature, frozenset(visible_names), format_key)
+        key = (ref(comp_cls), signature, frozenset(visible_names), format_key, abc.get_cache_token())
         with self._lock:
             self._prune_collected_components()
             body = self._entries.get(key)
@@ -1133,7 +1137,7 @@ class ConstBodyCache:
                 self._entries.move_to_end(key)
                 return body
             body = build()
-            stored_key = (ref(comp_cls, self._component_collected), signature, key[2], format_key)
+            stored_key = (ref(comp_cls, self._component_collected), signature, key[2], format_key, key[4])
             self._entries[stored_key] = body
             while len(self._entries) > self._max_entries:
                 self._entries.popitem(last=False)

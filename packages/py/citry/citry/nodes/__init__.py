@@ -103,6 +103,7 @@ from citry.client_directives import (
     has_client_props_key,
     is_client_props_key,
     resolve_component_tag_client_binding_value,
+    unsupported_slot_tag_directive_message,
 )
 from citry.constness import (
     Const,
@@ -1358,8 +1359,14 @@ def _kwarg_is_const(attr: HtmlAttr, context: CitryContext) -> bool:
 
 
 def _is_special_component_input_key(key: str) -> bool:
-    """Whether a fixed component attr needs the general binding pipeline."""
-    return key in {"ref", "v-on"} or key.startswith(("@", ":", "#c-", "$c-", "x-on:", "v-bind", "v-on:"))
+    """
+    Whether a fixed component attr must go through the full client-binding checks in ``_resolve_inputs``.
+
+    Every ``v-*``, ``#*``, and ``.*`` name goes through them, including Vue
+    syntax a component tag rejects, so the classifier can report it rather
+    than letting it become a kwarg the child never reads.
+    """
+    return key == "ref" or key.startswith(("@", ":", "#", ".", "$c-", "x-on:", "v-"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1516,7 +1523,7 @@ class ComponentNode(Node):
 
         resolved = self._resolve_inputs(context)
         child_cls = component.citry.get(self.name)
-        if child_cls.simple:
+        if child_cls.simple is True:
             from citry._simple_runtime import simple_deferred  # noqa: PLC0415
 
             if self.contains_fills or self.metadata is not None:
@@ -1692,7 +1699,9 @@ class ComponentNode(Node):
                 # attributes until the final-tag attrs hook authenticates and
                 # validates them against the selected HTML element.
                 return False
-            client_binding_kind = classify_component_tag_client_binding_key(resolved_key, tag_name=tag_name)
+            client_binding_kind = classify_component_tag_client_binding_key(
+                resolved_key, tag_name=tag_name, component_boundary=component_boundary
+            )
             if client_binding_kind is None:
                 return False
             if not component_boundary:
@@ -1740,7 +1749,17 @@ class ComponentNode(Node):
                 raise RuntimeError(
                     f"Executable Vue binding {resolved_key!r} on <{tag_name}> cannot use template interpolation."
                 )
-            if resolved_key in {":key", "v-bind:key", ":citry-id", "v-bind:citry-id"}:
+            # `v-model:key` would pass its value as the same `key` prop, which
+            # the call's own identity then overrides without a trace.
+            if resolved_key.split(".", 1)[0] in {
+                ":key",
+                "v-bind:key",
+                ":citry-id",
+                "v-bind:citry-id",
+                "v-model:key",
+                "v-model:citry-id",
+                "v-model:citryId",
+            }:
                 raise RuntimeError(
                     f"Vue binding {resolved_key!r} on <{tag_name}> targets Citry-owned component identity."
                 )
@@ -2135,7 +2154,11 @@ class ForNode(Node):
 
         has_browser_binding = any(
             attr.key == "c-bind"
-            or classify_component_tag_client_binding_key(attr.key.removeprefix("c-"), tag_name=call_node.name)
+            or classify_component_tag_client_binding_key(
+                attr.key.removeprefix("c-"),
+                tag_name=f"c-{call_node.name}",
+                component_boundary=call_node.name != "element",
+            )
             is not None
             for attr in call_node.attrs
         )
@@ -2152,7 +2175,7 @@ class ForNode(Node):
         if not registry._registry_ready():
             return selected
         child_cls = registry._registry._name_to_cls.get(call_node.name)
-        if child_cls is None or child_cls.simple or child_cls.transparent or child_cls._citry_dynamic_selector:
+        if child_cls is None or child_cls.simple is True or child_cls.transparent or child_cls._citry_dynamic_selector:
             return selected
         from citry._vue.direct import DirectCallRunRender  # noqa: PLC0415
 
@@ -2410,6 +2433,11 @@ class SlotNode(Node):
                         )
                         raise TypeError(msg)
                     _reject_dynamic_translation_binding(spread_key, tag_name="c-slot")
+                    # The parser rejects authored Vue directives here; a spread
+                    # key would otherwise become slot data the fill never uses.
+                    unsupported = unsupported_slot_tag_directive_message(spread_key)
+                    if unsupported is not None:
+                        raise RuntimeError(unsupported)
                     if spread_key == "name":
                         name = spread_value
                     elif spread_key == "required":

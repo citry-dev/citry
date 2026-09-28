@@ -19,9 +19,10 @@ TEMPLATE_MARKER_NAME_INVALID = 'citry.template.marker-name-invalid'
 JS_DATA_UNSUPPORTED_TYPE = 'citry.js-data.unsupported-type'
 JS_DATA_PUBLIC_NAME_COLLISION = 'citry.js-data.public-name-collision'
 VUE_UNKNOWN_VARIABLE = 'citry.vue.unknown-variable'
+VUE_PYTHON_VARIABLE = 'citry.vue.python-variable'
 CSP_INCOMPATIBLE_BROWSER_CODE = 'citry.csp.incompatible-browser-code'
 COMPONENT_JS_UNKNOWN_VARIABLE = 'citry.component-js.unknown-variable'
-COMPONENT_JS_UNKNOWN_DATA_MEMBER = 'citry.component-js.unknown-data-member'
+COMPONENT_JS_UNKNOWN_MEMBER = 'citry.component-js.unknown-member'
 BROWSER_INVALID_STATE_BINDING_TARGET = 'citry.browser.invalid-state-binding-target'
 BROWSER_UNKNOWN_STATE_FIELD = 'citry.browser.unknown-state-field'
 BROWSER_UNKNOWN_SERVER_EVENT = 'citry.browser.unknown-server-event'
@@ -248,36 +249,46 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                         'title': 'Invalid template declaration value',
                                         'when': 'Component.template is not a string, or Component.template_file is '
                                                 'neither a string nor a pathlib.Path.'},
- 'citry.component-js.unknown-data-member': {'code': 'citry.component-js.unknown-data-member',
-                                            'constant': 'COMPONENT_JS_UNKNOWN_DATA_MEMBER',
-                                            'defaultSeverity': 'error',
-                                            'documentationPath': '/ide/diagnostics/#citry.component-js.unknown-data-member',
-                                            'examples': [{'language': 'javascript',
-                                                          'source': '$component(({ data }) => {\n'
-                                                                    '  console.log(data.missing_field);\n'
-                                                                    '});',
-                                                          'title': 'Unknown field in callback data'}],
-                                            'messages': {'default': "JavaScript data field '{name}' is not available "
-                                                                    'in this component.'},
-                                            'parameters': {'name': 'Authored JavaScript data field name.'},
-                                            'summary': 'A callback accesses a data field that is absent from the '
-                                                       "component's known JavaScript data schema.",
-                                            'surfaces': ['check', 'lsp'],
-                                            'title': 'Unknown component JavaScript data member',
-                                            'when': "A static member access on the $component callback's data binding "
-                                                    'names a field absent from a closed JsData schema or a complete '
-                                                    'inferred js_data() return shape. Dynamic keys and unknown or open '
-                                                    'schemas are not checked.'},
+ 'citry.component-js.unknown-member': {'code': 'citry.component-js.unknown-member',
+                                       'configurableSeverity': True,
+                                       'constant': 'COMPONENT_JS_UNKNOWN_MEMBER',
+                                       'defaultSeverity': 'error',
+                                       'documentationPath': '/ide/diagnostics/#citry.component-js.unknown-member',
+                                       'examples': [{'language': 'javascript',
+                                                     'source': '$component(({ component }) => {\n'
+                                                               '  console.log(component.missing_field);\n'
+                                                               '});',
+                                                     'title': 'Misspelled js_data() key in a callback'}],
+                                       'messages': {'default': "Component instance member '{name}' is not defined by "
+                                                               'this component.'},
+                                       'parameters': {'name': 'Authored member name.'},
+                                       'summary': 'Component JavaScript reads a name that the component instance does '
+                                                  'not have.',
+                                       'surfaces': ['check', 'lsp'],
+                                       'title': 'Unknown component instance member',
+                                       'when': 'Component JavaScript reads this.<name> inside a Vue Options method, '
+                                               'computed value, data() function, lifecycle hook, provide() function, '
+                                               'or watch handler, or reads component.<name> inside an onServerRender '
+                                               'callback, and the name is not a js_data() key, prop, data() key, setup '
+                                               'binding, method, computed value, or injection. Citry checks only when '
+                                               "every owning component's JavaScript data is closed (a closed JsData "
+                                               'schema or a complete inferred js_data() return) and every Vue Options '
+                                               'section is known from the source. Names that start with $ or _, '
+                                               'bracket reads such as component[key], and names the source may assign '
+                                               'as a property are not checked, and nothing is checked when the source '
+                                               'writes computed members, copies names in with Object.assign, declares '
+                                               'a class, or merges other options in with mixins or extends. A plugin '
+                                               'property without a $ prefix, such as this.axios, is reported.'},
  'citry.component-js.unknown-variable': {'code': 'citry.component-js.unknown-variable',
                                          'configurableSeverity': True,
                                          'constant': 'COMPONENT_JS_UNKNOWN_VARIABLE',
                                          'defaultSeverity': 'error',
                                          'documentationPath': '/ide/diagnostics/#citry.component-js.unknown-variable',
                                          'examples': [{'language': 'javascript',
-                                                       'source': '$component(({ data }) => {\n'
-                                                                 '  scope.ready = data.ready;\n'
+                                                       'source': '$component(({ component }) => {\n'
+                                                                 '  component.ready = settings.ready;\n'
                                                                  '});',
-                                                       'title': 'Missing callback destructuring'}],
+                                                       'title': 'Undeclared name in a callback'}],
                                          'messages': {'default': "Component JavaScript variable '{name}' is not "
                                                                  'defined.'},
                                          'parameters': {'name': 'Authored JavaScript variable name.'},
@@ -661,6 +672,40 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                      'when': 'A name used in an interpolation or Python-valued template attribute is '
                                              'absent from the proven template data, configured globals, and lint-only '
                                              'variables.'},
+ 'citry.vue.python-variable': {'code': 'citry.vue.python-variable',
+                               'configurableSeverity': True,
+                               'constant': 'VUE_PYTHON_VARIABLE',
+                               'defaultSeverity': 'warning',
+                               'documentationPath': '/ide/diagnostics/#citry.vue.python-variable',
+                               'examples': [{'language': 'citry-html',
+                                             'source': '<li c-for="item in items" :title="item"></li>',
+                                             'title': 'Python loop variable in a Vue binding'}],
+                               'messages': {'attribute': "Vue reads '{name}' from browser state, but '{name}' is a "
+                                                         'Python variable here. Use c-{attribute}="{name}" to pass the '
+                                                         'Python value.',
+                                            'browser': "Vue reads the component's browser value '{name}' here, not the "
+                                                       "Python loop or slot variable '{name}'. Pass the Python value "
+                                                       'with a c- attribute, or rename one of them.',
+                                            'browser-attribute': "Vue reads the component's browser value '{name}' "
+                                                                 "here, not the Python loop or slot variable '{name}'. "
+                                                                 'Use c-{attribute}="{name}" for the Python value, or '
+                                                                 'rename one of them.',
+                                            'default': "Vue reads '{name}' from browser state, but '{name}' is a "
+                                                       'Python variable here. Pass its value with a c- attribute or '
+                                                       "loop with Vue's v-for instead."},
+                               'parameters': {'attribute': 'HTML attribute name that a c- attribute can set from '
+                                                           'Python.',
+                                              'name': 'Python variable name read by the Vue expression.'},
+                               'summary': 'A Vue expression reads a Python loop or slot variable, which the browser '
+                                          'never sees, so the value is missing or wrong.',
+                               'surfaces': ['check', 'lsp'],
+                               'title': 'Python variable read by a Vue expression',
+                               'when': 'A Vue expression inside a c-for loop or a c-fill binding reads that Python '
+                                       'variable and the name is not a Vue v-for or slot alias. This includes a name '
+                                       "that the component's browser data also defines, where Vue shows the browser "
+                                       "value instead of the loop value. When the component's browser data is fully "
+                                       'known and lacks the name, citry.vue.unknown-variable reports the read instead, '
+                                       'unless that rule is set to ignore.'},
  'citry.vue.unknown-variable': {'code': 'citry.vue.unknown-variable',
                                 'configurableSeverity': True,
                                 'constant': 'VUE_UNKNOWN_VARIABLE',
@@ -669,7 +714,11 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                 'examples': [{'language': 'citry-html',
                                               'source': '<button :disabled="submitting1">Save</button>',
                                               'title': 'Unknown name in a Vue expression'}],
-                                'messages': {'default': "Vue variable '{name}' is not available in this component."},
+                                'messages': {'default': "Vue variable '{name}' is not available in this component.",
+                                             'python': "Vue variable '{name}' is not available in this component. "
+                                                       "'{name}' is a Python variable here, which the browser never "
+                                                       "sees; pass its value with a c- attribute or loop with Vue's "
+                                                       'v-for.'},
                                 'parameters': {'name': 'Authored Vue variable name.'},
                                 'summary': "A free identifier in a Vue expression is absent from the component's "
                                            'proven browser scope.',
