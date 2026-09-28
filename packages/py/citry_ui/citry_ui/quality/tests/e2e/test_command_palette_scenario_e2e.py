@@ -11,7 +11,7 @@ pytest.importorskip("pytest_playwright")
 
 from citry import Citry, Component, ComponentLibrary
 from citry_ui.components.ccommand_palette import CCommandPalette, CCommandPaletteCommand
-from citry_ui.quality.routes import build_scenario, render_scenario
+from citry_ui.quality.routes import build_scenario
 
 pytestmark = pytest.mark.e2e
 
@@ -51,7 +51,9 @@ def _axe_serious_or_critical(page: Any) -> list[dict[str, object]]:
     )
 
 
-def _no_javascript_shell_html() -> str:
+def _no_javascript_fallback_html() -> str:
+    # Citry's default delivery writes the page's content into the served
+    # HTML, which is what a reader without JavaScript sees.
     app = Citry(autodiscover=False)
     app.register_library(ComponentLibrary("command-palette-no-javascript", (CCommandPalette,)))
 
@@ -77,15 +79,15 @@ def _no_javascript_shell_html() -> str:
           </main>
         """
 
-    return FallbackPage().render().serialize(security_javascript="omit")
+    return str(FallbackPage())
 
 
-def test_command_palette_quality_search_control_action_form_ime_and_axe(page: Any) -> None:
+def test_command_palette_quality_search_control_action_form_ime_and_axe(page: Any, open_scenario: Any) -> None:
     console_errors: list[str] = []
     page_errors: list[str] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: page_errors.append(str(error)))
-    page.set_content(render_scenario("command-palette.states"), wait_until="load")
+    open_scenario("command-palette.states")
     _wait_for_all_ready(page)
 
     page.get_by_role("button", name="Open workspace commands").click()
@@ -123,10 +125,11 @@ def test_command_palette_quality_search_control_action_form_ime_and_axe(page: An
     )
     controlled.locator('[data-citry-ui-part="command-palette-close"]').click()
     assert controlled.evaluate("element => element.open") is True
-    # The open modal makes controls outside the dialog inert; activate the
-    # checkbox through its public DOM control.
-    page.get_by_role("checkbox", name="Accept close").evaluate("element => element.click()")
-    page.wait_for_function("document.querySelector('.command-palette-quality input[type=checkbox]')?.checked")
+    # The modal palette makes the owner's checkbox inert, so change it the
+    # way its v-model listens: set the native state and fire `change`.
+    page.get_by_label("Accept close").evaluate(
+        "element => { element.checked = true; element.dispatchEvent(new Event('change', {bubbles: true})); }"
+    )
     controlled.locator('[data-citry-ui-part="command-palette-close"]').click()
     page.wait_for_function("!document.querySelector('#quality-command-palette-controlled').open")
 
@@ -408,7 +411,7 @@ def test_command_palette_no_javascript_keeps_readable_inert_native_fallback(brow
     context = browser.new_context(java_script_enabled=False)
     page = context.new_page()
     try:
-        page.set_content(_no_javascript_shell_html(), wait_until="load")
+        page.set_content(_no_javascript_fallback_html(), wait_until="load")
         closed = page.locator("#quality-command-palette-no-js-closed")
         assert closed.get_attribute("open") is None
         assert closed.locator('[data-citry-ui-part="command-palette-title"]').text_content().strip() == (

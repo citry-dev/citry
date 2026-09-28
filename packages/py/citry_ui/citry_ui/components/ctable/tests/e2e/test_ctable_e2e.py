@@ -13,11 +13,6 @@ from citry import Citry, Component
 
 pytestmark = pytest.mark.e2e
 
-READY = """() => Boolean(
-  window.Citry?.events
-  && window.CitryStable?._apps?.size === 1
-)"""
-
 
 def _static_page() -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
@@ -471,12 +466,13 @@ def test_nested_tables_isolate_structural_css_and_page_sticky_mode_has_no_scroll
 
 def test_events_reorder_preserves_a_focused_edit_and_removal_drops_the_keyed_row(
     page: Any,
+    wait_for_citry_ready: Any,
     serve_citry_ui_live: Any,
 ) -> None:
     app, html = _events_page()
     base = serve_citry_ui_live(app, html)
     page.goto(base + "/")
-    page.wait_for_function(READY)
+    wait_for_citry_ready()
 
     beta = page.get_by_role("textbox", name="beta quantity")
     beta.fill("draft 27")
@@ -528,12 +524,13 @@ def test_events_reorder_preserves_a_focused_edit_and_removal_drops_the_keyed_row
 
 def test_events_reorder_keeps_controlled_value_authoritative_for_the_keyed_row(
     page: Any,
+    wait_for_citry_ready: Any,
     serve_citry_ui_live: Any,
 ) -> None:
     app, html = _events_page(controlled=True)
     base = serve_citry_ui_live(app, html)
     page.goto(base + "/")
-    page.wait_for_function(READY)
+    wait_for_citry_ready()
 
     beta = page.get_by_role("textbox", name="beta quantity")
     beta.fill("draft 27")
@@ -573,12 +570,13 @@ def test_events_reorder_keeps_controlled_value_authoritative_for_the_keyed_row(
 
 def test_state_replacement_preserves_the_live_region_outside_the_busy_table(
     page: Any,
+    wait_for_citry_ready: Any,
     serve_citry_ui_live: Any,
 ) -> None:
     app, html = _state_events_page()
     base = serve_citry_ui_live(app, html)
     page.goto(base + "/")
-    page.wait_for_function(READY)
+    wait_for_citry_ready()
 
     page.evaluate("window.__tableAnnouncer = document.querySelector('.cui-table-announcer')")
     advance = page.locator(".advance-state")

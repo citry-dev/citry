@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -13,13 +12,12 @@ pytest.importorskip("pytest_playwright")
 from playwright.sync_api import expect
 
 from citry_ui.quality.accessibility import AXE_INCOMPLETE_DISPOSITIONS
-from citry_ui.quality.routes import build_scenario, render_scenario
+from citry_ui.quality.routes import build_scenario
 from citry_ui.quality.scenarios import SCENARIOS, QualityTool
 
 pytestmark = pytest.mark.e2e
 
 _BROWSER_SCENARIOS = tuple(scenario for scenario in SCENARIOS if QualityTool.BROWSER in scenario.tools)
-_CITRY_STYLESHEET_TAG_RE = re.compile(r"<(?:style|link)\b[^>]*\bdata-citry-css-url=", re.IGNORECASE)
 
 
 def _repository_root() -> Path:
@@ -58,18 +56,6 @@ def _axe_findings(
         test_embedded_frames,
     )
     return result
-
-
-def _with_external_css(html: str, css: str, *, after_citry: bool) -> str:
-    stylesheet = f'<style data-quality-external-css="">{css}</style>'
-    if after_citry:
-        return html.replace("</head>", stylesheet + "</head>", 1)
-    first_citry_style_match = _CITRY_STYLESHEET_TAG_RE.search(html)
-    if first_citry_style_match is None:
-        msg = "Rendered scenario did not contain a Citry stylesheet."
-        raise RuntimeError(msg)
-    first_citry_style = first_citry_style_match.start()
-    return html[:first_citry_style] + stylesheet + html[first_citry_style:]
 
 
 def _install_image_scenario_routes(page: Any) -> None:
@@ -267,13 +253,14 @@ def _activate_representative_state(page: Any, scenario_id: str) -> None:
 @pytest.mark.parametrize("scenario", _BROWSER_SCENARIOS, ids=lambda scenario: scenario.id)
 def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_findings(
     page: Any,
+    open_scenario: Any,
     scenario: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     if scenario.id == "image.states":
         _install_image_scenario_routes(page)
-    page.set_content(render_scenario(scenario.id), wait_until="load")
+    open_scenario(scenario.id)
     page.wait_for_selector(scenario.ready_selector, state="attached")
     if scenario.id == "textarea.states":
         assert page.locator(".cui-textarea").count() == 13
@@ -338,8 +325,11 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
     )
 
 
-def test_repeatable_contacts_initial_rows_keep_v_model_through_reverse_and_remove(page: Any) -> None:
-    page.set_content(render_scenario("workflow.repeatable-contacts"), wait_until="load")
+def test_repeatable_contacts_initial_rows_keep_v_model_through_reverse_and_remove(
+    page: Any,
+    open_scenario: Any,
+) -> None:
+    open_scenario("workflow.repeatable-contacts")
     page.wait_for_selector("#repeatable-contacts-form[data-citry-form-initialized]", state="attached")
 
     form = page.locator("#repeatable-contacts-form")
@@ -424,8 +414,8 @@ def test_accordion_quality_form_continuity_and_brand_contrast(page: Any, serve_c
         assert all(ratio >= 4.5 for ratio in page.evaluate(contrast_script))
 
 
-def test_disclosure_quality_form_continuity_and_brand_contrast(page: Any) -> None:
-    page.set_content(render_scenario("disclosure.states"), wait_until="load")
+def test_disclosure_quality_form_continuity_and_brand_contrast(page: Any, open_scenario: Any) -> None:
+    open_scenario("disclosure.states")
     page.wait_for_selector('[data-quality-states~="brand-orchard"][data-citry-disclosure-initialized]')
     form = page.locator("#disclosure-quality-form")
     control = form.locator('[name="email"]')
@@ -804,8 +794,8 @@ def test_tags_input_quality_form_tokenization_focus_and_morph(page: Any, serve_c
     assert page_errors == []
 
 
-def test_menu_quality_form_safety_native_disabledness_and_brand_contrast(page: Any) -> None:
-    page.set_content(render_scenario("menu.states"), wait_until="load")
+def test_menu_quality_form_safety_native_disabledness_and_brand_contrast(page: Any, open_scenario: Any) -> None:
+    open_scenario("menu.states")
     page.wait_for_selector("#quality-menu[data-citry-menu-initialized]", state="attached")
 
     page.get_by_role("button", name="Open archive index").click()
@@ -845,6 +835,7 @@ def test_menu_quality_form_safety_native_disabledness_and_brand_contrast(page: A
 @pytest.mark.parametrize("after_citry", [False, True], ids=("framework-first", "framework-last"))
 def test_representative_compositions_coexist_with_pinned_framework_css(
     page: Any,
+    open_scenario: Any,
     scenario_id: str,
     framework: str,
     after_citry: bool,
@@ -856,14 +847,11 @@ def test_representative_compositions_coexist_with_pinned_framework_css(
         else root / "packages" / "py" / "citry_ui" / "citry_ui" / "quality" / "css" / ".generated" / "tailwind.css"
     )
     assert css_path.is_file(), "run `pnpm install` and `pnpm run citry-ui:quality-css` first"
-    html = _with_external_css(
-        render_scenario(scenario_id),
-        css_path.read_text(encoding="utf-8"),
-        after_citry=after_citry,
+    open_scenario(
+        scenario_id,
+        framework_css=css_path.read_text(encoding="utf-8"),
+        framework_css_after_citry=after_citry,
     )
-    scenario = next(scenario for scenario in SCENARIOS if scenario.id == scenario_id)
-    page.set_content(html, wait_until="load")
-    page.wait_for_selector(scenario.ready_selector)
 
     if scenario_id == "composition.orbit-access":
         control = page.get_by_role("button", name="Request access")

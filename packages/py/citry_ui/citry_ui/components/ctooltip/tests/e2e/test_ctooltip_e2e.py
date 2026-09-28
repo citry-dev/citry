@@ -26,11 +26,13 @@ def _tooltip_page() -> str:
                 open: false,
                 accept: false,
                 disabled: false,
-                placement: 'top',
-                label: 'Jupiter moon',
+                placement: "top",
+                label: "Jupiter moon",
               };
             },
             mounted() {
+              // Tests change owner state through this Vue instance, which
+              // reaches the tooltip through its reactive props.
               window.__state = this;
             },
             beforeUnmount() {

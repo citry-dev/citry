@@ -44,8 +44,10 @@ class RowsAndResize(Component):
         },
         methods: {
           applyPreviewControls(event) {
-            this.rows = Number(event.detail.rows);
-            this.resize = event.detail.resize;
+            // A select reports its choice as text, and a bound `rows`
+            // must be a number, so convert it before passing it on.
+            const { rows, resize } = event.detail;
+            Object.assign(this, { rows: Number(rows), resize });
           },
         },
         mounted() {

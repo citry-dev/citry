@@ -6,12 +6,7 @@ citry.register_library(citry_ui)
 
 class ScrollAreaActivityAndFocus(Component):
     template = """
-      <section
-        class="scroll-area-focus"
-
-        @activity-focus="last=$event.detail"
-        @activity-blur="last=$event.detail"
-      >
+      <section class="scroll-area-focus">
         <p>
           Tab enters the viewport before its descendants. Native scrolling
           keys keep focus on the viewport.
@@ -19,22 +14,8 @@ class ScrollAreaActivityAndFocus(Component):
         <c-CScrollArea
           aria_label="Deployment activity"
           style="--cui-scroll-area-max-block-size: 15rem"
-          @focusin="
-            $event.currentTarget.dispatchEvent(
-              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
-                'activity-focus',
-                {bubbles:true, detail:`Focused ${$event.target.id}`}
-              )
-            )
-          "
-          @focusout="
-            $event.currentTarget.dispatchEvent(
-              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
-                'activity-blur',
-                {bubbles:true, detail:`Left ${$event.target.id}`}
-              )
-            )
-          "
+          @focusin="last=`Focused ${$event.target.id}`"
+          @focusout="last=`Left ${$event.target.id}`"
           :onScrollChange="(detail)=>
               last=`Block offset ${Math.round(detail.blockOffset)}`"
           id="deployment-activity"

@@ -328,7 +328,7 @@ def repeatable_contacts_component(app: Citry) -> type[Component]:
                   </label>
                   <button
                     type="button"
-                    @click="contacts = contacts.filter((item) => item.id !== contact.id)"
+                    @click="removeContact(contact.id)"
                   >
                     Remove
                   </button>
@@ -337,7 +337,7 @@ def repeatable_contacts_component(app: Citry) -> type[Component]:
               <c-CButton
                 type="button"
                 variant="outline"
-                @click="contacts.push({ id: nextId++, name: 'New contact', email: '' })"
+                @click="addContact()"
               >
                 Add contact
               </c-CButton>
@@ -355,6 +355,8 @@ def repeatable_contacts_component(app: Citry) -> type[Component]:
           </section>
         """
 
+        # Browser-owned rows keep this workflow client-heavy: add, remove, and
+        # reorder never round-trip, so the scenario measures Vue list updates.
         js = """
           $component({
             data() {
@@ -365,6 +367,14 @@ def repeatable_contacts_component(app: Citry) -> type[Component]:
                   { id: 2, name: 'Grace Hopper', email: '' },
                 ],
               };
+            },
+            methods: {
+              addContact() {
+                this.contacts.push({ id: this.nextId++, name: 'New contact', email: '' });
+              },
+              removeContact(id) {
+                this.contacts = this.contacts.filter((item) => item.id !== id);
+              },
             },
           });
         """

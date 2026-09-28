@@ -29,16 +29,10 @@ def _tag_page() -> str:
     class Page(Component):
         citry = app
         js = """
-          $component({
-            data(){
-              const tagTest=Citry.vue.reactive({
-                selected:'alpha',events:[],itemDisabled:false,variant:'soft',size:'md',
-              });
-              window.__tagTest=tagTest;
-              return {state:{tagTest},accept:false,fieldsetDisabled:false};
-            },
-            onServerRender({component}) { window.__state = component; },
-          });
+          $component({data(){const tagTest=Citry.vue.reactive({
+            selected:'alpha',events:[],itemDisabled:false,variant:'soft',size:'md',
+            accept:false,fieldsetDisabled:false,
+          }); window.__tagTest=tagTest; return {state:{tagTest}};}});
         """
         template = """
           <!doctype html>
@@ -56,7 +50,7 @@ def _tag_page() -> str:
                 :size="state.tagTest.size"
                 :onValueChange="(value, detail) => {
                     state.tagTest.events.push(['value', value, detail.previousValue]);
-                    if (accept) state.tagTest.selected = value;
+                    if (state.tagTest.accept) state.tagTest.selected = value;
                   }"
                 :onAction="(value) => state.tagTest.events.push(['action', value])"
                 :onRemove="(values, detail) => state.tagTest.events.push([
@@ -83,7 +77,7 @@ def _tag_page() -> str:
                 <c-CTag value="pool">Pool</c-CTag>
               </c-CTagGroup>
 
-              <fieldset id="native-fieldset" :disabled="fieldsetDisabled">
+              <fieldset id="native-fieldset" :disabled="state.tagTest.fieldsetDisabled">
                 <legend>Native ownership</legend>
                 <c-CTagGroup
                   label="Fieldset topics"
@@ -143,7 +137,7 @@ def test_controlled_selection_action_order_and_reactive_presentation(page: Any) 
     assert alpha.get_attribute("aria-selected") == "true"
     assert beta.get_attribute("aria-selected") == "false"
 
-    page.evaluate("window.__state.accept = true")
+    page.evaluate("window.__tagTest.accept = true")
     beta_label.click()
     page.wait_for_function("window.__tagTest.selected === 'beta'")
     page.wait_for_function("document.querySelector('#controlled [data-value=beta]').hasAttribute('data-selected')")
@@ -201,13 +195,13 @@ def test_item_and_native_fieldset_disabled_states_dominate_activation(page: Any)
     assert page.evaluate("window.__tagTest.events.length") == before
 
     page.locator("#fieldset-group").get_by_role("row", name="One").focus()
-    page.evaluate("window.__state.fieldsetDisabled = true")
+    page.evaluate("window.__tagTest.fieldsetDisabled = true")
     page.wait_for_function("document.querySelector('#fieldset-group').hasAttribute('data-disabled')")
     assert page.locator("#fieldset-group").get_by_role("row", name="One").get_attribute("tabindex") == "-1"
     assert page.locator("#fieldset-group [data-citry-ui-part='list']").evaluate(
         "element => element === document.activeElement"
     )
-    page.evaluate("window.__state.fieldsetDisabled = false")
+    page.evaluate("window.__tagTest.fieldsetDisabled = false")
     page.wait_for_function("!document.querySelector('#fieldset-group').hasAttribute('data-disabled')")
     assert errors == []
 

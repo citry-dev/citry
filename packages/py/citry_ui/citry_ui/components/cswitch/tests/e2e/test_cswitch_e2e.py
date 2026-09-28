@@ -65,16 +65,18 @@ def _switch_page() -> str:
             --cui-switch-width: 48px;
           }
         """
+        # The page owns the demo state that the switches bind to. Tests drive it
+        # through `window.__switchDemo`, which is the same Vue reactive object.
         js = """
           $component({
             data() {
-              return { checked: true, fixed: false, size: 'md' };
-            },
-            mounted() {
-              window.__state = this;
-            },
-            beforeUnmount() {
-              delete window.__state;
+              const switchDemo = Citry.vue.reactive({
+                checked: true,
+                fixed: false,
+                size: 'md',
+              });
+              window.__switchDemo = switchDemo;
+              return {state: {switchDemo}};
             },
           });
         """
@@ -89,14 +91,14 @@ def _switch_page() -> str:
                   value="enabled"
                   checked
                   class_="switch-brand"
-                  :checked="checked"
-                  :size="size"
-                  @input="checked = $event.target.checked"
+                  :checked="state.switchDemo.checked"
+                  :size="state.switchDemo.size"
+                  @input="state.switchDemo.checked = $event.target.checked"
                 >Night lighting</c-CSwitch>
                 <c-CSwitch
                   name="fixed"
                   value="yes"
-                  :checked="fixed"
+                  :checked="state.switchDemo.fixed"
                 >Immutable setting</c-CSwitch>
                 <button type="reset">Reset</button>
               </form>
@@ -137,7 +139,7 @@ def test_switch_exposes_native_role_keyboard_form_and_controlled_state(switch_pa
     page.keyboard.press("Space")
     assert switch.is_checked() is False
     assert page.evaluate("Array.from(new FormData(document.querySelector('#switch-form')).entries())") == []
-    page.evaluate("window.__state.checked = true")
+    page.evaluate("window.__switchDemo.checked = true")
     page.wait_for_function("document.querySelector('input[name=night]').checked")
     assert switch.is_checked()
     assert switch.evaluate("element => element.getAttribute('aria-checked')") is None

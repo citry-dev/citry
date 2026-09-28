@@ -6,9 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from markupsafe import escape
-
-from citry import LibraryComponent, Markup, const_value
+from citry import LibraryComponent, const_value
 from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
     CClassValue,
@@ -17,7 +15,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
-    reject_html_attr_bindings,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._validation import reject_owned_attrs, validate_optional_boolean
@@ -105,7 +103,9 @@ def _validate_attrs(attrs: Mapping[str, object] | None) -> None:
         msg = f"CTextarea attrs must be a mapping or None, got {attrs!r}."
         raise TypeError(msg)
     reject_owned_attrs(attrs, _OWNED_ATTRS, "CTextarea")
-    reject_html_attr_bindings(attrs, {"form"}, "CTextarea")
+    # A Vue directive could rebind `form` or another owned attribute, so none
+    # may arrive through Python data.
+    reject_vue_directive_attrs(attrs, "CTextarea")
     for key in attrs or {}:
         normalized = key.lower()
         if normalized.startswith(("data-citry-", "data-cev", "data-cid")):
@@ -117,19 +117,12 @@ def _normalize_newlines(value: str) -> str:
     return value.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def _encode_initial_value(value: str | None) -> Markup:
-    normalized = _normalize_newlines(value or "")
-    encoded = escape(normalized)
-    if normalized.startswith("\n"):
-        # citry_ui is a first-party companion package. This branch exists
-        # solely to compensate for the HTML parser's initial textarea LF when
-        # serializing HTML; Vue creates the text VNode directly.
-        from citry._vue.capture import prepared_render_active, vue_render_active  # noqa: PLC0415
-
-        if prepared_render_active() or vue_render_active():
-            return encoded
-        return Markup("\n") + encoded
-    return encoded
+def _initial_text(value: str | None) -> str:
+    # The template always writes one literal newline after `<textarea>`, which
+    # both the HTML parser and Vue's template compiler drop, so this is the
+    # exact text, leading newlines included. It stays a plain string so the
+    # template escapes it on the server and Vue binds it as text in the browser.
+    return _normalize_newlines(value or "")
 
 
 class CTextarea(LibraryComponent):
@@ -272,7 +265,7 @@ class CTextarea(LibraryComponent):
         return {
             "id": textarea_id,
             "name": name,
-            "default_value": _encode_initial_value(value),
+            "default_value": _initial_text(value),
             "rows": rows,
             "cols": cols,
             "wrap": wrap,
@@ -361,7 +354,8 @@ class CTextarea(LibraryComponent):
         c-data-citry-field-control="field_control"
         c-bind="attrs"
         data-citry-ui-part="textarea"
-      >{{ default_value }}</textarea>
+      >
+{{ default_value }}</textarea>
     """
 
     js = r"""
@@ -577,7 +571,7 @@ class CTextarea(LibraryComponent):
             if (reconcileTimer !== null) {
               clearTimeout(reconcileTimer);
             }
-            // Consumer event handlers and Alpine effects settle before this
+            // Consumer event handlers and Vue updates settle before this
             // task reads the latest value prop.
             reconcileTimer = setTimeout(() => {
               reconcileTimer = null;

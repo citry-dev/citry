@@ -9,11 +9,7 @@ class SwitchForm(Component):
       <form
         class="switch-form"
 
-        @submit.prevent="
-          result = new window.FormData($event.target).has('quiet_hours')
-            ? 'Saved'
-            : 'Enable quiet hours'
-        "
+        @submit.prevent="save($event.target)"
       >
         <c-CSwitch name="quiet_hours" value="enabled" required>Quiet hours</c-CSwitch>
         <c-CRow>
@@ -29,6 +25,13 @@ class SwitchForm(Component):
           return {
             result: ''
           };
+        },
+        methods: {
+          // An unchecked switch leaves its name out of the form data.
+          save(form) {
+            const enabled = new window.FormData(form).has('quiet_hours');
+            this.result = enabled ? 'Saved' : 'Enable quiet hours';
+          },
         },
       });
     """

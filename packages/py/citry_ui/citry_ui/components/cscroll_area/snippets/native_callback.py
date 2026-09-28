@@ -6,12 +6,7 @@ citry.register_library(citry_ui)
 
 class ScrollAreaNativeCallback(Component):
     template = """
-      <section
-        class="scroll-area-callback"
-
-        @scroll-area-native="nativeCount += 1"
-        @scroll-area-settled="settled += 1"
-      >
+      <section class="scroll-area-callback">
         <div class="scroll-area-callback__controls">
           <button type="button" @click="rows += 2">Add content</button>
           <button type="button" @click="rows = Math.max(1, rows - 2)">
@@ -22,7 +17,7 @@ class ScrollAreaNativeCallback(Component):
           </button>
           <button
             type="button"
-            @click="window.setTimeout(()=>imageVisible=true,350)"
+            @click="showImageLater()"
           >
             Load a delayed image
           </button>
@@ -35,20 +30,8 @@ class ScrollAreaNativeCallback(Component):
           axis="both"
           aria_label="Event-scoped audit log"
           style="--cui-scroll-area-max-block-size: 13rem"
-          @scroll="
-            $event.currentTarget.dispatchEvent(
-              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
-                'scroll-area-native', {bubbles:true}
-              )
-            )
-          "
-          @scrollend="
-            $event.currentTarget.dispatchEvent(
-              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
-                'scroll-area-settled', {bubbles:true}
-              )
-            )
-          "
+          @scroll="nativeCount += 1"
+          @scrollend="settled += 1"
           :onScrollChange="handleScrollChange"
         >
           <div
@@ -109,6 +92,10 @@ class ScrollAreaNativeCallback(Component):
             this.callbackCount += 1;
             this.lastInline = Math.round(detail.inlineOffset);
             this.lastBlock = Math.round(detail.blockOffset);
+          },
+          // Simulate an image that finishes loading after the area settled.
+          showImageLater() {
+            setTimeout(() => { this.imageVisible = true; }, 350);
           },
         },
         mounted() {

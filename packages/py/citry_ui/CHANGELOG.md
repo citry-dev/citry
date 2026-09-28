@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Component `attrs` mappings (and part mappings such as `input_attrs` or
+  `trigger_attrs`) now reject Vue directive names, those starting with `v-`,
+  `:`, `.`, `^`, `@`, or `#`, with an error that names the component. Write
+  Vue bindings and listeners on the component tag in your template instead,
+  for example `<c-CSplitButton @click="...">`.
+- `CMultiSelect` rejects inline event handler attributes such as `onclick`
+  in `attrs`, `trigger_attrs`, and `listbox_attrs` with an error that names
+  the input. Use the `onValueChange` callback or a Vue listener in your
+  template instead.
+
+### Fixed
+
+- Vue bindings inside the content you give Tabs, Repeatable Form Collection,
+  Sortable, Splitter, Stepper, Tour, Transfer List, and Virtual List now read
+  your component's data, so `v-text`, `@click`, `v-model`, and `@c-*` Events
+  bindings there work instead of rendering empty or doing nothing. Write
+  such content inside the group's tag or in a transparent component: content
+  in an ordinary component that you pass into the group stops the render
+  with an error that names the content. This needs the next `citry` release.
+- Inside a client i18n provider (`<c-i18n client>`), the default labels
+  and announcements that components update in the browser now translate
+  instead of failing with "message ... is not loaded". This affects many
+  interactive components, such as `CCombobox`, `CPagination`, `CDataGrid`,
+  `CTreeGrid`, and `CToastRegion`, and needs the matching `citry` release.
+- `CScrollArea` no longer calls `onScrollChange` for the scroll event its own
+  offset restore causes when the area is moved to another place in the page
+  before the next frame; the callback previously received that event with a
+  `null` source target.
+
 ## [0.2.2] - 2026-09-11
 
 ### Fixed

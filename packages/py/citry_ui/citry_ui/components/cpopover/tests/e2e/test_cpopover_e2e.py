@@ -26,11 +26,13 @@ def _popover_page() -> str:
                 open: false,
                 accept: false,
                 dismissible: true,
-                placement: 'bottom-start',
+                placement: "bottom-start",
                 matchWidth: false,
               };
             },
             mounted() {
+              // Tests change owner state through this Vue instance, which
+              // reaches the popover through its reactive props.
               window.__state = this;
             },
             beforeUnmount() {
@@ -220,7 +222,7 @@ def _popover_events_page() -> tuple[Citry, str]:
                 Survey step {{ step }}
               </c-fill>
               <c-fill name="default">
-                <input id="survey-note" value="Original note" />
+                <input id="survey-note" v-model="note" />
               </c-fill>
             </c-CPopover>
           </section>
@@ -231,6 +233,16 @@ def _popover_events_page() -> tuple[Citry, str]:
                 "placement": "top-end" if kwargs.step else "bottom-start",
                 "step": kwargs.step,
             }
+
+        # A server revision re-applies server-rendered input values, so the
+        # draft lives in Vue state, which the retained instance keeps.
+        js = """
+          $component({
+            data() {
+              return { note: "Original note" };
+            },
+          });
+        """
 
     class Page(Component):
         citry = app
@@ -988,7 +1000,12 @@ def test_correlated_rerender_retains_open_state_edits_and_one_layer(
     page.wait_for_function("document.querySelector('#survey-popover').matches(':popover-open')")
     note = page.locator("#survey-note")
     note.fill("Retained note")
-    page.evaluate("window.__popoverRoot = document.querySelector('[data-citry-popover-host]')")
+    page.evaluate(
+        """() => {
+          window.__popoverRoot = document.querySelector('[data-citry-popover-host]');
+          window.__surveyNote = document.querySelector('#survey-note');
+        }"""
+    )
 
     page.evaluate("() => Citry.events.send(document.querySelector('.advance-popover'), 'advance', {})")
     page.wait_for_function("document.querySelector('#survey-popover')?.dataset.placement === 'top-end'")
@@ -996,5 +1013,7 @@ def test_correlated_rerender_retains_open_state_edits_and_one_layer(
     assert page.evaluate("document.querySelector('[data-citry-popover-host]') === window.__popoverRoot") is True
     assert page.locator("#survey-popover").evaluate("element => element.matches(':popover-open')") is True
     assert note.input_value() == "Retained note"
+    # The open popover content is patched in place, not rebuilt.
+    assert page.evaluate("document.querySelector('#survey-note') === window.__surveyNote") is True
     assert page.evaluate("window[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length") == 1
     assert page.get_by_role("heading", name="Survey step 1").count() == 1

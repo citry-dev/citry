@@ -26,7 +26,9 @@ def _render(source: str, *, static_fallback: bool = False) -> str:
 
 
 def _manifest(html: str) -> dict[str, object]:
-    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
     assert match is not None
     return json.loads(match.group(1))["manifest"]
 
@@ -80,6 +82,9 @@ def test_closed_and_disabled_panels_are_inert_and_form_safe() -> None:
     assert " hidden" in panel.group(0)
     assert " inert" in panel.group(0)
     item = _occurrence(_manifest(html), "CNavigationMenuItem")["preparedData"]
+    # The template passes an empty string for data-* presence attributes, so
+    # Vue renders the same bare attribute as the server. Native boolean
+    # attributes keep Python True.
     assert item["citryAttrs0"]["data-disabled"] == ""
     assert item["citryAttrs1"]["disabled"] is True
     assert item["citryAttrs2"]["hidden"] is True
@@ -119,7 +124,14 @@ def test_public_schema_and_registration_are_exact() -> None:
         ('c-loop="1"', "loop"),
         ('id="two words"', "ASCII whitespace"),
         ("c-attrs=\"{'role': 'navigation'}\"", "owned"),
-        ("c-attrs=\"{'x-show': 'open'}\"", "ownership"),
+        (
+            "c-attrs=\"{'v-bind:role': 'kind'}\"",
+            "CNavigationMenu attrs cannot contain the Vue directive 'v-bind:role'",
+        ),
+        ("c-attrs=\"{'v-show': 'open'}\"", "CNavigationMenu attrs cannot contain the Vue directive 'v-show'"),
+        ("c-attrs=\"{'V-IF': 'open'}\"", "CNavigationMenu attrs cannot contain the Vue directive 'V-IF'"),
+        ("c-attrs=\"{'@keydown': 'move'}\"", "CNavigationMenu attrs cannot contain the Vue directive '@keydown'"),
+        ("c-attrs=\"{'#default': 'props'}\"", "CNavigationMenu attrs cannot contain the Vue directive '#default'"),
     ],
 )
 def test_invalid_root_inputs_fail(root: str, message: str) -> None:
@@ -167,6 +179,25 @@ def test_owned_destination_attributes_fail() -> None:
         _render(_source(item="c-trigger_attrs=\"{'aria-expanded': 'false'}\""))
     with pytest.raises(ValueError, match="owned"):
         _render(_source(item="c-panel_attrs=\"{'hidden': False}\""))
+
+
+def test_destination_attrs_reject_vue_directives() -> None:
+    with pytest.raises(
+        ValueError, match="CNavigationMenuItem trigger attrs cannot contain the Vue directive ':aria-expanded'"
+    ):
+        _render(_source(item="c-trigger_attrs=\"{':aria-expanded': 'open'}\""))
+    with pytest.raises(ValueError, match="CNavigationMenuItem panel attrs cannot contain the Vue directive 'v-html'"):
+        _render(_source(item="c-panel_attrs=\"{'v-html': 'markup'}\""))
+    with pytest.raises(
+        ValueError, match=re.escape("CNavigationMenuItem attrs cannot contain the Vue directive '.hidden'")
+    ):
+        _render(_source(item="c-attrs=\"{'.hidden': True}\""))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(_source("c-attrs=\"{'x-data': 'menu', 'title': 'Site'}\""), static_fallback=True)
+    assert 'x-data="menu"' in html
+    assert 'title="Site"' in html
 
 
 def test_css_contract_covers_public_states_and_environments() -> None:

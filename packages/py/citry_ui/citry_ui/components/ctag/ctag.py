@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
@@ -22,19 +22,6 @@ _SELECTION_MODES = ("none", "single", "multiple")
 _VARIANTS = ("soft", "solid", "outline")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-teleport",
-        "x-text",
-    }
-)
 _COMMON_OWNED = frozenset(
     {
         "aria-hidden",
@@ -142,14 +129,6 @@ def _choice(component: str, name: str, value: object, allowed: tuple[str, ...]) 
     return plain
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    if attribute.startswith("x-bind:"):
-        return attribute.removeprefix("x-bind:").split(".", 1)[0]
-    if attribute.startswith((":", ".")):
-        return attribute[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(
     component: str,
     attrs: Mapping[str, object] | None,
@@ -160,17 +139,13 @@ def _copy_attrs(
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{component} attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, component)
     for key in copied:
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"{component} attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            msg = f"{component} attrs cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if _dynamic_target(normalized) in owned:
-            msg = f"{component} attrs cannot dynamically bind owned attribute {key!r}."
             raise ValueError(msg)
     return copied
 
@@ -392,7 +367,10 @@ class CTagGroup(LibraryComponent):
           const list = root.querySelector(':scope > [data-citry-ui-part="list"]');
           const form = component.formService;
           const invalidEpisodes = new Set();
-          const registrations = new Map();
+          // Each CTag publishes its entry on its own root. Vue runs child callbacks
+          // before this one, and a server revision may rerun only this callback, so
+          // the group reads entries from the DOM instead of keeping its own registry.
+          const entryOf = (tag) => tag.__citryTagEntry ?? null;
           const runtime = root.__citryUiTagRuntime ?? {
             selection: data.selectionMode === "multiple" ? [] : null,
             serverValueFingerprint: null,
@@ -421,7 +399,7 @@ class CTagGroup(LibraryComponent):
           };
           const clearEpisode = (name) => invalidEpisodes.delete(name);
           const directTags = () => [...list.querySelectorAll(':scope > [data-citry-ui-part="tag"]')];
-          const entries = () => directTags().map((tag) => registrations.get(tag)).filter(Boolean);
+          const entries = () => directTags().map(entryOf).filter(Boolean);
           const canonical = (value) => typeof value === "string" && !value.includes("\0")
             ? value.replace(/\r\n?/g, "\n") : null;
           const known = () => new Set(entries().map((entry) => entry.value));
@@ -465,7 +443,7 @@ class CTagGroup(LibraryComponent):
           const validStructure = () => {
             const children = [...list.children];
             if (children.some((child) => !child.matches('[data-citry-ui-part="tag"]'))) return false;
-            if (children.some((child) => !registrations.has(child))) return false;
+            if (children.some((child) => !entryOf(child))) return false;
             const values = children.map((child) => child.dataset.value);
             if (values.length !== new Set(values).size) return false;
             const interactiveSelector = [
@@ -580,19 +558,11 @@ class CTagGroup(LibraryComponent):
             if (reconcileTimer !== null) return;
             reconcileTimer = setTimeout(reconcile, 0);
           };
-          root.__citryTagRegister = (entry) => {
-            registrations.set(entry.root, entry);
-            schedule();
-            return () => { registrations.delete(entry.root); schedule(); };
-          };
-          // Vue invokes mounted callbacks from children towards parents. A
-          // CTag can therefore reach this group before the group callback has
-          // installed its registration function. Notify already-mounted tags
-          // once the group-side registry becomes available.
-          root.dispatchEvent(new Event("citry:tag-group-ready"));
+          // A Tag calls this after it publishes, changes, or withdraws its entry.
+          root.__citryTagChanged = schedule;
           const ownedEntry = (target) => {
             const tag = target.closest?.('[data-citry-ui-part="tag"]');
-            return tag?.closest('[data-citry-ui-part="tag-group"]') === root ? registrations.get(tag) : null;
+            return tag?.closest('[data-citry-ui-part="tag-group"]') === root ? entryOf(tag) : null;
           };
           const focusEntry = (entry) => {
             if (!entry || entry.disabled) return;
@@ -773,7 +743,7 @@ class CTagGroup(LibraryComponent):
             root.removeEventListener("focusin", onFocusIn, true);
             root.removeEventListener("focusout", onFocusOut);
             root.removeAttribute("data-citry-tag-group-initialized");
-            delete root.__citryTagRegister;
+            delete root.__citryTagChanged;
           };
         },
       })
@@ -918,7 +888,6 @@ class CTag(LibraryComponent):
           const invalid = new Set();
           let localDisabled = data.disabled;
           let textValue = data.textValue;
-          let unregister = null;
           const report = (name, value) => {
             if (invalid.has(name)) return;
             invalid.add(name);
@@ -928,12 +897,9 @@ class CTag(LibraryComponent):
             root, label, indicator, remove, value: root.dataset.value,
             localDisabled, disabled: localDisabled, textValue,
           };
-          const register = () => {
-            if (unregister || !group.__citryTagRegister) return;
-            unregister = group.__citryTagRegister(entry) ?? null;
-          };
-          group.addEventListener("citry:tag-group-ready", register, {once: true});
-          register();
+          // The group may not have run its callback yet, so publish the entry on
+          // this root where the group finds it, then ask the group to reconcile.
+          root.__citryTagEntry = entry;
           const apply = () => {
             if (props.disabled === undefined) { invalid.delete("disabled"); localDisabled = data.disabled; }
             else if (typeof props.disabled === "boolean") {
@@ -948,14 +914,14 @@ class CTag(LibraryComponent):
             } else report("textValue", props.textValue);
             entry.localDisabled = localDisabled;
             entry.textValue = textValue;
-            register();
-            group.__citryTagRegister?.(entry);
+            group.__citryTagChanged?.();
           };
           const stop = Citry.vue.watchEffect(apply);
           root.setAttribute("data-citry-tag-initialized", "");
           return () => {
-            stop?.(); unregister?.();
-            group.removeEventListener("citry:tag-group-ready", register);
+            stop?.();
+            delete root.__citryTagEntry;
+            group.__citryTagChanged?.();
             root.removeAttribute("data-citry-tag-initialized");
           };
         },
