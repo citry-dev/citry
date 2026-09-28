@@ -24,6 +24,12 @@ function runtime() {
     history: { state: null, pushState() {}, replaceState() {} },
     queueMicrotask,
     btoa,
+    // The vm realm has no DOM, so a minimal CustomEvent records what a listener would receive.
+    CustomEvent: class CustomEvent {
+      constructor(type, init) {
+        Object.assign(this, init, { type });
+      }
+    },
     Vue: {
       reactive: (value) => value,
       shallowRef: (value) => ({ value }),
@@ -521,4 +527,37 @@ test("applyEnvelope keeps a private copy of a caller's envelope and a stale one 
   assert.equal(Object.isFrozen(envelope), false);
   assert.equal(Object.isFrozen(envelope.occurrences[0].serverData), false);
   assert.equal(JSON.stringify(envelope), sent);
+});
+
+test("a lifecycle notification for an unmounted component still reaches document listeners", () => {
+  const fixture = runtime();
+  const dispatch = fixture.stable._dispatchLifecycleEvent;
+  // A cancelled version notification must report false so the bridge skips its reload prompt.
+  fixture.document.dispatchEvent = function (event) {
+    this.dispatched.push(event);
+    return false;
+  };
+  assert.equal(dispatch("stale", null, [], "move", { reason: "version" }), false);
+  const [stale] = fixture.document.dispatched;
+  assert.equal(stale.type, "citry:events:stale");
+  assert.equal(stale.cancelable, true);
+  assert.equal(stale.bubbles, true);
+  assert.deepEqual({ ...stale.detail }, { instance: null, class: null, event: "move", reason: "version" });
+
+  // A live component keeps its identity and starts the event at its first root element.
+  const root = {
+    dispatched: [],
+    dispatchEvent(event) {
+      this.dispatched.push(event);
+      return true;
+    },
+  };
+  const context = { serverRenderId: "server-root", componentClassId: "Root_1" };
+  assert.equal(dispatch("swapped", context, [root], "move"), true);
+  assert.equal(fixture.document.dispatched.length, 1);
+  assert.equal(root.dispatched[0].cancelable, false);
+  assert.deepEqual(
+    { ...root.dispatched[0].detail, els: [...root.dispatched[0].detail.els] },
+    { instance: "server-root", class: "Root_1", event: "move", els: [root] },
+  );
 });

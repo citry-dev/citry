@@ -1769,7 +1769,7 @@
       if (!occurrence || occurrence.typeKey !== typeKey || app.mounted.has(occurrence.id)) throw new Error("invalid mounted occurrence");
       const generation = ++app.nextMountGeneration;
       const initialLive = app.snapshot.value.get(occurrence.id);
-      const record = {app, occurrenceId: occurrence.id, parentId: occurrence.parentId, generation, live: V.shallowRef(initialLive), serverKeys: new Set(Object.keys(occurrence.serverData)), definition: V.shallowRef({id: occurrence.definitionId, render: null, cache: []}), callbackScope: undefined, callbackCleanup: undefined, callbackSubscriptions: undefined, callbackRunning: false, applying: false, failed: false, events: null, state: null, controlHandles: new Map()};
+      const record = {app, occurrenceId: occurrence.id, parentId: occurrence.parentId, generation, live: V.shallowRef(initialLive), serverKeys: new Set(Object.keys(occurrence.serverData)), definition: V.shallowRef({id: occurrence.definitionId, render: null, cache: []}), callbackScope: undefined, callbackCleanup: undefined, callbackSubscriptions: undefined, callbackRunning: false, rootElements: [], applying: false, failed: false, events: null, state: null, controlHandles: new Map()};
       record.events = createEventActivity(record, occurrence.eventContext?.descriptor || null);
       record.state = createStateFacade(record, occurrence.eventContext);
       instanceRecords.set(this, record);
@@ -1801,8 +1801,9 @@
         }
       }});
       Object.defineProperty(this, "$onEvent", {enumerable: false, configurable: true, value: (name, callback) => {
-        if (!record.events?.descriptor)
-          throw new Error("this component declares no Events class; $onEvent needs a component Events declaration");
+        // A component without Events never receives a server event, so as in 0.5.1 the listener is not
+        // kept and the caller gets an unsubscribe that does nothing, rather than an error.
+        if (!record.events?.descriptor) return () => {};
         if (!record.events?.subscribe) throw new Error("Citry Events subscriptions are unavailable");
         // Only a call made while an onServerRender callback is running belongs to that run; any other call
         // (mounted(), a method, a timer) keeps its listener for the life of this instance.
@@ -3389,22 +3390,13 @@
           : source;
         const context = contexts.get(effectiveSource.stableId);
         const mounted = ownedApp.mounted.get(effectiveSource.stableId);
-        if (!context || !mounted || mounted.record.generation !== effectiveSource.generation) return true;
-        const details = {
-          instance: context.serverRenderId,
-          class: context.componentClassId,
-          event,
-          ...extra,
-        };
-        if (kind === "swapped") details.els = liveRootElements(mounted.component);
-        const roots = liveRootElements(mounted.component);
-        const carrier = roots[0] || document;
-        return carrier.dispatchEvent(new CustomEvent(`citry:events:${kind}`, {
-          detail: details,
-          bubbles: true,
-          // A page cancels a version-skew notification to replace the default reload prompt.
-          cancelable: kind === "before" || (kind === "stale" && extra.reason === "version"),
-        }));
+        // The calling component may be unmounted or replaced while its call is in flight. Page
+        // listeners on `document` must still hear the notification (a `stale` event under reason
+        // `version` decides whether the reload prompt appears), so a gone component only changes
+        // where the event starts and drops the identity fields it can no longer vouch for.
+        const live = context && mounted && mounted.record.generation === effectiveSource.generation;
+        return dispatchLifecycleEvent(
+          kind, live ? context : null, live ? liveRootElements(mounted.component) : [], event, extra);
       },
       promptReload,
       redirect(url) { global.location.assign(url); },
@@ -3956,6 +3948,36 @@
     disposeEventTimings(record);
     record.events?.dispose?.();
     disposeCallbacks(record);
+    // A callback may still hold the `els` array; once the component is gone it has no elements.
+    record.rootElements.length = 0;
+  }
+  // Refill the component's one `els` array in place, so a callback that destructured it earlier
+  // reads the elements the component renders now rather than the ones it rendered then.
+  function refreshRootElements(component, record) {
+    const roots = liveRootElements(component);
+    record.rootElements.length = 0;
+    record.rootElements.push(...roots);
+    return record.rootElements;
+  }
+  // Fire one `citry:events:<kind>` notification for an Events call. `context` is the calling
+  // component's Events context, or null when that component is no longer mounted; `roots` are its
+  // connected top-level elements. The event bubbles from the first root so instance-scoped listeners
+  // hear it, and starts at `document` when there is no live root, so page-level listeners always do.
+  // Returns false only when a listener cancelled a cancellable event.
+  function dispatchLifecycleEvent(kind, context, roots, event, extra = {}) {
+    const detail = {
+      instance: context ? context.serverRenderId : null,
+      class: context ? context.componentClassId : null,
+      event,
+      ...extra,
+    };
+    if (kind === "swapped") detail.els = [...roots];
+    return (roots[0] || document).dispatchEvent(new CustomEvent(`citry:events:${kind}`, {
+      detail,
+      bubbles: true,
+      // A page cancels `before` to stop a call, and a version-skew `stale` to replace the reload prompt.
+      cancelable: kind === "before" || (kind === "stale" && extra.reason === "version"),
+    }));
   }
   // The connected DOM elements a component renders at its top level, in order. A fragment or a child
   // component root contributes its own top-level elements, so this matches what the user sees.
@@ -3988,6 +4010,8 @@
     record.callbackSubscriptions = subscriptions;
     // Marks the synchronous part of this run, so `this.$onEvent` called inside it is released with the run.
     record.callbackRunning = true;
+    // Each run follows the mount or a server render this component applied, so `els` catches up here.
+    refreshRootElements(component, record);
     try {
       const context = {
         component,
@@ -3996,9 +4020,11 @@
         onEvent: (name, handler) => subscribeRecordEvent(record, name, handler, subscriptions),
         // The remaining fields repeat instance helpers under the names a 0.5.1 initializer destructured,
         // so such an initializer keeps working. Getters read the current value at each access, because a
-        // later server render may replace the occurrence, its State, or the root elements.
+        // later server render may replace the occurrence or its State.
         get id() { return record.app.occurrences.get(record.occurrenceId)?.renderId ?? null; },
-        get els() { return liveRootElements(component); },
+        // As in 0.5.1, `els` is one array for the component's lifetime, refilled in place before every
+        // callback run and on each read, so a destructured reference follows later server renders.
+        get els() { return refreshRootElements(component, record); },
         // 0.5.1 gave a component without Events a null `state`, and code tests for that to tell the two apart.
         get state() { return record.events?.descriptor ? component.$state : null; },
         get i18n() { return component.$i18n ?? null; },
@@ -4611,7 +4637,7 @@
     startPrepared(configuration).catch(error => queueMicrotask(() => { throw error; }));
   }
 
-  global.__citryRuntime = {configure, registerDefinition, registerTypeOptions, registerBrowserPlugin, defineType: defineTypeWithCallback, startPrepared, startDocument, attachVueApp, attachPreparedHost, whenReady, applyEnvelope, compilerRuntime, _apps: apps};
+  global.__citryRuntime = {configure, registerDefinition, registerTypeOptions, registerBrowserPlugin, defineType: defineTypeWithCallback, startPrepared, startDocument, attachVueApp, attachPreparedHost, whenReady, applyEnvelope, compilerRuntime, _apps: apps, _dispatchLifecycleEvent: dispatchLifecycleEvent};
   if (!global.CitryVueFragments?.installFragmentManager)
     throw new Error("Citry Vue fragment support is unavailable");
   global.CitryVueFragments.installFragmentManager(

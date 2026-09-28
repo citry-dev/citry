@@ -76,7 +76,7 @@ The component template declares the referenced element:
 | `revision` | The accepted server revision visible to the component. |
 | [`onEvent(name, handler)`](#on-server-render-on-event) | Listens for an event this component's server handler dispatches and returns a function that stops listening. |
 | `id` | The component's current server render ID, the value `Citry.events.send()` accepts and the `instance` in `citry:events:*` details. `null` when the component has none. Read-only. |
-| `els` | A new array of the component's connected top-level elements each time you read it. |
+| `els` | The component's connected top-level elements. It is one array for the component's lifetime, which Citry refills after each server render, so an `els` you destructured earlier lists the current elements. |
 | `state` | The same object as [`component.$state`](#state), or `null` when the component declares no `Events`. |
 | `sendEvent(name, args?, opts?)` | Calls [`component.$sendEvent`](#send-event). |
 | `loading(name?)` | Calls [`component.$loading`](#loading). |
@@ -125,9 +125,9 @@ $component({
 `onEvent` takes the same arguments as [`$onEvent`](#on-event), but each
 listener lasts only as long as the callback run that added it. Citry removes
 it before the next callback and when the component unmounts, so a listener
-added on every run is never registered twice. Unlike `$onEvent`, calling it
-without an `Events` declaration is not an error, but it only receives events
-that this component's own Events handlers dispatch:
+added on every run is never registered twice. Calling it without an `Events`
+declaration is not an error, but it only receives events that this
+component's own Events handlers dispatch:
 
 ```js
 $component(({ component, onEvent }) => {
@@ -270,8 +270,9 @@ A call made while this component's own `onServerRender` callback is still
 executing (not later from a timer or promise it started) belongs to that
 callback instead, like the callback's own [`onEvent`](#on-server-render): Citry
 removes the listener before it calls the callback again. After the component
-is unmounted, `$onEvent` adds nothing. `$onEvent` requires a component Events
-declaration.
+is unmounted, `$onEvent` adds nothing. On a component without an `Events`
+declaration, no server handler can dispatch to it, so `$onEvent` adds nothing
+and returns a `stop()` that does nothing.
 
 <h3 class="doc-heading" id="citry-events"><code>Citry.events</code></h3>
 
@@ -339,7 +340,10 @@ Event calls also emit bubbling `citry:events:before`, `after`, `error`,
 `swapped`, and `stale` events. Their detail always includes `instance`,
 `class`, and `event`; `after` adds `ok`, `error` adds `error`, `swapped` adds
 `els`, and `stale` adds `reason`. The `before` event is cancellable with
-`preventDefault()`.
+`preventDefault()`. Each event bubbles from the calling component's first
+element. When that component has left the page before the call finishes,
+the event fires on `document` with `instance` and `class` set to `null`, so
+a listener on `document` still hears it.
 
 `stale` fires when a call's result will not reach the page. Its `reason` says
 why:

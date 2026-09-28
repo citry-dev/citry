@@ -44,12 +44,19 @@ def test_initializer_context_exposes_the_instance_helpers_under_their_0_5_1_name
     class Page(Component):
         citry = engine
         State = PageState
-        template = '<main id="aliases"><output id="count">{{ count }}</output></main>'
+        # The `bump` render adds a second top-level element, so the component's
+        # roots change between the first and second run.
+        template = """
+            <main id="aliases"><output id="count">{{ count }}</output></main>
+            <aside id="extra" c-if="count > 0">bumped</aside>
+        """
         # Each run records what the context fields read, then the first run
         # drives one successful and one failing call through `sendEvent`.
         js = """$component(function (context) {
           const {component, revision, id, els, state, sendEvent, loading, error, i18n} = context;
+          globalThis.__firstEls ||= els;
           (globalThis.__contextRuns ||= []).push({revision, id, els: els.map(el => el.id), count: state.count,
+            sameEls: els === globalThis.__firstEls,
             sameState: state === component.$state, loading: loading(), error: error(), i18n,
             idWritable: Object.getOwnPropertyDescriptor(context, 'id').set !== undefined});
           if (revision === 0) {
@@ -93,8 +100,12 @@ def test_initializer_context_exposes_the_instance_helpers_under_their_0_5_1_name
     assert runs[0]["id"] == render_ids[0]
     # The second run happens while `bump`, the call whose render it applies, is still settling.
     assert [run["loading"] for run in runs] == [False, True]
+    assert [run["els"] for run in runs] == [["aliases"], ["aliases", "extra"]]
+    # As in 0.5.1, `els` is one array that Citry refills after each server render,
+    # so the array the first run destructured now holds the new roots.
+    assert page.evaluate("globalThis.__firstEls.map(el => el.id)") == ["aliases", "extra"]
     for run in runs:
-        assert run["els"] == ["aliases"]
+        assert run["sameEls"] is True
         assert run["sameState"] is True
         assert run["error"] is None
         assert run["i18n"] is None
@@ -119,9 +130,14 @@ def test_initializer_context_on_a_component_without_events_matches_0_5_1(page: A
         citry = engine
         template = '<section id="plain">plain</section>'
         # 0.5.1 gave a component without Events a null `state`, `false` and
-        # `null` from `loading()` and `error()`, and a rejected `sendEvent`.
+        # `null` from `loading()` and `error()`, a rejected `sendEvent`, and a
+        # `$onEvent` that returned an unsubscribe function doing nothing.
         js = """$component(({component, state, sendEvent, loading, error, els, id}) => {
           const report = {state, loading: loading(), error: error(), els: els.map(el => el.id), id};
+          try {
+            const off = component.$onEvent('saved', () => {});
+            report.onEvent = typeof off === 'function' ? String(off()) : typeof off;
+          } catch (reason) { report.onEvent = 'threw: ' + String(reason); }
           let threw = null;
           let returned;
           try { returned = component.$sendEvent('save'); } catch (reason) { threw = String(reason); }
@@ -141,6 +157,7 @@ def test_initializer_context_on_a_component_without_events_matches_0_5_1(page: A
     assert report["loading"] is False
     assert report["error"] is None
     assert report["els"] == ["plain"]
+    assert report["onEvent"] == "undefined"
     assert report["instanceThrew"] is None
     assert report["instanceReturnedPromise"] is True
     for status, reason in report["rejections"]:
@@ -295,4 +312,59 @@ def test_cancelling_the_version_notification_suppresses_the_reload_prompt(page: 
     page.locator("#skew").click()
     page.wait_for_function("window.__handledSkew === 1")
     page.wait_for_timeout(200)
+    assert dialogs == []
+
+
+@pytest.mark.e2e
+def test_a_call_whose_component_is_gone_still_notifies_document_listeners(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="vue-version-skew-gone-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+    skew = _stale_token_page(engine)
+    dispatcher_for(engine)
+    dialogs: list[str] = []
+    page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
+    # The listener cancels every cancellable notification, as a page that shows its
+    # own update banner would, and records what arrives at `document`.
+    page.add_init_script(
+        """
+        window.__goneEvents = [];
+        for (const name of ['before', 'stale', 'error', 'after'])
+          document.addEventListener(`citry:events:${name}`, event => {
+            window.__goneEvents.push({
+              name, instance: event.detail.instance, event: event.detail.event,
+              reason: event.detail.reason ?? null, ok: event.detail.ok ?? null});
+            if (event.cancelable && name === 'stale') event.preventDefault();
+          });
+        """
+    )
+    page.goto(serve_live(engine, skew(count=0).render().serialize(), "") + "/")
+    page.wait_for_function("document.querySelector('#skew')?.textContent === '0'")
+
+    # Hold the call at the network layer so the component can be unmounted while
+    # the call is still in flight, then let the stale token reach the server.
+    held: list[Any] = []
+
+    def hold(route: Any) -> None:
+        held.append(route)
+
+    page.route("**/ext/events/call", hold)
+    page.locator("#skew").click()
+    page.wait_for_function("window.__goneEvents.length === 1")
+    deadline = 50
+    while not held and deadline:
+        page.wait_for_timeout(20)
+        deadline -= 1
+    assert held, "the event call never reached the network"
+    page.evaluate("__citryRuntime._apps.values().next().value.vueApp.unmount()")
+    held[0].continue_()
+    page.wait_for_function("window.__goneEvents.some(item => item.name === 'after')")
+    page.wait_for_timeout(200)
+
+    events = page.evaluate("window.__goneEvents")
+    assert [item["name"] for item in events] == ["before", "stale", "after"]
+    assert events[0]["instance"] is not None
+    # The page hears why the call's result was dropped even though no component
+    # is left to start the event from, so the detail no longer names one.
+    assert events[1] == {"name": "stale", "instance": None, "event": "bump", "reason": "disposed", "ok": None}
+    assert events[2] == {"name": "after", "instance": None, "event": "bump", "reason": None, "ok": False}
     assert dialogs == []
