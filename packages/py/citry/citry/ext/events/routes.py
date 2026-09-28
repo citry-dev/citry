@@ -59,6 +59,7 @@ from citry.ext.events.codecs import decode_request
 from citry.ext.events.csrf import build_csrf_check
 from citry.ext.events.dispatcher import EventRequest, EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError, wire_error
+from citry.ext.events.handlers import EVENT_ROUTE_METHODS
 from citry.util.misc import format_url
 from citry.util.routing import RouteResponse, URLRoute
 
@@ -76,6 +77,7 @@ __all__ = [
     "DEFINITION_PATH",
     "EVENTS_RUNTIME_SRC",
     "EVENT_PATH",
+    "EVENT_ROUTE_METHODS",
     "MAX_ENVELOPE_BYTES",
     "RUNTIME_PATH",
     "STYLE_ASSET_PATH",
@@ -92,12 +94,9 @@ DEFINITION_PATH = "ext/events/definitions/{digest}.js"
 STYLE_ASSET_PATH = "ext/events/assets/{digest}.css"
 RUNTIME_PATH = "ext/events/runtime.js"
 EVENT_PATH = "ext/events/e/{class_id}/{event}"
-# The methods the per-event route admits at the host adapter. Handlers can
-# register after the routes are mounted (Django snapshots its URL set once),
-# so the route admits the standard methods a handler declares with
-# `@event(methods=...)`, and `_prepare` answers 405 with the resolved
-# handler's own `Allow` list.
-EVENT_ROUTE_METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+# EVENT_PATH admits EVENT_ROUTE_METHODS, the same fixed set a handler may
+# declare with ``@event(methods=...)``; ``handlers.py`` explains why the set
+# is fixed and defines it there so the decorator can check against it.
 
 # The committed browser bundle built from packages/js/citry-client.
 EVENTS_RUNTIME_SRC = Path(__file__).parents[2] / "_vue" / "runtime.js"

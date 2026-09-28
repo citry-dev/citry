@@ -1440,12 +1440,12 @@ class TestConfigResolution:
             citry = app
 
             class Events:
-                _methods = ("get", "m-search")
+                _methods = ("get", "patch")
 
                 def go(self):
                     return None
 
-        assert _events_ext(app).resolve(Comp).methods == ("GET", "M-SEARCH")
+        assert _events_ext(app).resolve(Comp).methods == ("GET", "PATCH")
 
     def test_topics_stored_and_validated(self):
         app = _Citry()

@@ -35,11 +35,17 @@ component with [`get_event_url()`][citry.ext.events.get_event_url]. GET handlers
 must not mutate server state. Their flat query format accepts scalar strings,
 booleans, finite numbers, and non-empty arrays of those values.
 
-Server adapters can dispatch every valid method declared by a handler. The
-native browser bridge currently cannot call handlers whose primary method is
-`HEAD`, `OPTIONS`, `CONNECT`, `TRACE`, or `TRACK`; call those routes through a
-server-side HTTP client or another transport. It rejects these methods before
-sending a request or consuming pending State edits.
+A handler can declare `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and
+`OPTIONS`, the methods its route accepts. Declaring any other method, such as
+`PURGE`, raises `ValueError` when the component class is defined, because no
+request with that method could reach the handler. A request with a method the
+handler did not declare gets a `405` response whose `Allow` header lists the
+methods it did declare.
+
+The browser runtime cannot call a handler whose first declared method is
+`HEAD` or `OPTIONS`. It raises an error before sending anything, and the
+component's pending State edits stay unsent. Call such a handler with a
+server-side HTTP client instead.
 
 ## Keep a form working without JavaScript
 

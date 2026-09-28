@@ -36,6 +36,7 @@ from citry.ext.events.handlers import (
     validate_csrf_value,
     validate_handler_signature,
     validate_methods_value,
+    validate_route_methods,
     validate_timing_value,
     validate_topics_value,
 )
@@ -622,6 +623,10 @@ class EventsExtension(Extension):
             f"Component {comp_name}: Events._methods",
             self._resolve_config_value(raw_events, "_methods", defaults),
         )
+        # The component default (or the engine default it fell back to)
+        # applies to every handler without its own @event(methods=...), so a
+        # method the per-event route rejects would leave them all unreachable.
+        validate_route_methods(f"Component {comp_name}: Events._methods", methods)
         debounce = validate_timing_value(
             f"Component {comp_name}: Events._debounce",
             self._resolve_config_value(raw_events, "_debounce", defaults),

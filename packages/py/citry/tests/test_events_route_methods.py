@@ -149,3 +149,63 @@ def test_per_event_put_and_delete_reach_the_handler(call: Any) -> None:
     assert other_status == 405
 
     assert component.calls == ["put", "delete"]  # type: ignore[attr-defined]
+
+
+def test_event_decorator_rejects_a_method_the_route_does_not_accept() -> None:
+    # The route answers PURGE with the adapter's 405, so a handler declaring
+    # it could never be called; the error appears while the class is defined.
+    with pytest.raises(ValueError, match="per-event route does not accept") as err:
+
+        class Cache(Component):
+            class Events:
+                @event(methods=("POST", "purge"))
+                def flush(self) -> None:
+                    return None
+
+    message = str(err.value)
+    assert "'PURGE'" in message
+    assert "Cache.Events.flush" in message
+    assert "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS" in message
+
+
+@pytest.mark.parametrize("method", EVENT_ROUTE_METHODS)
+def test_event_decorator_accepts_every_route_method(method: str) -> None:
+    @event(methods=(method.lower(),))
+    def handler() -> None:
+        return None
+
+    assert handler._citry_event_options.methods == (method,)  # type: ignore[attr-defined]
+
+
+def test_component_methods_default_rejects_a_method_the_route_does_not_accept() -> None:
+    engine = Citry(autodiscover=False)
+    with pytest.raises(ValueError, match=r"Events\._methods declares HTTP method 'PROPFIND'"):
+
+        class Folder(Component):
+            citry = engine
+
+            class Events:
+                _methods = ("PROPFIND",)
+
+                def list_files(self) -> None:
+                    return None
+
+            template = """
+                <p>folder</p>
+            """
+
+
+def test_engine_methods_default_rejects_a_method_the_route_does_not_accept() -> None:
+    engine = Citry(autodiscover=False, extensions_defaults={"events": {"_methods": ("LINK",)}})
+    with pytest.raises(ValueError, match="'LINK', which the per-event route does not accept"):
+
+        class Share(Component):
+            citry = engine
+
+            class Events:
+                def share(self) -> None:
+                    return None
+
+            template = """
+                <p>share</p>
+            """
