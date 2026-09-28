@@ -146,9 +146,10 @@ into one browser object. Citry instead keeps three ownership rules:
   Pass browser values with native Vue props and receive child events with
   native `v-on` or `@event` bindings.
 
-This distinction matters for slots and multi-root components. Citry's graph
-keeps the component and slot owner explicit even when their DOM ranges overlap
-or have no element root.
+This distinction matters for slots and multi-root components. A fill reads
+names from the component that wrote it, even when it appears inside another
+component's HTML, and a component with several root elements or none is still
+one Vue instance.
 
 ## Translate dynamic HTML attributes
 

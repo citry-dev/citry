@@ -106,5 +106,21 @@ literal.
 - It needs both opening and closing tags and cannot self-close.
 - Raw blocks cannot nest. The first closing tag ends the block.
 
+### Keep raw HTML complete on interactive pages
+
+When anything on the page or fragment has browser behavior, such as Vue
+directives or `$component`, the body of `<c-raw>` must be a complete piece of HTML. Vue
+takes over that part of the page, so Citry has to know where the raw HTML
+starts and ends. Otherwise the render fails with "opaque HTML must be a
+self-contained strict fragment":
+
+```citry-html
+--8<-- "docs_site/snippets/builtin_raw_complete.html"
+```
+
+Void elements such as `<br>` and `<img>` need no closing tag. Output with
+no browser behavior anywhere copies the raw body unchanged, as described
+above.
+
 To pass an HTML comment through a component input, see
 [Markup in attributes](/syntax/nested-templates/#when-the-fragment-markers-are-optional).

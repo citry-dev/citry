@@ -104,12 +104,12 @@ choice when a value must not appear in the page token.
 | Polling | Handwritten | Rich poll object | Application code | htmx | `@c-poll.<time>="handler"`, hidden-tab pause | **v1** |
 | Dynamic poll retiming | Handwritten | `PollUpdate` | Application code | htmx | Re-render a different binding or use app code | **Dropped** |
 | Viewport trigger | Handwritten | `unicorn:visible` | Alpine/plugin | htmx trigger | IntersectionObserver or Vue integration | **Dropped** |
-| Morph opt-out | Manual | `unicorn:ignore` | Alpine morph controls | `no_morph` helper | Explicitly unsupported by the current Vue renderer | **Dropped** |
+| Morph opt-out | Manual | `unicorn:ignore` | Alpine morph controls | `no_morph` helper | No opt-out: Vue updates every element it renders, and `#c-ignore` stops the render with an error | **Dropped** |
 | Stable item identity | Manual ids | Component key | Component id | Path id | `#c-key` gives Vue sibling identity at its authored position | **v1** |
 | Single element root | Not required by core | Required | Required | Root attrs required | Supported | **v1** |
 | Multi-root component | Supported by core | - | - | - | Logical root group | **v1** |
 | Text-only or empty component | Supported by core | - | - | - | Vue component lifecycle without an element root | **v1** |
-| Focus/value/caret preservation | Handwritten | Morph-dependent | Alpine morph rules | Alpine morph | Vue preserves compatible keyed updates; directive-shape replacement may lose focus or selection | **v1** |
+| Focus/value/caret preservation | Handwritten | Morph-dependent | Alpine morph rules | Alpine morph | Reordered keyed rows keep the focused field, its caret, and its text; a text field keeps what the user typed until the server sends a different value | **v1** |
 | Self render | Manual response | Automatic full component | Automatic | Dirty component | Return component or `Render(target=None)` | **v1** |
 | Target another region | Manual fragment | Partial/parent controls | Client callback | Dirty result | Render a component occurrence or explicit marker | **v1** |
 | Several target matches | Manual | Partials | - | OOB fragments | Targets are singular component occurrences or explicit markers | **Dropped** |
@@ -123,11 +123,12 @@ choice when a value must not appear in the page token.
 | Fragment assets activate | Manual dependency strategy | Framework runtime | Response bundle list | Manual five-part client setup | Fragment descriptor validates, loads and mounts a Vue app | **v1** |
 | Client prerequisite | Application choice | Unicorn JS | Tetra plus Alpine | htmx, json-enc, Alpine, morph, config | Citry-managed runtime with pinned Vue | **v1** |
 | Template-load validation | Limited | Mostly runtime | Mostly runtime | Mostly runtime | Literal event, State, and modifier mistakes fail early | **v1** |
-| Slot/fill scope after update | Application-owned | Template re-render | Saved component | Saved template | New fills in the returned tree; Citry graph owns client scope | **v1** |
+| Slot/fill scope after update | Application-owned | Template re-render | Saved component | Saved template | New fills in the returned tree; each fill keeps the Vue scope of the template that wrote it | **v1** |
 
-Citry uses Vue with a Citry-owned logical component graph for scope, slots,
-multi-root groups and rootless components. State remains under `$state`; it is
-not flattened into user component data.
+Each Citry component with browser behavior is a Vue component, so Vue
+handles its scope, slots, multiple root elements, and components that
+render no element. State stays under `$state`; it is not mixed into the component's
+own Vue data.
 
 ## Queueing, transport, and stale responses
 

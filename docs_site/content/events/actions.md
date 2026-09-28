@@ -17,8 +17,8 @@ class Events:
         return actions.Render(TaskList(tasks=load_tasks()))
 ```
 
-The Vue Events renderer addresses a component occurrence or an explicit marker
-and applies a morph. Omitting `target` selects the calling instance. Use a
+A Render action updates one component occurrence or an explicit marker in
+place. Omitting `target` selects the calling instance. Use a
 known `render:<id>` address for another component occurrence or a caller-relative
 `mark:<name>` address for a marker. CSS selectors and other swap modes are not
 supported. A component element returned directly is equivalent to
@@ -63,7 +63,7 @@ $component({
 
 | Return value | Browser result |
 |---|---|
-| `MyComponent(...)` or `actions.Render(...)` | Morph the calling component. |
+| `MyComponent(...)` or `actions.Render(...)` | Update the calling component in place. |
 | `dict` or `actions.Data(value)` | Resolve an imperative `$sendEvent` Promise. |
 | `actions.Dispatch(name, detail)` | Dispatch a bubbling browser event. |
 | `actions.Redirect(url)` | Navigate. |
@@ -80,7 +80,7 @@ first when the old subtree must hear the event.
 
 Vue matches unkeyed siblings by position. Give repeated items a stable
 application key so surviving component and element instances correspond to the
-same domain record after the calling component morphs:
+same domain record after the calling component renders again:
 
 ```citry-html
 <c-for each="item in items">

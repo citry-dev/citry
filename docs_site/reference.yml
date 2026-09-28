@@ -359,6 +359,7 @@ categories:
       - { key: "$error", anchor: error, role: "js:function" }
       - { key: "$sendEvent", anchor: send-event, role: "js:function" }
       - { key: "$onEvent", anchor: on-event, role: "js:function" }
+      - { key: "$i18n", anchor: i18n, role: "js:data" }
       - { key: Citry.events, anchor: citry-events, role: "js:data" }
 
   - kind: generated_python

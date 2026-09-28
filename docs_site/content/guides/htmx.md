@@ -68,8 +68,18 @@ Write literal HTMX attributes as ordinary HTML, such as
 `hx-target="#results"`. When a value comes from component data, add Citry's
 `c-` prefix: `c-hx-get="edit_url"`.
 
-When Vue creates HTMX controls inside a Citry component, process the mounted
-root from native component JavaScript:
+Once Citry's runtime is on the page, it mounts each inserted fragment
+itself, so HTMX needs no extra extension or helper script for Citry
+responses.
+
+When Vue creates HTMX controls inside a Citry component, give the element a
+`ref` and process it from the component's JavaScript once Vue has mounted it:
+
+```citry-html
+<article ref="root">
+  <button hx-get="/fragments/contacts/1/edit">Edit</button>
+</article>
+```
 
 ```javascript
 $component({
@@ -79,9 +89,10 @@ $component({
 });
 ```
 
-This lets HTMX discover attributes after Vue has mounted the component. Remove
-the listener implicitly by replacing the complete Vue app through its external
-wrapper; do not let HTMX rewrite descendants of a retained Vue app.
+HTMX then finds the `hx-*` attributes on the elements Vue created. To change
+what a Vue app shows, replace the whole app through its wrapper, as the next
+section describes; do not let HTMX rewrite elements inside an app that stays
+on the page.
 
 ## Update a plain wrapper around the component
 

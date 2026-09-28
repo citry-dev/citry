@@ -55,7 +55,7 @@ receives the updated value:
 declared field update alongside the current signed State token, and calls
 `refresh`. The token contains the full declared State. The handler builds a new
 `LiveSearch` explicitly. Focus, the input value, and the caret survive the
-resulting morph.
+update.
 
 If several handlers render the same component, add an author-defined helper
 to the State class if it makes the repeated constructor clearer:

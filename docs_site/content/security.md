@@ -44,6 +44,11 @@ the template. Put trusted scripts and styles in `Component.js`,
 `Component.css`, or structured
 [`Dependencies`][citry.ext.dependencies.Dependencies].
 
+Your policy never needs `'unsafe-eval'` for Citry, and `"strict"` places no
+limit on the JavaScript you write in Vue expressions. A page under a Content
+Security Policy is sent with HTML that Vue replaces instead of adopting; see
+[Pages Vue replaces instead of adopting](/advanced/vue-runtime/#pages-vue-replaces-instead-of-adopting).
+
 Per-render mode overrides are enforced during serialization. The Citry editor
 and `citry check` report template and dependency problems at authored source
 locations where static evidence is available.
@@ -70,9 +75,10 @@ The four modes answer different questions:
 - `"allow"` preserves normal interactive output.
 - `"warn"` preserves those exact bytes and emits one `RuntimeWarning` that
   inventories reached browser behavior.
-- `"omit"` removes Citry-managed executable scripts, Vue and Events
-  runtimes, preloaders, and browser manifests. Server-rendered HTML and CSS
-  remain. Authored Vue directives remain inert.
+- `"omit"` removes the scripts Citry manages: the Vue runtime, the Events
+  client, component JavaScript, and the app data that starts Vue.
+  Server-rendered HTML and CSS remain. Authored Vue directives stay in the
+  HTML, where the browser ignores them.
 - `"forbid"` rejects a rendered subtree that needs executable client
   behavior, even when `deps_strategy="simple"` or `"ignore"` would otherwise
   hide the corresponding runtime or dependency tag.
@@ -91,8 +97,8 @@ high-confidence fallback hazards such as browser-only structural directives
 and handler-only controls. Check the resulting page without
 JavaScript and provide native links or forms for essential actions.
 
-CSS remains allowed in every mode. An omit fragment emits its CSS directly,
-without a preloader, manifest, mounted route, or existing browser manager.
+CSS remains allowed in every mode. An omit fragment includes its CSS
+directly, so it needs no mounted route and no Citry runtime on the page.
 `deps_strategy="ignore"` keeps its existing meaning and suppresses collected
 CSS too. When an exact structured stylesheet or inert data script carries an
 executable attribute, omit removes that attribute while retaining the CSS or
@@ -128,8 +134,9 @@ value but reports it as unverified; it never downloads third-party code during
 serialization. Set `crossorigin` on that `Script` yourself: the browser checks
 the digest only when the third-party host sends CORS headers.
 
-This option provides byte identity and hash metadata. It composes with
-`security_csp="strict"`, but does not enable that expression policy by itself.
+This option provides byte identity and hash metadata. It works together
+with `security_csp="strict"`, but does not turn on strict CSP validation
+by itself.
 
 An interactive page sends its app's data, such as the rows of a table, as
 JSON that the browser reads but never runs. Your policy does not need to
@@ -203,8 +210,8 @@ every resource outside the Citry render. The
 least 128 random bits before encoding.
 
 Citry adds the value after dependency hooks have run. Every structured
-[`Script`][citry.ext.dependencies.Script], including external scripts and inert
-JSON manifests, receives it. The browser does not need the nonce on JSON
+[`Script`][citry.ext.dependencies.Script], including external scripts and the
+JSON block that carries an interactive page's app data, receives it. The browser does not need the nonce on JSON
 data, but Citry's runtime does: it starts an interactive page only from app
 data that carries the same nonce as the runtime's own script, so markup
 injected into the page cannot supply its own app data. Every structured
@@ -218,15 +225,13 @@ automatically trusted or nonced. Move trusted code to `Component.js`,
 `Component.css`, or a structured dependency. Strict mode rejects those raw
 elements after all render hooks have run.
 
-The browser manager records the nonce that authorized its own script tag. When
-a later fragment creates a structured script, inline style, or stylesheet
-link, the manager adds that document nonce if the descriptor omits it and
-rejects a different value before inserting the dependency batch. Off and
-warning fragments may load the
-standard manager through their preloader. Strict fragments contain only inert
-markup and manifests and require a strict Citry base document with an existing
-CSP manager. A present manager rejects nonce or runtime-variant mismatches
-before adoption; without one, the fragment remains inert.
+Citry's runtime reads the nonce from its own script tag when the page loads.
+When an [HTML fragment](/advanced/html-fragments/) arrives later, the runtime
+puts that page nonce on every script, inline style, and stylesheet link it
+adds for the fragment, so a fragment response does not need to know the
+page's nonce. Under `security_csp="strict"`, a fragment includes no script
+that loads Citry's runtime, so insert it only into a page that already
+loaded Citry.
 
 Do not cache nonce-bearing HTML separately from its response header. If a full
 response is cached, its HTML and CSP header must remain one artifact.

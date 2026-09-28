@@ -663,3 +663,52 @@ class Card(Component):
 
 Read [Bind controls to State](/events/bindings/#bind-controls-to-state) for the
 full element list and more. See [Keep State between calls](/events/state/) for declaring the State fields.
+
+## `#c-key` Stable identity across renders
+
+When an event handler renders a list again, Vue matches the old and new
+items by position unless each item has a key. Without keys, a reordered
+list can leave an open panel or a half-typed field on the wrong row.
+`#c-key` gives an element or a component call a key that Vue uses to
+match it to the one it rendered last time:
+
+```citry-html
+<c-for each="task in tasks">
+  <c-TaskRow
+    #c-key="task.id"
+    c-task="task"
+  />
+</c-for>
+```
+
+The value is a Python expression. Use a stable domain value, such as a
+database id or slug, and keep keys unique among the siblings in one list.
+On an interactive page, a component call that `<c-for>` repeats needs a
+`#c-key`: a missing, `None`, or duplicate key makes the render fail. On a
+plain HTML element the key is optional, and a `None` result means no key
+for that render. Other falsy values such as `0` or `""` are real keys.
+
+Write `#c-key` directly on a plain HTML element or a component tag. It is
+not an HTML attribute, and it never reaches the component as an input.
+These forms fail:
+
+```citry-html
+{# Fails when the page renders: a flag cannot come from c-bind #}
+<article c-bind="{'#c-key': task.id}"></article>
+
+{# Fails when the template loads: <c-if> and <c-for> take no key #}
+<c-if cond="task.visible" #c-key="task.id">...</c-if>
+```
+
+When a caller should choose the key, accept it as an ordinary input and
+write the flag in the template that renders the markup:
+
+```citry-html
+{# Inside TaskRow, with row_key coming from an input #}
+<article #c-key="row_key">
+  {{ task.title }}
+</article>
+```
+
+[Preserve identity in rendered lists](/events/actions/#preserve-identity-in-rendered-lists)
+covers how keys behave when an event handler renders the list again.

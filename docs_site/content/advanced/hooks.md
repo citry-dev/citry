@@ -181,6 +181,11 @@ runtime and initialization tags afterward, so this hook is not a complete
 document-level CSP surface. See [Extensions](/advanced/extensions/) for the
 application-wide hook.
 
+The extension hook's context also has a `before_manifest` list. On static
+output, its entries are written before the dependency scripts. On an
+interactive page, an entry there makes serialization raise `RuntimeError`,
+so add those scripts to `ctx.scripts` instead.
+
 ## Next steps
 
 - [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) covers

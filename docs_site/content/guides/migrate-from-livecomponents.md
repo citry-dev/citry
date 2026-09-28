@@ -176,7 +176,7 @@ attributes. Text interpolation continues to use `{{ expression }}`.
 | `PushUrl` / `ReplaceUrl` | `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` |
 | `parent_id` and component path | No author-managed hierarchy id; use target or Dispatch |
 | `{% call_command ... %}` / `hx-post` | `@c-*`, `$sendEvent`, or a per-event URL |
-| htmx + json-enc + Alpine morph setup | Citry loads and coordinates its client runtimes automatically |
+| htmx + json-enc + Alpine morph setup | Citry loads its pinned Vue runtime and the Events client automatically |
 | Saved context and template source | Fresh tree with explicit kwargs and fills |
 
 ## Keep serialization and authorization explicit

@@ -268,10 +268,10 @@ provide one stable reactive object and mutate its fields. Composition API
 helpers from the page's runtime are available through `Citry.vue` when Options
 alone are not enough.
 
-The former element-scoped `$provide`, `$inject`, and `$unprovide` browser APIs
-are unsupported by the Vue runtime. Put a provider on a Citry component
-boundary. To hide an inherited value from a subtree, introduce a boundary
-component that provides the replacement value; Vue has no `unprovide` option.
+A browser provider is always a component: put `provide` in the `$component`
+options of the component whose descendants need the value. To hide an
+inherited value from part of the page, wrap that part in a component that
+provides a replacement value under the same key.
 
 ## Next steps
 

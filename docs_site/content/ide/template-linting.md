@@ -159,8 +159,9 @@ environment.
 convention and also supply analysis metadata only. Use `vue_variables` for
 custom Vue magics or values supplied to a Vue scope outside Citry. Use
 `component_js_globals` for project scripts that make a real global available
-inside `$component`. Citry supplies `component` to `onServerRender`; server
-defaults, props, refs, i18n and event helpers are accessed through that
+inside `$component`. Citry passes `onServerRender` one object with
+`component` and the other callback fields; server defaults, props, refs,
+i18n and event helpers are reached through those fields or the `component`
 instance. Listing one of those names as a global would hide a real initializer
 bug.
 

@@ -34,9 +34,9 @@ Then use that state in the component template:
 <p v-show="open">Ships within two working days.</p>
 ```
 
-Citry also activates Vue for Python-seeded `js_data()`, native props and
-events, component JavaScript, and server Events state. The same ownership
-rules apply to complete documents and [HTML fragments](/advanced/html-fragments/).
+Citry also starts Vue for Python-seeded `js_data()`, native props and
+events, component JavaScript, and server Events state. Complete documents
+and [HTML fragments](/advanced/html-fragments/) work the same way.
 
 Do not mount another Vue application over Citry-managed output. Citry creates
 the component types, validates the prepared component graph, and coordinates
@@ -162,7 +162,7 @@ nonce, graph, and asset metadata before mounting the fragment.
 
 Set `security_javascript="omit"` for deliberate static output. Citry keeps
 server-rendered HTML and CSS but leaves Vue directives inert and emits no
-component JavaScript, Events runtime, or interactive manifest.
+component JavaScript, Events client, or app data.
 
 Set `security_javascript="forbid"` when reaching browser behavior should fail
 serialization. See
@@ -393,6 +393,13 @@ but contains mismatches", and Vue then rewrites the changed text. Citry validate
 incoming definitions and occurrence metadata before publishing a server
 revision.
 
+Citry requests its own scripts and stylesheets with `crossorigin="anonymous"`
+and answers them with `Access-Control-Allow-Origin: *`. When those requests
+cross origins, as in a sandboxed iframe or behind a CDN that rewrites the
+asset URLs, a proxy that drops the header leaves the page showing its HTML
+while its components never start. See
+[Keep the CORS header when a proxy or CDN serves Citry's files](/security/#keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files).
+
 ## Choose the right loop or condition
 
 Use Vue `v-if` and `v-for` for browser-owned HTML inside one component. Give
@@ -405,9 +412,10 @@ identities.
 ## Diagnose a runtime failure
 
 Start with the first `[Citry]` error in the browser console. Common causes are
-an incomplete fragment or asset, altered ownership metadata, an invalid
-prepared definition, or browser code that moved a managed range outside its
-owner. Later errors are often consequences of the first failure.
+an incomplete fragment or asset, a Vue host or configuration block that an
+optimizer changed or removed, an invalid prepared definition, or browser code
+that moved or removed elements inside a Vue app. Later errors are often
+consequences of the first failure.
 
 [Troubleshooting](/guides/troubleshooting/) covers the wider server and
 browser investigation workflow.

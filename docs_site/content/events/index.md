@@ -80,8 +80,8 @@ class Counter(Component):
 ```
 
 Clicking the button calls `increment` on the server. Returning a component
-element renders a fresh component tree and morphs it over the calling instance,
-so the button text changes without a page reload.
+element renders a fresh component tree and updates the calling instance in
+place, so the button text changes without a page reload.
 
 Every public method declared on the component's own [`Events`][citry.Component.Events] class is callable.
 An underscore-prefixed method is a private helper or configuration hook.

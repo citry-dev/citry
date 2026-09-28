@@ -238,7 +238,7 @@ class Layout(Component):
         highlight_slots = True
 ```
 
-Debug keeps Citry's `data-cid-*`, key, event, and CSS-variable markers on the elements authored by the component. Full-document component or slot boundaries and transparent structural components are skipped automatically.
+Debug adds its wrapper around the component's output and leaves the elements and attributes that the component writes unchanged. Debug skips full-document component or slot boundaries and transparent structural components.
 
 The boundaries themselves are real `<div>` elements. They can change flex or grid children, direct-child selectors, exact element identity, and restricted table or select content. Use Debug for development inspection, not in production or for layout-sensitive behavioral tests. Place it after an output-rewriting extension if you want to inspect that extension's final result.
 

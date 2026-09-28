@@ -334,28 +334,20 @@ a client provider is a hard browser boundary and also needs a real `tag`:
 The switch does not walk the whole document. Another client provider elsewhere
 has its own service and switches independently.
 
-## Inserted fragments add their own requirements
+## Re-rendered content and inserted fragments bring their own messages
 
-A fragment rendered under an existing client provider carries the message
-requirements and checked binding records used by its browser expressions. When
-Citry Events adopts that fragment, and the provider has already switched away
-from the fragment's server-rendered locale, Citry loads the provider's
-current-locale closure and reconciles the fragment's bound text and attributes
-before Vue or component callbacks activate. The ownership rule is Citry's
-logical provider route, including slots and teleports; it is not DOM
-`closest()`.
+When an Events handler renders part of the page again, the new content
+carries the message requirements and `$c-tr` bindings its browser
+expressions use. Content rendered inside a client provider stays under that
+provider, so `$i18n` and `$c-tr` there keep using the provider's service.
+Replacing the content releases the requirements and bindings of the content
+it replaces.
 
-When the browser commits the fragment, Citry adds its requirement and binding
-reference counts to the provider. Removing or morphing it removes them again.
-A failed current-locale load leaves the old live region unchanged and activates
-none of the incoming fragment.
+An [HTML fragment](/advanced/html-fragments/) that you insert yourself
+starts its own Vue app and must go outside every other Citry Vue app, so a
+client provider on the page cannot reach its content. Wrap the fragment's
+content in its own `<c-i18n client>` provider when it needs browser
+translations.
 
-Direct host `innerHTML` insertion still gets eventual inert-manifest discovery
-from Citry's permanent observer, but a synchronous host insertion cannot wait
-for current-locale loading before other browser code sees those nodes. Use the
-Citry Events fragment action path when pre-activation locale reconciliation is
-required.
-
-This follows the same fragment lifecycle as Citry's other browser metadata.
-The i18n extension does not send every public message in the project merely
-because one fragment may arrive later.
+The i18n extension does not send every public message in the project just
+because new content may arrive later; each render sends what it uses.

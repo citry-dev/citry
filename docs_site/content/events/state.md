@@ -61,8 +61,8 @@ The data flow is explicit:
    pending value and calls `refresh` once.
 5. `refresh` builds a new `LiveSearch` from the updated State.
 6. `template_data` performs the search for that new render.
-7. The morph updates the result list while preserving the focused input and
-   its caret.
+7. Vue updates the result list in place, and the focused input keeps its
+   focus and caret.
 
 ## Choose what survives in State
 

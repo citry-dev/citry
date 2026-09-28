@@ -1,7 +1,6 @@
 ---
 title: Simple components
 description: Render presentation components without creating an independent component instance.
-needs_review: true
 ---
 
 # Simple components
@@ -44,10 +43,6 @@ from citry import Component
 
 class Toggle(Component):
     simple = "vue"
-    template = """
-      <button :aria-expanded="open" @click="open = !open">{{ label }}</button>
-    """
-    js = "$component({data(){return {open:false}}})"
 
     class Kwargs:
         label: str
@@ -55,6 +50,23 @@ class Toggle(Component):
     @staticmethod
     def template_data(kwargs, _slots):
         return {"label": kwargs.label}
+
+    template = """
+      <button
+        :aria-expanded="open"
+        @click="open = !open"
+      >
+        {{ label }}
+      </button>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { open: false };
+        },
+      });
+    """
 ```
 
 This mode accepts registered components whose templates contain no slots
@@ -107,7 +119,14 @@ class Row(Component):
         </div>
       </li>
     """
-    js = "$component({data(){return {open:false}}})"
+
+    js = """
+      $component({
+        data() {
+          return { open: false };
+        },
+      });
+    """
 ```
 
 `Details` can be an ordinary component or another `simple = "vue"`

@@ -61,10 +61,13 @@ browser's default action.
 See the [Vue template syntax](https://vuejs.org/guide/essentials/template-syntax.html){:
 target="_blank" rel="noopener"} for directive forms and modifiers.
 
-Citry currently compiles component templates to ordinary Vue VNodes. Vue's
-built-in helper components are outside that compiled-template contract for now:
-`<Teleport>`, `<Transition>`, `<Suspense>`, and `<KeepAlive>` are rejected with
-an unsupported-helper diagnostic when they appear in a `Component.template`.
+A few Vue features do not work in a `Component.template`:
+
+- Vue's built-in helper components `<Teleport>`, `<Transition>`,
+  `<Suspense>`, and `<KeepAlive>` stop the template with an
+  unsupported-helper diagnostic.
+- `v-once` and `v-memo` make the render fail. Keep a value fixed by not
+  changing it, or compute it once in `data()`.
 
 ## Keep Python and JavaScript expressions separate
 
@@ -155,7 +158,7 @@ A Citry component tag accepts these Vue directives:
 | Directive | What it does on a component tag |
 | --- | --- |
 | `:name`, `v-bind` | Passes a Vue prop to the child. |
-| `@event`, `v-on` | Listens for an event the child emits. |
+| `@event`, `v-on` | Listens for an event the child emits. `v-on="listeners"` adds every listener in an object. |
 | `v-if`, `v-else-if`, `v-else` | Adds or removes the component. |
 | `v-model` | Passes a value and updates it when the child asks. |
 | `v-show` | Hides or shows the child's root element. |
@@ -283,8 +286,8 @@ Other rejected forms include:
 | `v-html`, `v-text` | A prop or a fill that the child renders |
 | `v-if`, `v-else-if`, `v-else`, or `v-show` with an argument or modifiers | The directive without them |
 | `.name` or `v-bind.prop` | A prop, `:name="..."` |
-| `v-on="..."` with an object | One `@event="..."` per listener |
-| `v-once`, `v-memo`, `v-cloak`, `v-pre` | The directive on an element in the child's template |
+| `v-cloak`, `v-pre` | The directive on an element in the child's template |
+| `v-once`, `v-memo` | Nothing: they are not supported on elements either |
 | `v-If` or another capitalized built-in name | The lowercase name |
 
 The template also stops compiling when `v-if`, `v-else-if`, `v-show`, or
