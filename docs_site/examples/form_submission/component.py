@@ -1,9 +1,11 @@
 """
-A contact form that handles its own submission, used as a live docs example.
+A contact form that handles its own submission, used as a live docs
+example.
 
-The docs site is static, so the form has no server to post to. Vue handles the
-submit in the browser and shows the "thank you" response from the entered name,
-standing in for the server response a real form would show.
+The docs site is static, so the form has no server to post to. Vue
+handles the submit in the browser and shows the "thank you" response
+from the entered name, standing in for the server response a real form
+would show.
 """
 
 from typing import Any
@@ -12,7 +14,7 @@ from citry import Component
 
 
 class ContactForm(Component):
-    """A styled contact form; submitting it shows a thank-you message in the browser."""
+    """A styled contact form that thanks the sender on submit."""
 
     class Kwargs:
         pass
@@ -38,7 +40,9 @@ class ContactForm(Component):
             placeholder="Ada Lovelace"
           />
         </label>
-        <button class="contact-form__button" type="submit">Submit</button>
+        <button class="contact-form__button" type="submit">
+          Submit
+        </button>
         <div role="status" aria-live="polite">
           <p
             v-if="thanks"
@@ -53,12 +57,12 @@ class ContactForm(Component):
       $component({
         methods: {
           async submit() {
-            // Clear the message first, so a screen reader announces it
-            // again when the same name is submitted twice.
+            // Clear the message first, so a screen reader announces
+            // it again when the same name is submitted twice.
             this.thanks = "";
             await this.$nextTick();
-            // A real form would post to the server and show its reply.
-            // This one builds the reply here, from the entered name.
+            // A real form would post to the server and show its
+            // reply. This one builds the reply from the entered name.
             const name = this.name.trim() || "stranger";
             this.thanks = `Thank you for your submission, ${name}!`;
           },

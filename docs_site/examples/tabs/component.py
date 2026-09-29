@@ -11,7 +11,7 @@ class Tab(TypedDict):
 
 
 class Tabs(Component):
-    """A tab bar plus panels; Vue state tracks the open tab in the browser."""
+    """A tab bar plus panels; Vue state tracks the open tab."""
 
     class Kwargs:
         tabs: list[Tab]
@@ -23,8 +23,9 @@ class Tabs(Component):
         return {
             "tabs": kwargs.tabs,
             "activeIndex": 0,
-            # The instance ID keeps element IDs unique when a page shows
-            # several Tabs, so each tab still names its own panel.
+            # The instance ID keeps element IDs unique when a page
+            # shows several Tabs, so each tab still names its own
+            # panel.
             "idPrefix": f"demo-tabs-{self.id}",
         }
 
@@ -66,16 +67,16 @@ class Tabs(Component):
     js = """
       $component({
         created() {
-          // Vue does not promise that refs collected inside v-for keep
-          // the list order, so each button is stored under its index.
-          // A plain Map, set up here rather than in data(), keeps Vue
-          // from tracking the elements as state.
+          // Vue does not promise that refs collected inside v-for
+          // keep the list order, so each button is stored under its
+          // index. A plain Map, set up here rather than in data(),
+          // keeps Vue from tracking the elements as state.
           this.tabButtons = new Map();
         },
         methods: {
           keepTabButton(index, el) {
-            // Vue calls this with null when the button unmounts, so the
-            // Map drops it instead of holding a detached element.
+            // Vue calls this with null when the button unmounts, so
+            // the Map drops it instead of holding a detached element.
             if (el) {
               this.tabButtons.set(index, el);
             } else {
@@ -83,8 +84,8 @@ class Tabs(Component):
             }
           },
           moveWithKeys(event, index) {
-            // The arrow keys wrap around, and Home and End jump to the
-            // ends, as the WAI-ARIA tabs pattern expects.
+            // The arrow keys wrap around, and Home and End jump to
+            // the ends, as the WAI-ARIA tabs pattern expects.
             const count = this.tabs.length;
             const nextIndex = {
               ArrowRight: (index + 1) % count,
@@ -96,7 +97,8 @@ class Tabs(Component):
             if (nextIndex === undefined) return;
             event.preventDefault();
             this.activeIndex = nextIndex;
-            // Only the open tab is in the Tab order, so focus follows it.
+            // Only the open tab is in the Tab order, so focus
+            // follows it.
             this.tabButtons.get(nextIndex)?.focus();
           },
         },

@@ -1,17 +1,19 @@
 """
-A widget that the page loads as an HTML fragment, used as a live docs example.
+A widget that the page loads as an HTML fragment, used as a live docs
+example.
 
-The server renders the widget on its own. When the page inserts that HTML,
-Citry's browser runtime fetches the widget's JavaScript and CSS and starts it.
-The widget keeps its JavaScript and CSS on the class, without ``js_data()`` or
-``css_data()``, so every render of it shares the same two files.
+The server renders the widget on its own. When the page inserts that
+HTML, Citry's browser runtime fetches the widget's JavaScript and CSS
+and starts it. The widget keeps its JavaScript and CSS on the class,
+without ``js_data()`` or ``css_data()``, so every render of it shares
+the same two files.
 """
 
 from citry import Component
 
 
 class FragmentWidget(Component):
-    """A small self-contained widget, rendered and loaded as an HTML fragment."""
+    """A small widget, rendered and loaded as an HTML fragment."""
 
     class Kwargs:
         pass
@@ -25,7 +27,9 @@ class FragmentWidget(Component):
           Loaded over the wire
           <span v-if="scriptRan">(JS ran)</span>
         </strong>
-        <p>This widget's HTML, CSS, and JS arrived as an HTML fragment.</p>
+        <p>
+          This widget's HTML, CSS, and JS arrived as an HTML fragment.
+        </p>
       </div>
     """
 
@@ -35,8 +39,8 @@ class FragmentWidget(Component):
           return { scriptRan: false };
         },
         mounted() {
-          // The label appears only once the widget's own script has run
-          // in the page that inserted the fragment.
+          // The label appears only once the widget's own script has
+          // run in the page that inserted the fragment.
           this.scriptRan = true;
         },
       });

@@ -1,4 +1,4 @@
-"""Standalone page that renders the recursion example (the live demo)."""
+"""Standalone page that renders the recursion example."""
 
 from typing import Any
 
@@ -6,7 +6,7 @@ from citry import Component
 
 
 class RecursionPage(Component):
-    """A full page showing a nested tree drawn by the self-rendering TreeNode."""
+    """A full page showing a nested tree drawn by TreeNode."""
 
     class Kwargs:
         pass
@@ -50,10 +50,15 @@ class RecursionPage(Component):
           <meta charset="utf-8" />
           <title>Recursion example</title>
           <c-css />
+          <style>
+            body {
+              margin: 0;
+              padding: 1.5rem;
+              font-family: system-ui, sans-serif;
+            }
+          </style>
         </head>
-        <body
-          style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"
-        >
+        <body>
           <c-TreeNode c-node="tree" />
           <c-js />
         </body>

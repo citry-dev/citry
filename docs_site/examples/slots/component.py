@@ -1,13 +1,13 @@
-"""A panel with named slots and footer fallback, used as a live docs example."""
+"""A panel with named slots and footer fallback content."""
 
 from citry import Component, SlotInput
 
 
 class SlotPanel(Component):
-    """A styled panel with a header slot, a default body slot, and a footer slot.
+    """A styled panel with header, default body, and footer slots.
 
-    The footer slot ships fallback content, so a caller that omits the footer
-    still gets a sensible default rendering.
+    The footer slot ships fallback content, so a caller that omits the
+    footer still gets a sensible default rendering.
     """
 
     class Kwargs:
@@ -28,7 +28,9 @@ class SlotPanel(Component):
         </div>
         <footer class="slot-panel__footer">
           <c-slot name="footer">
-            <span class="slot-panel__fallback">No actions available</span>
+            <span class="slot-panel__fallback">
+              No actions available
+            </span>
           </c-slot>
         </footer>
       </section>

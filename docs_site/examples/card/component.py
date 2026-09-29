@@ -21,7 +21,8 @@ class Card(Component):
       .demo-card {
         max-width: 24rem;
         padding: 1rem 1.25rem;
-        border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+        border: 1px solid
+          color-mix(in srgb, currentColor 20%, transparent);
         border-top: 0.25rem solid var(--accent);
         border-radius: 8px;
         background: Canvas;

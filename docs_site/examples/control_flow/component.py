@@ -1,4 +1,4 @@
-"""A task list that shows off c-for, c-if, and c-empty control flow."""
+"""A task list that shows c-for, c-if, and c-empty control flow."""
 
 from typing import Any, TypedDict
 
@@ -13,9 +13,9 @@ class Task(TypedDict):
 class TaskList(Component):
     """Renders a list of {text, done} tasks.
 
-    One <c-if> check picks how a task looks: done tasks get a check mark
-    and struck-through text, pending tasks a hollow bullet. When there are
-    no tasks, the <c-empty> branch is shown.
+    One <c-if> check picks how a task looks: done tasks get a check
+    mark and struck-through text, pending tasks a hollow bullet. When
+    there are no tasks, the <c-empty> branch is shown.
     """
 
     class Kwargs:
@@ -35,17 +35,25 @@ class TaskList(Component):
           <c-for each="task in tasks">
             <li class="tasklist__item">
               <c-if cond="task['done']">
-                <span class="tasklist__mark tasklist__mark--done">&#10003;</span>
-                <span class="tasklist__text tasklist__text--done">{{ task['text'] }}</span>
+                <span class="tasklist__mark tasklist__mark--done">
+                  &#10003;
+                </span>
+                <span class="tasklist__text tasklist__text--done">
+                  {{ task['text'] }}
+                </span>
               </c-if>
               <c-else>
-                <span class="tasklist__mark tasklist__mark--todo">&#9675;</span>
+                <span class="tasklist__mark tasklist__mark--todo">
+                  &#9675;
+                </span>
                 <span class="tasklist__text">{{ task['text'] }}</span>
               </c-else>
             </li>
           </c-for>
           <c-empty>
-            <li class="tasklist__item tasklist__item--empty">Nothing to do yet.</li>
+            <li class="tasklist__item tasklist__item--empty">
+              Nothing to do yet.
+            </li>
           </c-empty>
         </ul>
       </section>

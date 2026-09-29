@@ -1,7 +1,7 @@
 """A self-rendering tree, used as a live example in the docs.
 
-TreeNode renders one node's label and then renders itself for each child,
-so a nested structure of any depth is drawn with one component.
+TreeNode renders one node's label and then renders itself for each
+child, so a nested structure of any depth is drawn with one component.
 """
 
 from __future__ import annotations
@@ -33,7 +33,8 @@ class TreeNode(Component):
         node = kwargs.node
         children = node.get("children", [])
         has_children = len(children) > 0
-        # An open-folder arrow marks a node with children, a dot a leaf.
+        # An open-folder arrow marks a node with children, a dot a
+        # leaf.
         icon = "▾" if has_children else "•"
         return {
             "label": node["label"],
