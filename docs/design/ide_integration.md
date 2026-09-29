@@ -1782,9 +1782,10 @@ degradation contract in section 3.4.1.
     `id`, `els`, typed `data`, initial `scope`, read-only `props`, Events
     `state`, `loading`, `error`, `effect`, `reactive`, `graph`,
     `provide`/`inject`/`unprovide`, `sendEvent`, and `onEvent`. Callback and
-    configuration-object forms use separate contextual overloads, and the
-    callback result is `void | (() => void)` because a returned function is
-    cleanup while async initialization is unsupported. Direct synchronous
+    configuration-object forms share one generic signature, like Vue's
+    `defineComponent()`, so TypeScript infers each Options section and types
+    `this` as the full instance. An initializer may return a cleanup
+    function, or a Promise that resolves to one. Direct synchronous
     initialization writes such as `scope.name = value`, `scope["name"] =
     value`, and a static `Object.assign(scope, {...})` add proven variables to
     the component's Alpine subtree. Conditional writes are optional; computed

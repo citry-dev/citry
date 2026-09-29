@@ -52,6 +52,7 @@ from citry.analysis import (
     TemplatePythonRoot,
     VueLintConsumer,
     analyze_browser_component_source,
+    analyze_browser_expression,
     analyze_css_data_source,
     analyze_js_data_source,
     analyze_template_data_source,
@@ -1800,8 +1801,10 @@ def browser_projection(
         )
         if instance is not None:
             preamble = f"{preamble}\n{instance.source}"
-        # One function scope holds the names and the expression, so each name
-        # hides a browser global of the same name instead of merging with it.
+        # One function scope holds the names and the expression. VS Code
+        # checks each projection as a module, where this changes nothing; a
+        # checker that reads the file as a script would otherwise merge a
+        # name such as `open` with the browser global of that name.
         preamble = f"{preamble}\n(function () {{\n{name_declarations}"
         projected_expression = expression.source
         if expression.transform == "dynamic-slot":
@@ -1958,8 +1961,8 @@ def _template_component_instance(
     object, as it does inside the component JavaScript. The authored source is
     copied into a function so its helpers stay in scope, and the function
     returns the inferred instance. A template shared by several components, or
-    a source without exactly one `$component(...)` argument, keeps the
-    unknown-typed names instead.
+    a source that does not call `$component(...)` exactly once with Options,
+    keeps the unknown-typed names instead.
     """
     if len(consumers) != 1:
         return None
@@ -1968,7 +1971,9 @@ def _template_component_instance(
         return None
     source = resolved[0]
     analysis = analyze_browser_component_source(source)
-    if not analysis.valid or len(analysis.component_calls) != 1:
+    # Without Options names there is nothing for the template to read from
+    # the inferred instance; js_data() keys are typed from Python already.
+    if not analysis.valid or len(analysis.component_calls) != 1 or not analysis.public_names:
         return None
     call = analysis.component_calls[0]
     if call.argument_start_index is None or call.argument_end_index is None:
@@ -1980,6 +1985,8 @@ def _template_component_instance(
     block = "\n".join(
         (
             f"function {_TEMPLATE_COMPONENT_SOURCE}() {{",
+            # Declared here, not globally, so a template expression is never offered `$component`.
+            "/** @type {CitryComponentFunction} */ var $component = /** @type {any} */ (function () {});",
             source,
             # The leading semicolon ends an authored statement left open.
             ";return /** @type {CitryDefineComponent} */ (/** @type {any} */ (null))(",
@@ -2299,7 +2306,10 @@ def _browser_projection_owns_position(
     ):
         return True
     if not component_js and identifier is not None and identifier.root:
-        return identifier.name in {root.name for root in roots}
+        return (
+            identifier.name in {root.name for root in roots}
+            and _browser_free_root_at(expression, parser_index) is not None
+        )
     member = browser_member_at(expression, parser_index)
     if component_js and (member is None or member.owner not in {"data", "scope"}):
         # Citry answers a js_data() key read through the instance with its
@@ -7318,13 +7328,10 @@ def _browser_native_member_locations(
     if context is None:
         return ()
     region, expression, parser_index = context
-    identifier = browser_identifier_at(expression, parser_index)
-    # A `v-for` or slot binding with the same name shadows the instance member.
-    if (
-        identifier is None
-        or not identifier.root
-        or any(binding.name == identifier.name for binding in expression.binding_details)
-    ):
+    # A `v-for` or slot binding, an arrow parameter, or an object key with the
+    # same name is not the instance member.
+    identifier = _browser_free_root_at(expression, parser_index)
+    if identifier is None:
         return ()
     found: list[types.Location] = []
     for component in _template_consumers(document, region, project, open_documents):
@@ -7362,6 +7369,26 @@ def _browser_expression_context(
     return (region, expression, parser_index) if expression is not None else None
 
 
+def _browser_free_root_at(expression: BrowserExpression, parser_index: int) -> Any | None:
+    """
+    Return the identifier under the cursor when it reads a template-scope name.
+
+    The token check alone treats an arrow parameter or an object key as a
+    root, so ask the parser which names the expression reads from outside.
+    While the expression does not parse, fall back to the token check so
+    hover keeps working as the author types.
+    """
+    identifier = browser_identifier_at(expression, parser_index)
+    if identifier is None or not identifier.root:
+        return None
+    analysis = analyze_browser_expression(expression)
+    if analysis.valid and not any(
+        reference.start_index == identifier.start_index for reference in analysis.references
+    ):
+        return None
+    return identifier
+
+
 def _browser_data_root_at(
     document: DocumentState,
     position: types.Position,
@@ -7372,8 +7399,8 @@ def _browser_data_root_at(
     if context is None:
         return None
     region, expression, parser_index = context
-    identifier = browser_identifier_at(expression, parser_index)
-    if identifier is None or not identifier.root:
+    identifier = _browser_free_root_at(expression, parser_index)
+    if identifier is None:
         return None
     root = next(
         (
@@ -8276,14 +8303,14 @@ def _component_public_instance_shape(
             # portable analyzer proves the name but not that finer contract.
             members[name] = ("unknown", False)
     presence = {root.name: root.presence for root in roots}
-    writable = _js_object_shape(
+    writable = _js_member_shape(
         tuple(
             (name, type_source, presence.get(name) != "conditional")
             for name, (type_source, readonly) in members.items()
             if not readonly
         )
     )
-    readonly = _js_object_shape(
+    readonly = _js_member_shape(
         tuple((name, type_source, True) for name, (type_source, readonly) in members.items() if readonly)
     )
     helpers, open_namespace = _component_instance_helpers(analysis, js_data_policy=js_data_policy, i18n=i18n)
@@ -8296,7 +8323,7 @@ def _component_instance_helpers(
     js_data_policy: Literal["closed", "open", "unavailable"],
     i18n: Any | None,
 ) -> tuple[str, str]:
-    """Render Citry's instance helpers and whether unproven names stay readable."""
+    """Return the type of Citry's helper members, and an open index signature when some names are unproven."""
     helpers = (
         "{$state: CitryEventsState, $sendEvent: (name: CitryServerEventName, "
         "args?: Record<string, unknown>, opts?: CitrySendOptions) => Promise<unknown>, "
@@ -8307,7 +8334,7 @@ def _component_instance_helpers(
     if i18n is not None and i18n.configured:
         helpers = helpers[:-1] + ", $i18n: CitryI18nService | null}"
     # An open js_data() result or an Options section the analyzer cannot read
-    # may add any name, so an unlisted member reads as unknown, not an error.
+    # may add any name, so an unlisted member reads as `unknown`.
     open_namespace = (
         " & Record<string, unknown>"
         if js_data_policy != "closed"
@@ -8333,7 +8360,7 @@ def _component_instance_extras_shape(
     methods, and injections from the Options object, so only the names Citry
     installs before `data()` runs belong here.
     """
-    js_data = _js_object_shape(
+    js_data = _js_member_shape(
         tuple((root.name, root.wire_type.javascript, root.presence != "conditional") for root in roots)
     )
     helpers, open_namespace = _component_instance_helpers(analysis, js_data_policy=js_data_policy, i18n=i18n)
@@ -8377,9 +8404,13 @@ def _browser_preamble(
             if root.name in names or root.name in binding_names:
                 continue
             names.add(root.name)
+            if not _is_js_variable_name(root.name):
+                continue
             name_lines.extend((f"/** @type {{{root.wire_type.javascript}}} */", f"var {root.name};"))
     for binding in bindings:
-        if binding in names:
+        # `var delete;` or `var a-b;` would break the whole projection; a
+        # template cannot read such a name as a bare variable anyway.
+        if binding in names or not _is_js_variable_name(binding):
             continue
         names.add(binding)
         if binding == "$i18n" and i18n is not None and i18n.configured:
@@ -8393,16 +8424,16 @@ def _browser_preamble(
     props_shape = (
         "Record<string, unknown>"
         if props is None
-        else _js_object_shape(tuple((prop.name, prop.javascript, prop.required or prop.has_default) for prop in props))
+        else _js_member_shape(tuple((prop.name, prop.javascript, prop.required or prop.has_default) for prop in props))
     )
-    writable_state_shape = _js_object_shape(
+    writable_state_shape = _js_member_shape(
         tuple(
             (root.name, f"CitryDeepReadonly<{root.wire_type.javascript}>", True)
             for root in state_roots
             if root.name in writable_state_names
         )
     )
-    readonly_state_shape = _js_object_shape(
+    readonly_state_shape = _js_member_shape(
         tuple(
             (root.name, f"CitryDeepReadonly<{root.wire_type.javascript}>", True)
             for root in state_roots
@@ -8478,10 +8509,11 @@ def _browser_preamble(
             "/** @callback CitryCleanup @returns {void} */",
             # An initializer may be async; Citry keeps a cleanup the Promise resolves to.
             # The Options form passes its own instance type; the callback form has no Options.
-            "/** @template [I=CitryComponentPublicInstance] @callback CitryComponentInitializer",
-            " * @param {CitryComponentContext<I>} context",
-            " * @returns {void | CitryCleanup | Promise<void | CitryCleanup>}",
-            " */",
+            # Citry calls an initializer without a receiver, so its `this` is
+            # undefined even when it is written as a method of the Options object.
+            "/** @template [I=CitryComponentPublicInstance] @typedef {(this: void, "
+            "context: CitryComponentContext<I>) => void | CitryCleanup | Promise<void | CitryCleanup>} "
+            "CitryComponentInitializer */",
             "/** @typedef {{timeout?: number, wait?: true}} CitrySendOptions */",
             "/**",
             " * @template [I=CitryComponentPublicInstance]",
@@ -8546,8 +8578,7 @@ def _browser_preamble(
             "CitryComponentDefinition<B, D, C, M>) => CitryOptionsInstance<B, D, C, M>} CitryDefineComponent */",
         )
     )
-    if component_js or instance_names:
-        # A template's projection also runs its component's source, which calls `$component`.
+    if component_js:
         lines.append(
             "/** @type {CitryComponentFunction} */ var $component = /** @type {any} */ (function () {});",
         )
@@ -8670,6 +8701,73 @@ def _i18n_browser_typedefs(index: Any) -> tuple[str, ...]:
         "} switchLocale",
         " */",
     )
+
+
+_JS_RESERVED_WORDS = frozenset(
+    [
+        "await",
+        "break",
+        "case",
+        "catch",
+        "class",
+        "const",
+        "continue",
+        "debugger",
+        "default",
+        "delete",
+        "do",
+        "else",
+        "enum",
+        "export",
+        "extends",
+        "false",
+        "finally",
+        "for",
+        "function",
+        "if",
+        "implements",
+        "import",
+        "in",
+        "instanceof",
+        "interface",
+        "let",
+        "new",
+        "null",
+        "package",
+        "private",
+        "protected",
+        "public",
+        "return",
+        "static",
+        "super",
+        "switch",
+        "this",
+        "throw",
+        "true",
+        "try",
+        "typeof",
+        "var",
+        "void",
+        "while",
+        "with",
+        "yield",
+    ]
+)
+
+
+def _is_js_variable_name(name: str) -> bool:
+    """Whether `var <name>;` is valid JavaScript in strict mode."""
+    return re.fullmatch(r"[A-Za-z_$][\w$]*", name) is not None and name not in _JS_RESERVED_WORDS
+
+
+def _js_member_shape(fields: tuple[tuple[str, str, bool], ...]) -> str:
+    """
+    Render object members that are joined to other members with `&`.
+
+    An empty part must be `{}`: a `Record<string, never>` part would make
+    every member of the joined type, including the listed ones, `never`.
+    """
+    return _js_object_shape(fields) if fields else "{}"
 
 
 def _js_object_shape(fields: tuple[tuple[str, str, bool], ...]) -> str:

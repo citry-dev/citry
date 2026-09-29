@@ -23,6 +23,7 @@ _JS = """$component({
   setup() { return { query: "" }; },
   computed: {
     double() { return this.count * 2; },
+    doubled: { get() { return this.count * 2; }, set(/** @type {number} */ value) { this.count = value / 2; } },
   },
   watch: { count() { this.toggle(); } },
   methods: {
@@ -30,6 +31,7 @@ _JS = """$component({
     startDrag(/** @type {Event} */ event) { this.toggle(); this.label; this.theme; this.title; },
   },
   mounted() { this.startDrag(new Event('x')); },
+  beforeUnmount() {},
   provide() { return { shared: this.count }; },
   onServerRender({ component }) { component.title; component.toggle(); },
 });
@@ -72,8 +74,7 @@ def _repository_tsc() -> Path | None:
     return next((bin_dir / name for name in names if (bin_dir / name).is_file()), None)
 
 
-# TypeScript reports the inferred type of each `__probe(read)` argument, which
-# proves what hover and completion will show for that read.
+# TypeScript reports the type it infers for each `__probe(read)` argument.
 _PROBE = "\n/** @param {null} value */\nfunction __probe(value) {}\n"
 
 
@@ -102,6 +103,9 @@ def _type_errors(tmp_path: Path, source: str) -> list[str]:
             "preserve",
             "--target",
             "es2022",
+            # VS Code's projection config checks each file as a module.
+            "--moduleDetection",
+            "force",
             "--pretty",
             "false",
             str(checked),
@@ -151,6 +155,8 @@ _ALL_MEMBERS = {
         ("watch: { count() {", _ALL_MEMBERS),
         ("provide() {", _ALL_MEMBERS),
         ("double() {", {"data": ("this.count", "number"), "js_data": ("this.title", "string")}),
+        ("set(/** @type {number} */ value) {", _ALL_MEMBERS),
+        ("beforeUnmount() {", _ALL_MEMBERS),
         # data() sees what exists before it runs: props, injections, js_data()
         # keys and helpers.
         (
@@ -197,7 +203,7 @@ def test_template_names_take_the_instance_types(card):
         "theme": "unknown",
         "startDrag": "(event: Event) => void",
         "label": "string",
-        # `open` is also a browser global; the component's name must win.
+        # `open` is also a browser global; the component's own name must win.
         "open": "boolean",
     }
     reads = ", ".join(f"__probe({name})" for name in expected)
@@ -349,3 +355,85 @@ class Options(Component):
     assert definition(document, _position(source, "count + label", 1), project) == target("count: 1")
     assert definition(document, _position(source, 'toggle()"', 1), project) == target("toggle() {")
     assert definition(document, _position(source, 'label"', 1), project) == target("label: String")
+
+
+@pytest.mark.parametrize(
+    ("javascript", "app_extra"),
+    [
+        # No js_data() keys at all.
+        ("$component({ data() { return { count: 1 }; }, methods: { m() { __probe(this.typo); } } });", ""),
+        # An open js_data() result.
+        (
+            "$component({ data() { return { count: 1 }; }, methods: { m() { __probe(this.typo); } } });",
+            "    def js_data(self, kwargs, slots):\n        return dict(kwargs)\n",
+        ),
+        # The callback form with no js_data() keys.
+        ("$component(({ component }) => { __probe(component.typo); });", ""),
+    ],
+)
+def test_unlisted_member_is_never_silently_never(tmp_path, javascript, app_extra):
+    (tmp_path / "card.js").write_text(javascript, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\nfrom citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        f"class Card(Component):\n    citry = engine\n    js_file = 'card.js'\n{app_extra}",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState((tmp_path / "card.js").as_uri(), "javascript", javascript, 1)
+    document.update(javascript, 1, project)
+    projection = browser_projection(document, _position(javascript, "typo", 1), project)
+    assert projection is not None
+    errors = _type_errors(tmp_path, projection.source)
+    # A closed instance reports the typo; an open one reads it as unknown.
+    # Neither may type it `never`, which would hide the mistake.
+    assert _probe_message("never") not in errors, errors
+    assert any("'typo' does not exist" in message for message in errors) or _probe_message("unknown") in errors, errors
+
+
+def test_initializer_method_has_no_instance_this(card):
+    tmp_path, project, javascript, _template, documents = card
+    body_start = "onServerRender({ component }) {"
+    projection = browser_projection(javascript, _position(_JS, body_start, 1), project, documents)
+    assert projection is not None
+    # Citry calls the initializer without a receiver.
+    source = projection.source.replace(body_start, body_start + "__probe(this);", 1)
+    assert _probe_message("void") in _type_errors(tmp_path, source)
+
+
+def test_template_projection_keeps_generated_names_out_of_scope(card):
+    _tmp_path, project, _javascript, template, documents = card
+    projection = browser_projection(template, _position(_TEMPLATE, "count + double", 2), project, documents)
+    assert projection is not None
+    helper = projection.source.index("function __citryComponentSource() {")
+    # `$component` is declared only inside the copied component source.
+    assert "var $component" not in projection.source[:helper]
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        # An arrow parameter and an object key share a member's name but are not it.
+        "[1].map((count) => count)",
+        "{ count: 1 }",
+    ],
+)
+def test_template_locals_and_keys_do_not_navigate_to_members(tmp_path, expression):
+    template_source = f'<p :data-x="{expression}"></p>'
+    (tmp_path / "card.html").write_text(template_source, encoding="utf-8")
+    (tmp_path / "card.js").write_text("$component({ data() { return { count: 1 }; } });\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\nfrom citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n    citry = engine\n    template_file = 'card.html'\n    js_file = 'card.js'\n"
+        "    class JsData:\n        count: int\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    template = DocumentState((tmp_path / "card.html").as_uri(), "citry-html", template_source, 1)
+    template.update(template_source, 1, project)
+    last = _position(template_source, "count", template_source.rindex("count") - template_source.index("count") + 1)
+    assert definition(template, last, project) is None
+    projection = browser_projection(template, last, project)
+    assert projection is not None
+    assert not projection.citry_owns_position

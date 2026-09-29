@@ -184,22 +184,23 @@ Hovering `this.count` or `count` in the template shows `number`, and
 `this` has this type in methods, computed getters and setters, `watch`
 handlers, lifecycle hooks such as `mounted()`, and `provide()`. When
 `onServerRender` or `init` is part of the same object, its `component`
-value gets the same type. Citry's
-helpers such as `$sendEvent`, `$loading`, and `$state` and Vue's own
-`$el`, `$refs`, and `$emit` are included.
+value gets the same type. Citry's helpers, such as `$sendEvent`,
+`$loading`, and `$state`, and Vue's own `$el`, `$refs`, and `$emit` are
+included. `$emit` accepts any event name.
 
 `this` in `data()` has props, injections, `js_data()` keys, and Citry's
-helpers, because those exist before `data()` runs. It does not include the
-`data()` result itself or the methods.
+helpers. The editor does not type the `data()` result or the methods
+there.
 
 Types come from the `$component` object as you write it. A section with the
 wrong shape, such as a `computed` entry that is a number instead of a
-function, stops the other sections from being typed until you fix it. A
+function, can stop computed values and methods from being typed until you
+fix it. A
 template that several components share keeps names untyped, because each
 component may declare them differently, but **Go to Definition** still lists
 each component's declaration.
 
-### Check component JavaScript and Vue expressions
+### Types, checks, and navigation in component JavaScript
 
 The component's direct `js` or resolved `js_file` receives matching types for
 the complete `$component` callback context. Direct synchronous writes to
