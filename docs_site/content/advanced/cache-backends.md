@@ -57,7 +57,8 @@ An interactive page loads its compiled component code and stylesheets from
 URLs after the HTML arrives, and a page that stays open may ask for one much
 later. When you do not pass a cache, each `Citry` instance keeps these files
 in its own process, up to 64 MiB by default. Past the limit, it drops the
-files used longest ago.
+files used longest ago. It never drops the files of a page it is rendering,
+so a page always finds its own files right after it arrives.
 
 The symptom of a limit that is too small: a page that has been open for a
 while stops loading a component, and the browser shows a 404 for a URL

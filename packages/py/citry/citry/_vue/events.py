@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import OrderedDict
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from threading import Lock
 from typing import TYPE_CHECKING, TypedDict, cast
@@ -22,7 +24,7 @@ from citry.ext.dependencies.scripts import uses_component
 from citry.ext.events.emission import EXTRA_KEY, EventInstanceEntry, build_events_manifest
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Callable, Iterator, Mapping, Sequence
 
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
@@ -137,12 +139,19 @@ class _LocalAssets:
     so it holds up to ``CitrySettings.vue_asset_max_bytes`` bytes. When it has
     one, the backend holds every asset and this map keeps only the
     ``_LOCAL_ASSET_LIMIT`` most recent.
+
+    An asset that a render still in progress has published is never dropped
+    (see ``_hold_render_assets``), and the limit is applied only when an
+    asset is added. So the total can exceed the limit by the files of the
+    renders in progress and of the page rendered last.
     """
 
     def __init__(self) -> None:
         # (kind, digest) -> bytes. Order is recency: the front was used longest ago.
         self.entries: OrderedDict[tuple[str, str], bytes] = OrderedDict()
         self.total_bytes = 0
+        # (kind, digest) -> how many in-progress renders published it.
+        self.held: dict[tuple[str, str], int] = {}
 
     def __len__(self) -> int:
         return len(self.entries)
@@ -164,12 +173,73 @@ def _uses_own_store(citry: Citry) -> bool:
     return citry.settings.cache is None
 
 
-def _remember_locally(citry: Citry, kind: str, digest: str, content: bytes) -> None:
-    """Keep one asset in this process, rejecting a digest reused for other bytes, then apply the limit."""
+# The assets published by the render in progress in this context (thread or
+# async task), with the engine that owns each. ``None`` outside a render.
+_RENDER_PUBLISHES: ContextVar[list[tuple[Citry, tuple[str, str]]] | None] = ContextVar(
+    "citry_vue_render_publishes", default=None
+)
+
+
+@contextmanager
+def _hold_render_assets() -> Iterator[None]:
+    """
+    Keep every asset a render publishes until the render has finished preparing its page.
+
+    One page links several assets. Without this, a small limit or several
+    concurrent renders could drop an asset the page links before the page is
+    even sent, and the browser's first request for it would get a 404.
+
+    Finishing only releases the hold; it drops nothing. The page is sent
+    after this point and the browser asks for its files right away, so the
+    limit is applied again only when a later render publishes something.
+    """
+    if _RENDER_PUBLISHES.get() is not None:
+        # A nested preparation: the outermost render holds everything.
+        yield
+        return
+    published: list[tuple[Citry, tuple[str, str]]] = []
+    token = _RENDER_PUBLISHES.set(published)
+    try:
+        yield
+    finally:
+        _RENDER_PUBLISHES.reset(token)
+        with _LOCAL_ASSETS_LOCK:
+            for citry, key in published:
+                local = _LOCAL_ASSETS.get(citry)
+                if local is None:
+                    continue
+                remaining = local.held.get(key, 0) - 1
+                if remaining > 0:
+                    local.held[key] = remaining
+                else:
+                    local.held.pop(key, None)
+
+
+def _enforce_limit(citry: Citry, local: _LocalAssets, *, newest: tuple[str, str]) -> None:
+    """Drop the assets used longest ago until ``local`` fits its limit; the caller holds the lock."""
     own_store = _uses_own_store(citry)
     byte_limit = citry.settings.vue_asset_max_bytes if own_store else None
     entry_limit = None if own_store else _LOCAL_ASSET_LIMIT
+
+    def over_limit() -> bool:
+        return (entry_limit is not None and len(local.entries) > entry_limit) or (
+            byte_limit is not None and local.total_bytes > byte_limit
+        )
+
+    for key in list(local.entries):
+        if not over_limit():
+            return
+        # The newest asset stays even when it alone exceeds the limit, and so
+        # does anything a render in progress links: those pages need them now.
+        if key == newest or local.held.get(key):
+            continue
+        local.total_bytes -= len(local.entries.pop(key))
+
+
+def _remember_locally(citry: Citry, kind: str, digest: str, content: bytes) -> None:
+    """Keep one asset in this process, rejecting a digest reused for other bytes, then apply the limit."""
     key = (kind, digest)
+    published = _RENDER_PUBLISHES.get()
     with _LOCAL_ASSETS_LOCK:
         local = _LOCAL_ASSETS.setdefault(citry, _LocalAssets())
         prior = local.entries.get(key)
@@ -179,14 +249,12 @@ def _remember_locally(citry: Citry, kind: str, digest: str, content: bytes) -> N
             local.total_bytes += len(content)
         local.entries[key] = content
         local.entries.move_to_end(key)
-        # The newest asset always stays, even when it alone exceeds the byte
-        # limit: the page being rendered links it right now.
-        while len(local.entries) > 1 and (
-            (entry_limit is not None and len(local.entries) > entry_limit)
-            or (byte_limit is not None and local.total_bytes > byte_limit)
-        ):
-            _, dropped = local.entries.popitem(last=False)
-            local.total_bytes -= len(dropped)
+        # A render holds each asset it publishes once, however often it
+        # publishes it, so the release at its end balances exactly.
+        if published is not None and (citry, key) not in published:
+            published.append((citry, key))
+            local.held[key] = local.held.get(key, 0) + 1
+        _enforce_limit(citry, local, newest=key)
 
 
 def _local_asset(citry: Citry, kind: str, digest: str) -> bytes | None:
@@ -206,8 +274,9 @@ def _store_asset(citry: Citry, kind: str, digest: str, content: bytes) -> None:
     Publish one asset before the page that links it is sent, so a later request for its URL finds it.
 
     Without a configured cache, the asset stays in this process only, within
-    ``CitrySettings.vue_asset_max_bytes``. Once that limit drops an asset, an
-    open page that asks for it gets a 404.
+    ``CitrySettings.vue_asset_max_bytes``. Assets of a render in progress and
+    of the page rendered last are never dropped; once the limit drops an
+    older asset, an open page that asks for it gets a 404.
 
     With a configured cache, the asset is also written there, without a TTL,
     so any worker sharing the backend can serve it and an open page can load
@@ -504,6 +573,33 @@ class DirectVueEventsProducer:
         _early_selected_tree: EarlySelectedTreeCompilation | None = None,
     ) -> _PreparedResult:
         """Prepare initial or event output without rendering the selected tree again."""
+        # Every asset this preparation publishes stays in memory until it is
+        # done, so the page never links an asset the limit already dropped.
+        with _hold_render_assets():
+            return self._prepare_holding_assets(
+                render,
+                citry=citry,
+                app_id=app_id,
+                revision=revision,
+                base_revision=base_revision,
+                root_occurrence_id=root_occurrence_id,
+                dependency_options=dependency_options,
+                _early_selected_tree=_early_selected_tree,
+            )
+
+    def _prepare_holding_assets(
+        self,
+        render: CitryRender,
+        *,
+        citry: Citry,
+        app_id: str,
+        revision: int,
+        base_revision: int | None = None,
+        root_occurrence_id: str | None = None,
+        dependency_options: _DependencyOptions | None = None,
+        _early_selected_tree: EarlySelectedTreeCompilation | None = None,
+    ) -> _PreparedResult:
+        """The body of ``_prepare_from_render_result``, run while its published assets are held."""
         root_component = render.context.component
         if root_component is not None:
             root_class = type(root_component)
