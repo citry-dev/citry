@@ -122,17 +122,11 @@ class AccountDashboard(Component):
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002 - Citry supplies both declared schemas.
     ) -> dict[str, object]:
-        parsed_amount = self.i18n.parse.number(
-            kwargs.localized_amount,
-            format="editable-number",
-        )
         return {
             "accountName": kwargs.name,
             "balanceText": str(kwargs.balance),
-            "completionText": str(kwargs.completion),
             "lazyMessage": "demo-account-lazy-detail",
             "localizedAmount": kwargs.localized_amount,
-            "parseState": parsed_amount.state,
         }
 
     template = """
@@ -205,16 +199,14 @@ class AccountDashboard(Component):
               ></output>
               <label>
                 <span>{{ tr("demo-account-number-input-label") }}</span>
-                <input
-                  type="text"
-                  v-model="localizedAmount"
-                  @input="parseState = $i18n.parse.number(
-                    localizedAmount,
-                    { format: 'editable-number' },
-                  ).state"
-                />
+                <input type="text" v-model="localizedAmount"/>
               </label>
-              <p v-text="parseState"></p>
+              <p
+                v-text="$i18n.parse.number(
+                  localizedAmount,
+                  { format: 'editable-number' },
+                ).state"
+              ></p>
               <button type="button" @click="lazyText = $i18n.tr(lazyMessage)">
                 <span v-text="$i18n.tr('demo-account-load-detail')"></span>
               </button>
@@ -364,11 +356,6 @@ def render_demo(*, locale: str = "en-US") -> str:
     )
 
 
-if __name__ == "__main__":
-    sys.stdout.write(render_demo())
-    sys.stdout.write("\n")
-
-
 class Tag(Component):
     """Show one product tag; the parent decides whether it is highlighted."""
 
@@ -424,6 +411,7 @@ class ProductCard(Component):
             return ProductCard(
                 tags=state.tags,
                 likes=state.likes + 1,
+                accent=state.accent,
             )
 
     def template_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
@@ -461,3 +449,8 @@ class ProductCard(Component):
     messages = """
       product-card-no-tags = No tags yet.
     """
+
+
+if __name__ == "__main__":
+    sys.stdout.write(render_demo())
+    sys.stdout.write("\n")
