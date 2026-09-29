@@ -151,8 +151,7 @@ class InMemoryCache:
             self._data.clear()
 
 
-# Content-addressed entries (compiled Vue code, stylesheets, served
-# ``Dependencies`` files) are written once and read many times, but the page
+# Content-addressed entries (compiled Vue code and stylesheets) are written once and read many times, but the page
 # that links one is rendered again and again. Asking a shared backend "do you
 # still have it?" on every render costs one network round trip per asset per
 # render, so each process remembers which keys it has already seen stored.
@@ -181,6 +180,11 @@ def _store_if_missing(owner: object, cache: CitryCache, key: str, value: Callabl
     is encoded and sent only then. The entry is written without a TTL: an
     open page can ask for it at any later time. Backend errors propagate, so
     a render never links an entry that failed to store.
+
+    A render on another thread that checked the backend just before a
+    delete (a bad entry removed, or ``Citry.clear()``) can record the key as
+    stored after it was forgotten. The recheck interval bounds how long that
+    wrong record lasts.
     """
     now = time.monotonic()
     with _STORED_KEYS_LOCK:

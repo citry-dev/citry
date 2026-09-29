@@ -175,8 +175,8 @@ Where `before_manifest` entries end up depends on the page:
   a script with `async`, `defer`, or `nomodule` makes serialization raise
   `ValueError`.
 
-Citry adds its own browser runtime after the hook runs, so the hook cannot
-move or remove it.
+Citry adds its own browser runtime after the hook returns, so the hook
+cannot move or remove it. The runtime still loads before these scripts.
 
 ## Give components extension settings
 

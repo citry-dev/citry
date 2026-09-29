@@ -390,9 +390,10 @@ class CitrySettings:
             URL, possibly long after the page was rendered. When the total
             grows past this limit, the files used longest ago are dropped,
             and a page that is still open gets a 404 if it later asks for
-            one of them. The default is 64 MiB. ``None`` removes the limit. When ``cache`` is set, the
-            files are stored there instead, and the backend's own capacity
-            and eviction apply, so this setting has no effect. Must be a
+            one of them. The default is 64 MiB. ``None`` removes the limit.
+            When ``cache`` is set, the files are stored there instead, and
+            the backend's own capacity and eviction apply, so this setting
+            has no effect. Must be a
             positive ``int`` or ``None``: another type raises ``TypeError``
             and zero or a negative value raises ``ValueError`` when the
             settings are created.

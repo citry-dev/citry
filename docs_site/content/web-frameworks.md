@@ -217,11 +217,11 @@ interactive pages load, at `/{prefix}/ext/events/definitions/{digest}.js` and
 ## Share the cache between worker processes
 
 The worker that renders a page stores the page's per-instance variables,
-compiled component code, and stylesheets in the Citry cache (or, with no
-cache configured, keeps the code and stylesheets in its own memory). The browser then
-requests them by URL, and a different worker may answer. With the default
-in-memory cache, that worker has nothing stored and answers 404, so the
-page's interactive components cannot load their code or styles.
+compiled component code, and stylesheets in the Citry cache, or in its own
+memory when no cache is configured. The browser then requests them by URL,
+and a different worker may answer. Without a shared cache, that worker has
+nothing stored and answers 404, so the page's interactive components
+cannot load their code or styles.
 
 If you run more than one worker process, point every worker at a shared cache
 backend: DiskCache, Redis, or your Django cache through `DjangoCache` (see

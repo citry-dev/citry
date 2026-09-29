@@ -36,11 +36,11 @@ must not mutate server state. Their flat query format accepts scalar strings,
 booleans, finite numbers, and non-empty arrays of those values.
 
 A handler can declare `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and
-`OPTIONS`, the methods its route accepts. Declaring any other method, such as
-`PURGE`, raises `ValueError` when the component class is defined, because no
-request with that method could reach the handler. A request with a method the
-handler did not declare gets a `405` response whose `Allow` header lists the
-methods it did declare.
+`OPTIONS`, the methods its per-event URL accepts. Declaring any other method,
+such as `PURGE`, raises `ValueError` when the component class is defined,
+because a request with that method could never reach the handler's URL. On
+that URL, a request with a method the handler did not declare gets a `405`
+response whose `Allow` header lists the methods it did declare.
 
 The browser runtime cannot call a handler whose first declared method is
 `HEAD` or `OPTIONS`. It raises an error before sending anything, and the

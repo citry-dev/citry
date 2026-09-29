@@ -56,8 +56,9 @@ _HTTP_METHOD_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 # mounted (Django snapshots its URL set once), so the route cannot list only
 # the methods current handlers declare; it admits this fixed set, and the
 # resolved handler answers 405 with its own ``Allow`` list. A handler may
-# declare only methods from this set, because a request with any other method
-# stops at the adapter and could never reach it. It lives here rather than in
+# declare only methods from this set, because on its own URL a request with
+# any other method stops at the adapter, so the declared method could never
+# be served there. It lives here rather than in
 # ``routes.py`` because ``routes.py`` imports the dispatcher, which imports
 # this module.
 EVENT_ROUTE_METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
@@ -148,17 +149,19 @@ def validate_route_methods(source: str, methods: tuple[str, ...]) -> None:
     Check that every declared method can reach the handler through the per-event route.
 
     ``methods`` is the uppercase tuple ``validate_methods_value`` returned.
-    A method outside ``EVENT_ROUTE_METHODS`` is answered 405 by the host
-    adapter before Events sees the request, so declaring it would register a
-    handler no request can reach. Rejecting it here makes that mistake fail
-    when the class is defined instead of on the first request.
+    On the handler's own URL, a method outside ``EVENT_ROUTE_METHODS`` is
+    answered 405 by the host adapter before Events sees the request, so a
+    declared method outside that set could never be served there. (The
+    batched call route ignores declared methods.) Rejecting it here makes
+    that mistake fail when the class is defined instead of on the first
+    request.
     """
     unreachable = next((method for method in methods if method not in EVENT_ROUTE_METHODS), None)
     if unreachable is not None:
         allowed = ", ".join(EVENT_ROUTE_METHODS)
         msg = (
             f"{source} declares HTTP method {unreachable!r}, which the per-event route does not accept,"
-            f" so no request could reach the handler. Use one of: {allowed}."
+            f" so the handler's own URL could never serve it. Use one of: {allowed}."
         )
         raise ValueError(msg)
 
