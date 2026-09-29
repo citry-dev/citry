@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from app.citry_app import citry_app, document_ids
 from app.data import Project, find_projects
 from app.render import render_document, write_document
 
@@ -34,6 +35,16 @@ def test_document_contains_prepared_vue_data_and_local_assets() -> None:
 
 def test_document_is_deterministic() -> None:
     assert render_document() == render_document()
+
+
+def test_rendering_keeps_the_configured_id_generator() -> None:
+    # Rendering restarts the numbering but must not swap the app's generator,
+    # which other code may already hold.
+    render_document()
+    render_document()
+
+    assert citry_app.id_generator is document_ids
+    assert "standalone-1" in render_document()
 
 
 def test_document_escapes_project_data_in_vue_json(monkeypatch: pytest.MonkeyPatch) -> None:
