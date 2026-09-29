@@ -160,6 +160,7 @@ class TestTemplateAnalysis:
                 template_variables={
                     "request": Annotated[str, "Current request."],
                 },
+                rule_alpine_attribute="ignore",
             ),
         )
 
@@ -169,6 +170,9 @@ class TestTemplateAnalysis:
             class Kwargs:
                 title: str
 
+            class Lint:
+                rule_alpine_cloak = "warning"
+
         original = engine.template_analysis()
         restored = TemplateAnalysis.from_dict(original.to_dict())
 
@@ -176,6 +180,10 @@ class TestTemplateAnalysis:
         assert restored.lint == original.lint
         assert dict(restored.component_lint) == dict(original.component_lint)
         assert {item.name for item in restored.lint.template_variables} == {"request", "site_name"}
+        # The Alpine rules survive the portable dict at both levels.
+        card_lint = restored.component_lint[PortableCard.definition_id]
+        assert (restored.lint.rule_alpine_attribute, restored.lint.rule_alpine_cloak) == ("ignore", "error")
+        assert (card_lint.rule_alpine_attribute, card_lint.rule_alpine_cloak) == ("ignore", "warning")
         with pytest.raises(SyntaxError, match="must have one of the following attributes"):
             restored.parse_template("<c-portable-card />")
 

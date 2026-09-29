@@ -2706,6 +2706,57 @@ def test_template_lint_diagnostics_do_not_run_without_registry_ownership():
     assert template_lint_diagnostics(document, project, {document.uri: document}) == ()
 
 
+def test_template_lint_diagnostics_report_alpine_attributes_with_the_owner_policy(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = '<div x-data="{ open: false }" x-cloak>{{ title }}</div>'
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component, LintSettings\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, "
+        "lint=LintSettings(rule_alpine_cloak='warning'))\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class TemplateData:\n"
+        "        title: str\n"
+        "    class Lint:\n"
+        "        rule_alpine_attribute = 'error'\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+
+    assert [(item.code, item.severity) for item in diagnostics] == [
+        ("citry.template.alpine-attribute", types.DiagnosticSeverity.Error),
+        ("citry.template.alpine-cloak", types.DiagnosticSeverity.Warning),
+    ]
+    assert diagnostics[0].range == types.Range(
+        _position(template_source, "x-data"),
+        _position(template_source, "x-data", len("x-data")),
+    )
+    assert diagnostics[1].code_description == types.CodeDescription(
+        "https://citry.dev/ide/diagnostics/#citry.template.alpine-cloak"
+    )
+
+
+def test_template_lint_diagnostics_report_alpine_attributes_without_a_project():
+    # The Alpine rules need no component data, so the defaults apply here.
+    source = "<p x-show='open' x-cloak></p>"
+    project = _syntax_state()
+    document = _document(source, project)
+
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+
+    assert [(item.code, item.severity) for item in diagnostics] == [
+        ("citry.template.alpine-attribute", types.DiagnosticSeverity.Warning),
+        ("citry.template.alpine-cloak", types.DiagnosticSeverity.Error),
+    ]
+
+
 @pytest.mark.parametrize(
     "edited_source",
     [

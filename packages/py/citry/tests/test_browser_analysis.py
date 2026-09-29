@@ -7,6 +7,7 @@ import pytest
 from citry._browser_expressions import BrowserExpression, browser_component_prop_sites
 from citry.analysis import (
     VUE_AMBIENT_NAMES,
+    AlpineAttributeLintConsumer,
     ComponentJsLintConsumer,
     VueLintConsumer,
     analyze_browser_component_source,
@@ -28,6 +29,7 @@ from citry.analysis import (
     browser_member_literal_calls,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
+    lint_alpine_attributes,
     lint_csp_compatibility,
     lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
@@ -1058,3 +1060,60 @@ def test_native_component_prop_sites_preserve_nested_utf8_ranges_and_dynamic_unc
     dynamic = site.contributions[-1]
     assert encoded[dynamic.name_start_index : dynamic.name_end_index].decode() == ":unknown.future"
     assert encoded[dynamic.value_start_index : dynamic.value_end_index].decode() == "value"
+
+
+def _alpine(source: str, consumers: tuple[AlpineAttributeLintConsumer, ...] = ()) -> list[tuple[str, str, str]]:
+    """Return (code, severity, spanned source text) for each Alpine finding."""
+    encoded = source.encode("utf-8")
+    return [
+        (finding.code, finding.severity, encoded[finding.start_index : finding.end_index].decode("utf-8"))
+        for finding in lint_alpine_attributes(parse_template(source), consumers)
+    ]
+
+
+def test_alpine_lint_reports_x_attributes_on_html_elements():
+    # The span covers the attribute name, and a nested element is walked too.
+    assert _alpine('<div x-data="{ a: 1 }"><b x-on:click="a++">{{ label }}</b></div>') == [
+        ("citry.template.alpine-attribute", "warning", "x-data"),
+        ("citry.template.alpine-attribute", "warning", "x-on:click"),
+    ]
+    (finding,) = lint_alpine_attributes(parse_template("<p x-text='a'></p>"), ())
+    assert finding.name == "x-text"
+    assert "'x-text' is an Alpine attribute" in finding.message
+    assert "rule_alpine_attribute" in finding.message
+
+
+def test_alpine_lint_reports_x_cloak_once_as_an_error_in_any_letter_case():
+    assert _alpine("<div X-Cloak x-SHOW='a'></div>") == [
+        ("citry.template.alpine-cloak", "error", "X-Cloak"),
+        ("citry.template.alpine-attribute", "warning", "x-SHOW"),
+    ]
+    (finding,) = lint_alpine_attributes(parse_template("<div x-cloak></div>"), ())
+    assert "[x-cloak]" in finding.message
+
+
+def test_alpine_lint_skips_component_tags_but_checks_c_element():
+    # On a component tag `x-foo` is a Python kwarg; `<c-element>` renders HTML.
+    source = '<c-card x-foo="1" /><c-element is="div" x-cloak></c-element>'
+    assert _alpine(source) == [("citry.template.alpine-cloak", "error", "x-cloak")]
+
+
+def test_alpine_lint_maps_nested_template_offsets_into_the_outer_source():
+    source = "<c-card c-header=\"<><i x-show='a'></i></>\" /><p>ok</p>"
+    assert _alpine(source) == [("citry.template.alpine-attribute", "warning", "x-show")]
+
+
+def test_alpine_lint_severity_across_consumers():
+    source = "<div x-data='{}' x-cloak></div>"
+    ignore = AlpineAttributeLintConsumer("ignore", "ignore")
+    assert _alpine(source, (ignore,)) == []
+    # One consumer that still reports is enough, and "error" wins over "warning".
+    assert _alpine(source, (ignore, AlpineAttributeLintConsumer("error", "warning"))) == [
+        ("citry.template.alpine-attribute", "error", "x-data"),
+        ("citry.template.alpine-cloak", "warning", "x-cloak"),
+    ]
+
+
+def test_alpine_lint_consumer_rejects_an_unknown_severity():
+    with pytest.raises(ValueError, match="rule_alpine_cloak"):
+        AlpineAttributeLintConsumer(rule_alpine_cloak="fatal")  # type: ignore[arg-type]

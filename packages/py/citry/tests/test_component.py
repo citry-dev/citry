@@ -44,8 +44,13 @@ class TestComponentFields:
                 component_js_globals = {"baseClient": int}
                 rule_unknown_component_js_member = "warning"
                 rule_vue_python_variable = "error"
+                rule_alpine_attribute = "ignore"
 
         class Child(Base):
+            class Lint:
+                rule_alpine_cloak = "warning"
+
+        class Grandchild(Child):
             class Lint:
                 template_variables = {
                     "child_value": Annotated[str, "Child-only value."],
@@ -57,11 +62,14 @@ class TestComponentFields:
                     "childClient": Annotated[str, "Child-only component JS value."],
                 }
 
-        class Reset(Child):
+        class Reset(Grandchild):
             Lint = None
 
         analysis = c.template_analysis()
-        child_lint = analysis.component_lint[Child.definition_id]
+        # Each nested Lint overrides only the rules it names.
+        middle_lint = analysis.component_lint[Child.definition_id]
+        assert (middle_lint.rule_alpine_attribute, middle_lint.rule_alpine_cloak) == ("ignore", "warning")
+        child_lint = analysis.component_lint[Grandchild.definition_id]
         reset_lint = analysis.component_lint[Reset.definition_id]
 
         assert child_lint.rule_unknown_template_variable == "warning"
@@ -78,6 +86,7 @@ class TestComponentFields:
         assert child_lint.rule_unknown_component_js_variable == "warning"
         assert child_lint.rule_unknown_component_js_member == "warning"
         assert child_lint.rule_vue_python_variable == "error"
+        assert (child_lint.rule_alpine_attribute, child_lint.rule_alpine_cloak) == ("ignore", "warning")
         assert {item.name for item in child_lint.component_js_globals} == {"baseClient", "childClient"}
         child_client_value = next(item for item in child_lint.component_js_globals if item.name == "childClient")
         assert (child_client_value.type_display, child_client_value.description) == (
@@ -91,6 +100,7 @@ class TestComponentFields:
         assert reset_lint.rule_unknown_component_js_variable == "error"
         assert reset_lint.rule_unknown_component_js_member == "error"
         assert reset_lint.rule_vue_python_variable == "warning"
+        assert (reset_lint.rule_alpine_attribute, reset_lint.rule_alpine_cloak) == ("warning", "error")
         assert reset_lint.component_js_globals == ()
 
     def test_lint_declaration_names_the_vue_replacement_for_alpine_settings(self):
@@ -153,6 +163,22 @@ class TestComponentFields:
 
                 class Lint:
                     rule_vue_python_variable = "warn"
+
+        with pytest.raises(ValueError, match="rule_alpine_attribute"):
+
+            class InvalidAlpineRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_alpine_attribute = "warn"
+
+        with pytest.raises(ValueError, match="rule_alpine_cloak"):
+
+            class InvalidCloakRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_alpine_cloak = "warn"
 
     def test_kwargs_auto_dataclass(self):
         c = Citry()

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from citry import Citry, Component, Extension, ForeignSpan, ForeignSpanSet
+from citry import Citry, Component, Extension, ForeignSpan, ForeignSpanSet, LintSettings
 from citry.__main__ import main
 from citry._app_selection import CheckAppSelection
 from citry._checker import TRANSFORM_NOTE, check_project
@@ -1762,3 +1762,55 @@ def test_registry_check_keeps_parser_owned_mark_syntax_rejections(tmp_path: Path
 
     assert [finding.code for finding in report.findings] == ["citry.parse.syntax"]
     assert message_fragment in report.findings[0].message
+
+
+def test_registry_check_reports_leftover_alpine_attributes_with_component_severities(tmp_path):
+    engine = Citry(autodiscover=False, lint=LintSettings(rule_alpine_cloak="warning"))
+
+    class Card(Component):
+        citry = engine
+        template = """
+          <div x-data="{ open: false }" x-cloak>
+            <c-inner x-label="'kwarg'" />
+          </div>
+        """
+
+    # No Kwargs schema, so the tag accepts `x-label` as a keyword argument.
+    class Inner(Component):
+        citry = engine
+        template = "<p>inner</p>"
+
+    class Picker(Component):
+        citry = engine
+        template = '<input x-mask="99/99">'
+
+        class Lint:
+            rule_alpine_attribute = "ignore"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [
+        (item.code, item.severity, item.line)
+        for item in report.findings
+        if item.code.startswith("citry.template.alpine-")
+    ]
+
+    # The component tag's `x-label` is a kwarg, the application lowered
+    # x-cloak to a warning, and Picker ignores the attribute rule.
+    assert findings == [
+        ("citry.template.alpine-attribute", "warning", 1),
+        ("citry.template.alpine-cloak", "warning", 1),
+    ]
+
+
+def test_static_check_reports_leftover_alpine_attributes_with_default_severities(tmp_path):
+    (tmp_path / "card.py").write_text(
+        "from citry import Component\nclass Card(Component):\n    template = '<div x-show=\"open\" x-cloak></div>'\n",
+        encoding="utf-8",
+    )
+
+    report = check_project(CheckAppSelection(), tmp_path)
+
+    assert [(item.code, item.severity) for item in report.findings] == [
+        ("citry.template.alpine-attribute", "warning"),
+        ("citry.template.alpine-cloak", "error"),
+    ]
