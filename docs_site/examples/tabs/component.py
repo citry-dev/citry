@@ -37,7 +37,7 @@ class Tabs(Component):
         >
           <button
             v-for="(tab, index) in tabs"
-            ref="tabButtons"
+            :ref="(el) => keepTabButton(index, el)"
             :id="idPrefix + '-tab-' + index"
             type="button"
             class="demo-tabs__tab"
@@ -65,7 +65,23 @@ class Tabs(Component):
 
     js = """
       $component({
+        created() {
+          // Vue does not promise that refs collected inside v-for keep
+          // the list order, so each button is stored under its index.
+          // A plain Map, set up here rather than in data(), keeps Vue
+          // from tracking the elements as state.
+          this.tabButtons = new Map();
+        },
         methods: {
+          keepTabButton(index, el) {
+            // Vue calls this with null when the button unmounts, so the
+            // Map drops it instead of holding a detached element.
+            if (el) {
+              this.tabButtons.set(index, el);
+            } else {
+              this.tabButtons.delete(index);
+            }
+          },
           moveWithKeys(event, index) {
             // The arrow keys wrap around, and Home and End jump to the
             // ends, as the WAI-ARIA tabs pattern expects.
@@ -81,7 +97,7 @@ class Tabs(Component):
             event.preventDefault();
             this.activeIndex = nextIndex;
             // Only the open tab is in the Tab order, so focus follows it.
-            this.$refs.tabButtons[nextIndex].focus();
+            this.tabButtons.get(nextIndex)?.focus();
           },
         },
       });
