@@ -1,5 +1,5 @@
 """
-Local demo of Citry's i18n paths and a Citry Event, also used as an editor fixture.
+Local demo of Citry's server and browser translation, plus one Citry Event, also an editor fixture.
 
 Run ``python app.py`` to serve the page on http://127.0.0.1:8000/, where the
 Like button calls Python, or ``python app.py --html`` to print the page.
@@ -540,6 +540,9 @@ def render_demo(*, locale: str = "en-US") -> str:
 CITRY_PREFIX = "/citry"
 citry_routes = wsgi_app(app)
 app.set_mounted_prefix(CITRY_PREFIX)
+# Initialize at import so a WSGI server that imports `application` gets a
+# ready app too, not only `python app.py`.
+app.initialize()
 
 
 def application(
@@ -564,7 +567,6 @@ def application(
 
 def main(argv: list[str]) -> None:
     """Print the page with --html, or serve it on http://127.0.0.1:8000/."""
-    app.initialize()
     if "--html" in argv:
         sys.stdout.write(render_demo())
         sys.stdout.write("\n")

@@ -19,7 +19,7 @@ class ProductCard(Component):
             product = load_product(state.product_id)
             return ProductCard(
                 product_id=product.id,
-                tags=product.tags,
+                tags=state.tags,
                 likes=state.likes + 1,
                 accent=state.accent,
                 slots={"body": product.name},

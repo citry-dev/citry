@@ -641,9 +641,9 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
         "text": (
             "A public method here can be called from the browser "
             'using <code>@c-event="like"</code>. <code>like</code> '
-            "reloads the product named in the state and renders the updated "
-            "component, passing every input and slot again because the new "
-            "render starts from nothing. The browser then displays it."
+            "reloads the product whose id the state holds and renders the "
+            "updated component. State carries the inputs but not the "
+            "caller's slot content, so the handler passes the body again."
         ),
     },
     {
