@@ -6,7 +6,7 @@ mod common;
 mod tests {
     use citry_template_parser::parser::parse_template;
 
-    use super::common::parse_first_node;
+    use super::common::{assert_parse_error, parse_first_node};
 
     #[test]
     fn native_vue_bindings_preserve_authored_order_and_spans() {
@@ -218,5 +218,84 @@ mod tests {
             None,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn alpine_only_listener_modifiers_are_rejected_with_the_vue_form() {
+        assert_parse_error(
+            r#"<div @click.outside="open = false;">x</div>"#,
+            "'@click.outside' (line 1, column 6) uses the Alpine modifier '.outside', which Vue does not have. Vue would read '.outside' as a key name, so the listener would never run. Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted().",
+        );
+        for (input, modifier, hint) in [
+            (
+                r#"<div @click.away="x = 1;"></div>"#,
+                "away",
+                "this.$el contains event.target",
+            ),
+            (
+                r#"<div @resize.window="x = 1;"></div>"#,
+                "window",
+                "window.addEventListener",
+            ),
+            (
+                r#"<div v-on:keyup.document="x = 1;"></div>"#,
+                "document",
+                "document.addEventListener",
+            ),
+            (
+                r#"<input @input.debounce.500ms="x = 1;" />"#,
+                "debounce",
+                "'@c-input.debounce'",
+            ),
+            (
+                r#"<input @input.throttle="x = 1;" />"#,
+                "throttle",
+                "setTimeout",
+            ),
+            (
+                r#"<div @custom-event.camel="x = 1;"></div>"#,
+                "camel",
+                "exact event name",
+            ),
+            (
+                r#"<div @custom-event.dot="x = 1;"></div>"#,
+                "dot",
+                "exact event name",
+            ),
+            (r#"<input @keydown.cmd.enter="x = 1;" />"#, "cmd", "'.meta'"),
+            (
+                r#"<input @keydown.period="x = 1;" />"#,
+                "period",
+                "$event.key === '.'",
+            ),
+            (
+                r#"<div @[name].outside="x = 1;"></div>"#,
+                "outside",
+                "this.$el",
+            ),
+            (
+                r#"<c-Card @close.window="x = 1;" />"#,
+                "window",
+                "window.addEventListener",
+            ),
+        ] {
+            assert_parse_error(input, &format!("the Alpine modifier '.{modifier}'"));
+            assert_parse_error(input, hint);
+        }
+    }
+
+    #[test]
+    fn vue_listener_modifiers_and_citry_event_modifiers_still_parse() {
+        for input in [
+            r#"<form @submit.prevent.stop="go();"></form>"#,
+            r#"<div @click.self.once.capture.passive="go();"></div>"#,
+            r#"<input @keyup.enter.exact="go();" @keydown.ctrl.shift.alt.meta.a="go();" />"#,
+            r#"<input @keydown.caps-lock.page-down.esc.space.tab.delete="go();" />"#,
+            r#"<div @click.left.right.middle="go();"></div>"#,
+            r#"<input @c-input.debounce.300ms="search" @c-scroll.throttle.1s="more" />"#,
+            r#"<div @[name.window]="go();"></div>"#,
+        ] {
+            parse_template(input, None, None).unwrap();
+        }
     }
 }

@@ -1218,7 +1218,7 @@ fn parse_html_attribute(
                     return Err(context.error_from_local_span(
                         attr_span,
                         format!(
-                            "'{}' takes no value. Write the bare marker ('{}') to opt the element subtree or component range out of morphing.",
+                            "'{}' takes no value. Write the bare marker ('{}') on an HTML element to keep its contents as the server first rendered them.",
                             META_ATTR_IGNORE, META_ATTR_IGNORE
                         ),
                     ));
@@ -1648,6 +1648,8 @@ fn validate_node(
     validate_slot_tag_vue_directives(node, context)?;
     validate_attributes_present(node, context)?;
     validate_meta_attr_placement(node, context)?;
+    validate_ignored_element_contents(node, context)?;
+    validate_vue_listener_modifiers(node, context)?;
     validate_attribute_conflicts(node, context)?;
     validate_attribute_values(node, context)?;
     validate_fill_names(node, fill_nodes, context)?;
@@ -2051,7 +2053,7 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
                     return Err(context.error_from_token(
                         &attr.token,
                         format!(
-                            "'{}' is not supported on '<{}>' (line {}, column {}). It belongs on a plain HTML element (the ignored subtree) or on a component tag (the ignored component range).",
+                            "'{}' is not supported on '<{}>' (line {}, column {}). Put it on a plain HTML element, whose contents the browser then keeps as the server first rendered them.",
                             META_ATTR_IGNORE, tag_name, line, col
                         ),
                     ));
@@ -2071,6 +2073,223 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
         }
     }
     Ok(())
+}
+
+/// What to write instead of an Alpine event modifier that Vue does not have,
+/// or `None` for a modifier Vue accepts (including every key name).
+///
+/// Vue compiles an unknown modifier into a key filter, so a listener that
+/// carries one of these would silently never run.
+fn alpine_only_modifier_hint(modifier: &str) -> Option<&'static str> {
+    Some(match modifier {
+        "outside" | "away" => {
+            "Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted()."
+        }
+        "window" => {
+            "Add the listener with window.addEventListener(...) in mounted() and remove it in unmounted()."
+        }
+        "document" => {
+            "Add the listener with document.addEventListener(...) in mounted() and remove it in unmounted()."
+        }
+        "debounce" | "throttle" => {
+            "Delay the work inside the method instead, for example with setTimeout. To call a server event handler, a '@c-*' binding such as '@c-input.debounce' accepts this modifier."
+        }
+        "camel" | "dot" => {
+            "Add the listener for the exact event name with addEventListener(...) in mounted(), on an element you reach through a 'ref', and remove it in unmounted()."
+        }
+        "cmd" | "super" => "Use Vue's '.meta' modifier instead.",
+        "period" | "comma" | "slash" | "equal" => {
+            "Vue matches key modifiers against the key's name, so check the key in the listener instead, for example @keydown=\"if ($event.key === '.') go();\"."
+        }
+        _ => return None,
+    })
+}
+
+/// Reject Alpine-only modifiers on a Vue listener (`@event` or `v-on:event`).
+///
+/// A '@c-*' binding is a Citry Events binding with its own modifiers, such as
+/// '.debounce', so it is left to the Events compiler.
+fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    for attr in node.attrs() {
+        let name = attr.key.content.as_str();
+        let Some(listener) = name
+            .strip_prefix("v-on:")
+            .or_else(|| name.strip_prefix('@'))
+        else {
+            continue;
+        };
+        if name.starts_with("@c-") {
+            continue;
+        }
+        // A dynamic event name (`@[name]`) may itself contain dots, so the
+        // modifiers start after its closing bracket.
+        let modifiers = if listener.starts_with('[') {
+            listener
+                .find(']')
+                .map_or("", |close| &listener[close + 1..])
+        } else {
+            listener.find('.').map_or("", |dot| &listener[dot..])
+        };
+        for modifier in modifiers.split('.').skip(1) {
+            let Some(hint) = alpine_only_modifier_hint(modifier) else {
+                continue;
+            };
+            let (line, col) = attr.token.line_col;
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "'{name}' (line {line}, column {col}) uses the Alpine modifier '.{modifier}', which Vue does not have. Vue would read '.{modifier}' as a key name, so the listener would never run. {hint}"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The Citry tags a `#c-ignore` element may contain. Each one renders plain
+/// HTML on the server, so the element's contents can be written once as HTML
+/// that the browser keeps unchanged afterwards.
+const IGNORED_CONTENT_CITRY_TAGS: [&str; 6] = [
+    C_IF_TAG,
+    C_ELIF_TAG,
+    C_ELSE_TAG,
+    C_FOR_TAG,
+    C_EMPTY_TAG,
+    C_RAW_TAG,
+];
+
+/// One piece of a `#c-ignore` element's contents that needs Vue to work.
+enum IgnoredContentProblem<'a> {
+    /// A component, slot, or other Citry tag that renders through Vue.
+    Tag(&'a Token),
+    /// A Vue binding, Events binding, or template ref on a child element.
+    Binding {
+        attr: &'a HtmlAttr,
+        owner: &'a Token,
+    },
+}
+
+/// Keep a `#c-ignore` element's contents to what the server can write once.
+///
+/// In an interactive component the server renders the contents of a
+/// `#c-ignore` element to HTML once, and the browser keeps those nodes for the
+/// life of the component instance, so a library can take them over. A child
+/// component, a slot, or a Vue binding inside would never render or run
+/// there, so the template is rejected when it loads. The check applies on
+/// static pages too, so a template does not become invalid when its page
+/// later turns interactive.
+fn validate_ignored_element_contents(
+    node: &Node,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    // Only a plain HTML element keeps its contents; `#c-ignore` on a component
+    // tag is reported by the Python runtime, where the component is known.
+    let tag_name = node.tag_name();
+    if has_citry_component_prefix(tag_name) {
+        return Ok(());
+    }
+    let Some(ignore_attr) = node
+        .attrs()
+        .iter()
+        .find(|attr| attr.kind == HtmlAttrKind::Meta && attr.key.content == META_ATTR_IGNORE)
+    else {
+        return Ok(());
+    };
+    let Node::WithBody { body, .. } = node else {
+        return Ok(());
+    };
+    let Some(problem) = find_ignored_content_problem(body) else {
+        return Ok(());
+    };
+    let (line, col) = ignore_attr.token.line_col;
+    let owner = format!(
+        "'{}' on <{}> (line {}, column {}) keeps the element's contents exactly as the server first rendered them",
+        META_ATTR_IGNORE, tag_name, line, col
+    );
+    let allowed = format!(
+        "Inside a '{}' element, write plain HTML, '{{{{ }}}}' expressions, '<c-if>', '<c-for>', and '<c-raw>'.",
+        META_ATTR_IGNORE
+    );
+    let (token, message) = match problem {
+        IgnoredContentProblem::Tag(child) => {
+            let (child_line, child_col) = child.line_col;
+            (
+                child,
+                format!(
+                    "{owner}, so they cannot hold <{}> (line {}, column {}): it needs Vue to render it. {allowed} Move <{}> outside the <{}> element.",
+                    child.content, child_line, child_col, child.content, tag_name
+                ),
+            )
+        }
+        IgnoredContentProblem::Binding { attr, owner: child } => {
+            let (attr_line, attr_col) = attr.token.line_col;
+            let name = attr.key.content.as_str();
+            // A template ref is the natural first attempt for handing a child
+            // to a library, so say how to reach the child instead.
+            let fix = if name == "ref" {
+                format!(
+                    "Put the 'ref' on the <{}> element itself and find the child from there, for example with this.$refs.<name>.querySelector(...).",
+                    tag_name
+                )
+            } else {
+                format!(
+                    "Move the <{}> element that has the binding outside the <{}> element.",
+                    child.content, tag_name
+                )
+            };
+            (
+                &attr.token,
+                format!(
+                    "{owner}, so the browser never runs '{}' on <{}> (line {}, column {}). {allowed} {fix}",
+                    name, child.content, attr_line, attr_col
+                ),
+            )
+        }
+    };
+    Err(context.error_from_token(token, message))
+}
+
+/// Find the first child tag or attribute, in source order, that a `#c-ignore`
+/// element cannot keep as server-written HTML.
+fn find_ignored_content_problem(body: &Template) -> Option<IgnoredContentProblem<'_>> {
+    for element in &body.elements {
+        let TemplateElement::Node(child) = element else {
+            continue;
+        };
+        let child_tag = child.tag_name();
+        if has_citry_component_prefix(child_tag)
+            && !IGNORED_CONTENT_CITRY_TAGS
+                .iter()
+                .any(|allowed| citry_component_tag_eq(child_tag, allowed))
+        {
+            return Some(IgnoredContentProblem::Tag(&child.start_tag().name));
+        }
+        for attr in child.attrs() {
+            if attr.kind == HtmlAttrKind::Meta {
+                continue;
+            }
+            let name = attr.key.content.as_str();
+            // `@event`, `:attr`, `v-*`, `#slot`, `.prop`, the `$c-*` browser
+            // bindings, and `ref` all need Vue to read the element.
+            let needs_vue = name.starts_with('@')
+                || name.starts_with(':')
+                || name.starts_with("$c-")
+                || name == "ref"
+                || vue_directive_name(name).is_some();
+            if needs_vue {
+                return Some(IgnoredContentProblem::Binding {
+                    attr,
+                    owner: &child.start_tag().name,
+                });
+            }
+        }
+        if let Node::WithBody { body, .. } = child {
+            if let Some(problem) = find_ignored_content_problem(body) {
+                return Some(problem);
+            }
+        }
+    }
+    None
 }
 
 /// Validate semantic attribute values whose contracts are narrower than the
