@@ -20,7 +20,7 @@ class TaskCard(Component):
             "owner": task.owner,
             "completed": task.completed,
             "toggle_label": "Reopen task" if task.completed else "Mark complete",
-            "badge_component": ("high-priority-badge" if task.priority == "high" else "standard-priority-badge"),
+            "high_priority": task.priority == "high",
             "accent_style": f"--board-accent: {theme.accent};",
             "lane_options": LANES,
             "current_lane": task.lane,
@@ -50,7 +50,7 @@ class TaskCard(Component):
         @dragend="$el.classList.remove('task-card--dragging')"
       >
         <div class="task-card__meta">
-          <c-component c-is="badge_component" />
+          <c-PriorityBadge c-high="high_priority" />
           <span>{{ owner }}</span>
         </div>
         <h3>{{ title }}</h3>

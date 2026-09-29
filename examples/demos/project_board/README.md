@@ -15,8 +15,8 @@ service, or a network connection after installation.
   page heading, board columns, and cards.
 - `ProjectBoard` provides one accent color. Each column and card injects that
   value so they use the same color.
-- Each card uses `<c-component>` to choose its high- or standard-priority
-  badge.
+- Each card shows one `PriorityBadge` component, which switches between its
+  high- and standard-priority styles based on a typed flag.
 - Vue opens the explanation and dismisses notices without calling Python.
 - Dragging a card moves it to another column. Each card also has a labeled
   **Move to column** menu that works with a keyboard or touchscreen.
@@ -107,7 +107,7 @@ Remove-Item -Recurse -Force `
 | `app/components/board_page.py` | Composes the heading and project board. |
 | `app/components/project_board.py` | Defines the form, filters, Events, and board-level state. |
 | `app/components/lane.py` and `app/components/task_card.py` | Define the board columns and task cards. |
-| `app/components/*_badge.py` and `app/components/badge_styles.py` | Define the priority badges and shared styles. |
+| `app/components/priority_badge.py` | Defines the priority badge and its styles. |
 | `tests/test_app.py` | Checks the page, task changes, and mounted Citry runtime. |
 
 ## Follow the data
