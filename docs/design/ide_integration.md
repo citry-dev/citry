@@ -17,6 +17,15 @@ first, so this document builds on that skeleton and grafts the strongest
 elements of the platform-first and ecosystem-first drafts onto it; section 11
 records every contested decision and why it was resolved the way it was.
 
+**Vue runtime (0.6.0):** browser expressions are Vue expressions. The
+lint settings are `LintSettings.rule_unknown_vue_variable` and
+`vue_variables`, reported as `citry.vue.unknown-variable`, and
+`rule_alpine_attribute` / `rule_alpine_cloak` report leftover `x-*`
+attributes (`citry.template.alpine-attribute`,
+`citry.template.alpine-cloak`). Steps below that describe Alpine attributes,
+magics, and scope record the earlier Alpine design; where they conflict with
+the Vue runtime, [`vue.md`](vue.md) and the code win.
+
 Related docs: the standing editor-experience decisions this design builds on
 are in [`source_languages.md`](source_languages.md) (no highlight-only
 stopgap, the `*_lang` attributes, the staged extension-grammar-server path).
