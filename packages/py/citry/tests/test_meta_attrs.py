@@ -19,6 +19,7 @@ from citry._vue.capture import render_prepared_direct
 from citry._vue.direct_capture import UnsupportedPreparedView, assemble_typed_render
 from citry.citry_render import CitryRender
 from citry.constness import Const
+from citry.ext.events.renderers import dispatcher_for
 
 SIGNING_KEY = "component-ignore-secret"
 
@@ -295,6 +296,32 @@ class TestElementIgnore:
         assert record["pinned"] is True
         assert record["html"] in {'<span title="x">a</span>', "<span>a</span>"}
         assert "<p>after</p>" in assembly.compile_inputs[root.definition_id].template
+
+    def test_a_spread_in_an_events_component_is_kept_unless_it_adds_a_binding(self):
+        c = Citry(secret=SIGNING_KEY)
+        c.set_mounted_prefix("/citry")
+
+        class Page(Component):
+            citry = c
+            template = """
+                <main>
+                  <button @c-click="go">x</button>
+                  <div #c-ignore><span c-bind="attrs">a</span></div>
+                </main>
+            """
+
+            class Events:
+                def go(self) -> None:
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": kwargs.get("attrs", {"title": "t"})}
+
+        dispatcher_for(c)
+        root = _assemble(Page()).view.occurrences[0]
+        assert root.prepared_data["opaqueHtml"]["citryOpaque0"]["html"] == '<span title="t">a</span>'
+        with pytest.raises(UnsupportedPreparedView, match="cannot hold a Vue or Events binding on <span>"):
+            _assemble(Page(attrs={"@c-click": "go"}))
 
     def test_vue_binding_inside_is_a_template_error(self):
         c = Citry()

@@ -3037,8 +3037,9 @@ def _ignored_contents_html(
                     or part.browser_bindings
                     or part.runtime_event_bindings
                     or part.runtime_poll_bindings
-                    or part.runtime_events_candidate
                 ):
+                    # A `c-bind` spread in an Events component only may add a
+                    # server event; the resolved bindings above say whether it did.
                     raise reject(f"a Vue or Events binding on <{part.tag}>")
                 rendered = format_prepared_element_attrs(part)
                 suffix = "" if not rendered else " " + " ".join(rendered)
