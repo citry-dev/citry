@@ -444,6 +444,15 @@ def _compute_simple_vue_admission(
         else:
             compiled.prepared_standalone_bodies.move_to_end(plan_key)
     if len(cached_plan) != 1:
+        # `#c-ignore` keeps its contents through the component's own Vue
+        # instance, which a simple component does not have. Name it, because
+        # the generic reason below does not mention it.
+        if "#c-ignore" in compiled.source:
+            return rejected(
+                "`#c-ignore` needs a component instance to keep its contents; "
+                'remove `simple = "vue"` from this component, or remove `#c-ignore`',
+                compiled,
+            )
         return rejected(
             "the template uses slots, a child call that passes content, c-bind or Vue bindings, "
             "or an expression the instance-free renderer cannot evaluate",

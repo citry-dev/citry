@@ -102,6 +102,40 @@ def test_simple_vue_rejects_reserved_js_data_key_without_an_instance(monkeypatch
     assert leaf_instances == []
 
 
+def test_simple_vue_names_c_ignore_when_it_rejects_the_template() -> None:
+    app = Citry()
+
+    class Chart(Component):
+        citry = app
+        simple = "vue"
+        template = """
+          <div #c-ignore><canvas></canvas></div>
+        """
+
+        class Slots:
+            pass
+
+    class Page(Component):
+        citry = app
+        template = """
+          <main><c-chart /></main>
+        """
+
+    with pytest.raises(TypeError, match=r"`#c-ignore` needs a component instance.*remove `simple = \"vue\"`"):
+        Page().render()
+
+    # The fix the message names works: the same template renders without simple="vue".
+    other = Citry()
+
+    class Plain(Component):
+        citry = other
+        template = """
+          <div #c-ignore><canvas></canvas></div>
+        """
+
+    assert "<canvas></canvas>" in Plain().render().serialize()
+
+
 def test_simple_true_remains_caller_owned_static_html() -> None:
     app = Citry()
 
