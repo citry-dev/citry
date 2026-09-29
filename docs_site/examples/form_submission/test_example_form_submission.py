@@ -30,3 +30,8 @@ def test_form_submission_example_page_renders() -> None:
     assert 'class: "contact-form__button"' in source
     assert 'role: "status"' in source
     assert '"aria-live": "polite"' in source
+    # Python seeds an empty message, so the first paint has no thank-you
+    # box; Vue adds it only after a submit.
+    document = lxml_html.document_fromstring(html)
+    [status] = document.xpath('//div[@role="status"]')
+    assert not status.xpath(".//*[contains(@class, 'contact-form__thanks')]")

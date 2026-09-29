@@ -6,6 +6,8 @@ submit in the browser and shows the "thank you" response from the entered name,
 standing in for the server response a real form would show.
 """
 
+from typing import Any
+
 from citry import Component
 
 
@@ -17,6 +19,12 @@ class ContactForm(Component):
 
     class Slots:
         pass
+
+    def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+        # Python sends the empty starting state, so the server render
+        # already knows there is no message and leaves the box out of
+        # the first paint, before Vue loads.
+        return {"name": "", "thanks": ""}
 
     template = """
       <form class="contact-form" @submit.prevent="submit">
@@ -43,9 +51,6 @@ class ContactForm(Component):
 
     js = """
       $component({
-        data() {
-          return { name: "", thanks: "" };
-        },
         methods: {
           async submit() {
             // Clear the message first, so a screen reader announces it
