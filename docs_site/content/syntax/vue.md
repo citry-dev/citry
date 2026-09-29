@@ -58,6 +58,21 @@ Vue modifiers stay in the attribute name. For example,
 `@keydown.enter.prevent="submit()"` listens for Enter and prevents the
 browser's default action.
 
+Alpine had event modifiers that Vue does not, such as `.outside`,
+`.window`, `.document`, `.debounce`, and `.throttle`. Vue would read one
+as a key name, and the listener would never run, so the template fails
+when it loads with a message that names the Vue way to do the same thing:
+
+```citry-html
+{# Fails: Vue has no .outside modifier #}
+<div @click.outside="open = false;">...</div>
+```
+
+For a click outside, add a `click` listener to `document` in `mounted()`
+and remove it in `unmounted()`. For a server event handler, the `@c-*`
+bindings accept `.debounce` and `.throttle`; see
+[Bind events in templates](/events/bindings/).
+
 See the [Vue template syntax](https://vuejs.org/guide/essentials/template-syntax.html){:
 target="_blank" rel="noopener"} for directive forms and modifiers.
 
@@ -66,8 +81,10 @@ A few Vue features do not work in a `Component.template`:
 - Vue's built-in helper components `<Teleport>`, `<Transition>`,
   `<Suspense>`, and `<KeepAlive>` stop the template with an
   unsupported-helper diagnostic.
-- `v-once` and `v-memo` make the render fail. Keep a value fixed by not
-  changing it, or compute it once in `data()`.
+- `v-once` and `v-memo` make the template fail when it loads. Keep a
+  value fixed by not changing it, or compute it once in `data()`. To keep
+  an element's contents as the server first rendered them, use
+  [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore).
 
 ## Keep Python and JavaScript expressions separate
 

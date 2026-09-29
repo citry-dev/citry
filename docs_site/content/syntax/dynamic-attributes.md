@@ -712,3 +712,59 @@ write the flag in the template that renders the markup:
 
 [Preserve identity in rendered lists](/events/actions/#preserve-identity-in-rendered-lists)
 covers how keys behave when an event handler renders the list again.
+
+## `#c-ignore` Keep contents that a library manages
+
+A chart, map, or rich-text editor library changes the elements you give
+it. When an event handler renders the component again, Vue would put
+those elements back the way the template describes them and undo the
+library's work. Put `#c-ignore` on the element that holds the library's
+elements:
+
+```citry-html
+<div class="chart" ref="chart" #c-ignore>
+  <canvas></canvas>
+  <p class="caption">{{ caption }}</p>
+</div>
+```
+
+The server renders the element's contents once. After that, the browser
+keeps those same nodes for as long as the component is on the page, and
+a later render leaves them alone, even when `caption` changes. The
+element itself stays under Vue: its attributes and bindings, such as
+`ref` or `:class`, update as usual. Reach the contents from component
+JavaScript through the element, for example
+`this.$refs.chart.querySelector("canvas")`.
+
+The contents are written once as plain HTML, so they can hold only what
+the server can render: HTML, `{{ }}` expressions, `<c-if>`, `<c-for>`,
+and `<c-raw>`. A component, a slot, or a Vue binding inside would never
+render or run, so the template fails when it loads:
+
+```citry-html
+{# Fails: the browser never runs @click inside #c-ignore #}
+<div #c-ignore>
+  <button @click="zoom();">Zoom</button>
+</div>
+
+{# Works: the button sits outside the kept contents #}
+<button @click="zoom();">Zoom</button>
+<div ref="chart" #c-ignore>
+  <canvas></canvas>
+</div>
+```
+
+A `ref` inside the contents fails the same way. Put the `ref` on the
+`#c-ignore` element and find the child from there.
+
+Some placements fail with a message that says what to change:
+
+- On a component tag. The component renders through Vue, so put
+  `#c-ignore` on the element inside the component's template instead.
+- On `<c-element>`. Write the element as a plain HTML tag.
+- Inside `<svg>` or `<math>`, or on `<textarea>`, `<script>`, `<style>`,
+  or `<title>`, in an interactive component. Put it on an HTML element
+  that wraps the `<svg>` or `<math>` element.
+
+On a page without Vue, `#c-ignore` has nothing to do: the element and its
+contents render as written.

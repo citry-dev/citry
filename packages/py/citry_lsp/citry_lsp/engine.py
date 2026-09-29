@@ -5240,8 +5240,8 @@ _CITRY_SYNTAX = (
     _SyntaxSpec(
         "#c-ignore",
         "attribute",
-        "Exclude this subtree from Citry morphing",
-        "Keep this browser-owned subtree unchanged during Citry updates.",
+        "Keep contents that a library manages",
+        "Render this element's contents once and keep them unchanged on later renders.",
         f"{_DYNAMIC_ATTRIBUTES_URL}#c-ignore",
         context="general",
         insert_text="#c-ignore",

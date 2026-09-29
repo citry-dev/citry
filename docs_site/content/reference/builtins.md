@@ -137,6 +137,18 @@ component. The marker accepts default body content only. An Events handler can
 return `actions.Render(element, target="mark:summary")` to address it relative
 to the component handling the event. See [Events actions](/events/actions/).
 
+Because `<c-mark>` is built in, your own component cannot use the name
+`mark`. A class named `Mark`, or one registered as `mark`, fails when it is
+defined:
+
+```text
+AlreadyRegistered: Cannot register 'Mark' as 'mark': the name is
+reserved for the built-in <c-mark> component.
+```
+
+Rename the class, for example to `Highlight`, and write `<c-highlight>` in
+your templates.
+
 ## Data and resilience
 
 <c-builtin tag="provide" c-level="3" />
