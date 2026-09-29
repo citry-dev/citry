@@ -124,8 +124,38 @@ export interface VueEventSend {
   handler: string;
   args?: JsonObject;
   stateUpdates?: JsonObject;
-  options?: { timeout?: number };
+  /** The caller's `opts` as given; `send` checks it and keeps its own copy. */
+  options?: unknown;
 }
+
+/**
+ * Check the `opts` a page passed to `$sendEvent` or `Citry.events.send` and copy the values the
+ * bridge reads, so a caller that changes its object while the call waits in line changes nothing.
+ *
+ * Only `wait: true` (the default) is accepted. Each server render is built on the app revision the
+ * browser held when it sent the call, and each call carries the State token the previous call
+ * returned, so a call that skipped ahead of queued calls would come back built on a page state
+ * that no longer exists. Rejecting the option says so at the call site instead of ignoring it.
+ */
+const checkSendOptions = (value: unknown): { timeout?: number } | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    throw new TypeError("Citry Events send options must be an object, such as {timeout: 5000}.");
+  for (const key of Object.keys(value)) {
+    if (key !== "timeout" && key !== "wait")
+      throw new TypeError(`Citry Events send got an unknown option '${key}'; the options are 'timeout' and 'wait'.`);
+  }
+  const { timeout, wait } = value as { timeout?: unknown; wait?: unknown };
+  if (wait !== undefined && wait !== true)
+    throw new TypeError(
+      "Citry Events option 'wait' accepts only true. Calls from one Vue app are sent one at a time, " +
+        "in the order they were made, so a call cannot skip ahead of earlier ones. Remove 'wait'; to " +
+        "replace an older call to the same handler, declare the handler with @event(latest_wins=True).",
+    );
+  if (timeout !== undefined && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0))
+    throw new Error("Citry Events timeout must be a positive finite number.");
+  return timeout === undefined ? {} : { timeout };
+};
 
 export interface VueEventActivity {
   enqueue(handler: string): unknown;
@@ -638,7 +668,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     // envelope/dependency scheduling.
     const isolated = useGet || handlerOptions.allowBatching === false;
     const endpoint = isolated ? eventUrl(routes.eventBaseUrl ?? "", context, input.handler) : routes.endpoint;
-    const callTimeout = input.options?.timeout;
+    // `send` replaced the caller's options with the checked copy.
+    const callTimeout = (input.options as { timeout?: number } | undefined)?.timeout;
     const timeoutMs = callTimeout ?? runtimeConfig.timeout ?? options.timeoutMs ?? 30_000;
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("Vue Events timeoutMs must be positive.");
     const controller = new AbortController();
@@ -809,16 +840,14 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
 
   const unsupportedBrowserMethods = new Set(["HEAD", "OPTIONS", "CONNECT", "TRACE", "TRACK"]);
 
-  const send = (input: VueEventSend): Promise<JsonValue | undefined> => {
+  const send = (given: VueEventSend): Promise<JsonValue | undefined> => {
     if (disposed) return Promise.reject(stale("disposed"));
     let activity: VueEventActivity | undefined;
     let intent: unknown;
+    let input = given;
     try {
-      if (
-        input.options?.timeout !== undefined &&
-        (!Number.isFinite(input.options.timeout) || input.options.timeout <= 0)
-      )
-        throw new Error("Citry Events timeout must be a positive finite number.");
+      // Checked before the call is queued, so a bad option rejects without reaching the server.
+      input = { ...given, options: checkSendOptions(given.options) };
       const context = current(input.source);
       if (!Object.prototype.hasOwnProperty.call(context.descriptor.eventHandlers, input.handler))
         throw new Error(`Unknown event handler '${input.handler}'.`);

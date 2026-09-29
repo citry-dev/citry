@@ -20,6 +20,28 @@
   }
 
   const apps = new Map();
+  // Vue plugins the page registered with `Citry.vue.use()`, in registration order. Citry installs
+  // each one on every Vue app it creates, because the page never gets to call `app.use` itself.
+  const pageVuePlugins = [];
+  // Becomes true when Citry starts its first app on this page. A plugin registered after that would
+  // be missing from the app that already started, so `Citry.vue.use()` refuses it from then on.
+  let appStartBegan = false;
+  if (!Object.prototype.hasOwnProperty.call(V, "use")) {
+    Object.defineProperty(V, "use", {enumerable: false, configurable: false, writable: false,
+      value: function use(plugin, ...options) {
+        // Vue accepts the same two shapes in `app.use`; anything else would fail later, inside an app start.
+        if (typeof plugin !== "function" &&
+            !(plugin !== null && typeof plugin === "object" && typeof plugin.install === "function"))
+          throw new TypeError("Citry.vue.use() needs a Vue plugin: an object with an install(app) method, or a function");
+        if (appStartBegan)
+          throw new Error("Citry.vue.use() was called after Citry started a Vue app on this page, so that app " +
+            "would run without the plugin. Call it from a script that runs before Citry starts its apps, such " +
+            "as a script loaded with `defer` in the page <head>.");
+        // As with `app.use`, registering the same plugin again does nothing, even with other options.
+        if (pageVuePlugins.some(entry => entry.plugin === plugin)) return;
+        pageVuePlugins.push(Object.freeze({plugin, options}));
+      }});
+  }
   // Ask at most once per page: a deploy tends to make every following call stale at once, and asking again
   // after the user declined would nag. One page may run several apps, so the flag lives outside them.
   let reloadPrompted = false;
@@ -326,6 +348,9 @@
     });
   }
   const ORDINARY_TARGET = "ordinary-vnodes/1";
+  // A component tag has no element of its own to time, so a timed binding there has nothing to run on.
+  const TIMED_COMPONENT_BINDING_ERROR = "A `.debounce` or `.throttle` `@c-*` binding, or `@c-poll`, cannot go on a " +
+    "component tag. Put it on an element inside the child component's template instead.";
   const INPUT_MODEL_SITE = "__citryInputModelSite";
   let nextInputModelIdentity = 0;
   const inputModelObjectIds = new WeakMap();
@@ -2556,6 +2581,10 @@
     if (!(hostElement instanceof Element) || !plain(configuration.tags, "component tags"))
       throw new Error("prepared bootstrap needs one host element and component tags");
     const appId = manifest.appId, registered = new Set(), contexts = new Map(), sources = new Map();
+    // The Events context each call source last reported in a `citry:events:*` detail. It outlives the
+    // component, so a notification that arrives after the component is gone still names it; keyed by
+    // the source object a call holds, so it is released with the call.
+    const lifecycleIdentities = new WeakMap();
     const pluginEntries = extensionEntries(manifest.extensions || {}), plugins = new Map();
     let staged = null;
     if (!Array.isArray(manifest.definitions) || !Array.isArray(manifest.occurrences))
@@ -3393,10 +3422,17 @@
         // The calling component may be unmounted or replaced while its call is in flight. Page
         // listeners on `document` must still hear the notification (a `stale` event under reason
         // `version` decides whether the reload prompt appears), so a gone component only changes
-        // where the event starts and drops the identity fields it can no longer vouch for.
+        // where the event starts. The detail keeps the render ID and class the call last reported,
+        // so a listener can still match the notification to the `before` event it saw.
         const live = context && mounted && mounted.record.generation === effectiveSource.generation;
+        if (live) {
+          lifecycleIdentities.set(source, context);
+          lifecycleIdentities.set(effectiveSource, context);
+        }
+        const identity = live ? context
+          : lifecycleIdentities.get(effectiveSource) || lifecycleIdentities.get(source) || null;
         return dispatchLifecycleEvent(
-          kind, live ? context : null, live ? liveRootElements(mounted.component) : [], event, extra);
+          kind, identity, live ? liveRootElements(mounted.component) : [], event, extra);
       },
       promptReload,
       redirect(url) { global.location.assign(url); },
@@ -3502,7 +3538,7 @@
       if (binding.debounce === null && binding.throttle === null)
         return sendDeclarativeEvent(record, binding, source, args);
       const element = event.currentTarget;
-      if (!(element instanceof Element)) throw new Error("timed component-boundary Events bindings are not supported");
+      if (!(element instanceof Element)) throw new Error(TIMED_COMPONENT_BINDING_ERROR);
       if (!timingDirectiveOwns(element, record, bindingId, binding))
         throw new Error("Citry timed Events binding has no authenticated element lifecycle");
       const capturedArgs = cloneJsonValue(args, "Citry Events arguments");
@@ -3549,7 +3585,7 @@
       const {binding, source} = resolveDeclarativeEvent(record, bindingId);
       const args = declarativeEventArgs(emittedValue, authoredArgs);
       if (binding.debounce !== null || binding.throttle !== null)
-        throw new Error("timed component-boundary Events bindings are not supported");
+        throw new Error(TIMED_COMPONENT_BINDING_ERROR);
       return sendDeclarativeEvent(record, binding, source, args);
     };
     definitionRegistry(appId).eventPoll = async (record, bindingId, args) => {
@@ -3568,8 +3604,8 @@
       plain(checkedArgs, "Citry Events arguments");
       const source = sources.get(record.occurrenceId);
       if (!source) throw new Error("Citry Events call has no mounted Vue owner");
-      const options = opts === undefined ? undefined : opts && typeof opts === "object" ? {timeout: opts.timeout} : opts;
-      return ensureEventsBridge().send({source, handler, args: checkedArgs, options});
+      // The bridge checks the options (an unknown key or `wait: false` rejects) and copies them.
+      return ensureEventsBridge().send({source, handler, args: checkedArgs, options: opts});
     };
     ownedApp.resolvePublicTarget = sourceForTarget;
     ownedApp.publicSend = (source, handler, args, opts) => {
@@ -3579,8 +3615,8 @@
       requireEventHandler(mounted.record, handler);
       const checkedArgs = args === undefined ? {} : args;
       plain(checkedArgs, "Citry Events arguments");
-      const options = opts === undefined ? undefined : opts && typeof opts === "object" ? {timeout: opts.timeout} : opts;
-      return ensureEventsBridge().send({source, handler, args: checkedArgs, options});
+      // The bridge checks the options (an unknown key or `wait: false` rejects) and copies them.
+      return ensureEventsBridge().send({source, handler, args: checkedArgs, options: opts});
     };
     ownedApp.publicApplyActions = (actions, source) => ensureEventsBridge().applyActions(actions, source);
     attachPreparedHost(appId, {
@@ -3766,6 +3802,9 @@
     try {
       lifecycle?.guard();
       for (const {plugin} of plugins.values()) vueApp.use(plugin);
+      // Page plugins go after Citry's own, before any component is registered or mounted, which is
+      // when a plugin such as a store or a global directive must be in place.
+      for (const {plugin, options} of pageVuePlugins) vueApp.use(plugin, ...options);
       for (const [typeKey, type] of Object.entries(componentTypes)) {
         const tag = initialTypeTags.get(typeKey);
         if (typeof tag !== "string") throw new Error("prepared component type has no registered tag");
@@ -3877,6 +3916,8 @@
   }
 
   async function startPrepared(configuration, lifecycle) {
+    // From here on the page's plugin list is fixed; see `Citry.vue.use()` above.
+    appStartBegan = true;
     const candidateId = configuration && typeof configuration === "object" && configuration.manifest &&
       typeof configuration.manifest === "object" ? configuration.manifest.appId : null;
     const startAttempt = Object.freeze({});
@@ -3960,7 +4001,8 @@
     return record.rootElements;
   }
   // Fire one `citry:events:<kind>` notification for an Events call. `context` is the calling
-  // component's Events context, or null when that component is no longer mounted; `roots` are its
+  // component's Events context (the last one it had, when it is no longer mounted), or null when
+  // none is known; `roots` are its
   // connected top-level elements. The event bubbles from the first root so instance-scoped listeners
   // hear it, and starts at `document` when there is no live root, so page-level listeners always do.
   // Returns false only when a listener cancelled a cancellable event.
@@ -4022,8 +4064,9 @@
         // so such an initializer keeps working. Getters read the current value at each access, because a
         // later server render may replace the occurrence or its State.
         get id() { return record.app.occurrences.get(record.occurrenceId)?.renderId ?? null; },
-        // As in 0.5.1, `els` is one array for the component's lifetime, refilled in place before every
-        // callback run and on each read, so a destructured reference follows later server renders.
+        // `els` is one array for the component's lifetime, refilled in place before every callback run
+        // and on each read of this getter, so a destructured reference follows later server renders.
+        // A change made only in the browser (a `v-if` toggle) reaches it at the next refill.
         get els() { return refreshRootElements(component, record); },
         // 0.5.1 gave a component without Events a null `state`, and code tests for that to tell the two apart.
         get state() { return record.events?.descriptor ? component.$state : null; },
@@ -4033,8 +4076,25 @@
         error: name => component.$error(name),
       };
       const cleanup = scope.run(() => callback(context));
-      if (cleanup !== undefined && typeof cleanup !== "function") throw new TypeError("onServerRender must return a function or undefined");
-      record.callbackCleanup = cleanup;
+      if (cleanup !== null && typeof cleanup === "object" && typeof cleanup.then === "function") {
+        // An async callback. Citry does not hold the page's start or the next server render for it,
+        // so a slow await delays only this component's own work. A rejection is logged instead of
+        // stopping the app, since the rest of the page never waited on it.
+        record.callbackCleanup = undefined;
+        Promise.resolve(cleanup).then(resolved => {
+          if (resolved === undefined) return;
+          if (typeof resolved !== "function")
+            throw new TypeError("onServerRender must resolve to a function or undefined");
+          // Still the current run: keep the cleanup for the next run or the unmount, as a
+          // synchronous callback's would be. The run already ended (a newer server render or the
+          // unmount came first), so nothing will call it later: run it now.
+          if (record.callbackSubscriptions === subscriptions) record.callbackCleanup = resolved;
+          else resolved();
+        }).catch(error => console.error("[Citry] an async onServerRender callback failed:", error));
+      } else {
+        if (cleanup !== undefined && typeof cleanup !== "function") throw new TypeError("onServerRender must return a function or undefined");
+        record.callbackCleanup = cleanup;
+      }
     } catch (error) {
       scope.stop();
       for (const unsubscribe of subscriptions) unsubscribe();

@@ -393,7 +393,8 @@ test("unsupported targets reject the whole result before state mutation", async 
   const bridge = bridgeModule.createVueEventsBridge({ endpoint: "/events", host, fetch });
   await assert.rejects(
     bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }),
-    /marker targets are not implemented/,
+    // The protocol check refuses a CSS selector target; the bridge's own target check is the backstop.
+    /A render target must be render:<renderId> or mark:<id>:<name>|marker targets are not implemented/,
   );
   assert.equal(stateCommits, 0);
 });
@@ -1961,4 +1962,51 @@ test("a response that fails the strict JSON check reaches no host step and stays
   );
   assert.deepEqual(calls, []);
   assert.equal(Object.isFrozen(parsed.results[0].actions[1].prepared), false);
+});
+
+test("send options accept only timeout and wait: true, and reject before activity or transport", async () => {
+  let enqueued = 0;
+  const bodies = [];
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host: basicHost(),
+    activity: () => ({
+      enqueue: (handler) => {
+        enqueued += 1;
+        return { handler };
+      },
+      start() {},
+      succeed() {},
+      fail() {},
+      finish() {},
+    }),
+    fetch: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      bodies.push(body);
+      return resultResponse(body, [{ action: "data", value: bodies.length }]);
+    },
+  });
+  const source = { stableId: "board", generation: 1 };
+  // `wait: false` used to mean "skip the line"; each call is sent in order, so it is refused by name.
+  await assert.rejects(
+    bridge.send({ source, handler: "move", options: { wait: false } }),
+    (error) => error instanceof TypeError && /option 'wait' accepts only true/.test(error.message),
+  );
+  await assert.rejects(
+    bridge.send({ source, handler: "move", options: { timout: 5 } }),
+    /unknown option 'timout'; the options are 'timeout' and 'wait'/,
+  );
+  await assert.rejects(bridge.send({ source, handler: "move", options: 5 }), /send options must be an object/);
+  await assert.rejects(bridge.send({ source, handler: "move", options: { timeout: 0 } }), /positive finite/);
+  assert.equal(enqueued, 0);
+  assert.equal(bodies.length, 0);
+
+  // The bridge keeps its own copy, so a caller that edits its object after the call starts
+  // changes nothing about that call.
+  const options = { wait: true, timeout: 5_000 };
+  const pending = bridge.send({ source, handler: "move", options });
+  options.wait = false;
+  assert.equal(await pending, 1);
+  assert.equal(await bridge.send({ source, handler: "move", options: {} }), 2);
+  assert.equal(enqueued, 2);
 });

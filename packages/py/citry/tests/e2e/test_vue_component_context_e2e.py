@@ -4,9 +4,11 @@ Browser tests for the `$component` initializer context and the version-skew prom
 An initializer written for 0.5.1 destructures `state`, `sendEvent`, `loading`,
 `error`, `i18n`, `els`, and `id` from its context, and may register itself as
 `$component({init})`. These tests check that such an initializer still runs and
-reads the same values the instance helpers give. The last tests check what the
-page does when a call fails because the page's State token no longer verifies,
-which is what a deploy does to a page that stays open.
+reads the same values the instance helpers give, and that an async initializer
+neither holds up the page nor stops it when it fails. The last tests check what
+the page does when a call fails because the page's State token no longer
+verifies, which is what a deploy does to a page that stays open, and what the
+`citry:events:*` notifications report when the calling component is gone.
 """
 
 from __future__ import annotations
@@ -101,8 +103,8 @@ def test_initializer_context_exposes_the_instance_helpers_under_their_0_5_1_name
     # The second run happens while `bump`, the call whose render it applies, is still settling.
     assert [run["loading"] for run in runs] == [False, True]
     assert [run["els"] for run in runs] == [["aliases"], ["aliases", "extra"]]
-    # As in 0.5.1, `els` is one array that Citry refills after each server render,
-    # so the array the first run destructured now holds the new roots.
+    # `els` is one array that Citry refills after each server render, so the
+    # array the first run destructured now holds the new roots.
     assert page.evaluate("globalThis.__firstEls.map(el => el.id)") == ["aliases", "extra"]
     for run in runs:
         assert run["sameEls"] is True
@@ -203,8 +205,9 @@ def test_init_option_beside_on_server_render_is_rejected(page: Any, serve_docume
         });"""
 
     errors = _collect_page_errors(page)
-    page.goto(serve_document(Ambiguous().render().serialize()))
-    page.wait_for_timeout(500)
+    # The definition fails when its script runs, which the page reports as an error.
+    with page.expect_event("pageerror"):
+        page.goto(serve_document(Ambiguous().render().serialize()))
     assert any("both `init` and `onServerRender`" in error for error in errors), errors
     assert page.evaluate("globalThis.__ambiguousRan ?? null") is None
 
@@ -299,19 +302,23 @@ def test_cancelling_the_version_notification_suppresses_the_reload_prompt(page: 
     page.add_init_script(
         """
         window.__handledSkew = 0;
+        window.__skewFinished = false;
         document.addEventListener('citry:events:stale', event => {
           if (event.detail.reason !== 'version') return;
           event.preventDefault();
           window.__handledSkew += 1;
         });
+        document.addEventListener('citry:events:after', () => { window.__skewFinished = true; });
         """
     )
     page.goto(serve_live(engine, skew(count=0).render().serialize(), "") + "/")
     page.wait_for_function("document.querySelector('#skew')?.textContent === '0'")
     _sign_tokens_with_an_unknown_secret(page)
     page.locator("#skew").click()
-    page.wait_for_function("window.__handledSkew === 1")
-    page.wait_for_timeout(200)
+    # Citry decides on the prompt right after the `stale` listeners return and
+    # before `after` fires, so once `after` has fired no dialog can still come.
+    page.wait_for_function("window.__skewFinished === true")
+    assert page.evaluate("window.__handledSkew") == 1
     assert dialogs == []
 
 
@@ -331,7 +338,7 @@ def test_a_call_whose_component_is_gone_still_notifies_document_listeners(page: 
         for (const name of ['before', 'stale', 'error', 'after'])
           document.addEventListener(`citry:events:${name}`, event => {
             window.__goneEvents.push({
-              name, instance: event.detail.instance, event: event.detail.event,
+              name, instance: event.detail.instance, class: event.detail.class, event: event.detail.event,
               reason: event.detail.reason ?? null, ok: event.detail.ok ?? null});
             if (event.cancelable && name === 'stale') event.preventDefault();
           });
@@ -358,13 +365,292 @@ def test_a_call_whose_component_is_gone_still_notifies_document_listeners(page: 
     page.evaluate("__citryRuntime._apps.values().next().value.vueApp.unmount()")
     held[0].continue_()
     page.wait_for_function("window.__goneEvents.some(item => item.name === 'after')")
-    page.wait_for_timeout(200)
 
     events = page.evaluate("window.__goneEvents")
     assert [item["name"] for item in events] == ["before", "stale", "after"]
-    assert events[0]["instance"] is not None
+    instance, component_class = events[0]["instance"], events[0]["class"]
+    assert instance is not None
+    assert component_class is not None
     # The page hears why the call's result was dropped even though no component
-    # is left to start the event from, so the detail no longer names one.
-    assert events[1] == {"name": "stale", "instance": None, "event": "bump", "reason": "disposed", "ok": None}
-    assert events[2] == {"name": "after", "instance": None, "event": "bump", "reason": None, "ok": False}
+    # is left to start the event from, and the detail still names the component.
+    assert events[1] == {
+        "name": "stale",
+        "instance": instance,
+        "class": component_class,
+        "event": "bump",
+        "reason": "disposed",
+        "ok": None,
+    }
+    assert events[2] == {
+        "name": "after",
+        "instance": instance,
+        "class": component_class,
+        "event": "bump",
+        "reason": None,
+        "ok": False,
+    }
     assert dialogs == []
+
+
+@pytest.mark.e2e
+def test_async_initializer_runs_beside_the_page_and_its_cleanup_still_runs(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="vue-async-init-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class AsyncState:
+        count: int = 0
+
+        def render(self):
+            return AsyncInit(count=self.count)
+
+    class AsyncInit(Component):
+        citry = engine
+        State = AsyncState
+        template = """
+            <button id="async-bump" @c-click="bump">{{ count }}</button>
+        """
+        # Runs 0 and 2 wait for the test to release them; run 1 fails after its
+        # first await. Every step lands in one log, so the order is visible.
+        js = """
+            $component({
+              async init({revision}) {
+                const log = (window.__asyncLog ||= []);
+                log.push('start:' + revision);
+                if (revision === 0 || revision === 2)
+                  await new Promise(resolve => { window['__release' + revision] = resolve; });
+                else await null;
+                log.push('end:' + revision);
+                if (revision === 1) throw new Error('async init failed on purpose');
+                return () => log.push('cleanup:' + revision);
+              },
+            });
+        """
+
+        def template_data(self, kwargs, slots):
+            return kwargs
+
+        class Events:
+            def bump(self, state: AsyncState):
+                state.count += 1
+                return state.render()
+
+    dispatcher_for(engine)
+    errors = _collect_page_errors(page)
+    console_errors: list[str] = []
+    page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    page.add_init_script(
+        """
+        document.addEventListener('citry:ready', () => {
+          window.__readyLog = [...(window.__asyncLog || [])];
+        });
+        """
+    )
+    page.goto(serve_live(engine, AsyncInit(count=0).render().serialize(), "") + "/")
+    page.wait_for_function("window.__readyLog !== undefined")
+    # The page became ready while the first run was still waiting.
+    assert page.evaluate("window.__readyLog") == ["start:0"]
+    page.evaluate("window.__release0()")
+    page.wait_for_function("window.__asyncLog.includes('end:0')")
+
+    # Server render 1: the resolved cleanup of run 0 runs first; run 1 then fails.
+    page.locator("#async-bump").click()
+    page.wait_for_function("window.__asyncLog.includes('end:1')")
+    page.wait_for_function("document.querySelector('#async-bump')?.textContent === '1'")
+    # Server render 2 starts a run that waits; render 3 replaces it before it resolves.
+    page.locator("#async-bump").click()
+    page.wait_for_function("window.__asyncLog.includes('start:2')")
+    page.locator("#async-bump").click()
+    page.wait_for_function("window.__asyncLog.includes('end:3')")
+    # Run 2 is over, so the cleanup it resolves to runs at once instead of being kept.
+    page.evaluate("window.__release2()")
+    page.wait_for_function("window.__asyncLog.includes('cleanup:2')")
+
+    assert page.evaluate("window.__asyncLog") == [
+        "start:0",
+        "end:0",
+        "cleanup:0",
+        "start:1",
+        "end:1",
+        "start:2",
+        "start:3",
+        "end:3",
+        "end:2",
+        "cleanup:2",
+    ]
+    assert page.locator("#async-bump").text_content() == "3"
+    # The failed run is logged and does not stop the app or escape as a page error.
+    assert any(text.startswith("[Citry] an async onServerRender callback failed:") for text in console_errors)
+    assert errors == []
+
+
+def _record_lifecycle_at_document() -> str:
+    # Records every `citry:events:*` notification that reaches `document`, and
+    # whether it started there rather than bubbling up from a component element.
+    return """
+        window.__lifecycle = [];
+        for (const name of ['before', 'stale', 'error', 'after'])
+          document.addEventListener(`citry:events:${name}`, event => window.__lifecycle.push({
+            name, instance: event.detail.instance, class: event.detail.class,
+            reason: event.detail.reason ?? null, startedAtDocument: event.target === document}));
+        """
+
+
+def _hold_event_calls(page: Any) -> list[Any]:
+    held: list[Any] = []
+
+    def hold(route: Any) -> None:
+        held.append(route)
+
+    page.route("**/ext/events/call", hold)
+    return held
+
+
+def _release_with_an_unknown_signature(route: Any) -> None:
+    body = route.request.post_data_json
+    for call in body["calls"]:
+        prefix, payload, signature = call["stateToken"].split(".")
+        call["stateToken"] = f"{prefix}.{payload}.{'A' * len(signature)}"
+    route.continue_(post_data=body)
+
+
+@pytest.mark.e2e
+def test_a_stale_state_answer_for_a_component_without_elements_prompts_from_document(
+    page: Any, serve_live: Any
+) -> None:
+    engine = Citry(secret="vue-version-skew-hidden-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class HiddenState:
+        count: int = 0
+
+        def render(self):
+            return Hidden(count=self.count)
+
+    class Hidden(Component):
+        citry = engine
+        State = HiddenState
+        # A browser-only toggle removes the component's only element while it
+        # stays mounted, so its Events notifications have no element to start from.
+        template = """
+            <button
+                id="hidden-skew"
+                v-if="shown"
+                @c-click="bump"
+            >{{ count }}</button>
+        """
+        js = """
+            $component({
+              data() { return {shown: true}; },
+              mounted() { window.__hidden = this; },
+            });
+        """
+
+        def template_data(self, kwargs, slots):
+            return kwargs
+
+        class Events:
+            def bump(self, state: HiddenState):
+                state.count += 1
+                return state.render()
+
+    dispatcher_for(engine)
+    errors = _collect_page_errors(page)
+    dialogs: list[str] = []
+    page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
+    page.add_init_script(_record_lifecycle_at_document())
+    page.goto(serve_live(engine, Hidden(count=0).render().serialize(), "") + "/")
+    page.wait_for_function("document.querySelector('#hidden-skew')?.textContent === '0'")
+    held = _hold_event_calls(page)
+    page.locator("#hidden-skew").click()
+    page.wait_for_function("window.__lifecycle.length === 1")
+    page.evaluate("window.__hidden.shown = false")
+    page.wait_for_function("document.querySelector('#hidden-skew') === null")
+    assert len(held) == 1
+    _release_with_an_unknown_signature(held[0])
+    page.wait_for_function("window.__lifecycle.some(item => item.name === 'after')")
+
+    events = page.evaluate("window.__lifecycle")
+    instance = events[0]["instance"]
+    assert instance is not None
+    assert [(item["name"], item["reason"], item["startedAtDocument"]) for item in events] == [
+        ("before", None, False),
+        ("stale", "version", True),
+        ("error", None, True),
+        ("after", None, True),
+    ]
+    assert {item["instance"] for item in events} == {instance}
+    # No listener cancelled the `stale` event at `document`, so Citry asked to reload.
+    assert dialogs == [_RELOAD_PROMPT]
+    assert errors == []
+
+
+@pytest.mark.e2e
+def test_an_unmounted_component_keeps_its_id_and_its_dropped_call_does_not_prompt(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="vue-version-skew-unmounted-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class ChildState:
+        count: int = 0
+
+        def render(self):
+            return SkewChild(count=self.count)
+
+    class SkewChild(Component):
+        citry = engine
+        State = ChildState
+        template = """
+            <button id="child-skew" @c-click="bump">{{ count }}</button>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"count": kwargs.get("count", 0)}
+
+        class Events:
+            def bump(self, state: ChildState):
+                state.count += 1
+                return state.render()
+
+    engine.register(SkewChild)
+
+    class Holder(Component):
+        citry = engine
+        template = """
+            <main>
+                <button id="drop-child" @click="show = false">drop</button>
+                <template v-if="show"><c-skew-child /></template>
+            </main>
+        """
+        js = """
+            $component({
+              data() { return {show: true}; },
+            });
+        """
+
+    dispatcher_for(engine)
+    errors = _collect_page_errors(page)
+    dialogs: list[str] = []
+    page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
+    page.add_init_script(_record_lifecycle_at_document())
+    page.goto(serve_live(engine, Holder().render().serialize(), "") + "/")
+    page.wait_for_function("document.querySelector('#child-skew')?.textContent === '0'")
+    held = _hold_event_calls(page)
+    page.locator("#child-skew").click()
+    page.wait_for_function("window.__lifecycle.length === 1")
+    # Unmounting the child cancels its call, while the app and its Events bridge stay live.
+    page.locator("#drop-child").click()
+    page.wait_for_function("window.__lifecycle.some(item => item.name === 'after')")
+    assert len(held) == 1
+    # The server would answer `stale_state`, but the browser already dropped the call.
+    _release_with_an_unknown_signature(held[0])
+
+    events = page.evaluate("window.__lifecycle")
+    instance, component_class = events[0]["instance"], events[0]["class"]
+    assert instance is not None
+    assert [(item["name"], item["reason"], item["startedAtDocument"]) for item in events] == [
+        ("before", None, False),
+        ("stale", "retired", True),
+        ("after", None, True),
+    ]
+    assert {(item["instance"], item["class"]) for item in events} == {(instance, component_class)}
+    assert dialogs == []
+    assert errors == []
