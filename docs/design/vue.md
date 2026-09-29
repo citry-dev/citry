@@ -898,7 +898,10 @@ The maintained native compiler will apply replacement keys using the parsed
 template's byte ranges, then compile that transformed template through Vize's
 public DOM compiler. It inserts a generated key only on native elements with
 runtime directives and replaces an authored static key at its parsed attribute
-span. A later definition without that directive gets its ordinary key again,
+span. An authored `:key`, such as the key of a `v-for` item, is kept beside the
+generated key as `JSON.stringify(['<generated>', (<authored expression>)])`, so
+the items of a keyed list stay apart; a dynamic binding name, an unquoted
+value, or a second key on the element is rejected. A later definition without that directive gets its ordinary key again,
 so Vue replaces the element and performs directive cleanup. A component call
 carries one runtime directive, `v-show`, under the rule in
 [Vue directives on component calls](#vue-directives-on-component-calls).
@@ -906,7 +909,7 @@ carries one runtime directive, `v-show`, under the rule in
 This avoids copying Vize's private DOM transformation pipeline. It also avoids
 editing generated JavaScript or discovering attributes with text searches.
 The compiler checks every edited source range, rejects overlapping edits and
-untrusted dynamic keys, and maps diagnostics back across inserted text. Artifact
+keys it cannot compose, and maps diagnostics back across inserted text. Artifact
 identity includes the original and transformed source, compiler version, options,
 and replacement plan. The alternative of returning metadata alone was rejected:
 the browser needs executable keys to enforce the selected cleanup behavior.

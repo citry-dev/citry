@@ -1520,6 +1520,7 @@ fn plan_key_edit(
     edits: &mut Vec<Edit>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    let mut authored_key = None;
     for prop in &element.props {
         if let PropNode::Directive(d) = prop
             && d.name == "bind"
@@ -1534,6 +1535,18 @@ fn plan_key_edit(
             if authorized {
                 continue;
             }
+            // A `:key` the author wrote, typically on a `v-for` item, keeps
+            // telling the list's items apart: the digest is composed with
+            // its value below. A dynamic argument could name any attribute,
+            // and a second key source would leave Vue two keys to choose
+            // from, so both are still rejected.
+            if prepared_key.is_none()
+                && authored_key.is_none()
+                && let Some(value) = authored_key_value(d, source)
+            {
+                authored_key = Some((d, value));
+                continue;
+            }
             diagnostics.push(diag(
                 "metadata",
                 "DYNAMIC_KEY_UNSUPPORTED",
@@ -1543,6 +1556,35 @@ fn plan_key_edit(
             ));
             return;
         }
+    }
+    if let Some((directive, (quote, value))) = authored_key {
+        let has_static_key = element
+            .props
+            .iter()
+            .any(|prop| matches!(prop, PropNode::Attribute(a) if a.name == "key"));
+        if has_static_key {
+            diagnostics.push(diag(
+                "metadata",
+                "DYNAMIC_KEY_UNSUPPORTED",
+                "an element cannot have both a static key and a :key",
+                directive.loc.span.start,
+                directive.loc.span.end,
+            ));
+            return;
+        }
+        // The same composition as a prepared key: the element is replaced
+        // when its directives change, and the authored value still tells
+        // siblings apart. The digest is ASCII hex, and the authored
+        // expression is copied byte for byte inside its original quotes.
+        let inner = if quote == '"' { '\'' } else { '"' };
+        edits.push(Edit {
+            start: directive.loc.span.start as usize,
+            end: directive.loc.span.end as usize,
+            replacement: format!(
+                ":key={quote}JSON.stringify([{inner}{key}{inner}, ({value})]){quote}"
+            ),
+        });
+        return;
     }
     let static_key = element.props.iter().find_map(|prop| {
         if let PropNode::Attribute(a) = prop
@@ -1604,6 +1646,41 @@ fn plan_key_edit(
         end: start,
         replacement,
     });
+}
+
+/// The quote character and raw source text of an authored `:key` value,
+/// or `None` when the binding is not a plain `:key="expression"` that can be
+/// copied into a new quoted attribute unchanged.
+fn authored_key_value<'s>(
+    directive: &vize_atelier_core::DirectiveNode<'_>,
+    source: &'s str,
+) -> Option<(char, &'s str)> {
+    let Some(ExpressionNode::Simple(arg)) = directive.arg.as_ref() else {
+        return None;
+    };
+    if !arg.is_static || arg.content != "key" {
+        return None;
+    }
+    let Some(ExpressionNode::Simple(exp)) = directive.exp.as_ref() else {
+        return None;
+    };
+    let start = exp.loc.span.start as usize;
+    let end = exp.loc.span.end as usize;
+    let value = source.get(start..end)?;
+    // The value must sit inside quotes that end right after it, so the
+    // copy keeps the same meaning inside the same quotes.
+    let quote = match (
+        source.as_bytes().get(start.checked_sub(1)?),
+        source.as_bytes().get(end),
+    ) {
+        (Some(b'"'), Some(b'"')) => '"',
+        (Some(b'\''), Some(b'\'')) => '\'',
+        _ => return None,
+    };
+    if value.trim().is_empty() || value.contains(quote) {
+        return None;
+    }
+    Some((quote, value))
 }
 
 fn validate_element_binding(
@@ -3463,21 +3540,75 @@ mod tests {
         );
     }
 
-    #[test]
-    fn rejects_a_dynamic_key_after_an_unrelated_binding() {
-        let artifact = compile(CompileRequest {
-            template: "<input :title=\"x\" :key=\"item.id\" v-model=\"name\">".to_owned(),
+    fn compile_template(template: &str) -> CompileArtifact {
+        compile(CompileRequest {
+            template: template.to_owned(),
             local_calls: vec![],
             local_call_runs: vec![],
             element_bindings: vec![],
             dynamic_elements: vec![],
-        });
-        assert!(
-            artifact
-                .diagnostics
-                .iter()
-                .any(|item| item.code == "DYNAMIC_KEY_UNSUPPORTED")
+        })
+    }
+
+    fn rejects_key(template: &str) -> bool {
+        compile_template(template)
+            .diagnostics
+            .iter()
+            .any(|item| item.code == "DYNAMIC_KEY_UNSUPPORTED")
+    }
+
+    #[test]
+    fn composes_an_authored_key_with_the_lifecycle_digest() {
+        // A `v-for` item with a runtime directive keeps its own key, so Vue
+        // still tells the items apart when the list changes.
+        let artifact = compile_template(
+            "<ul><li v-for=\"item in items\" :title=\"x\" :key=\"item.id\" v-show=\"item.open\">a</li></ul>",
         );
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        let template = &artifact.transformed_template;
+        let start = template
+            .find(":key=\"JSON.stringify(['citryReplacement")
+            .unwrap_or_else(|| panic!("{template}"));
+        let digest = &template[start + ":key=\"JSON.stringify(['citryReplacement".len()..];
+        assert!(digest[..64].bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert!(digest[64..].starts_with("', (item.id)])\""), "{template}");
+        // The authored expression is copied inside its own quotes.
+        let single = compile_template(
+            "<ul><li v-for=\"item in items\" :key='item[\"id\"]' v-show=\"item.open\">a</li></ul>",
+        );
+        assert!(single.diagnostics.is_empty(), "{:?}", single.diagnostics);
+        assert!(
+            single
+                .transformed_template
+                .contains(r#":key='JSON.stringify(["citryReplacement"#),
+            "{}",
+            single.transformed_template
+        );
+        assert!(single.transformed_template.contains(r#", (item["id"])])'"#));
+        let long_form = compile_template("<input v-bind:key=\"id\" v-model=\"name\">");
+        assert!(
+            long_form.diagnostics.is_empty(),
+            "{:?}",
+            long_form.diagnostics
+        );
+        assert!(long_form.transformed_template.contains(", (id)])\""));
+    }
+
+    #[test]
+    fn rejects_a_key_it_cannot_compose() {
+        // A dynamic argument could name any attribute, including `key`.
+        assert!(rejects_key("<input :[name]=\"x\" v-model=\"name\">"));
+        // Two keys on one element leave Vue two values to choose from.
+        assert!(rejects_key("<input key=\"a\" :key=\"b\" v-model=\"name\">"));
+        assert!(rejects_key(
+            "<input :key=\"a\" :key=\"b\" v-model=\"name\">"
+        ));
+        // An unquoted value cannot be copied into a quoted attribute as is.
+        assert!(rejects_key("<input :key=b v-model=\"name\">"));
     }
 
     #[test]
