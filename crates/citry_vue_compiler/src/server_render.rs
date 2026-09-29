@@ -2571,10 +2571,18 @@ impl<'a> Writer<'a> {
             }
         }
         let record = record.ok_or_else(fail)?;
-        let (Some(Json::String(html)), Some(node_count), 2) = (
+        // A `#c-ignore` element's contents arrive as a record with
+        // `"pinned": true`, which only tells the browser to keep the first
+        // nodes it has; the server writes them the same way.
+        let pinned = match record.get("pinned") {
+            None => false,
+            Some(Json::Bool(true)) => true,
+            Some(_) => return Err(fail()),
+        };
+        let (Some(Json::String(html)), Some(node_count), true) = (
             record.get("html"),
             record.get("nodeCount").and_then(Json::as_u64),
-            record.len(),
+            record.len() == 2 + usize::from(pinned),
         ) else {
             return Err(fail());
         };
@@ -3670,6 +3678,10 @@ mod tests {
             );
             assert_eq!(declines(&result), []);
         }
+        // A pinned record is written the same way.
+        let pinned = render(json!({"html": "<b>x</b>", "nodeCount": 1, "pinned": true}));
+        assert_eq!(html(&pinned), "<main><!--[--><b>x</b><!--]--></main>");
+        assert_eq!(declines(&pinned), []);
         let empty = render(json!({"html": "", "nodeCount": 0}));
         assert_eq!(html(&empty), "<main><!--[--><!--]--></main>");
         // Elements inside the block count toward the page size.
@@ -3684,6 +3696,10 @@ mod tests {
             (json!({"html": "<b>x</b>"}), "<b>x</b>"),
             (
                 json!({"html": "<b>x</b>", "nodeCount": 1, "extra": true}),
+                "<b>x</b>",
+            ),
+            (
+                json!({"html": "<b>x</b>", "nodeCount": 1, "pinned": false}),
                 "<b>x</b>",
             ),
             (
