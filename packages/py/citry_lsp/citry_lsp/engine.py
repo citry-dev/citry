@@ -7908,7 +7908,10 @@ _ALPINE_API_SPECS = {
     ),
     "$sendEvent": _BrowserApiSpec(
         "function",
-        "(name: CitryServerEventName, args?: Record<string, unknown>, opts?: unknown) => Promise<unknown>",
+        (
+            "(name: CitryServerEventName, args?: Record<string, unknown>, "
+            "opts?: {timeout?: number; wait?: true}) => Promise<unknown>"
+        ),
         "Call one of this component's declared server event handlers.",
         f"{_BROWSER_APIS_URL}#send-event",
     ),
@@ -7967,7 +7970,10 @@ _COMPONENT_CONTEXT_SPECS = {
     ),
     "sendEvent": _BrowserApiSpec(
         "parameter",
-        "(name: CitryServerEventName, args?: Record<string, unknown>, opts?: unknown) => Promise<unknown>",
+        (
+            "(name: CitryServerEventName, args?: Record<string, unknown>, "
+            "opts?: {timeout?: number; wait?: true}) => Promise<unknown>"
+        ),
         "Call one of this component's declared server event handlers, like `component.$sendEvent`.",
         f"{_BROWSER_APIS_URL}#send-event",
     ),
@@ -8143,7 +8149,7 @@ def _component_public_instance_shape(
     )
     helpers = (
         "{$state: CitryEventsState, $sendEvent: (name: CitryServerEventName, "
-        "args?: Record<string, unknown>) => Promise<unknown>, "
+        "args?: Record<string, unknown>, opts?: CitrySendOptions) => Promise<unknown>, "
         "$loading: (name?: CitryServerEventName) => boolean, "
         "$error: (name?: CitryServerEventName) => CitryEventError | null, "
         "$onEvent: (name: string, callback: (detail: unknown) => void) => CitryCleanup}"
@@ -8268,7 +8274,9 @@ def _browser_preamble(
             "/** @typedef {import("
             f"{_js_string_literal(vue_types)}).ComponentPublicInstance}} CitryVuePublicInstance */",
             f"/** @typedef {{CitryVuePublicInstance & {component_shape}}} CitryComponentPublicInstance */",
-            "/** @type {{vue: CitryVueNamespace}} */ var Citry;",
+            # `Citry.vue` is the Vue runtime plus `use`, which Citry adds to install a page plugin.
+            "/** @type {{vue: CitryVueNamespace & {use(plugin: import("
+            f"{_js_string_literal(vue_types)}).Plugin, ...options: any[]): void}}}}}} */ var Citry;",
             f"/** @typedef {{{event_type}}} CitryServerEventName */",
             "/** @typedef {Object} CitryEventError",
             " * @property {number} status",
@@ -8277,10 +8285,12 @@ def _browser_preamble(
             " * @property {Record<string, string[]>} [fieldErrors]",
             " */",
             "/** @callback CitryCleanup @returns {void} */",
+            # An initializer may be async; Citry keeps a cleanup the Promise resolves to.
             "/** @callback CitryComponentInitializer",
             " * @param {CitryComponentContext} context",
-            " * @returns {void | CitryCleanup}",
+            " * @returns {void | CitryCleanup | Promise<void | CitryCleanup>}",
             " */",
+            "/** @typedef {{timeout?: number, wait?: true}} CitrySendOptions */",
             "/**",
             " * @typedef {Object} CitryComponentContext",
             " * @property {CitryComponentPublicInstance} component",
@@ -8289,7 +8299,7 @@ def _browser_preamble(
             " * @property {string | null} id",
             " * @property {Element[]} els",
             " * @property {CitryEventsState | null} state",
-            " * @property {(name: CitryServerEventName, args?: Record<string, unknown>, opts?: unknown) "
+            " * @property {(name: CitryServerEventName, args?: Record<string, unknown>, opts?: CitrySendOptions) "
             "=> Promise<unknown>} sendEvent",
             " * @property {(name?: CitryServerEventName) => boolean} loading",
             " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
@@ -8321,11 +8331,11 @@ def _browser_preamble(
         lines.extend(
             (
                 "/** @param {CitryServerEventName} name @param {Record<string, unknown>=} args "
-                "@returns {Promise<unknown>} */",
-                "function sendEvent(name, args) { return Promise.resolve(); }",
+                "@param {CitrySendOptions=} opts @returns {Promise<unknown>} */",
+                "function sendEvent(name, args, opts) { return Promise.resolve(); }",
                 "/** @param {CitryServerEventName} name @param {Record<string, unknown>=} args "
-                "@returns {Promise<unknown>} */",
-                "function $sendEvent(name, args) { return Promise.resolve(); }",
+                "@param {CitrySendOptions=} opts @returns {Promise<unknown>} */",
+                "function $sendEvent(name, args, opts) { return Promise.resolve(); }",
                 "/** @param {string} name @param {(detail: unknown) => void} fn @returns {CitryCleanup} */",
                 "function onEvent(name, fn) { return function () {}; }",
                 "/** @param {string} name @param {(detail: unknown) => void} fn @returns {CitryCleanup} */",

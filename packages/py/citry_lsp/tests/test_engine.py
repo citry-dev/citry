@@ -6515,3 +6515,81 @@ class Card(Component):
     ]
     assert 'c-title="item"' in findings[0].message
     assert "component's browser value 'label'" in findings[1].message
+
+
+def test_component_js_types_accept_page_plugins_async_initializers_and_send_options(tmp_path):
+    """The editor accepts `Citry.vue.use`, an async initializer, and valid send options, and rejects wrong ones."""
+    js_source = """$component({
+      async onServerRender({ component, sendEvent }) {
+        Citry.vue.use({ install(app) { app.directive('mark', {}); } }, { text: 'hi' });
+        Citry.vue.use((app) => { app.config.globalProperties.$extra = 1; });
+        await sendEvent('save', {}, { timeout: 500, wait: true });
+        await component.$sendEvent('save', {}, { timeout: 500 });
+        Citry.vue.use(42);
+        await sendEvent('save', {}, { wait: false });
+        return () => undefined;
+      },
+    });
+    """
+    (tmp_path / "card.html").write_text("<p>card</p>", encoding="utf8")
+    js_file = tmp_path / "card.js"
+    js_file.write_text(js_source, encoding="utf8")
+    app_source = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Card(Component):
+    citry = engine
+    template_file = 'card.html'
+    js_file = 'card.js'
+    class Events:
+        def save(self):
+            return None
+"""
+    (tmp_path / "app.py").write_text(app_source, encoding="utf8")
+    project = load_project(tmp_path, "app:engine")
+    javascript = DocumentState(js_file.as_uri(), "javascript", js_source, 1)
+    javascript.update(js_source, 1, project)
+    projection = browser_projection(
+        javascript,
+        _position(js_source, "component.$sendEvent", len("component")),
+        project,
+        {javascript.uri: javascript},
+    )
+    assert projection is not None
+    projected = tmp_path / "projection.js"
+    projected.write_text("// @ts-check\n" + projection.source, encoding="utf8")
+    tsc = _require_repository_tsc()
+    checked = subprocess.run(
+        [
+            str(tsc),
+            "--ignoreConfig",
+            "--noEmit",
+            "--strict",
+            "--allowJs",
+            "--checkJs",
+            "--moduleResolution",
+            "bundler",
+            "--module",
+            "preserve",
+            "--target",
+            "es2022",
+            "--pretty",
+            "false",
+            str(projected),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    diagnostics = checked.stdout + checked.stderr
+    errors = [line for line in diagnostics.splitlines() if "error TS" in line]
+
+    def line_of(snippet: str) -> int:
+        return projection.source[: projection.source.index(snippet)].count("\n") + 2
+
+    # Exactly the two wrong calls are reported: a number is not a plugin, and `wait` accepts only true.
+    assert {int(line.split("(")[1].split(",")[0]) for line in errors} == {
+        line_of("Citry.vue.use(42)"),
+        line_of("{ wait: false }"),
+    }, diagnostics
