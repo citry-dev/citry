@@ -599,7 +599,7 @@ def browser_htmx(base_url: str, browser_name: str) -> None:
         page.goto(base_url + "/", wait_until="networkidle")
         page.wait_for_function("window.htmx && window.Citry")
         results = page.locator("#search-results")
-        results.locator(".contact-results[data-citry-activated='all']").wait_for()
+        results.locator(".contact-results[data-test-activated='all']").wait_for()
         initial_accessibility_findings = axe_high_impact_findings(page)
         if initial_accessibility_findings:
             raise AssertionError(
@@ -613,7 +613,7 @@ def browser_htmx(base_url: str, browser_name: str) -> None:
         with page.expect_request(lambda request: "/fragments/search?q=grace" in request.url.lower()):
             search.fill("grace")
         results.get_by_text("Grace Hopper", exact=True).wait_for()
-        results.locator(".contact-results[data-citry-activated='grace']").wait_for()
+        results.locator(".contact-results[data-test-activated='grace']").wait_for()
         if results.get_by_text("Ada Lovelace", exact=True).count():
             raise AssertionError("The slower Ada search overwrote the newer Grace result")
         page.wait_for_function(
@@ -651,7 +651,7 @@ def browser_htmx(base_url: str, browser_name: str) -> None:
         with page.expect_request(lambda request: "/fragments/search?q=" in request.url.lower()):
             search.fill("")
         results.get_by_text("Ada Lovelace", exact=True).wait_for()
-        results.locator(".contact-results[data-citry-activated='all']").wait_for()
+        results.locator(".contact-results[data-test-activated='all']").wait_for()
         editor = results.locator("#contact-row-1")
         grace = results.locator("#contact-row-2")
         edit_button = editor.get_by_role("button", name="Edit Ada Lovelace")
@@ -739,7 +739,7 @@ def browser_htmx(base_url: str, browser_name: str) -> None:
         page.keyboard.press("Enter")
         editor.get_by_role("heading", name="Ada Byron").wait_for()
         editor.get_by_text("Saved Ada Byron.").wait_for()
-        editor.locator(".contact-detail[data-citry-contact='1']").wait_for()
+        editor.locator(".contact-detail[data-test-contact='1']").wait_for()
         form_style.wait_for(state="detached")
 
         department = page.get_by_label("Department")

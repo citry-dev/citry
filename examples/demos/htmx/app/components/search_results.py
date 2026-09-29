@@ -22,7 +22,7 @@ class SearchResults(Component):
         }
 
     template = """
-      <div class="contact-results" c-data-citry-activated="activated">
+      <div class="contact-results" c-data-test-activated="activated">
         <p class="contact-results__summary" role="status">{{ summary }}</p>
         <c-if cond="count">
           <ul class="contact-results__list">{{ rows_html }}</ul>

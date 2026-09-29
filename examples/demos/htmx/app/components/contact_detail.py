@@ -27,7 +27,7 @@ class ContactDetail(Component):
       <article
         ref="root"
         class="contact-detail"
-        :data-citry-contact="contactId"
+        :data-test-contact="contactId"
       >
         <c-if cond="notice">
           <p class="contact-detail__notice" role="status">{{ notice }}</p>
