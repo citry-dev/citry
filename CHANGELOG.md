@@ -45,7 +45,7 @@ Upgrading from 0.5.x? Follow
   stylesheets in `<head>`, so they are styled from the first paint.
 - Install a Vue plugin, such as a store or a global directive, on every
   Vue app Citry creates with `Citry.vue.use(plugin, ...options)`, called
-  before Citry starts the page's apps.
+  before Citry creates the page's first Vue app.
 - A `$component` `init` or `onServerRender` callback may be `async`.
   Citry does not wait for it, and it logs a rejection instead of stopping
   the page.

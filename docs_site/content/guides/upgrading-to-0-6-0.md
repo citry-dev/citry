@@ -382,7 +382,7 @@ lists the rest.
 
 | Removed | What to use |
 | --- | --- |
-| `Citry.alpine.beforeStart(fn)` | [`Citry.vue.use(plugin)`](/reference/browser-apis/#citry-vue-use) from a `defer` script in `<head>`, before Citry starts. An Alpine plugin has no direct replacement. |
+| `Citry.alpine.beforeStart(fn)` | [`Citry.vue.use(plugin)`](/reference/browser-apis/#citry-vue-use) called from a `defer` script in `<head>` or an extension's `before_manifest` script. An Alpine plugin has no direct replacement. |
 | `Citry.manager.*` (`loadJs`, `loadCss`, `callComponent`, ...) | Declare assets on the component with `Component.js`, `Component.css`, or `Dependencies`. Interactive fragments load their own assets. |
 | `Citry.i18n.provider` | `component.$i18n` or `this.$i18n`; see [Browser i18n](/i18n/browser/). |
 | `window.Alpine`, `alpine:init` | The `citry:ready` event on `document`. |
@@ -461,8 +461,9 @@ cache, answered the request.
 
 Point every worker at one shared cache backend, such as Redis or
 DiskCache. Without a configured cache, a single process keeps this code
-in memory up to `vue_asset_max_bytes` (64 MiB by default); a page left
-open long enough to ask for a dropped file gets the same 404, so raise
+in memory up to `vue_asset_max_bytes` (64 MiB by default). A page always
+finds its own files right after it arrives, but a page left open long
+enough to ask for a dropped file gets the same 404, so raise
 the limit or configure a cache. See
 [Share the cache between worker processes](/web-frameworks/#share-the-cache-between-worker-processes).
 

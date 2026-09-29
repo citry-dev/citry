@@ -173,7 +173,10 @@ Where `before_manifest` entries end up depends on the page:
   `ctx.scripts`. They follow the same rules as any other script on an
   interactive page: classic JavaScript only. A `type="module"` or
   `type="application/json"` script, or a script with `async`, `defer`, or
-  `nomodule`, makes serialization raise `ValueError`.
+  `nomodule`, makes serialization raise `ValueError`. An extension can
+  install a Vue plugin on the page's apps by adding a `before_manifest`
+  script that calls `Citry.vue.use(plugin)`; the page runs it before it
+  creates the Vue app.
 
 Citry adds its own browser runtime after the hook returns, so the hook
 cannot move or remove it. The runtime still loads before these scripts.
