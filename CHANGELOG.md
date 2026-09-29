@@ -202,6 +202,10 @@ Upgrading from 0.5.x? Follow
 - **Breaking:** `OnSerializeContext` and
   `OnDependenciesContext` gain `selected_render`, the render being
   serialized, so build these contexts with keyword arguments.
+- **Breaking:** In the shapes returned by
+  `citry.analysis.analyze_template_data_source`, `analyze_js_data_source`,
+  and `analyze_css_data_source`, `parameters` leaves out `self` or `cls`,
+  so `parameters[0]` is always the kwargs parameter.
 - **Breaking:** Alpine and ownership Python APIs are removed: the
   `citry.ownership` and `citry.ownership_manifest` modules, the Alpine
   names in `citry.analysis`, and the `ownership` parameters of
@@ -259,6 +263,11 @@ Upgrading from 0.5.x? Follow
   route accepts it while keeping each handler's 405 and CSRF checks.
 - `GET` Events calls reject argument names and values that contain broken
   Unicode (unpaired surrogates) instead of silently replacing characters.
+- `citry check` no longer reports "Template variable 'x' is not declared"
+  for keys returned by a `template_data` written as a `@staticmethod` or
+  `@classmethod`, such as the one `simple = "vue"` components use.
+  `citry check` now also checks the returned value types of a `js_data`
+  written that way.
 
 
 ## v0.5.1

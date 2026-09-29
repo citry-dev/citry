@@ -15,6 +15,13 @@ All notable changes to `citry-lsp` are documented here.
   `els`, and `id`, and `$component({ init })` is checked like
   `onServerRender`.
 
+### Fixed
+
+- Completion, hover, go-to-definition, and unknown-variable diagnostics now
+  work for keys returned by a `template_data`, `js_data`, or `css_data`
+  written as a `@staticmethod` or `@classmethod`, not only for instance
+  methods.
+
 ## [0.1.7] - 2026-09-11
 
 ### Added

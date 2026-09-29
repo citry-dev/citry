@@ -41,6 +41,10 @@ class TemplateDataSourceShape:
     completeness: Literal["closed", "open"]
     open_reasons: tuple[str, ...]
     preserves_kwargs_extras: bool = False
+    # The names Citry binds when it calls the method, in order: the kwargs
+    # parameter first, then slots. The receiver (``self`` or ``cls``) is left
+    # out, so ``parameters[0]`` names kwargs whether or not the method is a
+    # staticmethod.
     parameters: tuple[str, ...] = ()
 
 
@@ -84,7 +88,11 @@ def analyze_template_data_source(
     kwargs_fields: tuple[str, ...] | None,
 ) -> TemplateDataSourceShape | None:
     """
-    Infer roots from one exact, undecorated ``template_data`` method.
+    Infer roots from one exact ``template_data`` method.
+
+    The method may be a plain instance method, a ``@staticmethod``, or a
+    ``@classmethod``. Any other decorator can change the returned value, so
+    Citry does not analyze such a method and returns ``None``.
 
     ``None`` means the module or requested owner cannot be matched safely.
     Unsupported runtime shapes instead return an open result without guesses.
@@ -162,24 +170,25 @@ def _analyze_data_method_source(
     if class_node is None or class_node.decorator_list:
         return None
     bindings = [statement for statement in class_node.body if _statement_binds_name(statement, method_name)]
-    if (
-        len(bindings) != 1
-        or not isinstance(bindings[0], ast.FunctionDef)
-        or bindings[0].name != method_name
-        or bindings[0].decorator_list
-    ):
+    if len(bindings) != 1 or not isinstance(bindings[0], ast.FunctionDef) or bindings[0].name != method_name:
         return None
     method = bindings[0]
-    positional = (*method.args.posonlyargs, *method.args.args)
+    # Citry passes (kwargs, slots) as the arguments, so a staticmethod
+    # receives them first, while an instance or class method receives
+    # self or cls before them.
+    call_parameters = data_method_call_parameters(tree, class_node, method)
+    if call_parameters is None:
+        return None
+    parameters = tuple(argument.arg for argument in call_parameters)
     if _function_contains_yield(method):
         return TemplateDataSourceShape(
             (),
             "open",
             (f"generator {method_name} method",),
             preserves_kwargs_extras=False,
-            parameters=tuple(argument.arg for argument in positional),
+            parameters=parameters,
         )
-    kwargs_name = positional[1].arg if method_name == "template_data" and len(positional) >= 2 else None
+    kwargs_name = parameters[0] if method_name == "template_data" and parameters else None
     initial = _State()
     if kwargs_name is not None:
         initial.names[kwargs_name] = initial.store(_kwargs_mapping(kwargs_fields))
@@ -194,7 +203,47 @@ def _analyze_data_method_source(
         returns.append(_Mapping())
     if not returns:
         returns.append(_Mapping(open_reasons={"method has no reachable normal return"}))
-    return _merge_returns(returns, tuple(argument.arg for argument in positional))
+    return _merge_returns(returns, parameters)
+
+
+def data_method_call_parameters(
+    tree: ast.Module,
+    class_node: ast.ClassDef,
+    method: ast.FunctionDef,
+) -> tuple[ast.arg, ...] | None:
+    """
+    Return the positional parameters Citry fills when it calls a data method.
+
+    Citry passes ``(kwargs, slots)`` as the arguments to ``template_data``,
+    ``js_data``, and ``css_data``. A ``@staticmethod`` receives them as its
+    first parameters, while an instance or class method receives ``self``
+    or ``cls`` before them.
+
+    Returns:
+        The parameters that receive kwargs and slots, or ``None`` when a
+        decorator other than a builtin ``staticmethod`` or ``classmethod``
+        wraps the method, since such a decorator can replace its result.
+
+    """
+    positional = (*method.args.posonlyargs, *method.args.args)
+    if not method.decorator_list:
+        return positional[1:]
+    if len(method.decorator_list) != 1:
+        return None
+    decorator = method.decorator_list[0]
+    if not isinstance(decorator, ast.Name) or decorator.id not in {"staticmethod", "classmethod"}:
+        return None
+    # A module or class that rebinds the name may mean some other decorator,
+    # and then the call shape is unknown. A star import can bind any name,
+    # so it counts as a rebinding too.
+    if any(
+        isinstance(statement, ast.ImportFrom) and any(alias.name == "*" for alias in statement.names)
+        for statement in tree.body
+    ):
+        return None
+    if any(_statement_binds_name(statement, decorator.id) for statement in (*tree.body, *class_node.body)):
+        return None
+    return positional if decorator.id == "staticmethod" else positional[1:]
 
 
 def python_class_defines_direct_method(source: str, class_qualname: str, method_name: str) -> bool | None:
@@ -1228,6 +1277,7 @@ __all__ = [
     "analyze_css_data_source",
     "analyze_js_data_source",
     "analyze_template_data_source",
+    "data_method_call_parameters",
     "python_class_asset_resolution_signature",
     "python_class_defines_direct_method",
     "python_class_direct_method_first_line",

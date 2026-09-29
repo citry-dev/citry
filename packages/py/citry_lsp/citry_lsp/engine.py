@@ -7557,10 +7557,11 @@ def _js_data_member_types(
     shape: TemplateDataSourceShape,
 ) -> dict[str, dict[str, JsonWireType]]:
     """Join the effective Kwargs schema to the js_data() kwargs parameter."""
-    if len(shape.parameters) < 2 or component.schemas.kwargs.kind != "fields":
+    # parameters[0] is the kwargs parameter for instance, class, and static methods alike.
+    if not shape.parameters or component.schemas.kwargs.kind != "fields":
         return {}
     return {
-        shape.parameters[1]: {
+        shape.parameters[0]: {
             field.name: (
                 json_wire_type_from_annotation(field.type_display)
                 if field.type_display is not None

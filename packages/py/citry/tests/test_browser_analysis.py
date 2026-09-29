@@ -87,7 +87,8 @@ def test_js_data_source_keeps_only_browser_identifier_roots():
 
     assert shape is not None
     assert [root.name for root in shape.roots] == ["optional", "title"]
-    assert shape.parameters == ("self", "kwargs", "slots")
+    # The receiver is left out, so the kwargs parameter always comes first.
+    assert shape.parameters == ("kwargs", "slots")
 
 
 def test_browser_hosts_preserve_loop_bindings_and_literal_event_ranges():

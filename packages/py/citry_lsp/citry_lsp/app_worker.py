@@ -415,6 +415,11 @@ def _data_resolution_chain(
             chain.append(record)
         if method_name in namespace:
             method = namespace[method_name]
+            # A staticmethod or classmethod stores the authored function on
+            # __func__. Compare that function with the source, and let the
+            # source analyzer decide whether the decorator is one it understands.
+            if type(method) is staticmethod or type(method) is classmethod:
+                method = method.__func__
             if (
                 type(method) is not FunctionType
                 or method.__module__ != module

@@ -5,8 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from textwrap import dedent, indent
 
+import pytest
+
 from citry.analysis import (
     analyze_css_data_source,
+    analyze_js_data_source,
     analyze_template_data_source,
     python_class_asset_resolution_signature,
     python_class_defines_direct_method,
@@ -208,6 +211,83 @@ def test_owner_and_direct_method_resolution_decline_ambiguity_and_decorators():
     assert python_class_defines_direct_method(duplicate, "Card", "template_data") is None
     assert python_class_defines_direct_method(replaced, "Card", "template_data") is None
     assert analyze_template_data_source(replaced, "Card", kwargs_fields=()) is None
+
+
+# Each method form Citry can call as component.method(kwargs, slots): the
+# decorator line (if any) and the receiver parameter that precedes kwargs.
+_METHOD_FORMS = pytest.mark.parametrize(
+    ("decorator", "receiver"),
+    [("", "self, "), ("@staticmethod\n    ", ""), ("@classmethod\n    ", "cls, ")],
+    ids=["instance", "staticmethod", "classmethod"],
+)
+
+
+@_METHOD_FORMS
+def test_static_and_class_data_methods_bind_kwargs_after_the_receiver(decorator, receiver):
+    source = (
+        "class Card:\n"
+        f"    {decorator}def template_data({receiver}kwargs, slots):\n"
+        "        if slots:\n"
+        "            return kwargs\n"
+        "        return {'label': 'Hi'}\n"
+        f"    {decorator}def js_data({receiver}options, slots):\n"
+        "        return {'open': options.open}\n"
+    )
+
+    shape = analyze_template_data_source(source, "Card", kwargs_fields=("high",))
+    js_shape = analyze_js_data_source(source, "Card")
+
+    assert shape is not None
+    assert shape.completeness == "closed"
+    assert shape.parameters == ("kwargs", "slots")
+    roots = {root.name: root for root in shape.roots}
+    assert set(roots) == {"high", "label"}
+    # "high" can only come from the kwargs parameter, which proves the
+    # analyzer bound kwargs to the right name for every method form.
+    assert roots["high"].origins == frozenset({"kwargs"})
+    assert js_shape is not None
+    assert js_shape.parameters == ("options", "slots")
+    assert [root.name for root in js_shape.roots] == ["open"]
+
+
+@pytest.mark.parametrize(
+    "prelude",
+    [
+        "    @cache\n",
+        "    @staticmethod\n    @cache\n",
+        "    @builtins.staticmethod\n",
+        "    staticmethod = cache\n    @staticmethod\n",
+    ],
+    ids=["other", "stacked", "attribute", "rebound"],
+)
+def test_data_methods_with_an_unknown_decorator_stay_unprovable(prelude):
+    source = f"class Card:\n{prelude}    def template_data(kwargs, slots):\n        return {{'label': 'Hi'}}\n"
+
+    assert analyze_template_data_source(source, "Card", kwargs_fields=()) is None
+
+
+def test_a_star_import_makes_a_decorated_method_unprovable():
+    source = (
+        "from helpers import *\n"
+        "class Card:\n"
+        "    @staticmethod\n"
+        "    def template_data(kwargs, slots):\n"
+        "        return {'label': 'Hi'}\n"
+    )
+
+    assert analyze_template_data_source(source, "Card", kwargs_fields=()) is None
+
+
+def test_a_module_level_rebinding_of_staticmethod_makes_the_method_unprovable():
+    source = (
+        "from helpers import memo as staticmethod\n"
+        "class Card:\n"
+        "    @staticmethod\n"
+        "    def template_data(kwargs, slots):\n"
+        "        return {'label': 'Hi'}\n"
+    )
+
+    assert analyze_template_data_source(source, "Card", kwargs_fields=()) is None
 
 
 def test_raise_terminates_flow_and_nested_call_side_effects_taint_a_mapping():

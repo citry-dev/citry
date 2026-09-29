@@ -1234,8 +1234,20 @@ async def test_default_template_data_gets_types_from_effective_kwargs(tmp_path: 
     assert "lower" in {item.label for item in items}
 
 
+# Each method form Citry can call as component.method(kwargs, slots): the
+# decorator line (if any) and the receiver parameter that precedes kwargs.
+_METHOD_FORMS = pytest.mark.parametrize(
+    ("decorator", "receiver"),
+    [("", "self, "), ("    @staticmethod\n", ""), ("    @classmethod\n", "cls, ")],
+    ids=["instance", "staticmethod", "classmethod"],
+)
+
+
+@_METHOD_FORMS
 @pytest.mark.asyncio
-async def test_inferred_kwargs_type_survives_same_named_method_local(tmp_path: Path) -> None:
+async def test_inferred_kwargs_type_survives_same_named_method_local(
+    tmp_path: Path, decorator: str, receiver: str
+) -> None:
     template_file = tmp_path / "card.html"
     template_source = "{{ title.lo }}"
     template_file.write_text(template_source, encoding="utf-8")
@@ -1248,7 +1260,8 @@ async def test_inferred_kwargs_type_survives_same_named_method_local(tmp_path: P
         "    template_file = 'card.html'\n"
         "    class Kwargs:\n"
         "        title: str\n"
-        "    def template_data(self, kwargs, slots):\n"
+        f"{decorator}"
+        f"    def template_data({receiver}kwargs, slots):\n"
         "        Card = int\n"
         "        return kwargs\n",
         encoding="utf-8",

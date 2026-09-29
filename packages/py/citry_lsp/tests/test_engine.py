@@ -2217,7 +2217,17 @@ $component(({ component }) => {
     assert "$onEvent: (name: string, callback: (detail: unknown) => void) => CitryCleanup" in projection.source
 
 
-def test_inferred_js_data_tracks_kwargs_types_synchronized_source_and_invalid_literals(tmp_path):
+# Each method form Citry can call as component.method(kwargs, slots): the
+# decorator line (if any) and the receiver parameter that precedes kwargs.
+_METHOD_FORMS = pytest.mark.parametrize(
+    ("decorator", "receiver"),
+    [("", "self, "), ("    @staticmethod\n", ""), ("    @classmethod\n", "cls, ")],
+    ids=["instance", "staticmethod", "classmethod"],
+)
+
+
+@_METHOD_FORMS
+def test_inferred_js_data_tracks_kwargs_types_synchronized_source_and_invalid_literals(tmp_path, decorator, receiver):
     template_source = "<p v-text=\"submitting.valueOf() ? title.toUpperCase() : ''\"></p>"
     template_file = tmp_path / "card.html"
     app_file = tmp_path / "app.py"
@@ -2231,7 +2241,8 @@ def test_inferred_js_data_tracks_kwargs_types_synchronized_source_and_invalid_li
         "    template_file = 'card.html'\n"
         "    class Kwargs:\n"
         "        submitting: bool = False\n"
-        "    def js_data(self, kwargs: Kwargs, slots):\n"
+        f"{decorator}"
+        f"    def js_data({receiver}kwargs: Kwargs, slots):\n"
         "        return {'title': 'Card', 'submitting': kwargs.submitting, 'invalid': {1, 2}}\n"
     )
     app_file.write_text(app_source, encoding="utf-8")
@@ -2258,7 +2269,8 @@ def test_inferred_js_data_tracks_kwargs_types_synchronized_source_and_invalid_li
     target = definition(template, _position(template_source, "title", 2), project, documents)
     assert isinstance(target, types.Location)
     assert target.uri == app_file.as_uri()
-    assert target.range.start.line == 9
+    # The decorator line, when present, pushes the return statement down one line.
+    assert target.range.start.line == 9 + bool(decorator)
     diagnostics = browser_diagnostics(python, project, documents)
     assert [diagnostic.code for diagnostic in diagnostics] == ["citry.js-data.unsupported-type"]
 
@@ -2450,13 +2462,15 @@ def test_css_file_completes_hovers_and_navigates_declared_css_data(tmp_path):
     assert len(found_references) == 3
 
 
-def test_inline_css_uses_inferred_hyphenated_css_data_key(tmp_path):
+@_METHOD_FORMS
+def test_inline_css_uses_inferred_hyphenated_css_data_key(tmp_path, decorator, receiver):
     source = (
         "from citry import Citry, Component\n"
         "engine = Citry(autodiscover=False)\n"
         "class Card(Component):\n"
         "    citry = engine\n"
-        "    def css_data(self, kwargs, slots):\n"
+        f"{decorator}"
+        f"    def css_data({receiver}kwargs, slots):\n"
         "        return {'row-color': 'red'}\n"
         "    template = '<div class=\"card\"></div>'\n"
         '    css = """\n'
@@ -2478,7 +2492,8 @@ def test_inline_css_uses_inferred_hyphenated_css_data_key(tmp_path):
     assert "Card.css_data()" in found_hover.contents.value
     assert isinstance(target, types.Location)
     assert target.uri == app_file.as_uri()
-    assert target.range.start.line == 5
+    # The decorator line, when present, pushes the returned key down one line.
+    assert target.range.start.line == 5 + bool(decorator)
 
 
 def test_shared_css_intersects_producers_and_unknown_custom_properties_remain_open(tmp_path):
@@ -2665,7 +2680,8 @@ def test_runtime_globals_and_lint_metadata_complete_and_hover(tmp_path):
     )
 
 
-def test_template_lint_diagnostics_use_inferred_roots_and_warning_policy(tmp_path):
+@_METHOD_FORMS
+def test_template_lint_diagnostics_use_inferred_roots_and_warning_policy(tmp_path, decorator, receiver):
     template_file = tmp_path / "card.html"
     template_source = "{{ inferred }} {{ missing }}"
     template_file.write_text(template_source, encoding="utf-8")
@@ -2677,7 +2693,8 @@ def test_template_lint_diagnostics_use_inferred_roots_and_warning_policy(tmp_pat
         "class Card(Component):\n"
         "    citry = engine\n"
         "    template_file = 'card.html'\n"
-        "    def template_data(self, kwargs, slots):\n"
+        f"{decorator}"
+        f"    def template_data({receiver}kwargs, slots):\n"
         "        return {'inferred': 'yes'}\n",
         encoding="utf-8",
     )

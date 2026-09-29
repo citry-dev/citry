@@ -1638,8 +1638,9 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
     source_file, source, shape = analyzed
     member_types: dict[str, dict[str, JsonWireType]] = {}
     kwargs_schema = component_info.schemas.kwargs
-    if len(shape.parameters) >= 2 and kwargs_schema.kind == "fields":
-        member_types[shape.parameters[1]] = {
+    # parameters[0] is the kwargs parameter for instance, class, and static methods alike.
+    if shape.parameters and kwargs_schema.kind == "fields":
+        member_types[shape.parameters[0]] = {
             field.name: (
                 json_wire_type_from_annotation(field.type_display)
                 if field.type_display is not None

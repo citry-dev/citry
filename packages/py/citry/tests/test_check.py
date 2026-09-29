@@ -1217,7 +1217,42 @@ def test_registry_check_reports_js_data_wire_and_literal_server_event_problems(t
     assert {finding.severity for finding in report.findings if "unsupported-type" in finding.code} == {"warning"}
 
 
-def test_registry_check_joins_inferred_js_data_values_to_kwargs_types(tmp_path, monkeypatch, capsys):
+# Each method form Citry can call as component.method(kwargs, slots): the
+# decorator line (if any) and the receiver parameter that precedes kwargs.
+_METHOD_FORMS = pytest.mark.parametrize(
+    ("decorator", "receiver"),
+    [("", "self, "), ("    @staticmethod\n", ""), ("    @classmethod\n", "cls, ")],
+    ids=["instance", "staticmethod", "classmethod"],
+)
+
+
+@_METHOD_FORMS
+def test_registry_check_infers_template_data_for_every_method_form(tmp_path, monkeypatch, capsys, decorator, receiver):
+    monkeypatch.chdir(tmp_path)
+    spec = _write_app(
+        tmp_path,
+        "from typing import NamedTuple\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(autodiscover=False)\n"
+        "class Badge(Component):\n"
+        "    citry = engine\n"
+        "    class Kwargs(NamedTuple):\n"
+        "        high: bool\n"
+        f"{decorator}"
+        f"    def template_data({receiver}kwargs, slots):\n"
+        "        return {'label': 'Hot', 'high': kwargs.high}\n"
+        "    template = '<span c-class=\"{\\'hot\\': high}\">{{ label }}</span>'\n",
+    )
+
+    assert _run_main(["--app", spec, "check", "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["findings"] == []
+
+
+@_METHOD_FORMS
+def test_registry_check_joins_inferred_js_data_values_to_kwargs_types(
+    tmp_path, monkeypatch, capsys, decorator, receiver
+):
     monkeypatch.chdir(tmp_path)
     spec = _write_app(
         tmp_path,
@@ -1229,7 +1264,8 @@ def test_registry_check_joins_inferred_js_data_values_to_kwargs_types(tmp_path, 
         "    class Kwargs:\n"
         "        invalid: set[str]\n"
         "        submitting: bool = False\n"
-        "    def js_data(self, options: Kwargs, slots):\n"
+        f"{decorator}"
+        f"    def js_data({receiver}options: Kwargs, slots):\n"
         "        return {'submitting': options.submitting, 'invalid': options.invalid}\n",
     )
 

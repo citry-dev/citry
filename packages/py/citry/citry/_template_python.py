@@ -214,8 +214,21 @@ def build_inferred_template_shadow(
         for statement in class_node.body
         if isinstance(statement, ast.FunctionDef) and statement.name == "template_data"
     ]
-    if len(methods) != 1 or methods[0].decorator_list:
+    if len(methods) != 1:
         return None
+    # citry.analysis imports this module at load time and the data-method
+    # analyzer imports citry.analysis, so importing it here breaks the cycle.
+    from citry._template_data_source import data_method_call_parameters  # noqa: PLC0415
+
+    # Only an instance, static, or class method has a known call shape. The
+    # copy keeps that decorator, so the kwargs annotation must go on the same
+    # parameter the runtime fills with kwargs.
+    call_parameters = data_method_call_parameters(tree, class_node, methods[0])
+    if call_parameters is None:
+        return None
+    # The call parameters are the tail of the positional list, after any receiver.
+    positional_count = len(methods[0].args.posonlyargs) + len(methods[0].args.args)
+    kwargs_index = positional_count - len(call_parameters) if call_parameters else None
 
     placeholder = _query_placeholder(
         module_source,
@@ -231,21 +244,20 @@ def build_inferred_template_shadow(
         return None
     _prune_unreachable_statements(duplicate)
     duplicate.name = "__citry_analyze_template"
-    duplicate.decorator_list = []
     duplicate.returns = None
     import_source = ""
     if kwargs_type is not None:
         module, qualname = kwargs_type
         positional = (*duplicate.args.posonlyargs, *duplicate.args.args)
-        if not _qualified_identifier(module) or not _qualified_identifier(qualname) or len(positional) < 2:
+        if not _qualified_identifier(module) or not _qualified_identifier(qualname) or kwargs_index is None:
             return None
         if module == source_module:
             class_prefix = f"{class_qualname}."
             scoped_qualname = qualname.removeprefix(class_prefix)
-            positional[1].annotation = ast.parse(scoped_qualname, mode="eval").body
+            positional[kwargs_index].annotation = ast.parse(scoped_qualname, mode="eval").body
         else:
             alias = "__citry_schema_module"
-            positional[1].annotation = ast.parse(f"{alias}.{qualname}", mode="eval").body
+            positional[kwargs_index].annotation = ast.parse(f"{alias}.{qualname}", mode="eval").body
             import_source = f"import {module} as {alias}\n"
     type_imports, type_references = _root_type_imports(roots, source_module=source_module)
     transformer = _ReturnQueryTransformer(
