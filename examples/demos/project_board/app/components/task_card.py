@@ -18,6 +18,7 @@ class TaskCard(Component):
         return {
             "title": task.title,
             "owner": task.owner,
+            "completed": task.completed,
             "toggle_label": "Reopen task" if task.completed else "Mark complete",
             "high_priority": task.priority == "high",
             "accent_style": f"--board-accent: {theme.accent};",
@@ -37,10 +38,8 @@ class TaskCard(Component):
       <article
         c-id="task_dom_id"
         class="task-card"
-        :class="{
-          'task-card--done': taskCompleted,
-          'task-card--dragging': dragging,
-        }"
+        c-class="{'task-card--done': completed}"
+        :data-dragging="dragging"
         c-style="accent_style"
         draggable="true"
         @dragstart="startDrag($event)"
@@ -132,7 +131,7 @@ class TaskCard(Component):
           transform 120ms ease;
       }
 
-      .task-card--dragging {
+      .task-card[data-dragging="true"] {
         opacity: 0.55;
         cursor: grabbing;
         transform: scale(0.98);

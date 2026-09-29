@@ -31,7 +31,7 @@ class Lane(Component):
     template = """
       <section
         class="lane"
-        :class="{ 'lane--drop-target': dropTarget }"
+        :data-drop-target="dropTarget"
         c-style="accent_style"
         c-aria-label="title + ' column'"
         @dragover.prevent="highlightDropTarget($event)"
@@ -115,7 +115,7 @@ class Lane(Component):
           background 120ms ease;
       }
 
-      .lane--drop-target {
+      .lane[data-drop-target="true"] {
         border-color: var(--color-accent);
         background: var(--color-accent-soft);
       }
