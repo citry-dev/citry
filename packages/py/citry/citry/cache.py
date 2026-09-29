@@ -151,8 +151,9 @@ class InMemoryCache:
             self._data.clear()
 
 
-# Content-addressed entries (compiled Vue code and stylesheets) are written once and read many times, but the page
-# that links one is rendered again and again. Asking a shared backend "do you
+# Content-addressed entries (compiled Vue code and stylesheets) are written
+# once and read many times, but the page that links one is rendered again and
+# again. Asking a shared backend "do you
 # still have it?" on every render costs one network round trip per asset per
 # render, so each process remembers which keys it has already seen stored.
 # The memory is per ``Citry`` instance (the owner below), because two engines
@@ -164,8 +165,9 @@ class InMemoryCache:
 # after this interval bounds how long other workers may answer 404 for it,
 # while keeping the check to one per key per interval instead of per render.
 _STORED_KEY_RECHECK_SECONDS = 60.0
-# How many keys each engine remembers. A forgotten key is only re-checked on
-# its next write, so this bounds memory without affecting correctness.
+# How many keys each engine remembers. A forgotten key costs one extra backend
+# check on its next render, so this bounds memory without affecting
+# correctness.
 _STORED_KEY_LIMIT = 4096
 _STORED_KEYS: WeakKeyDictionary[object, OrderedDict[str, float]] = WeakKeyDictionary()
 # Renders on several threads write through the same engine's record.

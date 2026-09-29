@@ -781,4 +781,6 @@ Some placements fail with a message that says what to change:
   text. Remove `#c-ignore`.
 
 On a page without Vue, `#c-ignore` has nothing to do: the element and its
-contents render as written.
+contents render as written. The placement and content rules above still
+apply, so the template keeps working if the page later becomes
+interactive.

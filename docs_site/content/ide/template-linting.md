@@ -222,7 +222,7 @@ reads it. `citry check` and the editor report each `x-*` attribute on an
 HTML element as a `citry.template.alpine-attribute` warning:
 
 ```citry-html
-<!-- Warning: nothing reads x-data or x-on:click. -->
+{# Warning: nothing reads x-data or x-on:click #}
 <div x-data="{ open: false }">
   <button x-on:click="open = !open">Menu</button>
 </div>

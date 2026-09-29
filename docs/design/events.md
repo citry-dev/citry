@@ -1551,8 +1551,9 @@ is opaque, minted and verified by the same binding.
   or action outside the advertised set. For an `html-fragment/1` render it
   downgrades instead (`morph` to `replace`); a `vue-prepared/1` render
   always uses `morph`, and a client that advertises `vue-prepared/1`
-  without `morph` gets `handler_error` on any call that renders. An absent field means the **protocol baseline**: one fixed
-  constant per protocol major, defined in the protocol package's spec and
+  without `morph` gets `handler_error` on any call that renders. An
+  absent field means the **protocol baseline**: one fixed constant per
+  protocol major, defined in the protocol package's spec and
   tests. For v1 that is every swap except `morph` plus all six v1
   action kinds, named `CAPABILITIES_BASELINE_V1`. The server therefore
   holds a single constant per major, not a table of runtime versions; the

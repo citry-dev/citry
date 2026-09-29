@@ -571,10 +571,10 @@ and with the caller's promise rejected, in these cases:
   the call. This happens when the component was replaced or removed while the
   call was in flight.
 - An event target names a component other than the caller.
-- Several `vue-prepared/1` renders in one result do not sit next to each
-  other in the list, one of them has a positive `delay` or `wait: false`, or
-  two of them name the same component or a component and one inside it. The
-  browser applies such a group as one update.
+- A result holds several `vue-prepared/1` renders and any of these is
+  true: they are not next to each other in the list, one has a positive
+  `delay` or `wait: false`, or two name the same component or a component
+  and one inside it. The browser applies such a group as one update.
 
 ### Order and timing
 
@@ -588,8 +588,8 @@ Only `false` is valid when `wait` is present. A blocking delay preserves order.
 When a delayed action runs, Citry's browser client first checks that the
 calling component is still mounted and that no newer result for it has been
 applied; otherwise it skips a non-blocking action and fires
-`citry:events:stale`, or rejects the caller's promise for a blocking one. Actions
-after a redirect race the navigation, so a server should warn when it encodes
+`citry:events:stale`, or rejects the caller's promise for a blocking one.
+Actions after a redirect race the navigation, so a server should warn when it encodes
 such a list even though the authored order remains unchanged.
 
 ### Errors

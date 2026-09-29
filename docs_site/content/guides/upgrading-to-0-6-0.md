@@ -426,9 +426,9 @@ Also check these settings and hooks:
   Any Vue expression works, because Citry compiles templates on the server.
   See [Security](/security/#choose-a-csp-compatibility-mode).
 - **`OnDependenciesContext.before_manifest`** works on interactive pages.
-  Its scripts load first, before `ctx.scripts`. They must be ordinary
-  JavaScript: a JSON data script or `async`, `defer`, or `nomodule`
-  raises `ValueError`.
+  Its scripts load first, before `ctx.scripts`. They must be classic
+  JavaScript: a module or JSON data script, or `async`, `defer`, or
+  `nomodule`, raises `ValueError`.
 - **`@event(methods=...)`** accepts only GET, HEAD, POST, PUT, PATCH,
   DELETE, and OPTIONS. Any other method raises `ValueError` when the class
   is defined.
@@ -504,7 +504,8 @@ the limit or configure a cache. See
 
 1. Install `citry` 0.6.0, `citry-ui` 0.3.0, and `citry-lsp` 0.2.0 in the
    same environment.
-2. Search for `x-*` attributes and replace each with its Vue form.
+2. Run `citry check` to find leftover `x-*` attributes, and replace each
+   with its Vue form.
 3. Move `x-data` state into `data()` or `js_data()`.
 4. Rewrite `.outside`, `.window`, `.document`, `.debounce`, and `.throttle`
    modifiers on plain `@event` listeners; `citry check` reports them.
@@ -530,7 +531,7 @@ the limit or configure a cache. See
     that pass `wait: false`.
 17. Remove uses of `Citry.alpine`, `Citry.manager`, and `Citry.i18n`.
 18. Rename the Alpine lint settings and diagnostic codes.
-19. Check that `before_manifest` scripts are ordinary JavaScript, build
+19. Check that `before_manifest` scripts are classic JavaScript, build
     `OnSerializeContext` and `OnDependenciesContext` with keyword
     arguments, and remove `citry.ownership` imports and `ownership=`
     arguments.

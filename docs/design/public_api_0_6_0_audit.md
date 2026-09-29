@@ -914,8 +914,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   (component-tag error); `docs/design/vue_migration.md` notes that the
   subtree primitive is deferred.
 - **Status:** option (c). On an element in an interactive component the
-  server sends the contents as a pinned opaque HTML block that the
-  browser keeps for the component's life; static pages render them as
+  server sends the contents as an HTML block that the browser keeps
+  unchanged for the component's life; static pages render them as
   written; Vue-only content inside fails when the template loads; the
   component-tag error stays and names the fix (`763a578e`, `40de8c59`,
   `33d5a762`, `deb56390`, `50f14b1f`, `0751132d`, `6a78eec3`).
@@ -1077,7 +1077,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Evidence:** `P/_vue/events.py` `_store_asset` ("No TTL").
 - **Status:** option (c). Without a configured cache, Vue assets live in a
   per-process store bounded by `vue_asset_max_bytes` (64 MiB); with a
-  cache, each process checks it once per asset for 60 seconds
+  cache, each process asks the cache about each asset at most once a
+  minute
   (`6e3872e5`). The same growth in the dependencies extension is
   [#154](https://github.com/citry-dev/citry/issues/154).
 

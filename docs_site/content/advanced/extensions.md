@@ -171,9 +171,9 @@ Where `before_manifest` entries end up depends on the page:
   there are no tags to write first. Citry makes the `before_manifest`
   entries the app's first scripts, in the order you added them, followed by
   `ctx.scripts`. They follow the same rules as any other script on an
-  interactive page. For example, a `type="application/json"` data script or
-  a script with `async`, `defer`, or `nomodule` makes serialization raise
-  `ValueError`.
+  interactive page: classic JavaScript only. A `type="module"` or
+  `type="application/json"` script, or a script with `async`, `defer`, or
+  `nomodule`, makes serialization raise `ValueError`.
 
 Citry adds its own browser runtime after the hook returns, so the hook
 cannot move or remove it. The runtime still loads before these scripts.

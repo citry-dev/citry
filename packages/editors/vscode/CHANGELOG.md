@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- Accept citry-lsp 0.2.x, the language server for Citry 0.6 projects, as
-  well as citry-lsp 0.1.x for Citry 0.5 projects.
+- The extension now works with citry-lsp 0.2.x, the language server for
+  Citry 0.6.0 projects, as well as citry-lsp 0.1.x for Citry 0.5.x
+  projects.
 
 ## 0.1.6 - 2026-09-11
 

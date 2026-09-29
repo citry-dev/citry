@@ -807,9 +807,10 @@ def _emit_fragment(
         citry.extensions.emit("on_dependencies", hook_ctx)
         scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
         _validate_hook_nonces(script_security, scripts, styles, before_manifest)
-    # An interactive fragment prepares its dependencies in the Vue producer,
-    # which sets VUE_DEPENDENCIES_PREPARED_KEY and folds before_manifest into
-    # its leading scripts, so the hook above never ran for it.
+    # An interactive fragment's dependencies are prepared by the code that
+    # builds its Vue payload, which sets VUE_DEPENDENCIES_PREPARED_KEY and
+    # puts the before_manifest entries first in its script list, so the hook
+    # above never ran for it.
     if vue_mount is not None and before_manifest:
         raise AssertionError("an interactive fragment ran the dependency hooks outside the Vue producer")
     framework_manifests = before_manifest

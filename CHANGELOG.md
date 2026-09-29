@@ -206,13 +206,11 @@ Upgrading from 0.5.x? Follow
   `citry.ownership` and `citry.ownership_manifest` modules, the Alpine
   names in `citry.analysis`, and the `ownership` parameters of
   `CitryContext` and `CitryElement`.
-- **Breaking:** `#c-ignore` on an HTML element keeps the element's
-  contents as the server first rendered them, so a chart or map library
-  can own them. The contents may hold only HTML, `{{ }}` expressions,
-  `<c-if>`, `<c-for>`, and `<c-raw>`; a component, a slot, a Vue
-  binding, or a `ref` inside fails when the template loads. `#c-ignore`
-  on a component tag fails too; put it on the element inside the
-  component's template that the library manages.
+- **Breaking:** `#c-ignore` on a component tag, or around a component,
+  slot, Vue binding, or `ref`, fails when the template loads. On an HTML
+  element it keeps the contents as the server first rendered them, so a
+  chart or map library can own them; the contents may hold only HTML,
+  `{{ }}` expressions, `<c-if>`, `<c-for>`, and `<c-raw>`.
 - **Breaking:** when several worker processes serve interactive pages,
   configure a shared cache backend such as Redis or DiskCache. Pages link
   compiled component code and stylesheets that any worker reads from that
