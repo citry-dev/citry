@@ -19,15 +19,15 @@ class TabsPage(Component):
             "tabs": [
                 {
                     "label": "Overview",
-                    "body": "Each Tabs instance keeps the open tab in its own browser state.",
+                    "body": "Each Tabs keeps its open tab in browser state.",
                 },
                 {
                     "label": "Details",
-                    "body": "Clicking a tab, or moving to it with the arrow keys, opens its panel.",
+                    "body": "Click a tab or use the arrow keys to open a panel.",
                 },
                 {
                     "label": "Notes",
-                    "body": "The component's CSS styles the open tab through its aria-selected attribute.",
+                    "body": "CSS styles the open tab by its aria-selected value.",
                 },
             ]
         }

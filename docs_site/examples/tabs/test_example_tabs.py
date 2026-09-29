@@ -31,7 +31,7 @@ def test_tabs_example_page_renders() -> None:
     assert 'role: "tab"' in source
     assert 'role: "tabpanel"' in source
     tabs = next(item for item in transport["manifest"]["occurrences"] if item["typeKey"].startswith("Tabs_"))
-    # Python seeds the browser state; Vue renders the tabs and panels from it.
+    # Python sends the starting browser state; Vue renders the tabs and panels from it.
     server_data = tabs["serverData"]
     assert server_data["activeIndex"] == 0
     assert server_data["idPrefix"] == f"demo-tabs-{tabs['renderId']}"

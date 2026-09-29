@@ -112,8 +112,8 @@ class ContactForm(Component):
       $component({
         mounted() {
           window.htmx.process(this.$refs.form);
-          // HTMX inserts this form before Vue mounts it, so an `autofocus`
-          // attribute would focus markup that Vue then replaces.
+          // Vue builds this form after HTMX inserts it, so focus the name
+          // field once Vue has mounted it.
           this.$refs.nameInput.focus();
         },
       });

@@ -96,9 +96,9 @@ Citry needs to set up the component.
 
 `ContactDetail` and `ContactForm` process their mounted Vue root with HTMX.
 This is necessary because Vue creates their controls after HTMX's initial page
-scan. Their Edit, Save, and Cancel controls keep `hx-swap="innerHTML"` so
-each response replaces the contents of the row wrapper, never the wrapper
-itself.
+scan. The Edit and Cancel buttons and the Save form keep
+`hx-swap="innerHTML"` so each response replaces the contents of the row
+wrapper, never the wrapper itself.
 
 The application uses separate URLs for full pages and HTMX responses. If one
 URL returns different HTML based on the `HX-Request` header, also return
