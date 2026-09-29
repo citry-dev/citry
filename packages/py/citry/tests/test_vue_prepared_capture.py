@@ -1644,9 +1644,11 @@ def test_nested_slot_forwarding_keeps_root_fill_in_root_lexical_definition() -> 
 def test_authored_vue_binding_cannot_conflict_with_prepared_python_attribute() -> None:
     registry = Citry(autodiscover=False, extensions=[])
 
+    # The template loader rejects a written `c-value` next to `:value`; a
+    # `c-bind` key is only known while rendering, where the same rule holds.
     class Page(Component):
         citry = registry
-        template = '<input c-value="seed" :value="draft">'
+        template = """<input c-bind="{'value': seed}" :value="draft">"""
 
         def template_data(self, kwargs, slots):
             return {"seed": "server", "draft": "browser"}
@@ -1678,7 +1680,21 @@ def test_authored_and_python_attribute_targets_use_html_ascii_identity(vue_attr:
         def template_data(self, kwargs, slots):
             return {"seed": "server", "draft": "browser"}
 
-    with pytest.raises(UnsupportedPreparedView, match=r"same HTML name.*(?:VALUE|value|title)"):
+    with pytest.raises(SyntaxError, match=f"sets the same attribute as '{python_attr}'"):
+        render_prepared(Page())
+
+
+def test_c_bind_attribute_targets_use_html_ascii_identity() -> None:
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class Page(Component):
+        citry = registry
+        template = """<input :value="draft" c-bind="{'VALUE': seed}">"""
+
+        def template_data(self, kwargs, slots):
+            return {"seed": "server", "draft": "browser"}
+
+    with pytest.raises(UnsupportedPreparedView, match=r"same HTML name.*VALUE"):
         _assembled_view(
             render_prepared(Page()),
             revision=0,
@@ -1697,12 +1713,10 @@ def test_dynamic_element_browser_bindings_reject_python_attrs_but_survive_alone(
         def template_data(self, kwargs, slots):
             return {"field": "title", "draft": "browser", "seed": "server"}
 
-    with pytest.raises(UnsupportedPreparedView, match=r"dynamic-argument.*prepared Python"):
-        _assembled_view(
-            render_prepared(Mixed()),
-            revision=0,
-            tag_for_type=lambda type_key: f"c-{type_key.split('_', 1)[0].lower()}",
-        )
+    # The dynamic name may resolve to `title`, so the template is rejected
+    # when it loads.
+    with pytest.raises(SyntaxError, match="cannot be combined with 'c-title'"):
+        render_prepared(Mixed())
 
     class NativeOnly(Component):
         citry = registry
@@ -2048,12 +2062,8 @@ def test_authored_object_binding_with_python_spread_remains_rejected_until_order
         def template_data(self, kwargs, slots):
             return {"browserAttrs": {}, "server_attrs": {"title": "server"}}
 
-    with pytest.raises(UnsupportedPreparedView, match="object v-bind"):
-        _assembled_view(
-            render_prepared(Page()),
-            revision=0,
-            tag_for_type=lambda type_key: f"c-{type_key.split('_', 1)[0].lower()}",
-        )
+    with pytest.raises(SyntaxError, match="cannot be combined with 'c-bind'"):
+        render_prepared(Page())
 
 
 def test_repeated_receiver_fills_allocate_distinct_caller_bindings() -> None:
@@ -2132,6 +2142,12 @@ def test_prepared_element_key_rejects_another_authored_key(authored_key: str) ->
         def template_data(self, kwargs, slots):
             return {"browserKey": "browser", "shown": True}
 
+    # A bound key is rejected when the template loads; a static one while
+    # the page is assembled.
+    if authored_key.startswith(":"):
+        with pytest.raises(SyntaxError, match="sets the same attribute as '#c-key'"):
+            render_prepared(Page())
+        return
     rendered = render_prepared(Page())
     with pytest.raises(UnsupportedPreparedView, match="conflicts with another authored key"):
         _assembled_view(

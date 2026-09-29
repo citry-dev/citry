@@ -116,6 +116,11 @@ Upgrading from 0.5.x? Follow
   built in Python that spells a Vue binding, such as `c-:title` or a
   `c-bind` key like `":title"` or `"@click"`, raises an error in an
   interactive component.
+- **Breaking:** an attribute set both from Python and by Vue on one
+  element, such as `c-title` together with `:title`, fails when the
+  template loads. A `:class` or `:style` is the exception: it joins the
+  element's `class` and `c-class`, or `style` and `c-style`, as it does in
+  Vue.
 - **Breaking:** a listener written as a single statement without a `;`,
   such as `@click="if (ok) save()"`, stops the render with a Vue compile
   error. Add the `;`: `@click="if (ok) save();"`.

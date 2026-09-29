@@ -47,6 +47,48 @@ def include_prepared_attribute(value: object) -> bool:
     return value is not None and value is not False
 
 
+# Vue's `mergeProps` joins a bound `class` with every other class on the
+# element and combines a bound `style` with every other style, so a value
+# Python computed for one of these names (`c-class`, `c-style`, or a `c-bind`
+# key) is kept beside the binding, exactly like a static `class` or `style`.
+# A modifier such as `.prop` makes Vue set the DOM property instead, which
+# replaces the Python value, so only these spellings merge.
+_VUE_MERGED_BINDINGS = frozenset({":class", "v-bind:class", ":style", "v-bind:style"})
+
+
+def conflicting_attribute_targets(source_targets: Mapping[str, str], data_targets: Mapping[str, str]) -> list[str]:
+    """
+    Return the HTML names that an authored Vue attribute and a Python-computed value both set.
+
+    Both mappings go from an attribute's HTML identity to the name as written.
+    A Python value would silently lose to, or override, a Vue binding for the
+    same name, so the caller rejects each returned name. A bound `class` or
+    `style` is left out because Vue merges it with the Python value.
+    """
+    return sorted(
+        identity
+        for identity in source_targets.keys() & data_targets.keys()
+        if source_targets[identity] not in _VUE_MERGED_BINDINGS
+    )
+
+
+def prepared_spread_index(authored_attrs: Iterable[object]) -> int | None:
+    """
+    Return where the Python-computed attributes' `v-bind` goes among an element's authored attributes.
+
+    `mergeProps` lets a later `style` declaration win, so the Python values
+    go right before the first authored `:class` or `:style`: a `c-style`
+    then behaves like a static `style` that the Vue binding overrides, and a
+    `c-class` lists its classes first, as a static `class` does. None means
+    after every authored attribute, where it goes when neither binding is
+    present.
+    """
+    for index, attribute in enumerate(authored_attrs):
+        if _attribute_name_and_value(attribute)[0] in _VUE_MERGED_BINDINGS:
+            return index
+    return None
+
+
 VUE_OWNED_NATIVE_DIRECTIVE = "v-citry-vue-owned"
 _NATIVE_PROPERTIES = frozenset({"value", "checked", "selected"})
 

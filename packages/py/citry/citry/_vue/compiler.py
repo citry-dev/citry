@@ -20,6 +20,7 @@ from citry_core import _rust
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
+from .capture import prepared_spread_index
 from .prepared import (
     ComponentCall,
     ElementClose,
@@ -1317,7 +1318,12 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 start = byte_position
                 attrs = list(node.authored_attrs)
                 if node.attrs_binding_key is not None:
-                    attrs.append(f'v-bind="$citryPrepared.{node.attrs_binding_key}"')
+                    spread = f'v-bind="$citryPrepared.{node.attrs_binding_key}"'
+                    spread_index = prepared_spread_index(node.authored_attrs)
+                    if spread_index is None:
+                        attrs.append(spread)
+                    else:
+                        attrs.insert(spread_index, spread)
                 if node.key_binding_key is not None:
                     attrs.append(f':key="$citryPrepared.{node.key_binding_key}"')
                 # Keep the compatibility composer on the same native-state

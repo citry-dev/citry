@@ -51,10 +51,12 @@ from .capture import (
     PreparedTextValue,
     PreparedVerbatimHtmlNode,
     _reject_executable_dynamic_attrs,
+    conflicting_attribute_targets,
     format_prepared_element_attrs,
     include_prepared_attribute,
     is_native_state_tag,
     is_vue_directive_name,
+    prepared_spread_index,
     vue_owned_native_marker,
     vue_owned_native_properties,
     vue_render_active,
@@ -2707,7 +2709,13 @@ class _Compiler:
             self.has_data_ops = True
             attrs_key = f"citryAttrs{self.attrs_index}"
             self.attrs_index += 1
-            attrs.append(f'v-bind="$citryPrepared.{attrs_key}"')
+            # Authored attributes lead `attrs`, so their index is valid here.
+            spread_index = prepared_spread_index(authored_attrs)
+            spread = f'v-bind="$citryPrepared.{attrs_key}"'
+            if spread_index is None:
+                attrs.append(spread)
+            else:
+                attrs.insert(spread_index, spread)
         if node.element_metadata and any(item and item[0] == "key" for item in node.element_metadata):
             if self.in_loop:
                 self.safe_body = False
@@ -3226,9 +3234,9 @@ def _validate_open(value: PreparedElementOpen) -> str | None:
     metadata = dict(value.element_metadata)
     if "key" in metadata and ("key" in source_targets or "key" in data_targets):
         return "prepared #c-key conflicts with another authored key"
-    conflict = source_targets.keys() & data_targets.keys()
+    conflict = conflicting_attribute_targets(source_targets, data_targets)
     if conflict:
-        names = [f"{source_targets[identity]!r} / {data_targets[identity]!r}" for identity in sorted(conflict)]
+        names = [f"{source_targets[identity]!r} / {data_targets[identity]!r}" for identity in conflict]
         return f"authored Vue and prepared Python attributes target the same HTML name: {names!r}"
     dynamic_bindings = [
         attr.name for attr in value.attrs if attr.origin == "source" and attr.name.startswith((":[", "v-bind:["))

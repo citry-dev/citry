@@ -39,12 +39,14 @@ from .capture import (
     PreparedTrustedHtmlValue,
     PreparedVerbatimHtml,
     StaticRunOpening,
+    conflicting_attribute_targets,
     format_prepared_element_attrs,
     is_authenticated_browser_binding,
     is_authenticated_dynamic_element_open,
     is_ignored_element_open,
     is_native_state_tag,
     is_vue_directive_name,
+    prepared_spread_index,
     vue_owned_native_marker,
     vue_owned_native_properties,
 )
@@ -2163,12 +2165,9 @@ def assemble_typed_render(
                     element_metadata = dict(part.element_metadata)
                     if "key" in element_metadata and ("key" in source_targets or "key" in data_targets):
                         raise UnsupportedPreparedView("prepared #c-key conflicts with another authored key")
-                    conflict = source_targets.keys() & data_targets.keys()
+                    conflict = conflicting_attribute_targets(source_targets, data_targets)
                     if conflict:
-                        names = [
-                            f"{source_targets[identity]!r} / {data_targets[identity]!r}"
-                            for identity in sorted(conflict)
-                        ]
+                        names = [f"{source_targets[identity]!r} / {data_targets[identity]!r}" for identity in conflict]
                         raise UnsupportedPreparedView(
                             f"authored Vue and prepared Python attributes target the same HTML name: {names!r}"
                         )
@@ -2259,12 +2258,9 @@ def assemble_typed_render(
                     if part.key is not None:
                         effective_dynamic_attrs.pop("data-citry-key", None)
                     data_targets = {_html_attr_identity(name): name for name in effective_dynamic_attrs}
-                    conflict = source_targets.keys() & data_targets.keys()
+                    conflict = conflicting_attribute_targets(source_targets, data_targets)
                     if conflict:
-                        names = [
-                            f"{source_targets[identity]!r} / {data_targets[identity]!r}"
-                            for identity in sorted(conflict)
-                        ]
+                        names = [f"{source_targets[identity]!r} / {data_targets[identity]!r}" for identity in conflict]
                         raise UnsupportedPreparedView(
                             f"authored Vue and prepared Python attributes target the same HTML name: {names!r}"
                         )
@@ -2318,7 +2314,13 @@ def assemble_typed_render(
                     _register_dynamic_binding_data(data_values, part)
                     start = output.byte_length
                     output.append(f"<{alias}")
-                    for attr in part.authored_attrs:
+                    # The Python values go before an authored `:class` or
+                    # `:style` (see `prepared_spread_index`), and otherwise
+                    # after every authored attribute, beside the marker below.
+                    spread_index = prepared_spread_index(attr.value for attr in part.authored_attrs)
+                    for index, attr in enumerate(part.authored_attrs):
+                        if index == spread_index:
+                            output.append(f' v-bind="$citryPrepared.{attrs_key}"')
                         output.append(f" {attr.value}")
                     # A native form control marks which of its properties an
                     # authored or Python binding owns, so the browser keeps a
@@ -2335,7 +2337,8 @@ def assemble_typed_render(
                         if is_native_state_tag(part.tag)
                         else ""
                     )
-                    output.append(f' v-bind="$citryPrepared.{attrs_key}"')
+                    if spread_index is None:
+                        output.append(f' v-bind="$citryPrepared.{attrs_key}"')
                     if native_marker:
                         output.append(f" {native_marker}")
                     key_key = None
@@ -3085,7 +3088,12 @@ def _append_element_open(
     if native_marker:
         attrs.append(native_marker)
     if attrs_binding_key is not None:
-        attrs.append(f'v-bind="$citryPrepared.{attrs_binding_key}"')
+        spread = f'v-bind="$citryPrepared.{attrs_binding_key}"'
+        index = prepared_spread_index(part.authored_attrs)
+        if index is None:
+            attrs.append(spread)
+        else:
+            attrs.insert(index, spread)
     if key_binding_key is not None:
         attrs.append(f':key="$citryPrepared.{key_binding_key}"')
     # Reactive projections own their checked destinations after the static

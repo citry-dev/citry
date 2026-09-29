@@ -221,6 +221,62 @@ mod tests {
     }
 
     #[test]
+    fn a_vue_binding_and_a_python_value_for_one_attribute_are_rejected() {
+        assert_parse_error(
+            r#"<p c-title="label" :title="hint">x</p>"#,
+            "':title' on <p> (line 1, column 20) sets the same attribute as 'c-title'. Set the attribute in one place: keep 'c-title' when Python decides the value, or keep ':title' and send the value to the browser with js_data().",
+        );
+        for (input, expected) in [
+            (
+                r#"<p v-bind:TITLE="hint" c-title="label">x</p>"#,
+                "'v-bind:TITLE' on <p>",
+            ),
+            (
+                r#"<c-element c-is="'p'" c-id="a" :id="b" />"#,
+                "':id' on <c-element>",
+            ),
+            (
+                r#"<li v-for="item in items" #c-key="k" :key="item.id">x</li>"#,
+                "Keep '#c-key' to key the element from Python, or remove it and keep ':key'.",
+            ),
+            (
+                r#"<p c-class="a" :class.prop="b">x</p>"#,
+                "Remove the modifier and write ':class', which Vue joins with 'c-class'.",
+            ),
+        ] {
+            assert_parse_error(input, expected);
+        }
+        // An object `v-bind` or a dynamic name may set any attribute.
+        for (input, expected) in [
+            (
+                r#"<p v-bind="attrs" c-title="t">x</p>"#,
+                "'v-bind' on <p> (line 1, column 4) may set any attribute, so it cannot be combined with 'c-title', which Python sets.",
+            ),
+            (r#"<p c-bind="d" :[name]="v">x</p>"#, "':[name]' on <p>"),
+            (r#"<p #c-key="k" v-bind:[name]="v">x</p>"#, "'#c-key'"),
+            (
+                r#"<c-element c-is="'p'" v-bind="attrs" c-id="i" />"#,
+                "cannot be combined with 'c-id'",
+            ),
+        ] {
+            assert_parse_error(input, expected);
+        }
+        // Vue joins a bound class or style with the Python one, a component
+        // tag's `c-*` attributes are Python inputs rather than attributes,
+        // and a structural `c-if` or `c-is` sets no attribute.
+        for input in [
+            r#"<p c-class="a" :class="b" c-style="c" v-bind:style="d">x</p>"#,
+            r#"<c-Card c-title="a" :title="b" />"#,
+            r#"<p title="a" :title="b">x</p>"#,
+            r#"<p v-bind="attrs" class="a" c-if="ok">x</p>"#,
+            r#"<c-element c-is="'p'" v-bind="attrs" />"#,
+            r#"<c-Card v-bind="props" c-title="a" />"#,
+        ] {
+            parse_template(input, None, None).unwrap();
+        }
+    }
+
+    #[test]
     fn alpine_only_listener_modifiers_are_rejected_with_the_vue_form() {
         assert_parse_error(
             r#"<div @click.outside="open = false;">x</div>"#,

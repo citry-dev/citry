@@ -26,7 +26,10 @@ pytestmark = pytest.mark.e2e
 
 # Walk the Vue host in document order and describe what a user can observe.
 # Two things differ by design and are left out: the shell marker
-# (data-allow-mismatch, only on the hydrated side) and data-cid-* ids.
+# (data-allow-mismatch, only on the hydrated side) and data-cid-* ids. A style
+# is described by the declarations the browser read from it, because the
+# server writes the text Vue's server renderer writes while a client mount
+# leaves the browser's own spelling of the same declarations.
 # Empty text nodes are skipped: a client mount marks where a list or fragment
 # starts and ends with empty text nodes, while hydration keeps the server's
 # comment nodes in those places.
@@ -43,7 +46,7 @@ _HOST_FACTS_JS = """() => {
       tag: node.tagName.toLowerCase(),
       attrs: [...node.attributes]
         .filter(attr => attr.name !== 'data-allow-mismatch' && !attr.name.startsWith('data-cid-'))
-        .map(attr => [attr.name, attr.value])
+        .map(attr => [attr.name, attr.name === 'style' ? node.style.cssText : attr.value])
         .sort(([a], [b]) => a.localeCompare(b)),
       checked: 'checked' in node ? node.checked : null,
       value: 'value' in node && typeof node.value === 'string' ? node.value : null,
@@ -701,3 +704,104 @@ def test_input_shape_hydrates_with_client_mount_parity(
         # the browser-side initial value must reach the hydrated page.
         expected = ["true", "block"] if case == "vue-state-true" else ["false", "none"]
         assert result["initial_toggle"] == expected
+
+
+def _merged_bindings_board(engine: Citry) -> type[Component]:
+    """Build a page whose elements join a bound class or style with a static or Python one."""
+
+    class Board(Component):
+        citry = engine
+        template = """
+<main>
+  <p
+    id="known"
+    class="card"
+    c-class="{'card--python': True}"
+    :class="{ 'card--done': done }"
+    c-style="'color: red; font-weight: normal'"
+    :style="{ fontWeight: weight }"
+  >known</p>
+  <ul id="items">
+    <li
+      v-for="item in items"
+      :key="item.id"
+      class="item"
+      :class="{ 'item--dragging': dragging === item.id }"
+      style="margin: 0"
+      :style="{ opacity: dragging === item.id ? 0.5 : 1 }"
+      v-show="item.shown"
+      @click="dragging = item.id"
+      v-text="item.label"
+    ></li>
+  </ul>
+  <button
+    type="button"
+    id="reverse"
+    @click="items.reverse()"
+  >Reverse</button>
+</main>
+"""
+
+        def js_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {
+                "done": True,
+                "weight": "bold",
+                "items": [
+                    {"id": 1, "label": "one", "shown": True},
+                    {"id": 2, "label": "two", "shown": False},
+                    {"id": 3, "label": "three", "shown": True},
+                ],
+            }
+
+        js = """
+$component({data(){return {dragging: null};}});
+"""
+
+    return Board
+
+
+def _drag_and_reverse(page: Any) -> list[Any]:
+    """Mark the first item, reverse the list, and report each item's classes and style."""
+    page.click("#items > li:first-child")
+    page.click("#reverse")
+    return page.evaluate(
+        """() => [...document.querySelectorAll('#items > li')].map(item =>
+          [item.textContent, item.className, item.style.opacity, getComputedStyle(item).display])"""
+    )
+
+
+def test_bound_class_and_style_merge_with_static_and_python_values_on_hydration(
+    page: Any, browser: Any, serve_document: Any, monkeypatch: Any
+) -> None:
+    engine = Citry(autodiscover=False)
+
+    result = _compare_with_client_mount(
+        _merged_bindings_board(engine)(),
+        page=page,
+        browser=browser,
+        serve_document=serve_document,
+        monkeypatch=monkeypatch,
+        interact=_drag_and_reverse,
+    )
+
+    # The paragraph's values are all known to the server, so it is adopted as
+    # written, with every class and the bound style after Python's.
+    assert (
+        '<p id="known" class="card card--python card--done" '
+        'style="color:red;font-weight:normal;font-weight:bold;">known</p>'
+    ) in result["html"]
+    # `dragging` lives in data(), so Vue builds the list, whose served HTML
+    # already showed each item's static class and style.
+    assert [(item.code, item.shell_tag) for item in result["admission"].declines] == [("browser-value", "ul")]
+    served = page.evaluate("window.__servedShellContents.map(item => [item.className, item.getAttribute('style')])")
+    assert served == [["item", "margin:0;"], ["item", "margin:0;display: none;"], ["item", "margin:0;"]]
+    # Each item keeps its own key: after reversing, the marked item moved with
+    # its classes, and the hidden item stayed hidden.
+    assert page.evaluate(
+        """() => [...document.querySelectorAll('#items > li')].map(item =>
+          [item.textContent, item.className, getComputedStyle(item).display])"""
+    ) == [
+        ["three", "item", "list-item"],
+        ["two", "item", "none"],
+        ["one", "item item--dragging", "list-item"],
+    ]

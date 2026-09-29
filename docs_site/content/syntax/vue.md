@@ -121,6 +121,42 @@ that value on every item instead of the loop value, and nothing fails. When
 Vue needs the value too, such as for a `v-show` that changes later, send it
 to the browser with `js_data()` or loop with Vue's `v-for` instead.
 
+## Add browser classes to a class from the template or Python
+
+A `:class` binding adds to the element's other classes instead of
+replacing them. Vue joins it with a static `class`, and Citry joins it
+with a `c-class` the same way:
+
+```citry-html
+<article
+  class="card"
+  c-class="{'card--done': task.completed}"
+  :class="{ 'card--dragging': dragging }"
+>
+  ...
+</article>
+```
+
+The card first shows `card card--done`, and Vue adds `card--dragging`
+while `dragging` is true. The classes from `class` and `c-class` come
+first. `:style` works the same way with `style` and `c-style`, and the
+bound style is applied last, so it wins for a property both set.
+
+Any other attribute has one owner. Setting the same attribute from Python
+and from Vue, such as `c-title` together with `:title`, fails when the
+template loads, and `citry check` reports it:
+
+```citry-html
+<!-- Fails: Python and Vue both set `title`. -->
+<a c-title="label" :title="hint">...</a>
+
+<!-- Python decides the title. -->
+<a c-title="label">...</a>
+```
+
+To let the browser change the title later, keep `:title` and send the
+starting value with `js_data()`.
+
 ## Seed Vue state from Python
 
 Return JSON-serializable values from

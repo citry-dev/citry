@@ -443,6 +443,20 @@ the other dead configuration. The accumulating `class` / `c-class` and `style`
 / `c-style` pairs are the exception on HTML elements because both contributions
 are preserved and merged.
 
+The same rule covers a Vue binding and a Python value for one attribute on an
+HTML element or `<c-element>`: `c-title` together with `:title` (or
+`v-bind:title`), and `#c-key` together with `:key`, fail at parse time. Python
+computes the `c-*` value while rendering and Vue then applies its binding on
+top, so one would silently replace the other. `:class` and `:style` without
+modifiers are the exception: Vue joins a bound class with every other class on
+the element and combines a bound style with every other style, exactly as it
+does for a static `class` or `style`. A modifier such as `.prop` makes Vue set
+the DOM property instead, so `c-class` with `:class.prop` is rejected. A
+component tag is exempt, because there `c-title` is a Python input and
+`:title` a Vue prop. A `c-bind` key and a dynamic binding name (`:[name]`) are
+only known while rendering, where the same conflict stops rendering with an
+error.
+
 `c-bind` is repeatable and may coexist with an explicit provider. A spread may
 or may not contain the logical key at render time, so its contributions resolve
 in source order. The directive does not clash with a literal `bind` attribute

@@ -1651,6 +1651,7 @@ fn validate_node(
     validate_ignored_element_contents(node, tag_stack, context)?;
     validate_vue_listener_modifiers(node, context)?;
     validate_element_once_memo(node, context)?;
+    validate_vue_binding_python_conflicts(node, context)?;
     validate_attribute_conflicts(node, context)?;
     validate_attribute_values(node, context)?;
     validate_fill_names(node, fill_nodes, context)?;
@@ -2129,6 +2130,121 @@ fn validate_element_once_memo(node: &Node, context: &ParserContext) -> Result<()
                 node.tag_name(),
                 component_tag_directive_hint(directive),
                 META_ATTR_IGNORE
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// The attribute a Vue binding (`:name` or `v-bind:name`) sets, and whether
+/// it carries modifiers such as `.prop`. `None` for anything else, including
+/// a dynamic name (`:[name]`), which cannot be compared when the template
+/// loads.
+fn vue_bound_attribute(name: &str) -> Option<(&str, bool)> {
+    let rest = name
+        .strip_prefix("v-bind:")
+        .or_else(|| name.strip_prefix(':'))?;
+    if rest.is_empty() || rest.starts_with('[') {
+        return None;
+    }
+    Some(match rest.split_once('.') {
+        Some((target, _)) => (target, true),
+        None => (rest, false),
+    })
+}
+
+/// Reject a Python value and a Vue binding that set the same attribute on one
+/// element.
+///
+/// On an HTML element Python computes a `c-*` attribute while rendering, and
+/// Vue then applies the element's bindings on top, so a `:title` would
+/// silently replace a `c-title` (and a `:key` would compete with `#c-key` for
+/// the element's identity). Rendering stops with an error in that case, so
+/// the template is rejected when it loads, where `citry check` and the editor
+/// report it too. A `:class` or `:style` without modifiers is the exception:
+/// Vue joins it with the Python value exactly as it joins a static `class`
+/// or `style`. A component tag is exempt, because its `c-*` attributes are
+/// Python inputs and its bindings are Vue props.
+fn validate_vue_binding_python_conflicts(
+    node: &Node,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    if has_citry_component_prefix(tag_name) && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+        return Ok(());
+    }
+    let attrs = node.attrs();
+    for binding in attrs {
+        let Some((target, has_modifiers)) = vue_bound_attribute(&binding.key.content) else {
+            continue;
+        };
+        let target = target.to_ascii_lowercase();
+        if !has_modifiers && matches!(target.as_str(), "class" | "style") {
+            continue;
+        }
+        let python = attrs.iter().find(|attr| {
+            let name = attr.key.content.as_str();
+            if target == "key" && name == META_ATTR_KEY {
+                return true;
+            }
+            matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template)
+                && name
+                    .strip_prefix("c-")
+                    .is_some_and(|rest| rest.eq_ignore_ascii_case(&target))
+        });
+        let Some(python) = python else {
+            continue;
+        };
+        let (line, col) = binding.token.line_col;
+        let python_name = &python.key.content;
+        let binding_name = &binding.key.content;
+        let fix = if target == "key" {
+            format!(
+                "Keep '{python_name}' to key the element from Python, or remove it and keep '{binding_name}'."
+            )
+        } else if matches!(target.as_str(), "class" | "style") {
+            format!(
+                "Remove the modifier and write ':{target}', which Vue joins with '{python_name}'."
+            )
+        } else {
+            format!(
+                "Set the attribute in one place: keep '{python_name}' when Python decides the value, or keep '{binding_name}' and send the value to the browser with js_data()."
+            )
+        };
+        return Err(context.error_from_token(
+            &binding.token,
+            format!(
+                "'{binding_name}' on <{tag_name}> (line {line}, column {col}) sets the same attribute as '{python_name}'. {fix}"
+            ),
+        ));
+    }
+    // An object `v-bind="..."` or a dynamic name (`:[name]`) may set any
+    // attribute, including one a Python value sets, and which ones is only
+    // known in the browser. Rendering refuses the combination, so it is
+    // reported here as well.
+    let open_binding = attrs.iter().find(|attr| {
+        let name = attr.key.content.as_str();
+        name == "v-bind" || name.starts_with(":[") || name.starts_with("v-bind:[")
+    });
+    let python = attrs.iter().find(|attr| {
+        let name = attr.key.content.as_str();
+        let control_flow = CONTROL_FLOW_GROUPS
+            .iter()
+            .any(|group| group.contains(&name));
+        name == C_BIND_ATTR
+            || name == META_ATTR_KEY
+            || (matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template)
+                && name.starts_with("c-")
+                && !control_flow
+                && name != "c-is")
+    });
+    if let (Some(binding), Some(python)) = (open_binding, python) {
+        let (line, col) = binding.token.line_col;
+        return Err(context.error_from_token(
+            &binding.token,
+            format!(
+                "'{}' on <{tag_name}> (line {line}, column {col}) may set any attribute, so it cannot be combined with '{}', which Python sets. Bind each attribute Vue owns by name, such as ':title', or compute every attribute in Python.",
+                binding.key.content, python.key.content
             ),
         ));
     }

@@ -2226,12 +2226,9 @@ def test_dynamic_element_uses_evaluated_key_as_occurrence_data() -> None:
         def js_data(self, kwargs, slots):
             return {"browserKey": "browser"}
 
-    with pytest.raises(UnsupportedPreparedView, match="#c-key conflicts"):
-        assemble_typed_render(
-            render_prepared_direct(Conflict()),
-            revision=0,
-            tag_for_type=lambda key: "x-" + key.lower().replace("_", "-"),
-        )
+    # Two keys for one element are rejected when the template loads.
+    with pytest.raises(SyntaxError, match="sets the same attribute as '#c-key'"):
+        render_prepared_direct(Conflict())
 
 
 def test_dynamic_element_still_rejects_c_ignore() -> None:
@@ -2307,14 +2304,12 @@ def test_evaluated_key_conflicts_with_unbounded_vue_attribute_targets(binding: s
         def js_data(self, kwargs, slots):
             return {"attrs": {}, "name": "title", "value": "browser"}
 
-    expected = "object v-bind" if binding.startswith("v-bind=") else "dynamic-argument"
+    # The binding may set any attribute, so the template is rejected when it
+    # loads, before Python evaluates the key.
+    expected = "may set any attribute, so it cannot be combined with '#c-key'"
     for component in (Ordinary(), Dynamic()):
-        with pytest.raises(UnsupportedPreparedView, match=expected):
-            assemble_typed_render(
-                render_prepared_direct(component),
-                revision=0,
-                tag_for_type=lambda key: "x-" + key.lower().replace("_", "-"),
-            )
+        with pytest.raises(SyntaxError, match=expected):
+            render_prepared_direct(component)
 
 
 def test_ordinary_object_binding_without_a_prepared_key_remains_supported() -> None:
@@ -2339,9 +2334,11 @@ def test_ordinary_object_binding_without_a_prepared_key_remains_supported() -> N
 def test_dynamic_element_rejects_source_data_target_collision_and_executable_spread() -> None:
     registry = Citry(autodiscover=False)
 
+    # A written `c-title` beside `:title` is rejected when the template
+    # loads; a `c-bind` key is only known while rendering.
     class Collision(Component):
         citry = registry
-        template = '<c-element c-is="tag" :title="label" c-title="title" />'
+        template = """<c-element c-is="tag" :title="label" c-bind="{'title': title}" />"""
 
         def template_data(self, kwargs, slots):
             return {"tag": "section", "title": "server"}
