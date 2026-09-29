@@ -30,6 +30,9 @@ if TYPE_CHECKING:
 # type annotation, so the allowed set can be derived from it for validation.
 Mode = Literal["production", "development"]
 _ALLOWED_MODES: tuple[str, ...] = get_args(Mode)
+# 64 MiB: room for thousands of typical compiled components and stylesheets,
+# so an ordinary app never drops one an open page still needs.
+DEFAULT_VUE_ASSET_MAX_BYTES = 64 * 1024 * 1024
 LintSeverity = Literal["ignore", "warning", "error"]
 _ALLOWED_LINT_SEVERITIES: tuple[str, ...] = get_args(LintSeverity)
 SecurityCspMode = Literal["off", "warn", "strict"]
@@ -364,6 +367,19 @@ class CitrySettings:
             its server HTML. Must be a non-negative ``int``:
             another type raises ``TypeError`` and a negative value raises
             ``ValueError`` when the settings are created.
+        vue_asset_max_bytes: How many bytes of compiled component code and
+            stylesheets for interactive pages each process keeps in memory
+            when ``cache`` is not set. Interactive pages load these files by
+            URL, possibly long after the page was rendered. When the total
+            grows past this limit, the files used longest ago are dropped,
+            and a page that is still open gets a 404 if it later asks for
+            one of them. The default, 64 MiB, is far more than an ordinary
+            app needs. ``None`` removes the limit. When ``cache`` is set, the
+            files are stored there instead, and the backend's own capacity
+            and eviction apply, so this setting has no effect. Must be a
+            positive ``int`` or ``None``: another type raises ``TypeError``
+            and zero or a negative value raises ``ValueError`` when the
+            settings are created.
         id_generator: A function returning the per-render id stamped on each
             component instance (``component.id``; static output also writes it
             into each component root's ``data-cid-<id>`` attribute). Given as
@@ -423,6 +439,7 @@ class CitrySettings:
     security_script_integrity: SecurityScriptIntegrityMode = "off"
     ssr: bool = True
     ssr_element_threshold: int = 0
+    vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES
 
     def __post_init__(self) -> None:
         # Copy every input into its immutable stored shape, so a direct
@@ -451,6 +468,15 @@ class CitrySettings:
             )
         if self.ssr_element_threshold < 0:
             raise ValueError(f"Citry ssr_element_threshold must be 0 or greater, got {self.ssr_element_threshold}.")
+        # The limit is a byte count; an exact int check keeps True/False and
+        # floats out, and a limit of zero would drop every file on arrival.
+        if self.vue_asset_max_bytes is not None:
+            if type(self.vue_asset_max_bytes) is not int:
+                raise TypeError(
+                    f"Citry vue_asset_max_bytes must be an int or None, got {type(self.vue_asset_max_bytes).__name__}."
+                )
+            if self.vue_asset_max_bytes <= 0:
+                raise ValueError(f"Citry vue_asset_max_bytes must be greater than 0, got {self.vue_asset_max_bytes}.")
 
         # Extensions are copied into a tuple of their own.
         object.__setattr__(self, "extensions", tuple(self.extensions))

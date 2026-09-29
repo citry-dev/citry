@@ -127,6 +127,7 @@ from citry._vue.serialization import (
     analyze_vue_serialization,
     prepare_vue_serialization,
 )
+from citry.cache import InMemoryCache
 from citry.citry_context import CitryContext
 from citry.citry_render import (
     CitryRender,
@@ -1943,7 +1944,8 @@ def test_direct_relationship_helpers_cover_session_and_slot_execution_boundaries
 
 def test_vue_events_cache_collision_eviction_and_collected_engine_are_explicit() -> None:
     """Content-addressed assets reject collisions, keep a bounded local copy, and fall back to the cache."""
-    app = Citry(autodiscover=False)
+    # A configured backend holds every asset; the process keeps only recent ones.
+    app = Citry(autodiscover=False, cache=InMemoryCache())
     producer = default_events_producer(app)
 
     def digest(content: bytes) -> str:
@@ -1952,10 +1954,10 @@ def test_vue_events_cache_collision_eviction_and_collected_engine_are_explicit()
         return hashlib.sha256(content).hexdigest()
 
     cases = (
-        ("definition", producer._publish_bundle, vue_events.definition_bundle, vue_events._BUNDLES, "bundle"),
-        ("style", producer._publish_style, vue_events.style_asset, vue_events._STYLE_ASSETS, "stylesheet asset"),
+        ("definition", producer._publish_bundle, vue_events.definition_bundle, "bundle"),
+        ("style", producer._publish_style, vue_events.style_asset, "stylesheet asset"),
     )
-    for kind, publish, load, store, label in cases:
+    for kind, publish, load, label in cases:
         # A digest reused for different bytes is a collision, whichever bytes are real.
         first = f"{kind}-first".encode()
         publish(digest(first), first)
@@ -1965,19 +1967,19 @@ def test_vue_events_cache_collision_eviction_and_collected_engine_are_explicit()
         contents = [f"{kind}-{index}".encode() for index in range(vue_events._LOCAL_ASSET_LIMIT + 2)]
         for content in contents:
             publish(digest(content), content)
-        local = store[app]
+        local = vue_events._LOCAL_ASSETS[app]
         # This process keeps only the newest assets in memory ...
         assert len(local) == vue_events._LOCAL_ASSET_LIMIT
-        assert digest(contents[0]) not in local
-        assert local[digest(contents[-1])] == contents[-1]
+        assert (kind, digest(contents[0])) not in local
+        assert local.entries[(kind, digest(contents[-1]))] == contents[-1]
         # ... while the engine's cache still serves an evicted one, which
         # then returns to the local map without growing it past the limit.
         assert load(app, digest(contents[0])) == contents[0]
-        assert digest(contents[0]) in local
+        assert (kind, digest(contents[0])) in local
         assert len(local) == vue_events._LOCAL_ASSET_LIMIT
         # Once the cache loses it too, the asset is gone (the route's 404).
         evicted = contents[2]
-        assert digest(evicted) not in local
+        assert (kind, digest(evicted)) not in local
         app.cache.delete(vue_events._asset_cache_key(kind, digest(evicted)))
         assert load(app, digest(evicted)) is None
 

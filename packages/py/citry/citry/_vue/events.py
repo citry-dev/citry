@@ -14,6 +14,7 @@ from citry._vue.capture import render_prepared_direct, render_prepared_marker_re
 from citry._vue.compiler import HELPER_CONTRACT, CompiledRender, NativeCompiler
 from citry._vue.direct_capture import Assembly, assemble_typed_render
 from citry._vue.protocol import DefinitionAsset, prepared_manifest, revision_envelope
+from citry.cache import _forget_stored_key, _store_if_missing
 from citry.citry import Citry
 from citry.citry_element import CitryElement
 from citry.component import Component, ComponentMeta
@@ -36,12 +37,13 @@ if TYPE_CHECKING:
 
 
 # A page links compiled definitions and stylesheets by digest, and the browser
-# may fetch them from any worker. These per-process maps only save a cache
-# round trip for recent assets; the engine's configured cache backend is where
-# every worker that shares it finds them (see ``_store_asset``).
-_BUNDLES: WeakKeyDictionary[Citry, OrderedDict[str, bytes]] = WeakKeyDictionary()
-_STYLE_ASSETS: WeakKeyDictionary[Citry, OrderedDict[str, bytes]] = WeakKeyDictionary()
-# How many recent assets each process keeps in memory per engine.
+# may ask for them long after the render. Each engine keeps them in this
+# process in ``_LOCAL_ASSETS`` (see ``_LocalAssets``). When the engine was
+# given a cache backend, that backend is where every worker sharing it finds
+# them, and the local copies only save a round trip (see ``_store_asset``).
+_LOCAL_ASSETS: WeakKeyDictionary[Citry, _LocalAssets] = WeakKeyDictionary()
+# How many recent assets each process keeps in memory per engine when the
+# engine has a cache backend, which holds the full set.
 _LOCAL_ASSET_LIMIT = 128
 # The asset name each kind uses in its collision error message.
 _ASSET_LABELS = {"definition": "definition bundle", "style": "stylesheet asset"}
@@ -126,67 +128,117 @@ def _asset_cache_key(kind: str, digest: str) -> str:
     return f"citry:vue-{kind}:{digest}"
 
 
-def _remember_locally(local: OrderedDict[str, bytes], digest: str, content: bytes, kind: str) -> None:
-    """Keep one asset in this process's bounded map, rejecting a digest reused for other bytes."""
+class _LocalAssets:
+    """
+    One engine's compiled Vue assets held in this process, dropping the ones used longest ago.
+
+    Which limit applies depends on where else the assets live. When the
+    engine has no configured cache, this map is the only place they are kept,
+    so it holds up to ``CitrySettings.vue_asset_max_bytes`` bytes. When it has
+    one, the backend holds every asset and this map keeps only the
+    ``_LOCAL_ASSET_LIMIT`` most recent.
+    """
+
+    def __init__(self) -> None:
+        # (kind, digest) -> bytes. Order is recency: the front was used longest ago.
+        self.entries: OrderedDict[tuple[str, str], bytes] = OrderedDict()
+        self.total_bytes = 0
+
+    def __len__(self) -> int:
+        return len(self.entries)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self.entries
+
+
+def _uses_own_store(citry: Citry) -> bool:
+    """
+    Whether this engine keeps Vue assets only in this process.
+
+    With no configured cache, the engine's default in-memory cache is private
+    to this process anyway, so writing assets there would only keep a second,
+    unbounded copy. A configured backend (even an ``InMemoryCache`` shared
+    by several engines) is where other engines and workers look, so it keeps
+    receiving every asset.
+    """
+    return citry.settings.cache is None
+
+
+def _remember_locally(citry: Citry, kind: str, digest: str, content: bytes) -> None:
+    """Keep one asset in this process, rejecting a digest reused for other bytes, then apply the limit."""
+    own_store = _uses_own_store(citry)
+    byte_limit = citry.settings.vue_asset_max_bytes if own_store else None
+    entry_limit = None if own_store else _LOCAL_ASSET_LIMIT
+    key = (kind, digest)
     with _LOCAL_ASSETS_LOCK:
-        prior = local.get(digest)
+        local = _LOCAL_ASSETS.setdefault(citry, _LocalAssets())
+        prior = local.entries.get(key)
         if prior is not None and prior != content:
             raise RuntimeError(f"Vue {_ASSET_LABELS[kind]} digest collision.")
-        local[digest] = content
-        local.move_to_end(digest)
-        while len(local) > _LOCAL_ASSET_LIMIT:
-            local.popitem(last=False)
+        if prior is None:
+            local.total_bytes += len(content)
+        local.entries[key] = content
+        local.entries.move_to_end(key)
+        # The newest asset always stays, even when it alone exceeds the byte
+        # limit: the page being rendered links it right now.
+        while len(local.entries) > 1 and (
+            (entry_limit is not None and len(local.entries) > entry_limit)
+            or (byte_limit is not None and local.total_bytes > byte_limit)
+        ):
+            _, dropped = local.entries.popitem(last=False)
+            local.total_bytes -= len(dropped)
 
 
-def _store_asset(
-    citry: Citry,
-    store: WeakKeyDictionary[Citry, OrderedDict[str, bytes]],
-    kind: str,
-    digest: str,
-    content: bytes,
-) -> None:
+def _local_asset(citry: Citry, kind: str, digest: str) -> bytes | None:
+    """This process's copy of one asset, marking it as recently used."""
+    with _LOCAL_ASSETS_LOCK:
+        local = _LOCAL_ASSETS.get(citry)
+        if local is None:
+            return None
+        content = local.entries.get((kind, digest))
+        if content is not None:
+            local.entries.move_to_end((kind, digest))
+        return content
+
+
+def _store_asset(citry: Citry, kind: str, digest: str, content: bytes) -> None:
     """
-    Publish one asset before the page that links it is sent, so any worker sharing the cache can serve it.
+    Publish one asset before the page that links it is sent, so a later request for its URL finds it.
+
+    Without a configured cache, the asset stays in this process only, within
+    ``CitrySettings.vue_asset_max_bytes``. Once that limit drops an asset, an
+    open page that asks for it gets a 404.
+
+    With a configured cache, the asset is also written there, without a TTL,
+    so any worker sharing the backend can serve it and an open page can load
+    it at any later time. The backend's own capacity and eviction decide how
+    long it stays. To avoid a round trip per asset per render, this process
+    asks the backend whether it holds the asset at most once per
+    ``citry.cache._STORED_KEY_RECHECK_SECONDS``. The cost of that saving: if
+    the backend drops an asset, a process that already saw it stored writes
+    it back only on its first render after that interval, and other workers
+    answer 404 for it until then.
 
     An error from the cache backend (a lost connection, a full store) is not
     caught: it fails the render that is about to link the asset. Rendering the
     page anyway would send a link that other workers answer with 404, so a
     loud failure is the safer outcome, as it is for ``Dependencies`` files.
-
-    Every entry is written without a TTL. With the default ``InMemoryCache``,
-    which has no size limit, each distinct compiled bundle or stylesheet
-    therefore stays in memory until the process exits. The number of entries
-    grows with changes to component code (each edit produces new bytes and a
-    new digest), not with the number of requests, since every render of the
-    same code reuses the same digest. ``InMemoryCache(max_entries=...)`` or a
-    backend with its own eviction bounds it, at a cost: an open page that later
-    asks for an asset the cache has dropped gets a 404 for it.
     """
-    local = store.setdefault(citry, OrderedDict())
-    _remember_locally(local, digest, content, kind)
-    # ``has`` before ``set`` sends the (possibly large) body to a shared
-    # backend only when it is missing, including after that backend evicted
-    # it. No TTL: an open page can load a component's code at any later
-    # time, so an entry that expired would break that page. Backend errors
-    # propagate on purpose (see the docstring).
-    key = _asset_cache_key(kind, digest)
-    if not citry.cache.has(key):
-        citry.cache.set(key, content.decode())
+    _remember_locally(citry, kind, digest, content)
+    if _uses_own_store(citry):
+        return
+    _store_if_missing(citry, citry.cache, _asset_cache_key(kind, digest), content.decode)
 
 
-def _load_asset(
-    citry: Citry,
-    store: WeakKeyDictionary[Citry, OrderedDict[str, bytes]],
-    kind: str,
-    digest: str,
-) -> bytes | None:
+def _load_asset(citry: Citry, kind: str, digest: str) -> bytes | None:
     """Find one asset in this process first, then in the cache another worker may have written."""
-    local = store.get(citry)
-    if local is not None:
-        with _LOCAL_ASSETS_LOCK:
-            content = local.get(digest)
-        if content is not None:
-            return content
+    content = _local_asset(citry, kind, digest)
+    if content is not None:
+        return content
+    # Without a configured cache nothing else holds the asset: a miss here
+    # is the route's 404.
+    if _uses_own_store(citry):
+        return None
     key = _asset_cache_key(kind, digest)
     cached = citry.cache.get(key)
     if cached is None:
@@ -195,11 +247,13 @@ def _load_asset(
     # A shared backend is outside this process's control. Serve only bytes
     # that still match the digest in the URL; anything else is a miss (404),
     # and the browser's integrity check would reject those bytes anyway.
-    # Deleting the entry lets the next render that links it write it again.
+    # Deleting the entry lets the next render that links it write it again;
+    # this process forgets it saw the key stored so its own next render does.
     if hashlib.sha256(content).hexdigest() != digest:
         citry.cache.delete(key)
+        _forget_stored_key(citry, key)
         return None
-    _remember_locally(store.setdefault(citry, OrderedDict()), digest, content, kind)
+    _remember_locally(citry, kind, digest, content)
     return content
 
 
@@ -209,7 +263,7 @@ def definition_bundle(citry: Citry, digest: str) -> bytes | None:
 
     Returns ``None`` when neither this process nor the cache holds it.
     """
-    return _load_asset(citry, _BUNDLES, "definition", digest)
+    return _load_asset(citry, "definition", digest)
 
 
 def style_asset(citry: Citry, digest: str) -> bytes | None:
@@ -218,7 +272,7 @@ def style_asset(citry: Citry, digest: str) -> bytes | None:
 
     Returns ``None`` when neither this process nor the cache holds it.
     """
-    return _load_asset(citry, _STYLE_ASSETS, "style", digest)
+    return _load_asset(citry, "style", digest)
 
 
 def default_events_producer(citry: Citry) -> DirectVueEventsProducer:
@@ -251,10 +305,10 @@ def default_events_producer(citry: Citry) -> DirectVueEventsProducer:
         return app_id, base_revision + 1, base_revision, occurrence_id
 
     def publish_bundle(digest: str, content: bytes) -> None:
-        _store_asset(current(), _BUNDLES, "definition", digest, content)
+        _store_asset(current(), "definition", digest, content)
 
     def publish_style(digest: str, content: bytes) -> None:
-        _store_asset(current(), _STYLE_ASSETS, "style", digest, content)
+        _store_asset(current(), "style", digest, content)
 
     producer = DirectVueEventsProducer(
         tag_for_type=tag_for_type,

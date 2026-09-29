@@ -55,7 +55,7 @@ from citry._component_introspection import _build_component_catalog, _build_comp
 from citry._linting import _application_lint_info, _component_lint_info
 from citry.analysis import TemplateAnalysis
 from citry.autodiscovery import import_component_modules
-from citry.cache import CitryCache, InMemoryCache
+from citry.cache import CitryCache, InMemoryCache, _forget_stored_keys
 from citry.component_registry import (
     BUILTIN_COMPONENT_NAMES,
     AlreadyRegistered,
@@ -68,6 +68,7 @@ from citry.constness import ConstBodyCache
 from citry.extension import ExtensionManager
 from citry.introspection import _new_engine_id
 from citry.settings import (
+    DEFAULT_VUE_ASSET_MAX_BYTES,
     CitrySettings,
     LintSettings,
     SecurityCspMode,
@@ -169,6 +170,7 @@ class Citry:
         security_script_integrity: SecurityScriptIntegrityMode = "off",
         ssr: bool = True,
         ssr_element_threshold: int = 0,
+        vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES,
     ) -> None:
         self._engine_id = _new_engine_id()
         # CitrySettings.__post_init__ copies every field into its immutable
@@ -195,6 +197,7 @@ class Citry:
             security_script_integrity=security_script_integrity,
             ssr=ssr,
             ssr_element_threshold=ssr_element_threshold,
+            vue_asset_max_bytes=vue_asset_max_bytes,
             secret=secret,
             event_result_resolvers=event_result_resolvers,
             event_payload_codecs=event_payload_codecs,
@@ -1799,6 +1802,10 @@ class Citry:
                 cache_clear = getattr(self.cache, "clear", None)
                 if callable(cache_clear):
                     cache_clear()
+                # This engine skips re-checking keys it recently saw stored;
+                # after a wipe that memory is wrong, so the next render must
+                # write its assets again.
+                _forget_stored_keys(self)
 
     def _clear_standalone_template_cache(self) -> None:
         """Discard sources compiled against an obsolete component registry."""

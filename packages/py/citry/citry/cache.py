@@ -3,8 +3,10 @@ The pluggable cache backend.
 
 Citry stores derived content in a cache: replayable component and named-fragment
 render artifacts, the dependencies extension's processed JS/CSS scripts and
-served ``Dependencies`` files, optional server-held Events State, and the
-compiled Vue definition bundles and stylesheets that interactive pages load.
+served ``Dependencies`` files, optional server-held Events State, and, when
+a backend is configured, the compiled Vue definition bundles and stylesheets
+that interactive pages load. (Without one, each engine keeps those in its
+process, up to ``CitrySettings.vue_asset_max_bytes``.)
 The backend is pluggable so deployments with multiple processes can point all
 of them at one shared store::
 
@@ -29,7 +31,11 @@ import math
 import time
 from collections import OrderedDict
 from threading import Lock
-from typing import Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
+from weakref import WeakKeyDictionary
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _normalize_ttl(value: object, *, source: str = "ttl") -> float | None:
@@ -143,3 +149,67 @@ class InMemoryCache:
         """Drop all entries. Called by ``Citry.clear()``."""
         with self._lock:
             self._data.clear()
+
+
+# Content-addressed entries (compiled Vue code, stylesheets, served
+# ``Dependencies`` files) are written once and read many times, but the page
+# that links one is rendered again and again. Asking a shared backend "do you
+# still have it?" on every render costs one network round trip per asset per
+# render, so each process remembers which keys it has already seen stored.
+# The memory is per ``Citry`` instance (the owner below), because two engines
+# may point at different backends.
+#
+# How long a remembered key is trusted before the backend is asked again. A
+# shared backend can drop an entry (memory pressure, a manual flush), and
+# only a process that renders a page linking it can write it back. Re-asking
+# after this interval bounds how long other workers may answer 404 for it,
+# while keeping the check to one per key per interval instead of per render.
+_STORED_KEY_RECHECK_SECONDS = 60.0
+# How many keys each engine remembers. A forgotten key is only re-checked on
+# its next write, so this bounds memory without affecting correctness.
+_STORED_KEY_LIMIT = 4096
+_STORED_KEYS: WeakKeyDictionary[object, OrderedDict[str, float]] = WeakKeyDictionary()
+# Renders on several threads write through the same engine's record.
+_STORED_KEYS_LOCK = Lock()
+
+
+def _store_if_missing(owner: object, cache: CitryCache, key: str, value: Callable[[], str]) -> None:
+    """
+    Make sure ``cache`` holds ``key``, asking the backend at most once per recheck interval.
+
+    ``value`` is called only when the entry must be written, so a large body
+    is encoded and sent only then. The entry is written without a TTL: an
+    open page can ask for it at any later time. Backend errors propagate, so
+    a render never links an entry that failed to store.
+    """
+    now = time.monotonic()
+    with _STORED_KEYS_LOCK:
+        remembered = _STORED_KEYS.get(owner)
+        confirmed_at = None if remembered is None else remembered.get(key)
+    # Seen stored recently: trust it and skip the round trip.
+    if confirmed_at is not None and now - confirmed_at < _STORED_KEY_RECHECK_SECONDS:
+        return
+    # ``has`` before ``set`` sends the body only when the backend lacks it,
+    # including after the backend dropped it.
+    if not cache.has(key):
+        cache.set(key, value())
+    with _STORED_KEYS_LOCK:
+        remembered = _STORED_KEYS.setdefault(owner, OrderedDict())
+        remembered[key] = now
+        remembered.move_to_end(key)
+        while len(remembered) > _STORED_KEY_LIMIT:
+            remembered.popitem(last=False)
+
+
+def _forget_stored_key(owner: object, key: str) -> None:
+    """Make the next ``_store_if_missing`` for ``key`` ask the backend again (the entry was removed)."""
+    with _STORED_KEYS_LOCK:
+        remembered = _STORED_KEYS.get(owner)
+        if remembered is not None:
+            remembered.pop(key, None)
+
+
+def _forget_stored_keys(owner: object) -> None:
+    """Forget every key remembered for ``owner``, e.g. after ``Citry.clear()`` emptied its cache."""
+    with _STORED_KEYS_LOCK:
+        _STORED_KEYS.pop(owner, None)

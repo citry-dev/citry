@@ -217,7 +217,8 @@ interactive pages load, at `/{prefix}/ext/events/definitions/{digest}.js` and
 ## Share the cache between worker processes
 
 The worker that renders a page stores the page's per-instance variables,
-compiled component code, and stylesheets in the Citry cache. The browser then
+compiled component code, and stylesheets in the Citry cache (or, with no
+cache configured, keeps the code and stylesheets in its own memory). The browser then
 requests them by URL, and a different worker may answer. With the default
 in-memory cache, that worker has nothing stored and answers 404, so the
 page's interactive components cannot load their code or styles.
@@ -227,7 +228,10 @@ backend: DiskCache, Redis, or your Django cache through `DjangoCache` (see
 [Cache backends](/advanced/cache-backends/)). Citry writes these entries
 without an expiry, because a page that is already open can request them at
 any later time. Give the backend enough room that it does not drop them
-while such pages are still in use.
+while such pages are still in use. A single worker without a configured
+cache keeps compiled code and stylesheets in memory up to the
+`vue_asset_max_bytes` setting; see
+[Limit memory for interactive page assets](/advanced/cache-backends/#limit-memory-for-interactive-page-assets).
 
 ## URL building in a render-only process
 
