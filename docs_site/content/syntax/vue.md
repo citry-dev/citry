@@ -84,7 +84,7 @@ A few Vue features do not work in a `Component.template`:
 - `v-once` and `v-memo` make the template fail when it loads. Keep a
   value fixed by not changing it, or compute it once in `data()`. To keep
   an element's contents as the server first rendered them, use
-  [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore).
+  [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
 
 ## Keep Python and JavaScript expressions separate
 

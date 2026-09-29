@@ -12,7 +12,7 @@ from html import escape, unescape
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeGuard, TypeVar, cast
 
-from citry.attrs import _html_attr_identity, validate_html_attr_name
+from citry.attrs import _html_attr_identity, format_attrs, validate_html_attr_name
 from citry.citry_render import (
     CitryRender,
     Placeholder,
@@ -24,7 +24,7 @@ from citry.citry_render import (
 )
 from citry.client_directives import ComponentTagClientBindingKind
 from citry.components.mark import validate_mark_name
-from citry.util.html import Markup
+from citry.util.html import Markup, escape_to_str
 from citry_core.template_parser import analyze_browser_source
 
 from .capture import (
@@ -39,6 +39,7 @@ from .capture import (
     PreparedTrustedHtmlValue,
     PreparedVerbatimHtml,
     StaticRunOpening,
+    format_prepared_element_attrs,
     is_authenticated_browser_binding,
     is_authenticated_dynamic_element_open,
     is_ignored_element_open,
@@ -988,8 +989,12 @@ def assemble_typed_render(
                         f"{label} has text contents, not elements, so there is nothing to keep. Remove '#c-ignore'."
                     )
                 close_index = _ignored_element_close_index(parts, open_index)
-                html = _ignored_contents_html(opening, parts[open_index + 1 : close_index])
-                reject_cross_boundary_html(html, origin=f"The contents of {label}")
+                html = _ignored_contents_html(
+                    opening,
+                    parts[open_index + 1 : close_index],
+                    lambda class_id: citry.get_component_by_class_id(class_id).__name__,
+                )
+                reject_cross_boundary_html(html, origin=f"The HTML inside {label.removesuffix(',')}")
                 key = data_key("Opaque", opening.source, opening.span, data_owner_id)
                 projected_data_container("opaqueHtml")
                 opaque_values = data_values.setdefault("opaqueHtml", {})
@@ -1669,9 +1674,12 @@ def assemble_typed_render(
                                 child_call,
                                 f"c-{(getattr(child_class, 'name', None) or child_class.__name__).lower()}",
                             )
+                            # Quote the example so it stays valid HTML whatever the value holds.
+                            quote = "'" if '"' in component_binding.value else '"'
+                            example_value = f"{quote}{component_binding.value}{quote}"
                             move_hint = (
                                 f"Put the binding on an element inside the template of {child_class.__name__}"
-                                f' instead, for example <div {component_binding.key}="{component_binding.value}">.'
+                                f" instead, for example <div {component_binding.key}={example_value}>."
                                 f" The handler then runs on {child_class.__name__}, so declare it in"
                                 f" {child_class.__name__}.Events."
                             )
@@ -1851,7 +1859,7 @@ def assemble_typed_render(
 
                     raw_line, raw_column = _line_column(part.source, part.span[0])
                     reject_cross_boundary_html(
-                        part.html, origin=f"The <c-raw> contents at line {raw_line}, column {raw_column}"
+                        part.html, origin=f"The <c-raw> block at line {raw_line}, column {raw_column}"
                     )
                     html = mark_opaque_html(
                         part.html,
@@ -2949,7 +2957,7 @@ def _ignored_element_label(part: PreparedElementOpen) -> str:
     from citry.ext.events.bindings import _line_column  # noqa: PLC0415
 
     line, column = _line_column(part.source, part.span[0])
-    return f"'#c-ignore' on <{part.tag}> (line {line}, column {column})"
+    return f"'#c-ignore' on the <{part.tag}> element that starts at line {line}, column {column},"
 
 
 def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int) -> int:
@@ -2979,7 +2987,11 @@ def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int) -
     raise UnsupportedPreparedView(f"{_ignored_element_label(opening)} has no matching close tag in the same template")
 
 
-def _ignored_contents_html(opening: PreparedElementOpen, parts: Sequence[RenderPart]) -> str:
+def _ignored_contents_html(
+    opening: PreparedElementOpen,
+    parts: Sequence[RenderPart],
+    component_name: Callable[[str], str],
+) -> str:
     """
     Write a `#c-ignore` element's contents as HTML the browser keeps.
 
@@ -2989,10 +3001,6 @@ def _ignored_contents_html(opening: PreparedElementOpen, parts: Sequence[RenderP
     rejects what the template spells directly; this check catches what a
     Python value or a `c-bind` spread brings in at render time.
     """
-    from citry.util.html import escape_to_str  # noqa: PLC0415
-
-    from .capture import format_prepared_element_attrs  # noqa: PLC0415
-
     label = _ignored_element_label(opening)
     out: list[str] = []
 
@@ -3039,8 +3047,6 @@ def _ignored_contents_html(opening: PreparedElementOpen, parts: Sequence[RenderP
             elif isinstance(part, (PreparedElementClose, PreparedDynamicElementClose)):
                 out.append(f"</{part.tag}>")
             elif isinstance(part, PreparedDynamicElementOpen):
-                from citry.attrs import format_attrs  # noqa: PLC0415
-
                 formatted = str(format_attrs(part.attrs))
                 out.append(f"<{part.tag}{' ' + formatted if formatted else ''}>")
             elif type(part) is CitryRender and not part.frame.is_component_root and not part.frame.is_transparent_root:
@@ -3048,7 +3054,7 @@ def _ignored_contents_html(opening: PreparedElementOpen, parts: Sequence[RenderP
                 # same component, so its markup belongs to these contents.
                 visit(part.parts)
             elif isinstance(part, CitryRender) and part.frame.class_id:
-                raise reject(f"the component {part.frame.class_id}")
+                raise reject(f"the component {component_name(part.frame.class_id)}")
             else:
                 raise reject(f"content that needs Vue to render it ({type(part).__name__})")
 

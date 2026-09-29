@@ -5242,7 +5242,7 @@ _CITRY_SYNTAX = (
         "attribute",
         "Keep contents that a library manages",
         "Render this element's contents once and keep them unchanged on later renders.",
-        f"{_DYNAMIC_ATTRIBUTES_URL}#c-ignore",
+        f"{_DYNAMIC_ATTRIBUTES_URL}#c-ignore-keep-contents-that-a-library-manages",
         context="general",
         insert_text="#c-ignore",
     ),

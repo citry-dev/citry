@@ -652,13 +652,13 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                  'examples': [{'language': 'citry-html',
                                                'source': '<div x-cloak>{{ message }}</div>',
                                                'title': 'Leftover x-cloak'}],
-                                 'messages': {'default': "'x-cloak' now hides this element for good, because nothing "
-                                                         "removes the attribute any more. Delete 'x-cloak' and its "
-                                                         "'[x-cloak]' CSS rule; the served HTML already shows the "
+                                 'messages': {'default': "Nothing in Citry removes 'x-cloak', so a '[x-cloak]' CSS "
+                                                         "rule keeps this element hidden. Delete 'x-cloak' and its "
+                                                         "'[x-cloak]' rule; the server-rendered HTML already shows the "
                                                          'content.'},
                                  'parameters': {},
-                                 'summary': 'An HTML element carries x-cloak, which nothing removes any more, so a '
-                                            '[x-cloak] CSS rule hides the element permanently.',
+                                 'summary': 'An HTML element carries x-cloak. Nothing in Citry removes it, so a '
+                                            '[x-cloak] CSS rule keeps the element hidden.',
                                  'surfaces': ['check', 'lsp'],
                                  'title': 'x-cloak hides an element for good',
                                  'when': 'An attribute named x-cloak, compared without regard to letter case, sits on '

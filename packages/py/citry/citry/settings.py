@@ -152,9 +152,9 @@ class LintSettings:
             Vue, so nothing reads the attribute. Set ``"ignore"`` when another
             library on the page reads ``x-*`` attributes. The default is
             ``"warning"``.
-        rule_alpine_cloak: Severity for ``x-cloak`` on an HTML element. Nothing
-            removes the attribute any more, so a ``[x-cloak]`` CSS rule hides
-            the element for good. The default is ``"error"``.
+        rule_alpine_cloak: Severity for ``x-cloak`` on an HTML element.
+            Nothing in Citry removes the attribute, so a ``[x-cloak]`` CSS
+            rule keeps the element hidden. The default is ``"error"``.
 
     Raises:
         TypeError: If a variable or global collection is not a mapping.

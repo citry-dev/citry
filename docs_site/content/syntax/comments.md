@@ -113,7 +113,7 @@ directives or `$component`, the body of `<c-raw>` must be a complete piece of HT
 takes over that part of the page, so Citry has to know where the raw HTML
 starts and ends. Otherwise the render fails with an error that names the
 block's line and column and explains the rule, such as "The <c-raw>
-contents at line 2, column 10 is not a complete HTML fragment":
+block at line 2, column 10 is not a complete HTML fragment":
 
 ```citry-html
 --8<-- "docs_site/snippets/builtin_raw_complete.html"

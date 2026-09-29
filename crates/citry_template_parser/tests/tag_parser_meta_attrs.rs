@@ -443,4 +443,28 @@ mod tests {
         )
         .unwrap();
     }
+
+    #[test]
+    fn test_ignore_placements_without_element_contents_are_errors() {
+        assert_parse_error(
+            "<br #c-ignore>",
+            "'#c-ignore' is not supported on <br> (line 1, column 5). <br> has no contents to keep. Remove '#c-ignore'.",
+        );
+        assert_parse_error(
+            "<textarea #c-ignore>x</textarea>",
+            "<textarea> holds text, not elements, so there is nothing to keep.",
+        );
+        for input in [
+            "<svg #c-ignore><g></g></svg>",
+            "<svg><g #c-ignore><circle></circle></g></svg>",
+            "<math><mi #c-ignore>x</mi></math>",
+        ] {
+            assert_parse_error(
+                input,
+                "Put '#c-ignore' on an HTML element that wraps the <svg> or <math> element.",
+            );
+        }
+        // Wrapping the SVG element in an HTML element works.
+        parse_template("<div #c-ignore><svg><g></g></svg></div>", None, None).unwrap();
+    }
 }

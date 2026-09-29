@@ -249,29 +249,52 @@ class TestElementIgnore:
         with pytest.raises(UnsupportedPreparedView) as excinfo:
             _assemble(Page())
         message = str(excinfo.value)
-        assert message.startswith("'#c-ignore' on <div> (line 1, column 1) keeps the element's contents")
-        assert "cannot hold the component Kid_" in message
+        assert message.startswith(
+            "'#c-ignore' on the <div> element that starts at line 1, column 1, keeps the element's contents"
+        )
+        assert "cannot hold the component Kid." in message
         assert "Move it outside the <div> element." in message
 
-    def test_contents_inside_svg_are_rejected_with_the_fix(self):
+    def test_placements_without_element_contents_fail_on_static_pages_too(self):
         c = Citry()
 
-        class Page(Component):
+        class InSvg(Component):
             citry = c
             template = '<svg><g #c-ignore><circle r="1"></circle></g></svg>'
 
-        with pytest.raises(UnsupportedPreparedView, match="wraps the <svg> or <math> element"):
-            _assemble(Page())
+        class OnTextarea(Component):
+            citry = c
+            template = "<div><textarea #c-ignore>x</textarea></div>"
 
-    def test_text_only_element_is_rejected(self):
+        # The parser rejects both when the template loads, before any Vue decision.
+        with pytest.raises(Exception, match="wraps the <svg> or <math> element"):
+            str(InSvg())
+        with pytest.raises(Exception, match="holds text, not elements"):
+            str(OnTextarea())
+
+    @pytest.mark.parametrize(
+        "template",
+        [
+            '<main :class="cls"><div #c-ignore><span c-bind="attrs">a</span></div><p>after</p></main>',
+            '<main :class="cls"><div #c-ignore c-bind="attrs"><span>a</span></div><p>after</p></main>',
+        ],
+    )
+    def test_a_spread_inside_or_on_the_element_keeps_the_contents_pinned(self, template):
         c = Citry()
 
         class Page(Component):
             citry = c
-            template = "<div><textarea #c-ignore>x</textarea></div>"
 
-        with pytest.raises(UnsupportedPreparedView, match="has text contents, not elements"):
-            _assemble(Page())
+            def template_data(self, kwargs, slots):
+                return {"attrs": {"title": "x"}}
+
+        Page.template = template
+        assembly = _assemble(Page())
+        root = assembly.view.occurrences[0]
+        [record] = root.prepared_data["opaqueHtml"].values()
+        assert record["pinned"] is True
+        assert record["html"] in {'<span title="x">a</span>', "<span>a</span>"}
+        assert "<p>after</p>" in assembly.compile_inputs[root.definition_id].template
 
     def test_vue_binding_inside_is_a_template_error(self):
         c = Citry()

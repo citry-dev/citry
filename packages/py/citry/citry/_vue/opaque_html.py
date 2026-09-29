@@ -15,7 +15,7 @@ def reject_cross_boundary_html(html: str, *, origin: str) -> None:
 
     Vue inserts the HTML as one block of nodes, so the block cannot open a tag
     that the template closes later, or the other way round. ``origin`` names
-    the input for the error message, such as "The <c-raw> contents at line 3,
+    the input for the error message, such as "The <c-raw> block at line 3,
     column 5".
     """
     try:

@@ -2269,7 +2269,7 @@ def test_incomplete_raw_html_names_the_block_and_the_rule() -> None:
     with pytest.raises(ValueError, match="complete HTML fragment") as excinfo:
         _assemble_page(Page())
     assert str(excinfo.value) == (
-        "The <c-raw> contents at line 2, column 10 is not a complete HTML fragment: '<div class=\"open\">'."
+        "The <c-raw> block at line 2, column 10 is not a complete HTML fragment: '<div class=\"open\">'."
         " Inside an interactive component, Vue inserts this HTML as one block, so every tag it opens must"
         " be closed inside it, it must not close a tag it did not open, and a '<' that does not start a tag"
         " must be written as '&lt;'. Fix the HTML, or move the tags it shares with the template into it."

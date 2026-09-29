@@ -1648,7 +1648,7 @@ fn validate_node(
     validate_slot_tag_vue_directives(node, context)?;
     validate_attributes_present(node, context)?;
     validate_meta_attr_placement(node, context)?;
-    validate_ignored_element_contents(node, context)?;
+    validate_ignored_element_contents(node, tag_stack, context)?;
     validate_vue_listener_modifiers(node, context)?;
     validate_element_once_memo(node, context)?;
     validate_attribute_conflicts(node, context)?;
@@ -2161,7 +2161,9 @@ fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Resu
             listener.find('.').map_or("", |dot| &listener[dot..])
         };
         for modifier in modifiers.split('.').skip(1) {
-            let Some(hint) = alpine_only_modifier_hint(modifier) else {
+            // Vue compares modifiers case-sensitively, so `.OUTSIDE` is an
+            // unknown modifier too and the listener would never run.
+            let Some(hint) = alpine_only_modifier_hint(&modifier.to_ascii_lowercase()) else {
                 continue;
             };
             let (line, col) = attr.token.line_col;
@@ -2210,6 +2212,7 @@ enum IgnoredContentProblem<'a> {
 /// later turns interactive.
 fn validate_ignored_element_contents(
     node: &Node,
+    tag_stack: &[TagStackEntry],
     context: &ParserContext,
 ) -> Result<(), ParseError> {
     // Only a plain HTML element keeps its contents; `#c-ignore` on a component
@@ -2225,13 +2228,48 @@ fn validate_ignored_element_contents(
     else {
         return Ok(());
     };
+    let (line, col) = ignore_attr.token.line_col;
+    let lower_tag = tag_name.to_ascii_lowercase();
+    // These placements have no element contents that the browser could keep,
+    // so they fail on every page rather than only once the page is interactive.
+    let placement_problem = if is_html_void_element(&lower_tag) {
+        Some(format!(
+            "<{tag_name}> has no contents to keep. Remove '{META_ATTR_IGNORE}'."
+        ))
+    } else if matches!(
+        lower_tag.as_str(),
+        "script" | "style" | "textarea" | "title"
+    ) {
+        Some(format!(
+            "<{tag_name}> holds text, not elements, so there is nothing to keep. Remove '{META_ATTR_IGNORE}'."
+        ))
+    } else if lower_tag == "svg"
+        || lower_tag == "math"
+        || tag_stack.iter().any(|entry| {
+            let ancestor = entry.start_tag.name.content.to_ascii_lowercase();
+            ancestor == "svg" || ancestor == "math"
+        })
+    {
+        Some(format!(
+            "The browser keeps the contents as HTML, and SVG or MathML contents cannot be kept that way. Put '{META_ATTR_IGNORE}' on an HTML element that wraps the <svg> or <math> element."
+        ))
+    } else {
+        None
+    };
+    if let Some(problem) = placement_problem {
+        return Err(context.error_from_token(
+            &ignore_attr.token,
+            format!(
+                "'{META_ATTR_IGNORE}' is not supported on <{tag_name}> (line {line}, column {col}). {problem}"
+            ),
+        ));
+    }
     let Node::WithBody { body, .. } = node else {
         return Ok(());
     };
     let Some(problem) = find_ignored_content_problem(body) else {
         return Ok(());
     };
-    let (line, col) = ignore_attr.token.line_col;
     let owner = format!(
         "'{}' on <{}> (line {}, column {}) keeps the element's contents exactly as the server first rendered them",
         META_ATTR_IGNORE, tag_name, line, col

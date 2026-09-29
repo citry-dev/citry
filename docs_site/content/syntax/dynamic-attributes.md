@@ -757,14 +757,28 @@ render or run, so the template fails when it loads:
 A `ref` inside the contents fails the same way. Put the `ref` on the
 `#c-ignore` element and find the child from there.
 
+In a list, give the element a `#c-key` too. Without a key, the kept
+contents stay at their position when the rows reorder, so a row can end
+up showing another row's contents:
+
+```citry-html
+<c-for each="chart in charts">
+  <div #c-key="chart.id" #c-ignore>
+    <canvas></canvas>
+  </div>
+</c-for>
+```
+
 Some placements fail with a message that says what to change:
 
 - On a component tag. The component renders through Vue, so put
   `#c-ignore` on the element inside the component's template instead.
 - On `<c-element>`. Write the element as a plain HTML tag.
-- Inside `<svg>` or `<math>`, or on `<textarea>`, `<script>`, `<style>`,
-  or `<title>`, in an interactive component. Put it on an HTML element
-  that wraps the `<svg>` or `<math>` element.
+- On or inside `<svg>` or `<math>`. Put it on an HTML element that wraps
+  the `<svg>` or `<math>` element.
+- On an element with no child elements to keep: a void element such as
+  `<br>`, or `<textarea>`, `<script>`, `<style>`, or `<title>`, which hold
+  text. Remove `#c-ignore`.
 
 On a page without Vue, `#c-ignore` has nothing to do: the element and its
 contents render as written.

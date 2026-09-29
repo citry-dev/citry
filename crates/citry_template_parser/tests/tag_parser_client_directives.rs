@@ -278,6 +278,11 @@ mod tests {
                 "window",
                 "window.addEventListener",
             ),
+            (
+                r#"<div @click.OUTSIDE="x = 1;"></div>"#,
+                "OUTSIDE",
+                "this.$el contains",
+            ),
         ] {
             assert_parse_error(input, &format!("the Alpine modifier '.{modifier}'"));
             assert_parse_error(input, hint);

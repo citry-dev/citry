@@ -1323,9 +1323,21 @@ def _ignored_element_close_indices(nodes: list[BodyItem]) -> set[int]:
     # Each entry says whether that open element carries `#c-ignore`.
     stack: list[bool] = []
     for index, node in enumerate(nodes):
-        if isinstance(node, PreparedElementOpenNode):
-            if not node.is_void:
-                stack.append(any(item[0] == "morph" for item in node.element_metadata))
+        # An extension may wrap the opening (the i18n binding wrapper does for
+        # a `c-bind` spread), so follow the wrapper to the typed opening.
+        opening: object = node
+        while not isinstance(opening, PreparedElementOpenNode) and isinstance(
+            getattr(opening, "original", None), ElementAttrsNode
+        ):
+            opening = opening.original  # type: ignore[attr-defined]
+        if isinstance(opening, PreparedElementOpenNode):
+            if not opening.is_void:
+                stack.append(any(item[0] == "morph" for item in opening.element_metadata))
+        elif isinstance(node, ElementAttrsNode):
+            # An opening this function cannot read still needs its own entry,
+            # or its close would end the wrong element.
+            if not getattr(node, "is_void", False):
+                stack.append(False)
         elif isinstance(node, PreparedConstantNode) and isinstance(node.value, PreparedElementOpen):
             if not node.value.is_void:
                 stack.append(is_ignored_element_open(node.value))
