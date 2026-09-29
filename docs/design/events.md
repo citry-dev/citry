@@ -1548,8 +1548,10 @@ is opaque, minted and verified by the same binding.
   multiplexing, harmless over HTTP).
 - `capabilities`: what the client runtime can apply, keyed `swaps` (swap
   strategies) and `actions` (action kinds). The server never emits a swap
-  or action outside the advertised set; it downgrades instead (`morph` to
-  `replace`). An absent field means the **protocol baseline**: one fixed
+  or action outside the advertised set. For an `html-fragment/1` render it
+  downgrades instead (`morph` to `replace`); a `vue-prepared/1` render
+  always uses `morph`, and a client that advertises `vue-prepared/1`
+  without `morph` gets `handler_error` on any call that renders. An absent field means the **protocol baseline**: one fixed
   constant per protocol major, defined in the protocol package's spec and
   tests. For v1 that is every swap except `morph` plus all six v1
   action kinds, named `CAPABILITIES_BASELINE_V1`. The server therefore
@@ -1648,8 +1650,7 @@ the template.
           "target": "render:c9zk1q00",
           "swap": "morph",
           "html": "<button data-cid-c9zk1q00 ...>...</button>
-            <script type=\"application/json\" data-citry>...</script>
-            <script type=\"application/json\" data-citry-events>...</script>"
+            <script type=\"application/json\" data-citry>...</script>"
         },
         {
           "action": "data",
@@ -1684,7 +1685,7 @@ Streams and htmx out-of-band swaps are the same shape):
 
 | Action | Fields | Meaning |
 |---|---|---|
-| `render` | `target`, `swap`, `html` | Insert or update HTML. `html` is a complete citry fragment (markup plus the inert `data-citry` and `data-citry-events` manifest tags), so the existing MutationObserver machinery loads assets and re-fires `$component` with zero new insertion mechanics. |
+| `render` | `target`, `swap`, `html` | Insert or update HTML. `html` is a complete citry fragment. A `vue-prepared/1` render instead carries the prepared Vue payload, whose occurrences hold the Events descriptors and State tokens, and must use `swap: "morph"`. |
 | `data` | `value` | Resolve an imperative caller's promise with this JSON value. A declarative `@c-*` binding has no caller-owned promise and does not expose the value. At most one per result: a handler whose return would encode two `data` actions is an encode-time error naming the fix (two bare dicts in one list is semantically contradictory, which promise value wins?), unlike the trailing-after-redirect case, whose actions are individually valid and merely unreliable, so it warns. It carries no `wait` field; receiving one is a protocol validation error. |
 | `state` | `targetRenderId`, `stateToken` | Replace the stored state token for a rendered component occurrence whose handler mutated state without re-rendering; the server places it before the handler's own actions. (A `render` action needs no companion; the fresh fragment's manifest carries the new token.) Client rule, either carrier: the runtime applies a result's token refresh to its registry before applying the actions array, so user code running mid-application (a dispatch listener that immediately sends) already carries the fresh token. |
 | `event` | `eventName`, `detail`, `target` | Dispatch one bubbling DOM CustomEvent under the **exact given name** on the target instance's first live root, or on `document`. A multi-root or mirrored instance uses one canonical root deliberately: dispatching the same logical action on every root would duplicate document/global delivery and `onEvent` callbacks. Raw names are the field's converged interop choice (Livewire and htmx both fire developer-chosen names verbatim); `citry:*` is reserved for the runtime's own events, and the documented best practice is prefixing with the component name (`MyCard:submit`, the BEM idea applied to events). A handler-returned `event` action with no explicit target is self-addressed by the server at encode time to the caller's `callerRenderId`; only calls without a rendered caller produce a document-targeted dispatch. |
@@ -1788,15 +1789,15 @@ the per-field error map, surfaced client-side as
 
 ### 4.4 How the state token reaches the client
 
-Alongside the existing `data-citry` asset manifest, serialize emits a
-second inert JSON tag, `data-citry-events`, for every page or fragment
-containing an Events-declaring component:
+On an interactive page the server puts this manifest into the prepared Vue
+payload, not into a tag of its own: `build_events_manifest` builds it, and
+each prepared occurrence carries its instance record (descriptor, signed
+State token, public State). The browser reads it when the occurrence
+mounts. The manifest has this shape:
 
-```html
-<script type="application/json" data-citry-events>
+```json
   {
     "protocol": "citry-events/1",
-    "clientGraphRevision": null,
     "componentClasses": [
       {
         "componentClassId": "TodoList_a1b2c3",
@@ -1820,13 +1821,11 @@ containing an Events-declaring component:
       }
     ]
   }
-</script>
 ```
 
-Manifest entries are named JSON objects embedded directly in the inert script
-block. The server escapes `<` as `\u003c`, so application State cannot close
-the script tag. `clientGraphRevision` links the Events sidecar to the ownership
-graph from the same render, or is `null` when no graph was emitted.
+Manifest entries are named JSON objects. The server escapes `<` as
+`\u003c` wherever it writes them into the page, so application State cannot
+close a script tag.
 
 `componentClasses` carries handler names and browser hints. Each handler has
 `httpMethod`; the optional non-default hints are `usesState: true`,

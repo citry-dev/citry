@@ -642,9 +642,12 @@ assets use Citry routes. Static CSS-only and script-only fragments can emit
 ordinary external URLs without installing the Citry runtime. Component JavaScript
 that requires a browser app is rejected if no prepared Vue plan exists.
 
-The `before_manifest` name remains for extension compatibility. Its entries are
-emitted immediately before the Vue fragment descriptor, or before ordinary
-dependency scripts on the static path. They are direct trusted tags, so extension
+The `before_manifest` name remains for extension compatibility. On an
+interactive render its entries become the first scripts of the prepared Vue
+payload, in the order the extension added them, so the browser loads them
+before `ctx.scripts` and the other assets and only after the descriptor has
+passed validation. On the static path they are written before ordinary
+dependency scripts. They are direct trusted tags, so extension
 authors must use structured `Script` or `Style` values when security policy
 requires nonce or integrity reconciliation.
 
