@@ -172,6 +172,42 @@
       "implementations": ["python", "javascript"]
     },
     {
+      "id": "result-render-target-rejects-css-selector",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/renderTarget/pattern",
+      "seed": "happy_render.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/actions/0/target", "value": "#cart"}],
+      "expected": {"path": "/results/0/actions/0/target", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-marker-target-needs-caller-render-id",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/renderTarget/pattern",
+      "seed": "happy_render.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/actions/0/target", "value": "mark:cart-badge"}],
+      "expected": {"path": "/results/0/actions/0/target", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-event-target-rejects-marker",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/eventTarget/pattern",
+      "seed": "rename_coerce.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/actions/1/target", "value": "mark:c9zk1q00:badge"}],
+      "expected": {"path": "/results/0/actions/1/target", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-prepared-render-requires-morph",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/preparedRenderAction/properties/swap/const",
+      "seed": "happy_render.result.json",
+      "operations": [{"op": "add", "path": "/results/0/actions/0/renderer", "value": "vue-prepared/1"}, {"op": "remove", "path": "/results/0/actions/0/html"}, {"op": "add", "path": "/results/0/actions/0/prepared", "value": {}}, {"op": "replace", "path": "/results/0/actions/0/swap", "value": "replace"}],
+      "expected": {"path": "/results/0/actions/0/swap", "category": "enum"},
+      "implementations": ["python", "javascript"]
+    },
+    {
       "id": "call-unknown-renderer-capability",
       "schema": "call.schema.json",
       "constraint": "/$defs/renderer/enum",
@@ -211,7 +247,7 @@
     {
       "id": "result-action-first-issue-follows-field-order",
       "schema": "result.schema.json",
-      "constraint": "/$defs/target/minLength",
+      "constraint": "/$defs/renderTarget/minLength",
       "seed": "happy_render.result.json",
       "operations": [
         {"op": "replace", "path": "/results/0/actions/0/target", "value": ""},

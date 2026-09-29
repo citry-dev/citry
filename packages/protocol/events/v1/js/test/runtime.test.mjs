@@ -471,7 +471,12 @@ test("exchange validation enforces advertised actions, swaps, and renderers", ()
 	});
 	const morphReply = protocol.buildResultEnvelope("request-swap", [
 		protocol.buildOkResult([
-			{ action: "render", target: "#out", swap: "morph", html: "<p>ok</p>" },
+			{
+				action: "render",
+				target: "render:counter_1",
+				swap: "morph",
+				html: "<p>ok</p>",
+			},
 		]),
 	]);
 	assert.deepEqual(protocol.validateExchange(swapLimited, morphReply), {
@@ -483,7 +488,7 @@ test("exchange validation enforces advertised actions, swaps, and renderers", ()
 	const prepared = {
 		action: "render",
 		target: "render:counter_1",
-		swap: "none",
+		swap: "morph",
 		renderer: "vue-prepared/1",
 		prepared: { revision: "r1" },
 	};
@@ -505,9 +510,36 @@ test("exchange validation enforces advertised actions, swaps, and renderers", ()
 		{ ...prepared, renderer: "unknown/1" },
 	])
 		assert.ok(protocol.validateAction(invalid));
+
+	// Targets name a component occurrence or a caller's marked region; any
+	// other string, including a marker without its caller, fails validation.
+	for (const target of ["#out", "mark:badge", "mark:counter_1:9bad", "render:"])
+		assert.equal(
+			protocol.validateAction({ ...prepared, target })?.category,
+			"pattern",
+		);
+	assert.equal(
+		protocol.validateAction({ ...prepared, target: "mark:counter_1:badge" }),
+		null,
+	);
+	assert.deepEqual(protocol.validateAction({ ...prepared, swap: "replace" }), {
+		path: "/swap",
+		category: "enum",
+		message: "A vue-prepared/1 render must use the morph swap.",
+	});
+	const eventAction = { action: "event", eventName: "saved" };
+	assert.equal(
+		protocol.validateAction({ ...eventAction, target: "render:counter_1" }),
+		null,
+	);
+	assert.equal(
+		protocol.validateAction({ ...eventAction, target: "mark:counter_1:badge" })
+			?.message,
+		"An event target must be render:<renderId>.",
+	);
 	const htmlOnly = protocol.buildCallEnvelope("request-renderer", [call], {
 		actions: ["render"],
-		swaps: ["none"],
+		swaps: ["morph"],
 		renderers: ["html-fragment/1"],
 	});
 	const preparedReply = protocol.buildResultEnvelope("request-renderer", [

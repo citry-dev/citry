@@ -298,7 +298,7 @@ def test_mathematically_integral_json_numbers_match_browser_integer_semantics() 
                         "actions": [
                             {
                                 "action": "render",
-                                "target": "#result",
+                                "target": "render:result",
                                 "swap": "replace",
                                 "html": "ok",
                                 "delay": 10**400,
@@ -328,7 +328,7 @@ def test_structural_action_issue_precedes_the_data_count_relationship() -> None:
                 "actions": [
                     {"action": "data", "value": 1},
                     {"action": "data", "value": 2},
-                    {"action": "render", "target": "#result", "swap": "replace", "html": 3},
+                    {"action": "render", "target": "render:result", "swap": "replace", "html": 3},
                 ],
             }
         ],

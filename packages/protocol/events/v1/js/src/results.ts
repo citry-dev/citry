@@ -131,9 +131,16 @@ const validateTiming = (
 	return null;
 };
 
+// A <c-mark> name, the same rule the server applies when a template declares one.
+const MARK_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+// A target names a component occurrence, so a receiver finds it in its own
+// records without searching the page's DOM. Only render actions may
+// address a marked region inside a component.
 const validateTarget = (
 	value: unknown,
 	path: string,
+	allowMarker: boolean,
 ): ValidationIssue | null => {
 	if (typeof value !== "string") {
 		return {
@@ -149,14 +156,36 @@ const validateTarget = (
 			message: "An action target must be a non-empty string.",
 		};
 	}
-	if (value.startsWith("render:") && !isSafeRenderId(value.slice(7))) {
+	if (value.startsWith("render:")) {
+		if (isSafeRenderId(value.slice(7))) return null;
 		return {
 			path,
 			category: "pattern",
-			message: "A render target must contain a valid render ID.",
+			message: "A render: target must contain a valid render ID.",
 		};
 	}
-	return null;
+	if (allowMarker && value.startsWith("mark:")) {
+		// The caller's render ID comes first because a marker name is only
+		// unique inside the component that rendered the <c-mark>.
+		const rest = value.slice(5);
+		const separator = rest.indexOf(":");
+		const caller = separator < 0 ? "" : rest.slice(0, separator);
+		const name = separator < 0 ? "" : rest.slice(separator + 1);
+		if (isSafeRenderId(caller) && MARK_NAME.test(name)) return null;
+		return {
+			path,
+			category: "pattern",
+			message:
+				"A marker target must be mark:<callerRenderId>:<name> with a valid ID and name.",
+		};
+	}
+	return {
+		path,
+		category: "pattern",
+		message: allowMarker
+			? "A render target must be render:<renderId> or mark:<callerRenderId>:<name>."
+			: "An event target must be render:<renderId>.",
+	};
 };
 
 const validateActionShape = (
@@ -206,7 +235,11 @@ const validateActionShape = (
 		};
 	}
 	if (kind === "render") {
-		const targetIssue = validateTarget(value.target, pointer(path, "target"));
+		const targetIssue = validateTarget(
+			value.target,
+			pointer(path, "target"),
+			true,
+		);
 		if (targetIssue) return targetIssue;
 		if (!(SWAPS as readonly unknown[]).includes(value.swap)) {
 			return {
@@ -263,6 +296,15 @@ const validateActionShape = (
 				message: "The prepared render content must be a JSON object.",
 			};
 		}
+		// Prepared Vue content updates the mounted component in place; the
+		// other swaps insert, remove, or skip DOM content, which it never does.
+		if (content === "prepared" && value.swap !== "morph") {
+			return {
+				path: pointer(path, "swap"),
+				category: "enum",
+				message: "A vue-prepared/1 render must use the morph swap.",
+			};
+		}
 	} else if (kind === "data") {
 		// The enclosing public strict-JSON pass already validated the payload.
 	} else if (kind === "state") {
@@ -317,7 +359,11 @@ const validateActionShape = (
 			};
 		}
 		if (hasOwn(value, "target")) {
-			const issue = validateTarget(value.target, pointer(path, "target"));
+			const issue = validateTarget(
+				value.target,
+				pointer(path, "target"),
+				false,
+			);
 			if (issue) return issue;
 		}
 	} else if (kind === "redirect") {

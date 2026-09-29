@@ -41,6 +41,10 @@ ERROR_STATUS_BY_CODE: dict[str, int] = {
 }
 ERROR_CODES = (*ERROR_STATUS_BY_CODE, "error")
 
+# A <c-mark> name, the same rule the server applies when a template declares one.
+_MARK_NAME_FIRST = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+_MARK_NAME_CHARS = _MARK_NAME_FIRST | frozenset("0123456789_-")
+
 _RESULT_ENVELOPE_FIELDS = ("protocol", "requestId", "results")
 _OK_RESULT_FIELDS = ("ok", "sendSequence", "actions")
 _ERROR_RESULT_FIELDS = ("ok", "sendSequence", "error")
@@ -250,14 +254,36 @@ def _validate_timing(action: Mapping[str, Any], path: str) -> ValidationIssue | 
     return None
 
 
-def _validate_target(value: Any, path: str) -> ValidationIssue | None:
+def _valid_mark_name(value: str) -> bool:
+    """Whether ``value`` is a ``<c-mark>`` name: a letter, then letters, digits, ``_``, or ``-``."""
+    return bool(value) and value[0] in _MARK_NAME_FIRST and all(character in _MARK_NAME_CHARS for character in value)
+
+
+def _validate_target(value: Any, path: str, *, allow_marker: bool) -> ValidationIssue | None:
+    # A target names a component occurrence, so a receiver finds it in its
+    # own records without searching the page's DOM.
     if not isinstance(value, str):
         return ValidationIssue(path, "type", "An action target must be a non-empty string.")
     if not value:
         return ValidationIssue(path, "range", "An action target must be a non-empty string.")
-    if value.startswith("render:") and not valid_render_id(value[7:]):
-        return ValidationIssue(path, "pattern", "A render target must contain a valid render ID.")
-    return None
+    if value.startswith("render:"):
+        if not valid_render_id(value[7:]):
+            return ValidationIssue(path, "pattern", "A render: target must contain a valid render ID.")
+        return None
+    if allow_marker and value.startswith("mark:"):
+        # The caller's render ID comes first because a marker name is only
+        # unique inside the component that rendered the <c-mark>.
+        caller, separator, name = value[5:].partition(":")
+        if not separator or not valid_render_id(caller) or not _valid_mark_name(name):
+            return ValidationIssue(
+                path, "pattern", "A marker target must be mark:<callerRenderId>:<name> with a valid ID and name."
+            )
+        return None
+    if allow_marker:
+        return ValidationIssue(
+            path, "pattern", "A render target must be render:<renderId> or mark:<callerRenderId>:<name>."
+        )
+    return ValidationIssue(path, "pattern", "An event target must be render:<renderId>.")
 
 
 def validate_action(value: Any, path: str = "") -> ValidationIssue | None:
@@ -286,7 +312,7 @@ def _validate_action_shape(value: Any, path: str) -> ValidationIssue | None:
     if found:
         return ValidationIssue(pointer(path, unknown), "unknown_field", f"The {kind} action has an unknown field.")
     if kind == "render":
-        issue = _validate_target(value["target"], pointer(path, "target"))
+        issue = _validate_target(value["target"], pointer(path, "target"), allow_marker=True)
         if issue is not None:
             return issue
         if value["swap"] not in SWAPS:
@@ -311,6 +337,10 @@ def _validate_action_shape(value: Any, path: str) -> ValidationIssue | None:
             return ValidationIssue(
                 pointer(path, "prepared"), "type", "The prepared render content must be a JSON object."
             )
+        # Prepared Vue content updates the mounted component in place; the
+        # other swaps insert, remove, or skip DOM content, which it never does.
+        if content == "prepared" and value["swap"] != "morph":
+            return ValidationIssue(pointer(path, "swap"), "enum", "A vue-prepared/1 render must use the morph swap.")
     elif kind == "data":
         pass
     elif kind == "state":
@@ -335,7 +365,7 @@ def _validate_action_shape(value: Any, path: str) -> ValidationIssue | None:
         if name.startswith("citry:"):
             return ValidationIssue(pointer(path, "eventName"), "pattern", "The event name is reserved.")
         if "target" in value:
-            issue = _validate_target(value["target"], pointer(path, "target"))
+            issue = _validate_target(value["target"], pointer(path, "target"), allow_marker=False)
             if issue is not None:
                 return issue
     elif kind == "redirect":

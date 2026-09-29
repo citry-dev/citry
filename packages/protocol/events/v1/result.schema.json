@@ -189,7 +189,7 @@
       "required": ["action", "target", "swap", "html"],
       "properties": {
         "action": {"const": "render"},
-        "target": {"$ref": "#/$defs/target"},
+        "target": {"$ref": "#/$defs/renderTarget"},
         "swap": {"$ref": "#/$defs/swap"},
         "html": {
           "type": "string",
@@ -205,7 +205,7 @@
       "required": ["action", "target", "swap", "renderer", "html"],
       "properties": {
         "action": {"const": "render"},
-        "target": {"$ref": "#/$defs/target"},
+        "target": {"$ref": "#/$defs/renderTarget"},
         "swap": {"$ref": "#/$defs/swap"},
         "renderer": {"const": "html-fragment/1"},
         "html": {"type": "string"},
@@ -219,8 +219,11 @@
       "required": ["action", "target", "swap", "renderer", "prepared"],
       "properties": {
         "action": {"const": "render"},
-        "target": {"$ref": "#/$defs/target"},
-        "swap": {"$ref": "#/$defs/swap"},
+        "target": {"$ref": "#/$defs/renderTarget"},
+        "swap": {
+          "const": "morph",
+          "description": "Prepared Vue content always updates the mounted component in place."
+        },
         "renderer": {"const": "vue-prepared/1"},
         "prepared": {"type": "object"},
         "delay": {"$ref": "#/$defs/delay"},
@@ -274,7 +277,7 @@
         "detail": {
           "description": "Any JSON application value; absent means null."
         },
-        "target": {"$ref": "#/$defs/target"},
+        "target": {"$ref": "#/$defs/eventTarget"},
         "delay": {"$ref": "#/$defs/delay"},
         "wait": {"$ref": "#/$defs/wait"}
       }
@@ -302,14 +305,17 @@
         "wait": {"$ref": "#/$defs/wait"}
       }
     },
-    "target": {
+    "renderTarget": {
       "type": "string",
       "minLength": 1,
-      "oneOf": [
-        {"pattern": "^render:[a-z0-9_-]+$"},
-        {"not": {"pattern": "^render:"}}
-      ],
-      "description": "A CSS selector, or render:<renderId> for one component instance."
+      "pattern": "^(render:[a-z0-9_-]+|mark:[a-z0-9_-]+:[A-Za-z][A-Za-z0-9_-]*)$",
+      "description": "render:<renderId> for one component occurrence, or mark:<callerRenderId>:<name> for one <c-mark> region rendered by the calling component."
+    },
+    "eventTarget": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^render:[a-z0-9_-]+$",
+      "description": "render:<renderId> for the component occurrence that dispatches the DOM event."
     },
     "swap": {
       "enum": ["morph", "replace", "inner", "append", "prepend", "remove", "none"]

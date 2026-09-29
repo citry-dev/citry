@@ -126,12 +126,12 @@
       "id": "events-result-actions",
       "schema": "result.schema.json",
       "exactSchemaPointers": [],
-      "schemaPointerPrefixes": ["/$defs/action", "/$defs/legacyRenderAction", "/$defs/explicitHtmlRenderAction", "/$defs/preparedRenderAction", "/$defs/renderAction", "/$defs/dataAction", "/$defs/stateAction", "/$defs/eventAction", "/$defs/redirectAction", "/$defs/urlAction", "/$defs/target", "/$defs/swap", "/$defs/delay", "/$defs/wait"],
+      "schemaPointerPrefixes": ["/$defs/action", "/$defs/legacyRenderAction", "/$defs/explicitHtmlRenderAction", "/$defs/preparedRenderAction", "/$defs/renderAction", "/$defs/dataAction", "/$defs/stateAction", "/$defs/eventAction", "/$defs/redirectAction", "/$defs/urlAction", "/$defs/renderTarget", "/$defs/eventTarget", "/$defs/swap", "/$defs/delay", "/$defs/wait"],
       "pythonValidators": ["python/citry_events/results.py:validate_action"],
       "javascriptValidators": ["js/src/results.ts:validateAction"],
       "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
-      "constraintCount": 79,
-      "constraintSha256": "16f37cac05353a37f44609c1390931c04ce8a018691c5e148398a0ba96f68536"
+      "constraintCount": 81,
+      "constraintSha256": "51d561eceb0d01182de36c161336504fc78000f43d66dc7f64d104512d82488c"
     }
   ]
 }

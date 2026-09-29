@@ -94,19 +94,28 @@ def test_results_stay_within_the_callers_advertised_capabilities():
 
 
 def test_render_actions_discriminate_legacy_html_and_prepared_content():
-    legacy = {"action": "render", "target": "#out", "swap": "replace", "html": "<p>ok</p>"}
+    legacy = {"action": "render", "target": "render:counter_1", "swap": "replace", "html": "<p>ok</p>"}
     explicit = {**legacy, "renderer": "html-fragment/1"}
     prepared = {
         "action": "render",
-        "target": "render:counter_1",
-        "swap": "none",
+        "target": "mark:counter_1:badge",
+        "swap": "morph",
         "renderer": "vue-prepared/1",
         "prepared": {"revision": "r1"},
     }
     for action in (legacy, explicit, prepared):
         envelope = {"protocol": "citry-events/1", "requestId": "r1", "results": [{"ok": True, "actions": [action]}]}
         assert checker.schema_errors(envelope, RESULT_SCHEMA) == []
-    for action in ({**prepared, "html": "mixed"}, {**prepared, "prepared": []}, {**prepared, "renderer": "unknown/1"}):
+    for action in (
+        {**prepared, "html": "mixed"},
+        {**prepared, "prepared": []},
+        {**prepared, "renderer": "unknown/1"},
+        # Prepared content only updates a mounted component in place.
+        {**prepared, "swap": "replace"},
+        # A target names a component, and a marker target also names its caller.
+        {**legacy, "target": "#out"},
+        {**legacy, "target": "mark:badge"},
+    ):
         envelope = {"protocol": "citry-events/1", "requestId": "r1", "results": [{"ok": True, "actions": [action]}]}
         assert checker.schema_errors(envelope, RESULT_SCHEMA)
 

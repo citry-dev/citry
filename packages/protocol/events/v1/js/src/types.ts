@@ -74,16 +74,23 @@ export interface ActionTiming {
 	wait?: false;
 }
 
+/** render:<renderId> or mark:<callerRenderId>:<name>. */
+export type RenderActionTarget =
+	| `render:${string}`
+	| `mark:${string}:${string}`;
+/** render:<renderId> of the component that dispatches the DOM event. */
+export type EventActionTarget = `render:${string}`;
+
 export interface LegacyRenderAction extends ActionTiming {
 	action: "render";
-	target: string;
+	target: RenderActionTarget;
 	swap: EventSwap;
 	html: string;
 }
 
 export interface HtmlRenderAction extends ActionTiming {
 	action: "render";
-	target: string;
+	target: RenderActionTarget;
 	swap: EventSwap;
 	renderer: "html-fragment/1";
 	html: string;
@@ -91,8 +98,8 @@ export interface HtmlRenderAction extends ActionTiming {
 
 export interface PreparedRenderAction extends ActionTiming {
 	action: "render";
-	target: string;
-	swap: EventSwap;
+	target: RenderActionTarget;
+	swap: "morph";
 	renderer: "vue-prepared/1";
 	prepared: JsonObject;
 }
@@ -118,7 +125,7 @@ export interface DispatchEventAction extends ActionTiming {
 	action: "event";
 	eventName: string;
 	detail?: JsonValue;
-	target?: string;
+	target?: EventActionTarget;
 }
 
 export interface RedirectAction extends ActionTiming {

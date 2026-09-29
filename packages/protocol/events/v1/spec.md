@@ -81,10 +81,10 @@ options.
 
 The browser checks the complete result envelope and every action's protocol
 shape before it applies the first action. If the tenth action has an invalid
-field or value, none of the first nine runs. Targets and returned fragments
-can still fail later for reasons outside the JSON protocol, such as an invalid
-CSS selector or malformed embedded HTML. The server performs the equivalent
-full protocol check before it runs a call.
+field or value, none of the first nine runs. A result can still fail after
+that check for reasons outside the JSON shape, such as a target that names a
+component the page no longer shows or malformed rendered content. The server
+performs the equivalent full protocol check before it runs a call.
 
 Only places that deliberately carry application data remain open:
 
@@ -262,16 +262,20 @@ interface ActionTiming {
   wait?: false;
 }
 
+// render:<renderId> or mark:<callerRenderId>:<name>
+type RenderActionTarget = `render:${string}` | `mark:${string}:${string}`;
+type EventActionTarget = `render:${string}`;
+
 interface LegacyRenderAction extends ActionTiming {
   action: "render";
-  target: string;
+  target: RenderActionTarget;
   swap: EventSwap;
   html: string;
 }
 
 interface HtmlRenderAction extends ActionTiming {
   action: "render";
-  target: string;
+  target: RenderActionTarget;
   swap: EventSwap;
   renderer: "html-fragment/1";
   html: string;
@@ -279,8 +283,8 @@ interface HtmlRenderAction extends ActionTiming {
 
 interface PreparedRenderAction extends ActionTiming {
   action: "render";
-  target: string;
-  swap: EventSwap;
+  target: RenderActionTarget;
+  swap: "morph";
   renderer: "vue-prepared/1";
   prepared: JsonObject;
 }
@@ -303,7 +307,7 @@ interface DispatchEventAction extends ActionTiming {
   action: "event";
   eventName: string;
   detail?: JsonValue;
-  target?: string;
+  target?: EventActionTarget;
 }
 
 interface RedirectAction extends ActionTiming {
@@ -374,7 +378,8 @@ The IDs are deliberately separate because they answer different questions:
 | `renderId` | One rendered occurrence of a component. Each new render receives a new ID. |
 | `callerRenderId` | The rendered occurrence that sent a call. |
 | `targetRenderId` | The rendered occurrence whose State token a `state` action replaces. |
-| `render:<renderId>` | A render or DOM-event action target written in component-address form. |
+| `render:<renderId>` | A render or DOM-event action target that names one rendered occurrence. |
+| `mark:<callerRenderId>:<name>` | A render action target that names one `<c-mark>` region inside the calling occurrence. |
 | `handlerName` | The Python handler the server runs. |
 | `eventName` | The browser DOM `CustomEvent` an `event` action dispatches. |
 | `sendSequence` | The order in which one stable browser record sent its calls. |
@@ -388,7 +393,7 @@ top-level fields are:
 |---|---|---|
 | `protocol` | Required; exactly `citry-events/1`. | Selects the protocol major. |
 | `requestId` | Required non-empty string. | A client-created request ID that the server echoes. |
-| `capabilities` | Optional strict object. | Says which v1 actions and swaps this browser can apply. See [Capabilities](#capabilities). |
+| `capabilities` | Optional strict object. | Says which v1 actions, swaps, and renderers this browser can apply. See [Capabilities](#capabilities). |
 | `calls` | Required array of 1 to 16 calls. | `results[i]` answers `calls[i]`. |
 
 Each call contains:
@@ -475,17 +480,30 @@ Actions are a closed v1 vocabulary:
 
 | Action | Required fields | Optional fields | Meaning |
 |---|---|---|---|
-| `render` | `target`, `swap`, `html` | `delay`, `wait` | Apply a complete Citry fragment to every selected target. |
+| `render` | `target`, `swap`, and `html` or `prepared` | `renderer`, `delay`, `wait` | Update one component occurrence, or one marked region inside the caller, with newly rendered content, as `swap` says. |
 | `data` | `value` | `delay` | Resolve the caller with any JSON value, including `null`. A result has at most one data action. |
 | `state` | `targetRenderId`, `stateToken` | `delay`, `wait` | Replace one rendered component occurrence's stored State token. |
 | `event` | `eventName` | `detail`, `target`, `delay`, `wait` | Dispatch a bubbling DOM `CustomEvent`. Names beginning `citry:` are reserved. |
 | `redirect` | `url` | `delay`, `wait` | Navigate the page. |
 | `url` | `url`, `mode` | `delay`, `wait` | Push or replace browser history without navigation. `mode` is `push` or `replace`. |
 
-A render action's `html` is the complete fragment, including the inert JSON
-and asset tags the inserted content needs, such as its Events records.
+A render action carries its content in one of two forms, selected by its
+`renderer` (see [Capabilities](#capabilities)):
+
+- `html-fragment/1` carries `html`, a complete HTML fragment. When the
+  content is interactive, the fragment mounts its own Vue app and includes
+  the inert JSON and asset tags that app needs, including its Events records.
+- `vue-prepared/1` carries `prepared`, a JSON object that the browser merges
+  into the Vue app already on the page. Its Events records are inside that
+  object.
+
 The v1 swaps are `morph`, `replace`, `inner`, `append`, `prepend`, `remove`,
-and `none`.
+and `none`. A `vue-prepared/1` render always uses `morph`: the browser updates
+the mounted component in place, while the other swaps insert, remove, or skip
+DOM content, which prepared content never does. An `html-fragment/1` render
+may use any v1 swap. Citry's browser client applies only `vue-prepared/1`
+renders; `html-fragment/1` serves other clients and form posts without
+JavaScript, which read the HTML directly.
 
 When a handler changes State but does not render, the server places a `state`
 action before the handler's own actions. Code triggered while later actions
@@ -494,19 +512,69 @@ token in its Events records instead.
 
 ### Targets
 
-A target is either:
+A target tells the browser which rendered component an action is about. It
+names the component directly, so the browser finds it in its own records
+instead of searching the page. There are two forms:
 
-- a non-empty CSS selector, applied with `querySelectorAll`; or
-- `render:<renderId>`, where the ID matches `^[a-z0-9_-]+$`.
+1. `render:<renderId>` names one rendered component occurrence. The ID
+   matches `^[a-z0-9_-]+$`, the same rule as `renderId` in the manifest.
+2. `mark:<callerRenderId>:<name>` names one `<c-mark name="...">` region that
+   the calling component rendered. Marker names are unique only inside the
+   component that renders them, so the target carries the caller's render ID
+   as well. The name matches `^[A-Za-z][A-Za-z0-9_-]*$`.
 
-`render:` is reserved. A value beginning with it but carrying an unsafe or
-empty ID is invalid, not a CSS selector. The `targetRenderId` of a `state`
-action uses the same ID grammar without the prefix.
+A handler can update a small part of its own output without re-rendering the
+whole component. Given this template fragment:
+
+```citry-html
+<c-mark name="cart-badge">
+  <c-CartBadge c-count="count" />
+</c-mark>
+```
+
+a handler returns
+`actions.Render(CartBadge(count=3), target="mark:cart-badge")`, and the server
+writes the caller's render ID into the wire target:
+
+```json
+{
+  "action": "render",
+  "target": "mark:c9zk1q00:cart-badge",
+  "swap": "morph",
+  "renderer": "vue-prepared/1",
+  "prepared": {"...": "..."}
+}
+```
+
+Render actions accept both forms. An `event` action's optional `target`
+accepts only `render:<renderId>`; the event fires on that component's first
+connected element and bubbles from there. The server only ever addresses an
+event to the calling component. The `targetRenderId` of a `state`
+action uses the same ID rule without the `render:` prefix.
 
 When the server creates a render, State refresh, or event action without an
-explicit target, it can target the `callerRenderId` automatically. A call
-without a rendered caller cannot have an automatic component target; an
-unaddressed event then dispatches on `document`.
+explicit target, it targets the `callerRenderId` automatically. A call
+without a rendered caller cannot have an automatic component target: the
+server fails a render without a target, or with a `mark:` target, as a
+`handler_error`, and an unaddressed event dispatches on `document`.
+
+A target in any other form, such as a CSS selector (`#cart`), a marker
+without its caller (`mark:cart-badge`), or an empty ID (`render:`), fails
+protocol validation, so a receiver rejects the whole result before it applies
+any action.
+
+Citry's browser client also rejects the whole result, before any action runs
+and with the caller's promise rejected, in these cases:
+
+- A render target names a component that is not currently mounted in the
+  caller's Vue app, or a marker whose caller is not the component that sent
+  the call. This happens when the component was replaced or removed while the
+  call was in flight.
+- An event target names a component other than the caller.
+- Several `vue-prepared/1` renders in one result do not sit next to each
+  other in the list, one of them has a positive `delay` or `wait: false`, or
+  two of them name the same component or a component and one inside it. The
+  browser applies such a group as one update.
 
 ### Order and timing
 
@@ -517,7 +585,10 @@ following action immediately. A data action must remain in the sequence
 because applying it settles the caller's promise.
 
 Only `false` is valid when `wait` is present. A blocking delay preserves order.
-A non-blocking delay re-resolves its target when it eventually runs. Actions
+When a delayed action runs, Citry's browser client first checks that the
+calling component is still mounted and that no newer result for it has been
+applied; otherwise it skips a non-blocking action and fires
+`citry:events:stale`, or rejects the caller's promise for a blocking one. Actions
 after a redirect race the navigation, so a server should warn when it encodes
 such a list even though the authored order remains unchanged.
 
@@ -578,8 +649,23 @@ Clients advertise the swaps, action kinds, and renderers they can apply:
 
 All arrays contain unique known values. The object and its arrays are strict.
 Any key may be omitted; an omitted key uses that key's v1 baseline. The
-server never emits outside the advertised set. In particular, it downgrades a
-`morph` render to `replace` for a client that did not advertise morphing.
+server never emits outside the advertised set. In particular, it downgrades an
+`html-fragment/1` render from `morph` to `replace` for a client that did not
+advertise morphing. A `vue-prepared/1` render has no such fallback, so a client
+that advertises `vue-prepared/1` must also advertise `morph`; otherwise a call
+that renders fails with `handler_error`. Any other render outside the
+advertised swaps or renderers also fails with `handler_error`, because the
+server never drops or reorders actions.
+
+Citry's own browser client advertises exactly what it applies:
+
+```json
+{
+  "swaps": ["morph"],
+  "actions": ["render", "data", "state", "event", "redirect", "url"],
+  "renderers": ["vue-prepared/1"]
+}
+```
 
 When the complete `capabilities` object is absent, all three keys use
 `CAPABILITIES_BASELINE_V1`:
