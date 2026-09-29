@@ -547,10 +547,13 @@
   Object.defineProperty(compilerRuntime, "helperContract", {value: HELPER_CONTRACT, enumerable: true});
 
   // An opaque HTML record is trusted HTML from Python and the number of top-level nodes it parses
-  // into inside a <template> element, which the server computed.
+  // into inside a <template> element, which the server computed. `pinned: true` asks the browser to
+  // keep the block's first render for the life of the component (see opaqueHtmlComponent).
   function checkOpaqueHtmlRecord(value) {
     const record = plain(value, "opaque HTML record");
-    if (Object.keys(record).sort().join(",") !== "html,nodeCount" || typeof record.html !== "string" ||
+    const keys = Object.keys(record).sort().join(",");
+    if ((keys !== "html,nodeCount" && keys !== "html,nodeCount,pinned") ||
+        (keys === "html,nodeCount,pinned" && record.pinned !== true) || typeof record.html !== "string" ||
         !Number.isSafeInteger(record.nodeCount) || record.nodeCount < 0 ||
         (record.html === "" && record.nodeCount !== 0))
       throw new TypeError("invalid opaque HTML record");
@@ -563,9 +566,15 @@
     setup(props) {
       let cachedHtml;
       let cachedVNode = null;
+      // Decided by the first record this instance renders. A pinned block hands its nodes to page
+      // code (a chart or map library, say) that changes them after mount, so Vue must never patch
+      // or replace them: returning the same vnode object makes Vue skip the block on every later
+      // render, whatever HTML the server sends then.
+      let pinned = null;
       return () => {
         const record = checkOpaqueHtmlRecord(props.record);
-        if (cachedVNode && cachedHtml === record.html) return cachedVNode;
+        if (pinned === null) pinned = record.pinned === true;
+        if (cachedVNode && (pinned || cachedHtml === record.html)) return cachedVNode;
         const key = record.html;
         // The block renders inside a Fragment. A hydrated page carries the block between the
         // Fragment's comments, and Vue adopts `nodeCount` nodes there without reading them; when
