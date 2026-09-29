@@ -15,7 +15,8 @@ from typing import Any
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, Extension
+from citry.ext.dependencies import Script
 from citry.ext.events import actions
 from citry.ext.events.renderers import dispatcher_for
 
@@ -109,7 +110,7 @@ def test_a_page_plugin_reaches_every_component_of_the_app(page: Any, serve_docum
     for message in use_errors[:3]:
         assert message.startswith("TypeError: Citry.vue.use() needs a Vue plugin")
     # Too late: the app already started without the plugin, and the message says where to call it.
-    assert use_errors[3].startswith("Error: Citry.vue.use() was called after Citry started a Vue app")
+    assert use_errors[3].startswith("Error: Citry.vue.use() was called after Citry created a Vue app")
     assert "`defer`" in use_errors[3]
     # `use` is Citry's addition, so it stays out of an enumeration of the Vue runtime.
     assert page.evaluate("Object.keys(Citry.vue).includes('use')") is False
@@ -184,4 +185,43 @@ def test_send_options_reject_wait_false_and_unknown_keys(page: Any, serve_live: 
     assert accepted == "pong"
     # Only the accepted call reached the server.
     assert len(requests) == 1
+    assert errors == []
+
+
+@pytest.mark.e2e
+def test_scripts_the_app_loads_before_it_starts_may_register_plugins(page: Any, serve_live: Any) -> None:
+    # An extension's before_manifest script and a component's own JavaScript run
+    # while Citry prepares the app, before it creates the Vue app, so a plugin
+    # they register still reaches that app.
+    class PagePlugins(Extension):
+        name = "page_plugins"
+
+        def on_dependencies(self, ctx):
+            ctx.before_manifest.append(
+                Script(
+                    content=(
+                        "Citry.vue.use({install(app) { app.config.globalProperties.$fromExtension = 'extension'; }});"
+                    ),
+                    wrap=False,
+                )
+            )
+
+    engine = Citry(extensions=[PagePlugins], autodiscover=False)
+
+    class Plugged(Component):
+        citry = engine
+        template = """
+            <p
+                id="plugged"
+                v-text="$fromExtension + ' ' + $fromComponent"
+            ></p>
+        """
+        js = """
+            Citry.vue.use({install(app) { app.config.globalProperties.$fromComponent = 'component'; }});
+            $component({});
+        """
+
+    errors = _collect_page_errors(page)
+    page.goto(serve_live(engine, Plugged().render().serialize(), "") + "/")
+    page.wait_for_function("document.querySelector('#plugged')?.textContent === 'extension component'")
     assert errors == []

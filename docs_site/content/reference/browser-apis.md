@@ -234,18 +234,29 @@ Citry.vue.use({
 A component template can then use `v-autofocus`. Register a store plugin,
 or any other Vue plugin, the same way.
 
-Call it before Citry starts its first app, from a script that runs after
-Citry's runtime has loaded; `Citry.vue` does not exist before that. A page
-that Citry renders loads the runtime with an ordinary script and starts
-its apps from a module script, so a script in the page `<head>` loaded
-with `defer` runs between the two:
+Call it before Citry creates its first Vue app, from a script that runs
+after Citry's runtime has loaded; `Citry.vue` does not exist before that.
+Three places work:
 
-```html
-<script defer src="/static/vue-plugins.js"></script>
-```
+- A script in the page `<head>` loaded with `defer`. A page that Citry
+  renders loads the runtime with an ordinary script and starts its apps
+  from a module script, so a deferred script runs between the two:
 
-- A call after Citry has started an app throws an `Error`, because that app
-  would run without the plugin. Move the call earlier.
+  ```html
+  <script defer src="/static/vue-plugins.js"></script>
+  ```
+
+- A script an extension adds to `ctx.before_manifest` in
+  `on_dependencies()`. On an interactive page the app loads it first,
+  before it creates the Vue app.
+- A component's own JavaScript, when the component is in the page's
+  first app. The app loads it before creating the Vue app, and the plugin
+  then applies to the whole app, not only to that component.
+
+Other calls behave as follows:
+
+- A call after Citry has created a Vue app throws an `Error`, because that
+  app would run without the plugin. Move the call earlier.
 - A value that is neither a function nor an object with an `install(app)`
   method throws a `TypeError`.
 - Registering the same plugin again does nothing, as with `app.use`, even

@@ -23,22 +23,26 @@
   // Vue plugins the page registered with `Citry.vue.use()`, in registration order. Citry installs
   // each one on every Vue app it creates, because the page never gets to call `app.use` itself.
   const pageVuePlugins = [];
-  // Becomes true when Citry starts its first app on this page. A plugin registered after that would
-  // be missing from the app that already started, so `Citry.vue.use()` refuses it from then on.
-  let appStartBegan = false;
+  // Becomes true when Citry creates its first Vue app on this page. A plugin registered after that
+  // would be missing from that app, so `Citry.vue.use()` refuses it from then on. Scripts the start
+  // loads before that moment (an extension's before_manifest scripts, component JavaScript) may
+  // still register one.
+  let firstAppCreated = false;
   // A Vue object that cannot take a new property (a frozen copy) goes without `use` rather than
-  // stopping the whole runtime from loading.
-  if (Object.isExtensible(V) && !Object.prototype.hasOwnProperty.call(V, "use")) {
+  // stopping the whole runtime from loading; the console says why a later call finds no function.
+  if (!Object.isExtensible(V) && !Object.prototype.hasOwnProperty.call(V, "use"))
+    console.error("[Citry] Citry.vue.use() is unavailable because the page's Vue runtime object cannot be extended");
+  else if (!Object.prototype.hasOwnProperty.call(V, "use")) {
     Object.defineProperty(V, "use", {enumerable: false, configurable: false, writable: false,
       value: function use(plugin, ...options) {
         // Vue accepts the same two shapes in `app.use`; anything else would fail later, inside an app start.
         if (typeof plugin !== "function" &&
             !(plugin !== null && typeof plugin === "object" && typeof plugin.install === "function"))
           throw new TypeError("Citry.vue.use() needs a Vue plugin: an object with an install(app) method, or a function");
-        if (appStartBegan)
-          throw new Error("Citry.vue.use() was called after Citry started a Vue app on this page, so that app " +
-            "would run without the plugin. Call it from a script that runs before Citry starts its apps, such " +
-            "as a script loaded with `defer` in the page <head>.");
+        if (firstAppCreated)
+          throw new Error("Citry.vue.use() was called after Citry created a Vue app on this page, so that app " +
+            "would run without the plugin. Call it from a script that runs before Citry creates its first app, " +
+            "such as a script loaded with `defer` in the page <head> or an extension's before_manifest script.");
         // As with `app.use`, registering the same plugin again does nothing, even with other options.
         if (pageVuePlugins.some(entry => entry.plugin === plugin)) return;
         pageVuePlugins.push(Object.freeze({plugin, options}));
@@ -3689,6 +3693,8 @@
     // ordinary pages never pay for it.
     const hydrationDiagnostics = hydrating && globalThis.__citryHydrationDiagnostics === true;
     const vueAppFactory = hydrating ? V.createSSRApp : V.createApp;
+    // From here on the page's plugin list is fixed; see `Citry.vue.use()` above.
+    firstAppCreated = true;
     const vueApp = vueAppFactory(componentTypes[root.typeKey], {citryId: root.id});
     vueApp.component("citry-opaque-html", opaqueHtmlComponent);
     vueApp.directive("citry-control", {
@@ -3947,8 +3953,6 @@
   }
 
   async function startPrepared(configuration, lifecycle) {
-    // From here on the page's plugin list is fixed; see `Citry.vue.use()` above.
-    appStartBegan = true;
     const candidateId = configuration && typeof configuration === "object" && configuration.manifest &&
       typeof configuration.manifest === "object" ? configuration.manifest.appId : null;
     const startAttempt = Object.freeze({});
