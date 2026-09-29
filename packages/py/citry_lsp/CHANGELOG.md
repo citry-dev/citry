@@ -17,6 +17,12 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Fixed
 
+- Inside `$component({ ... })`, `this` now knows every member of the
+  component: props, injections, `data()`, `setup()`, computed values,
+  methods, `js_data()` keys, and Citry's helpers such as `$sendEvent`.
+  Vue expressions in the template get the same types, and Go to Definition
+  from either place opens the member's declaration, or the Python field for
+  a `js_data()` key.
 - Completion, hover, go-to-definition, and unknown-variable diagnostics now
   work for keys returned by a `template_data`, `js_data`, or `css_data`
   written as a `@staticmethod` or `@classmethod`, not only for instance

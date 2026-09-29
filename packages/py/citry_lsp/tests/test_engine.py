@@ -1321,7 +1321,8 @@ def test_init_callback_context_fields_have_types_and_documentation_links(tmp_pat
         " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
         " * @property {CitryI18nService | null} i18n",
         "=> Promise<unknown>} sendEvent",
-        "onServerRender?: CitryComponentInitializer, init?: CitryComponentInitializer}",
+        "onServerRender?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M>>, "
+        "init?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M>>}",
     ):
         assert line in projection.source, line
 
@@ -1432,10 +1433,11 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
     assert loop_references is not None
     assert len(loop_references) == 2
 
+    # An instance read of a js_data() key navigates to the Python field, like the template root.
     js_title_target = definition(
         javascript, _position(js_source, "current.title", len("current.ti")), project, documents
     )
-    assert js_title_target is None
+    assert js_title_target == title_target
     scope_target = definition(
         template,
         _position(template_source, "notice.to", len("notice")),
@@ -1457,7 +1459,10 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
         documents,
         include_declaration=True,
     )
-    assert js_references is None
+    assert js_references is not None
+    assert title_target in js_references
+    title_use = _position(js_source, "current.title", len("current."))
+    assert any(location.uri == js_file.as_uri() and location.range.start == title_use for location in js_references)
 
     template_projection = browser_projection(
         template,
@@ -1474,6 +1479,7 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
         "count",
         "invalid",
         "colors",
+        "__citryComponentSource",
     )
     loop_projection = browser_projection(template, loop_use, project, documents)
     assert loop_projection is not None
@@ -1495,10 +1501,11 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
         "@property {(name: string, handler: (detail: unknown) => void) => CitryCleanup} onEvent"
         in js_projection.source
     )
-    assert "function $component(definition)" in js_projection.source
+    assert "/** @type {CitryComponentFunction} */ var $component" in js_projection.source
     assert "$provide" not in js_projection.source
     assert "secret" not in js_projection.source
-    assert not js_projection.citry_owns_position
+    # Citry answers the js_data() key with its Python origin.
+    assert js_projection.citry_owns_position
 
     template_state_projection = browser_projection(
         template,
@@ -1824,7 +1831,6 @@ def test_callback_projection_delegates_closed_instance_and_official_vue_types(tm
       },
       computed: {
         writable: { get() { return this.local; }, set(/** @type {number} */ value) { this.local = value; } },
-        brokenComputed: 42,
       },
       inject: ['theme'],
       onServerRender({ component: current, onEvent }) {
@@ -1878,7 +1884,7 @@ class Card(Component):
         {javascript.uri: javascript},
     )
     assert projection is not None
-    assert "ComputedOptions[string]" in projection.source
+    assert "CitryComponentFunction" in projection.source
     bundled_types = Path(engine_module.__file__).parent / "types" / "node_modules"
     spaced_types = tmp_path / "official Vue types" / "node_modules"
     copytree(bundled_types, spaced_types)
@@ -1922,11 +1928,11 @@ class Card(Component):
     assert "Property 'missing' does not exist" in diagnostics
     assert "Property 'notARealVueApi' does not exist" in diagnostics
     assert "Property 'notAnOption' does not exist" in diagnostics
-    broken_computed_line = projection.source[: projection.source.index("brokenComputed: 42")].count("\n") + 2
-    assert f"projection.js({broken_computed_line},9)" in diagnostics
-    assert (
-        "Type 'number' is not assignable to type 'ComputedGetter<any> | WritableComputedOptions<any, any>'"
-    ) in diagnostics
+    # Vue infers every Options section from the source, so `this` and the
+    # callback's `component` know each data(), setup(), computed, method and
+    # injected name, and no member the component declares is reported missing.
+    for declared in ("local", "labelLength", "setupValue", "writable", "save", "theme", "title"):
+        assert f"Property '{declared}' does not exist" not in diagnostics, declared
     writable_option_line = projection.source[: projection.source.index("writable: {")].count("\n") + 2
     assert f"projection.js({writable_option_line}," not in diagnostics
     assert "Cannot find module" not in diagnostics
@@ -1944,6 +1950,7 @@ class Card(Component):
       methods: { broken: 1 },
       inject: 42,
     });
+    $component({ computed: { brokenComputed: 42 } });
     """
     unsupported_source = projected_source.replace(js_source, unsupported_js)
     assert unsupported_source != projected_source
@@ -1979,13 +1986,17 @@ class Card(Component):
     assert "Type 'never[]' is not assignable to type 'undefined'" in unsupported_diagnostics
     assert "Type '{}' is not assignable to type 'undefined'" in unsupported_diagnostics
     assert "Type '() => null' is not assignable to type 'undefined'" in unsupported_diagnostics
-    assert "Type '() => () => null' is not assignable to type 'CitryComponentSetup'" in unsupported_diagnostics
+    # A render function is not a bindings object, so setup() must return one.
+    assert "Type '() => () => null' is not assignable to type '(this: void, props:" in unsupported_diagnostics
     assert (
-        "Type 'number' is not assignable to type '{ labelLength: unknown; local: unknown; }'"
-        in unsupported_diagnostics
-    )
-    assert "'broken' does not exist" in unsupported_diagnostics
-    assert "Type 'number' is not assignable to type '\"theme\"[] | {" in unsupported_diagnostics
+        "Type '() => number' is not assignable to type "
+        "'(this: CitryDataThis, vm: CitryDataThis) => Record<string, unknown>'"
+    ) in unsupported_diagnostics
+    assert "Type 'number' is not assignable to type 'Function'" in unsupported_diagnostics
+    assert "Type 'number' is not assignable to type '\"theme\"[] | CitryInjectOptions" in unsupported_diagnostics
+    assert (
+        "Type 'number' is not assignable to type 'ComputedGetter<any> | WritableComputedOptions<any, any>'"
+    ) in unsupported_diagnostics
 
 
 def test_open_inject_projection_keeps_explicit_options_and_accepts_unknown_keys(tmp_path):

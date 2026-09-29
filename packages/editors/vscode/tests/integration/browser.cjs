@@ -193,6 +193,88 @@ async function exerciseBrowser(folder) {
 		assert.equal(document.getText(), source);
 	}
 	await exerciseStateBindingTarget(folder);
+	await exerciseOptionsInstance(folder);
+}
+
+// `this` in an Options function and a template name both read the live
+// instance, so both must know every member and open its declaration.
+async function exerciseOptionsInstance(folder) {
+	const moduleName = "browser_fixture_options";
+	const uri = vscode.Uri.joinPath(folder.uri, `${moduleName}.py`);
+	const source = [
+		"from citry import Citry, Component",
+		"engine = Citry(autodiscover=False)",
+		"",
+		"class Options(Component):",
+		"    citry = engine",
+		"    class JsData:",
+		"        title: str",
+		'    template = """',
+		'      <button @click="toggle()" v-text="count"></button>',
+		'    """',
+		'    js = """',
+		"      $component({",
+		"        data() { return { count: 1 }; },",
+		"        methods: {",
+		"          toggle() {",
+		"            this.count += 1;",
+		"            return this.title;",
+		"          },",
+		"        },",
+		"      });",
+		'    """',
+		"",
+	].join("\n");
+	await vscode.workspace.fs.writeFile(uri, Buffer.from(source));
+	await vscode.workspace
+		.getConfiguration("citry", uri)
+		.update("app", `${moduleName}:engine`, vscode.ConfigurationTarget.WorkspaceFolder);
+	const document = await vscode.workspace.openTextDocument(uri);
+	await vscode.window.showTextDocument(document);
+	const at = (marker, offset) => document.positionAt(source.indexOf(marker) + offset);
+	const hoverText = async (position) =>
+		((await vscode.commands.executeCommand("vscode.executeHoverProvider", uri, position)) ?? [])
+			.flatMap((hover) => hover.contents)
+			.map((content) => (typeof content === "string" ? content : content.value))
+			.join("\n");
+	const definitionsAt = async (position) =>
+		((await vscode.commands.executeCommand("vscode.executeDefinitionProvider", uri, position)) ?? []).map(
+			(location) => ({
+				uri: (location.targetUri ?? location.uri).toString(),
+				offset: document.offsetAt((location.targetSelectionRange ?? location.range).start),
+			}),
+		);
+	const opens = async (position, marker) =>
+		(await definitionsAt(position)).some(
+			(target) => target.uri === uri.toString() && target.offset === source.indexOf(marker),
+		);
+
+	const memberStart = at("this.count += 1", "this.".length);
+	await eventually("Options this completion", async () => {
+		const result = await vscode.commands.executeCommand("vscode.executeCompletionItemProvider", uri, memberStart);
+		const labels = new Set(
+			(result?.items ?? []).map((item) => (typeof item.label === "string" ? item.label : item.label.label)),
+		);
+		return ["count", "toggle", "title", "$sendEvent"].every((name) => labels.has(name));
+	});
+	await eventually("Options this hover", async () =>
+		/\(property\) count: number\b/.test(await hoverText(at("this.count += 1", "this.c".length))),
+	);
+	await eventually("Options this data() definition", async () =>
+		opens(at("this.count += 1", "this.c".length), "count: 1"),
+	);
+	await eventually("Options this js_data() definition", async () =>
+		opens(at("this.title", "this.t".length), "title: str"),
+	);
+	await eventually("template instance hover", async () =>
+		/count: number\b/.test(await hoverText(at('v-text="count"', 'v-text="c'.length))),
+	);
+	await eventually("template data() definition", async () =>
+		opens(at('v-text="count"', 'v-text="c'.length), "count: 1"),
+	);
+	await eventually("template method definition", async () =>
+		opens(at('@click="toggle', '@click="t'.length), "toggle() {"),
+	);
 }
 
 async function exerciseStateBindingTarget(folder) {

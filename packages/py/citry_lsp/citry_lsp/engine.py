@@ -1784,17 +1784,25 @@ def browser_projection(
             binding.name: _browser_binding_wire_type(binding, roots) for binding in expression.binding_details
         }
         native_names = _shared_vue_public_names(consumers, project, document, open_documents)
-        preamble = _browser_preamble(
+        instance = _template_component_instance(consumers, project, document, open_documents)
+        preamble, name_declarations = _browser_preamble(
             roots,
             (*expression.bindings, *native_names),
-            (),
+            () if instance is None else instance.props,
             tuple(events),
             state_roots,
             binding_types=binding_types,
+            component_analysis=None if instance is None else instance.analysis,
             writable_state_names=writable_state_names,
             i18n=project.i18n,
             js_data_policy=_shared_js_data_policy(consumers, project, document, open_documents),
+            instance_names=frozenset() if instance is None else frozenset(native_names),
         )
+        if instance is not None:
+            preamble = f"{preamble}\n{instance.source}"
+        # One function scope holds the names and the expression, so each name
+        # hides a browser global of the same name instead of merging with it.
+        preamble = f"{preamble}\n(function () {{\n{name_declarations}"
         projected_expression = expression.source
         if expression.transform == "dynamic-slot":
             normalized = _normalized_dynamic_slot_source(expression.source)
@@ -1813,6 +1821,7 @@ def browser_projection(
         else:
             prefix = f"{preamble}\nvoid (\n"
             suffix = "\n);\n"
+        suffix = f"{suffix}}})();\n"
         source = f"{prefix}{projected_expression}{suffix}"
         relative_byte = parser_index - expression.start_index
         try:
@@ -1823,6 +1832,9 @@ def browser_projection(
         virtual_end = virtual_start + len(projected_expression)
         source_range = _range(region.source_map.map_range(expression.start_index, expression.end_index))
         owned_names = tuple(root.name for root in roots)
+        if instance is not None:
+            # The generated helper is not a template name, so never offer it.
+            owned_names = (*owned_names, _TEMPLATE_COMPONENT_SOURCE)
         owns_position = _browser_projection_owns_position(
             expression,
             parser_index,
@@ -1873,7 +1885,7 @@ def browser_projection(
     component_globals = _component_js_global_types(consumers, project)
     if component_globals is None:
         return None
-    preamble = _browser_preamble(
+    preamble_declarations, global_declarations = _browser_preamble(
         js_roots,
         tuple(component_globals),
         props,
@@ -1887,7 +1899,8 @@ def browser_projection(
         i18n=project.i18n,
         js_data_policy=_shared_js_data_policy(consumers, project, document, open_documents),
     )
-    prefix = f"{preamble}\n"
+    # Configured host globals stay global: the authored source is a top-level script.
+    prefix = f"{preamble_declarations}\n{global_declarations}\n"
     authored = js_region.source_map.template_source
     source = f"{prefix}{authored}"
     try:
@@ -1917,6 +1930,66 @@ def browser_projection(
         ),
         _browser_source_mappings(js_region.source_map, 0, authored, prefix),
     )
+
+
+# The generated function that runs a component's source inside a template projection.
+_TEMPLATE_COMPONENT_SOURCE = "__citryComponentSource"
+
+
+@dataclass(frozen=True, slots=True)
+class _TemplateComponentInstance:
+    """The owning component's Options, ready to type a template expression."""
+
+    source: str
+    props: tuple[Any, ...] | None
+    analysis: Any
+
+
+def _template_component_instance(
+    consumers: tuple[ComponentRecord, ...],
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> _TemplateComponentInstance | None:
+    """
+    Type a template's instance names from its component's `$component` call.
+
+    The JavaScript provider infers the live instance from the authored Options
+    object, as it does inside the component JavaScript. The authored source is
+    copied into a function so its helpers stay in scope, and the function
+    returns the inferred instance. A template shared by several components, or
+    a source without exactly one `$component(...)` argument, keeps the
+    unknown-typed names instead.
+    """
+    if len(consumers) != 1:
+        return None
+    resolved = _component_js_asset_source(consumers[0], project, document, open_documents)
+    if not resolved:
+        return None
+    source = resolved[0]
+    analysis = analyze_browser_component_source(source)
+    if not analysis.valid or len(analysis.component_calls) != 1:
+        return None
+    call = analysis.component_calls[0]
+    if call.argument_start_index is None or call.argument_end_index is None:
+        return None
+    try:
+        argument = _parser_source_slice(source, call.argument_start_index, call.argument_end_index)
+    except UnicodeDecodeError:
+        return None
+    block = "\n".join(
+        (
+            f"function {_TEMPLATE_COMPONENT_SOURCE}() {{",
+            source,
+            # The leading semicolon ends an authored statement left open.
+            ";return /** @type {CitryDefineComponent} */ (/** @type {any} */ (null))(",
+            argument,
+            ");",
+            "}",
+            f"/** @typedef {{ReturnType<typeof {_TEMPLATE_COMPONENT_SOURCE}>}} CitryTemplateInstance */",
+        )
+    )
+    return _TemplateComponentInstance(block, browser_component_props(source), analysis)
 
 
 def _browser_source_mappings(
@@ -2228,6 +2301,16 @@ def _browser_projection_owns_position(
     if not component_js and identifier is not None and identifier.root:
         return identifier.name in {root.name for root in roots}
     member = browser_member_at(expression, parser_index)
+    if component_js and (member is None or member.owner not in {"data", "scope"}):
+        # Citry answers a js_data() key read through the instance with its
+        # Python origin; the JavaScript provider only sees a generated type.
+        analysis = analyze_browser_component_source(expression.source)
+        root_names = {root.name for root in roots}
+        if analysis.valid and any(
+            item.start_index <= parser_index <= item.end_index and item.name in root_names
+            for item in analysis.member_references
+        ):
+            return True
     if member is None:
         return False
     if member.owner == "$state" or (component_js and member.owner == "state"):
@@ -3772,6 +3855,12 @@ def declaration(
     browser_member_locations = _js_data_member_origin_locations(document, position, project, open_documents)
     if browser_member_locations:
         return browser_member_locations[0] if len(browser_member_locations) == 1 else list(browser_member_locations)
+    option_member_locations = _component_js_option_member_locations(document, position)
+    if option_member_locations:
+        return option_member_locations[0] if len(option_member_locations) == 1 else list(option_member_locations)
+    native_member_locations = _browser_native_member_locations(document, position, project, open_documents)
+    if native_member_locations:
+        return native_member_locations[0] if len(native_member_locations) == 1 else list(native_member_locations)
     state_locations = _browser_state_origin_locations(document, position, project, open_documents)
     if state_locations:
         return state_locations[0] if len(state_locations) == 1 else list(state_locations)
@@ -3821,6 +3910,12 @@ def definition(
     browser_member_locations = _js_data_member_origin_locations(document, position, project, open_documents)
     if browser_member_locations:
         return browser_member_locations[0] if len(browser_member_locations) == 1 else list(browser_member_locations)
+    option_member_locations = _component_js_option_member_locations(document, position)
+    if option_member_locations:
+        return option_member_locations[0] if len(option_member_locations) == 1 else list(option_member_locations)
+    native_member_locations = _browser_native_member_locations(document, position, project, open_documents)
+    if native_member_locations:
+        return native_member_locations[0] if len(native_member_locations) == 1 else list(native_member_locations)
     state_locations = _browser_state_origin_locations(document, position, project, open_documents)
     if state_locations:
         return state_locations[0] if len(state_locations) == 1 else list(state_locations)
@@ -7205,6 +7300,49 @@ def _browser_data_origin_locations(
     return _js_data_root_locations(resolved[1], open_documents) if resolved is not None else ()
 
 
+def _browser_native_member_locations(
+    document: DocumentState,
+    position: types.Position,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> tuple[types.Location, ...]:
+    """
+    Navigate a template name to the Vue Options entry that declares it.
+
+    A Vue expression reads props, data(), setup(), computed values, methods
+    and injections by their bare name. The JavaScript provider only sees the
+    generated declaration, so Citry maps the name to each owning component's
+    authored `$component` source.
+    """
+    context = _browser_expression_context(document, position, project)
+    if context is None:
+        return ()
+    region, expression, parser_index = context
+    identifier = browser_identifier_at(expression, parser_index)
+    # A `v-for` or slot binding with the same name shadows the instance member.
+    if (
+        identifier is None
+        or not identifier.root
+        or any(binding.name == identifier.name for binding in expression.binding_details)
+    ):
+        return ()
+    found: list[types.Location] = []
+    for component in _template_consumers(document, region, project, open_documents):
+        resolved = _component_js_asset_source(component, project, document, open_documents)
+        if not resolved:
+            continue
+        source, uri, source_map = resolved
+        analysis = analyze_browser_component_source(source)
+        if not analysis.valid:
+            continue
+        found.extend(
+            types.Location(uri, _range(source_map.map_range(item.name_start_index, item.name_end_index)))
+            for item in analysis.public_names
+            if item.exposed_name == identifier.name
+        )
+    return _sorted_locations(found)
+
+
 def _browser_expression_context(
     document: DocumentState,
     position: types.Position,
@@ -8148,6 +8286,17 @@ def _component_public_instance_shape(
     readonly = _js_object_shape(
         tuple((name, type_source, True) for name, (type_source, readonly) in members.items() if readonly)
     )
+    helpers, open_namespace = _component_instance_helpers(analysis, js_data_policy=js_data_policy, i18n=i18n)
+    return f"{writable} & Readonly<{readonly}> & {helpers}{open_namespace}"
+
+
+def _component_instance_helpers(
+    analysis: Any | None,
+    *,
+    js_data_policy: Literal["closed", "open", "unavailable"],
+    i18n: Any | None,
+) -> tuple[str, str]:
+    """Render Citry's instance helpers and whether unproven names stay readable."""
     helpers = (
         "{$state: CitryEventsState, $sendEvent: (name: CitryServerEventName, "
         "args?: Record<string, unknown>, opts?: CitrySendOptions) => Promise<unknown>, "
@@ -8157,6 +8306,8 @@ def _component_public_instance_shape(
     )
     if i18n is not None and i18n.configured:
         helpers = helpers[:-1] + ", $i18n: CitryI18nService | null}"
+    # An open js_data() result or an Options section the analyzer cannot read
+    # may add any name, so an unlisted member reads as unknown, not an error.
     open_namespace = (
         " & Record<string, unknown>"
         if js_data_policy != "closed"
@@ -8165,7 +8316,28 @@ def _component_public_instance_shape(
         or any(section.state == "unknown" for section in analysis.sections)
         else ""
     )
-    return f"{writable} & Readonly<{readonly}> & {helpers}{open_namespace}"
+    return helpers, open_namespace
+
+
+def _component_instance_extras_shape(
+    roots: tuple[_JsDataRoot, ...],
+    analysis: Any | None,
+    *,
+    js_data_policy: Literal["closed", "open", "unavailable"],
+    i18n: Any | None,
+) -> str:
+    """
+    Render what Citry adds to a Vue instance: js_data() keys and the helpers.
+
+    Vue's own instance type supplies props, data(), setup(), computed values,
+    methods, and injections from the Options object, so only the names Citry
+    installs before `data()` runs belong here.
+    """
+    js_data = _js_object_shape(
+        tuple((root.name, root.wire_type.javascript, root.presence != "conditional") for root in roots)
+    )
+    helpers, open_namespace = _component_instance_helpers(analysis, js_data_policy=js_data_policy, i18n=i18n)
+    return f"{js_data} & {helpers}{open_namespace}"
 
 
 def _browser_preamble(
@@ -8182,27 +8354,41 @@ def _browser_preamble(
     writable_state_names: frozenset[str] = frozenset(),
     i18n: Any | None = None,
     js_data_policy: Literal["closed", "open", "unavailable"] = "closed",
-) -> str:
-    """Render collision-tolerant JSDoc facts for VS Code's JS provider."""
+    instance_names: frozenset[str] = frozenset(),
+) -> tuple[str, str]:
+    """
+    Render collision-tolerant JSDoc facts for VS Code's JS provider.
+
+    Returns the shared declarations and, separately, one `var` per expression
+    name. A template caller puts the names in a function around the expression
+    so a name such as `open` or `name` hides the browser global of that name.
+
+    `instance_names` are template names the component's Vue Options declare.
+    They take their types from `CitryTemplateInstance`, which the caller
+    defines from the component's own `$component` source.
+    """
     lines = ["// Generated Citry browser-analysis declarations."]
     lines.extend(_i18n_browser_typedefs(i18n))
     names: set[str] = set()
     binding_names = frozenset(bindings)
+    name_lines: list[str] = []
     if include_root_variables:
         for root in roots:
             if root.name in names or root.name in binding_names:
                 continue
             names.add(root.name)
-            lines.extend((f"/** @type {{{root.wire_type.javascript}}} */", f"var {root.name};"))
+            name_lines.extend((f"/** @type {{{root.wire_type.javascript}}} */", f"var {root.name};"))
     for binding in bindings:
         if binding in names:
             continue
         names.add(binding)
         if binding == "$i18n" and i18n is not None and i18n.configured:
             binding_type = "CitryI18nService"
+        elif binding in instance_names and binding not in (binding_types or {}):
+            binding_type = f"CitryTemplateInstance[{_js_string_literal(binding)}]"
         else:
             binding_type = (binding_types or {}).get(binding, JsonWireType("unknown")).javascript
-        lines.extend((f"/** @type {{{binding_type}}} */", f"var {binding};"))
+        name_lines.extend((f"/** @type {{{binding_type}}} */", f"var {binding};"))
     data_shape = _js_object_shape(tuple((root.name, root.wire_type.javascript, True) for root in roots))
     props_shape = (
         "Record<string, unknown>"
@@ -8239,13 +8425,12 @@ def _browser_preamble(
     option_shape = lambda origin, value: _js_object_shape(  # noqa: E731
         tuple((name, value, True) for name in sorted(option_names.get(origin, ())))
     )
-    setup_shape = option_shape("setup", "unknown")
-    data_options_shape = option_shape("data", "unknown")
-    computed_shape = option_shape(
-        "computed",
-        f"import({_js_string_literal(vue_types)}).ComputedOptions[string]",
+    instance_extras = _component_instance_extras_shape(
+        roots,
+        component_analysis,
+        js_data_policy=js_data_policy,
+        i18n=i18n,
     )
-    methods_shape = option_shape("methods", "(...args: unknown[]) => unknown")
     inject_unknown = (
         component_analysis is None
         or not component_analysis.valid
@@ -8263,6 +8448,11 @@ def _browser_preamble(
         else f"Record<string | symbol, {inject_value}>"
     )
     event_type = " | ".join(_js_string_literal(name) for name in event_names) or "string"
+    vue_import = f"import({_js_string_literal(vue_types)})"
+    generics = (
+        "<B extends Record<string, unknown> = {}, D extends Record<string, unknown> = {}, "
+        f"C extends {vue_import}.ComputedOptions = {{}}, M extends {vue_import}.MethodOptions = {{}}>"
+    )
     lines.extend(
         (
             f"/** @typedef {{{data_shape}}} CitryJsData */",
@@ -8287,14 +8477,16 @@ def _browser_preamble(
             " */",
             "/** @callback CitryCleanup @returns {void} */",
             # An initializer may be async; Citry keeps a cleanup the Promise resolves to.
-            "/** @callback CitryComponentInitializer",
-            " * @param {CitryComponentContext} context",
+            # The Options form passes its own instance type; the callback form has no Options.
+            "/** @template [I=CitryComponentPublicInstance] @callback CitryComponentInitializer",
+            " * @param {CitryComponentContext<I>} context",
             " * @returns {void | CitryCleanup | Promise<void | CitryCleanup>}",
             " */",
             "/** @typedef {{timeout?: number, wait?: true}} CitrySendOptions */",
             "/**",
+            " * @template [I=CitryComponentPublicInstance]",
             " * @typedef {Object} CitryComponentContext",
-            " * @property {CitryComponentPublicInstance} component",
+            " * @property {I} component",
             " * @property {number} revision",
             " * @property {(name: string, handler: (detail: unknown) => void) => CitryCleanup} onEvent",
             " * @property {string | null} id",
@@ -8306,29 +8498,60 @@ def _browser_preamble(
             " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
             " * @property {CitryI18nService | null} i18n",
             " */",
-            "/** @callback CitryComponentSetup",
-            " * @param {Readonly<CitryClientProps>} props",
-            f" * @param {{import({_js_string_literal(vue_types)}).SetupContext}} context",
-            " * @returns {Record<string, unknown> | undefined}",
-            " */",
-            f"/** @typedef {{import({_js_string_literal(vue_types)}).ComponentOptions<"
-            f"CitryClientProps, {setup_shape}, {data_options_shape}, {computed_shape}, {methods_shape}, "
-            f"never, never, any, string, {{}}, {inject_options_shape}, {inject_names}> & "
-            "{mixins?: never, extends?: never, render?: never, setup?: CitryComponentSetup, "
-            "onServerRender?: CitryComponentInitializer, init?: CitryComponentInitializer}} "
-            "CitryComponentDefinition */",
+            f"/** @typedef {{{instance_extras}}} CitryInstanceExtras */",
+            f"/** @typedef {{{inject_options_shape}}} CitryInjectOptions */",
+            # `this` in data() cannot include the data() result it returns, and
+            # the methods would make that result depend on itself, so data()
+            # sees props, injections, js_data() keys and Citry's helpers, which
+            # Citry installs before data() runs.
+            f"/** @typedef {{import({_js_string_literal(vue_types)}).CreateComponentPublicInstanceWithMixins<"
+            f"Readonly<CitryClientProps>, {{}}, {{}}, {{}}, {{}}, "
+            f"import({_js_string_literal(vue_types)}).ComponentOptionsMixin, "
+            f"import({_js_string_literal(vue_types)}).ComponentOptionsMixin, {{}}, "
+            "Readonly<CitryClientProps>, {}, false, CitryInjectOptions> & CitryInstanceExtras} CitryDataThis */",
+            # Vue's own data() and setup() types would join their `this` and
+            # return types with the ones below, so drop them; mapping over each
+            # key keeps the other Options and the open index signature.
+            "/** @template T @typedef {{[K in keyof T as K extends 'data' | 'setup' ? never : K]: T[K]}} "
+            "CitryOwnDataAndSetup */",
+            # The live instance: Vue infers setup(), data(), computed and methods
+            # from the Options object, and Citry adds its own names.
+            f"/** @template B, D @template {{import({_js_string_literal(vue_types)}).ComputedOptions}} C "
+            f"@template {{import({_js_string_literal(vue_types)}).MethodOptions}} M "
+            f"@typedef {{import({_js_string_literal(vue_types)}).CreateComponentPublicInstanceWithMixins<"
+            f"Readonly<CitryClientProps>, B, D, C, M, import({_js_string_literal(vue_types)}).ComponentOptionsMixin, "
+            f"import({_js_string_literal(vue_types)}).ComponentOptionsMixin, {{}}, Readonly<CitryClientProps>, "
+            "{}, false, CitryInjectOptions> & "
+            "CitryInstanceExtras} CitryOptionsInstance */",
+            f"/** @template B, D @template {{import({_js_string_literal(vue_types)}).ComputedOptions}} C "
+            f"@template {{import({_js_string_literal(vue_types)}).MethodOptions}} M "
+            f"@typedef {{CitryOwnDataAndSetup<import({_js_string_literal(vue_types)}).ComponentOptionsBase<"
+            f"CitryClientProps, B, D, C, M, import({_js_string_literal(vue_types)}).ComponentOptionsMixin, "
+            f"import({_js_string_literal(vue_types)}).ComponentOptionsMixin, any, string, {{}}, CitryInjectOptions, "
+            f"{inject_names}>> & "
+            "{data?: (this: CitryDataThis, vm: CitryDataThis) => D, "
+            "mixins?: never, extends?: never, render?: never, "
+            "setup?: (this: void, props: Readonly<CitryClientProps>, "
+            f"context: import({_js_string_literal(vue_types)}).SetupContext) => B | undefined, "
+            "onServerRender?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M>>, "
+            "init?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M>>} & "
+            "ThisType<CitryOptionsInstance<B, D, C, M>>} CitryComponentDefinition */",
+            # One generic signature, as in Vue's defineComponent(), lets
+            # TypeScript infer each section from the authored object. It must be
+            # a function type: a JSDoc `@template` function declaration loses
+            # the inference that the Options methods' `this` depends on.
+            f"/** @typedef {{{generics}(definition: CitryComponentInitializer | "
+            "CitryComponentDefinition<B, D, C, M>) => void} CitryComponentFunction */",
+            f"/** @typedef {{{generics}(definition: CitryComponentInitializer | "
+            "CitryComponentDefinition<B, D, C, M>) => CitryOptionsInstance<B, D, C, M>} CitryDefineComponent */",
         )
     )
-    if component_js:
-        lines.extend(
-            (
-                "/** @overload @param {CitryComponentInitializer} definition @returns {void} */",
-                "/** @overload @param {CitryComponentDefinition} definition @returns {void} */",
-                "/** @param {CitryComponentInitializer | CitryComponentDefinition} definition */",
-                "function $component(definition) {}",
-            )
+    if component_js or instance_names:
+        # A template's projection also runs its component's source, which calls `$component`.
+        lines.append(
+            "/** @type {CitryComponentFunction} */ var $component = /** @type {any} */ (function () {});",
         )
-    else:
+    if not component_js:
         lines.extend(
             (
                 "/** @param {CitryServerEventName} name @param {Record<string, unknown>=} args "
@@ -8351,7 +8574,7 @@ def _browser_preamble(
                 "/** @type {Record<string, Element>} */ var $refs;",
             )
         )
-    return "\n".join(lines)
+    return "\n".join(lines), "\n".join(name_lines)
 
 
 def _i18n_browser_typedefs(index: Any) -> tuple[str, ...]:
@@ -8866,16 +9089,72 @@ def _js_data_member_root_at(
         return None
     member = browser_member_at(_component_js_expression(region), parser_index)
     if member is None or member.owner not in {"data", "scope"}:
-        return None
-    roots = (
-        _js_asset_data_roots(document, region, project, open_documents)
-        if member.owner == "data"
-        else _js_asset_scope_roots(document, region, project, open_documents)
-    )
+        # `this.<name>` in a bound Options function and `component.<name>` in
+        # an initializer read the live instance, where js_data() keys live too.
+        instance_member = _component_js_instance_member_at(region, parser_index)
+        if instance_member is None:
+            return None
+        member, roots = instance_member, _js_asset_data_roots(document, region, project, open_documents)
+    elif member.owner == "data":
+        roots = _js_asset_data_roots(document, region, project, open_documents)
+    else:
+        roots = _js_asset_scope_roots(document, region, project, open_documents)
     if roots is None:
         return None
     root = next((candidate for candidate in roots if candidate.name == member.name), None)
     return (region, root, member) if root is not None else None
+
+
+def _component_js_instance_member_at(region: JsRegion, parser_index: int) -> Any | None:
+    """
+    Return the `this.<name>` or `component.<name>` read under the cursor.
+
+    The analyzer only reports a read whose receiver it proved is the live Vue
+    instance, so a shadowed `component` or a detached function's `this` is
+    never returned.
+    """
+    analysis = analyze_browser_component_source(region.source_map.template_source)
+    if not analysis.valid:
+        return None
+    return next(
+        (
+            member
+            for member in analysis.member_references
+            if member.start_index <= parser_index <= member.end_index
+            # `$i18n` spans may cover a local alias rather than a member name.
+            and not member.name.startswith("$")
+        ),
+        None,
+    )
+
+
+def _component_js_option_member_locations(
+    document: DocumentState,
+    position: types.Position,
+) -> tuple[types.Location, ...]:
+    """
+    Navigate an instance read of a prop or injection to its declaration.
+
+    The JavaScript provider types these names from Citry's generated
+    declarations, so its own answer points outside the authored source. Names
+    from data(), setup(), computed and methods resolve inside the Options object
+    and stay with the JavaScript provider.
+    """
+    region = document.js_region_at(position)
+    if region is None:
+        return ()
+    parser_index = region.source_map.parser_index_at(_citry_position(position))
+    if parser_index is None:
+        return ()
+    member = _component_js_instance_member_at(region, parser_index)
+    if member is None:
+        return ()
+    analysis = analyze_browser_component_source(region.source_map.template_source)
+    return tuple(
+        types.Location(document.uri, _range(region.source_map.map_range(item.name_start_index, item.name_end_index)))
+        for item in analysis.public_names
+        if item.exposed_name == member.name and item.origin in {"props", "inject"}
+    )
 
 
 def _js_data_member_hover(
@@ -8924,7 +9203,7 @@ def _js_data_member_reference_locations(
     resolved = _js_data_member_root_at(document, position, project, open_documents)
     if resolved is None:
         return None
-    region, root, _member = resolved
+    region, root, resolved_member = resolved
     expression = _component_js_expression(region)
     found: list[types.Location] = []
     for identifier in browser_identifiers(expression):
@@ -8937,6 +9216,15 @@ def _js_data_member_reference_locations(
                 _range(region.source_map.map_range(member.start_index, member.end_index)),
             )
         )
+    # Instance reads name js_data() keys, never the separate `scope` namespace.
+    if getattr(resolved_member, "owner", None) != "scope":
+        analysis = analyze_browser_component_source(region.source_map.template_source)
+        if analysis.valid:
+            found.extend(
+                types.Location(document.uri, _range(region.source_map.map_range(member.start_index, member.end_index)))
+                for member in analysis.member_references
+                if member.name == root.name
+            )
     if include_declaration:
         found.extend(_js_data_root_locations(root, open_documents))
     return list(_sorted_locations(found))

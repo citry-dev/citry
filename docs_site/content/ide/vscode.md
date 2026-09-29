@@ -142,6 +142,65 @@ Declaration**, and **Find All References** connect them to the exact Python
 field or a conservatively inferred `js_data()` dict key. Public Events
 `State` fields receive the same navigation through `$state`.
 
+### Work with component members in `this` and the template
+
+Inside `$component({ ... })`, `this` has the type of the live component, and
+so does each name a Vue expression in the template reads. Completion and
+hover know every member, and **Go to Definition** opens where it is declared:
+
+```citry
+class Counter(Component):
+    class JsData:
+        step: int
+
+    template = """
+      <button @click="add()" v-text="count"></button>
+    """
+
+    js = """
+      $component({
+        data() { return { count: 0 }; },
+        methods: {
+          add() { this.count += this.step; },
+        },
+      });
+    """
+```
+
+Hovering `this.count` or `count` in the template shows `number`, and
+**Go to Definition** from either opens the `count` key in `data()`. From
+`this.step`, it opens the `step` field in `JsData`.
+
+| Member | Declared in | Go to Definition opens |
+| --- | --- | --- |
+| Prop | `props` | The prop's key |
+| Injection | `inject` | The injected name |
+| `data()` value | `data()` | The returned key |
+| `setup()` binding | `setup()` | The returned key |
+| Computed value | `computed` | The computed entry |
+| Method | `methods` | The method |
+| Browser data | `js_data()` or `JsData` | The Python field or dict key |
+
+`this` has this type in methods, computed getters and setters, `watch`
+handlers, lifecycle hooks such as `mounted()`, and `provide()`. When
+`onServerRender` or `init` is part of the same object, its `component`
+value gets the same type. Citry's
+helpers such as `$sendEvent`, `$loading`, and `$state` and Vue's own
+`$el`, `$refs`, and `$emit` are included.
+
+`this` in `data()` has props, injections, `js_data()` keys, and Citry's
+helpers, because those exist before `data()` runs. It does not include the
+`data()` result itself or the methods.
+
+Types come from the `$component` object as you write it. A section with the
+wrong shape, such as a `computed` entry that is a number instead of a
+function, stops the other sections from being typed until you fix it. A
+template that several components share keeps names untyped, because each
+component may declare them differently, but **Go to Definition** still lists
+each component's declaration.
+
+### Check component JavaScript and Vue expressions
+
 The component's direct `js` or resolved `js_file` receives matching types for
 the complete `$component` callback context. Direct synchronous writes to
 the callback's `component` value use the generated public-instance type, and
