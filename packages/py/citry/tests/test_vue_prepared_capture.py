@@ -24,6 +24,7 @@ from citry._vue.capture import (
     PreparedVerbatimHtml,
     PreparedVerbatimHtmlNode,
     render_prepared,
+    render_prepared_direct,
     typed_render_scope,
     vue_owned_native_properties,
 )
@@ -2246,3 +2247,58 @@ def test_python_attrs_cannot_use_any_vue_directive_spelling(name: str) -> None:
 
     with pytest.raises(ValueError, match="cannot introduce Vue syntax"):
         render_prepared(UnsafeSpread())
+
+
+def _assemble_page(component: Component) -> object:
+    return assemble_typed_render(
+        render_prepared_direct(component),
+        revision=0,
+        tag_for_type=lambda key: "x-" + key.lower().replace("_", "-"),
+    )
+
+
+def test_incomplete_raw_html_names_the_block_and_the_rule() -> None:
+    app = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = app
+        template = """<main :class="cls">
+  <c-raw><div class="open"></c-raw>
+</main>"""
+
+    with pytest.raises(ValueError, match="complete HTML fragment") as excinfo:
+        _assemble_page(Page())
+    assert str(excinfo.value) == (
+        "The <c-raw> contents at line 2, column 10 is not a complete HTML fragment: '<div class=\"open\">'."
+        " Inside an interactive component, Vue inserts this HTML as one block, so every tag it opens must"
+        " be closed inside it, it must not close a tag it did not open, and a '<' that does not start a tag"
+        " must be written as '&lt;'. Fix the HTML, or move the tags it shares with the template into it."
+        " Static pages do not have this rule, because there the HTML is written into the page as is."
+    )
+
+    class StaticPage(Component):
+        citry = app
+        template = '<main><c-raw><div class="open"></c-raw></main>'
+
+    # A static page writes the same HTML as is.
+    assert '<div class="open">' in str(StaticPage())
+
+
+def test_incomplete_markup_value_is_named_as_markup() -> None:
+    app = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = app
+        template = '<main :class="cls">{{ html }}</main>'
+
+        def template_data(self, kwargs, slots):
+            return {"html": Markup("<b>bold")}
+
+    with pytest.raises(ValueError, match=r"^A Markup value \(trusted HTML from Python\) is not a complete"):
+        _assemble_page(Page())
+
+
+def test_compiler_names_once_and_memo_when_they_reach_the_vue_template() -> None:
+    with pytest.raises(ValueError, match=r"^The Vue template contains 'v-once'\. Citry does not support") as excinfo:
+        NativeCompiler().compile("<p v-once>x</p>", type_key="Page")
+    assert "put '#c-ignore' on the element" in str(excinfo.value)

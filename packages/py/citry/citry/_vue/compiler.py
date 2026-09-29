@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 from typing_extensions import NotRequired, Self
 
+from citry.client_directives import _ONCE_MEMO_HINT
 from citry_core import _rust
 
 if TYPE_CHECKING:
@@ -440,7 +441,16 @@ class NativeCompiler:
     ) -> CompiledRender:
         if source_map:
             raise ValueError("ordinary target source maps are not implemented by this compiler adapter")
-        if _FORBIDDEN_TEMPLATE.search(template):
+        forbidden = _FORBIDDEN_TEMPLATE.search(template)
+        if forbidden is not None:
+            # The template parser names `v-once` and `v-memo` with their
+            # position; this names them for a template that reached here another way.
+            if forbidden.group(0).lower().startswith("v-"):
+                msg = (
+                    f"The Vue template contains '{forbidden.group(0)}'. {_ONCE_MEMO_HINT} To keep an element's"
+                    " contents as the server first rendered them, put '#c-ignore' on the element."
+                )
+                raise ValueError(msg)
             raise ValueError("ordinary target template contains an unsupported raw-text or cached construct")
         identity = json.dumps(
             {

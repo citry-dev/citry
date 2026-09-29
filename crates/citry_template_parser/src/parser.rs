@@ -1650,6 +1650,7 @@ fn validate_node(
     validate_meta_attr_placement(node, context)?;
     validate_ignored_element_contents(node, context)?;
     validate_vue_listener_modifiers(node, context)?;
+    validate_element_once_memo(node, context)?;
     validate_attribute_conflicts(node, context)?;
     validate_attribute_values(node, context)?;
     validate_fill_names(node, fill_nodes, context)?;
@@ -2103,6 +2104,35 @@ fn alpine_only_modifier_hint(modifier: &str) -> Option<&'static str> {
         }
         _ => return None,
     })
+}
+
+/// Reject `v-once` and `v-memo` on a plain HTML element when the template loads.
+///
+/// Citry's Vue target renders without Vue's render cache, so the directive
+/// would otherwise fail later with a message that does not name it. A
+/// component tag reports the same directives through
+/// `validate_component_tag_vue_directives`.
+fn validate_element_once_memo(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    if has_citry_component_prefix(node.tag_name()) {
+        return Ok(());
+    }
+    for attr in node.attrs() {
+        let name = attr.key.content.as_str();
+        let Some(directive @ ("once" | "memo")) = vue_directive_name(name) else {
+            continue;
+        };
+        let (line, col) = attr.token.line_col;
+        return Err(context.error_from_token(
+            &attr.token,
+            format!(
+                "'v-{directive}' on <{}> (line {line}, column {col}): {} To keep an element's contents as the server first rendered them, put '{}' on the element.",
+                node.tag_name(),
+                component_tag_directive_hint(directive),
+                META_ATTR_IGNORE
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Reject Alpine-only modifiers on a Vue listener (`@event` or `v-on:event`).

@@ -1994,12 +1994,18 @@ def test_timed_component_boundary_citry_event_is_explicitly_unsupported() -> Non
                 return None
 
     dispatcher_for(registry)
-    with pytest.raises(UnsupportedPreparedView, match="timed component-boundary Events bindings are unsupported"):
+    with pytest.raises(UnsupportedPreparedView) as excinfo:
         assemble_typed_render(
             render_prepared_direct(Parent()),
             revision=0,
             tag_for_type=lambda key: "x-" + key.lower().replace("_", "-"),
         )
+    assert str(excinfo.value) == (
+        "'@c-change.debounce.25ms' on <c-Child> (line 1, column 10) cannot use '.debounce' or '.throttle',"
+        " because a component tag has no element to time the event on. Put the binding on an element inside"
+        ' the template of Child instead, for example <div @c-change.debounce.25ms="save">. The handler then'
+        " runs on Child, so declare it in Child.Events. Or remove the timing modifier."
+    )
 
 
 def test_polling_component_boundary_citry_event_is_explicitly_unsupported() -> None:
@@ -2018,12 +2024,17 @@ def test_polling_component_boundary_citry_event_is_explicitly_unsupported() -> N
                 return None
 
     dispatcher_for(registry)
-    with pytest.raises(UnsupportedPreparedView, match="component-boundary polling is unsupported"):
+    with pytest.raises(UnsupportedPreparedView) as excinfo:
         assemble_typed_render(
             render_prepared_direct(Parent()),
             revision=0,
             tag_for_type=lambda key: "x-" + key.lower().replace("_", "-"),
         )
+    assert str(excinfo.value) == (
+        "'@c-poll.5s' on <c-Child> (line 1, column 10) cannot poll, because a component tag has no element"
+        " to poll from. Put the binding on an element inside the template of Child instead, for example"
+        ' <div @c-poll.5s="refresh">. The handler then runs on Child, so declare it in Child.Events.'
+    )
 
 
 def test_empty_component_loop_with_vue_binding_stays_on_general_path() -> None:

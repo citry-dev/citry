@@ -989,7 +989,7 @@ def assemble_typed_render(
                     )
                 close_index = _ignored_element_close_index(parts, open_index)
                 html = _ignored_contents_html(opening, parts[open_index + 1 : close_index])
-                reject_cross_boundary_html(html)
+                reject_cross_boundary_html(html, origin=f"The contents of {label}")
                 key = data_key("Opaque", opening.source, opening.span, data_owner_id)
                 projected_data_container("opaqueHtml")
                 opaque_values = data_values.setdefault("opaqueHtml", {})
@@ -1662,9 +1662,23 @@ def assemble_typed_render(
                                 line=line,
                                 column=column,
                             )
+                            # Vue gives a component tag no element of its own to
+                            # run a timer on, so a polling or timed binding must
+                            # move onto an element inside the child's template.
+                            child_tag = _authored_call_tag(
+                                child_call,
+                                f"c-{(getattr(child_class, 'name', None) or child_class.__name__).lower()}",
+                            )
+                            move_hint = (
+                                f"Put the binding on an element inside the template of {child_class.__name__}"
+                                f' instead, for example <div {component_binding.key}="{component_binding.value}">.'
+                                f" The handler then runs on {child_class.__name__}, so declare it in"
+                                f" {child_class.__name__}.Events."
+                            )
                             if compiled_event.channel != _CHANNEL_EVENT:
                                 raise UnsupportedPreparedView(
-                                    "component-boundary polling is unsupported in prepared Vue"
+                                    f"'{component_binding.key}' on <{child_tag}> (line {line}, column {column})"
+                                    f" cannot poll, because a component tag has no element to poll from. {move_hint}"
                                 )
                             spec = dict(compiled_event.spec)
                             if component_binding.provenance == "runtime-spread" and spec["args"] is not None:
@@ -1689,7 +1703,9 @@ def assemble_typed_render(
                                 or event_component_binding["throttle"] is not None
                             ):
                                 raise UnsupportedPreparedView(
-                                    "timed component-boundary Events bindings are unsupported in prepared Vue"
+                                    f"'{component_binding.key}' on <{child_tag}> (line {line}, column {column})"
+                                    " cannot use '.debounce' or '.throttle', because a component tag has no element"
+                                    f" to time the event on. {move_hint} Or remove the timing modifier."
                                 )
                             # A body folded into another definition must carry
                             # this table along, as the element event sites do.
@@ -1826,7 +1842,12 @@ def assemble_typed_render(
                         raise UnsupportedPreparedView(
                             f"c-raw is unsupported inside prepared <{parent_tag}> raw-text or RCDATA content"
                         )
-                    reject_cross_boundary_html(part.html)
+                    from citry.ext.events.bindings import _line_column  # noqa: PLC0415
+
+                    raw_line, raw_column = _line_column(part.source, part.span[0])
+                    reject_cross_boundary_html(
+                        part.html, origin=f"The <c-raw> contents at line {raw_line}, column {raw_column}"
+                    )
                     html = mark_opaque_html(
                         part.html,
                         root_markers if project_root_markers and dom_depth == 0 else (),
@@ -1946,7 +1967,7 @@ def assemble_typed_render(
                         data_values[key] = value
                         output.append(f"{{{{ $citryPrepared.{key} }}}}")
                         continue
-                    reject_cross_boundary_html(serialized)
+                    reject_cross_boundary_html(serialized, origin="A Markup value (trusted HTML from Python)")
                     html = mark_opaque_html(
                         serialized,
                         root_markers if project_root_markers and dom_depth == 0 else (),

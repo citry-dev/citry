@@ -298,4 +298,16 @@ mod tests {
             parse_template(input, None, None).unwrap();
         }
     }
+
+    #[test]
+    fn once_and_memo_on_an_element_name_the_directive() {
+        assert_parse_error(
+            r#"<p v-once>hi</p>"#,
+            "'v-once' on <p> (line 1, column 4): Citry does not support 'v-once' or 'v-memo' in component templates, on elements or component tags. Remove the directive. To keep an element's contents as the server first rendered them, put '#c-ignore' on the element.",
+        );
+        assert_parse_error(
+            r#"<li v-memo="[a]">x</li>"#,
+            "'v-memo' on <li> (line 1, column 5)",
+        );
+    }
 }
