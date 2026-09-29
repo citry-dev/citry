@@ -3866,7 +3866,11 @@ def test_vue_show_hover_is_available_on_component_tags():
         ),
         ('<div c-bind="attrs"></div>', "c-bind", "/syntax/dynamic-attributes/#c-bind-spread"),
         ('<div #c-key="row.id"></div>', "#c-key", "/syntax/dynamic-attributes/#c-key"),
-        ("<div #c-ignore></div>", "#c-ignore", "/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages"),
+        (
+            "<div #c-ignore></div>",
+            "#c-ignore",
+            "/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages",
+        ),
         ('<c-if cond="ready"></c-if>', "cond", "/syntax/control-flow/"),
         ('<c-for each="item in items"></c-for>', "each", "/syntax/control-flow/"),
         ('<c-slot name="body"></c-slot>', "name", "/concepts/slots/"),
