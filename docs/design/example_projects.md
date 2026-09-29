@@ -250,7 +250,7 @@ small project catalog. The page displays project cards and lets a user:
 1. reveal or hide a short help panel immediately in Vue, without a server
    call;
 2. type a project query whose debounced Citry Event reloads matching records
-   and morphs the explorer; and
+   and replaces the explorer; and
 3. observe explicit loading and error feedback while the event settles.
 
 The page route loads the initial rich `Project` values and passes them into
@@ -259,7 +259,7 @@ event, the handler treats State as client input, reloads the deterministic
 records, and builds a fresh component tree from explicit inputs.
 
 This shape deliberately avoids a fake database mutation. It proves the full
-Events request, signed State, host route, dependency runtime, and morph path
+Events request, signed State, host route, dependency runtime, and replacement path
 without implying that a process-local list is a persistence design.
 
 ### 5.2 Required component shape
@@ -405,8 +405,8 @@ It still demonstrates:
 - component CSS, the Citry browser runtime with Vue, and the prepared Vue
   data embedded into the document.
 
-`python -m app.render` writes `_build/index.html`. It resets Citry's ID
-generator before each render so unchanged inputs produce identical output.
+`python -m app.render` writes `_build/index.html`. It restarts the app's ID
+numbering before each render so unchanged inputs produce identical output.
 The project tests check that the document embeds the compiled Vue handler and
 its prepared data, has no `src` or `href` pointing at an `http` URL and no
 `/citry/` path, escapes project data inside the embedded JSON, and renders the
@@ -541,12 +541,12 @@ The adaptation must:
 - keep only controls backed by real application behavior;
 - serve every CSS, JavaScript, and icon asset locally and implement every
   route the page uses;
-- register and implement every Alpine or JavaScript behavior the page uses;
+- register and implement every Vue or JavaScript behavior the page uses;
 - use deterministic time and fixture data;
 - implement or clearly disable every visible form, link, and action;
 - let people drag cards with a pointing device and provide a labeled column
   menu for keyboard and touchscreen use;
-- exercise Events, forms, State, actions, Alpine expressions, slots,
+- exercise Events, forms, State, actions, Vue expressions, slots,
   provide/inject, dependencies, and dynamic components only where they
   support a real interaction; and
 - pass the browser checks in section 8.5 before public docs link to the demo.

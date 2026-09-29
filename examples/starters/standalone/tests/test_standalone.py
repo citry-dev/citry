@@ -44,7 +44,7 @@ def test_rendering_keeps_the_configured_id_generator() -> None:
     render_document()
 
     assert citry_app.id_generator is document_ids
-    assert "standalone-1" in render_document()
+    assert '"standalone-1"' in render_document()
 
 
 def test_document_escapes_project_data_in_vue_json(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -21,7 +21,7 @@ class DocumentIds:
         return f"standalone-{next(self._numbers)}"
 
 
-# Citry calls this object for every component id. It is set once here, and
+# Citry calls this object for the id of each rendered component. It is set once here, and
 # `render_document()` only restarts its numbering.
 document_ids = DocumentIds()
 

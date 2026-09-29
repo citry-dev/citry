@@ -43,6 +43,5 @@ def test_tabs_example_page_renders() -> None:
     assert "aria-labelledby" in source
     assert "ArrowRight:" in html
     assert "Home:" in html
-    # Focus moves by looking a button up under its index, not by the
-    # position of a v-for ref array, which Vue does not keep in order.
+    # Focus moves to the button stored under the target index.
     assert "this.tabButtons.get(nextIndex)" in html
