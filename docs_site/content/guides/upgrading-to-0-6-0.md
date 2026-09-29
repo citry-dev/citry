@@ -232,7 +232,8 @@ itself:
 
 On a component tag, `#c-ignore` fails when the template loads. Move it
 onto the element inside the component's template that the library
-manages. See
+manages. On `<table>`, `<tbody>`, `<tr>`, and the other table row
+elements it fails too; wrap the table in a `<div #c-ignore>` instead. See
 [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
 
 ## Write Vue bindings in the template, not in Python

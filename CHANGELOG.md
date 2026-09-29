@@ -206,8 +206,9 @@ Upgrading from 0.5.x? Follow
   `citry.ownership` and `citry.ownership_manifest` modules, the Alpine
   names in `citry.analysis`, and the `ownership` parameters of
   `CitryContext` and `CitryElement`.
-- **Breaking:** `#c-ignore` on a component tag, or around a component,
-  slot, Vue binding, or `ref`, fails when the template loads. On an HTML
+- **Breaking:** `#c-ignore` on a component tag or a table row group
+  such as `<tbody>`, or around a component, slot, Vue binding, or `ref`,
+  fails when the template loads. On an HTML
   element it keeps the contents as the server first rendered them, so a
   chart or map library can own them; the contents may hold only HTML,
   `{{ }}` expressions, `<c-if>`, `<c-for>`, and `<c-raw>`.
