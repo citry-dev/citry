@@ -2154,6 +2154,21 @@ class TestCapabilities:
         with pytest.raises(ValueError, match="supports only swap='morph'; got 'inner'"):
             encoder.encode(actions.Render(Badge(), swap="inner"), "render:r1", None)  # type: ignore[arg-type]
 
+    def test_callerless_render_errors_point_to_a_render_target(self):
+        from citry.ext.events.results import encode_actions
+
+        c = _citry()
+
+        class Badge(Component):
+            citry = c
+            template = "<span>badge</span>"
+
+        # Both hints must name a target form that works without a caller.
+        with pytest.raises(ValueError, match=r"'save' has no target.*target=\"render:<id>\""):
+            encode_actions([actions.Render(Badge())], instance_id=None, handler="save")
+        with pytest.raises(ValueError, match=r"'save' targets 'mark:badge'.*target=\"render:<id>\""):
+            encode_actions([actions.Render(Badge(), target="mark:badge")], instance_id=None, handler="save")
+
     def test_html_marker_target_without_a_caller_fails_the_call(self):
         c = _citry()
 

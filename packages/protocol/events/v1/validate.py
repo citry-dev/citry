@@ -183,7 +183,7 @@ def _validate(value: Any, schema: dict[str, Any], root: dict[str, Any], path: st
         if "minLength" in schema and len(value) < schema["minLength"]:
             problems.append(f"{path}: shorter than minLength {schema['minLength']}")
         # JSON Schema patterns are unanchored: a match anywhere satisfies them.
-        if "pattern" in schema and re.search(schema["pattern"], value) is None:
+        if "pattern" in schema and not _pattern_matches(schema["pattern"], value):
             problems.append(f"{path}: does not match pattern {schema['pattern']!r}")
 
     if _has_type(value, "number") and "minimum" in schema and value < schema["minimum"]:
@@ -194,13 +194,35 @@ def _validate(value: Any, schema: dict[str, Any], root: dict[str, Any], path: st
     return problems
 
 
+def _pattern_matches(pattern: str, value: str) -> bool:
+    r"""
+    Search ``value`` with ECMA-262 end-of-input semantics for ``$``.
+
+    Python's ``$`` also matches before a final newline, so ``"render:a\n"``
+    would pass ``^render:[a-z0-9_-]+$``. JSON Schema regexes follow ECMA-262,
+    where ``$`` (without the multiline flag) matches only at the end, which
+    Python spells ``\Z``. Only a final ``$`` is an anchor; one inside a
+    character class is a literal and stays as it is.
+    """
+    if pattern.endswith("$") and not pattern.endswith("\\$"):
+        pattern = pattern[:-1] + r"\Z"
+    return re.search(pattern, value) is not None
+
+
+def _pattern(validator: Any, pattern: str, instance: Any, schema: dict[str, Any]) -> Any:  # noqa: ARG001 - jsonschema keyword signature
+    """The jsonschema ``pattern`` keyword with the same end-of-input rule as the built-in checker."""
+    if isinstance(instance, str) and not _pattern_matches(pattern, instance):
+        yield jsonschema.ValidationError(f"{instance!r} does not match {pattern!r}")
+
+
 def schema_errors(value: Any, schema: dict[str, Any]) -> list[str]:
     """Validate with the jsonschema package when available, else the built-in checker."""
     json_problems = _json_value_errors(value)
     if json_problems:
         return json_problems
     if jsonschema is not None:
-        validator = jsonschema.Draft202012Validator(schema)
+        validator_class = jsonschema.validators.extend(jsonschema.Draft202012Validator, {"pattern": _pattern})
+        validator = validator_class(schema)
         return [f"$.{'.'.join(str(p) for p in error.path)}: {error.message}" for error in validator.iter_errors(value)]
     return _validate(value, schema, schema, "$")
 

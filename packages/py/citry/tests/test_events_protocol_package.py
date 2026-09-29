@@ -93,6 +93,18 @@ def test_results_stay_within_the_callers_advertised_capabilities():
     assert any("unadvertised swap 'morph'" in problem for problem in problems)
 
 
+def test_schema_patterns_end_at_the_end_of_the_string():
+    # JSON Schema's $ matches only at the end, so a trailing newline must fail
+    # in both the jsonschema path and the built-in checker.
+    action = {"action": "render", "target": "render:abc", "swap": "replace", "html": "<p></p>"}
+    envelope = {"protocol": "citry-events/1", "requestId": "r1", "results": [{"ok": True, "actions": [action]}]}
+    assert checker.schema_errors(envelope, RESULT_SCHEMA) == []
+    for target in ("render:abc\n", "mark:abc:Badge\n"):
+        action["target"] = target
+        assert checker.schema_errors(envelope, RESULT_SCHEMA)
+        assert checker._validate(envelope, RESULT_SCHEMA, RESULT_SCHEMA, "$")
+
+
 def test_render_actions_discriminate_legacy_html_and_prepared_content():
     legacy = {"action": "render", "target": "render:counter_1", "swap": "replace", "html": "<p>ok</p>"}
     explicit = {**legacy, "renderer": "html-fragment/1"}

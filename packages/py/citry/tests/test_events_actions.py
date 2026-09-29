@@ -470,7 +470,7 @@ class TestEncodeActions:
 
     def test_a_render_without_instance_or_target_is_refused(self):
         c = _mounted_citry()
-        with pytest.raises(ValueError, match=r"no target.*Pass target=\.\.\."):
+        with pytest.raises(ValueError, match=r'no target.*Pass target="render:<id>"'):
             encode_actions([actions.Render(_badge(c)(count=1))], instance_id=None, handler="poll")
 
     def test_compat_targetless_render_is_refused_for_a_non_html_encoder(self):
@@ -490,7 +490,7 @@ class TestEncodeActions:
             renderer="vue-prepared/1",
             response_mode="compat",
         )
-        with pytest.raises(ValueError, match=r"no target.*Pass target=\.\.\."):
+        with pytest.raises(ValueError, match=r'no target.*Pass target="render:<id>"'):
             encode_actions(
                 [actions.Render(_badge(c)(count=1))],
                 instance_id=None,

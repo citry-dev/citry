@@ -96,7 +96,12 @@ class HtmlFragmentRenderEncoder:
     def encode(self, action: Render, target: str, context: RenderEncodingContext) -> dict[str, Any]:
         rendered = action.element.render() if isinstance(action.element, CitryElement) else action.element
         return build_render_action(
-            _html_wire_target(target, context.caller_render_id, compat=context.response_mode == "compat"),
+            _html_wire_target(
+                target,
+                context.caller_render_id,
+                compat=context.response_mode == "compat",
+                handler=context.handler.name,
+            ),
             action.swap,
             rendered.serialize(
                 deps_strategy="fragment",
@@ -116,7 +121,7 @@ HTML_RENDER_ENCODER = HtmlFragmentRenderEncoder()
 _COMPAT_HTML_RENDER_TARGET = "render:_compat"
 
 
-def _html_wire_target(target: str, caller_render_id: str | None, *, compat: bool) -> str:
+def _html_wire_target(target: str, caller_render_id: str | None, *, compat: bool, handler: str) -> str:
     """
     Spell a Render target the way the wire carries it for an HTML fragment.
 
@@ -133,7 +138,12 @@ def _html_wire_target(target: str, caller_render_id: str | None, *, compat: bool
     # alone, so the target only has to be valid.
     if compat:
         return _COMPAT_HTML_RENDER_TARGET
-    raise ValueError("a caller-relative marker target requires a calling component")
+    msg = (
+        f"actions.Render from event handler {handler!r} targets {target!r}, but a marker is named"
+        f" relative to the calling component and the call carries none. Target a component with"
+        f' target="render:<id>" instead.'
+    )
+    raise ValueError(msg)
 
 
 # The attribute on the per-call events instance that holds the constructed
@@ -374,7 +384,7 @@ def _encode_action(
         else:
             msg = (
                 f"actions.Render from event handler {handler!r} has no target: the call carries no"
-                f" component instance to default to. Pass target=... with a marker name."
+                f' component instance to default to. Pass target="render:<id>" to name a component.'
             )
             raise ValueError(msg)
         if render_context is None:
@@ -382,7 +392,7 @@ def _encode_action(
                 raise ValueError("A non-default render encoder requires a RenderEncodingContext.")
             rendered = action.element.render() if isinstance(action.element, CitryElement) else action.element
             encoded = build_render_action(
-                _html_wire_target(target, instance_id, compat=False),
+                _html_wire_target(target, instance_id, compat=False, handler=handler),
                 action.swap,
                 rendered.serialize(deps_strategy="fragment"),
                 delay=action.delay,

@@ -73,7 +73,12 @@ class VuePreparedRenderEncoder:
         wire_target = target
         if target.startswith("mark:"):
             if context.caller_render_id is None:
-                raise ValueError("a caller-relative marker target requires a calling component")
+                msg = (
+                    f"actions.Render from event handler {context.handler.name!r} targets {target!r}, but a"
+                    " marker is named relative to the calling component and the call carries none."
+                    ' Target a component with target="render:<id>" instead.'
+                )
+                raise ValueError(msg)
             if self._prepare_marker is None:
                 raise ValueError("the selected prepared renderer does not support marker targets")
             marker = _VueMarkerTarget(context.caller_render_id, target[5:])
