@@ -8,7 +8,11 @@ class Card(Component):
     class Slots:
         default: SlotInput
 
-    def css_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, str]:
+    def css_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, str]:
         return {"accent": kwargs.accent}
 
     template = """

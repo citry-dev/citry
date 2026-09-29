@@ -25,7 +25,11 @@ class TaskList(Component):
     class Slots:
         pass
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
         return {"tasks": kwargs.tasks, "title": kwargs.title}
 
     template = """

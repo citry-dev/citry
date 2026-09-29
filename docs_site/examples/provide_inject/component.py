@@ -17,7 +17,11 @@ class ThemedButton(Component):
     class Slots:
         pass
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
         theme = self.inject("theme")
         return {
             "text": kwargs.text,

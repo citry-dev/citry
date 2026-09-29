@@ -14,7 +14,11 @@ class RecursionPage(Component):
     class Slots:
         pass
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
         # A small folder tree, three levels deep, passed in one piece.
         tree = {
             "label": "project",

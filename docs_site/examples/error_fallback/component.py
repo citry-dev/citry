@@ -15,7 +15,11 @@ class FlakyWidget(Component):
     class Slots:
         pass
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
         if kwargs.fail:
             # Raised during render, so the surrounding
             # <c-error-fallback> catches it.

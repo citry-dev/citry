@@ -29,7 +29,11 @@ class TreeNode(Component):
     class Slots:
         pass
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
         node = kwargs.node
         children = node.get("children", [])
         has_children = len(children) > 0
