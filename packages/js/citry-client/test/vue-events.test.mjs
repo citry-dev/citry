@@ -393,8 +393,8 @@ test("unsupported targets reject the whole result before state mutation", async 
   const bridge = bridgeModule.createVueEventsBridge({ endpoint: "/events", host, fetch });
   await assert.rejects(
     bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }),
-    // The protocol check refuses a CSS selector target; the bridge's own target check is the backstop.
-    /A render target must be render:<renderId> or mark:<id>:<name>|marker targets are not implemented/,
+    // The protocol check refuses a CSS selector target before any action runs.
+    /A render target must be render:<renderId> or mark:<callerRenderId>:<name>/,
   );
   assert.equal(stateCommits, 0);
 });

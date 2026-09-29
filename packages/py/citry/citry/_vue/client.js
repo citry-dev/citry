@@ -180,11 +180,28 @@
     for (const [key, child] of Object.entries(value)) strictPublicJson(child, `${path}/${key}`, ancestors);
     ancestors.delete(value);
   };
-  const publicTarget = (value, path) => {
+  // A <c-mark> name, the same rule the server and the protocol package apply.
+  const safeMarkName = value => /^[A-Za-z][A-Za-z0-9_-]*$/.test(value);
+  // The same target rules as the protocol package's checker, which normally runs instead of this
+  // one: a target names a component occurrence (`render:<id>`), and only a render action may name
+  // a marked region inside it (`mark:<callerRenderId>:<name>`). A CSS selector is not a target.
+  const publicTarget = (value, path, allowMarker) => {
     if (typeof value !== "string" || value.length === 0)
       throw new TypeError(`Citry.events.applyActions needs a non-empty target at ${path}`);
-    if (value.startsWith("render:") && !safeRenderId(value.slice(7)))
-      throw new TypeError(`Citry.events.applyActions needs a valid render target at ${path}`);
+    if (value.startsWith("render:")) {
+      if (!safeRenderId(value.slice(7)))
+        throw new TypeError(`Citry.events.applyActions needs a valid render target at ${path}`);
+      return;
+    }
+    if (allowMarker && value.startsWith("mark:")) {
+      const rest = value.slice(5), separator = rest.indexOf(":");
+      if (separator < 0 || !safeRenderId(rest.slice(0, separator)) || !safeMarkName(rest.slice(separator + 1)))
+        throw new TypeError(`Citry.events.applyActions needs mark:<callerRenderId>:<name> at ${path}`);
+      return;
+    }
+    throw new TypeError(allowMarker
+      ? `Citry.events.applyActions needs a render:<renderId> or mark:<callerRenderId>:<name> target at ${path}`
+      : `Citry.events.applyActions needs a render:<renderId> event target at ${path}`);
   };
   const publicTiming = (action, path) => {
     if (has(action, "delay") && (typeof action.delay !== "number" || !Number.isFinite(action.delay) || action.delay < 0))
@@ -222,7 +239,7 @@
       }[action.action];
       for (const name of Object.keys(action)) if (!fields.includes(name)) throw new TypeError(`Citry.events.applyActions found an unknown field at ${path}/${name}`);
       if (action.action === "render") {
-        publicTarget(action.target, `${path}/target`);
+        publicTarget(action.target, `${path}/target`, true);
         if (!knownSwaps.has(action.swap)) throw new TypeError(`Citry.events.applyActions received an invalid render swap at ${path}/swap`);
         const renderer = has(action, "renderer") ? action.renderer : "html-fragment/1";
         if (!knownRenderers.has(renderer)) throw new TypeError(`Citry.events.applyActions received an invalid renderer at ${path}/renderer`);
@@ -232,6 +249,9 @@
         if (content === "html" && typeof action.html !== "string") throw new TypeError(`Citry.events.applyActions needs string HTML at ${path}/html`);
         if (content === "prepared" && (!action.prepared || Array.isArray(action.prepared) || (Object.getPrototypeOf(action.prepared) !== Object.prototype && Object.getPrototypeOf(action.prepared) !== null)))
           throw new TypeError(`Citry.events.applyActions needs prepared object data at ${path}/prepared`);
+        // Vue patches a prepared render into the component it already shows; it never inserts or removes one.
+        if (content === "prepared" && action.swap !== "morph")
+          throw new TypeError(`Citry.events.applyActions needs the morph swap for a vue-prepared/1 render at ${path}/swap`);
       } else if (action.action === "data") {
         dataActions += 1;
       } else if (action.action === "state") {
@@ -239,7 +259,7 @@
         if (typeof action.stateToken !== "string" || action.stateToken.length === 0) throw new TypeError(`Citry.events.applyActions needs a state token at ${path}/stateToken`);
       } else if (action.action === "event") {
         if (typeof action.eventName !== "string" || action.eventName.length === 0 || action.eventName.startsWith("citry:")) throw new TypeError(`Citry.events.applyActions needs a public event name at ${path}/eventName`);
-        if (has(action, "target")) publicTarget(action.target, `${path}/target`);
+        if (has(action, "target")) publicTarget(action.target, `${path}/target`, false);
       } else if (action.action === "redirect") {
         if (typeof action.url !== "string" || action.url.length === 0) throw new TypeError(`Citry.events.applyActions needs a redirect URL at ${path}/url`);
       } else {

@@ -561,3 +561,26 @@ test("a lifecycle notification for an unmounted component still reaches document
     { instance: "server-root", class: "Root_1", event: "move", els: [root] },
   );
 });
+
+test("the fallback action check uses the protocol's target and swap rules", async () => {
+  const fixture = runtime();
+  const prepared = (fields) => ({ action: "render", renderer: "vue-prepared/1", prepared: {}, ...fields });
+  const refused = [
+    [prepared({ target: "#cart", swap: "morph" }), /render:<renderId> or mark:<callerRenderId>:<name> target/],
+    [prepared({ target: "mark:bad id:cart", swap: "morph" }), /mark:<callerRenderId>:<name>/],
+    [prepared({ target: "render:abc", swap: "replace" }), /morph swap for a vue-prepared\/1 render/],
+    [{ action: "event", eventName: "ready", target: "mark:abc:cart" }, /render:<renderId> event target/],
+    [{ action: "event", eventName: "ready", target: ".cart" }, /render:<renderId> event target/],
+  ];
+  for (const [action, message] of refused) {
+    await assert.rejects(fixture.publicEvents.applyActions(fixture.realm([action])), message);
+  }
+  // Valid targets pass the check and reach target lookup, which finds no mounted app here.
+  for (const action of [
+    prepared({ target: "mark:abc:cart", swap: "morph" }),
+    { action: "event", eventName: "ready", target: "render:abc" },
+  ]) {
+    await assert.rejects(fixture.publicEvents.applyActions(fixture.realm([action])), /stale or retired/);
+  }
+  assert.equal(fixture.document.dispatched.length, 0);
+});
