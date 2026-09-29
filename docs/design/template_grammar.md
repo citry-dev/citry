@@ -453,9 +453,13 @@ the element and combines a bound style with every other style, exactly as it
 does for a static `class` or `style`. A modifier such as `.prop` makes Vue set
 the DOM property instead, so `c-class` with `:class.prop` is rejected. A
 component tag is exempt, because there `c-title` is a Python input and
-`:title` a Vue prop. A `c-bind` key and a dynamic binding name (`:[name]`) are
-only known while rendering, where the same conflict stops rendering with an
-error.
+`:title` a Vue prop. Vue's short forms `.title` and `^title` count as modified
+bindings. Control flow (`c-for`, `c-if`, ...) and a `<c-element>`'s `c-is` set
+no attribute of their own name, so `c-for` beside `:for` is accepted. An object
+`v-bind` or a dynamic `:[name]` beside any Python attribute (including
+`c-bind` and `#c-key`) is rejected at parse time, because it may set any
+attribute. A `c-bind` key is only known while rendering, where the same
+conflict stops rendering with an error.
 
 `c-bind` is repeatable and may coexist with an explicit provider. A spread may
 or may not contain the logical key at render time, so its contributions resolve

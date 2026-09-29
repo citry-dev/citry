@@ -243,6 +243,15 @@ mod tests {
                 r#"<p c-class="a" :class.prop="b">x</p>"#,
                 "Remove the modifier and write ':class', which Vue joins with 'c-class'.",
             ),
+            // Vue's short forms of `.prop` and `.attr` bindings.
+            (r#"<p c-title="a" .title="b">x</p>"#, "'.title' on <p>"),
+            (r#"<p c-title="a" ^title="b">x</p>"#, "'^title' on <p>"),
+            (r#"<p c-class="a" .class="b">x</p>"#, "Remove the modifier"),
+            // Vue treats `Class` as a key of its own, which it does not merge.
+            (
+                r#"<p c-class="a" v-bind:Class="b">x</p>"#,
+                "'v-bind:Class' on <p>",
+            ),
         ] {
             assert_parse_error(input, expected);
         }
@@ -253,6 +262,7 @@ mod tests {
                 "'v-bind' on <p> (line 1, column 4) may set any attribute, so it cannot be combined with 'c-title', which Python sets.",
             ),
             (r#"<p c-bind="d" :[name]="v">x</p>"#, "':[name]' on <p>"),
+            (r#"<p v-bind.prop="o" c-title="t">x</p>"#, "'v-bind.prop' on <p>"),
             (r#"<p #c-key="k" v-bind:[name]="v">x</p>"#, "'#c-key'"),
             (
                 r#"<c-element c-is="'p'" v-bind="attrs" c-id="i" />"#,
@@ -269,6 +279,9 @@ mod tests {
             r#"<c-Card c-title="a" :title="b" />"#,
             r#"<p title="a" :title="b">x</p>"#,
             r#"<p v-bind="attrs" class="a" c-if="ok">x</p>"#,
+            // Control flow sets no attribute of its own name.
+            r#"<label c-for="f in fields" :for="f">x</label>"#,
+            r#"<p c-if="ok" :if="x">x</p>"#,
             r#"<c-element c-is="'p'" v-bind="attrs" />"#,
             r#"<c-Card v-bind="props" c-title="a" />"#,
         ] {

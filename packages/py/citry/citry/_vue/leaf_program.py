@@ -3242,7 +3242,9 @@ def _validate_open(value: PreparedElementOpen) -> str | None:
         attr.name for attr in value.attrs if attr.origin == "source" and attr.name.startswith((":[", "v-bind:["))
     ]
     has_prepared_target = bool(value.data_attrs) or "key" in metadata
-    if has_prepared_target and any(attr.name == "v-bind" for attr in value.attrs if attr.origin == "source"):
+    if has_prepared_target and any(
+        attr.name == "v-bind" or attr.name.startswith("v-bind.") for attr in value.attrs if attr.origin == "source"
+    ):
         return "authored object v-bind cannot yet be combined with prepared Python attributes"
     if has_prepared_target and dynamic_bindings:
         return (
@@ -3604,7 +3606,8 @@ def _instance_free_root_spread(
 def _source_target(name: str) -> str | None:
     if name == "key":
         return name
-    if name.startswith(":"):
+    # `.name` and `^name` are Vue's short forms of `:name.prop` and `:name.attr`.
+    if name.startswith((":", ".", "^")):
         return name[1:].split(".", 1)[0]
     if name.startswith("v-bind:"):
         return name[7:].split(".", 1)[0]

@@ -2171,7 +2171,11 @@ def assemble_typed_render(
                         raise UnsupportedPreparedView(
                             f"authored Vue and prepared Python attributes target the same HTML name: {names!r}"
                         )
-                    has_object_binding = any(attr.name == "v-bind" for attr in part.attrs if attr.origin == "source")
+                    has_object_binding = any(
+                        attr.name == "v-bind" or attr.name.startswith("v-bind.")
+                        for attr in part.attrs
+                        if attr.origin == "source"
+                    )
                     has_prepared_target = bool(effective_data_attrs) or "key" in element_metadata
                     if has_prepared_target and has_object_binding:
                         raise UnsupportedPreparedView(
@@ -2265,7 +2269,9 @@ def assemble_typed_render(
                             f"authored Vue and prepared Python attributes target the same HTML name: {names!r}"
                         )
                     has_prepared_target = bool(effective_dynamic_attrs) or part.key is not None
-                    if has_prepared_target and any(attr.name == "v-bind" for attr in part.authored_attrs):
+                    if has_prepared_target and any(
+                        attr.name == "v-bind" or attr.name.startswith("v-bind.") for attr in part.authored_attrs
+                    ):
                         raise UnsupportedPreparedView(
                             "authored object v-bind cannot yet be combined with prepared Python attributes"
                         )
@@ -2750,7 +2756,8 @@ def _checked_component_tag(type_key: str, tag_for_type: TagForType) -> str:
 
 
 def _source_attribute_target(name: str) -> str | None:
-    if name.startswith(":"):
+    # `.name` and `^name` are Vue's short forms of `:name.prop` and `:name.attr`.
+    if name.startswith((":", ".", "^")):
         return name[1:].split(".", 1)[0]
     match = re.fullmatch(r"v-bind:([^\.]+)(?:\..*)?", name)
     if match is not None:

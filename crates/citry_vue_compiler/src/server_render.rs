@@ -895,6 +895,11 @@ impl Reader {
                     let Some(key) = property_name(&property.key, property.computed) else {
                         return Expr::Unsupported("browser-value");
                     };
+                    // `__proto__: value` sets the object's prototype
+                    // instead of adding a key.
+                    if key == "__proto__" {
+                        return Expr::Unsupported("browser-value");
+                    }
                     entries.push((key, self.expr(&property.value, locals)));
                 }
                 Expr::Object(entries)
@@ -1399,29 +1404,32 @@ fn normalize_class(value: &Val<'_>, parts: Parts) -> Result<String, &'static str
     // Vue builds the text with a space after every non-empty part and trims
     // the result, so a part's own surrounding spaces survive in the middle.
     let mut output = String::new();
-    let mut push = |text: &str| {
-        if !text.is_empty() {
+    // An array item adds its text only when that text is not empty, while an
+    // object adds every enabled key, even an empty one (`{ '': true }` adds
+    // a second space in the middle).
+    let mut push = |text: &str, keep_empty: bool| {
+        if keep_empty || !text.is_empty() {
             output.push_str(text);
             output.push(' ');
         }
     };
     match value {
-        Val::Str(text) => push(text),
+        Val::Str(text) => push(text, false),
         Val::Undefined | Val::Null | Val::Bool(_) | Val::Num(_) => {}
         Val::Data(Json::Array(items)) => {
             for item in items {
-                push(&normalize_class(&Val::from_json(item), parts)?);
+                push(&normalize_class(&Val::from_json(item), parts)?, false);
             }
         }
         Val::Array(items) => {
             for item in items.iter() {
-                push(&normalize_class(item, parts)?);
+                push(&normalize_class(item, parts)?, false);
             }
         }
         Val::Data(Json::Object(map)) => {
             for (name, enabled) in js_data_order(map) {
                 match (Val::from_json(enabled).truthy(), parts) {
-                    (Some(true), _) => push(name),
+                    (Some(true), _) => push(name, true),
                     (Some(false), _) | (None, Parts::Known) => {}
                     (None, Parts::All) => return Err("browser-value"),
                 }
@@ -1430,7 +1438,7 @@ fn normalize_class(value: &Val<'_>, parts: Parts) -> Result<String, &'static str
         Val::Object(entries) => {
             for (name, enabled) in entries.iter() {
                 match (enabled.truthy(), parts) {
-                    (Some(true), _) => push(name),
+                    (Some(true), _) => push(name, true),
                     (Some(false), _) | (None, Parts::Known) => {}
                     (None, Parts::All) => return Err("browser-value"),
                 }
@@ -1564,9 +1572,10 @@ fn parse_string_style(text: &str) -> Vec<(Cow<'static, str>, Val<'static>)> {
 
 /// The style attribute text for normalized style declarations, as Vue's
 /// server renderer (`stringifyStyle`) writes them: `name:value;` with
-/// camelCase names hyphenated. The browser reads the same declarations from
-/// it as from the style Vue's client render sets, which is all hydration
-/// compares. `None` when no declaration is written.
+/// camelCase names hyphenated. Only names and values the browser reads
+/// back as the same declarations the client sets one by one are written
+/// (see `style_property_name` and `safe_style_value`); anything else is left
+/// to the browser. `None` when no declaration is written.
 fn stringify_style(
     entries: &[(Cow<'_, str>, Val<'_>)],
     parts: Parts,
@@ -1576,11 +1585,13 @@ fn stringify_style(
         let text = match value {
             // Vue skips these values, and the client sets nothing for them.
             Val::Undefined | Val::Null => continue,
-            // The client removes an empty value while the server renderer
-            // writes `name:;`, and a semicolon inside a value makes the
-            // browser read the server's text as two declarations, so both
-            // are left to the browser.
-            Val::Str(text) if !text.is_empty() && !text.contains(';') => text.to_string(),
+            // The client sets each declaration on its own, while the server
+            // writes them into one text the browser parses as a whole. A
+            // value that could run into the next declaration (see
+            // `safe_style_value`), or an empty one, which the client removes
+            // and the server renderer writes as `name:;`, is left to the
+            // browser.
+            Val::Str(text) if safe_style_value(text) => text.to_string(),
             Val::Num(number) => match js_number(*number) {
                 Some(text) => text,
                 None if parts == Parts::Known => continue,
@@ -1592,18 +1603,11 @@ fn stringify_style(
             Val::Unknown(reason) => return Err(reason),
             _ => return Err("unsupported-attribute"),
         };
-        let name = if key.starts_with("--") {
-            key.to_string()
-        } else {
-            // A name that starts with a capital, such as `WebkitTransition`,
-            // is a vendor-prefixed property the client sets through the
-            // browser's style object, while the server renderer's
-            // `webkit-transition` is a name the browser ignores.
-            match hyphenate(key).filter(|_| !key.starts_with(|c: char| c.is_ascii_uppercase())) {
-                Some(name) => name,
-                None if parts == Parts::Known => continue,
-                None => return Err("unsupported-attribute"),
+        let Some(name) = style_property_name(key) else {
+            if parts == Parts::Known {
+                continue;
             }
+            return Err("unsupported-attribute");
         };
         output.push_str(&name);
         output.push(':');
@@ -1611,6 +1615,55 @@ fn stringify_style(
         output.push(';');
     }
     Ok((!output.is_empty()).then_some(output))
+}
+
+/// The CSS property name the server writes for a style key, or `None` when
+/// the client could set a different property than the server's text names.
+///
+/// A custom property (`--name`) is written as it is. Any other key is
+/// hyphenated as Vue's server renderer does, and must then be a plain
+/// lowercase name, so a key from the page's data cannot add a second
+/// declaration. A key that starts with a capital, such as
+/// `WebkitTransition`, is a vendor-prefixed property the client sets
+/// through the browser's style object, and `cssFloat` sets `float`; the
+/// server's `webkit-transition` and `css-float` are names the browser
+/// ignores, so both are declined.
+fn style_property_name(key: &str) -> Option<String> {
+    let plain = |name: &str, first: fn(&u8) -> bool| {
+        let bytes = name.as_bytes();
+        bytes.first().is_some_and(first)
+            && bytes
+                .iter()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    };
+    if let Some(custom) = key.strip_prefix("--") {
+        return plain(custom, |_| true).then(|| key.to_owned());
+    }
+    if key.starts_with(|c: char| c.is_ascii_uppercase()) || key == "cssFloat" {
+        return None;
+    }
+    let name = hyphenate(key)?;
+    (plain(&name, u8::is_ascii_lowercase) && !name.contains('_')).then_some(name)
+}
+
+/// Whether the browser reads a style value written into the style text as
+/// exactly that value. A semicolon would end the declaration early, and a
+/// quote, backslash, comment start, brace, or unbalanced parenthesis could
+/// carry the parse past the declaration's end and swallow the next one.
+fn safe_style_value(text: &str) -> bool {
+    let mut depth = 0usize;
+    for character in text.chars() {
+        match character {
+            ';' | '"' | '\'' | '\\' | '{' | '}' => return false,
+            '(' => depth += 1,
+            ')' => match depth.checked_sub(1) {
+                Some(next) => depth = next,
+                None => return false,
+            },
+            _ => {}
+        }
+    }
+    depth == 0 && !text.contains("/*") && !js_trim(text).is_empty()
 }
 
 /// Vue's `hyphenate`: a dash before every capital that follows a letter,
@@ -1859,7 +1912,7 @@ fn merge_prop<'a>(output: &mut Props<'a>, key: Cow<'a, str>, value: PropVal<'a>)
                     _ => Ok(String::new()),
                 };
                 match (before, normalize_class(after, Parts::All)) {
-                    (Ok(a), Ok(b)) => Val::Str(Cow::Owned(format!("{a} {b}").trim().to_owned())),
+                    (Ok(a), Ok(b)) => Val::Str(Cow::Owned(js_trim(&format!("{a} {b}")).to_owned())),
                     (Err(reason), _) | (_, Err(reason)) => Val::Unknown(reason),
                 }
             }
@@ -4351,6 +4404,9 @@ mod tests {
         // JavaScript lists array-index keys first, in numeric order, then
         // the others in the order they were written, or for the page's
         // JSON, in its sorted order.
+        // An enabled empty key adds a second space, as in Vue.
+        let empty = root(r#"<p :class="{ a: 1, '': 1, b: 1 }">x</p>"#, json!({}));
+        assert_eq!(html(&empty), r#"<p class="a  b">x</p>"#);
         let literal = root(
             r#"<p :class="{ z: 1, 10: 1, a: 1, 2: 1, z: 0, b: 1 }">x</p>"#,
             json!({}),
@@ -4397,6 +4453,13 @@ mod tests {
             "{ color: true }",
             "{ color: ['red'] }",
             "{ WebkitTransition: 'none' }",
+            "{ cssFloat: 'left' }",
+            // Text that could run into the next declaration.
+            "{ color: 'red&quot;', margin: 0 }",
+            "{ color: 'red /*', margin: 0 }",
+            "{ content: '(', margin: 0 }",
+            "{ 'x;background:red;y': 1 }",
+            "{ 'b c': 1 }",
         ] {
             let page = root(
                 &format!(r#"<main><p :style="{style}">x</p></main>"#),

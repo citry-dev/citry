@@ -899,10 +899,13 @@ template's byte ranges, then compile that transformed template through Vize's
 public DOM compiler. It inserts a generated key only on native elements with
 runtime directives and replaces an authored static key at its parsed attribute
 span. An authored `:key`, such as the key of a `v-for` item, is kept beside the
-generated key as `JSON.stringify(['<generated>', (<authored expression>)])`, so
-the items of a keyed list stay apart; a dynamic binding name, an unquoted
-value, or a second key on the element is rejected. A later definition without that directive gets its ordinary key again,
-so Vue replaces the element and performs directive cleanup. A component call
+generated key as `JSON.stringify(['<generated>', (<authored expression>)])`.
+Items whose key is a string or number, the kinds Vue documents, stay apart;
+`null`, `undefined` and `NaN` all print as `null`, and object keys compare by
+their JSON text rather than by identity. A dynamic binding name, an unquoted
+value, or a second key on the element is rejected. A later definition without
+that directive gets its ordinary key again, so Vue replaces the element and
+performs directive cleanup. A component call
 carries one runtime directive, `v-show`, under the rule in
 [Vue directives on component calls](#vue-directives-on-component-calls).
 

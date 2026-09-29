@@ -2141,16 +2141,37 @@ fn validate_element_once_memo(node: &Node, context: &ParserContext) -> Result<()
 /// a dynamic name (`:[name]`), which cannot be compared when the template
 /// loads.
 fn vue_bound_attribute(name: &str) -> Option<(&str, bool)> {
-    let rest = name
-        .strip_prefix("v-bind:")
-        .or_else(|| name.strip_prefix(':'))?;
+    // `.name` and `^name` are Vue's short forms of `:name.prop` and
+    // `:name.attr`, so they count as modified bindings.
+    let (rest, shorthand) = match name.strip_prefix(['.', '^']) {
+        Some(rest) => (rest, true),
+        None => (
+            name.strip_prefix("v-bind:")
+                .or_else(|| name.strip_prefix(':'))?,
+            false,
+        ),
+    };
     if rest.is_empty() || rest.starts_with('[') {
         return None;
     }
     Some(match rest.split_once('.') {
         Some((target, _)) => (target, true),
-        None => (rest, false),
+        None => (rest, shorthand),
     })
+}
+
+/// Whether a `c-*` attribute on an HTML element is a Python value for the
+/// attribute of the same name. Control flow (`c-for`, `c-if`, ...), a
+/// `<c-element>`'s `c-is`, and `c-bind` set no attribute of their own name.
+fn python_attribute_value(attr: &HtmlAttr) -> bool {
+    let name = attr.key.content.as_str();
+    matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template)
+        && name.starts_with("c-")
+        && name != C_BIND_ATTR
+        && name != "c-is"
+        && !CONTROL_FLOW_GROUPS
+            .iter()
+            .any(|group| group.contains(&name))
 }
 
 /// Reject a Python value and a Vue binding that set the same attribute on one
@@ -2178,16 +2199,17 @@ fn validate_vue_binding_python_conflicts(
         let Some((target, has_modifiers)) = vue_bound_attribute(&binding.key.content) else {
             continue;
         };
-        let target = target.to_ascii_lowercase();
-        if !has_modifiers && matches!(target.as_str(), "class" | "style") {
+        // Vue merges only these exact keys; `:Class` is a different key.
+        if !has_modifiers && matches!(target, "class" | "style") {
             continue;
         }
+        let target = target.to_ascii_lowercase();
         let python = attrs.iter().find(|attr| {
             let name = attr.key.content.as_str();
             if target == "key" && name == META_ATTR_KEY {
                 return true;
             }
-            matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template)
+            python_attribute_value(attr)
                 && name
                     .strip_prefix("c-")
                     .is_some_and(|rest| rest.eq_ignore_ascii_case(&target))
@@ -2224,19 +2246,16 @@ fn validate_vue_binding_python_conflicts(
     // reported here as well.
     let open_binding = attrs.iter().find(|attr| {
         let name = attr.key.content.as_str();
-        name == "v-bind" || name.starts_with(":[") || name.starts_with("v-bind:[")
+        name == "v-bind"
+            || name.starts_with("v-bind.")
+            || name.starts_with(":[")
+            || name.starts_with("v-bind:[")
+            || name.starts_with(".[")
+            || name.starts_with("^[")
     });
     let python = attrs.iter().find(|attr| {
         let name = attr.key.content.as_str();
-        let control_flow = CONTROL_FLOW_GROUPS
-            .iter()
-            .any(|group| group.contains(&name));
-        name == C_BIND_ATTR
-            || name == META_ATTR_KEY
-            || (matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template)
-                && name.starts_with("c-")
-                && !control_flow
-                && name != "c-is")
+        name == C_BIND_ATTR || name == META_ATTR_KEY || python_attribute_value(attr)
     });
     if let (Some(binding), Some(python)) = (open_binding, python) {
         let (line, col) = binding.token.line_col;

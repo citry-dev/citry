@@ -121,7 +121,7 @@ that value on every item instead of the loop value, and nothing fails. When
 Vue needs the value too, such as for a `v-show` that changes later, send it
 to the browser with `js_data()` or loop with Vue's `v-for` instead.
 
-## Add browser classes to a class from the template or Python
+## Combine `:class` and `:style` with `c-class` and `c-style`
 
 A `:class` binding adds to the element's other classes instead of
 replacing them. Vue joins it with a static `class`, and Citry joins it

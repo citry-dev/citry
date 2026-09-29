@@ -468,9 +468,15 @@ browser. `class` is normalized and a null class is removed; `style` is
 written as authored from a string and as Vue's server renderer writes a
 style object (`name:value;`, camelCase names hyphenated), which the browser
 reads as the same declarations the client sets. A style object is declined
-when a value is a fraction, empty, contains a semicolon, is not a string
-or number, or when a name starts with a capital (a vendor-prefixed
-property the client sets through the browser's style object). Two classes
+when a value is a fraction, empty, not a string or number, or holds a
+semicolon, quote, backslash, brace, comment start, or unbalanced
+parenthesis (any of which could carry the browser's parse into the next
+declaration); or when a name is not a plain lowercase property after
+hyphenation, starts with a capital (a vendor-prefixed property the client
+sets through the browser's style object), or is `cssFloat`. One gap remains:
+for a standard name a browser supports only with a prefix, Vue's client sets
+the prefixed property while the server writes the standard name, which that
+browser ignores; Vue's own server renderer has the same gap. Two classes
 or two styles meeting in `mergeProps` are joined as Vue joins them. Inside
 a shell's contents, a class or style with a browser-only part is written
 from the parts the server knows; `value` on `input`, `button`, `option` and

@@ -240,3 +240,25 @@ def test_simple_vue_rows_keep_their_static_class_beside_a_browser_only_binding()
         '<article class="row">x</article></section>'
     )
     assert declines == [("browser-value", "class", "section")]
+
+
+@pytest.mark.parametrize("binding", ['.title="hint"', '^title="hint"', ':class.prop="hint"'])
+def test_a_c_bind_key_and_a_modified_binding_for_one_attribute_stop_the_render(binding: str) -> None:
+    engine = Citry(autodiscover=False)
+
+    # A `c-bind` key is only known while rendering, so the render refuses
+    # the pair that the template loader cannot see.
+    class Card(Component):
+        citry = engine
+        template = f"""
+          <p c-bind="attrs" {binding}>x</p>
+        """
+
+        def template_data(self, kwargs, slots) -> dict[str, object]:
+            return {"attrs": {"title": "t", "class": "c"}}
+
+        def js_data(self, kwargs, slots) -> dict[str, object]:
+            return {"hint": "h"}
+
+    with pytest.raises(Exception, match="target the same HTML name"):
+        Card().render().serialize()

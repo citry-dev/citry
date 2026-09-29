@@ -326,9 +326,10 @@ The same happens for:
   number or an object, and `<textarea>` or `<pre>` text that starts with a
   newline;
 - a `:style` value the server cannot write the way the browser reads it:
-  a fractional number, an empty value, a value with a semicolon, a
-  vendor-prefixed name such as `WebkitTransition`, or a list of fallback
-  values;
+  a fractional number, an empty value, a `true` or `false` value, a value
+  with a semicolon, quote, backslash, brace, comment, or unbalanced
+  parenthesis, a vendor-prefixed name such as `WebkitTransition`, or a
+  list of fallback values;
 - custom directives on elements.
 
 Such an element is sent empty instead when its contents would hold

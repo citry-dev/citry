@@ -1550,7 +1550,7 @@ fn plan_key_edit(
             diagnostics.push(diag(
                 "metadata",
                 "DYNAMIC_KEY_UNSUPPORTED",
-                "user-authored dynamic keys are unsupported",
+                "this binding cannot be combined with the key Citry gives an element with a runtime directive; use one quoted :key with a fixed name",
                 d.loc.span.start,
                 d.loc.span.end,
             ));
@@ -1574,7 +1574,9 @@ fn plan_key_edit(
         }
         // The same composition as a prepared key: the element is replaced
         // when its directives change, and the authored value still tells
-        // siblings apart. The digest is ASCII hex, and the authored
+        // siblings apart. `JSON.stringify` compares keys by their text, so
+        // this holds for string and number keys, the kinds Vue documents;
+        // `null`, `undefined` and `NaN` all print as `null`. The digest is ASCII hex, and the authored
         // expression is copied byte for byte inside its original quotes.
         let inner = if quote == '"' { '\'' } else { '"' };
         edits.push(Edit {
