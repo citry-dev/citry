@@ -1092,6 +1092,19 @@ def test_alpine_lint_reports_x_cloak_once_as_an_error_in_any_letter_case():
     assert "[x-cloak]" in finding.message
 
 
+def test_alpine_lint_reports_only_alpine_directive_names():
+    # Vendor and library `x-*` names are ordinary HTML, not Alpine leftovers.
+    source = (
+        '<video x-webkit-airplay="allow" x-ms-format-detection="none"></video>'
+        '<div x-bind:class="c" x-on.click="go" x-intersect.once="load" x-databag="1"></div>'
+    )
+    assert [name for _code, _severity, name in _alpine(source)] == [
+        "x-bind:class",
+        "x-on.click",
+        "x-intersect.once",
+    ]
+
+
 def test_alpine_lint_skips_component_tags_but_checks_c_element():
     # On a component tag `x-foo` is a Python kwarg; `<c-element>` renders HTML.
     source = '<c-card x-foo="1" /><c-element is="div" x-cloak></c-element>'

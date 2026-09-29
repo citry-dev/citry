@@ -837,6 +837,27 @@ def lint_alpine_attributes(
     return tuple(findings)
 
 
+# Alpine's own directives and those of its official plugins. Other `x-*`
+# names, such as the vendor attribute `x-webkit-airplay`, are ordinary HTML
+# that browsers or other libraries read, so they are not reported.
+_ALPINE_DIRECTIVES = frozenset(
+    {
+        "data", "init", "show", "bind", "on", "text", "html", "model", "modelable", "for",
+        "transition", "effect", "ignore", "ref", "cloak", "teleport", "if", "id",
+        "intersect", "trap", "collapse", "anchor", "mask", "sort", "resize", "persist",
+    }
+)  # fmt: skip
+
+
+def _is_alpine_attribute(name: str) -> bool:
+    """Return whether an attribute name is an Alpine directive, with any argument or modifiers."""
+    lowered = _ascii_lower(name)
+    if not lowered.startswith("x-"):
+        return False
+    directive = re.split(r"[:.]", lowered[2:], maxsplit=1)[0]
+    return directive in _ALPINE_DIRECTIVES
+
+
 def _collect_alpine_attributes(
     template: Template,
     found: list[tuple[str, int, int]],
@@ -855,7 +876,7 @@ def _collect_alpine_attributes(
         # `<c-element>` writes its attributes onto a real HTML element.
         renders_attributes = not tag.startswith("c-") or tag == "c-element"
         for attr in node.start_tag.attrs:
-            if renders_attributes and _ascii_lower(attr.key.content).startswith("x-"):
+            if renders_attributes and _is_alpine_attribute(attr.key.content):
                 found.append((attr.key.content, base_index + attr.key.start_index, base_index + attr.key.end_index))
             # A template-valued attribute holds more HTML, whose offsets are
             # relative to the nested source, so shift them into this template.
