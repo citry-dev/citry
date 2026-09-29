@@ -1,6 +1,6 @@
 ---
 title: Template linting
-description: Configure unknown template, Vue, and component JavaScript names consistently across Citry tools.
+description: Configure unknown template, Vue, and component JavaScript names, and leftover Alpine attributes, consistently across Citry tools.
 ---
 
 # Template linting
@@ -86,7 +86,9 @@ See the diagnostic reference entries for
 [Vue variables](/ide/diagnostics/#citry.vue.unknown-variable),
 [Python variables in Vue expressions](/ide/diagnostics/#citry.vue.python-variable),
 [component JavaScript variables](/ide/diagnostics/#citry.component-js.unknown-variable),
-and [component instance members](/ide/diagnostics/#citry.component-js.unknown-member)
+[component instance members](/ide/diagnostics/#citry.component-js.unknown-member),
+[Alpine attributes](/ide/diagnostics/#citry.template.alpine-attribute),
+and [`x-cloak`](/ide/diagnostics/#citry.template.alpine-cloak)
 for their stable messages and reporting surfaces.
 
 The application owns this policy. `citry check` and the language server use
@@ -131,13 +133,16 @@ app = Citry(
         },
         rule_unknown_component_js_member="error",
         rule_vue_python_variable="warning",
+        rule_alpine_attribute="warning",
+        rule_alpine_cloak="error",
     ),
 )
 ```
 
 Each `rule_*` field accepts `"ignore"`, `"warning"`, or `"error"`.
-`rule_vue_python_variable` defaults to `"warning"`; the `rule_unknown_*`
-fields default to `"error"`.
+`rule_vue_python_variable` and `rule_alpine_attribute` default to
+`"warning"`; `rule_alpine_cloak` and the `rule_unknown_*` fields default to
+`"error"`.
 `rule_unknown_component_js_member` sets the severity of
 `citry.component-js.unknown-member`. When one JavaScript file serves several
 components, the strictest of their severities applies, so every one of them
@@ -209,6 +214,59 @@ assignment or simple settings aliases. Component variables link to the nested
 library-component declarations. Computed mappings and factory-built settings
 remain valid at runtime but have no guessed navigation target.
 
+## Find leftover Alpine attributes
+
+Citry uses Vue, so an Alpine attribute left in a template does nothing.
+Citry renders `x-data` or `x-on:click` unchanged, and nothing in the browser
+reads it. `citry check` and the editor report each `x-*` attribute on an
+HTML element as a `citry.template.alpine-attribute` warning:
+
+```citry-html
+<!-- Warning: nothing reads x-data or x-on:click. -->
+<div x-data="{ open: false }">
+  <button x-on:click="open = !open">Menu</button>
+</div>
+```
+
+Move the state into the component's `js_data()` or `$component`, and write
+the listener as a Vue `@click`. See [Vue in templates](/syntax/vue/).
+
+A leftover `x-cloak` does real harm. Nothing removes the attribute any
+more, so an app CSS rule such as `[x-cloak] { display: none }` hides the
+element for good. Citry reports it as a `citry.template.alpine-cloak`
+error. Delete both the attribute and the CSS rule; the served HTML already
+contains the content.
+
+Only HTML elements and `<c-element>` are checked. On a component tag, an
+`x-*` attribute is an ordinary Python keyword argument.
+
+When another library on the page reads `x-*` attributes, turn the warning
+off for the whole application:
+
+```python
+from citry import Citry, LintSettings
+
+app = Citry(
+    lint=LintSettings(rule_alpine_attribute="ignore"),
+)
+```
+
+Or turn it off for the components that use that library:
+
+```citry
+from citry import Component
+
+
+class DatePicker(Component):
+    class Lint:
+        rule_alpine_attribute = "ignore"
+```
+
+A template that several components use is reported unless every one of
+them sets `"ignore"`. These two rules do not depend on a component's data,
+so `citry check --static` and an editor without a loaded app still run
+them, with the default severities.
+
 ## Understand open schemas
 
 Citry tracks known fields separately from whether they exhaust the normalized
@@ -240,7 +298,8 @@ citry --app myproject.app:app check
 Warnings are printed and included in JSON output but do not make the command
 fail. Any error exits with status 1. `citry check --static` cannot prove which
 component owns a template or browser asset, so it intentionally performs
-syntax checks without these namespace rules.
+syntax checks without these namespace rules. It still reports leftover
+Alpine attributes, with the default severities.
 
 Extensions that add template data can publish detached namespace metadata with
 [`TemplateNamespaceContribution`][citry.TemplateNamespaceContribution]. An
