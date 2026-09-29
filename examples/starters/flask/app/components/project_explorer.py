@@ -51,9 +51,9 @@ class ProjectExplorer(Component):
           <button
             class="help-button"
             type="button"
-            @click="tipsOpen = !tipsOpen"
-            :aria-expanded="String(tipsOpen)"
+            :aria-expanded="tipsOpen"
             aria-controls="explorer-help"
+            @click="tipsOpen = !tipsOpen"
           >
             <span aria-hidden="true">?</span>
             <span v-text="tipsOpen ? 'Hide explanation' : 'How this page works'">
@@ -62,13 +62,22 @@ class ProjectExplorer(Component):
           </button>
         </div>
 
-        <aside id="explorer-help" class="explorer__help" v-cloak v-show="tipsOpen">
+        <aside
+          id="explorer-help"
+          class="explorer__help"
+          v-cloak
+          v-show="tipsOpen"
+        >
           <strong>The help button and search take different paths.</strong>
           This panel opens entirely in your browser. After you pause typing, a
           Citry Event sends the query to Python and updates the project list.
         </aside>
 
-        <div class="result-summary" aria-live="polite" aria-atomic="true">
+        <div
+          class="result-summary"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           <h2 id="project-list-heading">Current projects</h2>
           <span v-cloak v-show="$loading('refresh')">Searching…</span>
           <span v-show="!$loading('refresh')">
@@ -112,6 +121,7 @@ class ProjectExplorer(Component):
         justify-content: space-between;
         gap: 1rem;
       }
+
       .search-field {
         display: grid;
         width: min(100%, 34rem);
@@ -173,7 +183,9 @@ class ProjectExplorer(Component):
         line-height: 1.55;
       }
 
-      .explorer__help strong { color: var(--color-text); }
+      .explorer__help strong {
+        color: var(--color-text);
+      }
 
       .result-summary {
         display: flex;
@@ -203,6 +215,7 @@ class ProjectExplorer(Component):
         grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
         gap: 1rem;
       }
+
       .empty-state {
         display: grid;
         gap: 0.4rem;
@@ -213,7 +226,9 @@ class ProjectExplorer(Component):
         text-align: center;
       }
 
-      .empty-state strong { color: var(--color-text); }
+      .empty-state strong {
+        color: var(--color-text);
+      }
 
       @media (max-width: 42rem) {
         .explorer__toolbar {
@@ -221,7 +236,9 @@ class ProjectExplorer(Component):
           flex-direction: column;
         }
 
-        .help-button { align-self: flex-start; }
+        .help-button {
+          align-self: flex-start;
+        }
 
         .result-summary {
           align-items: flex-start;

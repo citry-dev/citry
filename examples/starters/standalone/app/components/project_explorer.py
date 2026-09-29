@@ -31,9 +31,9 @@ class ProjectExplorer(Component):
           <button
             class="help-button"
             type="button"
-            @click="tipsOpen = !tipsOpen"
-            :aria-expanded="String(tipsOpen)"
+            :aria-expanded="tipsOpen"
             aria-controls="explorer-help"
+            @click="tipsOpen = !tipsOpen"
           >
             <span aria-hidden="true">?</span>
             <span v-text="tipsOpen ? 'Hide explanation' : 'How this page works'">
@@ -42,7 +42,12 @@ class ProjectExplorer(Component):
           </button>
         </div>
 
-        <aside id="explorer-help" class="explorer__help" v-cloak v-show="tipsOpen">
+        <aside
+          id="explorer-help"
+          class="explorer__help"
+          v-cloak
+          v-show="tipsOpen"
+        >
           <strong>Opening this panel does not call Python.</strong>
           Vue stores whether the panel is open in your browser, so the page
           stays interactive after Python finishes rendering it.
@@ -124,7 +129,9 @@ class ProjectExplorer(Component):
         line-height: 1.55;
       }
 
-      .explorer__help strong { color: var(--color-text); }
+      .explorer__help strong {
+        color: var(--color-text);
+      }
 
       .project-grid {
         display: grid;
@@ -133,7 +140,12 @@ class ProjectExplorer(Component):
       }
 
       @media (max-width: 42rem) {
-        .explorer__toolbar { align-items: stretch; flex-direction: column; }
-        .help-button { align-self: flex-start; }
+        .explorer__toolbar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+        .help-button {
+          align-self: flex-start;
+        }
       }
     """
