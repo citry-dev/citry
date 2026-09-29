@@ -2,6 +2,7 @@ from citry import Component, SlotInput
 
 class ProductCard(Component):
     class Kwargs:
+        product_id: int
         tags: list[str]
         likes: int = 0
         accent: str = "#175cd3"
@@ -15,9 +16,13 @@ class ProductCard(Component):
 
     class Events:
         def like(self, state: ProductCard.State):
+            product = load_product(state.product_id)
             return ProductCard(
-                tags=state.tags,
+                product_id=product.id,
+                tags=product.tags,
                 likes=state.likes + 1,
+                accent=state.accent,
+                slots={"body": product.name},
             )
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
@@ -88,7 +93,9 @@ class ProductCard(Component):
         css = ["https://unpkg.com/normalize.css@8.0.1/normalize.css"]
 
 
+lamp = load_product(7)
 html = str(ProductCard(
-    tags=["new", "sale"],
-    slots={"body": "Aurora Lamp"}
+    product_id=lamp.id,
+    tags=lamp.tags,
+    slots={"body": lamp.name},
 ))

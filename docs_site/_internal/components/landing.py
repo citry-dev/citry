@@ -597,7 +597,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "kwargs",
         "label": "Inputs",
-        "lines": (4, 7),
+        "lines": (4, 8),
         "anchor": "class Kwargs",
         "title": "Declared inputs",
         "text": (
@@ -610,7 +610,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "slots",
         "label": "Slots",
-        "lines": (9, 11),
+        "lines": (10, 12),
         "anchor": "class Slots",
         "title": "Openings the caller fills",
         "text": (
@@ -622,7 +622,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "state",
         "label": "State",
-        "lines": (13, 14),
+        "lines": (14, 15),
         "anchor": "class State",
         "title": "State that survives a call",
         "text": (
@@ -635,20 +635,21 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "events",
         "label": "Events",
-        "lines": (16, 21),
+        "lines": (17, 26),
         "anchor": "class Events",
         "title": "Python that runs on interaction",
         "text": (
             "A public method here can be called from the browser "
             'using <code>@c-event="like"</code>. <code>like</code> '
-            "reads the current state and renders the updated component, "
-            "which the browser then displays."
+            "reloads the product named in the state and renders the updated "
+            "component, passing every input and slot again because the new "
+            "render starts from nothing. The browser then displays it."
         ),
     },
     {
         "id": "data",
         "label": "Data",
-        "lines": (23, 33),
+        "lines": (28, 38),
         "anchor": "def template_data",
         "title": "Use Python variables in templates, browser behavior, and CSS",
         "text": (
@@ -661,7 +662,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "browser-state",
         "label": "Browser state",
-        "lines": (36, 39),
+        "lines": (41, 44),
         "anchor": ":class",
         "title": "State that never leaves the page",
         "text": (
@@ -673,7 +674,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "slot-body",
         "label": "Slot",
-        "lines": (40, 40),
+        "lines": (45, 45),
         "anchor": '<c-slot name="body"',
         "title": "Where filled content lands",
         "text": (
@@ -684,7 +685,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "control",
         "label": "Control flow",
-        "lines": (42, 49),
+        "lines": (47, 54),
         "anchor": "c-for",
         "title": "A loop, a child, and the empty case",
         "text": (
@@ -699,7 +700,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "translated-text",
         "label": "Translated text",
-        "lines": (50, 50),
+        "lines": (55, 55),
         "anchor": 'tr("product-card-no-tags")',
         "title": "First-class support for i18n and l10n",
         "text": (
@@ -710,7 +711,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "handlers",
         "label": "Bindings",
-        "lines": (53, 55),
+        "lines": (58, 60),
         "anchor": "@c-click",
         "title": "Vue and Python, side by side",
         "text": (
@@ -721,7 +722,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "slot-footer",
         "label": "Fallback",
-        "lines": (57, 59),
+        "lines": (62, 64),
         "anchor": '<c-slot name="footer"',
         "title": "What shows when nobody fills it",
         "text": (
@@ -732,7 +733,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "js",
         "label": "Script",
-        "lines": (63, 70),
+        "lines": (68, 75),
         "anchor": "$component",
         "title": "Advanced setup scoped to this component",
         "text": (
@@ -744,7 +745,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "css",
         "label": "Style",
-        "lines": (72, 80),
+        "lines": (77, 85),
         "anchor": "var(--accent)",
         "title": "Styles reading Python values",
         "text": (
@@ -756,7 +757,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "messages",
         "label": "Messages",
-        "lines": (82, 84),
+        "lines": (87, 89),
         "anchor": "messages =",
         "title": "Write translation keys as Fluent syntax",
         "text": (
@@ -767,7 +768,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "deps",
         "label": "Assets",
-        "lines": (86, 88),
+        "lines": (91, 93),
         "anchor": "class Dependencies",
         "title": "Third-party scripts and styles",
         "text": (
@@ -778,7 +779,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "render",
         "label": "Render",
-        "lines": (91, 94),
+        "lines": (96, 101),
         "anchor": "str(ProductCard",
         "title": "Rendering is a function call",
         "text": (
