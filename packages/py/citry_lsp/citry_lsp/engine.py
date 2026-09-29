@@ -35,6 +35,7 @@ from citry._diagnostics import diagnostic_documentation_url, render_diagnostic
 from citry._i18n_directives import looks_like_i18n_binding
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
+    AlpineAttributeLintConsumer,
     BrowserBinding,
     BrowserComponentBinding,
     BrowserComponentPropContribution,
@@ -82,6 +83,7 @@ from citry.analysis import (
     css_data_references,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
+    lint_alpine_attributes,
     lint_csp_compatibility,
     lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
@@ -590,9 +592,11 @@ def template_lint_diagnostics(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> tuple[types.Diagnostic, ...]:
     """Apply portable root linting only where current component ownership is proven."""
+    # The Alpine rules need no component namespace, so they run even before
+    # the project analysis is available.
+    diagnostics = list(_alpine_lint_diagnostics(document, project, open_documents))
     if project.catalog is None or project.analysis is None:
-        return ()
-    diagnostics: list[types.Diagnostic] = []
+        return tuple(diagnostics)
     for region in document.regions:
         parsed = document.parsed.get(region.key)
         if parsed is None:
@@ -631,6 +635,56 @@ def template_lint_diagnostics(
             continue
         for finding in lint_unknown_template_variables(parsed.template, consumers):
             mapped = region.source_map.map_range(finding.start_index, finding.end_index)
+            diagnostics.append(
+                types.Diagnostic(
+                    range=_range(mapped),
+                    message=finding.message,
+                    severity=(
+                        types.DiagnosticSeverity.Error
+                        if finding.severity == "error"
+                        else types.DiagnosticSeverity.Warning
+                    ),
+                    code=finding.code,
+                    code_description=types.CodeDescription(diagnostic_documentation_url(finding.code)),
+                    source="citry",
+                )
+            )
+    return tuple(diagnostics)
+
+
+def _alpine_lint_diagnostics(
+    document: DocumentState,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> tuple[types.Diagnostic, ...]:
+    """Report leftover Alpine ``x-*`` attributes with each owner's severities."""
+    analysis = project.analysis
+    parser = analysis.parse_template if analysis is not None else parse_template
+    diagnostics: list[types.Diagnostic] = []
+    for region in document.regions:
+        parsed = document.parsed.get(region.key)
+        if parsed is None:
+            continue
+        consumers: list[AlpineAttributeLintConsumer] = []
+        if analysis is not None:
+            for owner in _template_consumers(document, region, project, open_documents):
+                # An owner missing from the analysis still belongs to this
+                # application, so its policy is the application's.
+                lint = analysis.component_lint.get(owner.definition_id, analysis.lint)
+                consumers.append(AlpineAttributeLintConsumer(lint.rule_alpine_attribute, lint.rule_alpine_cloak))
+            if not consumers:
+                # No proven owner: the application policy still applies,
+                # which is closer to the author's intent than the defaults.
+                consumers.append(
+                    AlpineAttributeLintConsumer(analysis.lint.rule_alpine_attribute, analysis.lint.rule_alpine_cloak)
+                )
+        for finding in lint_alpine_attributes(parsed.template, consumers, parse_nested=parser):
+            try:
+                mapped = region.source_map.map_range(finding.start_index, finding.end_index)
+            except ValueError:
+                # A span the source map cannot place exactly gets no squiggle
+                # rather than one in the wrong place.
+                continue
             diagnostics.append(
                 types.Diagnostic(
                     range=_range(mapped),
@@ -7898,7 +7952,11 @@ _COMPONENT_CONTEXT_SPECS = {
     "els": _BrowserApiSpec(
         "parameter",
         "Element[]",
-        "The component's connected top-level elements, read fresh on each access.",
+        (
+            "The component's connected top-level elements. One array that Citry refills on each server "
+            "render and each time this field is read; a destructured copy does not follow changes made "
+            "only in the browser until the next refill."
+        ),
         f"{_BROWSER_APIS_URL}#on-server-render",
     ),
     "state": _BrowserApiSpec(

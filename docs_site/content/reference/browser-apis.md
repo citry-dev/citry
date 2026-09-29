@@ -76,7 +76,7 @@ The component template declares the referenced element:
 | `revision` | The accepted server revision visible to the component. |
 | [`onEvent(name, handler)`](#on-server-render-on-event) | Listens for an event this component's server handler dispatches and returns a function that stops listening. |
 | `id` | The component's current server render ID, the value `Citry.events.send()` accepts and the `instance` in `citry:events:*` details. `null` when the component has none. Read-only. |
-| `els` | The component's connected top-level elements. It is one array for the component's lifetime, which Citry refills after each server render, so an `els` you destructured earlier lists the current elements. |
+| `els` | The component's connected top-level elements. It is one array for the component's lifetime. Citry refills it on each server render and each time you read `els` from the context, so an `els` you destructured earlier follows server renders. It does not follow a change made only in the browser, such as a `v-if` toggle, until the next refill. |
 | `state` | The same object as [`component.$state`](#state), or `null` when the component declares no `Events`. |
 | `sendEvent(name, args?, opts?)` | Calls [`component.$sendEvent`](#send-event). |
 | `loading(name?)` | Calls [`component.$loading`](#loading). |
@@ -98,6 +98,23 @@ value is an error.
 Effects registered synchronously inside the callback run in a Vue effect scope
 that Citry stops at the same time. Asynchronous continuations must arrange
 their own cleanup.
+
+The callback may be `async`. Citry does not wait for it: the page becomes
+ready, and later server renders apply, while it is still running. It may
+resolve to a cleanup function. If the next callback run or the unmount comes
+first, Citry calls that cleanup as soon as the Promise resolves. A rejected
+Promise is logged to the console as a `[Citry]` error and does not stop the
+page:
+
+```js
+$component({
+  async onServerRender({ component }) {
+    const { createChart } = await import("/static/chart.js");
+    const chart = createChart(component.$refs.chart);
+    return () => chart.destroy();
+  },
+});
+```
 
 The callback form of `$component` is shorthand for `onServerRender`:
 
@@ -125,9 +142,10 @@ $component({
 `onEvent` takes the same arguments as [`$onEvent`](#on-event), but each
 listener lasts only as long as the callback run that added it. Citry removes
 it before the next callback and when the component unmounts, so a listener
-added on every run is never registered twice. Calling it without an `Events`
-declaration is not an error, but it only receives events that this
-component's own Events handlers dispatch:
+added on every run is never registered twice. On a component without an
+`Events` declaration, calling `onEvent` is not an error, but the listener
+never runs, because only the component's own server handlers dispatch these
+events and it has none:
 
 ```js
 $component(({ component, onEvent }) => {
@@ -195,6 +213,45 @@ $component({
 });
 ```
 
+<h3 class="doc-heading" id="citry-vue-use"><code>Citry.vue.use</code></h3>
+
+Install a Vue plugin, such as a store or a global directive, on every Vue app
+Citry creates on the page. Citry calls `app.use(plugin, ...options)` on each
+app before it mounts:
+
+```js
+Citry.vue.use({
+  install(app) {
+    app.directive("autofocus", {
+      mounted(el) {
+        el.focus();
+      },
+    });
+  },
+});
+```
+
+A component template can then use `v-autofocus`. Register a store plugin,
+or any other Vue plugin, the same way.
+
+Call it before Citry starts its first app, from a script that runs after
+Citry's runtime has loaded. A script in the page `<head>` loaded with `defer`
+does both, because the browser runs it after parsing the page and before
+Citry's start script:
+
+```html
+<script defer src="/static/vue-plugins.js"></script>
+```
+
+- A call after Citry has started an app throws an `Error`, because that app
+  would run without the plugin. Move the call earlier.
+- A value that is neither a function nor an object with an `install(app)`
+  method throws a `TypeError`.
+- Registering the same plugin again does nothing, as with `app.use`, even
+  when the options differ.
+- An error thrown by the plugin's `install` stops that app from starting
+  and is reported as a page error.
+
 ## Component Events helpers
 
 The following helpers are available to templates and on the live Vue public
@@ -250,6 +307,20 @@ structured event error. An unknown handler name, or a component that declares
 no `Events`, also rejects the Promise instead of throwing. Use declarative `@c-*` bindings when no browser code
 needs the returned result.
 
+The optional third argument accepts these options:
+
+| Option | Meaning |
+| --- | --- |
+| `timeout` | Milliseconds to wait for the server before the call fails. Overrides the page default. |
+| `wait` | Only `true`, the default. |
+
+Citry sends the calls from one Vue app one at a time, in the order they were
+made, because each server render builds on the one before it. A call cannot
+skip ahead, so `wait: false` rejects the Promise with a `TypeError`. To
+replace an older call to the same handler, as live search does, declare the
+handler with `@event(latest_wins=True)`. An unknown option also rejects,
+and the error names it.
+
 <h3 class="doc-heading" id="on-event"><code>$onEvent</code></h3>
 
 Subscribe to a server-dispatched event for this component instance:
@@ -287,7 +358,8 @@ await Citry.events.send("render_abc123", "refresh", {page: 2});
 
 `send(target, name, args?, opts?)` accepts a current render ID or an Element
 inside its mounted component. The returned Promise has the same data and
-error behavior as `$sendEvent`. The other methods are:
+error behavior as `$sendEvent`, and `opts` takes the same
+[options](#send-event). The other methods are:
 
 | Method | Purpose |
 | --- | --- |
@@ -341,9 +413,10 @@ Event calls also emit bubbling `citry:events:before`, `after`, `error`,
 `class`, and `event`; `after` adds `ok`, `error` adds `error`, `swapped` adds
 `els`, and `stale` adds `reason`. The `before` event is cancellable with
 `preventDefault()`. Each event bubbles from the calling component's first
-element. When that component has left the page before the call finishes,
-the event fires on `document` with `instance` and `class` set to `null`, so
-a listener on `document` still hears it.
+element. When that component has no element on the page, for example
+because it was removed before the call finished, the event fires on
+`document` instead, so a listener on `document` still hears it. `instance`
+and `class` then name the component as the call last saw it.
 
 `stale` fires when a call's result will not reach the page. Its `reason` says
 why:
