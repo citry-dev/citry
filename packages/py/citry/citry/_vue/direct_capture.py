@@ -1837,10 +1837,15 @@ def assemble_typed_render(
                 if isinstance(part, PreparedVerbatimHtml):
                     parent_tag = element_stack[-1] if element_stack else None
                     if any(tag in {"svg", "math"} for tag in element_stack):
-                        raise UnsupportedPreparedView("c-raw is unsupported inside a prepared SVG or MathML parent")
+                        raise UnsupportedPreparedView(
+                            "<c-raw> cannot sit inside <svg> or <math> in an interactive component, because Vue"
+                            " inserts its HTML with the HTML parser. Move the <c-raw> block outside, or write the"
+                            " SVG or MathML markup directly in the template."
+                        )
                     if parent_tag in {"script", "style", "textarea", "title"}:
                         raise UnsupportedPreparedView(
-                            f"c-raw is unsupported inside prepared <{parent_tag}> raw-text or RCDATA content"
+                            f"<c-raw> cannot sit inside <{parent_tag}> in an interactive component, because"
+                            f" <{parent_tag}> holds text, not HTML. Write the text directly inside <{parent_tag}>."
                         )
                     from citry.ext.events.bindings import _line_column  # noqa: PLC0415
 
@@ -1953,11 +1958,15 @@ def assemble_typed_render(
                     parent_tag = element_stack[-1] if element_stack else None
                     if any(tag in {"svg", "math"} for tag in element_stack):
                         raise UnsupportedPreparedView(
-                            "trusted HTML is unsupported inside a prepared SVG or MathML parent"
+                            "A Markup value (trusted HTML from Python) cannot sit inside <svg> or <math> in an"
+                            " interactive component, because Vue inserts it with the HTML parser. Write the SVG or"
+                            " MathML markup in the template, or render the whole <svg> element from the value."
                         )
                     if parent_tag in {"script", "style", "textarea", "title"}:
                         raise UnsupportedPreparedView(
-                            f"trusted HTML is unsupported inside prepared <{parent_tag}> raw-text or RCDATA content"
+                            f"A Markup value (trusted HTML from Python) cannot sit inside <{parent_tag}> in an"
+                            f" interactive component, because <{parent_tag}> holds text, not HTML. Pass a plain"
+                            " string instead."
                         )
                     if "<" not in serialized:
                         value = unescape(serialized)

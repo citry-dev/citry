@@ -2302,3 +2302,23 @@ def test_compiler_names_once_and_memo_when_they_reach_the_vue_template() -> None
     with pytest.raises(ValueError, match=r"^The Vue template contains 'v-once'\. Citry does not support") as excinfo:
         NativeCompiler().compile("<p v-once>x</p>", type_key="Page")
     assert "put '#c-ignore' on the element" in str(excinfo.value)
+
+
+def test_raw_and_markup_placement_errors_say_what_to_write() -> None:
+    app = Citry(autodiscover=False)
+
+    class InSvg(Component):
+        citry = app
+        template = '<main :class="cls"><svg><c-raw><circle r="1"></circle></c-raw></svg></main>'
+
+    class InTextarea(Component):
+        citry = app
+        template = '<main :class="cls"><textarea>{{ html }}</textarea></main>'
+
+        def template_data(self, kwargs, slots):
+            return {"html": Markup("<b>x</b>")}
+
+    with pytest.raises(UnsupportedPreparedView, match="Move the <c-raw> block outside"):
+        _assemble_page(InSvg())
+    with pytest.raises(UnsupportedPreparedView, match=r"holds text, not HTML\. Pass a plain string instead\."):
+        _assemble_page(InTextarea())
