@@ -41,13 +41,8 @@ class TaskCard(Component):
         c-class="{'task-card--done': completed}"
         c-style="accent_style"
         draggable="true"
-        @dragstart="
-          $el.classList.add('task-card--dragging');
-          $event.dataTransfer.effectAllowed = 'move';
-          $event.dataTransfer.setData('text/plain', taskId.toString());
-          $event.dataTransfer.setData('application/x-citry-lane', laneKey);
-        "
-        @dragend="$el.classList.remove('task-card--dragging')"
+        @dragstart="startDrag($event)"
+        @dragend="endDrag()"
       >
         <div class="task-card__meta">
           <c-PriorityBadge c-high="high_priority" />
@@ -59,15 +54,7 @@ class TaskCard(Component):
             <span>Move to column</span>
             <select
               c-aria-label="'Move ' + title + ' to column'"
-              @change="
-                if ($event.target.value !== laneKey) {
-                  $el.dispatchEvent(new window.CustomEvent('board:move', { bubbles: true, detail: {
-                    taskId,
-                    lane: $event.target.value,
-                    focusControl: true,
-                  }}));
-                }
-              "
+              @change="requestMove($event)"
             >
               <c-for each="lane_key, lane_title in lane_options">
                 <option
@@ -83,17 +70,52 @@ class TaskCard(Component):
           <button
             class="task-card__toggle"
             type="button"
-            @click="
-              $el.dispatchEvent(new window.CustomEvent('board:set-completed', { bubbles: true, detail: {
-                taskId,
-                completed: !taskCompleted,
-              }}))
-            "
+            @click="toggleCompleted()"
           >
             {{ toggle_label }}
           </button>
         </div>
       </article>
+    """
+
+    js = """
+      $component({
+        methods: {
+          startDrag(event) {
+            this.$el.classList.add('task-card--dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            // The column reads both values on drop: the id says which task
+            // to move, and the source column lets it ignore a drop back
+            // onto the column the card came from.
+            event.dataTransfer.setData('text/plain', this.taskId.toString());
+            event.dataTransfer.setData('application/x-citry-lane', this.laneKey);
+          },
+          endDrag() {
+            this.$el.classList.remove('task-card--dragging');
+          },
+          // The Move to column menu lets keyboard and touchscreen users
+          // make the same move that dragging makes.
+          requestMove(event) {
+            const lane = event.target.value;
+            // Choosing the card's current column is not a move, so the card
+            // does not tell the board.
+            if (lane === this.laneKey) return;
+            // ProjectBoard owns the Events call, so the card announces the
+            // move with a bubbling DOM event. focusControl asks the board to
+            // put focus back on this menu after it renders the new board.
+            this.$el.dispatchEvent(new CustomEvent('board:move', {
+              bubbles: true,
+              detail: { taskId: this.taskId, lane, focusControl: true },
+            }));
+          },
+          toggleCompleted() {
+            this.$el.dispatchEvent(new CustomEvent('board:set-completed', {
+              bubbles: true,
+              detail: { taskId: this.taskId, completed: !this.taskCompleted },
+            }));
+          },
+        },
+      });
     """
 
     css = """

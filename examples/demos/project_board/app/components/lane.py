@@ -34,35 +34,9 @@ class Lane(Component):
         class="lane"
         c-style="accent_style"
         c-aria-label="title + ' column'"
-        @dragover.prevent="
-          $el.classList.add('lane--drop-target');
-          $event.dataTransfer.dropEffect = 'move';
-        "
-        @dragleave="
-          if (!$el.contains($event.relatedTarget)) {
-            $el.classList.remove('lane--drop-target');
-          }
-        "
-        @drop.prevent="
-          const rawTaskId = $event.dataTransfer.getData('text/plain');
-          const taskId = Number(rawTaskId);
-          const sourceLane = $event.dataTransfer.getData(
-            'application/x-citry-lane',
-          );
-          $el.classList.remove('lane--drop-target');
-          if (
-            sourceLane &&
-            Number.isSafeInteger(taskId) &&
-            taskId > 0 &&
-            sourceLane !== laneKey
-          ) {
-            $el.dispatchEvent(new window.CustomEvent('board:move', { bubbles: true, detail: {
-              taskId,
-              lane: laneKey,
-              focusControl: false,
-            }}));
-          }
-        "
+        @dragover.prevent="highlightDropTarget($event)"
+        @dragleave="clearDropTarget($event)"
+        @drop.prevent="dropTask($event)"
       >
         <header class="lane__header">
           <h2>{{ title }}</h2>
@@ -77,6 +51,50 @@ class Lane(Component):
           </c-slot>
         </footer>
       </section>
+    """
+
+    js = """
+      $component({
+        methods: {
+          highlightDropTarget(event) {
+            this.$el.classList.add('lane--drop-target');
+            event.dataTransfer.dropEffect = 'move';
+          },
+          clearDropTarget(event) {
+            // dragleave also fires when the pointer moves onto one of the
+            // column's own children, so keep the highlight until the pointer
+            // leaves the column itself.
+            if (!this.$el.contains(event.relatedTarget)) {
+              this.$el.classList.remove('lane--drop-target');
+            }
+          },
+          dropTask(event) {
+            // TaskCard stores these values when the drag starts.
+            const taskId = Number(event.dataTransfer.getData('text/plain'));
+            const sourceLane = event.dataTransfer.getData(
+              'application/x-citry-lane',
+            );
+            this.$el.classList.remove('lane--drop-target');
+            // Ignore drags that did not start on a task card or carry no
+            // valid task ID, and drops back onto the card's own column, so
+            // the board sends no request for them.
+            if (
+              !sourceLane ||
+              !Number.isSafeInteger(taskId) ||
+              taskId <= 0 ||
+              sourceLane === this.laneKey
+            ) {
+              return;
+            }
+            // ProjectBoard owns the Events call. A drop leaves focus where the
+            // person dragging had it, so it does not ask the board to move focus.
+            this.$el.dispatchEvent(new CustomEvent('board:move', {
+              bubbles: true,
+              detail: { taskId, lane: this.laneKey, focusControl: false },
+            }));
+          },
+        },
+      });
     """
 
     css = """

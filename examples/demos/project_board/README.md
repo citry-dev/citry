@@ -105,8 +105,8 @@ Remove-Item -Recurse -Force `
 | `app/store.py` | Stores the sample tasks and adds, moves, or completes them after validation. |
 | `app/components/app_shell.py` | Renders the document shell and shared page styles. |
 | `app/components/board_page.py` | Composes the heading and project board. |
-| `app/components/project_board.py` | Defines the form, filters, Events, and board-level state. |
-| `app/components/lane.py` and `app/components/task_card.py` | Define the board columns and task cards. |
+| `app/components/project_board.py` | Defines the form, filters, Events, and board-level state. Its Vue method shows the result notice and restores focus after a board update. |
+| `app/components/lane.py` and `app/components/task_card.py` | Define the board columns and task cards. Their Vue `methods` handle dragging, dropping, the **Move to column** menu, and the completion button. |
 | `app/components/priority_badge.py` | Defines the priority badge and its styles. |
 | `tests/test_app.py` | Checks the page, task changes, and mounted Citry runtime. |
 

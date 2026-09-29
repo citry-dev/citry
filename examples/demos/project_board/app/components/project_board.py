@@ -122,33 +122,6 @@ class ProjectBoard(Component):
     def js_data(self, kwargs: Kwargs, slots: Slots):
         return {"helpOpen": False, "notice": ""}
 
-    js = """
-      $component({
-        methods: {
-          handleBoardNotice(event) {
-            this.notice = event.detail.message;
-            if (event.detail.focusBoard) {
-              this.$nextTick(() => this.$refs.boardStatus?.focus());
-            }
-            if (event.detail.focusTaskId) {
-              this.$nextTick(() => {
-                document
-                  .getElementById('task-' + event.detail.focusTaskId)
-                  ?.querySelector('.task-card__move select')
-                  ?.focus();
-              });
-            }
-          },
-        },
-        mounted() {
-          document.addEventListener('board:notice', this.handleBoardNotice);
-        },
-        beforeUnmount() {
-          document.removeEventListener('board:notice', this.handleBoardNotice);
-        },
-      });
-    """
-
     template = """
       <section
         class="board-region"
@@ -318,9 +291,42 @@ class ProjectBoard(Component):
 
         <div class="toast" role="status" v-cloak v-show="notice">
           <span v-text="notice"></span>
-          <button type="button" @click="notice = ''" aria-label="Dismiss notification">&times;</button>
+          <button
+            type="button"
+            aria-label="Dismiss notification"
+            @click="notice = ''"
+          >
+            &times;
+          </button>
         </div>
       </section>
+    """
+
+    js = """
+      $component({
+        methods: {
+          handleBoardNotice(event) {
+            this.notice = event.detail.message;
+            if (event.detail.focusBoard) {
+              this.$nextTick(() => this.$refs.boardStatus?.focus());
+            }
+            if (event.detail.focusTaskId) {
+              this.$nextTick(() => {
+                document
+                  .getElementById('task-' + event.detail.focusTaskId)
+                  ?.querySelector('.task-card__move select')
+                  ?.focus();
+              });
+            }
+          },
+        },
+        mounted() {
+          document.addEventListener('board:notice', this.handleBoardNotice);
+        },
+        beforeUnmount() {
+          document.removeEventListener('board:notice', this.handleBoardNotice);
+        },
+      });
     """
 
     css = """
