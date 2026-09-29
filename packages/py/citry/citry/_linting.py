@@ -176,6 +176,8 @@ class TemplateLintInfo:
     allows_extra_variables: bool = False
     rule_unknown_component_js_member: LintSeverity = "error"
     rule_vue_python_variable: LintSeverity = "warning"
+    rule_alpine_attribute: LintSeverity = "warning"
+    rule_alpine_cloak: LintSeverity = "error"
 
     def __post_init__(self) -> None:
         if (
@@ -226,6 +228,12 @@ class TemplateLintInfo:
         if type(self.rule_vue_python_variable) is not str or self.rule_vue_python_variable not in _RULE_SEVERITIES:
             msg = f"Unknown Vue Python-variable lint severity: {self.rule_vue_python_variable!r}"
             raise ValueError(msg)
+        if type(self.rule_alpine_attribute) is not str or self.rule_alpine_attribute not in _RULE_SEVERITIES:
+            msg = f"Unknown Alpine-attribute lint severity: {self.rule_alpine_attribute!r}"
+            raise ValueError(msg)
+        if type(self.rule_alpine_cloak) is not str or self.rule_alpine_cloak not in _RULE_SEVERITIES:
+            msg = f"Unknown Alpine x-cloak lint severity: {self.rule_alpine_cloak!r}"
+            raise ValueError(msg)
         names = tuple(item.name for item in self.template_variables)
         if names != tuple(sorted(set(names))):
             msg = "Template lint variables must be unique and sorted by name"
@@ -252,6 +260,8 @@ class TemplateLintInfo:
             "allows_extra_variables": self.allows_extra_variables,
             "rule_unknown_component_js_member": self.rule_unknown_component_js_member,
             "rule_vue_python_variable": self.rule_vue_python_variable,
+            "rule_alpine_attribute": self.rule_alpine_attribute,
+            "rule_alpine_cloak": self.rule_alpine_cloak,
         }
 
     @classmethod
@@ -268,6 +278,8 @@ class TemplateLintInfo:
             "allows_extra_variables",
             "rule_unknown_component_js_member",
             "rule_vue_python_variable",
+            "rule_alpine_attribute",
+            "rule_alpine_cloak",
         }:
             msg = "template lint data must contain the exact supported fields"
             raise ValueError(msg)
@@ -294,6 +306,8 @@ class TemplateLintInfo:
             allows_extra_variables=value["allows_extra_variables"],  # type: ignore[arg-type]
             rule_unknown_component_js_member=value["rule_unknown_component_js_member"],  # type: ignore[arg-type]
             rule_vue_python_variable=value["rule_vue_python_variable"],  # type: ignore[arg-type]
+            rule_alpine_attribute=value["rule_alpine_attribute"],  # type: ignore[arg-type]
+            rule_alpine_cloak=value["rule_alpine_cloak"],  # type: ignore[arg-type]
         )
 
 
@@ -313,6 +327,8 @@ class _ComponentLintOverrides:
     component_js_global_owners: Mapping[str, type]
     rule_unknown_component_js_member: LintSeverity | None = None
     rule_vue_python_variable: LintSeverity | None = None
+    rule_alpine_attribute: LintSeverity | None = None
+    rule_alpine_cloak: LintSeverity | None = None
 
 
 def _application_lint_info(citry: Citry) -> TemplateLintInfo:
@@ -342,6 +358,8 @@ def _application_lint_info(citry: Citry) -> TemplateLintInfo:
         component_js_globals=tuple(component_js_globals[name] for name in sorted(component_js_globals)),
         rule_unknown_component_js_member=citry.settings.lint.rule_unknown_component_js_member,
         rule_vue_python_variable=citry.settings.lint.rule_vue_python_variable,
+        rule_alpine_attribute=citry.settings.lint.rule_alpine_attribute,
+        rule_alpine_cloak=citry.settings.lint.rule_alpine_cloak,
     )
 
 
@@ -406,6 +424,14 @@ def _component_lint_info(citry: Citry, component_class: type) -> TemplateLintInf
             if overrides.rule_vue_python_variable is not None
             else application.rule_vue_python_variable
         ),
+        rule_alpine_attribute=(
+            overrides.rule_alpine_attribute
+            if overrides.rule_alpine_attribute is not None
+            else application.rule_alpine_attribute
+        ),
+        rule_alpine_cloak=(
+            overrides.rule_alpine_cloak if overrides.rule_alpine_cloak is not None else application.rule_alpine_cloak
+        ),
     )
 
 
@@ -426,6 +452,8 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
     component_js_rule: LintSeverity | None = None
     component_js_member_rule: LintSeverity | None = None
     vue_python_variable_rule: LintSeverity | None = None
+    alpine_attribute_rule: LintSeverity | None = None
+    alpine_cloak_rule: LintSeverity | None = None
     component_js_globals: dict[str, object] = {}
     component_js_global_owners: dict[str, type] = {}
     declarations = _active_nested_class_declarations(component_class, "Lint")
@@ -449,6 +477,8 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
             "component_js_globals",
             "rule_unknown_component_js_member",
             "rule_vue_python_variable",
+            "rule_alpine_attribute",
+            "rule_alpine_cloak",
         }
         if unknown:
             rendered = ", ".join(sorted(unknown))
@@ -513,6 +543,24 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
                 )
                 raise ValueError(msg)
             vue_python_variable_rule = cast("LintSeverity", candidate_rule)
+        if "rule_alpine_attribute" in public_values:
+            candidate_rule = public_values["rule_alpine_attribute"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_alpine_attribute "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            alpine_attribute_rule = cast("LintSeverity", candidate_rule)
+        if "rule_alpine_cloak" in public_values:
+            candidate_rule = public_values["rule_alpine_cloak"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_alpine_cloak "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            alpine_cloak_rule = cast("LintSeverity", candidate_rule)
         if "template_variables" in public_values:
             candidate_variables = public_values["template_variables"]
             try:
@@ -558,6 +606,8 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
         component_js_global_owners,
         component_js_member_rule,
         vue_python_variable_rule,
+        alpine_attribute_rule,
+        alpine_cloak_rule,
     )
 
 

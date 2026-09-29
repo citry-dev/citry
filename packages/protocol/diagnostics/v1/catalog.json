@@ -159,6 +159,58 @@
       "documentationPath": "/ide/diagnostics/#citry.template.marker-name-invalid"
     },
     {
+      "code": "citry.template.alpine-attribute",
+      "constant": "TEMPLATE_ALPINE_ATTRIBUTE",
+      "title": "Alpine attribute on an HTML element",
+      "summary": "An HTML element carries an Alpine x- attribute, which Citry renders unchanged and nothing in the browser reads.",
+      "when": "An attribute name on a plain HTML element or a <c-element> starts with x-, compared without regard to letter case, including elements inside nested templates. Citry uses Vue, so the attribute has no effect unless another library on the page reads it. Component tags are not checked, because an x- attribute there is a Python keyword argument. x-cloak is reported as citry.template.alpine-cloak instead.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "Attribute name as written in the template."
+      },
+      "messages": {
+        "default": "'{name}' is an Alpine attribute. Citry uses Vue, so nothing reads it. Replace it with its Vue form, or set rule_alpine_attribute to 'ignore' if a library on the page reads '{name}'."
+      },
+      "examples": [
+        {
+          "title": "Alpine state on an element",
+          "language": "citry-html",
+          "source": "<div x-data=\"{ open: false }\">\n  <button x-on:click=\"open = !open\">Menu</button>\n</div>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.alpine-attribute"
+    },
+    {
+      "code": "citry.template.alpine-cloak",
+      "constant": "TEMPLATE_ALPINE_CLOAK",
+      "title": "x-cloak hides an element for good",
+      "summary": "An HTML element carries x-cloak, which nothing removes any more, so a [x-cloak] CSS rule hides the element permanently.",
+      "when": "An attribute named x-cloak, compared without regard to letter case, sits on a plain HTML element or a <c-element>, including elements inside nested templates. Component tags are not checked.",
+      "defaultSeverity": "error",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {},
+      "messages": {
+        "default": "'x-cloak' now hides this element for good, because nothing removes the attribute any more. Delete 'x-cloak' and its '[x-cloak]' CSS rule; the served HTML already shows the content."
+      },
+      "examples": [
+        {
+          "title": "Leftover x-cloak",
+          "language": "citry-html",
+          "source": "<div x-cloak>{{ message }}</div>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.alpine-cloak"
+    },
+    {
       "code": "citry.js-data.unsupported-type",
       "constant": "JS_DATA_UNSUPPORTED_TYPE",
       "title": "JsData field is not a JSON type",

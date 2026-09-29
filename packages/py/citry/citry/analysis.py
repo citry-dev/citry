@@ -47,6 +47,8 @@ from citry._browser_expressions import (
     BrowserStateBinding,
     BrowserStateBindingTargetError,
     MarkLiteralFinding,
+    _ascii_lower,
+    _nested_template,
     analyze_browser_component_source,
     analyze_browser_expression,
     browser_bindings,
@@ -86,6 +88,8 @@ from citry._diagnostic_catalog import (
     FORMAT_INVARIANT,
     FORMAT_PROVIDER_INVALID,
     FORMAT_PROVIDER_UNAVAILABLE,
+    TEMPLATE_ALPINE_ATTRIBUTE,
+    TEMPLATE_ALPINE_CLOAK,
     TEMPLATE_UNKNOWN_VARIABLE,
     VUE_PYTHON_VARIABLE,
     VUE_UNKNOWN_VARIABLE,
@@ -133,7 +137,7 @@ from citry_core.template_formatter import format_template as _format_template
 from citry_core.template_formatter import (
     prepare_embedded_format as _prepare_embedded_format,
 )
-from citry_core.template_parser import TagRules
+from citry_core.template_parser import HtmlAttrKind, TagRules, TemplateElement
 from citry_core.template_parser import parse_template as _parse_template
 
 if TYPE_CHECKING:
@@ -265,6 +269,41 @@ class VueLintConsumer:
 @dataclass(frozen=True, slots=True)
 class VueLintFinding:
     """Report one OXC-proven free root missing from a browser namespace."""
+
+    name: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class AlpineAttributeLintConsumer:
+    """
+    Carry one consuming component's severities for leftover Alpine attributes.
+
+    Attributes:
+        rule_alpine_attribute: Configured severity for an ``x-*`` attribute
+            other than ``x-cloak``.
+        rule_alpine_cloak: Configured severity for ``x-cloak``.
+
+    """
+
+    rule_alpine_attribute: Literal["ignore", "warning", "error"] = "warning"
+    rule_alpine_cloak: Literal["ignore", "warning", "error"] = "error"
+
+    def __post_init__(self) -> None:
+        for rule_name in ("rule_alpine_attribute", "rule_alpine_cloak"):
+            severity = getattr(self, rule_name)
+            if type(severity) is not str or severity not in {"ignore", "warning", "error"}:
+                msg = f"Unknown {rule_name} severity: {severity!r}"
+                raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class AlpineAttributeFinding:
+    """Report one Alpine ``x-*`` attribute on an HTML element, spanning its name."""
 
     name: str
     message: str
@@ -730,6 +769,110 @@ def _python_attribute_for(expression: BrowserExpression, name: str) -> str | Non
     if attribute.startswith("c-") or attribute in _VUE_SPECIAL_BINDINGS:
         return None
     return attribute
+
+
+def lint_alpine_attributes(
+    template: Template,
+    consumers: Sequence[AlpineAttributeLintConsumer],
+    *,
+    parse_nested: Callable[[str], Template] = _parse_template,
+) -> tuple[AlpineAttributeFinding, ...]:
+    """
+    Report Alpine ``x-*`` attributes left on HTML elements.
+
+    Citry uses Vue, so it renders an attribute such as ``x-data`` unchanged
+    and nothing in the browser reads it. ``x-cloak`` is worse: nothing removes
+    it, so a ``[x-cloak]`` CSS rule hides the element for good. ``x-cloak``
+    gets only the cloak finding, never both. Names compare without regard to
+    ASCII letter case, as HTML attribute names do.
+
+    Only plain HTML elements and ``<c-element>`` are checked, including
+    elements inside nested templates. On a component tag an ``x-*`` attribute
+    is an ordinary Python keyword argument.
+
+    A finding is reported unless every consumer ignores its rule, and it is an
+    error when any reporting consumer says ``"error"``. Unlike the
+    unknown-variable rules, this check needs no component namespace, so it
+    still runs when no consumer is proven. An empty ``consumers`` uses the
+    built-in defaults: ``"warning"`` for ``x-*`` attributes and ``"error"``
+    for ``x-cloak``. ``citry check --static`` and an editor without project
+    analysis rely on this; a caller that knows the application's
+    [`LintSettings`][citry.LintSettings] passes them as one consumer.
+
+    Args:
+        template: Parsed Citry template AST.
+        consumers: Every proven component that consumes this physical template.
+        parse_nested: Parser for template-valued attributes, so nested
+            templates use the same parse options as the outer one.
+
+    Returns:
+        Findings in source order, each spanning the attribute name.
+
+    """
+    # With no proven owner the defaults still apply, because whether an
+    # attribute is an Alpine leftover does not depend on the component.
+    effective = tuple(consumers) or (AlpineAttributeLintConsumer(),)
+    found: list[tuple[str, int, int]] = []
+    _collect_alpine_attributes(template, found, parse_nested=parse_nested, base_index=0)
+    findings: list[AlpineAttributeFinding] = []
+    for name, start_index, end_index in sorted(found, key=lambda item: (item[1], item[2])):
+        is_cloak = _ascii_lower(name) == "x-cloak"
+        severities = [
+            consumer.rule_alpine_cloak if is_cloak else consumer.rule_alpine_attribute for consumer in effective
+        ]
+        active = [severity for severity in severities if severity != "ignore"]
+        if not active:
+            continue
+        code = TEMPLATE_ALPINE_CLOAK if is_cloak else TEMPLATE_ALPINE_ATTRIBUTE
+        findings.append(
+            AlpineAttributeFinding(
+                name=name,
+                message=render_diagnostic(code) if is_cloak else render_diagnostic(code, name=name),
+                code=code,
+                severity="error" if "error" in active else "warning",
+                start_index=start_index,
+                end_index=end_index,
+            )
+        )
+    return tuple(findings)
+
+
+def _collect_alpine_attributes(
+    template: Template,
+    found: list[tuple[str, int, int]],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    """Collect each ``x-*`` attribute name on an HTML element with its byte span."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        tag = _ascii_lower(node.start_tag.name.content)
+        # A component tag passes `x-*` to Python as a keyword argument, and
+        # the other built-in tags do not render their own attributes. Only
+        # `<c-element>` writes its attributes onto a real HTML element.
+        renders_attributes = not tag.startswith("c-") or tag == "c-element"
+        for attr in node.start_tag.attrs:
+            if renders_attributes and _ascii_lower(attr.key.content).startswith("x-"):
+                found.append((attr.key.content, base_index + attr.key.start_index, base_index + attr.key.end_index))
+            # A template-valued attribute holds more HTML, whose offsets are
+            # relative to the nested source, so shift them into this template.
+            inner = attr.inner_value
+            if attr.kind == HtmlAttrKind.Template and inner is not None:
+                nested = _nested_template(inner.content, parse_nested)
+                if nested is not None:
+                    parsed, nested_start = nested
+                    _collect_alpine_attributes(
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_alpine_attributes(body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 def lint_csp_compatibility(
@@ -4144,6 +4287,8 @@ def python_class_static_asset_matches(
 __all__ = [
     "SERVER_EVENT_CALL_NAMES",
     "VUE_AMBIENT_NAMES",
+    "AlpineAttributeFinding",
+    "AlpineAttributeLintConsumer",
     "BrowserBinding",
     "BrowserCompletion",
     "BrowserComponentBinding",
@@ -4251,6 +4396,7 @@ __all__ = [
     "format_python_templates",
     "json_wire_type_from_annotation",
     "json_wire_type_from_expression",
+    "lint_alpine_attributes",
     "lint_csp_compatibility",
     "lint_unknown_component_js_members",
     "lint_unknown_component_js_variables",

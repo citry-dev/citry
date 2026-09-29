@@ -47,6 +47,7 @@ from citry._linting import _component_lint_info
 from citry._template_data_source import TemplateDataSourceShape, analyze_template_data_source
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
+    AlpineAttributeLintConsumer,
     BrowserComponentPropContribution,
     BrowserComponentPropSite,
     BrowserExpression,
@@ -72,6 +73,7 @@ from citry.analysis import (
     discover_python_templates,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
+    lint_alpine_attributes,
     lint_csp_compatibility,
     lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
@@ -365,6 +367,9 @@ def _check_registry(
         try:
             lint_consumers = tuple(_checker_lint_consumer(engine, component) for component in source.consumers)
             vue_lint_consumers = tuple(_checker_vue_lint_consumer(engine, component) for component in source.consumers)
+            alpine_lint_consumers = tuple(
+                _checker_alpine_lint_consumer(engine, component) for component in source.consumers
+            )
             foreign_options = _checker_foreign_options(
                 engine,
                 source,
@@ -400,6 +405,7 @@ def _check_registry(
                 engine=engine,
                 lint_consumers=lint_consumers,
                 vue_lint_consumers=vue_lint_consumers,
+                alpine_lint_consumers=alpine_lint_consumers,
                 i18n_manifest=i18n_manifest,
                 i18n_profiles=i18n_profiles,
                 foreign_options=foreign_options,
@@ -507,6 +513,7 @@ def _check_template(
     engine: Citry | None = None,
     lint_consumers: tuple[TemplateLintConsumer, ...] = (),
     vue_lint_consumers: tuple[VueLintConsumer, ...] = (),
+    alpine_lint_consumers: tuple[AlpineAttributeLintConsumer, ...] = (),
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None,
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None,
     foreign_options: ParseOptions | None = None,
@@ -594,6 +601,25 @@ def _check_template(
                 end_column=finding.column + len(finding.name),
             )
             for finding in lint_unknown_template_variables(template, lint_consumers)
+        )
+    # Static mode has no consumers here, and the Alpine rules then use their
+    # built-in severities because they need no component namespace.
+    for alpine_finding in lint_alpine_attributes(template, alpine_lint_consumers, parse_nested=nested_parser):
+        line, column = _byte_offset_coordinates(source.content, alpine_finding.start_index)
+        end_line, end_column = _byte_offset_coordinates(source.content, alpine_finding.end_index)
+        findings.append(
+            CheckFinding(
+                origin=source.origin,
+                message=alpine_finding.message,
+                code=alpine_finding.code,
+                severity=alpine_finding.severity,
+                start_index=alpine_finding.start_index,
+                end_index=alpine_finding.end_index,
+                line=line,
+                column=column,
+                end_line=end_line,
+                end_column=end_column,
+            )
         )
     browser_hosts = browser_expressions(template, parse_nested=nested_parser)
     if engine is not None and component_props is not None:
@@ -1498,6 +1524,15 @@ def _checker_lint_consumer(engine: Citry, component: type[Component]) -> Templat
         known_names=frozenset(known_names),
         namespace_policy=namespace_policy,
         rule_unknown_template_variable=lint.rule_unknown_template_variable,
+    )
+
+
+def _checker_alpine_lint_consumer(engine: Citry, component: type[Component]) -> AlpineAttributeLintConsumer:
+    """Read one component's effective Alpine-attribute severities."""
+    lint = _component_lint_info(engine, component)
+    return AlpineAttributeLintConsumer(
+        rule_alpine_attribute=lint.rule_alpine_attribute,
+        rule_alpine_cloak=lint.rule_alpine_cloak,
     )
 
 

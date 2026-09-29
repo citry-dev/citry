@@ -16,6 +16,8 @@ PARSE_CONFIGURATION = 'citry.parse.configuration'
 TEMPLATE_UNKNOWN_VARIABLE = 'citry.template.unknown-variable'
 TEMPLATE_UNKNOWN_COMPONENT = 'citry.template.unknown-component'
 TEMPLATE_MARKER_NAME_INVALID = 'citry.template.marker-name-invalid'
+TEMPLATE_ALPINE_ATTRIBUTE = 'citry.template.alpine-attribute'
+TEMPLATE_ALPINE_CLOAK = 'citry.template.alpine-cloak'
 JS_DATA_UNSUPPORTED_TYPE = 'citry.js-data.unsupported-type'
 JS_DATA_PUBLIC_NAME_COLLISION = 'citry.js-data.public-name-collision'
 VUE_UNKNOWN_VARIABLE = 'citry.vue.unknown-variable'
@@ -617,6 +619,51 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                        'title': 'Invalid template value',
                        'when': 'A parser API receives a value that it cannot convert into Citry template source or a '
                                'supported template value.'},
+ 'citry.template.alpine-attribute': {'code': 'citry.template.alpine-attribute',
+                                     'configurableSeverity': True,
+                                     'constant': 'TEMPLATE_ALPINE_ATTRIBUTE',
+                                     'defaultSeverity': 'warning',
+                                     'documentationPath': '/ide/diagnostics/#citry.template.alpine-attribute',
+                                     'examples': [{'language': 'citry-html',
+                                                   'source': '<div x-data="{ open: false }">\n'
+                                                             '  <button x-on:click="open = !open">Menu</button>\n'
+                                                             '</div>',
+                                                   'title': 'Alpine state on an element'}],
+                                     'messages': {'default': "'{name}' is an Alpine attribute. Citry uses Vue, so "
+                                                             'nothing reads it. Replace it with its Vue form, or set '
+                                                             "rule_alpine_attribute to 'ignore' if a library on the "
+                                                             "page reads '{name}'."},
+                                     'parameters': {'name': 'Attribute name as written in the template.'},
+                                     'summary': 'An HTML element carries an Alpine x- attribute, which Citry renders '
+                                                'unchanged and nothing in the browser reads.',
+                                     'surfaces': ['check', 'lsp'],
+                                     'title': 'Alpine attribute on an HTML element',
+                                     'when': 'An attribute name on a plain HTML element or a <c-element> starts with '
+                                             'x-, compared without regard to letter case, including elements inside '
+                                             'nested templates. Citry uses Vue, so the attribute has no effect unless '
+                                             'another library on the page reads it. Component tags are not checked, '
+                                             'because an x- attribute there is a Python keyword argument. x-cloak is '
+                                             'reported as citry.template.alpine-cloak instead.'},
+ 'citry.template.alpine-cloak': {'code': 'citry.template.alpine-cloak',
+                                 'configurableSeverity': True,
+                                 'constant': 'TEMPLATE_ALPINE_CLOAK',
+                                 'defaultSeverity': 'error',
+                                 'documentationPath': '/ide/diagnostics/#citry.template.alpine-cloak',
+                                 'examples': [{'language': 'citry-html',
+                                               'source': '<div x-cloak>{{ message }}</div>',
+                                               'title': 'Leftover x-cloak'}],
+                                 'messages': {'default': "'x-cloak' now hides this element for good, because nothing "
+                                                         "removes the attribute any more. Delete 'x-cloak' and its "
+                                                         "'[x-cloak]' CSS rule; the served HTML already shows the "
+                                                         'content.'},
+                                 'parameters': {},
+                                 'summary': 'An HTML element carries x-cloak, which nothing removes any more, so a '
+                                            '[x-cloak] CSS rule hides the element permanently.',
+                                 'surfaces': ['check', 'lsp'],
+                                 'title': 'x-cloak hides an element for good',
+                                 'when': 'An attribute named x-cloak, compared without regard to letter case, sits on '
+                                         'a plain HTML element or a <c-element>, including elements inside nested '
+                                         'templates. Component tags are not checked.'},
  'citry.template.marker-name-invalid': {'code': 'citry.template.marker-name-invalid',
                                         'constant': 'TEMPLATE_MARKER_NAME_INVALID',
                                         'defaultSeverity': 'error',

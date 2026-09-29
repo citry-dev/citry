@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 # type annotation, so the allowed set can be derived from it for validation.
 Mode = Literal["production", "development"]
 _ALLOWED_MODES: tuple[str, ...] = get_args(Mode)
-# 64 MiB: room for thousands of typical compiled components and stylesheets,
-# so an ordinary app never drops one an open page still needs.
+# 64 MiB: generous, so an app with many components and stylesheets rarely
+# drops one an open page still needs.
 DEFAULT_VUE_ASSET_MAX_BYTES = 64 * 1024 * 1024
 LintSeverity = Literal["ignore", "warning", "error"]
 _ALLOWED_LINT_SEVERITIES: tuple[str, ...] = get_args(LintSeverity)
@@ -147,6 +147,14 @@ class LintSettings:
             name bound in Python by an enclosing ``c-for`` loop or
             ``c-fill`` binding. The browser looks that name up in Vue state,
             not in the Python loop. The default is ``"warning"``.
+        rule_alpine_attribute: Severity for an Alpine ``x-*`` attribute, such
+            as ``x-data`` or ``x-on:click``, on an HTML element. Citry uses
+            Vue, so nothing reads the attribute. Set ``"ignore"`` when another
+            library on the page reads ``x-*`` attributes. The default is
+            ``"warning"``.
+        rule_alpine_cloak: Severity for ``x-cloak`` on an HTML element. Nothing
+            removes the attribute any more, so a ``[x-cloak]`` CSS rule hides
+            the element for good. The default is ``"error"``.
 
     Raises:
         TypeError: If a variable or global collection is not a mapping.
@@ -163,6 +171,8 @@ class LintSettings:
     component_js_globals: Mapping[str, object] = field(default_factory=dict)
     rule_unknown_component_js_member: LintSeverity = "error"
     rule_vue_python_variable: LintSeverity = "warning"
+    rule_alpine_attribute: LintSeverity = "warning"
+    rule_alpine_cloak: LintSeverity = "error"
 
     # Hidden from type checkers so they keep checking calls against the
     # generated __init__ signature.
@@ -274,6 +284,13 @@ class LintSettings:
                 f"{_ALLOWED_LINT_SEVERITIES}, got {self.rule_vue_python_variable!r}"
             )
             raise ValueError(msg)
+        # Both Alpine rules take the same severities as every other rule, so
+        # one loop reports the first invalid one by name.
+        for rule_name in ("rule_alpine_attribute", "rule_alpine_cloak"):
+            severity = getattr(self, rule_name)
+            if type(severity) is not str or severity not in _ALLOWED_LINT_SEVERITIES:
+                msg = f"{rule_name} must be one of {_ALLOWED_LINT_SEVERITIES}, got {severity!r}"
+                raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -373,8 +390,7 @@ class CitrySettings:
             URL, possibly long after the page was rendered. When the total
             grows past this limit, the files used longest ago are dropped,
             and a page that is still open gets a 404 if it later asks for
-            one of them. The default, 64 MiB, is far more than an ordinary
-            app needs. ``None`` removes the limit. When ``cache`` is set, the
+            one of them. The default is 64 MiB. ``None`` removes the limit. When ``cache`` is set, the
             files are stored there instead, and the backend's own capacity
             and eviction apply, so this setting has no effect. Must be a
             positive ``int`` or ``None``: another type raises ``TypeError``
