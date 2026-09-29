@@ -12,7 +12,6 @@ class Lane(Component):
 
     class Slots:
         default: SlotInput
-        footer: SlotInput | None = None
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
         theme = self.inject("board_theme")
@@ -32,6 +31,7 @@ class Lane(Component):
     template = """
       <section
         class="lane"
+        :class="{ 'lane--drop-target': dropTarget }"
         c-style="accent_style"
         c-aria-label="title + ' column'"
         @dragover.prevent="highlightDropTarget($event)"
@@ -43,21 +43,28 @@ class Lane(Component):
           <span c-aria-label="count_label">{{ count }}</span>
         </header>
         <div class="lane__tasks">
-          <c-slot />
+          <c-if cond="count">
+            <c-slot />
+          </c-if>
+          <c-else>
+            <p class="lane-empty">No tasks shown</p>
+          </c-else>
         </div>
         <footer class="lane__footer">
-          <c-slot name="footer">
-            No tasks shown
-          </c-slot>
+          {{ title }}: {{ count_label }} shown
         </footer>
       </section>
     """
 
     js = """
       $component({
+        emits: ['drop-task'],
+        data() {
+          return { dropTarget: false };
+        },
         methods: {
           highlightDropTarget(event) {
-            this.$el.classList.add('lane--drop-target');
+            this.dropTarget = true;
             event.dataTransfer.dropEffect = 'move';
           },
           clearDropTarget(event) {
@@ -65,7 +72,7 @@ class Lane(Component):
             // column's own children, so keep the highlight until the pointer
             // leaves the column itself.
             if (!this.$el.contains(event.relatedTarget)) {
-              this.$el.classList.remove('lane--drop-target');
+              this.dropTarget = false;
             }
           },
           dropTask(event) {
@@ -74,7 +81,7 @@ class Lane(Component):
             const sourceLane = event.dataTransfer.getData(
               'application/x-citry-lane',
             );
-            this.$el.classList.remove('lane--drop-target');
+            this.dropTarget = false;
             // Ignore drags that did not start on a task card or carry no
             // valid task ID, and drops back onto the card's own column, so
             // the board sends no request for them.
@@ -86,12 +93,8 @@ class Lane(Component):
             ) {
               return;
             }
-            // ProjectBoard owns the Events call. A drop leaves focus where the
-            // person dragging had it, so it does not ask the board to move focus.
-            this.$el.dispatchEvent(new CustomEvent('board:move', {
-              bubbles: true,
-              detail: { taskId, lane: this.laneKey, focusControl: false },
-            }));
+            // ProjectBoard listens for this and sends the move to Python.
+            this.$emit('drop-task', { taskId, lane: this.laneKey });
           },
         },
       });

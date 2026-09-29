@@ -22,10 +22,6 @@ class LaneView:
     def count(self) -> int:
         return len(self.tasks)
 
-    @property
-    def task_label(self) -> str:
-        return "task" if self.count == 1 else "tasks"
-
 
 LANES = (
     ("backlog", "Backlog"),

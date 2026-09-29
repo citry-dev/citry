@@ -106,7 +106,7 @@ Remove-Item -Recurse -Force `
 | `app/components/app_shell.py` | Renders the document shell and shared page styles. |
 | `app/components/board_page.py` | Composes the heading and project board. |
 | `app/components/project_board.py` | Defines the form, filters, Events, and board-level state. Its Vue method shows the result notice and restores focus after a board update. |
-| `app/components/lane.py` and `app/components/task_card.py` | Define the board columns and task cards. Their Vue `methods` handle dragging, dropping, the **Move to column** menu, and the completion button. |
+| `app/components/lane.py` and `app/components/task_card.py` | Define the board columns and task cards. Their Vue `methods` handle dragging, dropping, the **Move to column** menu, and the completion button, then emit Vue events to the board. |
 | `app/components/priority_badge.py` | Defines the priority badge and its styles. |
 | `tests/test_app.py` | Checks the page, task changes, and mounted Citry runtime. |
 
@@ -118,7 +118,7 @@ Remove-Item -Recurse -Force `
 | Parent to child | Typed inputs pass the records through the board, columns, and cards. |
 | Component to template | `template_data()` exposes only the values each template renders. |
 | Browser to Python | Signed `State` carries the search text and completed-task filter to an Event handler. |
-| Card to board | A drag, a change in the **Move to column** menu, or the completion button tells the board which task changed. |
+| Card to board | A drop on a column, a change in the **Move to column** menu, or the completion button emits a Vue event. The board listens on the column and card tags and calls its Python handler. |
 | Python to store | Typed handlers check each task ID and destination before changing the in-memory tasks. |
 | Python to page | Each handler returns a new `ProjectBoard`, and Citry replaces the current board. |
 | Python to browser | A dispatch action sends the success message shown in the notice. |

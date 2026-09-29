@@ -18,7 +18,6 @@ class TaskCard(Component):
         return {
             "title": task.title,
             "owner": task.owner,
-            "completed": task.completed,
             "toggle_label": "Reopen task" if task.completed else "Mark complete",
             "high_priority": task.priority == "high",
             "accent_style": f"--board-accent: {theme.accent};",
@@ -38,11 +37,14 @@ class TaskCard(Component):
       <article
         c-id="task_dom_id"
         class="task-card"
-        c-class="{'task-card--done': completed}"
+        :class="{
+          'task-card--done': taskCompleted,
+          'task-card--dragging': dragging,
+        }"
         c-style="accent_style"
         draggable="true"
         @dragstart="startDrag($event)"
-        @dragend="endDrag()"
+        @dragend="dragging = false"
       >
         <div class="task-card__meta">
           <c-PriorityBadge c-high="high_priority" />
@@ -80,9 +82,13 @@ class TaskCard(Component):
 
     js = """
       $component({
+        emits: ['move', 'set-completed'],
+        data() {
+          return { dragging: false };
+        },
         methods: {
           startDrag(event) {
-            this.$el.classList.add('task-card--dragging');
+            this.dragging = true;
             event.dataTransfer.effectAllowed = 'move';
             // The column reads both values on drop: the id says which task
             // to move, and the source column lets it ignore a drop back
@@ -90,29 +96,21 @@ class TaskCard(Component):
             event.dataTransfer.setData('text/plain', this.taskId.toString());
             event.dataTransfer.setData('application/x-citry-lane', this.laneKey);
           },
-          endDrag() {
-            this.$el.classList.remove('task-card--dragging');
-          },
           // The Move to column menu lets keyboard and touchscreen users
           // make the same move that dragging makes.
           requestMove(event) {
             const lane = event.target.value;
             // Choosing the card's current column is not a move, so the card
             // does not tell the board.
-            if (lane === this.laneKey) return;
-            // ProjectBoard owns the Events call, so the card announces the
-            // move with a bubbling DOM event. focusControl asks the board to
-            // put focus back on this menu after it renders the new board.
-            this.$el.dispatchEvent(new CustomEvent('board:move', {
-              bubbles: true,
-              detail: { taskId: this.taskId, lane, focusControl: true },
-            }));
+            if (lane !== this.laneKey) {
+              this.$emit('move', { taskId: this.taskId, lane });
+            }
           },
           toggleCompleted() {
-            this.$el.dispatchEvent(new CustomEvent('board:set-completed', {
-              bubbles: true,
-              detail: { taskId: this.taskId, completed: !this.taskCompleted },
-            }));
+            this.$emit('set-completed', {
+              taskId: this.taskId,
+              completed: !this.taskCompleted,
+            });
           },
         },
       });

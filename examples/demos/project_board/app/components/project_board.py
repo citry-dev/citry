@@ -22,11 +22,7 @@ class ProjectBoard(Component):
 
     class Events:
         def refresh(self, state: "ProjectBoard.State"):
-            return ProjectBoard(
-                lanes=board_snapshot(state.query, state.show_completed),
-                query=state.query,
-                show_completed=state.show_completed,
-            )
+            return board_for(state)
 
         def add(self, data: AddTaskIn, state: "ProjectBoard.State"):
             title = data.title.strip()
@@ -40,13 +36,7 @@ class ProjectBoard(Component):
             except ValueError as error:
                 raise EventError("Choose a valid column and priority.") from error
             return [
-                actions.Render(
-                    ProjectBoard(
-                        lanes=board_snapshot(state.query, state.show_completed),
-                        query=state.query,
-                        show_completed=state.show_completed,
-                    )
-                ),
+                actions.Render(board_for(state)),
                 actions.Dispatch(
                     "board:notice",
                     {"message": f"Added “{task.title}”."},
@@ -64,13 +54,7 @@ class ProjectBoard(Component):
                 raise EventError("That task no longer exists. Refresh the board.") from error
             verb = "Completed" if task.completed else "Reopened"
             return [
-                actions.Render(
-                    ProjectBoard(
-                        lanes=board_snapshot(state.query, state.show_completed),
-                        query=state.query,
-                        show_completed=state.show_completed,
-                    )
-                ),
+                actions.Render(board_for(state)),
                 actions.Dispatch(
                     "board:notice",
                     {
@@ -89,13 +73,7 @@ class ProjectBoard(Component):
                 raise EventError("That task no longer exists. Refresh the board.") from error
             lane_title = dict(LANES)[task.lane]
             return [
-                actions.Render(
-                    ProjectBoard(
-                        lanes=board_snapshot(state.query, state.show_completed),
-                        query=state.query,
-                        show_completed=state.show_completed,
-                    )
-                ),
+                actions.Render(board_for(state)),
                 actions.Dispatch(
                     "board:notice",
                     {
@@ -111,6 +89,7 @@ class ProjectBoard(Component):
         visible_count = sum(len(lane.tasks) for lane in kwargs.lanes)
         return {
             "lanes": kwargs.lanes,
+            "lane_options": LANES,
             "query": kwargs.query,
             "show_completed": kwargs.show_completed,
             "visible_count": visible_count,
@@ -125,19 +104,7 @@ class ProjectBoard(Component):
     template = """
       <section
         class="board-region"
-        @c-board:set-completed="
-          set_completed({
-            task_id: $event.detail.taskId,
-            completed: $event.detail.completed,
-          })
-        "
-        @c-board:move="
-          move({
-            task_id: $event.detail.taskId,
-            lane: $event.detail.lane,
-            focus_control: Boolean($event.detail.focusControl),
-          })
-        "
+        @board:notice="showNotice($event.detail)"
       >
         <div class="board-toolbar">
           <label class="filter-control filter-control--search">
@@ -188,18 +155,8 @@ class ProjectBoard(Component):
         <p
           class="event-error"
           role="alert"
-          v-show="
-            $error('refresh') ||
-            $error('set_completed') ||
-            $error('move')
-          "
-          v-text="
-            (
-              $error('refresh') ||
-              $error('set_completed') ||
-              $error('move')
-            )?.message || ''
-          "
+          v-show="boardError()"
+          v-text="boardError()?.message || ''"
         ></p>
 
         <div class="board-grid">
@@ -209,21 +166,29 @@ class ProjectBoard(Component):
               c-lane_key="lane.key"
               c-title="lane.title"
               c-count="lane.count"
+              @c-drop-task="
+                move({task_id: $event.taskId, lane: $event.lane})
+              "
             >
-              <c-fill name="default">
-                <c-if cond="lane.tasks">
-                  <c-for each="task in lane.tasks">
-                    <c-TaskCard #c-key="task.id" c-task="task" />
-                  </c-for>
-                </c-if>
-                <c-else>
-                  <p class="lane-empty">No tasks shown</p>
-                </c-else>
-              </c-fill>
-              <c-fill name="footer">
-                {{ lane.title }}: {{ lane.count }}
-                {{ lane.task_label }} shown
-              </c-fill>
+              <c-for each="task in lane.tasks">
+                <c-TaskCard
+                  #c-key="task.id"
+                  c-task="task"
+                  @c-move="
+                    move({
+                      task_id: $event.taskId,
+                      lane: $event.lane,
+                      focus_control: true,
+                    })
+                  "
+                  @c-set-completed="
+                    set_completed({
+                      task_id: $event.taskId,
+                      completed: $event.completed,
+                    })
+                  "
+                />
+              </c-for>
             </c-Lane>
           </c-for>
         </div>
@@ -260,9 +225,14 @@ class ProjectBoard(Component):
             <label class="filter-control">
               <span>Column</span>
               <select name="lane">
-                <option value="backlog">Backlog</option>
-                <option value="progress">In progress</option>
-                <option value="review">Review</option>
+                <c-for each="lane_key, lane_title in lane_options">
+                  <option
+                    #c-key="lane_key"
+                    c-value="lane_key"
+                  >
+                    {{ lane_title }}
+                  </option>
+                </c-for>
               </select>
             </label>
             <label class="filter-control">
@@ -305,26 +275,34 @@ class ProjectBoard(Component):
     js = """
       $component({
         methods: {
-          handleBoardNotice(event) {
-            this.notice = event.detail.message;
-            if (event.detail.focusBoard) {
+          // The board shows one error line for the handlers the board itself
+          // calls. The add form shows its own error beside the form.
+          boardError() {
+            return (
+              this.$error('refresh') ||
+              this.$error('set_completed') ||
+              this.$error('move')
+            );
+          },
+          // Python dispatches board:notice from this component's root after
+          // it renders the new board, so the new cards already exist here.
+          showNotice(detail) {
+            this.notice = detail.message;
+            if (detail.focusBoard) {
+              // The completed card disappeared, so focus the board summary
+              // instead of letting focus fall back to the page.
               this.$nextTick(() => this.$refs.boardStatus?.focus());
             }
-            if (event.detail.focusTaskId) {
+            if (detail.focusTaskId) {
+              // A move from the card's menu puts focus back on that menu,
+              // which now sits in the destination column.
               this.$nextTick(() => {
-                document
-                  .getElementById('task-' + event.detail.focusTaskId)
-                  ?.querySelector('.task-card__move select')
+                this.$el
+                  .querySelector('#task-' + detail.focusTaskId + ' select')
                   ?.focus();
               });
             }
           },
-        },
-        mounted() {
-          document.addEventListener('board:notice', this.handleBoardNotice);
-        },
-        beforeUnmount() {
-          document.removeEventListener('board:notice', this.handleBoardNotice);
         },
       });
     """
@@ -543,3 +521,12 @@ class ProjectBoard(Component):
         }
       }
     """
+
+
+def board_for(state: ProjectBoard.State) -> ProjectBoard:
+    """Render the board again with the search text and filter the browser sent."""
+    return ProjectBoard(
+        lanes=board_snapshot(state.query, state.show_completed),
+        query=state.query,
+        show_completed=state.show_completed,
+    )
