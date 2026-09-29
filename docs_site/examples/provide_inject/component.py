@@ -14,6 +14,14 @@ class ThemedButton(Component):
     class Slots:
         pass
 
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+        theme = self.inject("theme")
+        return {
+            "text": kwargs.text,
+            "label": theme.label,
+            "style": f"background: {theme.accent};",
+        }
+
     template = """
       <button class="themed-btn" c-style="style">
         {{ label }}: {{ text }}
@@ -32,11 +40,3 @@ class ThemedButton(Component):
         cursor: pointer;
       }
     """
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
-        theme = self.inject("theme")
-        return {
-            "text": kwargs.text,
-            "label": theme.label,
-            "style": "background: " + theme.accent + ";",
-        }

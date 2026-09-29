@@ -15,6 +15,12 @@ class FlakyWidget(Component):
     class Slots:
         pass
 
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+        if kwargs.fail:
+            # Raised during render so the surrounding <c-error-fallback> catches it.
+            raise ValueError("FlakyWidget was told to fail")
+        return {"label": kwargs.label}
+
     template = """
       <div class="flaky">
         <strong>{{ label }}</strong>
@@ -34,9 +40,3 @@ class FlakyWidget(Component):
         color: #1a7f37;
       }
     """
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
-        if kwargs.fail:
-            # Raised during render so the surrounding <c-error-fallback> catches it.
-            raise ValueError("FlakyWidget was told to fail")
-        return {"label": kwargs.label}

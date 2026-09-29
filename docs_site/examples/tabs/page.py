@@ -14,6 +14,24 @@ class TabsPage(Component):
     class Slots:
         pass
 
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+        return {
+            "tabs": [
+                {
+                    "label": "Overview",
+                    "body": "Each Tabs instance keeps the open tab in its own browser state.",
+                },
+                {
+                    "label": "Details",
+                    "body": "Clicking a tab, or moving to it with the arrow keys, opens its panel.",
+                },
+                {
+                    "label": "Notes",
+                    "body": "The component's CSS styles the open tab through its aria-selected attribute.",
+                },
+            ]
+        }
+
     template = """
       <!DOCTYPE html>
       <html lang="en">
@@ -30,21 +48,3 @@ class TabsPage(Component):
         </body>
       </html>
     """
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
-        return {
-            "tabs": [
-                {
-                    "label": "Overview",
-                    "body": "Citry ships a tiny bit of JS with each component. No framework, no CDN.",
-                },
-                {
-                    "label": "Details",
-                    "body": "Clicking a tab toggles the hidden attribute on its panel, all client-side.",
-                },
-                {
-                    "label": "Notes",
-                    "body": "The active tab is styled with the component's own CSS via a data attribute.",
-                },
-            ]
-        }

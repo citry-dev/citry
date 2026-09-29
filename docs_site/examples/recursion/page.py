@@ -14,23 +14,6 @@ class RecursionPage(Component):
     class Slots:
         pass
 
-    template = """
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-          <meta charset="utf-8" />
-          <title>Recursion example</title>
-          <c-css />
-        </head>
-        <body
-          style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"
-        >
-          <c-TreeNode c-node="tree" />
-          <c-js />
-        </body>
-      </html>
-    """
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         # A small folder tree, three levels deep, passed in one piece.
         tree = {
@@ -59,3 +42,20 @@ class RecursionPage(Component):
             ],
         }
         return {"tree": tree}
+
+    template = """
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <title>Recursion example</title>
+          <c-css />
+        </head>
+        <body
+          style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"
+        >
+          <c-TreeNode c-node="tree" />
+          <c-js />
+        </body>
+      </html>
+    """

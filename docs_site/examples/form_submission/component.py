@@ -1,17 +1,16 @@
 """
 A contact form that handles its own submission, used as a live docs example.
 
-The component ships its own JS: it intercepts the form submit so the "thank you"
-response appears with no server (the docs site is static). This mirrors the
-django-components form-submission example, whose server POST is simulated here by
-intercepting the submit in the browser.
+The docs site is static, so the form has no server to post to. Vue handles the
+submit in the browser and shows the "thank you" response from the entered name,
+standing in for the server response a real form would show.
 """
 
 from citry import Component
 
 
 class ContactForm(Component):
-    """A styled contact form; submitting it shows a thank-you message, all client-side."""
+    """A styled contact form; submitting it shows a thank-you message in the browser."""
 
     class Kwargs:
         pass
@@ -20,10 +19,11 @@ class ContactForm(Component):
         pass
 
     template = """
-      <form class="contact-form">
+      <form class="contact-form" @submit.prevent="submit">
         <label class="contact-form__label">
           Name
           <input
+            v-model="name"
             name="name"
             class="contact-form__input"
             type="text"
@@ -31,12 +31,34 @@ class ContactForm(Component):
           />
         </label>
         <button class="contact-form__button" type="submit">Submit</button>
-        <div
-          class="contact-form__result"
-          role="status"
-          aria-live="polite"
-        ></div>
+        <div role="status" aria-live="polite">
+          <p
+            v-if="thanks"
+            class="contact-form__thanks"
+            v-text="thanks"
+          ></p>
+        </div>
       </form>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { name: "", thanks: "" };
+        },
+        methods: {
+          async submit() {
+            // Clear the message first, so a screen reader announces it
+            // again when the same name is submitted twice.
+            this.thanks = "";
+            await this.$nextTick();
+            // A real form would post to the server and show its reply.
+            // This one builds the reply here, from the entered name.
+            const name = this.name.trim() || "stranger";
+            this.thanks = `Thank you for your submission, ${name}!`;
+          },
+        },
+      });
     """
 
     css = """
@@ -71,34 +93,11 @@ class ContactForm(Component):
         background: #4338ca;
       }
       .contact-form__thanks {
+        margin: 0;
         padding: 0.65rem 0.85rem;
         border: 1px solid #2da44e;
         border-radius: 6px;
         background: #effef1;
         color: #1a7f37;
       }
-    """
-
-    js = """
-      $component(({ component }) => {
-        const form = component.$el;
-        const result = form.querySelector(".contact-form__result");
-        // The callback runs again after each server render, so the
-        // returned cleanup removes this listener before that rerun.
-        const listeners = new AbortController();
-        form.addEventListener("submit", (event) => {
-          // No server on a static site: intercept the submit and show the
-          // response in the browser, built from the entered name.
-          event.preventDefault();
-          const entered = (new FormData(form).get("name") || "").toString().trim();
-          const name = entered || "stranger";
-          result.textContent = "";
-          const box = document.createElement("div");
-          box.className = "contact-form__thanks";
-          box.textContent = `Thank you for your submission, ${name}!`;
-          result.appendChild(box);
-        }, { signal: listeners.signal });
-
-        return () => listeners.abort();
-      });
     """

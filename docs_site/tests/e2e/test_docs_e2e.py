@@ -2426,6 +2426,10 @@ def test_tabs_example_supports_keyboard_navigation(page: Any, docs_site_url: str
     assert tabs.first.get_attribute("aria-selected") == "true"
 
 
+# The widget's own script adds "(JS ran)" to its title once Vue mounts it.
+_FRAGMENT_SCRIPT_RAN = "document.querySelector('.frag-widget__title')?.textContent.includes('(JS ran)')"
+
+
 def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> None:
     # The whole static-fragment path: the page loads the runtime from /citry/,
     # a click fetches the pre-rendered fragment, the runtime loads the component's
@@ -2470,7 +2474,7 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
     assert reset.is_hidden()
     assert page.locator(".frag-widget").count() == 0
     pending[0].continue_()
-    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    page.wait_for_function(_FRAGMENT_SCRIPT_RAN)
     # The component's CSS loaded too (the widget got its purple border).
     widget = page.locator(".frag-widget")
     assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"  # #8250df
@@ -2491,7 +2495,7 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
     assert page.evaluate("window.fragmentFetchCount") == fetch_count
     assert len(pending) == 1
     assert widget.evaluate("(el, original) => el === original", original_widget)
-    assert widget.get_attribute("data-ready") == "1"
+    assert page.evaluate(_FRAGMENT_SCRIPT_RAN)
     assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"
 
     # A document reload makes the static fragment safe to insert again.
@@ -2503,7 +2507,7 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
     assert reset.is_hidden()
     assert widget.count() == 0
     load.click()
-    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    page.wait_for_function(_FRAGMENT_SCRIPT_RAN)
     assert widget.count() == 1
     assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"
     assert errors == []
@@ -2537,7 +2541,7 @@ def test_fragment_fetch_failure_allows_retry(page: Any, docs_site_url: str, fail
     assert page.locator("#frag-target").inner_html() == ""
 
     load.click()
-    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    page.wait_for_function(_FRAGMENT_SCRIPT_RAN)
     assert page.locator(".frag-widget").count() == 1
     assert load.is_disabled()
     assert page.locator("#frag-reset").is_visible()

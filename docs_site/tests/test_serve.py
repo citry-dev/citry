@@ -442,7 +442,7 @@ def test_serve_emits_a_fragment_variant_with_working_deps(tmp_path: Path) -> Non
     script_responses = [client.get(source["url"]) for source in script_sources]
     style_responses = [client.get(source["url"]) for source in style_sources]
     assert all(response.status_code == 200 for response in (*script_responses, *style_responses))
-    assert any("frag-widget__title" in response.text for response in script_responses)
+    assert any("scriptRan" in response.text for response in script_responses)
     assert any(".frag-widget" in response.text for response in style_responses)
 
 

@@ -24,25 +24,22 @@ def _prepared_render(page_html: str) -> tuple[dict, str]:
 def test_tabs_example_page_renders() -> None:
     html = str(get_example_registry()["tabs"].page_cls())
     transport, source = _prepared_render(html)
-    # Static roles and labels belong to the compiled definition; per-row
-    # attributes and text belong to the prepared loop payload.
+    # Static roles and labels belong to the compiled definition; js_data()
+    # sends the tab list and the open index to the browser.
     assert 'role: "tablist"' in source
     assert '"aria-label": "Example sections"' in source
     assert 'role: "tab"' in source
     assert 'role: "tabpanel"' in source
     tabs = next(item for item in transport["manifest"]["occurrences"] if item["typeKey"].startswith("Tabs_"))
-    tab_rows = tabs["preparedData"]["citryLoop0"]
-    panel_rows = tabs["preparedData"]["citryLoop1"]
-    assert tab_rows[0]["citryAttrs0"]["aria-selected"] == "true"
-    assert tab_rows[0]["citryAttrs0"]["data-active"] == "true"
-    assert tab_rows[0]["citryAttrs0"]["data-index"] == "0"
-    assert tab_rows[0]["citryAttrs0"]["tabindex"] == "0"
-    assert tab_rows[0]["citryText0"] == "Overview"
-    assert panel_rows[1]["citryAttrs0"]["data-index"] == "1"
-    assert panel_rows[1]["citryAttrs0"]["hidden"] is True
-    assert panel_rows[1]["citryText0"] == "Clicking a tab toggles the hidden attribute on its panel, all client-side."
-    # Tabs and panels are connected for assistive technology, and the shipped
-    # script supports the standard horizontal-tab keyboard controls.
-    assert panel_rows[0]["citryAttrs0"]["aria-labelledby"] == tab_rows[0]["citryAttrs0"]["id"]
-    assert 'event.key === "ArrowRight"' in html
-    assert 'event.key === "Home"' in html
+    # Python seeds the browser state; Vue renders the tabs and panels from it.
+    server_data = tabs["serverData"]
+    assert server_data["activeIndex"] == 0
+    assert server_data["idPrefix"] == f"demo-tabs-{tabs['renderId']}"
+    assert [tab["label"] for tab in server_data["tabs"]] == ["Overview", "Details", "Notes"]
+    # Tabs and panels are bound for assistive technology, and the shipped script
+    # supports the standard horizontal-tab keyboard controls.
+    assert "aria-selected" in source
+    assert "aria-controls" in source
+    assert "aria-labelledby" in source
+    assert "ArrowRight:" in html
+    assert "Home:" in html

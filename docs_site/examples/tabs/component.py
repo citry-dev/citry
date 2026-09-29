@@ -11,13 +11,22 @@ class Tab(TypedDict):
 
 
 class Tabs(Component):
-    """A tab bar plus panels; clicking a tab shows its panel, driven by per-component JS."""
+    """A tab bar plus panels; Vue state tracks the open tab in the browser."""
 
     class Kwargs:
         tabs: list[Tab]
 
     class Slots:
         pass
+
+    def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+        return {
+            "tabs": kwargs.tabs,
+            "activeIndex": 0,
+            # The instance ID keeps element IDs unique when a page shows
+            # several Tabs, so each tab still names its own panel.
+            "idPrefix": f"demo-tabs-{self.id}",
+        }
 
     template = """
       <div class="demo-tabs">
@@ -27,35 +36,55 @@ class Tabs(Component):
           aria-label="Example sections"
         >
           <button
-            c-for="tab in tabs"
-            c-id="tab['tab_id']"
+            v-for="(tab, index) in tabs"
+            ref="tabButtons"
+            :id="idPrefix + '-tab-' + index"
             type="button"
             class="demo-tabs__tab"
             role="tab"
-            c-aria-controls="tab['panel_id']"
-            c-aria-selected="tab['active']"
-            c-tabindex="tab['tabindex']"
-            c-data-active="tab['active']"
-            c-data-index="tab['index']"
-          >
-            {{ tab['label'] }}
-          </button>
+            :aria-controls="idPrefix + '-panel-' + index"
+            :aria-selected="index === activeIndex"
+            :tabindex="index === activeIndex ? 0 : -1"
+            @click="activeIndex = index"
+            @keydown="moveWithKeys($event, index)"
+            v-text="tab.label"
+          ></button>
         </div>
-        <div class="demo-tabs__panels">
-          <div
-            c-for="tab in tabs"
-            c-id="tab['panel_id']"
-            class="demo-tabs__panel"
-            role="tabpanel"
-            tabindex="0"
-            c-aria-labelledby="tab['tab_id']"
-            c-data-index="tab['index']"
-            c-hidden="tab['active'] == 'false'"
-          >
-            {{ tab['body'] }}
-          </div>
-        </div>
+        <div
+          v-for="(tab, index) in tabs"
+          v-show="index === activeIndex"
+          :id="idPrefix + '-panel-' + index"
+          class="demo-tabs__panel"
+          role="tabpanel"
+          tabindex="0"
+          :aria-labelledby="idPrefix + '-tab-' + index"
+          v-text="tab.body"
+        ></div>
       </div>
+    """
+
+    js = """
+      $component({
+        methods: {
+          moveWithKeys(event, index) {
+            // The arrow keys wrap around, and Home and End jump to the
+            // ends, as the WAI-ARIA tabs pattern expects.
+            const count = this.tabs.length;
+            const nextIndex = {
+              ArrowRight: (index + 1) % count,
+              ArrowLeft: (index - 1 + count) % count,
+              Home: 0,
+              End: count - 1,
+            }[event.key];
+            // Other keys, such as Tab, keep their usual meaning.
+            if (nextIndex === undefined) return;
+            event.preventDefault();
+            this.activeIndex = nextIndex;
+            // Only the open tab is in the Tab order, so focus follows it.
+            this.$refs.tabButtons[nextIndex].focus();
+          },
+        },
+      });
     """
 
     css = """
@@ -84,7 +113,7 @@ class Tabs(Component):
       .demo-tabs__tab:hover {
         background: #eef1f4;
       }
-      .demo-tabs__tab[data-active="true"] {
+      .demo-tabs__tab[aria-selected="true"] {
         color: #0969da;
         font-weight: 600;
         border-bottom-color: #0969da;
@@ -94,84 +123,4 @@ class Tabs(Component):
         color: #24292f;
         line-height: 1.5;
       }
-      .demo-tabs__panel[hidden] {
-        display: none;
-      }
     """
-
-    js = """
-      $component(({ component }) => {
-        const root = component.$el;
-        // The callback runs again after each server render, so the
-        // returned cleanup removes these listeners before that rerun.
-        const listeners = new AbortController();
-        const { signal } = listeners;
-        const tabs = root.querySelectorAll(".demo-tabs__tab");
-        const panels = root.querySelectorAll(".demo-tabs__panel");
-
-        const activate = (nextTab, moveFocus = false) => {
-          const nextIndex = nextTab.getAttribute("data-index");
-          tabs.forEach((tab) => {
-            const selected = tab === nextTab;
-            tab.setAttribute("aria-selected", selected ? "true" : "false");
-            tab.setAttribute("data-active", selected ? "true" : "false");
-            tab.tabIndex = selected ? 0 : -1;
-          });
-          panels.forEach((panel) => {
-            if (panel.getAttribute("data-index") === nextIndex) {
-              panel.removeAttribute("hidden");
-            } else {
-              panel.setAttribute("hidden", "");
-            }
-          });
-          if (moveFocus) {
-            nextTab.focus();
-          }
-        };
-
-        tabs.forEach((tab, index) => {
-          tab.addEventListener("click", () => activate(tab), { signal });
-          tab.addEventListener("keydown", (event) => {
-            let nextIndex;
-            if (event.key === "ArrowRight") {
-              nextIndex = (index + 1) % tabs.length;
-            } else if (event.key === "ArrowLeft") {
-              nextIndex = (index - 1 + tabs.length) % tabs.length;
-            } else if (event.key === "Home") {
-              nextIndex = 0;
-            } else if (event.key === "End") {
-              nextIndex = tabs.length - 1;
-            } else {
-              return;
-            }
-            event.preventDefault();
-            activate(tabs[nextIndex], true);
-          }, { signal });
-        });
-
-        return () => listeners.abort();
-      });
-    """
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
-        # Precompute a per-tab index and active flag as strings. Expressions in the
-        # template can't call builtins like enumerate/str, and a bare True boolean
-        # would render as a valueless attribute, breaking the [data-active="true"]
-        # CSS selector, so the string values are built here.
-        prepared: list[dict[str, str]] = []
-        id_prefix = f"demo-tabs-{self.id}"
-        for i, tab in enumerate(kwargs.tabs):
-            tab_id = f"{id_prefix}-tab-{i}"
-            panel_id = f"{id_prefix}-panel-{i}"
-            prepared.append(
-                {
-                    "label": tab["label"],
-                    "body": tab["body"],
-                    "tab_id": tab_id,
-                    "panel_id": panel_id,
-                    "index": str(i),
-                    "active": "true" if i == 0 else "false",
-                    "tabindex": "0" if i == 0 else "-1",
-                }
-            )
-        return {"tabs": prepared}
