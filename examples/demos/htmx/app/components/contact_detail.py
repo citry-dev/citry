@@ -24,7 +24,11 @@ class ContactDetail(Component):
         return {"contactId": kwargs.contact.id}
 
     template = """
-      <article ref="root" class="contact-detail">
+      <article
+        ref="root"
+        class="contact-detail"
+        :data-citry-contact="contactId"
+      >
         <c-if cond="notice">
           <p class="contact-detail__notice" role="status">{{ notice }}</p>
         </c-if>
@@ -47,7 +51,6 @@ class ContactDetail(Component):
     js = """
       $component({
         mounted() {
-          this.$refs.root.dataset.citryContact = String(this.contactId);
           window.htmx.process(this.$refs.root);
         },
       });

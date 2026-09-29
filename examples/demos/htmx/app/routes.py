@@ -70,7 +70,7 @@ def _form_text(form: Mapping[str, object], name: str) -> str:
 
 def _page_html() -> str:
     search_results = _search_results_fragment()
-    team_picker = _fragment(TeamPicker(department="engineering", teams=list_teams("engineering")))
+    team_picker = _fragment(TeamPicker(teams=list_teams("engineering")))
     department_options = "".join(f'<option value="{value}">{label}</option>' for value, label in DEPARTMENTS)
     return f"""<!doctype html>
 <html lang="en">
@@ -192,7 +192,7 @@ def search(q: str = "") -> HTMLResponse:
 
 @router.get("/fragments/team-picker", response_class=HTMLResponse)
 def teams(department: str = "") -> HTMLResponse:
-    return _fragment_response(TeamPicker(department=department, teams=list_teams(department)))
+    return _fragment_response(TeamPicker(teams=list_teams(department)))
 
 
 @router.get("/fragments/contacts/{contact_id}", response_class=HTMLResponse)

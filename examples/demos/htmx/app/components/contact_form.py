@@ -53,12 +53,12 @@ class ContactForm(Component):
         <label>
           <span>Name</span>
           <input
+            ref="nameInput"
             name="name"
             c-value="name"
             c-aria-invalid="name_invalid"
             c-aria-describedby="name_error_id"
             autocomplete="name"
-            autofocus
           />
           <span c-id="name_error_id" class="field-error" role="alert">{{ name_error }}</span>
         </label>
@@ -112,7 +112,9 @@ class ContactForm(Component):
       $component({
         mounted() {
           window.htmx.process(this.$refs.form);
-          this.$refs.form.querySelector("input[name='name']")?.focus();
+          // HTMX inserts this form before Vue mounts it, so an `autofocus`
+          // attribute would focus markup that Vue then replaces.
+          this.$refs.nameInput.focus();
         },
       });
     """
