@@ -103,8 +103,8 @@ The callback may be `async`. Citry does not wait for it: the page becomes
 ready, and later server renders apply, while it is still running. It may
 resolve to a cleanup function. If the next callback run or the unmount comes
 first, Citry calls that cleanup as soon as the Promise resolves. A rejected
-Promise is logged to the console as a `[Citry]` error and does not stop the
-page:
+Promise, or one that resolves to anything else, is logged to the console as
+a `[Citry]` error and does not stop the page:
 
 ```js
 $component({
@@ -235,9 +235,10 @@ A component template can then use `v-autofocus`. Register a store plugin,
 or any other Vue plugin, the same way.
 
 Call it before Citry starts its first app, from a script that runs after
-Citry's runtime has loaded. A script in the page `<head>` loaded with `defer`
-does both, because the browser runs it after parsing the page and before
-Citry's start script:
+Citry's runtime has loaded; `Citry.vue` does not exist before that. A page
+that Citry renders loads the runtime with an ordinary script and starts
+its apps from a module script, so a script in the page `<head>` loaded
+with `defer` runs between the two:
 
 ```html
 <script defer src="/static/vue-plugins.js"></script>
@@ -312,7 +313,7 @@ The optional third argument accepts these options:
 | Option | Meaning |
 | --- | --- |
 | `timeout` | Milliseconds to wait for the server before the call fails. Overrides the page default. |
-| `wait` | Only `true`, the default. |
+| `wait` | Accepts only `true`, the default. See below. |
 
 Citry sends the calls from one Vue app one at a time, in the order they were
 made, because each server render builds on the one before it. A call cannot
@@ -416,7 +417,7 @@ Event calls also emit bubbling `citry:events:before`, `after`, `error`,
 element. When that component has no element on the page, for example
 because it was removed before the call finished, the event fires on
 `document` instead, so a listener on `document` still hears it. `instance`
-and `class` then name the component as the call last saw it.
+and `class` then name the component as Citry last saw it.
 
 `stale` fires when a call's result will not reach the page. Its `reason` says
 why:

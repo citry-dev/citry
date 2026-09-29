@@ -26,7 +26,9 @@
   // Becomes true when Citry starts its first app on this page. A plugin registered after that would
   // be missing from the app that already started, so `Citry.vue.use()` refuses it from then on.
   let appStartBegan = false;
-  if (!Object.prototype.hasOwnProperty.call(V, "use")) {
+  // A Vue object that cannot take a new property (a frozen copy) goes without `use` rather than
+  // stopping the whole runtime from loading.
+  if (Object.isExtensible(V) && !Object.prototype.hasOwnProperty.call(V, "use")) {
     Object.defineProperty(V, "use", {enumerable: false, configurable: false, writable: false,
       value: function use(plugin, ...options) {
         // Vue accepts the same two shapes in `app.use`; anything else would fail later, inside an app start.
@@ -4010,8 +4012,8 @@
     return record.rootElements;
   }
   // Fire one `citry:events:<kind>` notification for an Events call. `context` is the calling
-  // component's Events context (the last one it had, when it is no longer mounted), or null when
-  // none is known; `roots` are its
+  // component's Events context (the last one it had, when it is no longer mounted), or null
+  // when none is known. `roots` are its
   // connected top-level elements. The event bubbles from the first root so instance-scoped listeners
   // hear it, and starts at `document` when there is no live root, so page-level listeners always do.
   // Returns false only when a listener cancelled a cancellable event.
@@ -4094,9 +4096,9 @@
           if (resolved === undefined) return;
           if (typeof resolved !== "function")
             throw new TypeError("onServerRender must resolve to a function or undefined");
-          // Still the current run: keep the cleanup for the next run or the unmount, as a
-          // synchronous callback's would be. The run already ended (a newer server render or the
-          // unmount came first), so nothing will call it later: run it now.
+          // While this run is still current, keep the cleanup for the next run or the unmount, as a
+          // synchronous callback's would be. If the run already ended (a newer server render or the
+          // unmount came first), nothing will call it later, so run it now.
           if (record.callbackSubscriptions === subscriptions) record.callbackCleanup = resolved;
           else resolved();
         }).catch(error => console.error("[Citry] an async onServerRender callback failed:", error));

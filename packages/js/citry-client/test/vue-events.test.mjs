@@ -1987,7 +1987,7 @@ test("send options accept only timeout and wait: true, and reject before activit
     },
   });
   const source = { stableId: "board", generation: 1 };
-  // `wait: false` used to mean "skip the line"; each call is sent in order, so it is refused by name.
+  // Each call is sent in order, so `wait: false` is refused by name.
   await assert.rejects(
     bridge.send({ source, handler: "move", options: { wait: false } }),
     (error) => error instanceof TypeError && /option 'wait' accepts only true/.test(error.message),

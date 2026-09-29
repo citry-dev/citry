@@ -7954,8 +7954,8 @@ _COMPONENT_CONTEXT_SPECS = {
         "Element[]",
         (
             "The component's connected top-level elements. One array that Citry refills on each server "
-            "render and each time this field is read; a destructured copy does not follow changes made "
-            "only in the browser until the next refill."
+            "render and each time this field is read. An `els` you destructured earlier does not see "
+            "changes made only in the browser until the next refill."
         ),
         f"{_BROWSER_APIS_URL}#on-server-render",
     ),
