@@ -297,7 +297,10 @@ surrounds the part, the page is sent with Citry's ordinary server HTML as
 described above.
 
 Until Vue starts, that element shows HTML for its contents written from
-the values the server has, so readers and search engines still see them. When Vue starts,
+the values the server has, so readers and search engines still see them.
+An element keeps the classes and styles the server knows, so a
+`class="card"` beside a `:class` that reads `data()` still styles the
+card before Vue starts. When Vue starts,
 Citry removes that HTML and Vue builds the contents from its own state, in
 the same step, so the browser never paints the element empty.
 
@@ -322,7 +325,11 @@ The same happens for:
 - text containing a carriage return or NUL, text that displays a non-integer
   number or an object, and `<textarea>` or `<pre>` text that starts with a
   newline;
-- a `:style` bound to an object, and custom directives on elements.
+- a `:style` value the server cannot write the way the browser reads it:
+  a fractional number, an empty value, a value with a semicolon, a
+  vendor-prefixed name such as `WebkitTransition`, or a list of fallback
+  values;
+- custom directives on elements.
 
 Such an element is sent empty instead when its contents would hold
 something the browser would run or load a second time when Vue builds them

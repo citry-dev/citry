@@ -207,7 +207,8 @@ listener), `v-show`, or a custom directive (the server does not apply the
 caller's directives to the child's root element), scoped and dynamically
 built slots, HTML Python hands over as a finished string (`<c-raw>` contents
 or trusted `Markup` with tags) when one of the cases in "Raw HTML blocks"
-declines it, style objects, custom directives on elements, text with a carriage return or NUL, `<textarea>` or
+declines it, style values the browser could read differently from the server's text (see
+"Attributes" below), custom directives on elements, text with a carriage return or NUL, `<textarea>` or
 `<pre>` text starting with a newline, and elements the browser's parser
 would move (a block element inside `<p>`, table parts outside their table,
 nested `a`, `form` or `button`).
@@ -434,6 +435,13 @@ Expressions are limited to what JSON data can answer:
 
 - string, number, `true`/`false`, `null`, `undefined` and `void` literals,
   and a negated number literal;
+- array literals and object literals with fixed keys, such as the
+  `["card", { open: x }]` a static `class` beside a `:class` compiles to.
+  An object's keys are listed in JavaScript's order: array-index keys
+  first in numeric order, then the others as written, a repeated key
+  keeping its first position and its last value. An object from the page's
+  JSON uses the same order over its sorted keys. A spread, a hole, a
+  getter, or a method makes the literal a browser-only value;
 - `_ctx.$citryPrepared`, the occurrence's `preparedData` (an empty object
   when the occurrence has none),
   `_ctx.<key>` for each `js_data` key, and the parameters of the
@@ -442,8 +450,9 @@ Expressions are limited to what JSON data can answer:
   string, and array indexes;
 - `!`, `===`, `!==`, `&&`, `||`, `? :`, and `+` when one side is a string
   and the other a string or an integer;
-- `_toDisplayString`, `_normalizeClass` of a string, array or object, and
-  `_normalizeStyle` of a string or nothing.
+- `_toDisplayString`, `_normalizeClass` of a string, array or object
+  (trimmed, as Vue trims it), and `_normalizeStyle` of a string, array,
+  object, or nothing.
 
 Any other expression is a browser-only value: another name on `_ctx`
 (`data()`, `setup()`, props, methods, injections, `$slots` used as a
@@ -456,7 +465,15 @@ printing it as text or as an attribute is declined.
 Attributes follow Vue's `runtime-dom` `patchProp`, not its server renderer:
 the server writes what the element holds after Vue's first render in the
 browser. `class` is normalized and a null class is removed; `style` is
-written only from a string; `value` on `input`, `button`, `option` and
+written as authored from a string and as Vue's server renderer writes a
+style object (`name:value;`, camelCase names hyphenated), which the browser
+reads as the same declarations the client sets. A style object is declined
+when a value is a fraction, empty, contains a semicolon, is not a string
+or number, or when a name starts with a capital (a vendor-prefixed
+property the client sets through the browser's style object). Two classes
+or two styles meeting in `mergeProps` are joined as Vue joins them. Inside
+a shell's contents, a class or style with a browser-only part is written
+from the parts the server knows; `value` on `input`, `button`, `option` and
 `data`, `checked` on `input` and `selected` on `option` are written as
 attributes; `hidden` is written for `true`, `false`, `null` or `""`; names
 containing `-`, `:` or `_`, a fixed list of attribute-only names (`for`,

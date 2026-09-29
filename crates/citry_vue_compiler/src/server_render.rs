@@ -65,7 +65,8 @@ use citry_html_transform::{
 use oxc_allocator::Allocator as OxcAllocator;
 use oxc_ast::ast::{
     Argument, ArrayExpressionElement, ArrowFunctionBody, BinaryOperator, BindingPattern,
-    Expression, LogicalOperator, ObjectPropertyKind, PropertyKey, Statement, UnaryOperator,
+    Expression, LogicalOperator, ObjectPropertyKind, PropertyKey, PropertyKind, Statement,
+    UnaryOperator,
 };
 use oxc_parser::Parser;
 use oxc_span::SourceType;
@@ -263,6 +264,13 @@ enum Expr {
     NormalizeClass(Box<Expr>),
     /// `normalizeStyle(value)` for a `:style` binding.
     NormalizeStyle(Box<Expr>),
+    /// An array literal, such as the `["card", { open: isOpen }]` Vue
+    /// compiles a static `class` beside a `:class` binding into.
+    Array(Vec<Expr>),
+    /// An object literal, such as `{ open: isOpen }` in a `:class` or the
+    /// `{"color":"red"}` a static `style` compiles to. Keys stay in source
+    /// order; [`js_object_order`] puts them in JavaScript's order.
+    Object(Vec<(String, Expr)>),
     Unsupported(&'static str),
 }
 
@@ -282,6 +290,8 @@ impl Expr {
             Expr::Cond(test, then, otherwise) => {
                 test.fully_supported() && then.fully_supported() && otherwise.fully_supported()
             }
+            Expr::Array(items) => items.iter().all(Expr::fully_supported),
+            Expr::Object(entries) => entries.iter().all(|(_, value)| value.fully_supported()),
             _ => true,
         }
     }
@@ -859,6 +869,36 @@ impl Reader {
                     Expr::NormalizeStyle(value)
                 }
             }
+            Expression::ArrayExpression(array) => {
+                let mut items = Vec::with_capacity(array.elements.len());
+                for element in &array.elements {
+                    // A spread or a hole needs JavaScript's iteration, so
+                    // the whole literal is left to the browser.
+                    let Some(item) = element.as_expression() else {
+                        return Expr::Unsupported("browser-value");
+                    };
+                    items.push(self.expr(item, locals));
+                }
+                Expr::Array(items)
+            }
+            Expression::ObjectExpression(object) => {
+                let mut entries = Vec::with_capacity(object.properties.len());
+                for property in &object.properties {
+                    // Spreads, getters, setters and methods are left to the
+                    // browser; only `key: value` entries are read.
+                    let ObjectPropertyKind::ObjectProperty(property) = property else {
+                        return Expr::Unsupported("browser-value");
+                    };
+                    if property.kind != PropertyKind::Init || property.method {
+                        return Expr::Unsupported("browser-value");
+                    }
+                    let Some(key) = property_name(&property.key, property.computed) else {
+                        return Expr::Unsupported("browser-value");
+                    };
+                    entries.push((key, self.expr(&property.value, locals)));
+                }
+                Expr::Object(entries)
+            }
             _ => Expr::Unsupported("browser-value"),
         }
     }
@@ -943,6 +983,12 @@ enum Val<'a> {
     Str(Cow<'a, str>),
     /// An object or array from the prepared data.
     Data(&'a Json),
+    /// An array the render code builds. An item may be browser-only while
+    /// the array itself is known.
+    Array(Rc<Vec<Val<'a>>>),
+    /// An object the render code builds, its entries in JavaScript's
+    /// enumeration order (see [`js_object_order`]).
+    Object(Rc<Vec<(Cow<'a, str>, Val<'a>)>>),
     /// The component instance (`_ctx`).
     Ctx,
     Unknown(&'static str),
@@ -968,7 +1014,7 @@ impl<'a> Val<'a> {
             Val::Bool(value) => *value,
             Val::Num(value) => *value != 0.0 && !value.is_nan(),
             Val::Str(value) => !value.is_empty(),
-            Val::Data(_) | Val::Ctx => true,
+            Val::Data(_) | Val::Array(_) | Val::Object(_) | Val::Ctx => true,
             Val::Unknown(_) => return None,
         })
     }
@@ -995,7 +1041,7 @@ fn display<'a>(value: &Val<'a>) -> Result<Cow<'a, str>, &'static str> {
         Val::Bool(false) => Ok(Cow::Borrowed("false")),
         Val::Num(number) => js_number(*number).map(Cow::Owned).ok_or("browser-text"),
         // Objects print as indented JSON through Vue's own replacer.
-        Val::Data(_) | Val::Ctx => Err("browser-text"),
+        Val::Data(_) | Val::Array(_) | Val::Object(_) | Val::Ctx => Err("browser-text"),
         Val::Unknown(reason) => Err(reason),
     }
 }
@@ -1099,6 +1145,20 @@ fn eval<'a>(expr: &'a Expr, instance: &Instance<'a>, locals: &Scope<'a>) -> Val<
                 Err(_) if key == "length" => Val::Num(items.len() as f64),
                 _ => Val::Unknown("browser-value"),
             },
+            Val::Object(entries) => match entries.iter().find(|(name, _)| name == key) {
+                Some((_, value)) => value.clone(),
+                None if OBJECT_PROTOTYPE_NAMES.contains(&key.as_str()) => {
+                    Val::Unknown("browser-value")
+                }
+                None => Val::Undefined,
+            },
+            Val::Array(items) => match key.parse::<usize>() {
+                Ok(index) if index.to_string() == *key => {
+                    items.get(index).cloned().unwrap_or(Val::Undefined)
+                }
+                Err(_) if key == "length" => Val::Num(items.len() as f64),
+                _ => Val::Unknown("browser-value"),
+            },
             Val::Str(text) if key == "length" => Val::Num(text.encode_utf16().count() as f64),
             Val::Unknown(reason) => Val::Unknown(reason),
             // Other property reads (including of null, which throws) are
@@ -1162,17 +1222,25 @@ fn eval<'a>(expr: &'a Expr, instance: &Instance<'a>, locals: &Scope<'a>) -> Val<
             Ok(text) => Val::Str(text),
             Err(reason) => Val::Unknown(reason),
         },
-        Expr::NormalizeClass(value) => match normalize_class(&eval(value, instance, locals)) {
-            Ok(text) => Val::Str(Cow::Owned(text)),
-            Err(reason) => Val::Unknown(reason),
-        },
-        // Vue returns a style string unchanged; objects and arrays become
-        // a style object, which the server does not print.
-        Expr::NormalizeStyle(value) => match eval(value, instance, locals) {
-            text @ (Val::Str(_) | Val::Undefined | Val::Null) => text,
-            Val::Unknown(reason) => Val::Unknown(reason),
-            _ => Val::Unknown("unsupported-attribute"),
-        },
+        Expr::NormalizeClass(value) => {
+            match normalize_class(&eval(value, instance, locals), Parts::All) {
+                Ok(text) => Val::Str(Cow::Owned(text)),
+                Err(reason) => Val::Unknown(reason),
+            }
+        }
+        Expr::NormalizeStyle(value) => normalize_style(eval(value, instance, locals)),
+        Expr::Array(items) => Val::Array(Rc::new(
+            items
+                .iter()
+                .map(|item| eval(item, instance, locals))
+                .collect(),
+        )),
+        Expr::Object(entries) => Val::Object(Rc::new(js_object_order(
+            entries
+                .iter()
+                .map(|(key, value)| (Cow::Borrowed(key.as_str()), eval(value, instance, locals)))
+                .collect(),
+        ))),
         Expr::Unsupported(reason) => Val::Unknown(reason),
     }
 }
@@ -1308,39 +1376,332 @@ fn attribute_text(value: &Val<'_>, boolean: bool) -> Result<Option<String>, &'st
         Val::Num(number) => js_number(*number).map(Some).ok_or("unsupported-attribute"),
         Val::Unknown(reason) => Err(reason),
         // Objects and arrays print through JavaScript's own coercion.
-        Val::Data(_) | Val::Ctx => Err("unsupported-attribute"),
+        Val::Data(_) | Val::Array(_) | Val::Object(_) | Val::Ctx => Err("unsupported-attribute"),
     }
 }
 
-/// Vue's `normalizeClass` for the values prepared data carries.
-fn normalize_class(value: &Val<'_>) -> Result<String, &'static str> {
+/// Which parts of a class or style value the caller needs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Parts {
+    /// Every part: one the server cannot read makes the whole value
+    /// unknown, because Vue's first render would differ from a guess.
+    All,
+    /// Only the parts the server can read. Shell contents show these until
+    /// Vue builds the shell's children, so a static `class="card"` next to a
+    /// browser-only `:class` still styles the element before Vue runs.
+    Known,
+}
+
+/// Vue's `normalizeClass`: a string as it is, the normalized items of an
+/// array, or the keys of an object whose values are truthy, joined with
+/// spaces and trimmed.
+fn normalize_class(value: &Val<'_>, parts: Parts) -> Result<String, &'static str> {
+    // Vue builds the text with a space after every non-empty part and trims
+    // the result, so a part's own surrounding spaces survive in the middle.
+    let mut output = String::new();
+    let mut push = |text: &str| {
+        if !text.is_empty() {
+            output.push_str(text);
+            output.push(' ');
+        }
+    };
     match value {
-        Val::Str(text) => Ok(text.to_string()),
-        Val::Undefined | Val::Null | Val::Bool(_) | Val::Num(_) => Ok(String::new()),
+        Val::Str(text) => push(text),
+        Val::Undefined | Val::Null | Val::Bool(_) | Val::Num(_) => {}
         Val::Data(Json::Array(items)) => {
-            let mut output = String::new();
             for item in items {
-                let normalized = normalize_class(&Val::from_json(item))?;
-                if !normalized.is_empty() {
-                    output.push_str(&normalized);
-                    output.push(' ');
-                }
+                push(&normalize_class(&Val::from_json(item), parts)?);
             }
-            Ok(output.trim().to_owned())
+        }
+        Val::Array(items) => {
+            for item in items.iter() {
+                push(&normalize_class(item, parts)?);
+            }
         }
         Val::Data(Json::Object(map)) => {
-            let mut output = String::new();
-            for (name, enabled) in map {
-                if Val::from_json(enabled).truthy() == Some(true) {
-                    output.push_str(name);
-                    output.push(' ');
+            for (name, enabled) in js_data_order(map) {
+                match (Val::from_json(enabled).truthy(), parts) {
+                    (Some(true), _) => push(name),
+                    (Some(false), _) | (None, Parts::Known) => {}
+                    (None, Parts::All) => return Err("browser-value"),
                 }
             }
-            Ok(output.trim().to_owned())
         }
-        Val::Data(_) | Val::Ctx => Err("unsupported-attribute"),
-        Val::Unknown(reason) => Err(reason),
+        Val::Object(entries) => {
+            for (name, enabled) in entries.iter() {
+                match (enabled.truthy(), parts) {
+                    (Some(true), _) => push(name),
+                    (Some(false), _) | (None, Parts::Known) => {}
+                    (None, Parts::All) => return Err("browser-value"),
+                }
+            }
+        }
+        Val::Data(_) | Val::Ctx | Val::Unknown(_) if parts == Parts::Known => {}
+        Val::Data(_) | Val::Ctx => return Err("unsupported-attribute"),
+        Val::Unknown(reason) => return Err(reason),
     }
+    Ok(js_trim(&output).to_owned())
+}
+
+/// Vue's `normalizeStyle` for a `:style` value: a string or an object is
+/// returned as it is, and an array becomes one object holding every item's
+/// declarations, a later item replacing an earlier one's value.
+fn normalize_style(value: Val<'_>) -> Val<'_> {
+    match value {
+        Val::Array(_) | Val::Data(Json::Array(_)) => match style_entries(&value, Parts::All) {
+            Ok(Some(entries)) => Val::Object(Rc::new(entries)),
+            Ok(None) => Val::Undefined,
+            Err(reason) => Val::Unknown(reason),
+        },
+        Val::Str(_) | Val::Object(_) | Val::Data(Json::Object(_)) | Val::Unknown(_) => value,
+        // Vue returns nothing for any other value, which removes the
+        // attribute.
+        _ => Val::Undefined,
+    }
+}
+
+/// Style declarations as `normalizeStyle` leaves them: property name and
+/// value, in JavaScript's key order.
+type StyleEntries<'a> = Vec<(Cow<'a, str>, Val<'a>)>;
+
+/// The declarations `normalizeStyle` gives a value, in JavaScript's key
+/// order, or `None` when it gives nothing (a number, `null`).
+fn style_entries<'a>(
+    value: &Val<'a>,
+    parts: Parts,
+) -> Result<Option<StyleEntries<'a>>, &'static str> {
+    let mut output = Vec::new();
+    match value {
+        Val::Str(text) => output = parse_string_style(text),
+        Val::Object(entries) => output = entries.as_ref().clone(),
+        Val::Data(Json::Object(map)) => {
+            output = js_data_order(map)
+                .into_iter()
+                .map(|(key, value)| (Cow::Borrowed(key), Val::from_json(value)))
+                .collect();
+        }
+        Val::Array(_) | Val::Data(Json::Array(_)) => {
+            let items: Vec<Val<'a>> = match value {
+                Val::Array(items) => items.as_ref().clone(),
+                Val::Data(Json::Array(items)) => items.iter().map(Val::from_json).collect(),
+                _ => unreachable!("matched an array above"),
+            };
+            for item in &items {
+                // An item's declarations replace earlier values in place,
+                // like assigning to a JavaScript object.
+                for (key, value) in style_entries(item, parts)?.unwrap_or_default() {
+                    match output.iter_mut().find(|(name, _)| *name == key) {
+                        Some(existing) => existing.1 = value,
+                        None => output.push((key, value)),
+                    }
+                }
+            }
+            output = js_object_order(output);
+        }
+        Val::Unknown(_) | Val::Ctx if parts == Parts::Known => return Ok(None),
+        Val::Unknown(reason) => return Err(reason),
+        Val::Ctx | Val::Data(_) => return Err("unsupported-attribute"),
+        Val::Undefined | Val::Null | Val::Bool(_) | Val::Num(_) => return Ok(None),
+    }
+    Ok(Some(output))
+}
+
+/// Vue's `parseStringStyle`: split a style string into declarations,
+/// ignoring comments and semicolons inside parentheses.
+fn parse_string_style(text: &str) -> Vec<(Cow<'static, str>, Val<'static>)> {
+    // Comments are removed first, as `/\/\*[^]*?\*\//g` does.
+    let mut without_comments = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("/*") {
+        without_comments.push_str(&rest[..start]);
+        match rest[start + 2..].find("*/") {
+            Some(end) => rest = &rest[start + 2 + end + 2..],
+            None => {
+                // An unclosed comment is not matched, so it stays.
+                without_comments.push_str(&rest[start..]);
+                rest = "";
+            }
+        }
+    }
+    without_comments.push_str(rest);
+    let mut output: Vec<(Cow<'static, str>, Val<'static>)> = Vec::new();
+    // `;(?![^(]*\))`: a semicolon splits unless a `)` follows before any `(`.
+    let bytes = without_comments.as_bytes();
+    let mut start = 0;
+    let mut items = Vec::new();
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte != b';' {
+            continue;
+        }
+        let after = &without_comments[index + 1..];
+        let inside_parentheses = after
+            .find([')', '('])
+            .is_some_and(|at| after.as_bytes()[at] == b')');
+        if !inside_parentheses {
+            items.push(&without_comments[start..index]);
+            start = index + 1;
+        }
+    }
+    items.push(&without_comments[start..]);
+    for item in items {
+        // `split(/:([^]+)/)` keeps the text before the first colon and
+        // everything after it; an item without a colon is dropped.
+        let Some((key, value)) = item.split_once(':') else {
+            continue;
+        };
+        if value.is_empty() {
+            continue;
+        }
+        let key = Cow::Owned(js_trim(key).to_owned());
+        let value = Val::Str(Cow::Owned(js_trim(value).to_owned()));
+        match output.iter_mut().find(|(name, _)| *name == key) {
+            Some(existing) => existing.1 = value,
+            None => output.push((key, value)),
+        }
+    }
+    js_object_order(output)
+}
+
+/// The style attribute text for normalized style declarations, as Vue's
+/// server renderer (`stringifyStyle`) writes them: `name:value;` with
+/// camelCase names hyphenated. The browser reads the same declarations from
+/// it as from the style Vue's client render sets, which is all hydration
+/// compares. `None` when no declaration is written.
+fn stringify_style(
+    entries: &[(Cow<'_, str>, Val<'_>)],
+    parts: Parts,
+) -> Result<Option<String>, &'static str> {
+    let mut output = String::new();
+    for (key, value) in entries {
+        let text = match value {
+            // Vue skips these values, and the client sets nothing for them.
+            Val::Undefined | Val::Null => continue,
+            // The client removes an empty value while the server renderer
+            // writes `name:;`, and a semicolon inside a value makes the
+            // browser read the server's text as two declarations, so both
+            // are left to the browser.
+            Val::Str(text) if !text.is_empty() && !text.contains(';') => text.to_string(),
+            Val::Num(number) => match js_number(*number) {
+                Some(text) => text,
+                None if parts == Parts::Known => continue,
+                None => return Err("unsupported-attribute"),
+            },
+            // Other values are skipped by the server renderer but given to
+            // the browser's style object by the client, which can keep them.
+            _ if parts == Parts::Known => continue,
+            Val::Unknown(reason) => return Err(reason),
+            _ => return Err("unsupported-attribute"),
+        };
+        let name = if key.starts_with("--") {
+            key.to_string()
+        } else {
+            // A name that starts with a capital, such as `WebkitTransition`,
+            // is a vendor-prefixed property the client sets through the
+            // browser's style object, while the server renderer's
+            // `webkit-transition` is a name the browser ignores.
+            match hyphenate(key).filter(|_| !key.starts_with(|c: char| c.is_ascii_uppercase())) {
+                Some(name) => name,
+                None if parts == Parts::Known => continue,
+                None => return Err("unsupported-attribute"),
+            }
+        };
+        output.push_str(&name);
+        output.push(':');
+        output.push_str(&text);
+        output.push(';');
+    }
+    Ok((!output.is_empty()).then_some(output))
+}
+
+/// Vue's `hyphenate`: a dash before every capital that follows a letter,
+/// digit or underscore, then the whole name in lowercase. `None` for a
+/// name with non-ASCII characters, whose lowercase form JavaScript and
+/// Rust may spell differently.
+fn hyphenate(name: &str) -> Option<String> {
+    if !name.is_ascii() {
+        return None;
+    }
+    let mut output = String::with_capacity(name.len() + 4);
+    let mut previous_is_word = false;
+    for character in name.chars() {
+        // `\B([A-Z])`: not at a word boundary, so the previous character
+        // is a word character too.
+        if character.is_ascii_uppercase() && previous_is_word {
+            output.push('-');
+        }
+        output.push(character.to_ascii_lowercase());
+        previous_is_word = character.is_ascii_alphanumeric() || character == '_';
+    }
+    Some(output)
+}
+
+/// JavaScript's `String.prototype.trim`, whose whitespace differs from
+/// Rust's (it includes U+FEFF and excludes U+0085).
+fn js_trim(text: &str) -> &str {
+    text.trim_matches(|character: char| {
+        matches!(
+            character,
+            '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'
+                ..='\u{200a}'
+                    | '\u{2028}'
+                    | '\u{2029}'
+                    | '\u{202f}'
+                    | '\u{205f}'
+                    | '\u{3000}'
+                    | '\u{feff}'
+        )
+    })
+}
+
+/// Whether JavaScript treats an object key as an array index, which it
+/// lists before every other key, in numeric order.
+fn is_array_index(key: &str) -> bool {
+    let bytes = key.as_bytes();
+    if key == "0" {
+        return true;
+    }
+    if bytes.is_empty()
+        || bytes.len() > 10
+        || bytes[0] == b'0'
+        || !bytes.iter().all(u8::is_ascii_digit)
+    {
+        return false;
+    }
+    key.parse::<u64>()
+        .is_ok_and(|value| value < u64::from(u32::MAX))
+}
+
+/// Put an object literal's entries in the order JavaScript enumerates them:
+/// array-index keys first in numeric order, then the others in the order
+/// they were first written. A repeated key keeps its first position and its
+/// last value.
+fn js_object_order<'a>(entries: Vec<(Cow<'a, str>, Val<'a>)>) -> Vec<(Cow<'a, str>, Val<'a>)> {
+    let mut unique: Vec<(Cow<'a, str>, Val<'a>)> = Vec::with_capacity(entries.len());
+    for (key, value) in entries {
+        match unique.iter_mut().find(|(name, _)| *name == key) {
+            Some(existing) => existing.1 = value,
+            None => unique.push((key, value)),
+        }
+    }
+    let (mut indexes, others): (Vec<_>, Vec<_>) =
+        unique.into_iter().partition(|(key, _)| is_array_index(key));
+    indexes.sort_by_key(|(key, _)| key.parse::<u64>().unwrap_or(u64::MAX));
+    indexes.extend(others);
+    indexes
+}
+
+/// The entries of an object from the prepared data in the order the
+/// browser enumerates them. Python writes the page's JSON with sorted keys,
+/// which is also this map's order, and `JSON.parse` keeps that order except
+/// that array-index keys come first, in numeric order.
+fn js_data_order(map: &serde_json::Map<String, Json>) -> Vec<(&str, &Json)> {
+    let (mut indexes, others): (Vec<_>, Vec<_>) = map
+        .iter()
+        .map(|(key, value)| (key.as_str(), value))
+        .partition(|(key, _)| is_array_index(key));
+    indexes.sort_by_key(|(key, _)| key.parse::<u64>().unwrap_or(u64::MAX));
+    indexes.extend(others);
+    indexes
 }
 
 /// The attribute one prop leaves on the element after Vue's first client
@@ -1358,17 +1719,28 @@ fn client_attribute(tag: &str, key: &str, value: &Val<'_>) -> Result<Option<Stri
             Val::Str(text) => Ok(Some(text.to_string())),
             Val::Bool(false) => Ok(Some("false".to_owned())),
             Val::Num(number) if *number == 0.0 => Ok(Some("0".to_owned())),
-            other => normalize_class(other).map(Some),
+            other => normalize_class(other, Parts::All).map(Some),
         };
     }
     if key == "style" {
-        // A style string is written as authored. Hydration leaves it in
-        // place and the browser reads the same declarations; only the
-        // attribute text differs from the browser's normalized form that
-        // client mount leaves. Style objects need Vue's own serialization.
+        // A style string is written as authored and a style object as Vue's
+        // server renderer writes it. Hydration leaves either in place and
+        // the browser reads the same declarations; only the attribute text
+        // differs from the browser's normalized form that client mount
+        // leaves.
         return match value {
             Val::Undefined | Val::Null => Ok(None),
             Val::Str(text) => Ok(Some(text.to_string())),
+            Val::Object(entries) => stringify_style(entries, Parts::All),
+            // `createVNode` runs `normalizeStyle` on a style object or array
+            // the render did not normalize itself (the compiler leaves a
+            // constant one as it is).
+            Val::Data(Json::Object(_)) | Val::Array(_) | Val::Data(Json::Array(_)) => {
+                match style_entries(value, Parts::All)? {
+                    Some(entries) => stringify_style(&entries, Parts::All),
+                    None => Ok(None),
+                }
+            }
             _ => Err("unsupported-attribute"),
         };
     }
@@ -1483,10 +1855,10 @@ fn merge_prop<'a>(output: &mut Props<'a>, key: Cow<'a, str>, value: PropVal<'a>)
             (Some(PropVal::Value(Val::Str(a))), PropVal::Value(Val::Str(b))) if a == b => return,
             (before, PropVal::Value(after)) => {
                 let before = match before {
-                    Some(PropVal::Value(before)) => normalize_class(before),
+                    Some(PropVal::Value(before)) => normalize_class(before, Parts::All),
                     _ => Ok(String::new()),
                 };
-                match (before, normalize_class(after)) {
+                match (before, normalize_class(after, Parts::All)) {
                     (Ok(a), Ok(b)) => Val::Str(Cow::Owned(format!("{a} {b}").trim().to_owned())),
                     (Err(reason), _) | (_, Err(reason)) => Val::Unknown(reason),
                 }
@@ -1496,14 +1868,21 @@ fn merge_prop<'a>(output: &mut Props<'a>, key: Cow<'a, str>, value: PropVal<'a>)
         set_prop(output, key, PropVal::Value(merged));
         return;
     }
-    if key == "style" && output.iter().any(|(name, _)| name == "style") {
-        // Vue combines both into one style object; the combined text is not
-        // modelled, so the element is left to the browser.
-        set_prop(
-            output,
-            key,
-            PropVal::Value(Val::Unknown("unsupported-attribute")),
-        );
+    if key == "style" {
+        // Vue sets `normalizeStyle([before, after])`: one object with both
+        // values' declarations, the later value winning. With no earlier
+        // style that object holds exactly the declarations of the value on
+        // its own, so a string is kept as authored, as outside `mergeProps`.
+        let merged = match (output.iter().find(|(name, _)| name == "style"), value) {
+            (_, PropVal::Listener) | (Some((_, PropVal::Listener)), _) => {
+                Val::Unknown("unsupported-attribute")
+            }
+            (None, PropVal::Value(after)) => normalize_style(after),
+            (Some((_, PropVal::Value(before))), PropVal::Value(after)) => {
+                normalize_style(Val::Array(Rc::new(vec![before.clone(), after])))
+            }
+        };
+        set_prop(output, key, PropVal::Value(merged));
         return;
     }
     set_prop(output, key, value);
@@ -1541,7 +1920,7 @@ fn eval_props<'a>(
         PropsExpr::Spread(expr) => match eval(expr, instance, locals) {
             Val::Undefined | Val::Null => Ok(()),
             Val::Data(Json::Object(map)) => {
-                for (key, value) in map {
+                for (key, value) in js_data_order(map) {
                     // A function never arrives in JSON data, so a listener
                     // key here would carry the wrong kind of value.
                     if is_listener_key(key) {
@@ -1552,6 +1931,18 @@ fn eval_props<'a>(
                         Cow::Borrowed(key),
                         PropVal::Value(Val::from_json(value)),
                     );
+                }
+                Ok(())
+            }
+            // An object literal written in the render code, such as the
+            // argument of `v-bind="{ ... }"` outside `normalizeProps`.
+            Val::Object(entries) => {
+                for (key, value) in entries.iter() {
+                    // Listeners are functions, which the server never runs.
+                    if is_listener_key(key) {
+                        return Err("unsupported-attribute");
+                    }
+                    set_prop(output, key.clone(), PropVal::Value(value.clone()));
                 }
                 Ok(())
             }
@@ -2688,6 +3079,79 @@ impl<'a> Writer<'a> {
 /// same content many times.
 const MAX_SHELL_CONTENT: usize = 1 << 20;
 
+/// The class or style text a shell's contents show for an element whose
+/// value has a browser-only part: Vue's rules applied to the parts the
+/// server can read, the others left out. `None` when nothing is known.
+fn known_class_or_style<'a>(
+    key: &str,
+    props: &'a PropsExpr,
+    instance: &Instance<'a>,
+    locals: &Scope<'a>,
+) -> Option<String> {
+    let mut parts = Vec::new();
+    known_parts(key, props, instance, locals, &mut parts);
+    let parts = Val::Array(Rc::new(parts));
+    let text = if key == "class" {
+        normalize_class(&parts, Parts::Known).ok()?
+    } else {
+        stringify_style(&style_entries(&parts, Parts::Known).ok()??, Parts::Known).ok()??
+    };
+    (!text.is_empty()).then_some(text)
+}
+
+/// Collect every value a props expression gives `key`, in the order
+/// `mergeProps` combines them. Vue normalizes a class or style the same way
+/// whether its parts arrive one by one or as one array, so the caller
+/// normalizes the list once.
+fn known_parts<'a>(
+    key: &str,
+    props: &'a PropsExpr,
+    instance: &Instance<'a>,
+    locals: &Scope<'a>,
+    parts: &mut Vec<Val<'a>>,
+) {
+    match props {
+        PropsExpr::Object(entries) => {
+            // In one object literal the last value for a key wins.
+            if let Some(PropValue::Value(expr)) = entries
+                .iter()
+                .rev()
+                .find(|entry| entry.key == key)
+                .map(|entry| &entry.value)
+            {
+                // Read the value inside `normalizeClass(...)` or
+                // `normalizeStyle(...)`, which would otherwise turn a
+                // partly known value into an unknown one.
+                let expr = match expr {
+                    Expr::NormalizeClass(inner) | Expr::NormalizeStyle(inner) => inner,
+                    other => other,
+                };
+                parts.push(eval(expr, instance, locals));
+            }
+        }
+        PropsExpr::Merge(items) => {
+            for item in items {
+                known_parts(key, item, instance, locals, parts);
+            }
+        }
+        PropsExpr::Normalize(inner) => known_parts(key, inner, instance, locals, parts),
+        PropsExpr::Spread(expr) => match eval(expr, instance, locals) {
+            Val::Data(Json::Object(map)) => {
+                if let Some(value) = map.get(key) {
+                    parts.push(Val::from_json(value));
+                }
+            }
+            Val::Object(entries) => {
+                if let Some((_, value)) = entries.iter().find(|(name, _)| name == key) {
+                    parts.push(value.clone());
+                }
+            }
+            _ => {}
+        },
+        PropsExpr::Unsupported(_) => {}
+    }
+}
+
 /// Writes a shell's contents from the same render code and data, showing
 /// what the server can know before Vue runs.
 ///
@@ -2874,8 +3338,19 @@ impl<'a> StaticWriter<'a> {
             {
                 continue;
             }
-            let Some(text) = static_attribute(tag, key, value) else {
-                continue;
+            let text = match (static_attribute(tag, key, value), key, props) {
+                (Some(text), _, _) => text,
+                // A class or style with a browser-only part still shows the
+                // parts the server knows, such as a static `class` beside a
+                // `:class` that reads `data()`, so the element is styled
+                // before Vue runs.
+                (None, "class" | "style", Some(props)) => {
+                    match known_class_or_style(key, props, instance, locals) {
+                        Some(text) => text,
+                        None => continue,
+                    }
+                }
+                (None, _, _) => continue,
             };
             if key == "style" {
                 style = Some(text);
@@ -2889,6 +3364,9 @@ impl<'a> StaticWriter<'a> {
             if eval(expr, instance, locals).truthy() == Some(false));
         match (style, hidden) {
             (Some(style), true) => {
+                // A style written as Vue's server renderer writes it already
+                // ends with a semicolon.
+                let style = style.trim_end().trim_end_matches(';');
                 push_attribute(&mut self.html, "style", &format!("{style};display: none;"))
             }
             (None, true) => push_attribute(&mut self.html, "style", "display: none;"),
@@ -3179,7 +3657,10 @@ mod tests {
     }
 
     fn html(result: &HydrationRender) -> &str {
-        result.html.as_deref().expect("the page hydrates")
+        result
+            .html
+            .as_deref()
+            .unwrap_or_else(|| panic!("the page hydrates: {:?}", result.declines))
     }
 
     fn declines(result: &HydrationRender) -> Vec<(&str, &str, Option<&str>)> {
@@ -3538,7 +4019,12 @@ mod tests {
             client_attribute("div", "style", &text("color: red")),
             Ok(Some("color: red".to_owned()))
         );
-        assert!(client_attribute("div", "style", &Val::Data(&json!({"color": "red"}))).is_err());
+        // A style object is written as Vue's server renderer writes it.
+        assert_eq!(
+            client_attribute("div", "style", &Val::Data(&json!({"color": "red"}))),
+            Ok(Some("color:red;".to_owned()))
+        );
+        assert!(client_attribute("div", "style", &Val::Data(&json!({"color": 0.5}))).is_err());
         assert!(client_attribute("div", "tabIndex", &Val::Num(1.0)).is_err());
         assert!(client_attribute("textarea", "value", &text("x")).is_err());
         assert!(client_attribute("div", "unknownprop", &text("x")).is_err());
@@ -3813,20 +4299,118 @@ mod tests {
             json!({"c": {"on": true, "off": false}, "s": "color: red"}),
         );
         assert_eq!(html(&bound), r#"<p class="on" style="color: red">x</p>"#);
-        // Two styles meeting in `mergeProps` combine into one object Vue prints.
+        // Two styles meeting in `mergeProps` combine into one object, which
+        // is written as Vue's server renderer writes it.
         let styles = root(
             r#"<main><p v-bind="$citryPrepared.o" style="color: red">x</p></main>"#,
             json!({"o": {"style": "font-weight: bold"}}),
         );
-        // The shell's contents leave out the style the server cannot print.
         assert_eq!(
             html(&styles),
-            r#"<main data-allow-mismatch="children"><p>x</p></main>"#
+            r#"<main><p style="font-weight:bold;color:red;">x</p></main>"#
+        );
+        assert!(declines(&styles).is_empty());
+    }
+
+    #[test]
+    fn a_static_class_or_style_merges_with_its_binding() {
+        // Vue compiles `class` beside `:class` into one array and `style`
+        // beside `:style` into an array of objects; both are written the
+        // way Vue's first render leaves them.
+        let merged = root(
+            concat!(
+                r#"<p class="card" :class="{ open: $citryPrepared.on, shut: $citryPrepared.off }""#,
+                r#" style="color: red" :style="{ fontWeight: $citryPrepared.w, '--gap': 2 }">x</p>"#,
+            ),
+            json!({"on": true, "off": false, "w": "bold"}),
         );
         assert_eq!(
-            declines(&styles),
-            [("unsupported-attribute", "style", Some("main"))]
+            html(&merged),
+            r#"<p class="card open" style="color:red;font-weight:bold;--gap:2;">x</p>"#
         );
+        // Arrays nest, strings are trimmed, and a falsy item adds nothing.
+        let nested = root(
+            r#"<p :class="['  a ', [$citryPrepared.b, { c: 1 }], 0, null, '']">x</p>"#,
+            json!({"b": "b"}),
+        );
+        assert_eq!(html(&nested), r#"<p class="a b c">x</p>"#);
+        // A `:style` array reads its strings as declarations, a later value
+        // replacing an earlier one in place.
+        let styles = root(
+            r#"<p :style="['color: red; margin: 0 /* x */', { color: 'blue', marginTop: 1 }]">x</p>"#,
+            json!({}),
+        );
+        assert_eq!(
+            html(&styles),
+            r#"<p style="color:blue;margin:0;margin-top:1;">x</p>"#
+        );
+    }
+
+    #[test]
+    fn object_class_keys_follow_the_browser_order() {
+        // JavaScript lists array-index keys first, in numeric order, then
+        // the others in the order they were written, or for the page's
+        // JSON, in its sorted order.
+        let literal = root(
+            r#"<p :class="{ z: 1, 10: 1, a: 1, 2: 1, z: 0, b: 1 }">x</p>"#,
+            json!({}),
+        );
+        assert_eq!(html(&literal), r#"<p class="2 10 a b">x</p>"#);
+        let data = root(
+            r#"<p :class="$citryPrepared.c">x</p>"#,
+            json!({"c": {"z": true, "10": true, "a": true, "2": true, "01": true}}),
+        );
+        assert_eq!(html(&data), r#"<p class="2 10 01 a z">x</p>"#);
+    }
+
+    #[test]
+    fn a_browser_only_class_or_style_part_leaves_the_known_parts_in_the_shell() {
+        // `open` is component state only the browser has, so Vue builds the
+        // element; until then the shell shows the classes and styles the
+        // server knows, so the element is styled before Vue runs.
+        let partial = root(
+            concat!(
+                r#"<main><p class="card" :class="{ open: open, done: $citryPrepared.done }""#,
+                r#" style="color: red" :style="{ width: size }">x</p></main>"#,
+            ),
+            json!({"done": true}),
+        );
+        assert_eq!(
+            html(&partial),
+            r#"<main data-allow-mismatch="children"><p class="card done" style="color:red;">x</p></main>"#
+        );
+        assert_eq!(
+            declines(&partial),
+            [("browser-value", "class", Some("main"))]
+        );
+    }
+
+    #[test]
+    fn style_values_the_browser_could_read_differently_are_left_to_it() {
+        // A fraction would need JavaScript's number printing, an empty
+        // value is removed by the client but written by the server
+        // renderer, and a semicolon would split the declaration.
+        for style in [
+            "{ width: 1.5 }",
+            "{ color: '' }",
+            "{ color: 'red;' }",
+            "{ color: true }",
+            "{ color: ['red'] }",
+            "{ WebkitTransition: 'none' }",
+        ] {
+            let page = root(
+                &format!(r#"<main><p :style="{style}">x</p></main>"#),
+                json!({}),
+            );
+            assert_eq!(
+                declines(&page),
+                [("unsupported-attribute", "style", Some("main"))],
+                "{style}"
+            );
+        }
+        // Null and undefined values are skipped by both renderers.
+        let skipped = root(r#"<p :style="{ color: null, margin: 0 }">x</p>"#, json!({}));
+        assert_eq!(html(&skipped), r#"<p style="margin:0;">x</p>"#);
     }
 
     #[test]
