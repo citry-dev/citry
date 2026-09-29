@@ -43,6 +43,20 @@ Upgrading from 0.5.x? Follow
   exists in Python (`citry.vue.python-variable`).
 - Interactive pages served through Citry's routes link their component
   stylesheets in `<head>`, so they are styled from the first paint.
+- Install a Vue plugin, such as a store or a global directive, on every
+  Vue app Citry creates with `Citry.vue.use(plugin, ...options)`, called
+  before Citry starts the page's apps.
+- A `$component` `init` or `onServerRender` callback may be `async`.
+  Citry does not wait for it, and it logs a rejection instead of stopping
+  the page.
+- `citry check` and the editor report Alpine `x-*` attributes left on
+  HTML elements as warnings, and `x-cloak` as an error, because a
+  `[x-cloak]` CSS rule would keep the element hidden. Set
+  `rule_alpine_attribute="ignore"` when a library on the page reads
+  `x-*` attributes.
+- Without a configured cache, cap how much memory a process spends on
+  compiled component code and stylesheets for interactive pages with
+  `Citry(vue_asset_max_bytes=...)` (default 64 MiB).
 
 ### Changed
 
@@ -104,10 +118,10 @@ Upgrading from 0.5.x? Follow
   interactive component.
 - **Breaking:** a listener written as a single statement without a `;`,
   such as `@click="if (ok) save()"`, stops the render with a Vue compile
-  error. Add the `;`: `@click="if (ok) save();"`. Alpine-only modifiers
-  such as `.outside`, `.window`, `.debounce`, and `.throttle` on `@event`
-  stop the listener from running; remove them and handle the case in a
-  method.
+  error. Add the `;`: `@click="if (ok) save();"`.
+- **Breaking:** Alpine-only modifiers such as `.outside`, `.window`,
+  `.debounce`, and `.throttle` on `@event` fail when the template loads,
+  with a message that shows the Vue way to write the listener.
 - **Breaking:** content with Vue bindings that you write in a separate
   component and pass into a group component, such as citry-ui's `CTabs`,
   stops the render with an error that names the content and line. Write
@@ -118,8 +132,9 @@ Upgrading from 0.5.x? Follow
 - **Breaking:** `<c-mark>` is a built-in tag, so a component class named
   `Mark` or registered as `mark` fails with `AlreadyRegistered`. Rename it.
 - **Breaking:** `<c-raw>` content and `Markup` inside an interactive
-  component must be a complete HTML fragment, and an interactive page
-  template must put its content in one `<body>`.
+  component must be a complete HTML fragment, every tag closed and no
+  stray `<`, and an interactive page template must put its content in one
+  `<body>`. The error names the input that broke the rule.
 - **Breaking:** `actions.Render` and `Citry.events.applyActions` no longer
   accept CSS selectors as targets, a `swap` other than `"morph"`, or a
   target that matches several places. Name the region with `<c-mark>`.
@@ -138,6 +153,9 @@ Upgrading from 0.5.x? Follow
   `request.headers`: a 0.5.1 transport that sends only the envelope fails
   every handler that returns a render.
 - **Breaking:** other Events changes in the browser:
+  - `$sendEvent` and `Citry.events.send` reject `wait: false` and
+    unknown options. Calls from one app are sent in order; declare the
+    handler with `@event(latest_wins=True)` to replace an older call.
   - Writing a nested `$state` value, such as `$state.tags.push(x)`,
     throws. Assign the whole field instead.
   - `$onEvent` and the callback's `onEvent` hear only events that the
@@ -181,32 +199,35 @@ Upgrading from 0.5.x? Follow
   `security_javascript` on the `Citry` instance. Passing a different value
   to `serialize()` raises, so a later server render cannot use a weaker
   policy.
-- **Breaking:** an extension that adds tags to
-  `OnDependenciesContext.before_manifest` fails on interactive pages; add
-  them to `ctx.scripts` instead. `OnSerializeContext` and
+- **Breaking:** `OnSerializeContext` and
   `OnDependenciesContext` gain `selected_render`, the render being
   serialized, so build these contexts with keyword arguments.
 - **Breaking:** Alpine and ownership Python APIs are removed: the
   `citry.ownership` and `citry.ownership_manifest` modules, the Alpine
   names in `citry.analysis`, and the `ownership` parameters of
   `CitryContext` and `CitryElement`.
-- **Breaking:** `#c-ignore` no longer keeps content out of updates, and
-  it raises an error, on static pages too. On a component tag the error
-  comes when the template loads; on an element, when the component
-  renders. Remove it, and keep content that a browser library manages
-  inside an element that component JavaScript reaches through a Vue
-  `ref`.
+- **Breaking:** `#c-ignore` on an HTML element keeps the element's
+  contents as the server first rendered them, so a chart or map library
+  can own them. The contents may hold only HTML, `{{ }}` expressions,
+  `<c-if>`, `<c-for>`, and `<c-raw>`; a component, a slot, a Vue
+  binding, or a `ref` inside fails when the template loads. `#c-ignore`
+  on a component tag fails too; put it on the element inside the
+  component's template that the library manages.
 - **Breaking:** when several worker processes serve interactive pages,
   configure a shared cache backend such as Redis or DiskCache. Pages link
   compiled component code and stylesheets that any worker reads from that
   cache; with each worker's default in-memory cache, another worker
   answers those links with 404.
+- **Breaking:** `@event(methods=...)` and `Events._methods` raise
+  `ValueError` when the class is defined if they name a method the event
+  URL cannot accept (anything other than GET, HEAD, POST, PUT, PATCH,
+  DELETE, or OPTIONS).
 - **Breaking:** `URLRoute` checks `methods` when you build a route: pass
   a non-empty tuple of uppercase HTTP method names such as `("GET",)`.
   A lowercase name, which a framework adapter could never match, raises
   `ValueError`.
-- Upgrade `citry-ui` to 0.3.0 and `citry-lsp` to the release that requires
-  Citry 0.6.0 together with Citry. `citry-lsp` 0.1.7 fails to import with
+- Upgrade `citry-ui` to 0.3.0 and `citry-lsp` to 0.2.0 together with
+  Citry. `citry-lsp` 0.1.7 fails to import with
   Citry 0.6.0, and `citry-ui` 0.2.x components render without browser
   behavior.
 - A text input, `<textarea>`, or `<select>` keeps what the user typed when
