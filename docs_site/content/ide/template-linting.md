@@ -262,10 +262,23 @@ class DatePicker(Component):
         rule_alpine_attribute = "ignore"
 ```
 
+Only Alpine's own directive names are reported, such as `x-data`,
+`x-on:click`, or `x-intersect`. Other `x-*` names, such as the browser
+attribute `x-webkit-airplay`, are ordinary HTML and pass.
+
 A template that several components use is reported unless every one of
 them sets `"ignore"`. These two rules do not depend on a component's data,
 so `citry check --static` and an editor without a loaded app still run
-them, with the default severities.
+them. They cannot read your settings there, so they use the default
+severities: a leftover `x-cloak` is an error even when your settings
+ignore it. Run `citry --app <module>:<app> check` in CI so the check
+reads your `LintSettings` and each component's `Lint` class.
+
+Two related template mistakes are not lint rules, so no setting turns
+them off: an Alpine-only event modifier such as `@click.outside`, and
+`v-once` or `v-memo`. Both fail when the template loads, on every page,
+with a message that shows what to write instead. See
+[Vue in templates](/syntax/vue/).
 
 ## Understand open schemas
 

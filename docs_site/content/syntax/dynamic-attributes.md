@@ -776,6 +776,9 @@ Some placements fail with a message that says what to change:
 - On `<c-element>`. Write the element as a plain HTML tag.
 - On or inside `<svg>` or `<math>`. Put it on an HTML element that wraps
   the `<svg>` or `<math>` element.
+- On `<table>`, `<thead>`, `<tbody>`, `<tfoot>`, `<tr>`, or `<colgroup>`.
+  These hold only table elements, so put it on a `<div>` that wraps the
+  `<table>`, or on a `<td>` or `<th>` inside it.
 - On an element with no child elements to keep: a void element such as
   `<br>`, or `<textarea>`, `<script>`, `<style>`, or `<title>`, which hold
   text. Remove `#c-ignore`.

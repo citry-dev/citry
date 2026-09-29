@@ -464,6 +464,18 @@ mod tests {
                 "Put '#c-ignore' on an HTML element that wraps the <svg> or <math> element.",
             );
         }
+        for tag in ["table", "thead", "tbody", "tfoot", "tr", "colgroup"] {
+            assert_parse_error(
+                &format!("<{tag} #c-ignore></{tag}>"),
+                "Put '#c-ignore' on a <div> that wraps the <table>, or on a <td> or <th> inside it.",
+            );
+        }
+        parse_template(
+            "<div #c-ignore><table><tbody><tr><td #c-ignore>1</td></tr></tbody></table></div>",
+            None,
+            None,
+        )
+        .unwrap();
         // Wrapping the SVG element in an HTML element works.
         parse_template("<div #c-ignore><svg><g></g></svg></div>", None, None).unwrap();
     }

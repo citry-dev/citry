@@ -2243,6 +2243,17 @@ fn validate_ignored_element_contents(
         Some(format!(
             "<{tag_name}> holds text, not elements, so there is nothing to keep. Remove '{META_ATTR_IGNORE}'."
         ))
+    } else if matches!(
+        lower_tag.as_str(),
+        "table" | "thead" | "tbody" | "tfoot" | "tr" | "colgroup"
+    ) {
+        // Vue keeps the contents behind one placeholder element, and the
+        // HTML parser moves any such element out of a table's rows and
+        // sections, so the kept contents would land outside the table.
+        Some(
+            "Table rows and sections can hold only table elements, so the browser cannot keep their contents as one block. Put '#c-ignore' on a <div> that wraps the <table>, or on a <td> or <th> inside it."
+                .to_string(),
+        )
     } else if lower_tag == "svg"
         || lower_tag == "math"
         || tag_stack.iter().any(|entry| {
