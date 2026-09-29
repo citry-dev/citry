@@ -239,7 +239,7 @@ def test_trusted_html_rejects_raw_text_and_rcdata_contexts() -> None:
         def template_data(self, kwargs, slots):
             return {"value": Markup("&lt;b&gt;x&lt;/b&gt;")}
 
-    with pytest.raises(UnsupportedPreparedView, match="raw-text or RCDATA content"):
+    with pytest.raises(UnsupportedPreparedView, match="holds text, not HTML"):
         assemble_typed_render(render_prepared(Rcdata()), revision=0, tag_for_type=lambda _key: "x-rcdata")
 
     class RawText(Component):
@@ -249,7 +249,7 @@ def test_trusted_html_rejects_raw_text_and_rcdata_contexts() -> None:
         def template_data(self, kwargs, slots):
             return {"value": Markup("body { color: red }")}
 
-    with pytest.raises(UnsupportedPreparedView, match="raw-text or RCDATA content"):
+    with pytest.raises(UnsupportedPreparedView, match="holds text, not HTML"):
         assemble_typed_render(render_prepared(RawText()), revision=0, tag_for_type=lambda _key: "x-raw-text")
 
     class ForeignParent(Component):
@@ -259,7 +259,7 @@ def test_trusted_html_rejects_raw_text_and_rcdata_contexts() -> None:
         def template_data(self, kwargs, slots):
             return {"value": Markup("<circle></circle>")}
 
-    with pytest.raises(UnsupportedPreparedView, match="SVG or MathML parent"):
+    with pytest.raises(UnsupportedPreparedView, match=r"cannot sit inside <svg> or <math>"):
         assemble_typed_render(render_prepared(ForeignParent()), revision=0, tag_for_type=lambda _key: "x-foreign")
 
     class DynamicRcdataRaw(Component):
@@ -269,7 +269,7 @@ def test_trusted_html_rejects_raw_text_and_rcdata_contexts() -> None:
         def template_data(self, kwargs, slots):
             return {"tag": "textarea"}
 
-    with pytest.raises(UnsupportedPreparedView, match=r"c-raw.*raw-text or RCDATA content"):
+    with pytest.raises(UnsupportedPreparedView, match=r"<c-raw> cannot sit inside <\w+>.*holds text, not HTML"):
         assemble_typed_render(
             render_prepared(DynamicRcdataRaw()),
             revision=0,
@@ -291,7 +291,7 @@ def test_opaque_html_rejects_component_and_slot_placement_under_foreign_content(
         citry = registry
         template = "<div><c-OpaqueChild /></div><svg><c-OpaqueChild /></svg>"
 
-    with pytest.raises(UnsupportedPreparedView, match="SVG or MathML parent"):
+    with pytest.raises(UnsupportedPreparedView, match=r"cannot sit inside <svg> or <math>"):
         assemble_typed_render(
             render_prepared(ComponentParent()),
             revision=0,
@@ -309,7 +309,7 @@ def test_opaque_html_rejects_component_and_slot_placement_under_foreign_content(
         def template_data(self, kwargs, slots):
             return {"body": Markup('<title><b onclick="globalThis.example=1">x</b></title>')}
 
-    with pytest.raises(UnsupportedPreparedView, match="SVG or MathML parent"):
+    with pytest.raises(UnsupportedPreparedView, match=r"cannot sit inside <svg> or <math>"):
         assemble_typed_render(
             render_prepared(SlotParent()),
             revision=0,
@@ -344,7 +344,7 @@ def test_opaque_call_run_members_reject_foreign_physical_parents(foreign_parent:
         def template_data(self, kwargs, slots):
             return {"values": [1, 2]}
 
-    with pytest.raises(UnsupportedPreparedView, match="SVG or MathML parent"):
+    with pytest.raises(UnsupportedPreparedView, match=r"cannot sit inside <svg> or <math>"):
         assemble_typed_render(
             render_prepared(Root()),
             revision=0,
