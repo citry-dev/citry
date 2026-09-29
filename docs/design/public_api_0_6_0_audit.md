@@ -33,8 +33,12 @@ The sources for 0.5.1 were:
 - the `citry-ui@0.2.2`, `citry-lsp@0.1.7`, and `citry-core@1.7.1` tags.
 
 The branch was audited at commit `2db4ba42`. The statuses below were then
-updated for the fixes committed afterwards (`2db4ba42..bd19307c`), each
-checked against the code and, where noted, by running it.
+updated for the fixes committed afterwards (`2db4ba42..566c128a`), each
+checked against the code and, where noted, by running it. The maintainer
+then decided every question in section 6, and the commits after
+`566c128a` implement those decisions. Each decision in section 6 ends with
+a **Status** line naming its commits. Where a row in section 3 or 5 still
+cites a decision number, that Status line is the current answer.
 
 ### Method
 
@@ -54,20 +58,23 @@ Yes. Most breaks are deliberate removals of Alpine or of Citry's browser
 ownership graph (the record 0.5.1 kept of which component owned which DOM
 nodes). The rest are seven consequences of running components on Vue:
 
-1. `wait: false` on `$sendEvent` / `Citry.events.send` is ignored, because
-   each app sends its calls one at a time.
+1. `wait: false` on `$sendEvent` / `Citry.events.send` rejects with a
+   `TypeError`, because each app sends its calls one at a time (0.5.1
+   sent such a call outside the queue).
 2. A custom Events transport is called as `send(envelope, request)` and
    must forward the request headers.
 3. Writing a nested `$state` value throws.
 4. Components that Vue renders carry no `data-cid-*` attributes.
 5. `Markup` and `<c-raw>` content inside an interactive component must be
    a strict fragment (HTML whose tags all open and close inside it).
-6. `OnDependenciesContext.before_manifest` fails on interactive pages.
-7. Alpine-only event modifiers such as `.outside` compile into a filter
-   that the event never passes, so the listener never runs.
+6. Alpine-only event modifiers such as `.outside` fail when the template
+   loads, with a message that names the Vue alternative.
+7. `#c-ignore` keeps an element's contents as the server first rendered
+   them, and those contents may not hold components or Vue bindings.
 
-Of these, `wait: false`, the Alpine-only modifiers, and `before_manifest`
-are open decisions (section 6). The others are recorded in the CHANGELOG.
+All seven are recorded in the CHANGELOG and the upgrade guide.
+`OnDependenciesContext.before_manifest`, which failed on interactive pages
+at the time of the audit, works again (decision 6.8).
 
 What still works as in 0.5.1:
 
@@ -100,12 +107,17 @@ Vue meaning. Section 5 lists each one with its replacement.
 What was broken by accident and is now restored:
 
 - the `$component` / `onServerRender` context fields `id`, `els`, `state`,
-  `sendEvent`, `loading`, `error`, and `i18n` (`els` is again one array
-  that Citry updates in place, as in 0.5.1);
+  `sendEvent`, `loading`, `error`, and `i18n` (`els` is one array for the
+  component's lifetime, refilled on each server render and on each read
+  of the getter; a destructured reference does not see changes made only
+  in the browser until the next refill);
 - `$component({ init })`;
 - `citry:events:stale` with `reason: "version"` and the one-time reload
-  prompt after a deploy, which still reaches `document` listeners when the
-  calling component is gone;
+  prompt after a deploy, which reaches `document` listeners when the
+  calling component has no elements left (a component that is unmounted
+  reports `retired` instead, because its call is cancelled);
+- the component id in `citry:events:*` details after the component is
+  gone (the last known `instance` and `class`);
 - `URLRoute.methods` as a tuple on every route;
 - Vue definition bundles and stylesheets served correctly by any worker
   that shares the configured cache;
@@ -227,7 +239,7 @@ TypeScript types were ever published.
 | `$component({props, init})` config form | M51:7605-7630 | C `registerTypeOptions` | restored | The object is Vue Options; `init` runs as `onServerRender`. Naming both throws; a non-function `init` throws. Before the fix Vue dropped `init` silently. |
 | Returned cleanup function | M51:7632-7640 | C `runCallback` | unchanged | A non-function return other than `undefined` now throws. |
 | field `id` (render ID) | M51:7595 | C `runCallback` getter | restored | Reads the occurrence's current render ID, or `null`. |
-| field `els` | M51:7140, 7594 | C `runCallback` | restored | One stable array of the component's connected top-level elements, updated in place after each server render, as in 0.5.1. |
+| field `els` | M51:7140, 7594 | C `runCallback` | restored | One array of the component's connected top-level elements for the component's lifetime, refilled on each server render and on each read of the getter. A destructured reference does not see changes made only in the browser until the next refill. |
 | field `data` | M51:7595 | none | removed | `js_data()` keys are instance members (`component.<key>`). |
 | field `graph` | M51:7596 | none | removed | Ownership graph concept. |
 | field `props` | M51:7609 | none | removed | Vue props on `component`. |
@@ -767,7 +779,7 @@ written" is accurate.
 
 | What | Where | Tests |
 |---|---|---|
-| Callback context fields `id`, `els`, `state`, `sendEvent`, `loading`, `error`, `i18n` on `$component(fn)` and `onServerRender`; `els` is one array updated in place after each server render | `P/_vue/client.js` `runCallback`; `liveRootElements` moved to module scope (`c4ec2da0`, plus the in-place `els` update in the current working tree) | `packages/py/citry/tests/e2e/test_vue_component_context_e2e.py`: `test_initializer_context_exposes_the_instance_helpers_under_their_0_5_1_names`, `test_initializer_context_on_a_component_without_events_matches_0_5_1` |
+| Callback context fields `id`, `els`, `state`, `sendEvent`, `loading`, `error`, `i18n` on `$component(fn)` and `onServerRender`; `els` is one array for the component's lifetime, refilled on each server render and on each getter read (a destructured reference does not follow browser-only changes until the next refill) | `P/_vue/client.js` `runCallback`; `liveRootElements` moved to module scope (`c4ec2da0`, plus the in-place `els` update in the current working tree) | `packages/py/citry/tests/e2e/test_vue_component_context_e2e.py`: `test_initializer_context_exposes_the_instance_helpers_under_their_0_5_1_names`, `test_initializer_context_on_a_component_without_events_matches_0_5_1` |
 | `$component({ init })` runs as `onServerRender`; `init` beside `onServerRender` throws | `P/_vue/client.js` `registerTypeOptions` | `test_init_option_runs_as_the_server_render_initializer`, `test_init_option_beside_on_server_render_is_rejected` |
 | `citry:events:stale` with `reason: "version"`, cancelable, and the one-time reload prompt; the event starts at `document` when the calling component is gone | `citry-events-vue.ts` (`stale_state` branch, `promptReload` host hook); `P/_vue/client.js` `promptReload`, `dispatchLifecycleEvent` | `test_stale_state_after_a_deploy_asks_once_to_reload`, `test_cancelling_the_version_notification_suppresses_the_reload_prompt`; `packages/js/citry-client/test/vue-events.test.mjs` ("a stale_state answer reports a cancelable version notification before the error", "a cancelled version notification skips the reload prompt, and other errors never prompt") |
 | `$sendEvent` on a component without Events rejects; `$loading` / `$error` there return `false` / `null` | `P/_vue/client.js` instance setup | `test_initializer_context_on_a_component_without_events_matches_0_5_1` |
@@ -797,7 +809,7 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 | Removed | Reason | Replacement |
 |---|---|---|
 | Alpine `x-*` directives, Alpine magics, `alpine:init` events, `globalThis.Alpine` | Alpine is gone | Vue directives; `citry:ready` |
-| `Citry.alpine.*` | Alpine-only | None public for app-wide Vue plugins (decision 6.2) |
+| `Citry.alpine.*` | Alpine-only | `Citry.vue.use(plugin)` for app-wide Vue plugins (decision 6.2) |
 | `Citry.manager.*`, `Citry.manager.ownership.*` | Alpine dependency manager and ownership graph | Fragments load their own assets |
 | `Citry.i18n.provider`, `citry_i18n` provide key, `x-citry-tr` | Alpine wiring | `component.$i18n`; not in CHANGELOG by design (undocumented) |
 | Callback fields `data`, `scope`, `props`, `graph`, `effect`, `reactive`, `provide`, `inject`, `unprovide` | Vue replaces each concept | `component`, Vue Options, `Citry.vue.watchEffect`, `Citry.vue.reactive` |
@@ -808,7 +820,7 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 | `c-:attr`, `c-@event`, `c-x-*`, `c-bind` keys spelling Vue bindings | Vue templates are compiled on the server, so Python cannot write browser code | Write the binding in the template, pass values with `js_data()` or props |
 | Forwarding Alpine attrs through `c-attrs` | Alpine-only | `inheritAttrs: false` + `v-bind="$attrs"` |
 | Timed `@c-*` and `@c-poll` on component tags | No component-level timer in the Vue model | Put the binding on an element in the child (decision 6.7) |
-| `#c-ignore` on elements and component tags | Vue re-renders what it mounts | None yet (decision 6.4) |
+| `#c-ignore` on component tags, and Vue-only content inside `#c-ignore` | A component or binding renders through Vue, which updates it | `#c-ignore` on the element inside the component's template (decision 6.4) |
 | `data-cid`, `data-cev-*`, `data-citry-root`, `data-citry-graph`, `data-citry-key` markers | Alpine and ownership markers | Vue `ref`; `data-cid-*` still on static output (decision 6.3) |
 | `citry.ownership`, `citry.ownership_manifest`, ownership params on `CitryContext` and `CitryElement` | Ownership graph removed | None needed |
 | `citry.analysis` Alpine names | Alpine-only | `Vue*` equivalents |
@@ -822,7 +834,7 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 | `citry:events:stale` reasons `cancelled` and `timeout` | A timed-out call is aborted, and `disposed` covers most cancellations | `disposed`; rejection of the call |
 | `citry_core.html_transform.scan_alpine_html`, `analyze_component_members` | Alpine-only | In the citry-core CHANGELOG |
 
-## 6. Decisions needed from the maintainer
+## 6. Maintainer decisions
 
 ### 6.1 `wait: false` on `$sendEvent` and `Citry.events.send`
 
@@ -840,6 +852,13 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Evidence:** `P/_vue/client.js` `eventSend` (`{timeout: opts.timeout}`);
   0.5.1 option in `docs_site/versions/0.5.1/reference/browser-apis/`. Not in
   the CHANGELOG or upgrade guide.
+- **Status:** decided: support it if safe, else reject. Rejected: two calls
+  in flight would drop each other's renders, because a render applies only
+  on the app revision the call was sent from, and each call carries the
+  State token the previous one returned. `wait: false` and unknown option
+  keys reject with a `TypeError`; the error points at
+  `@event(latest_wins=True)` (`ddd553e6`). Proper support is tracked in
+  [#155](https://github.com/citry-dev/citry/issues/155).
 
 ### 6.2 A public way to install a Vue plugin on Citry's apps
 
@@ -855,6 +874,10 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   Pinia, UI kits, and global directives have no path today.
 - **Evidence:** 0.5.1 hook at M51:617-624; branch `P/_vue/client.js`
   `registerBrowserPlugin` on `__citryRuntime`; `P/extension.py:950-954`.
+- **Status:** option (a) as `Citry.vue.use(plugin, ...options)`, applied to
+  every app Citry creates; a call after the first app starts throws
+  (`ddd553e6`, `457c060f`, editor types `4544c1e0`). Documented in
+  `reference/browser-apis.md`.
 
 ### 6.3 `data-cid-*` markers on interactive components
 
@@ -870,6 +893,7 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   Only the decision itself remains to confirm.
 - **Evidence:** `CHANGELOG.md` Unreleased; `docs_site/content/guides/upgrading-to-0-6-0.md`;
   `docs_site/content/guides/migrate-from-django-components.md:148`.
+- **Status:** option (b) accepted; covered by the upgrade guide.
 
 ### 6.4 Element-level `#c-ignore`
 
@@ -889,6 +913,12 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Evidence:** `P/_vue/capture.py` (element error); `P/nodes/__init__.py`
   (component-tag error); `docs/design/vue_migration.md` notes that the
   subtree primitive is deferred.
+- **Status:** option (c). On an element in an interactive component the
+  server sends the contents as a pinned opaque HTML block that the
+  browser keeps for the component's life; static pages render them as
+  written; Vue-only content inside fails when the template loads; the
+  component-tag error stays and names the fix (`763a578e`, `40de8c59`,
+  `33d5a762`, `deb56390`, `50f14b1f`, `0751132d`, `6a78eec3`).
 
 ### 6.5 A diagnostic for leftover `x-*` attributes
 
@@ -903,6 +933,10 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   attributes you missed" section, but a check catches what people miss.
 - **Evidence:** no `x-` check in `P/_linting.py`, `P/analysis.py`, or
   `packages/py/citry_lsp/`; inert output checked by rendering.
+- **Status:** a warning for `x-*` (`citry.template.alpine-attribute`) and
+  an error for `x-cloak` (`citry.template.alpine-cloak`), with
+  `rule_alpine_attribute="ignore"` as the escape hatch (`1cced7eb`,
+  `16553057`, `ad2b0b78`).
 
 ### 6.6 Alpine-only event modifiers
 
@@ -917,6 +951,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   reword the CHANGELOG line, which today understates the effect.
 - **Evidence:** checked by rendering (temporary audit notes, not kept);
   CHANGELOG "have no effect" line.
+- **Status:** option (a): a compile error naming the Vue alternative, and
+  the CHANGELOG line reworded (`763a578e`).
 
 ### 6.7 Timed `@c-*` and `@c-poll` on component tags
 
@@ -926,6 +962,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Recommendation:** (a) for 0.6.0; it is in the CHANGELOG and the guide.
   Revisit if users report it.
 - **Evidence:** `P/_vue/direct_capture.py:1625, 1650`.
+- **Status:** option (a); the Python and browser messages now show the
+  element form to move into the child (`c6230150`, `ddd553e6`).
 
 ### 6.8 `OnDependenciesContext.before_manifest`
 
@@ -938,6 +976,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Recommendation:** (b) is one place to change and removes a break with
   no Vue reason; (a) is acceptable because the CHANGELOG names the fix.
 - **Evidence:** `P/_vue/events.py:631-635`; `P/ext/dependencies/emission.py:97-101`.
+- **Status:** option (b): entries become the leading prepared scripts
+  (`22b90c45`).
 
 ### 6.9 The Events protocol contract
 
@@ -954,6 +994,10 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Recommendation:** (a), so the reference validator and the product agree.
 - **Evidence:** `packages/protocol/events/v1/spec.md:495-505`;
   `P/ext/events/actions.py:176-208`.
+- **Status:** option (a). The spec, schema, both validators, and the
+  fixtures define `render:<id>` and `mark:<callerRenderId>:<name>`, and a
+  `vue-prepared/1` render requires `morph`; protocol version 1 is kept
+  (`a77f0346`, `b7c6fab1`, browser fallback check `91ff8480`).
 
 ### 6.10 The reserved component name `mark`
 
@@ -963,6 +1007,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Recommendation:** (a). The error is clear and the rename is trivial;
   shadowing would make `<c-mark>` mean different things in different apps.
 - **Evidence:** `P/component_registry.py:29, 159`.
+- **Status:** option (a); documented in the builtins reference and the
+  upgrade guide (`7c919585`).
 
 ### 6.11 citry-lsp version and upper bound
 
@@ -974,6 +1020,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Recommendation:** 0.2.0 with `<0.7.0`, since the worker protocol and
   private imports tie it to a citry minor version.
 - **Evidence:** `packages/py/citry_lsp/pyproject.toml:10, 33`.
+- **Status:** version 0.2.0 with `citry>=0.6.0` and no upper bound; the VS
+  Code extension accepts the 0.2 line (`e6c8abe3`, `3eeb3f8e`).
 
 ### 6.12 `@event(methods=...)` and the per-event route
 
@@ -985,6 +1033,7 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Recommendation:** (a), so the error appears when the class is defined.
 - **Evidence:** `P/ext/events/handlers.py:120` `validate_methods_value`;
   `P/ext/events/routes.py` `EVENT_ROUTE_METHODS`.
+- **Status:** option (a) (`3a4e876f`, `ebf1ce31`).
 
 ### 6.13 `<c-raw>` and `Markup` inside interactive components
 
@@ -998,6 +1047,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   there.
 - **Evidence:** `crates/citry_html_transform/src/output_scanner.rs:515`;
   the correction in 3.4.
+- **Status:** option (a); the error names the input and the rule, and the
+  syntax pages document it (`c6230150`, `1e761d20`, `7c919585`).
 
 ### 6.14 `v-once` on an element
 
@@ -1008,6 +1059,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Recommendation:** (a), reusing `_ONCE_MEMO_HINT`.
 - **Evidence:** `P/_vue/compiler.py:444`; `P/client_directives.py`
   `_ONCE_MEMO_HINT`.
+- **Status:** option (a); the error names the directive and points at
+  `#c-ignore` (`c6230150`).
 
 ### 6.15 Default in-memory cache growth
 
@@ -1022,6 +1075,11 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   `docs_site/content/advanced/cache-backends.md`. A size limit can evict an
   asset an open page still needs, which is what the fix avoided.
 - **Evidence:** `P/_vue/events.py` `_store_asset` ("No TTL").
+- **Status:** option (c). Without a configured cache, Vue assets live in a
+  per-process store bounded by `vue_asset_max_bytes` (64 MiB); with a
+  cache, each process checks it once per asset for 60 seconds
+  (`6e3872e5`). The same growth in the dependencies extension is
+  [#154](https://github.com/citry-dev/citry/issues/154).
 
 ### 6.16 Example projects pin `citry>=0.5.0`
 
@@ -1031,6 +1089,9 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Recommendation:** raise the floor to `citry>=0.6.0` after 0.6.0 is on
   PyPI, in the post-release batch, since a lockfile cannot resolve it
   before then.
+- **Status:** raised to `citry>=0.6.0` and `citry-lsp>=0.2,<0.3` now; the
+  locks are refreshed after publication, a step added to the release
+  checklist (`e076be6e`).
 
 ### 6.17 README demo links
 
@@ -1038,6 +1099,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   which 404s until the tag exists.
 - **Recommendation:** keep them; they are correct from the moment the
   release is tagged. Check them in the post-release verification.
+- **Status:** kept; the release checklist now opens them after tagging
+  (`e076be6e`).
 
 ## 7. CHANGELOG reconciliation
 
@@ -1052,7 +1115,7 @@ Covered now:
 - The reserved `mark` name.
 - `citry.analysis` Alpine names; the ownership modules and parameters.
 - `OnSerializeContext` and `OnDependenciesContext` gaining
-  `selected_render`; `before_manifest` failing on interactive pages.
+  `selected_render`.
 - `x-*` removal (the guide explains finding leftovers).
 - The `runtime-csp.js` route and `security_csp="strict"` meaning.
 - Removed diagnostic codes and their replacements.
@@ -1074,7 +1137,7 @@ Covered now:
   upgrade guide).
 - `data-citry-key` no longer written.
 - `<c-raw>` / `Markup` strict fragments, one `<body>`, `v-once`.
-- Alpine-only modifiers (see 6.6 on the wording).
+- Alpine-only modifiers, now a load-time error.
 - `data-citry-events` script tags no longer emitted.
 - The HTMX helper no longer needed.
 - A shared cache required for several workers (CHANGELOG and upgrade
@@ -1085,9 +1148,14 @@ Covered now:
 - `$onEvent` on a component without Events needs no entry: it returns an
   unsubscribe function that does nothing, as in 0.5.1 (restored).
 
+Added after the maintainer's decisions: `wait: false` rejection,
+`Citry.vue.use`, async initializers, `#c-ignore` keeping its contents,
+the `x-*` lint rules, Alpine-only modifier errors, `@event` method checks,
+`vue_asset_max_bytes`, and citry-lsp 0.2.0. `before_manifest` left the
+CHANGELOG, because it works as in 0.5.1 again.
+
 Still missing from the root CHANGELOG:
 
-- `opts.wait: false` being ignored (pending decision 6.1).
 - Security and hook settings that turn off hydration
   (`security_csp` other than `"off"`, `security_javascript` other than
   `"allow"`, `security_script_integrity="citry"`, custom
