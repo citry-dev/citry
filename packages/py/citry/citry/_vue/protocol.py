@@ -120,9 +120,11 @@ def prepared_manifest(
         for key, record in opaque.items():
             # The browser mounts each record as one static vnode: its HTML and the number of
             # top-level nodes that HTML parses into, which Vue needs to adopt a written block.
+            # A `#c-ignore` element's contents also carry `"pinned": true`.
             if (
                 type(record) is not dict
-                or set(record) != {"html", "nodeCount"}
+                or set(record) - {"pinned"} != {"html", "nodeCount"}
+                or record.get("pinned", True) is not True
                 or type(record["html"]) is not str
                 or type(record["nodeCount"]) is not int
                 or not 0 <= record["nodeCount"] <= 2**53 - 1

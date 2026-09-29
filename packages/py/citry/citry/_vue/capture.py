@@ -859,18 +859,6 @@ class PreparedElementOpenNode(ElementAttrsNode):
                 (),
                 (),
             )
-        if any(item and item[0] == "morph" for item in element_metadata):
-            # `#c-ignore` is the only directive that produces morph metadata. This
-            # node is built the first time the component renders its template, so
-            # the author sees the error then, even when the element sits in a
-            # branch that does not run. The wording matches the component-tag error.
-            msg = (
-                f"'#c-ignore' is not supported on the element <{tag}>. Vue updates every element it"
-                " renders, so Citry cannot stop Vue from updating this element. Remove '#c-ignore' and"
-                " keep content that browser code manages inside an element your component reaches"
-                " through a Vue `ref`."
-            )
-            raise TypeError(msg)
 
     def render(self, context: CitryContext) -> PreparedElementOpen:
         static = self._static_prepared
@@ -1239,6 +1227,12 @@ def _resolve_element_metadata(
     resolved: list[tuple[str, object]] = []
     for item in metadata:
         kind, value = item
+        if kind == "morph" and value == "ignore":
+            # `#c-ignore` needs no value from the render. The static serializer
+            # writes the element as usual, and the Vue assembler turns its
+            # contents into HTML the browser keeps (see `pin_ignored_contents`).
+            resolved.append(item)
+            continue
         if kind != "key":
             raise ValueError(f"unsupported prepared element metadata: {kind!r}")
         if isinstance(value, PreparedConstantElementKey):
@@ -1316,6 +1310,30 @@ def _validate_prepared_render(render: CitryRender) -> None:
                 raise TypeError(f"prepared Vue rendering received unsupported raw output: {type(part).__name__}")
 
 
+def is_ignored_element_open(value: object) -> bool:
+    """Whether a typed opening carries `#c-ignore` metadata."""
+    return isinstance(value, PreparedElementOpen) and any(
+        item[0] == "morph" and item[1] == "ignore" for item in value.element_metadata
+    )
+
+
+def _ignored_element_close_indices(nodes: list[BodyItem]) -> set[int]:
+    """Return the positions of the closes that end `#c-ignore` elements in one body."""
+    closes: set[int] = set()
+    # Each entry says whether that open element carries `#c-ignore`.
+    stack: list[bool] = []
+    for index, node in enumerate(nodes):
+        if isinstance(node, PreparedElementOpenNode):
+            if not node.is_void:
+                stack.append(any(item[0] == "morph" for item in node.element_metadata))
+        elif isinstance(node, PreparedConstantNode) and isinstance(node.value, PreparedElementOpen):
+            if not node.value.is_void:
+                stack.append(is_ignored_element_open(node.value))
+        elif isinstance(node, PreparedElementCloseNode) and stack and stack.pop():
+            closes.add(index)
+    return closes
+
+
 def coalesce_prepared_static_nodes(nodes: list[BodyItem]) -> list[BodyItem]:
     """Merge adjacent immutable authored nodes after template extension transforms."""
     # Physical document boundaries remain typed nodes so the serializer and
@@ -1331,6 +1349,7 @@ def coalesce_prepared_static_nodes(nodes: list[BodyItem]) -> list[BodyItem]:
         for node in nodes
     ):
         return nodes
+    ignored_closes = _ignored_element_close_indices(nodes)
     output: list[BodyItem] = []
     pending: list[str] = []
     pending_openings: list[StaticRunOpening] = []
@@ -1388,6 +1407,14 @@ def coalesce_prepared_static_nodes(nodes: list[BodyItem]) -> list[BodyItem]:
             index += 1
             continue
         if isinstance(node, PreparedElementCloseNode):
+            if index in ignored_closes:
+                # The Vue assembler finds a `#c-ignore` element's contents by
+                # its typed close, so that close never joins the static run
+                # that holds the markup after the element.
+                flush()
+                output.append(node)
+                index += 1
+                continue
             if (
                 node.position[0] == node.position[1]
                 and output

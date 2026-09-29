@@ -1502,12 +1502,14 @@ class ComponentNode(Node):
             # finished tree is serialized, after this tag's metadata is gone.
             # Rejecting when the template loads keeps the directive from being
             # dropped silently from an interactive page, even inside a branch
-            # that never renders. `#c-ignore` on an HTML element is rejected
-            # later, the first time the component renders its template.
+            # that never renders. A child component renders through its own Vue
+            # instance, so its output cannot be kept as fixed HTML; the fix is
+            # to mark the element inside the child that a library manages.
             msg = (
-                f"'#c-ignore' is not supported on the component tag <{self._authored_tag()}>. Vue re-renders"
-                " every component it mounts, so Citry cannot stop Vue from updating this component."
-                " Remove '#c-ignore' from the tag."
+                f"'#c-ignore' is not supported on the component tag <{self._authored_tag()}>. The component"
+                " renders through Vue, so its output cannot be kept as fixed HTML. Remove '#c-ignore' from"
+                " the tag and put it on the HTML element inside the component's template whose contents a"
+                " browser library manages, for example <div #c-ignore>."
             )
             raise TypeError(msg)
 

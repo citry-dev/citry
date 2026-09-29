@@ -754,7 +754,7 @@ class TestDynamicElement:
 
         with pytest.raises(
             TypeError,
-            match=r"'#c-ignore' is not supported on the element <c-element> \(rendered as <hr>\)\.",
+            match=r"'#c-ignore' is not supported on <c-element> \(rendered as <hr>\)\. Write the element",
         ):
             render_prepared_direct(Page())
 

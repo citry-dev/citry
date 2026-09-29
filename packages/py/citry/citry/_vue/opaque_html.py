@@ -42,7 +42,7 @@ def mark_opaque_html(html: str, markers: tuple[tuple[str, object], ...]) -> str:
     return marked.replace(f' {sentinel}=""', replacement)
 
 
-def opaque_html_record(html: str) -> dict[str, object]:
+def opaque_html_record(html: str, *, pinned: bool = False) -> dict[str, object]:
     """
     Return the prepared record the browser renders as one static vnode.
 
@@ -50,8 +50,15 @@ def opaque_html_record(html: str) -> dict[str, object]:
     HTML inside a ``<template>`` element. Vue needs it to adopt those nodes
     when the server wrote the block into a hydrated page; the server checks
     that the page's own parse creates the same nodes before it writes them.
+
+    ``pinned`` marks a `#c-ignore` element's contents: the browser keeps the
+    nodes from the first render for the life of the component instance and
+    ignores the HTML of later renders, so a library can take them over.
     """
-    return {"html": html, "nodeCount": static_html_node_count(html)}
+    record: dict[str, object] = {"html": html, "nodeCount": static_html_node_count(html)}
+    if pinned:
+        record["pinned"] = True
+    return record
 
 
 __all__ = ["mark_opaque_html", "opaque_html_record", "reject_cross_boundary_html"]

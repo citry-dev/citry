@@ -41,6 +41,7 @@ from .capture import (
     StaticRunOpening,
     is_authenticated_browser_binding,
     is_authenticated_dynamic_element_open,
+    is_ignored_element_open,
     is_native_state_tag,
     is_vue_directive_name,
     vue_owned_native_marker,
@@ -966,8 +967,49 @@ def assemble_typed_render(
                         }
                     )
 
+            def append_ignored_contents(
+                output: _DefinitionFragment,
+                parts: Sequence[RenderPart],
+                open_index: int,
+                data_values: dict[str, object],
+            ) -> int:
+                """Write a `#c-ignore` element's contents as one pinned HTML block; return the close index."""
+                opening = cast("PreparedElementOpen", parts[open_index])
+                label = _ignored_element_label(opening)
+                # The browser keeps the block as HTML parsed in an HTML parent,
+                # so an SVG or MathML parent or a text-only element cannot hold it.
+                if any(tag in {"svg", "math"} for tag in element_stack):
+                    raise UnsupportedPreparedView(
+                        f"{label} is inside SVG or MathML, whose contents the browser cannot keep as HTML."
+                        " Put '#c-ignore' on an HTML element that wraps the <svg> or <math> element."
+                    )
+                if opening.tag.lower() in {"script", "style", "textarea", "title"}:
+                    raise UnsupportedPreparedView(
+                        f"{label} has text contents, not elements, so there is nothing to keep. Remove '#c-ignore'."
+                    )
+                close_index = _ignored_element_close_index(parts, open_index)
+                html = _ignored_contents_html(opening, parts[open_index + 1 : close_index])
+                reject_cross_boundary_html(html)
+                key = data_key("Opaque", opening.source, opening.span, data_owner_id)
+                projected_data_container("opaqueHtml")
+                opaque_values = data_values.setdefault("opaqueHtml", {})
+                if type(opaque_values) is not dict:
+                    raise AssertionError("prepared opaqueHtml container changed type")
+                record = opaque_html_record(html, pinned=True)
+                if opaque_values.setdefault(key, record) != record:
+                    raise UnsupportedPreparedView("one prepared opaque HTML site produced conflicting bytes")
+                start = output.byte_length
+                output.append(f'<citry-opaque-html :record="$citryPrepared.opaqueHtml.{key}">')
+                end = output.byte_length
+                output.append("</citry-opaque-html>")
+                output.opaque_html_sites.append({"key": key, "sourceStart": start, "sourceEnd": end, "origin": "raw"})
+                return close_index
+
+            # Parts before this index are a `#c-ignore` element's contents,
+            # already written as one block of HTML the browser keeps.
+            ignored_contents_end = 0
             for part_index, part in enumerate(parts):
-                if part_index in run_followers:
+                if part_index in run_followers or part_index < ignored_contents_end:
                     continue
                 if isinstance(part, DirectProjectionRender):
                     nested_template = isinstance(part, DirectNestedTemplateRender)
@@ -2145,6 +2187,8 @@ def assemble_typed_render(
                             else None
                         )
                         dom_depth += 1
+                    if is_ignored_element_open(part) and not part.is_void:
+                        ignored_contents_end = append_ignored_contents(output, parts, part_index, data_values)
                     continue
                 if isinstance(part, PreparedDynamicElementOpen):
                     if not is_authenticated_dynamic_element_open(part):
@@ -2863,6 +2907,123 @@ def _append_slot_outlet(
         )
         output.extend(fallback)
         output.append("</template>")
+
+
+_IGNORED_CONTENTS_ALLOWED = (
+    "Inside a '#c-ignore' element, write plain HTML, '{{ }}' expressions, '<c-if>', '<c-for>', and '<c-raw>'."
+)
+
+
+def _ignored_element_label(part: PreparedElementOpen) -> str:
+    """Name a `#c-ignore` element and where the template writes it."""
+    from citry.ext.events.bindings import _line_column  # noqa: PLC0415
+
+    line, column = _line_column(part.source, part.span[0])
+    return f"'#c-ignore' on <{part.tag}> (line {line}, column {column})"
+
+
+def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int) -> int:
+    """Return the index of the close that ends the `#c-ignore` element opened at ``open_index``."""
+    opening = cast("PreparedElementOpen", parts[open_index])
+    depth = 0
+    for index in range(open_index + 1, len(parts)):
+        part = parts[index]
+        if isinstance(part, (PreparedElementOpen, PreparedDynamicElementOpen)):
+            depth += 0 if part.is_void else 1
+        elif isinstance(part, PreparedStaticRun):
+            # A static run can open an element here and close it later, as in
+            # `<ul>` ... `</ul>` around a loop, so follow its depth change.
+            if part.root_structure is None:
+                if "<" in part.html:
+                    raise UnsupportedPreparedView(
+                        f"{_ignored_element_label(opening)} holds markup whose structure is unknown"
+                    )
+            else:
+                depth += part.root_structure.final_depth_delta
+        elif isinstance(part, (PreparedElementClose, PreparedDynamicElementClose)):
+            if depth == 0:
+                if not isinstance(part, PreparedElementClose) or part.tag != opening.tag:
+                    break
+                return index
+            depth -= 1
+    raise UnsupportedPreparedView(f"{_ignored_element_label(opening)} has no matching close tag in the same template")
+
+
+def _ignored_contents_html(opening: PreparedElementOpen, parts: Sequence[RenderPart]) -> str:
+    """
+    Write a `#c-ignore` element's contents as HTML the browser keeps.
+
+    The contents are rendered once, like the static serializer writes them.
+    Anything that needs Vue to render or run is rejected, because the browser
+    never builds Vue nodes for these contents. The template parser already
+    rejects what the template spells directly; this check catches what a
+    Python value or a `c-bind` spread brings in at render time.
+    """
+    from citry.util.html import escape_to_str  # noqa: PLC0415
+
+    from .capture import format_prepared_element_attrs  # noqa: PLC0415
+
+    label = _ignored_element_label(opening)
+    out: list[str] = []
+
+    def reject(what: str) -> UnsupportedPreparedView:
+        return UnsupportedPreparedView(
+            f"{label} keeps the element's contents exactly as the server first rendered them, so they cannot"
+            f" hold {what}. {_IGNORED_CONTENTS_ALLOWED} Move it outside the <{opening.tag}> element."
+        )
+
+    def visit(items: Sequence[RenderPart]) -> None:
+        for part in items:
+            if type(part) is str and part == "":
+                continue
+            if isinstance(part, PreparedSourceText):
+                out.append(part.text)
+            elif isinstance(part, PreparedStaticRun):
+                out.append(part.html)
+            elif isinstance(part, PreparedTextValue):
+                if part.browser_binding is not None:
+                    raise reject(f"the browser value {part.browser_binding.helper}()")
+                out.append(escape_to_str(part.value))
+            elif isinstance(part, PreparedTrustedHtmlValue):
+                out.append(part.html)
+            elif isinstance(part, Markup):
+                out.append(str(part))
+            elif isinstance(part, PreparedVerbatimHtml):
+                out.append(part.html)
+            elif isinstance(part, PreparedElementOpen):
+                if (
+                    any(attr.origin == "source" and is_vue_directive_name(attr.name) for attr in part.attrs)
+                    or part.event_bindings
+                    or part.poll_bindings
+                    or part.control_bindings
+                    or part.browser_bindings
+                    or part.runtime_event_bindings
+                    or part.runtime_poll_bindings
+                    or part.runtime_events_candidate
+                ):
+                    raise reject(f"a Vue or Events binding on <{part.tag}>")
+                rendered = format_prepared_element_attrs(part)
+                suffix = "" if not rendered else " " + " ".join(rendered)
+                ending = "/>" if part.is_void and part.is_self_closing else ">"
+                out.append(f"<{part.tag}{suffix}{ending}")
+            elif isinstance(part, (PreparedElementClose, PreparedDynamicElementClose)):
+                out.append(f"</{part.tag}>")
+            elif isinstance(part, PreparedDynamicElementOpen):
+                from citry.attrs import format_attrs  # noqa: PLC0415
+
+                formatted = str(format_attrs(part.attrs))
+                out.append(f"<{part.tag}{' ' + formatted if formatted else ''}>")
+            elif type(part) is CitryRender and not part.frame.is_component_root and not part.frame.is_transparent_root:
+                # A `<c-if>` or `<c-for>` body renders as a nested part of the
+                # same component, so its markup belongs to these contents.
+                visit(part.parts)
+            elif isinstance(part, CitryRender) and part.frame.class_id:
+                raise reject(f"the component {part.frame.class_id}")
+            else:
+                raise reject(f"content that needs Vue to render it ({type(part).__name__})")
+
+    visit(parts)
+    return "".join(out)
 
 
 def _append_element_open(

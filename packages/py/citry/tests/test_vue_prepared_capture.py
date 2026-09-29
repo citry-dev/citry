@@ -548,7 +548,7 @@ else:
     assert result.returncode == 0, result.stderr
 
 
-def test_prepared_open_rejects_dynamic_vue_syntax_and_morph_metadata() -> None:
+def test_prepared_open_rejects_dynamic_vue_syntax_and_keeps_morph_metadata() -> None:
     source = '<div c-bind="attrs"></div>'
     node = PreparedElementOpenNode(
         source,
@@ -563,8 +563,10 @@ def test_prepared_open_rejects_dynamic_vue_syntax_and_morph_metadata() -> None:
     assert node.render(CitryContext(variables={"attrs": {"v-show": "danger"}}))
     with typed_render_scope(vue=True), pytest.raises(ValueError, match="cannot introduce Vue syntax"):
         node.render(CitryContext(variables={"attrs": {"v-show": "danger"}}))
-    with pytest.raises(TypeError, match="is not supported on the element <div>"):
-        PreparedElementOpenNode(source, (0, 20), "div", (), (), False, False, (("morph", "ignore"),))
+    # `#c-ignore` metadata reaches the typed opening, where the Vue assembler
+    # finds the element whose contents the browser keeps.
+    ignored = PreparedElementOpenNode(source, (0, 20), "div", (), (), False, False, (("morph", "ignore"),))
+    assert ignored.render(CitryContext()).element_metadata == (("morph", "ignore"),)
 
 
 def test_typed_default_reuses_generator_and_static_serializer_consumes_parts(

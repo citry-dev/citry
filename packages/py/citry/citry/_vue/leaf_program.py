@@ -2582,6 +2582,11 @@ class _Compiler:
         # resolution, so this opening must use the general typed assembler.
         if node._authored_vue_attrs and node._has_spread:
             self.safe_body = False
+        # A leaf template would write a `#c-ignore` element's contents as
+        # ordinary Vue nodes, which Vue then updates. The general assembler
+        # writes them as HTML the browser keeps.
+        if any(item[0] == "morph" for item in node.element_metadata):
+            self.safe_body = False
         if node._has_spread and not _source_attrs_are_projectable(node):
             # A spread can remove or replace these authored values, so the
             # leaf template would have to carry the selected value through

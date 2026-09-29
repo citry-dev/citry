@@ -3,12 +3,14 @@ Tests for authored metadata in the typed prepared Vue render.
 
 Element ``#c-key`` values are carried by generated prepared-data bindings;
 component ``#c-key`` values stay in typed call frames and affect generated
-occurrence identities. ``#c-ignore`` remains parsed syntax but is explicitly
-unsupported by prepared rendering. The plain ``key`` attribute and ``key`` /
+occurrence identities. An element's ``#c-ignore`` turns its contents into one
+pinned opaque HTML block that the browser keeps; on a component tag it is an
+error. The plain ``key`` attribute and ``key`` /
 ``c-key`` component inputs remain ordinary HTML and component inputs.
 """
 
 import json
+import re
 
 import pytest
 
@@ -184,33 +186,102 @@ class TestElementKey:
 
 
 class TestElementIgnore:
-    def test_ignore_is_explicitly_unsupported_in_prepared_vue(self):
+    def test_contents_become_one_pinned_opaque_block(self):
         c = Citry()
 
         class Page(Component):
             citry = c
-            template = "<div><p #c-ignore>chart</p></div>"
+            template = (
+                '<section :class="cls"><div #c-ignore class="chart"><canvas></canvas>{{ label }}'
+                '<c-if cond="flag"><b>yes</b></c-if><ul><li c-for="x in xs">{{ x }}</li></ul></div>'
+                "<p>after</p></section>"
+            )
 
-        with pytest.raises(TypeError) as excinfo:
-            render_prepared_direct(Page())
+            def template_data(self, kwargs, slots):
+                return {"label": "L<", "flag": True, "xs": [1, 2]}
 
-        # The render error names the component path first, then this message.
-        assert str(excinfo.value).endswith(
-            "'#c-ignore' is not supported on the element <p>. Vue updates every element it renders,"
-            " so Citry cannot stop Vue from updating this element. Remove '#c-ignore' and keep content"
-            " that browser code manages inside an element your component reaches through a Vue `ref`."
+        assembly = _assemble(Page())
+        root = assembly.view.occurrences[0]
+        compile_input = assembly.compile_inputs[root.definition_id]
+        # The element itself stays in the Vue template; its contents do not.
+        assert compile_input.template == (
+            '<section :class="cls"><div class="chart">'
+            '<citry-opaque-html :record="$citryPrepared.opaqueHtml.citryOpaque0"></citry-opaque-html>'
+            "</div><p>after</p></section>"
         )
+        assert root.prepared_data["opaqueHtml"] == {
+            "citryOpaque0": {
+                "html": "<canvas></canvas>L&lt;<b>yes</b><ul><li>1</li><li>2</li></ul>",
+                "nodeCount": 4,
+                "pinned": True,
+            }
+        }
 
-    def test_ignore_on_an_element_fails_on_first_render_even_in_a_branch_that_does_not_run(self):
+    def test_static_page_renders_the_element_and_its_contents(self):
         c = Citry()
 
         class Page(Component):
             citry = c
-            template = '<c-if cond="False"><p #c-ignore>chart</p></c-if>'
+            template = '<div #c-ignore class="chart"><canvas></canvas>{{ label }}</div><p>after</p>'
 
-        # Loading the template succeeds; the first render of the component
-        # rejects the directive, whichever branch runs.
-        with pytest.raises(TypeError, match=r"'#c-ignore' is not supported on the element <p>\."):
+            def template_data(self, kwargs, slots):
+                return {"label": "a<b"}
+
+        # The component-root markers are the only additions to the authored markup.
+        html = re.sub(r' data-cid-[a-z0-9]+=""', "", str(Page()))
+        assert html == '<div class="chart"><canvas></canvas>a&lt;b</div><p>after</p>'
+        assert "citry-opaque-html" not in html
+
+    def test_a_component_arriving_as_a_value_is_rejected_with_the_fix(self):
+        c = Citry()
+
+        class Kid(Component):
+            citry = c
+            template = "<span>kid</span>"
+
+        class Page(Component):
+            citry = c
+            template = "<div #c-ignore>{{ kid }}</div>"
+
+            def template_data(self, kwargs, slots):
+                return {"kid": Kid()}
+
+        with pytest.raises(UnsupportedPreparedView) as excinfo:
+            _assemble(Page())
+        message = str(excinfo.value)
+        assert message.startswith("'#c-ignore' on <div> (line 1, column 1) keeps the element's contents")
+        assert "cannot hold the component Kid_" in message
+        assert "Move it outside the <div> element." in message
+
+    def test_contents_inside_svg_are_rejected_with_the_fix(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<svg><g #c-ignore><circle r="1"></circle></g></svg>'
+
+        with pytest.raises(UnsupportedPreparedView, match="wraps the <svg> or <math> element"):
+            _assemble(Page())
+
+    def test_text_only_element_is_rejected(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = "<div><textarea #c-ignore>x</textarea></div>"
+
+        with pytest.raises(UnsupportedPreparedView, match="has text contents, not elements"):
+            _assemble(Page())
+
+    def test_vue_binding_inside_is_a_template_error(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<div #c-ignore><button @click="go();">x</button></div>'
+
+        # The parser rejects it when the template loads, on static pages too.
+        with pytest.raises(Exception, match="so the browser never runs '@click' on <button>"):
             str(Page())
 
 
@@ -544,7 +615,7 @@ class TestComponentIgnore:
         message = str(excinfo.value)
         # The message quotes the tag as the template spells it.
         assert "'#c-ignore' is not supported on the component tag <c-Child>" in message
-        assert "Remove '#c-ignore' from the tag." in message
+        assert "put it on the HTML element inside the component's template" in message
 
     def test_ignore_inside_a_static_parent_is_rejected(self):
         c = Citry()
