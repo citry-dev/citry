@@ -65,6 +65,11 @@ class VuePreparedRenderEncoder:
     def encode(self, action: Render, target: str, context: RenderEncodingContext) -> dict[str, object]:
         if not isinstance(action.element, (CitryElement, CitryRender)):
             raise TypeError("vue-prepared/1 requires a CitryElement or a typed prepared CitryRender.")
+        # Prepared content only updates a mounted component in place, so name
+        # the swap here rather than fail later with a generic protocol error.
+        if action.swap != "morph":
+            msg = f"actions.Render: the Vue renderer supports only swap='morph'; got {action.swap!r}."
+            raise ValueError(msg)
         wire_target = target
         if target.startswith("mark:"):
             if context.caller_render_id is None:

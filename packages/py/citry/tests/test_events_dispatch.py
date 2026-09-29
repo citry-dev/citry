@@ -354,7 +354,7 @@ class TestHappyPaths:
         assert second["ok"] is False
         assert second["error"]["code"] == "handler_error"
 
-    def test_compat_targetless_render_uses_the_internal_root_target(self):
+    def test_compat_targetless_render_uses_the_internal_compat_target(self):
         c = _citry()
 
         class Result(Component):
@@ -374,7 +374,8 @@ class TestHappyPaths:
         [item] = EventsDispatcher().dispatch(envelope, ctx)["results"]
         [action] = item["actions"]
         assert action["action"] == "render"
-        assert action["target"] == ":root"
+        # A valid render target that Citry's generated render IDs never equal.
+        assert action["target"] == "render:_compat"
 
 
 class TestStateResign:
@@ -437,7 +438,8 @@ class TestStateResign:
         actions = result["results"][0]["actions"]
         kinds = [action["action"] for action in actions]
         assert kinds == ["state", "render"]
-        assert actions[1]["target"] == "mark:badge"
+        # The wire form names the caller, since a marker name is unique only inside it.
+        assert actions[1]["target"] == "mark:i9:badge"
 
     def test_unchanged_state_mints_nothing(self):
         c = _citry()
@@ -1231,7 +1233,8 @@ class TestPipelineOrder:
             [{"action": "data", "value": 1, "delay": True}],
             [{"action": "data", "value": 1, "wait": 1}],
             [{"action": "data", "value": 1, "wait": False}],
-            [{"action": "render", "target": "#target", "swap": "replace", "html": 1}],
+            [{"action": "render", "target": "render:target", "swap": "replace", "html": 1}],
+            [{"action": "render", "target": "#target", "swap": "replace", "html": "<p>x</p>"}],
             [{"action": "render", "target": "", "swap": "replace", "html": "<p>x</p>"}],
             [{"action": "render", "target": "render:MixedCase", "swap": "replace", "html": "<p>x</p>"}],
             [{"action": "data"}],
@@ -2106,12 +2109,74 @@ class TestCapabilities:
 
             class Events:
                 def append(self):
-                    return actions.Render(Badge(), target="#target", swap="append")
+                    return actions.Render(Badge(), swap="append")
 
-        call = {"componentClassId": Renderer.class_id, "handlerName": "append"}
+        call = {"componentClassId": Renderer.class_id, "handlerName": "append", "callerRenderId": "r1"}
         capabilities = {"actions": ["render"], "swaps": ["replace"]}
         [item] = _dispatch(c, call, envelope_extra={"capabilities": capabilities})["results"]
         assert item["error"]["code"] == "handler_error"
+
+    def test_morph_downgrades_to_replace_only_for_html_fragments(self):
+        html = {"action": "render", "target": "render:r1", "swap": "morph", "html": "<p></p>"}
+        prepared = {
+            "action": "render",
+            "target": "render:r1",
+            "swap": "morph",
+            "renderer": "vue-prepared/1",
+            "prepared": {},
+        }
+        capabilities = {
+            "actions": frozenset({"render"}),
+            "swaps": frozenset({"replace"}),
+            "renderers": frozenset({"html-fragment/1", "vue-prepared/1"}),
+        }
+        [downgraded] = EventsDispatcher._apply_capabilities([html], capabilities, handler="h")
+        assert downgraded["swap"] == "replace"
+        # Prepared Vue content has no replace form, so the call fails instead of
+        # sending a render the client would reject.
+        with pytest.raises(ValueError, match="only an HTML fragment's 'morph' downgrades"):
+            EventsDispatcher._apply_capabilities([prepared], capabilities, handler="h")
+
+    def test_vue_renderer_names_a_swap_it_cannot_apply(self):
+        from citry.ext.events.renderers import VuePreparedRenderEncoder
+
+        c = _citry()
+
+        class Badge(Component):
+            citry = c
+            template = "<span>badge</span>"
+
+        def prepare(_element, _context):
+            raise AssertionError("the swap check runs before any content is prepared")
+
+        # A self-targeted Render may pick any swap, but prepared content only morphs.
+        encoder = VuePreparedRenderEncoder(prepare)
+        with pytest.raises(ValueError, match="supports only swap='morph'; got 'inner'"):
+            encoder.encode(actions.Render(Badge(), swap="inner"), "render:r1", None)  # type: ignore[arg-type]
+
+    def test_html_marker_target_without_a_caller_fails_the_call(self):
+        c = _citry()
+
+        class Badge(Component):
+            citry = c
+            template = "<span>badge</span>"
+
+        class Renderer(Component):
+            citry = c
+            template = "<div>r</div>"
+
+            class Events:
+                def badge(self):
+                    return actions.Render(Badge(), target="mark:badge")
+
+        # The wire form mark:<callerRenderId>:<name> needs a caller to name.
+        call = {"componentClassId": Renderer.class_id, "handlerName": "badge"}
+        [item] = _dispatch(c, call)["results"]
+        assert item["error"]["code"] == "handler_error"
+
+        compat = TransportContext(transport="http", citry=c, response_mode="compat")
+        [item] = EventsDispatcher().dispatch(_envelope(call), compat)["results"]
+        assert item["actions"][0]["target"] == "render:_compat"
 
 
 class TestDebugHint:

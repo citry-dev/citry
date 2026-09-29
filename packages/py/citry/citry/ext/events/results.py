@@ -17,7 +17,8 @@ Two steps, in dispatch order (design ``docs/design/events.md`` 3.4, 4.3, 6.2):
 - :func:`encode_actions` turns those action values into the JSON-ready wire
   shapes, in the exact order returned: a render action renders its element
   and serializes it as a fragment (whose manifests carry the fresh state),
-  targets serialize as marker names or the ``render:<render id>`` form, and
+  targets serialize as ``render:<render id>`` or the caller-qualified
+  ``mark:<caller render id>:<name>`` form, and
   the timing fields ride along when set. Two ``data`` actions in one result
   are an encode-time error; actions trailing a redirect (and a render
   coexisting with one) are debug-logged but never reordered or dropped.
@@ -95,7 +96,7 @@ class HtmlFragmentRenderEncoder:
     def encode(self, action: Render, target: str, context: RenderEncodingContext) -> dict[str, Any]:
         rendered = action.element.render() if isinstance(action.element, CitryElement) else action.element
         return build_render_action(
-            target,
+            _html_wire_target(target, context.caller_render_id, compat=context.response_mode == "compat"),
             action.swap,
             rendered.serialize(
                 deps_strategy="fragment",
@@ -108,9 +109,32 @@ class HtmlFragmentRenderEncoder:
 
 HTML_RENDER_ENCODER = HtmlFragmentRenderEncoder()
 
-# Compatibility responses consume the HTML before it reaches a client, but
-# the intermediate protocol action still requires a non-empty target.
-_COMPAT_HTML_RENDER_TARGET = ":root"
+# Compatibility responses consume the HTML before it reaches a client, but the
+# intermediate protocol action (which on_event_result hooks also see) still
+# needs a valid wire target. Citry's generated render IDs never contain "_",
+# so this target does not collide with one unless an app supplies its own IDs.
+_COMPAT_HTML_RENDER_TARGET = "render:_compat"
+
+
+def _html_wire_target(target: str, caller_render_id: str | None, *, compat: bool) -> str:
+    """
+    Spell a Render target the way the wire carries it for an HTML fragment.
+
+    A handler writes a marker as ``mark:<name>``, but the name is only unique
+    inside the component that rendered the ``<c-mark>``, so the wire form adds
+    the caller's render ID: ``mark:<callerRenderId>:<name>``. The prepared Vue
+    encoder builds the same form itself.
+    """
+    if not target.startswith("mark:"):
+        return target
+    if caller_render_id is not None:
+        return f"mark:{caller_render_id}:{target[5:]}"
+    # A no-JS form post has no caller, and its response body is the HTML
+    # alone, so the target only has to be valid.
+    if compat:
+        return _COMPAT_HTML_RENDER_TARGET
+    raise ValueError("a caller-relative marker target requires a calling component")
+
 
 # The attribute on the per-call events instance that holds the constructed
 # actions while debug tracking is active.
@@ -263,7 +287,7 @@ def encode_actions(
     available. In wire mode, an instance-less render needs an explicit target.
     The compatibility HTML path has one private exception: with a compatibility
     ``render_context`` and the default ``HTML_RENDER_ENCODER``, it assigns the
-    internal ``:root`` target to an instance-less render.
+    internal ``render:_compat`` target to an instance-less render.
 
     Args:
         actions: The coerced actions, in return order.
@@ -272,12 +296,12 @@ def encode_actions(
             ``None``, a dispatch targets ``document`` (no ``target`` field), and
             an instance-less render in wire mode must carry an explicit
             ``target``. Only compatibility mode with the default HTML encoder
-            supplies the private ``:root`` target.
+            supplies the private ``render:_compat`` target.
         handler: The handler's wire name, for errors and debug warnings.
         render_encoder: The selected private render encoding backend.
         render_context: Framework context for that backend. Direct callers
             encoding a render may omit it only with the default HTML encoder;
-            compatibility mode's private ``:root`` target requires a context
+            compatibility mode's private ``render:_compat`` target requires a context
             marked ``"compat"``.
 
     Returns:
@@ -358,7 +382,7 @@ def _encode_action(
                 raise ValueError("A non-default render encoder requires a RenderEncodingContext.")
             rendered = action.element.render() if isinstance(action.element, CitryElement) else action.element
             encoded = build_render_action(
-                target,
+                _html_wire_target(target, instance_id, compat=False),
                 action.swap,
                 rendered.serialize(deps_strategy="fragment"),
                 delay=action.delay,

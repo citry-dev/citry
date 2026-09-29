@@ -1130,9 +1130,10 @@ class EventsDispatcher:
         """
         Never emit an action kind or swap outside the client's advertised set.
 
-        The one defined downgrade is ``morph`` to ``replace`` (protocol spec
-        section 5); anything else outside the set is an encode-time error,
-        because dropping or reordering actions is never allowed.
+        The only allowed downgrade turns an HTML-fragment render's ``morph``
+        into ``replace`` (protocol spec "Capabilities"); anything else outside
+        the set is an encode-time error, because dropping or reordering actions
+        is never allowed.
         """
         swaps = capabilities["swaps"]
         kinds = capabilities["actions"]
@@ -1156,13 +1157,15 @@ class EventsDispatcher:
                     )
                 swap = action.get("swap")
                 if swap not in swaps:
-                    if swap == "morph" and "replace" in swaps:
+                    # Prepared Vue content can only morph, so only an HTML
+                    # fragment has a replace to fall back to.
+                    if swap == "morph" and "replace" in swaps and renderer == "html-fragment/1":
                         action = {**action, "swap": "replace"}  # noqa: PLW2901 - the downgraded copy is the point
                     else:
                         msg = (
                             f"Event handler {handler!r} produced a render with swap {swap!r}, which"
-                            f" the client's advertised capabilities do not include (only 'morph'"
-                            f" downgrades, to 'replace')."
+                            f" the client's advertised capabilities do not include (only an HTML"
+                            f" fragment's 'morph' downgrades, to 'replace')."
                         )
                         raise ValueError(msg)
             applied.append(action)
