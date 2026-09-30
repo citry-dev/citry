@@ -120,7 +120,17 @@ $component({ onServerRender({ component, onEvent: listen }) {
 } });
 """
 
-    valid, references, bindings, calls, public_names, sections, member_references = analyze_component_source(source)
+    (
+        valid,
+        references,
+        bindings,
+        calls,
+        public_names,
+        sections,
+        member_references,
+        emits_sections,
+        declared_events,
+    ) = analyze_component_source(source)
 
     assert valid
     assert [name for name, _start, _end in references] == ["console", "missingInside"]
@@ -133,6 +143,9 @@ $component({ onServerRender({ component, onEvent: listen }) {
     assert public_names == []
     assert all(section[1] == "absent" for section in sections)
     assert member_references == []
+    # The callback form has no `emits` option.
+    assert emits_sections == [("emits", "absent", None, None, None)]
+    assert declared_events == []
 
 
 # =========================================================================

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from lsprotocol import types
-from tests.test_component_instance_types import _position, _probe_message, _type_errors
+from test_component_instance_types import _position, _probe_message, _type_errors
 
 from citry_lsp.engine import DocumentState, browser_diagnostics, browser_projection, hover
 from citry_lsp.project import load_project

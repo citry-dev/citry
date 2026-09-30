@@ -619,7 +619,7 @@ def test_unknown_vue_lint_is_strict_configurable_and_v_for_scope_aware():
 def test_unknown_vue_lint_knows_vue_instance_names():
     # A Vue template reads these from the component instance, as `$el` and `$refs`.
     template = parse_template(
-        '<button @click="$emit(\'saved\'); $forceUpdate()" '
+        "<button @click=\"$emit('saved'); $forceUpdate()\" "
         ':title="[$attrs, $slots, $props, $parent, $options].length"></button>'
     )
 
