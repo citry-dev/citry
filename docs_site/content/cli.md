@@ -127,6 +127,40 @@ The exit status is:
 - `2` for a missing or conflicting mode, or when explicit app selection or
   discovery fails after syntax-only fallback finishes
 
+### Check types with TypeScript
+
+Add `--types` to also run TypeScript over every component's JavaScript and
+Vue template expressions in the current directory, the same check the
+[VS Code extension](/ide/vscode/#typescript-errors-in-component-javascript-and-templates)
+runs:
+
+```bash
+citry --app myproject.engine:app check --types
+```
+
+Each TypeScript error is an error finding at its file's full path, line,
+and column, with TypeScript's code (wrapped here to fit):
+
+```text
+/srv/shop/app/components/lane.py:24:13: error: TS2322: Type
+'boolean' is not assignable to type '() => void'.
+```
+
+In `--format json`, its code is `citry.typescript.ts2322`. An error makes
+the command exit with status 1, like any other error.
+
+`--types` needs three things, and the command exits with status 2 and says
+what to install when one is missing:
+
+- the `citry-lsp` package, which builds the files TypeScript checks;
+- Node.js on `PATH`;
+- TypeScript's `tsc`, from the project's `node_modules` (the nearest one in
+  the current directory or a parent) or from `PATH`. Install it with
+  `npm install --save-dev typescript`.
+
+Components installed from another package are skipped. `--types` cannot be
+combined with `--static`, because it needs the registry.
+
 ## Format component assets
 
 `citry format` formats standalone Citry files and statically identifiable

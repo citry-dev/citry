@@ -69,6 +69,15 @@ class TestModeSelection:
         assert _run_main(args) == 2
         assert "--static cannot be combined with an app selection" in capsys.readouterr().err
 
+    def test_types_needs_the_registry_mode(self, monkeypatch, capsys):
+        def forbidden(*args, **kwargs):
+            raise AssertionError("a mode error must not start analysis")
+
+        monkeypatch.setattr("citry.commands.check.check_project", forbidden)
+
+        assert _run_main(["check", "--static", "--types"]) == 2
+        assert "--types needs the app's registry" in capsys.readouterr().err
+
     @pytest.mark.parametrize(
         "args",
         [

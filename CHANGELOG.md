@@ -46,6 +46,11 @@ Upgrading from 0.5.x? Follow
   (`citry.browser.undeclared-emit`), and warn about a listener such as
   `@drop-tsak` on a child component tag when the child does not declare
   that event (`citry.browser.undeclared-component-event`).
+- `citry --app module:engine check --types` also runs TypeScript over
+  component JavaScript and Vue template expressions and reports its errors,
+  such as an `$emit` payload that fails the `emits` validator or a wrong
+  argument count, at their file, line, and column. It needs `citry-lsp`,
+  Node.js, and TypeScript's `tsc`.
 - Interactive pages served through Citry's routes link their component
   stylesheets in `<head>`, so they are styled from the first paint.
 - Install a Vue plugin, such as a store or a global directive, on every

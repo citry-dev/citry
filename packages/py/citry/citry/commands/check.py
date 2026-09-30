@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, ClassVar, NoReturn, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message, load_app
-from citry._checker import CheckReport, check_project
+from citry._checker import CheckFinding, CheckReport, _lsp_range_coordinates, check_project
 from citry.command import CommandArg
 from citry.extension import ExtensionCommand
 
@@ -45,6 +45,14 @@ class CheckCommand(ExtensionCommand):
     exits with status 2 without importing the app or scanning source.
     ``build_check_command`` binds the per-invocation app-selection state used by
     :meth:`handle`.
+
+    ``--types`` also runs TypeScript over every component's JavaScript and
+    Vue template expressions in the current directory, as the editor does,
+    and reports its errors as findings with ``citry.typescript.*`` codes. It
+    needs registry mode, the ``citry-lsp`` package, and Node.js with the
+    ``tsc`` compiler in the project's ``node_modules`` or on ``PATH``. When
+    one of them is missing, the command says what to install and exits with
+    status 2.
     """
 
     name = "check"
@@ -56,6 +64,11 @@ class CheckCommand(ExtensionCommand):
             help="Check limited inline template candidates without importing an app.",
         ),
         CommandArg(
+            "--types",
+            action="store_true",
+            help="Also type-check component JavaScript and Vue expressions with TypeScript (needs citry-lsp and tsc).",
+        ),
+        CommandArg(
             "--format",
             choices=("text", "json"),
             default="text",
@@ -64,13 +77,22 @@ class CheckCommand(ExtensionCommand):
     )
     selection: ClassVar[CheckAppSelection] = CheckAppSelection()
 
-    def handle(self, *, static: bool = False, format: str = "text", **_kwargs: Any) -> None:  # noqa: A002
+    def handle(
+        self,
+        *,
+        static: bool = False,
+        types: bool = False,
+        format: str = "text",  # noqa: A002
+        **_kwargs: Any,
+    ) -> None:
         """Run the conservative checker and preserve the CLI handler contract."""
         app_selected = any(
             value is not None for value in (self.selection.spec, self.selection.engine, self.selection.failure)
         )
         if static and app_selected:
             _mode_error("--static cannot be combined with an app selection")
+        if static and types:
+            _mode_error("--types needs the app's registry; use 'citry --app module:engine check --types'")
         if not static and not app_selected:
             _mode_error(
                 "choose 'citry --app module:engine check' for registry-backed checking "
@@ -87,6 +109,8 @@ class CheckCommand(ExtensionCommand):
                 selection = CheckAppSelection(spec=selection.spec, engine=engine)
 
         report = check_project(selection, Path.cwd())
+        if types and report.app_failure is None and selection.spec is not None:
+            report = _with_type_findings(report, selection.spec, Path.cwd())
         if format == "json":
             print(_json_report(report, static=static, app_spec=selection.spec))
         else:
@@ -131,6 +155,55 @@ def _json_report(report: CheckReport, *, static: bool, app_spec: str | None) -> 
         ],
     }
     return json.dumps(payload, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":"))
+
+
+def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckReport:
+    """Add TypeScript's findings for the components in `cwd` to `report`."""
+    # citry-lsp is an optional companion package that itself imports citry, so
+    # it can only be imported here, once the command needs it.
+    try:
+        from citry_lsp.project import load_project  # noqa: PLC0415
+        from citry_lsp.typescript import (  # noqa: PLC0415
+            TypeScriptUnavailableError,
+            check_project_types,
+            find_typescript_compiler,
+        )
+    except ImportError:
+        _type_check_error("it needs the citry-lsp package; install it with 'python -m pip install citry-lsp'")
+    try:
+        command = find_typescript_compiler(cwd)
+    except TypeScriptUnavailableError as exc:
+        _type_check_error(str(exc))
+    # The language server's project loader reads the same registry facts the editor uses.
+    project = load_project(cwd, app_spec)
+    if not project.status.registry_ready:
+        _type_check_error(project.status.message or "the app's component registry is unavailable")
+    try:
+        found = check_project_types(project, cwd, command)
+    except TypeScriptUnavailableError as exc:
+        _type_check_error(str(exc))
+    findings = list(report.findings)
+    for item in found:
+        start = item.diagnostic.range.start
+        code = str(item.diagnostic.code)
+        coordinates = _lsp_range_coordinates(item.source, item.diagnostic.range)
+        findings.append(
+            CheckFinding(
+                f"{item.path}:{start.line + 1}:{start.character + 1}",
+                # TypeScript's own spelling of the code leads the message, as `tsc` prints it.
+                f"{code.rsplit('.', 1)[-1].upper()}: {item.diagnostic.message}",
+                code,
+                "error",
+                *(coordinates or ()),
+            )
+        )
+    return CheckReport(tuple(findings), report.app_failure, report.notes)
+
+
+def _type_check_error(message: str) -> NoReturn:
+    """Stop `--types` with a message that says what to install or fix."""
+    sys.stderr.write(f"citry check: error: --types cannot run TypeScript: {message}\n")
+    raise SystemExit(2)
 
 
 def _mode_error(message: str) -> NoReturn:

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import shutil
+import subprocess
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -490,3 +494,64 @@ def test_type_check_options_are_validated(tmp_path):
     for invalid in invalid_options:
         with pytest.raises(JsonRpcInvalidParams, match="typeCheck"):
             _configured(tmp_path, invalid)
+
+
+# --- `citry check --types` ------------------------------------------------------
+
+
+def _run_check(tmp_path: Path, path_entries: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run `citry check --types --format json` in `tmp_path` with exactly `path_entries` on PATH."""
+    environment = {**os.environ, "PATH": os.pathsep.join(path_entries), "NO_COLOR": "1"}
+    environment.pop("FORCE_COLOR", None)
+    return subprocess.run(
+        [sys.executable, "-m", "citry", "--app", "app:engine", "check", "--types", "--format", "json"],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_check_types_reports_findings_with_file_positions(tmp_path):
+    tsc = Path(_command()[0])
+    (tmp_path / "app.py").write_text(_APP, encoding="utf-8")
+    for name, source in (("lane.js", _LANE_JS), ("lane.html", _LANE_HTML), ("card.html", _CARD_HTML)):
+        (tmp_path / name).write_text(source, encoding="utf-8")
+    (tmp_path / "card.js").write_text("$component({});\n", encoding="utf-8")
+
+    node = shutil.which("node")
+    assert node is not None
+    # The package-manager shim for `tsc` is a shell script that needs the system tools.
+    result = _run_check(tmp_path, [str(tsc.parent), str(Path(node).parent), "/usr/bin", "/bin"])
+
+    assert result.returncode == 1, result.stderr
+    payload = json.loads(result.stdout)
+    typed = [item for item in payload["findings"] if item["code"].startswith("citry.typescript.")]
+    lane_js = str((tmp_path / "lane.js").resolve())
+    assert [(item["origin"], item["code"], item["message"].split(":", 1)[0]) for item in typed] == [
+        (f"{(tmp_path / 'card.html').resolve()!s}:1:53", "citry.typescript.ts2339", "TS2339"),
+        (f"{(tmp_path / 'lane.html').resolve()!s}:1:27", "citry.typescript.ts2345", "TS2345"),
+        (f"{(tmp_path / 'lane.html').resolve()!s}:1:60", "citry.typescript.ts2345", "TS2345"),
+        (f"{lane_js}:10:7", "citry.typescript.ts2322", "TS2322"),
+        (f"{lane_js}:11:31", "citry.typescript.ts2345", "TS2345"),
+        (f"{lane_js}:13:25", "citry.typescript.ts2554", "TS2554"),
+        (f"{lane_js}:14:16", "citry.typescript.ts2339", "TS2339"),
+    ]
+    # The JSON range is the file's own zero-based position.
+    assert typed[3]["range"]["start"] == {"line": 9, "column": 6}
+
+
+def test_check_types_says_what_to_install_without_node(tmp_path):
+    (tmp_path / "app.py").write_text(_APP, encoding="utf-8")
+    for name, source in (("lane.js", _LANE_JS), ("lane.html", _LANE_HTML), ("card.html", _CARD_HTML)):
+        (tmp_path / name).write_text(source, encoding="utf-8")
+    (tmp_path / "card.js").write_text("$component({});\n", encoding="utf-8")
+
+    empty = tmp_path / "empty-bin"
+    empty.mkdir()
+    result = _run_check(tmp_path, [str(empty)])
+
+    assert result.returncode == 2
+    assert "--types cannot run TypeScript: Node.js was not found on PATH" in result.stderr
+    assert "npm install --save-dev typescript" in result.stderr
