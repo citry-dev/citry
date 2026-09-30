@@ -573,6 +573,8 @@ class template_parser:
         ],
         list[tuple[str, str, int | None, int | None, str | None]],
         list[tuple[str, str, int, int]],
+        list[tuple[str, str, int | None, int | None, str | None]],
+        list[tuple[str, int, int]],
     ]: ...
     # Functions
     @staticmethod

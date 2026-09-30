@@ -31,6 +31,7 @@ from citry._browser_expressions import (
     BrowserComponentSection,
     BrowserComponentSourceAnalysis,
     BrowserDeclarativeEvent,
+    BrowserEmitName,
     BrowserExpression,
     BrowserExpressionMode,
     BrowserFreeReference,
@@ -70,6 +71,7 @@ from citry._browser_expressions import (
     browser_literal_wire_type,
     browser_member_at,
     browser_member_literal_calls,
+    browser_proven_member_literal_calls,
     browser_state_binding_target_errors,
     browser_state_bindings,
     component_js_i18n_owners,
@@ -79,6 +81,8 @@ from citry._browser_expressions import (
     python_event_handler_coordinates as _python_event_handler_coordinates,
 )
 from citry._diagnostic_catalog import (
+    BROWSER_UNDECLARED_COMPONENT_EVENT,
+    BROWSER_UNDECLARED_EMIT,
     COMPONENT_JS_UNKNOWN_MEMBER,
     COMPONENT_JS_UNKNOWN_VARIABLE,
     FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
@@ -137,7 +141,7 @@ from citry_core.template_formatter import format_template as _format_template
 from citry_core.template_formatter import (
     prepare_embedded_format as _prepare_embedded_format,
 )
-from citry_core.template_parser import HtmlAttrKind, TagRules, TemplateElement
+from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TagRules, TemplateElement
 from citry_core.template_parser import parse_template as _parse_template
 
 if TYPE_CHECKING:
@@ -1046,6 +1050,231 @@ def lint_unknown_component_js_members(
 # Citry adds this prop to every component itself, so authored Options never
 # declare it.
 _RUNTIME_INSTANCE_MEMBERS = frozenset({"citryId"})
+
+
+def lint_undeclared_component_js_emits(source: str) -> tuple[ComponentJsLintFinding, ...]:
+    """
+    Report `this.$emit('name')` and `component.$emit('name')` calls for undeclared events.
+
+    Vue checks emitted names against the component's `emits` option, and
+    accepts a name that matches a declared `on<Event>` prop too. Only calls
+    whose receiver the analyzer proves is the live instance, with a string
+    literal event name, are checked.
+
+    Args:
+        source: Authored component JavaScript.
+
+    Returns:
+        Error findings spanning each undeclared event name, in source order.
+        Nothing is reported when the component declares no `emits` (Vue then
+        accepts every name) or builds `emits` in a way the analyzer cannot read.
+
+    """
+    analysis = analyze_browser_component_source(source)
+    if analysis.declared_events is None:
+        return ()
+    spans = frozenset(
+        (member.start_index, member.end_index) for member in analysis.member_references if member.name == "$emit"
+    )
+    return tuple(
+        ComponentJsLintFinding(
+            name=call.value,
+            message=render_diagnostic(BROWSER_UNDECLARED_EMIT, name=call.value),
+            code=BROWSER_UNDECLARED_EMIT,
+            severity="error",
+            start_index=call.start_index,
+            end_index=call.end_index,
+        )
+        for call in browser_proven_member_literal_calls(source, spans)
+        if not _emit_is_declared(call.value, analysis)
+    )
+
+
+def lint_undeclared_template_emits(
+    expressions: Sequence[BrowserExpression],
+    component_sources: Sequence[str],
+) -> tuple[VueLintFinding, ...]:
+    """
+    Report `$emit('name')` calls in Vue expressions for events the component does not declare.
+
+    Args:
+        expressions: The Vue expressions of one template.
+        component_sources: The JavaScript of every component that renders the
+            template. An expression runs in each of them, so a name must be
+            declared by all of them.
+
+    Returns:
+        Error findings spanning each undeclared event name. Nothing is reported
+        when any component declares no `emits`, or builds it in a way the
+        analyzer cannot read, since that component accepts every name.
+
+    """
+    analyses = [analyze_browser_component_source(source) for source in component_sources]
+    if not analyses or any(analysis.declared_events is None for analysis in analyses):
+        return ()
+    findings: list[VueLintFinding] = []
+    for expression in expressions:
+        # A `v-for` or slot binding named `$emit` is not Vue's `$emit`.
+        if expression.host != "vue" or "$emit" in expression.bindings:
+            continue
+        findings.extend(
+            VueLintFinding(
+                name=call.value,
+                message=render_diagnostic(BROWSER_UNDECLARED_EMIT, name=call.value),
+                code=BROWSER_UNDECLARED_EMIT,
+                severity="error",
+                start_index=call.start_index,
+                end_index=call.end_index,
+            )
+            for call in browser_literal_calls(expression, frozenset({"$emit"}))
+            if not all(_emit_is_declared(call.value, analysis) for analysis in analyses)
+        )
+    return tuple(findings)
+
+
+def lint_undeclared_component_listeners(
+    expressions: Sequence[BrowserExpression],
+    child_source: Callable[[str], str | None],
+) -> tuple[VueLintFinding, ...]:
+    """
+    Report listeners on child component tags for events the child does not declare.
+
+    Vue turns `@drop-task` on a component into an `onDropTask` listener and
+    matches it against the child's `emits` in camelCase or kebab-case, or
+    against an `on<Event>` prop. A listener the child does not declare is
+    passed to the child's root element as a DOM listener instead, where it
+    fires only if that element dispatches a DOM event with this name, so a
+    misspelled event name goes unnoticed. Only a name with a hyphen, a colon,
+    or an uppercase letter is reported: a plain lowercase name such as
+    `click` is usually a native DOM event.
+
+    Args:
+        expressions: The Vue expressions of one template.
+        child_source: Return the JavaScript of the component a `c-*` tag
+            renders, or None when the tag resolves to no component with
+            readable JavaScript.
+
+    Returns:
+        Warning findings spanning each listener's attribute name.
+
+    """
+    sources: dict[str, BrowserComponentSourceAnalysis | None] = {}
+    findings: list[VueLintFinding] = []
+    for expression in expressions:
+        element = expression.element
+        event = component_listener_event(expression)
+        if element is None or event is None or expression.attribute_start_index is None:
+            continue
+        if element not in sources:
+            source = child_source(element)
+            sources[element] = None if source is None else analyze_browser_component_source(source)
+        analysis = sources[element]
+        if analysis is None or analysis.declared_events is None:
+            continue
+        if event == event.lower() and "-" not in event and ":" not in event:
+            continue
+        if _listener_is_declared(event, analysis):
+            continue
+        findings.append(
+            VueLintFinding(
+                name=event,
+                message=render_diagnostic(BROWSER_UNDECLARED_COMPONENT_EVENT, name=event, component=element),
+                code=BROWSER_UNDECLARED_COMPONENT_EVENT,
+                severity="warning",
+                start_index=expression.attribute_start_index,
+                end_index=expression.attribute_end_index or expression.attribute_start_index,
+            )
+        )
+    return tuple(findings)
+
+
+def component_listener_event(expression: BrowserExpression) -> str | None:
+    """
+    Return the event name of a `@name` or `v-on:name` listener on a component tag.
+
+    Citry server events (`@c-*`), dynamic names (`@[name]`), native tags, and
+    Citry's structural tags have no child `emits` to check.
+    """
+    element = expression.element
+    if (
+        expression.mode != "statement"
+        or element is None
+        or not element.startswith("c-")
+        or element == "c-element"
+        or element in RESERVED_TAG_NAMES
+    ):
+        return None
+    attribute = expression.attribute
+    if attribute.startswith("@"):
+        raw = attribute[1:]
+    elif attribute.lower().startswith("v-on:"):
+        raw = attribute[len("v-on:") :]
+    else:
+        return None
+    # `@vue:mounted` and the other `vue:` names are Vue's own vnode lifecycle
+    # hooks, which a component never emits.
+    if not raw or raw.startswith(("[", "c-", "vue:")):
+        return None
+    # Modifiers such as `.once` or `.stop` do not change which event is heard.
+    return raw.split(".", 1)[0] or None
+
+
+def _vue_camelize(name: str) -> str:
+    """Camelize the way Vue does: `drop-task` becomes `dropTask`."""
+    return re.sub(r"-(\w)", lambda match: match.group(1).upper(), name)
+
+
+def _vue_hyphenate(name: str) -> str:
+    """Hyphenate the way Vue does: `dropTask` becomes `drop-task`."""
+    return re.sub(r"\B([A-Z])", r"-\1", name).lower()
+
+
+def _emit_is_declared(name: str, analysis: BrowserComponentSourceAnalysis) -> bool:
+    """
+    Whether Vue accepts `$emit(name)` without a missing-declaration warning.
+
+    Vue looks the name up exactly in `emits`, or accepts an `on<Event>` prop
+    for its camelized form.
+    """
+    declared = analysis.declared_events
+    if declared is None or name in {event.name for event in declared}:
+        return True
+    camel = _vue_camelize(name)
+    handler = f"on{camel[:1].upper()}{camel[1:]}"
+    return any(item.origin == "props" and item.exposed_name == handler for item in analysis.public_names)
+
+
+def vue_listener_event_names(event: str) -> tuple[str, str, str]:
+    """
+    Return the `emits` names Vue accepts for one listener on a component tag.
+
+    Vue compiles `@drop-task` to an `onDropTask` prop and its `isEmitListener`
+    then looks for `dropTask`, `drop-task`, and `DropTask` in `emits`.
+    """
+    camel = _vue_camelize(event)
+    key = camel[:1].upper() + camel[1:]
+    return (key[:1].lower() + key[1:], _vue_hyphenate(key), key)
+
+
+def _listener_is_declared(event: str, analysis: BrowserComponentSourceAnalysis) -> bool:
+    """
+    Match a parent's listener name to the child's `emits` as Vue's `isEmitListener` does.
+
+    A child may also take the listener as an `on<Event>` prop, which Vue
+    binds to the prop instead of passing it on.
+    """
+    declared = analysis.declared_events
+    if declared is None:
+        return True
+    names: tuple[str, ...] = vue_listener_event_names(event)
+    # Vue strips a trailing `Once` before the lookup, as for `.once`.
+    if names[2].endswith("Once") and len(names[2]) > len("Once"):
+        names = (*names, *vue_listener_event_names(names[2][: -len("Once")]))
+    if set(names) & {item.name for item in declared}:
+        return True
+    handler = f"on{names[2]}"
+    return any(item.origin == "props" and item.exposed_name == handler for item in analysis.public_names)
+
 
 # A property write such as `this.timer = ...` or `vm.count += 1`. Vue lets code
 # add plain properties to an instance this way, so a later read is not a typo.
@@ -4323,6 +4552,7 @@ __all__ = [
     "BrowserComponentSection",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
+    "BrowserEmitName",
     "BrowserExpression",
     "BrowserExpressionMode",
     "BrowserFreeReference",
@@ -4419,6 +4649,9 @@ __all__ = [
     "json_wire_type_from_expression",
     "lint_alpine_attributes",
     "lint_csp_compatibility",
+    "lint_undeclared_component_js_emits",
+    "lint_undeclared_component_listeners",
+    "lint_undeclared_template_emits",
     "lint_unknown_component_js_members",
     "lint_unknown_component_js_variables",
     "lint_unknown_template_variables",

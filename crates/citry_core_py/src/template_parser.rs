@@ -225,6 +225,8 @@ type ComponentSourceAnalysis = (
     )>,
     Vec<(String, String, Option<usize>, Option<usize>, Option<String>)>,
     Vec<(String, String, usize, usize)>,
+    Vec<(String, String, Option<usize>, Option<usize>, Option<String>)>,
+    Vec<(String, usize, usize)>,
 );
 
 /// Return detached source facts for runtime `$component` initializers.
@@ -309,6 +311,24 @@ pub fn analyze_component_source(input: &str) -> ComponentSourceAnalysis {
                     reference.end,
                 )
             })
+            .collect(),
+        analysis
+            .emits_sections
+            .into_iter()
+            .map(|section| {
+                (
+                    section.name,
+                    section.state,
+                    section.start,
+                    section.end,
+                    section.unknown_reason,
+                )
+            })
+            .collect(),
+        analysis
+            .emit_names
+            .into_iter()
+            .map(|name| (name.name, name.start, name.end))
             .collect(),
     )
 }

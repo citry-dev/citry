@@ -75,6 +75,9 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_csp_compatibility,
+    lint_undeclared_component_js_emits,
+    lint_undeclared_component_listeners,
+    lint_undeclared_template_emits,
     lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
@@ -691,6 +694,8 @@ def _check_template(
                 end_column=end_column,
             )
         )
+    if engine is not None and source.consumers:
+        findings.extend(_emit_findings(engine, source, browser_hosts))
     csp_mode = engine.settings.security_csp if engine is not None else None
     for csp_finding in lint_csp_compatibility(browser_hosts, vue_lint_consumers, csp_mode):
         line, column = _byte_offset_coordinates(source.content, csp_finding.start_index)
@@ -1561,6 +1566,51 @@ def _checker_vue_lint_consumer(
     )
 
 
+def _emit_findings(
+    engine: Citry,
+    source: _TemplateSource,
+    browser_hosts: tuple[BrowserExpression, ...],
+) -> list[CheckFinding]:
+    """Check `$emit` names against the owners' `emits`, and child listeners against the child's."""
+    owner_sources = [_disk_component_js_source(engine, component) for component in source.consumers]
+
+    def child_source(tag: str) -> str | None:
+        try:
+            child = engine.get(tag.lower().removeprefix("c-"))
+        except NotRegistered:
+            return None
+        return _disk_component_js_source(engine, child)
+
+    return [
+        _browser_source_finding(
+            source.origin,
+            source.content,
+            finding.start_index,
+            finding.end_index,
+            finding.code,
+            finding.message,
+            finding.severity,
+        )
+        for finding in (
+            # An owner without readable JavaScript declares no `emits`, so it
+            # accepts every name and nothing can be reported for the template.
+            *lint_undeclared_template_emits(
+                browser_hosts,
+                () if None in owner_sources else [text for text in owner_sources if text is not None],
+            ),
+            *lint_undeclared_component_listeners(browser_hosts, child_source),
+        )
+    ]
+
+
+def _disk_component_js_source(engine: Citry, component: type[Component]) -> str | None:
+    """Return the one JavaScript source a component runs, without executing an asset loader."""
+    sources: dict[tuple[object, ...], _BrowserSource] = {}
+    _collect_browser_source(engine, component, sources)
+    matching = [source for source in sources.values() if component in source.consumers]
+    return matching[0].content if len(matching) == 1 else None
+
+
 def _disk_vue_options_namespace(
     engine: Citry,
     component: type[Component],
@@ -1817,6 +1867,18 @@ def _check_browser_source(
             owners=i18n_owners,
             proven_owner_spans=i18n_owner_spans,
         )
+    )
+    findings.extend(
+        _browser_source_finding(
+            source.origin,
+            source.content,
+            finding.start_index,
+            finding.end_index,
+            finding.code,
+            finding.message,
+            finding.severity,
+        )
+        for finding in lint_undeclared_component_js_emits(source.content)
     )
     event_names = _shared_event_names(source.consumers)
     if event_names is None:

@@ -1850,3 +1850,63 @@ def test_static_check_reports_leftover_alpine_attributes_with_default_severities
         ("citry.template.alpine-attribute", "warning"),
         ("citry.template.alpine-cloak", "error"),
     ]
+
+
+def test_registry_check_reports_undeclared_emits_and_child_listeners(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Lane(Component):
+        citry = engine
+        template = """
+          <section></section>
+        """
+        js = """
+          $component({
+            emits: ['drop-task'],
+            methods: {
+              drop() {
+                this.$emit('drop-task');
+                this.$emit('drop-tsak');
+              },
+            },
+          });
+        """
+
+    class Board(Component):
+        citry = engine
+        template = """
+          <c-Lane
+            @drop-task="move($event)"
+            @drop-tsak="move($event)"
+            @click="move($event)"
+          ></c-Lane>
+          <button @click="$emit('moved')"></button>
+        """
+        js = """
+          $component({
+            emits: ['changed'],
+            methods: { move() {} },
+          });
+        """
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = sorted(
+        (item.code, item.severity, item.message)
+        for item in report.findings
+        if item.code.startswith("citry.browser.undeclared-")
+    )
+
+    # `@click` may be a native event, so only the hyphenated typo is reported.
+    assert findings == [
+        (
+            "citry.browser.undeclared-component-event",
+            "warning",
+            "Component 'c-lane' does not declare event 'drop-tsak' in its emits option.",
+        ),
+        (
+            "citry.browser.undeclared-emit",
+            "error",
+            "Event 'drop-tsak' is not declared in this component's emits option.",
+        ),
+        ("citry.browser.undeclared-emit", "error", "Event 'moved' is not declared in this component's emits option."),
+    ]

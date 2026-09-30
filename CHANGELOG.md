@@ -41,6 +41,11 @@ Upgrading from 0.5.x? Follow
   misspelled `js_data()` key (`citry.component-js.unknown-member`), and
   warn when a Vue binding reads a `c-for` or `c-fill` variable, which only
   exists in Python (`citry.vue.python-variable`).
+- `citry check` reports an `$emit('name')` call for an
+  event the component's `emits` option does not declare
+  (`citry.browser.undeclared-emit`), and warn about a listener such as
+  `@drop-tsak` on a child component tag when the child does not declare
+  that event (`citry.browser.undeclared-component-event`).
 - Interactive pages served through Citry's routes link their component
   stylesheets in `<head>`, so they are styled from the first paint.
 - Install a Vue plugin, such as a store or a global directive, on every

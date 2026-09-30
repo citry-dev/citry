@@ -240,6 +240,17 @@ pub struct BrowserComponentMemberReference {
     pub end: usize,
 }
 
+/// One event name declared by the Vue Options `emits` section.
+///
+/// The span covers the string literal of an array entry or the key of an
+/// object entry, as authored.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BrowserEmitName {
+    pub name: String,
+    pub start: usize,
+    pub end: usize,
+}
+
 /// Source facts proven inside runtime `$component` initializers.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BrowserComponentAnalysis {
@@ -251,6 +262,13 @@ pub struct BrowserComponentAnalysis {
     pub public_names: Vec<BrowserPublicName>,
     pub sections: Vec<BrowserOptionsSection>,
     pub member_references: Vec<BrowserComponentMemberReference>,
+    /// What each `$component` call proves about its `emits` section, in call
+    /// order. It is kept apart from `sections` because declared events are
+    /// not instance members: an unreadable `emits` must not make every
+    /// instance name unknown.
+    pub emits_sections: Vec<BrowserOptionsSection>,
+    /// The event names of every `complete` emits section.
+    pub emit_names: Vec<BrowserEmitName>,
 }
 
 /// Parse one browser expression/statement and return its exact free roots.
@@ -331,6 +349,8 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
             public_names: Vec::new(),
             sections: Vec::new(),
             member_references: Vec::new(),
+            emits_sections: Vec::new(),
+            emit_names: Vec::new(),
         };
     }
     let built = SemanticBuilder::new_compiler()
@@ -347,6 +367,8 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
             public_names: Vec::new(),
             sections: Vec::new(),
             member_references: Vec::new(),
+            emits_sections: Vec::new(),
+            emit_names: Vec::new(),
         };
     }
     let semantic = built.semantic;
@@ -471,6 +493,8 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
         public_names: visitor.public_names,
         sections: visitor.sections,
         member_references: visitor.member_references,
+        emits_sections: visitor.emits_sections,
+        emit_names: visitor.emit_names,
     }
 }
 
@@ -489,6 +513,8 @@ struct ComponentVisitor<'semantic> {
     public_names: Vec<BrowserPublicName>,
     sections: Vec<BrowserOptionsSection>,
     member_references: Vec<BrowserComponentMemberReference>,
+    emits_sections: Vec<BrowserOptionsSection>,
+    emit_names: Vec<BrowserEmitName>,
 }
 
 impl<'a> Visit<'a> for ComponentVisitor<'_> {
@@ -556,6 +582,8 @@ impl<'semantic> ComponentVisitor<'semantic> {
             public_names: Vec::new(),
             sections: Vec::new(),
             member_references: Vec::new(),
+            emits_sections: Vec::new(),
+            emit_names: Vec::new(),
         }
     }
 
@@ -661,6 +689,7 @@ impl<'semantic> ComponentVisitor<'semantic> {
                 state.unknown_reason = Some("inherited-options".to_string());
             }
         }
+        self.collect_emits(options, inherits);
         // Vue also calls lifecycle hooks, `provide()`, and `watch` handlers
         // with `this` set to the instance, so their member reads are proven
         // too. Any other option is read by code Vue does not know, which may
@@ -683,7 +712,112 @@ impl<'semantic> ComponentVisitor<'semantic> {
         }
     }
 
+    /// Read the `emits` section: an array of string literals or an object
+    /// whose static keys name the events. Anything else leaves the declared
+    /// events unknown, so a consumer must accept every event name.
+    fn collect_emits(&mut self, options: &ObjectExpression<'_>, inherits: bool) {
+        let mut state = BrowserOptionsSection {
+            name: "emits".to_string(),
+            state: "absent".to_string(),
+            start: None,
+            end: None,
+            unknown_reason: None,
+        };
+        let mut names = Vec::new();
+        for item in &options.properties {
+            // A spread or a computed key may add or replace `emits`, as the
+            // other sections treat them, until a later explicit `emits`.
+            let Some(property) = item.as_property() else {
+                state.state = "unknown".to_string();
+                state.unknown_reason = Some("top-level-spread".to_string());
+                names.clear();
+                continue;
+            };
+            if property.computed {
+                state.state = "unknown".to_string();
+                state.unknown_reason = Some("computed-top-level-key".to_string());
+                names.clear();
+                continue;
+            }
+            if !property.key.is_specific_static_name("emits") {
+                continue;
+            }
+            // A later `emits` key replaces an earlier one in the object.
+            names.clear();
+            let span = property.span();
+            state.start = Some(span.start as usize);
+            state.end = Some(span.end as usize);
+            state.state = "complete".to_string();
+            state.unknown_reason = None;
+            match property.value.without_parentheses() {
+                Expression::ArrayExpression(array) => {
+                    for element in &array.elements {
+                        match element.as_expression().map(Expression::without_parentheses) {
+                            Some(Expression::StringLiteral(literal)) => {
+                                let span = literal.span();
+                                names.push(BrowserEmitName {
+                                    name: literal.value.to_string(),
+                                    start: span.start as usize,
+                                    end: span.end as usize,
+                                });
+                            }
+                            _ => {
+                                state.state = "unknown".to_string();
+                                state.unknown_reason = Some("non-literal-entry".to_string());
+                            }
+                        }
+                    }
+                }
+                Expression::ObjectExpression(object) => {
+                    for entry in &object.properties {
+                        let Some(entry) = entry.as_property() else {
+                            state.state = "unknown".to_string();
+                            state.unknown_reason = Some("object-spread".to_string());
+                            continue;
+                        };
+                        let name = if entry.computed {
+                            None
+                        } else {
+                            entry.key.static_name()
+                        };
+                        let Some(name) = name else {
+                            state.state = "unknown".to_string();
+                            state.unknown_reason = Some("computed-key".to_string());
+                            continue;
+                        };
+                        let span = entry.key.span();
+                        names.push(BrowserEmitName {
+                            name: name.into_owned(),
+                            start: span.start as usize,
+                            end: span.end as usize,
+                        });
+                    }
+                }
+                _ => {
+                    state.state = "unknown".to_string();
+                    state.unknown_reason = Some("non-literal-section".to_string());
+                }
+            }
+        }
+        // A mixin or parent options object may declare more events.
+        if inherits {
+            state.state = "unknown".to_string();
+            state.unknown_reason = Some("inherited-options".to_string());
+        }
+        if state.state == "complete" {
+            self.emit_names.extend(names);
+        }
+        self.emits_sections.push(state);
+    }
+
     fn collect_absent_options(&mut self) {
+        self.emits_sections.push(BrowserOptionsSection {
+            name: "emits".to_owned(),
+            state: "absent".to_owned(),
+            start: None,
+            end: None,
+            unknown_reason: None,
+        });
         for name in ["props", "methods", "computed", "inject", "data", "setup"] {
             self.sections.push(BrowserOptionsSection {
                 name: name.to_owned(),
@@ -696,6 +830,13 @@ impl<'semantic> ComponentVisitor<'semantic> {
     }
 
     fn collect_unknown_options(&mut self, span: oxc_span::Span) {
+        self.emits_sections.push(BrowserOptionsSection {
+            name: "emits".to_owned(),
+            state: "unknown".to_owned(),
+            start: Some(span.start as usize),
+            end: Some(span.end as usize),
+            unknown_reason: Some("indirect-options".to_owned()),
+        });
         for name in ["props", "methods", "computed", "inject", "data", "setup"] {
             self.sections.push(BrowserOptionsSection {
                 name: name.to_owned(),
@@ -1613,6 +1754,106 @@ $component /* kept */ ({
                 .map(|reference| (reference.receiver.as_str(), reference.name.as_str()))
                 .collect::<Vec<_>>(),
             [("this", "$i18n")]
+        );
+    }
+
+    fn emits_facts(source: &str) -> (Vec<(String, Option<String>)>, Vec<String>) {
+        let analysis = analyze_component_source(source);
+        assert!(analysis.valid);
+        (
+            analysis
+                .emits_sections
+                .iter()
+                .map(|section| (section.state.clone(), section.unknown_reason.clone()))
+                .collect(),
+            analysis
+                .emit_names
+                .iter()
+                .map(|name| source[name.start..name.end].to_string())
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn emits_sections_report_declared_event_names() {
+        let complete = |names: &[&str]| {
+            (
+                vec![("complete".to_string(), None)],
+                names
+                    .iter()
+                    .map(|name| (*name).to_string())
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(
+            emits_facts("$component({ emits: ['drop-task', \"open\"] })"),
+            complete(&["'drop-task'", "\"open\""])
+        );
+        assert_eq!(
+            emits_facts(
+                "$component({ emits: { 'drop-task'(id) { return true }, open: null, [key]: null } })"
+            ),
+            (
+                vec![("unknown".to_string(), Some("computed-key".to_string()))],
+                Vec::new()
+            )
+        );
+        assert_eq!(
+            emits_facts("$component({ emits: { 'drop-task': (id) => true, open: null } })"),
+            complete(&["'drop-task'", "open"])
+        );
+        // A later explicit `emits` replaces an earlier spread's contribution.
+        assert_eq!(
+            emits_facts("$component({ ...base, emits: ['a'] })"),
+            complete(&["'a'"])
+        );
+        for (source, reason) in [
+            ("$component({ emits: names })", "non-literal-section"),
+            ("$component({ emits: ['a', name] })", "non-literal-entry"),
+            ("$component({ emits: ['a'], ...more })", "top-level-spread"),
+            ("$component({ emits: { ...base } })", "object-spread"),
+            (
+                "$component({ emits: ['a'], mixins: [shared] })",
+                "inherited-options",
+            ),
+            ("$component(options)", "indirect-options"),
+        ] {
+            assert_eq!(
+                emits_facts(source),
+                (
+                    vec![("unknown".to_string(), Some(reason.to_string()))],
+                    Vec::new()
+                ),
+                "{source}"
+            );
+        }
+        for source in [
+            "$component({ data() { return {} } })",
+            "$component(({ component }) => {})",
+        ] {
+            assert_eq!(
+                emits_facts(source),
+                (vec![("absent".to_string(), None)], Vec::new()),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn emit_calls_on_the_instance_are_member_references() {
+        let source = "$component({ methods: { m() { this.$emit('a', 1) } }, \
+            onServerRender({ component }) { component.$emit('b') } })";
+        let analysis = analyze_component_source(source);
+        assert_eq!(
+            analysis
+                .member_references
+                .iter()
+                .map(|reference| (
+                    reference.receiver.as_str(),
+                    &source[reference.start..reference.end]
+                ))
+                .collect::<Vec<_>>(),
+            [("this", "$emit"), ("component", "$emit")]
         );
     }
 

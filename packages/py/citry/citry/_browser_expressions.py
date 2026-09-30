@@ -305,6 +305,15 @@ class BrowserComponentMemberReference:
 
 
 @dataclass(frozen=True, slots=True)
+class BrowserEmitName:
+    """One event name declared by a Vue Options `emits` section, with its authored span."""
+
+    name: str
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
 class BrowserComponentSourceAnalysis:
     """Portable OXC facts for runtime `$component` initializers."""
 
@@ -315,6 +324,23 @@ class BrowserComponentSourceAnalysis:
     public_names: tuple[BrowserComponentPublicName, ...]
     sections: tuple[BrowserComponentSection, ...]
     member_references: tuple[BrowserComponentMemberReference, ...]
+    # One `emits` state per `$component` call. Declared events are not
+    # instance members, so they stay out of `sections` and `public_names`.
+    emits_sections: tuple[BrowserComponentSection, ...] = ()
+    emit_names: tuple[BrowserEmitName, ...] = ()
+
+    @property
+    def declared_events(self) -> tuple[BrowserEmitName, ...] | None:
+        """
+        Return the events the component's `emits` option declares.
+
+        `None` means any event name is allowed: the source has no single
+        `$component` call, declares no `emits` (Vue then accepts every name),
+        or builds `emits` in a way the analyzer cannot read.
+        """
+        if not self.valid or len(self.emits_sections) != 1 or self.emits_sections[0].state != "complete":
+            return None
+        return self.emit_names
 
 
 @dataclass(frozen=True, slots=True)
@@ -745,9 +771,17 @@ def _component_section_state(value: str) -> Literal["absent", "complete", "unkno
 
 def analyze_browser_component_source(source: str) -> BrowserComponentSourceAnalysis:
     """Return source-proven Vue Options facts for `$component`."""
-    valid, references, bindings, calls, public_names, sections, member_references = analyze_component_source_rust(
-        source
-    )
+    (
+        valid,
+        references,
+        bindings,
+        calls,
+        public_names,
+        sections,
+        member_references,
+        emits_sections,
+        emit_names,
+    ) = analyze_component_source_rust(source)
     encoded = source.encode("utf-8")
     return BrowserComponentSourceAnalysis(
         valid=valid,
@@ -782,6 +816,13 @@ def analyze_browser_component_source(source: str) -> BrowserComponentSourceAnaly
             for name, state, start, end, unknown_reason in sections
         ),
         member_references=tuple(BrowserComponentMemberReference(*reference) for reference in member_references),
+        emits_sections=tuple(
+            BrowserComponentSection(name, _component_section_state(state), start, end, unknown_reason)
+            for name, state, start, end, unknown_reason in emits_sections
+        ),
+        emit_names=tuple(
+            BrowserEmitName(name, start, end) for name, start, end in emit_names if 0 <= start < end <= len(encoded)
+        ),
     )
 
 
@@ -1075,6 +1116,49 @@ def browser_member_literal_calls(
                 start_index=expression.start_index + boundaries[content_start],
                 end_index=expression.start_index + boundaries[content_end],
             )
+        )
+    return tuple(found)
+
+
+def browser_proven_member_literal_calls(
+    source: str,
+    member_spans: frozenset[tuple[int, int]],
+) -> tuple[BrowserLiteralCall, ...]:
+    """
+    Return the literal first argument of each call on an already proven member.
+
+    The component analyzer proves which `this.<name>` and `component.<name>`
+    reads target the live instance. Pass the UTF-8 spans of those member
+    names, and this returns each `<member>('literal', ...)` call among them,
+    such as `this.$emit('drop-task')`.
+
+    Args:
+        source: Authored component JavaScript.
+        member_spans: Exact UTF-8 spans of proven member names.
+
+    Returns:
+        One call per proven member called with a string literal first
+        argument, in source order, spanning the literal's content.
+
+    """
+    tokens = _tokens(source)
+    boundaries = _utf8_boundaries(source)
+    found: list[BrowserLiteralCall] = []
+    for index, member in enumerate(tokens):
+        if member.kind != "identifier" or (boundaries[member.start], boundaries[member.end]) not in member_spans:
+            continue
+        opening = _next_token(tokens, index)
+        argument = _next_token(tokens, index + 1)
+        # Only a direct call with a literal name can be checked; a computed
+        # name or a stored reference to the method may emit anything.
+        if opening is None or opening.source != "(" or argument is None or argument.kind != "string":
+            continue
+        if argument.value is None:
+            continue
+        content_start = argument.start + 1
+        content_end = max(content_start, argument.end - 1)
+        found.append(
+            BrowserLiteralCall(member.source, argument.value, boundaries[content_start], boundaries[content_end])
         )
     return tuple(found)
 
@@ -2822,6 +2906,7 @@ __all__ = [
     "BrowserComponentSection",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
+    "BrowserEmitName",
     "BrowserExpression",
     "BrowserExpressionEvaluator",
     "BrowserExpressionHost",
@@ -2861,6 +2946,7 @@ __all__ = [
     "browser_literal_wire_type",
     "browser_member_at",
     "browser_member_literal_calls",
+    "browser_proven_member_literal_calls",
     "browser_state_bindings",
     "component_js_i18n_owners",
     "mark_literal_findings",

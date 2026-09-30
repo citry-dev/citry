@@ -28,6 +28,8 @@ COMPONENT_JS_UNKNOWN_MEMBER = 'citry.component-js.unknown-member'
 BROWSER_INVALID_STATE_BINDING_TARGET = 'citry.browser.invalid-state-binding-target'
 BROWSER_UNKNOWN_STATE_FIELD = 'citry.browser.unknown-state-field'
 BROWSER_UNKNOWN_SERVER_EVENT = 'citry.browser.unknown-server-event'
+BROWSER_UNDECLARED_EMIT = 'citry.browser.undeclared-emit'
+BROWSER_UNDECLARED_COMPONENT_EVENT = 'citry.browser.undeclared-component-event'
 BROWSER_MISSING_COMPONENT_PROP = 'citry.browser.missing-component-prop'
 BROWSER_INCOMPATIBLE_COMPONENT_PROP = 'citry.browser.incompatible-component-prop'
 CHECK_TEMPLATE_DECLARATION = 'citry.check.template-declaration'
@@ -108,6 +110,59 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                           'when': 'A resolved registered <c-*> call has no native Vue binding for a '
                                                   'prop marked required: true, and no dynamic binding could supply '
                                                   'it.'},
+ 'citry.browser.undeclared-component-event': {'code': 'citry.browser.undeclared-component-event',
+                                              'constant': 'BROWSER_UNDECLARED_COMPONENT_EVENT',
+                                              'defaultSeverity': 'warning',
+                                              'documentationPath': '/ide/diagnostics/#citry.browser.undeclared-component-event',
+                                              'examples': [{'language': 'citry-html',
+                                                            'source': '<c-Lane @drop-tsak="moveTask($event)"></c-Lane>',
+                                                            'title': 'Misspelled child event'}],
+                                              'messages': {'default': "Component '{component}' does not declare event "
+                                                                      "'{name}' in its emits option."},
+                                              'parameters': {'component': 'Component tag, lowercased, including the c- '
+                                                                          'prefix.',
+                                                             'name': 'Authored event name.'},
+                                              'summary': 'A template listens on a child component tag for an event the '
+                                                         "child's emits option does not declare.",
+                                              'surfaces': ['check', 'lsp'],
+                                              'title': 'Listener for an event the child component does not declare',
+                                              'when': 'A @name or v-on:name listener on a Citry component tag names an '
+                                                      "event that the child component's emits option does not declare "
+                                                      'and no on<Event> prop accepts, and the name cannot be a native '
+                                                      'DOM event because it contains a hyphen, a colon, or an '
+                                                      "uppercase letter. Vue passes such a listener to the child's "
+                                                      'root element, where it fires only if that element dispatches a '
+                                                      'DOM event with this name, so a misspelled event name goes '
+                                                      "unnoticed. Citry checks only when the child's emits option is "
+                                                      'an array of string literals or an object with static keys.'},
+ 'citry.browser.undeclared-emit': {'code': 'citry.browser.undeclared-emit',
+                                   'constant': 'BROWSER_UNDECLARED_EMIT',
+                                   'defaultSeverity': 'error',
+                                   'documentationPath': '/ide/diagnostics/#citry.browser.undeclared-emit',
+                                   'examples': [{'language': 'javascript',
+                                                 'source': '$component({\n'
+                                                           "  emits: ['drop-task'],\n"
+                                                           '  methods: {\n'
+                                                           "    drop() { this.$emit('drop-tsak'); },\n"
+                                                           '  },\n'
+                                                           '});',
+                                                 'title': 'Misspelled event in a method'},
+                                                {'language': 'citry-html',
+                                                 'source': '<button @click="$emit(\'close\')">Close</button>',
+                                                 'title': 'Undeclared event in the template'}],
+                                   'messages': {'default': "Event '{name}' is not declared in this component's emits "
+                                                           'option.'},
+                                   'parameters': {'name': 'Authored event name.'},
+                                   'summary': "Browser code emits a Vue event that the component's emits option does "
+                                              'not declare.',
+                                   'surfaces': ['check', 'lsp'],
+                                   'title': 'Undeclared emitted event',
+                                   'when': 'Component JavaScript calls this.$emit or component.$emit, or a Vue '
+                                           "expression in the component's template calls $emit, with a string literal "
+                                           "that is not in the component's emits option and has no matching on<Event> "
+                                           'prop. Citry checks only when the emits option is an array of string '
+                                           'literals or an object with static keys; a component without emits may emit '
+                                           'any name, as in Vue.'},
  'citry.browser.unknown-server-event': {'code': 'citry.browser.unknown-server-event',
                                         'constant': 'BROWSER_UNKNOWN_SERVER_EVENT',
                                         'defaultSeverity': 'error',

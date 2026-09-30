@@ -31,6 +31,9 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_csp_compatibility,
+    lint_undeclared_component_js_emits,
+    lint_undeclared_component_listeners,
+    lint_undeclared_template_emits,
     lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
     lint_unknown_vue_variables,
@@ -1131,3 +1134,45 @@ def test_alpine_lint_severity_across_consumers():
 def test_alpine_lint_consumer_rejects_an_unknown_severity():
     with pytest.raises(ValueError, match="rule_alpine_cloak"):
         AlpineAttributeLintConsumer(rule_alpine_cloak="fatal")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("listener", "declared", "reported"),
+    [
+        # Vue matches a listener to `emits` in camelCase or kebab-case.
+        ("@drop-task", "['dropTask']", False),
+        ("@dropTask", "['drop-task']", False),
+        ("v-on:drop-task.once", "{ 'drop-task': null }", False),
+        ("@update:model-value", "['update:modelValue']", False),
+        ("@drop-tsak", "['drop-task']", True),
+        ("@update:title", "['update:modelValue']", True),
+        # A callback prop and Vue's `Once` suffix also match.
+        ("@drop-task", "['x'], props: { onDropTask: Function }", False),
+        ("@dropTaskOnce", "['drop-task']", False),
+        # Vue's vnode lifecycle hooks are not component events.
+        ("@vue:mounted", "['drop-task']", False),
+        # A plain lowercase name may be a native DOM event on the child's root.
+        ("@select", "['drop-task']", False),
+        # A child without readable `emits` accepts any listener.
+        ("@drop-tsak", "names", False),
+    ],
+)
+def test_component_listener_names_follow_vue_matching(listener, declared, reported):
+    template = parse_template(f'<c-lane {listener}="go"></c-lane>')
+    source = f"$component({{ emits: {declared} }});"
+    findings = lint_undeclared_component_listeners(browser_expressions(template), lambda _tag: source)
+    assert bool(findings) is reported
+
+
+def test_emit_checks_accept_on_props_and_shared_templates_need_every_owner():
+    source = "$component({ emits: ['open'], props: { onPing: Function } });"
+    template = parse_template("<p @click=\"$emit('open'); $emit('ping'); $emit('gone')\"></p>")
+    expressions = browser_expressions(template)
+    assert [finding.name for finding in lint_undeclared_template_emits(expressions, [source])] == ["gone"]
+    # An owner without `emits` accepts every name, so nothing is provable.
+    assert lint_undeclared_template_emits(expressions, [source, "$component({})"]) == ()
+    assert lint_undeclared_template_emits(expressions, []) == ()
+    # A computed event name is never checked.
+    assert (
+        lint_undeclared_component_js_emits("$component({ emits: [], methods: { m() { this.$emit(name); } } });") == ()
+    )
