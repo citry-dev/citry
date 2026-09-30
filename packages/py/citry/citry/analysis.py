@@ -510,12 +510,19 @@ VUE_AMBIENT_NAMES = frozenset(
     {
         *COMPONENT_JS_AMBIENT_NAMES,
         # Vue template public-instance properties.
+        "$attrs",
         "$data",
         "$el",
+        "$emit",
         "$event",
+        "$forceUpdate",
         "$nextTick",
+        "$options",
+        "$parent",
+        "$props",
         "$refs",
         "$root",
+        "$slots",
         "$watch",
         # Citry's Vue magic/context surface.
         "$error",

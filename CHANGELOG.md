@@ -278,6 +278,9 @@ Upgrading from 0.5.x? Follow
   `@classmethod`, such as the one `simple = "vue"` components use.
   `citry check` now also checks the returned value types of a `js_data`
   written that way.
+- `$emit`, `$attrs`, `$slots`, `$props`, `$parent`, `$options`, and
+  `$forceUpdate` in a Vue expression are no longer reported as unknown Vue
+  variables.
 
 
 ## v0.5.1
