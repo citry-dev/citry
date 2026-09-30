@@ -221,6 +221,7 @@ async function exerciseOptionsInstance(folder) {
 		"            this.count += 1;",
 		"            this.$emit('toggled', this.$el);",
 		"            this.$emit('toggeld');",
+		"            this.$el.fooBar;",
 		"            return this.title;",
 		"          },",
 		"        },",
@@ -305,6 +306,32 @@ async function exerciseOptionsInstance(folder) {
 					diagnostic.range.start.isEqual(document.positionAt(typo)) &&
 					diagnostic.range.end.isEqual(document.positionAt(typo + "toggeld".length)),
 			),
+	);
+	// TypeScript's own errors reach the Python file: `$el` is the <button>.
+	const unknownMember = source.indexOf("fooBar");
+	const codeOf = (diagnostic) => (typeof diagnostic.code === "object" ? diagnostic.code.value : diagnostic.code);
+	await eventually("forwarded TypeScript diagnostic", async () =>
+		vscode.languages
+			.getDiagnostics(uri)
+			.some(
+				(diagnostic) =>
+					codeOf(diagnostic) === "citry.typescript.ts2339" &&
+					diagnostic.source === "Citry (ts)" &&
+					diagnostic.severity === vscode.DiagnosticSeverity.Error &&
+					diagnostic.range.start.isEqual(document.positionAt(unknownMember)) &&
+					diagnostic.range.end.isEqual(document.positionAt(unknownMember + "fooBar".length)),
+			),
+	);
+	// Citry already reports the undeclared event name, so TypeScript does not report it again.
+	assert.equal(
+		vscode.languages
+			.getDiagnostics(uri)
+			.some(
+				(diagnostic) =>
+					String(codeOf(diagnostic)).startsWith("citry.typescript.") &&
+					diagnostic.range.contains(document.positionAt(typo + 1)),
+			),
+		false,
 	);
 }
 

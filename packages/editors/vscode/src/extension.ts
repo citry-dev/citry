@@ -64,6 +64,13 @@ import {
 	virtualDocumentTimeoutMs,
 	withTimeout,
 } from "./providerPipeline.js";
+import {
+	type TypeCheckResponse,
+	typeCheckDiagnostics,
+	typeCheckMethod,
+	typeCheckVersion,
+	validTypeCheckParams,
+} from "./typeCheck.js";
 import { resolveWorkspacePath, sameWorkspacePath } from "./workspaceConfiguration.js";
 
 const protocolVersion = 1;
@@ -360,7 +367,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			if (
 				event.affectsConfiguration("citry.app") ||
 				event.affectsConfiguration("citry.python") ||
-				event.affectsConfiguration("citry.envFile")
+				event.affectsConfiguration("citry.envFile") ||
+				event.affectsConfiguration("citry.typeCheck")
 			) {
 				await restartAll();
 			}
@@ -413,6 +421,7 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 	const configuration = vscode.workspace.getConfiguration("citry", folder.uri);
 	const app = configuration.get<string>("app", "").trim() || null;
 	const configuredEnvironmentFile = configuration.get<string>("envFile", "").trim();
+	const typeCheck = configuration.get<boolean>("typeCheck", true);
 	const environmentFile = configuredEnvironmentFile
 		? resolveWorkspacePath(configuredEnvironmentFile, folder.uri.fsPath)
 		: null;
@@ -475,6 +484,9 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 				languages: ["javascript", "css"],
 				providerSelection: "vscode-first-result",
 			},
+			typeCheck,
+			// VS Code's TypeScript server checks the files, so no Node.js install is needed.
+			...(typeCheck ? { typeCheckClient: { version: typeCheckVersion } } : {}),
 		},
 		workspaceFolder: folder,
 		outputChannelName: `Citry (${folder.name})`,
@@ -490,6 +502,7 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 	clients.set(key, entry);
 	entry.disposables.push(
 		client.onRequest(formatEmbeddedMethod, (params, token) => handleEmbeddedFormatting(params, token)),
+		client.onRequest(typeCheckMethod, (params, token) => handleTypeCheck(params, token)),
 	);
 	client.onNotification(statusMethod, (status: ProjectStatus) => {
 		entry.status = status;
@@ -943,6 +956,45 @@ async function handleEmbeddedFormatting(
 	}
 }
 
+/**
+ * Run VS Code's TypeScript server over the files the language server sends.
+ *
+ * Each file is written beside the completion projections, so it shares their
+ * TypeScript project and Vue types. Opening it hands it to TypeScript without
+ * showing a tab, and TypeScript reports problems only for files open in a tab,
+ * so these never appear in the Problems panel. `null` tells the server that
+ * TypeScript could not answer this time, for example while it is starting.
+ */
+async function handleTypeCheck(params: unknown, token: vscode.CancellationToken): Promise<TypeCheckResponse | null> {
+	if (!validTypeCheckParams(params)) {
+		throw new Error("citry/typeCheck request has an unsupported shape; update the Citry extension.");
+	}
+	const files: TypeCheckResponse["files"] = [];
+	for (const file of params.files) {
+		if (token.isCancellationRequested) {
+			return null;
+		}
+		const uri = await browserScripts.create(`type-check\u0000${params.textDocument.uri}\u0000${file.id}`, file.source);
+		try {
+			await vscode.workspace.openTextDocument(uri);
+			// Syntax errors matter for JavaScript inside Python strings, which no other provider reads.
+			const syntactic = await vscode.commands.executeCommand("typescript.tsserverRequest", "syntacticDiagnosticsSync", {
+				file: uri,
+				includeLinePosition: false,
+			});
+			const semantic = await vscode.commands.executeCommand("typescript.tsserverRequest", "semanticDiagnosticsSync", {
+				file: uri,
+				includeLinePosition: false,
+			});
+			files.push({ id: file.id, diagnostics: [...typeCheckDiagnostics(syntactic), ...typeCheckDiagnostics(semantic)] });
+		} catch {
+			// The TypeScript extension is disabled or has not started yet.
+			return null;
+		}
+	}
+	return { version: typeCheckVersion, files };
+}
+
 function currentDocumentVersion(uri: string): number | undefined {
 	return vscode.workspace.textDocuments.find((document) => document.uri.toString() === uri)?.version;
 }
@@ -1213,7 +1265,8 @@ class BrowserScriptFiles implements vscode.Disposable {
 		if (prior !== undefined && prior.toString() !== uri.toString()) {
 			this.remove(prior);
 		}
-		while (this.uriByIdentity.size > 64) {
+		// Type checks write one file per template and script region, so keep room for several documents.
+		while (this.uriByIdentity.size > 256) {
 			const [oldestIdentity, oldestUri] = this.uriByIdentity.entries().next().value ?? [];
 			if (oldestIdentity === undefined || oldestUri === undefined) {
 				break;
@@ -1255,6 +1308,9 @@ class BrowserScriptFiles implements vscode.Disposable {
 					moduleResolution: "Bundler",
 					lib: ["ES2022", "DOM", "DOM.Iterable"],
 					checkJs: false,
+					// Matches `TYPE_CHECK_COMPILER_OPTIONS` in citry_lsp, so a hover and a
+					// forwarded error agree. Type-check files turn checking on with `// @ts-check`.
+					strict: false,
 					moduleDetection: "force",
 					noEmit: true,
 					types: [],

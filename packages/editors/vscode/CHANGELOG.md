@@ -5,6 +5,10 @@
 - The extension now works with citry-lsp 0.2.x, the language server for
   Citry 0.6.0 projects, as well as citry-lsp 0.1.x for Citry 0.5.x
   projects.
+- TypeScript errors in component JavaScript and Vue template expressions
+  now appear in the editor, checked by VS Code's own TypeScript, so no
+  Node.js install is needed. Turn them off with the `citry.typeCheck`
+  setting.
 
 ## 0.1.6 - 2026-09-11
 

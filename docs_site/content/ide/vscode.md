@@ -252,11 +252,17 @@ Completion inside `this.$emit('')` offers the declared names, and hovering
 takes. In a parent template, a listener on the child's tag uses the same
 types: `@drop-task="move($event)"` on `<c-Lane>` types `$event` as the first
 value the child emits, and the parameters of an inline function such as
-`@drop-task="(payload) => move(payload)"` get the emitted values' types. A
-listener for an event the child does not declare keeps `$event` a DOM
-`Event`, because Vue then passes the listener to the child's root element.
-When the child lists its events as an array, a declared event's `$event` is
-`any`.
+`@drop-task="(payload) => move(payload)"` get the emitted values' types.
+Citry's `@c-drop-task` server-event binding on the same tag reads the same
+`$event`. A listener for an event the child does not declare gets the DOM
+event of that name, because Vue then passes the listener to the child's
+root element. When the child lists its events as an array, or its `emits`
+cannot be read, a declared event's `$event` is `any`.
+
+On an HTML element, `$event` is the DOM event of the listener's name, such
+as `KeyboardEvent` for `@keydown`. A name the DOM does not define, such as
+`@board:notice`, is a `CustomEvent`, so `$event.detail` works. A template
+cannot cast, so `$event.target` and `$event.currentTarget` are `any`.
 
 Citry also checks event names, in the editor and in `citry check`, when
 `emits` is an array of strings or an object with plain keys:
@@ -276,10 +282,9 @@ Citry also checks event names, in the editor and in `citry check`, when
   reported, because a plain lowercase name such as `@click` is usually a
   native DOM event.
 
-A value that does not match a validator's parameter types shows up only in
-hover, not as an error, because the editor does not report TypeScript errors
-for Vue expressions and component JavaScript, and `citry check` does not run
-TypeScript.
+A value that does not match a validator's parameter types is a TypeScript
+error; see
+[TypeScript errors in component JavaScript and templates](#typescript-errors-in-component-javascript-and-templates).
 
 ### Types, checks, and navigation in component JavaScript
 
@@ -317,7 +322,88 @@ that declaration. A spread keeps explicit keys checkable but suppresses a
 missing-required conclusion; dynamic component targets remain unproven. When a
 `JsData` annotation or known literal value cannot cross
 Citry's strict JSON wire, Citry reports `citry.js-data.unsupported-type` as a
-warning and lets JavaScript tooling treat that value as `unknown`.
+warning and lets JavaScript tooling treat that value as `any`.
+
+### TypeScript errors in component JavaScript and templates
+
+The editor reports TypeScript's own errors in component JavaScript and in Vue
+expressions, on the line you wrote, whether the code sits in a `.js` file, a
+template file, or a string in a Python file:
+
+```citry
+class Lane(Component):
+    template = """
+      <button @click="startDrag('first')">Drag</button>
+    """
+    js = """
+      $component({
+        emits: {
+          'drop-task'(/** @type {{taskId: number}} */ payload) {
+            return true;
+          },
+        },
+        methods: {
+          clearDropTarget() {},
+          startDrag(/** @type {number} */ id) {
+            // A method is not a boolean.
+            this.clearDropTarget = true;
+            // The payload does not match the validator.
+            this.$emit('drop-task', 'x');
+            // One argument too many.
+            this.startDrag(1, 2);
+            // `$el` is the template's <button>.
+            this.$el.fooBar;
+          },
+        },
+      });
+    """
+```
+
+Each of those lines, and `startDrag('first')` in the template, shows an
+error with the source `Citry (ts)` and a code such as
+`citry.typescript.ts2322`, where the number is TypeScript's own. Citry
+reports these kinds of TypeScript errors:
+
+| Mistake | Example | TypeScript codes |
+| --- | --- | --- |
+| A value of the wrong type | `this.clearDropTarget = true` | 2322, 2345, 2769, and related |
+| A member that does not exist | `this.$el.fooBar` | 2339, 2551, 2353, 2561 |
+| The wrong number of arguments | `this.startDrag(1, 2)` | 2554, 2555, 2556, 2575 |
+| A name that does not exist, in component JavaScript | `formatDte(value)` | 2304, 2552 |
+| A syntax error in JavaScript inside a Python string | `const = 1` | 1000 to 1999 |
+
+VS Code's own TypeScript runs the check, so you need no Node.js install. The
+check uses the same types that completion and hover show, and it runs after
+Citry's own diagnostics, so its errors can appear a moment later.
+
+Some TypeScript errors are left out on purpose:
+
+- A mistake that Citry already reports keeps only Citry's finding. For
+  example, `this.startDargg()` shows
+  [`citry.component-js.unknown-member`](/ide/diagnostics/#citry.component-js.unknown-member),
+  and an event name `emits` does not declare shows
+  [`citry.browser.undeclared-emit`](/ide/diagnostics/#citry.browser.undeclared-emit).
+- An unknown name in a template follows
+  [`citry.vue.unknown-variable`](/ide/diagnostics/#citry.vue.unknown-variable)
+  and its lint severity, so TypeScript does not report it.
+- A value Citry cannot type, such as an injection, a server event's result,
+  or a `JsData` field that cannot cross the JSON wire, is `any`, so reading
+  it is never an error.
+- TypeScript's strict mode is off, so a `data()` value that starts as
+  `null` can take any value later, and implicit `any` is not reported.
+- A query by CSS selector, such as `this.$el.querySelector('#name')`, returns
+  `any`, because the selector does not say which element it finds. A query
+  by tag name, such as `querySelector('input')`, keeps the tag's type. A
+  member of `window` that the DOM does not declare, such as `window.htmx`,
+  is `any`, because a page script may add it.
+- A minified file such as `runtime.min.js` is not checked.
+- A `js_data()` value types its key as the value's general type, such as
+  `boolean` for `False`, because Vue code may change it later.
+
+Set `citry.typeCheck` to `false` to turn these errors off. The language
+server can also run the check for other editors; it then uses the `tsc` in
+your project's `node_modules` or on `PATH`. Run the same check in a terminal
+or CI with [`citry check --types`](/cli/#check-types-with-typescript).
 
 ## Navigate i18n messages and profiles
 
@@ -593,12 +679,12 @@ setting.
 - Parsing stops after the first syntax error.
 - General Python-file analysis remains the responsibility of the configured
   Python extension; Citry analyzes only mapped template expressions.
-- Embedded CSS and JavaScript receive highlighting, completion, hover, and
-  formatting through VS Code providers, but Citry cannot request their
-  diagnostics through VS Code's public API.
-- TypeScript type errors in Vue expressions and component JavaScript, such
-  as an `$emit` value that does not match its validator, are not reported.
-  Citry reports its own checks, such as undeclared event names, instead.
+- Embedded CSS receives highlighting, completion, hover, and formatting
+  through VS Code providers, but Citry cannot request its diagnostics through
+  VS Code's public API. Embedded JavaScript reports the TypeScript errors
+  listed in
+  [TypeScript errors in component JavaScript and templates](#typescript-errors-in-component-javascript-and-templates),
+  not every JavaScript warning.
 - Embedded JavaScript and CSS use bundled Prettier 3.9.6 unless Prettier for VS
   Code is installed and selected for that language. Other editor formatters do
   not replace that fallback.
