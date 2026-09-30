@@ -36,6 +36,15 @@ class JsonWireType:
     @property
     def javascript(self) -> str:
         """Render a JSDoc-compatible type without exposing Python spellings."""
+        return self.render()
+
+    def render(self, *, unknown: str = "unknown") -> str:
+        """
+        Render a JSDoc-compatible type, spelling each unproven part as `unknown`.
+
+        A type checker must not report errors about a value Citry could not
+        type, so the editor's projections pass `unknown="any"`.
+        """
         if self.kind == "null":
             return "null"
         if self.kind in {"boolean", "number", "string"}:
@@ -43,20 +52,20 @@ class JsonWireType:
                 return json.dumps(self.literal, ensure_ascii=False)
             return self.kind
         if self.kind == "array":
-            item = merge_json_wire_types(self.items).javascript if self.items else "unknown"
+            item = merge_json_wire_types(self.items).render(unknown=unknown) if self.items else unknown
             return f"Array<{item}>"
         if self.kind == "object":
             members = [
-                f"{_js_property(field.name)}{'?' if not field.required else ''}: {field.value.javascript}"
+                f"{_js_property(field.name)}{'?' if not field.required else ''}: {field.value.render(unknown=unknown)}"
                 for field in self.fields
             ]
             if self.additional is not None:
-                members.append(f"[key: string]: {self.additional.javascript}")
-            return "{" + ", ".join(members) + "}" if members else "Record<string, unknown>"
+                members.append(f"[key: string]: {self.additional.render(unknown=unknown)}")
+            return "{" + ", ".join(members) + "}" if members else f"Record<string, {unknown}>"
         if self.kind == "union":
-            rendered = tuple(dict.fromkeys(item.javascript for item in self.items))
-            return " | ".join(rendered) if rendered else "unknown"
-        return "unknown"
+            rendered = tuple(dict.fromkeys(item.render(unknown=unknown) for item in self.items))
+            return " | ".join(rendered) if rendered else unknown
+        return unknown
 
     @property
     def display(self) -> str:

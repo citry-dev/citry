@@ -1235,7 +1235,8 @@ def test_native_slot_pattern_projection_uses_a_parameter_declaration(tmp_path):
         documents,
     )
     assert body_projection is not None
-    assert "/** @type {unknown} */\nvar item;" in body_projection.source
+    # Citry cannot type the slot value, so TypeScript reads it as `any` rather than report every use.
+    assert "/** @type {any} */\nvar item;" in body_projection.source
     assert same_element_projection is not None
     assert "/** @type {string} */\nvar item;" in same_element_projection.source
     assert sibling_projection is not None
@@ -1320,7 +1321,7 @@ def test_init_callback_context_fields_have_types_and_documentation_links(tmp_pat
         " * @property {(name?: CitryServerEventName) => boolean} loading",
         " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
         " * @property {CitryI18nService | null} i18n",
-        "=> Promise<unknown>} sendEvent",
+        "=> Promise<any>} sendEvent",
         "onServerRender?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M, E>>, "
         "init?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M, E>>}",
     ):
@@ -1497,10 +1498,7 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
     assert "CitryDeepReadonly<number>" in js_projection.source
     assert "function((" not in js_projection.source
     assert "/** @typedef {Object} CitryEventError" in js_projection.source
-    assert (
-        "@property {(name: string, handler: (detail: unknown) => void) => CitryCleanup} onEvent"
-        in js_projection.source
-    )
+    assert "@property {(name: string, handler: (detail: any) => void) => CitryCleanup} onEvent" in js_projection.source
     assert "/** @type {CitryComponentFunction} */ var $component" in js_projection.source
     assert "$provide" not in js_projection.source
     assert "secret" not in js_projection.source
@@ -1626,7 +1624,7 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
         dynamic_documents,
     )
     assert dynamic_projection is not None
-    assert "@typedef {Record<string, unknown>} CitryClientProps" in dynamic_projection.source
+    assert "@typedef {Record<string, any>} CitryClientProps" in dynamic_projection.source
 
     template_codes = [finding.code for finding in browser_diagnostics(template, project, documents)]
     js_codes = [finding.code for finding in browser_diagnostics(javascript, project, documents)]
@@ -2222,10 +2220,8 @@ $component(({ component }) => {
     assert "/** @type {string} */\nvar configuredClient;" in projection.source
     # The runtime passes `onEvent` to the callback and sets `$onEvent` on the
     # instance, so the editor must not flag either as a missing property.
-    assert "@property {(name: string, handler: (detail: unknown) => void) => CitryCleanup} onEvent" in (
-        projection.source
-    )
-    assert "@property {(name: string, callback: (detail: unknown) => void) => CitryCleanup} $onEvent" in (
+    assert "@property {(name: string, handler: (detail: any) => void) => CitryCleanup} onEvent" in (projection.source)
+    assert "@property {(name: string, callback: (detail: any) => void) => CitryCleanup} $onEvent" in (
         projection.source
     )
 
@@ -2342,15 +2338,16 @@ class Second(Component):
     assert engine_module._shared_js_data_policy(consumers, project, template, open_documents) == "open"
     assert set(joined) == {"optional", "shared"}
     assert joined["optional"].presence == "conditional"
-    assert joined["optional"].wire_type.javascript == "true | null"
+    # A js_data() value is only where the browser value starts, so its type is widened.
+    assert joined["optional"].wire_type.javascript == "boolean | null"
     assert len(joined["optional"].producers) == 2
     assert joined["shared"].presence == "always"
-    assert joined["shared"].wire_type.javascript == '"first" | 2 | 3'
+    assert joined["shared"].wire_type.javascript == "string | number"
     assert len(joined["shared"].producers) == 2
     assert projection is not None
-    assert "optional?: true | null" in projection.source
-    assert 'shared: "first" | 2 | 3' in projection.source
-    assert "& Record<string, unknown>" in projection.source
+    assert "optional?: boolean | null" in projection.source
+    assert "shared: string | number" in projection.source
+    assert "& Record<string, any>" in projection.source
 
 
 def test_js_data_public_name_diagnostics_cover_reserved_prefixes_and_dedupe_shared_owners(

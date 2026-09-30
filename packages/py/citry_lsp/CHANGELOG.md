@@ -4,7 +4,26 @@ All notable changes to `citry-lsp` are documented here.
 
 ## Unreleased
 
+### Added
+
+- The editor reports TypeScript's errors in component JavaScript and Vue
+  template expressions, such as a method assigned a boolean, an `$emit`
+  payload that fails its validator, a wrong argument count, or an unknown
+  member of `this.$el`. They show as `citry.typescript.*` errors with the
+  source `Citry (ts)`, and a mistake Citry already reports keeps only
+  Citry's finding. VS Code uses its own TypeScript; other editors use the
+  project's `tsc`. Set the `typeCheck` initialization option to `false` to
+  turn it off.
+
 ### Changed
+
+- Editor types match what JavaScript can check without casts: a value
+  Citry cannot type, such as an injection or a server event's result, is
+  `any` instead of `unknown`; a `js_data()` value types its key as
+  `boolean`, `number`, or `string` instead of its initial literal;
+  `$event` on an HTML element is the DOM event of that name with an open
+  `target`; and a selector query such as `querySelector('#name')` returns
+  `any`.
 
 - citry-lsp 0.2.0 understands Vue templates and component JavaScript.
   It requires Citry 0.6.0 or newer, with no upper bound, so upgrade

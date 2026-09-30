@@ -101,6 +101,12 @@ watched-file notification for that path.
 Open a component module or standalone template after saving the definition.
 One Citry server serves both mappings for that project.
 
+The server also reports
+[TypeScript errors in component JavaScript and templates](/ide/vscode/#typescript-errors-in-component-javascript-and-templates)
+when it finds Node.js and TypeScript's `tsc`, in the project's
+`node_modules` or on `PATH`. Add `"typeCheck": false` to the
+initialization options to turn them off.
+
 ## Current limitations
 
 - Inline `template`, `js`, and `css` values retain normal Python string

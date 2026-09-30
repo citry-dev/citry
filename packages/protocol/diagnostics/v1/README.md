@@ -17,3 +17,6 @@ catalog.
 
 `citry.python.*` codes are intentionally different. Citry maps those from the
 pinned Python analyzer, so their suffixes and messages remain provider-owned.
+`citry.typescript.*` codes work the same way for TypeScript's errors in
+component JavaScript and templates: the suffix is TypeScript's error number,
+such as `ts2322`, and the message is TypeScript's.

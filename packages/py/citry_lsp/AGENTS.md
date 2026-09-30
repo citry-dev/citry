@@ -13,3 +13,10 @@ also follow the complete vertical checklist in
 Project code must never be imported in the LSP stdio process. Keep app loading
 in `citry_lsp.app_worker`, preserve the registry/static confidence boundary,
 and bump the declared protocol version for incompatible client changes.
+
+TypeScript diagnostics: `engine.type_check_projections` builds the checked
+files, `citry_lsp/typescript.py` runs `tsc` and maps and filters findings,
+and the server asks a client that offers it (`typeCheckClient`) through
+`citry/typeCheck`. Fix a false positive in the projection types or
+`types/citry-dom.d.ts`, never by matching TypeScript's message text, which
+VS Code may show in another language.

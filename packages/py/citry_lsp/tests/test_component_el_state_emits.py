@@ -310,8 +310,8 @@ def test_child_listener_names_are_checked(tmp_path):
         # A validator without parameters emits no values.
         ('move($event)" @dropTask', "move($event)", "__probe($event)", "undefined"),
         ('move($event)" @drop-tsak', "move($event)", "__probe($event)", "{ taskId: number; }"),
-        # An undeclared or native event keeps the DOM event type.
-        ('move($event)"></c-Lane>', "move($event)", "__probe($event)", "Event"),
+        # An undeclared event reaches the child's root element as a DOM event.
+        ('move($event)"></c-Lane>', "move($event)", "__probe($event)", 'CitryDomEvent<"click">'),
         # Vue calls an inline function with the emitted values.
         ("(a, b)", "(a, b) => move(a)", "(a, b) => __probe([a, b])", "any[]"),
     ],
@@ -329,7 +329,7 @@ def test_array_emits_type_declared_listeners_as_any_and_others_as_events(tmp_pat
     template = '<c-Lane @drop-task="move($event)" @click="move($event)"></c-Lane>'
     lane_js = "$component({ emits: ['drop-task'] });\n"
     project, _javascript, template_document, documents = _project(tmp_path, template, _PARENT_JS, lane_js=lane_js)
-    for marker, expected in (('move($event)" @click', "any"), ('move($event)"></c', "Event")):
+    for marker, expected in (('move($event)" @click', "any"), ('move($event)"></c', 'CitryDomEvent<"click">')):
         projection = browser_projection(template_document, _position(template, marker, 1), project, documents)
         assert projection is not None
         source = projection.source.replace("\nmove($event)\n", "\n__probe($event)\n", 1)

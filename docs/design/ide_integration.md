@@ -1718,11 +1718,11 @@ degradation contract in section 3.4.1.
     its Alpine magics and `$component` context, while ordinary JavaScript
     remains provider-owned. Generated projection ranges, stale
     document versions, invalid source, ambiguous ownership, unsupported data
-    shapes, and partial provenance degrade to no mapped result. This slice
-    does not claim a standalone JavaScript diagnostic service. Citry owns its
+    shapes, and partial provenance degrade to no mapped result. Citry owns its
     JSON-wire warning, Alpine and component-initializer namespace rules,
-    literal server-event contract, and static child-prop contract; ordinary
-    JavaScript diagnostics remain provider-owned.
+    literal server-event contract, and static child-prop contract. Step 25
+    adds TypeScript's own type errors on top of these; other JavaScript
+    warnings remain provider-owned.
 
     **Accepted browser-intelligence expansion.** User testing after the first
     Step 20 delivery established that browser expressions need the same strict
@@ -1851,9 +1851,9 @@ degradation contract in section 3.4.1.
     owners are omitted. The shared checker and LSP report
     `citry.component-js.unknown-data-member` only when every consumer's `JsData`
     schema or inferred `js_data()` return shape is closed. Open, unavailable,
-    and stale source contracts produce no unknown-member error. General
-    JavaScript diagnostics are not forwarded into embedded source by this
-    integration; Citry publishes its own cross-language findings there.
+    and stale source contracts produce no unknown-member error. Step 25
+    forwards TypeScript's type errors into embedded source; Citry's own
+    cross-language findings win where both describe the same mistake.
     Literal server-event completion works from an empty or partial string in
     `sendEvent`, `$sendEvent`, `$loading`, and `$error`, using the same handler
     contract as diagnostics and navigation.
@@ -2001,6 +2001,97 @@ degradation contract in section 3.4.1.
     does not intercept typing or reverse document changes because those events
     cannot prove whether an f-string edit came from Pylance or was authored
     deliberately. Editors without Pylance need no setting.
+
+25. **Report TypeScript's errors in component JavaScript and templates.**
+    Implemented 2026-10-01. Once completion and hover typed `this`, template
+    names, `$el`, and `$emit`, the types caught real mistakes (a method
+    assigned a boolean, an `$emit` payload that fails its validator, a wrong
+    argument count, `this.$el.fooBar`) but no one saw them: VS Code does not
+    forward diagnostics from Citry's generated projection files, and
+    `citry check` did not run TypeScript.
+
+    *Prior art.* The language server already runs an outside type checker:
+    `semantic.semantic_diagnostics` sends Python expression copies to the
+    pinned `ty` server, maps findings through the copies, keeps only those
+    wholly inside authored text, and publishes them as `citry.python.*` with
+    the source `Citry (ty)`. The server also already asks the VS Code client
+    to run a VS Code provider for it: `citry/formatEmbedded` hands embedded
+    JavaScript and CSS to the installed formatter and validates the answer.
+    `engine.browser_projection` built one projection per cursor position;
+    the VS Code client's `BrowserScriptFiles` writes projections as real
+    files so VS Code's TypeScript server types them. Tests already ran the
+    repository's `tsc` over projections to prove the types. No code ran
+    TypeScript diagnostics or found a `tsc` outside tests.
+
+    *Design.* `engine.type_check_projections` builds one file per template
+    region, declaring the shared names and the owning component's instance
+    once and wrapping each Vue expression in its own function with its own
+    `v-for` aliases and `$event`, plus one file per component JavaScript
+    region. Both reuse the helpers of the interactive projection, so the
+    check and a hover see the same types. The language server then runs
+    TypeScript one of two ways. A client that sends
+    `initializationOptions.typeCheckClient = {"version": 1}` receives a
+    `citry/typeCheck` request with the files; the VS Code extension writes
+    them beside its completion projections with a `// @ts-check` header,
+    asks VS Code's TypeScript server through the `typescript.tsserverRequest`
+    command for `syntacticDiagnosticsSync` and `semanticDiagnosticsSync`,
+    and returns the raw diagnostics. Any other client gets the server's own
+    run of the project's `tsc` (the nearest `node_modules/.bin/tsc`, then
+    `PATH`). Either way `typescript.map_type_check_findings` keeps errors of
+    the reported kinds (type mismatch, unknown member, call arity, and
+    unknown names outside templates; syntax errors only for JavaScript in a
+    Python string), maps both ends through the projection's source runs,
+    drops anything in generated text, and drops a finding that overlaps a
+    Citry finding for the same mistake. The server publishes Citry's
+    findings first and adds TypeScript's, with the source `Citry (ts)` and
+    codes `citry.typescript.ts<number>`, when the check answers.
+    `initializationOptions.typeCheck = false` (VS Code: `citry.typeCheck`)
+    turns it off. `citry check --types` loads the same project facts,
+    checks every workspace document in one `tsc` run, and reports the same
+    findings with file, line, and column.
+
+    The projections were changed so ordinary code produces no findings.
+    Unproven values (`JsonWireType` unknowns, dynamic props, injections,
+    server-event results, open instance names) render as `any` instead of
+    `unknown`. `js_data()` literal values widen to their base type. Strict
+    mode stays off, matching the VS Code projection folder's `jsconfig.json`.
+    A native listener's `$event` is the named DOM event with `target` open,
+    and a Citry `@c-*` binding on a child tag reads the child's emitted value.
+    `citry-dom.d.ts`, shipped beside the Vue types, types a selector query
+    and an unknown `window` member as `any`. A component without an
+    `inject` option injects nothing, so a misspelled `this.<name>` is an
+    error rather than `unknown`. Minified files are not checked.
+
+    *Alternatives rejected.* Running TypeScript only in the VS Code
+    extension would leave other editors and `citry check` with a second,
+    separate implementation of the filter and mapping. Running `tsc` only
+    from the server would require Node.js and TypeScript in every VS Code
+    user's environment, although VS Code ships a TypeScript server. Letting
+    VS Code's TypeScript extension publish the projection files' own
+    diagnostics would put generated file names in the Problems panel and
+    cannot filter or de-duplicate them. Filtering TypeScript findings by
+    message text (for example, "on type 'unknown'") breaks when VS Code
+    shows TypeScript in another language, so false positives are fixed in
+    the projection types instead.
+
+    *Error modes.* A client answer of `null`, a timeout (30 s), or an
+    invalid answer keeps the previous TypeScript findings and logs a
+    warning; the server never fails Citry's own diagnostics because of it.
+    A missing Node.js or `tsc` logs one warning per session in the editor,
+    and makes `citry check --types` exit with status 2 and name what to
+    install. A `tsc` configuration error is reported the same way. An
+    invalid `typeCheck` or `typeCheckClient` option is rejected at
+    initialization.
+
+    *What would falsify it.* A false positive on authored code that runs
+    correctly in the browser, found in the example apps or `citry_ui`,
+    means a projection type is wrong. At the time of writing the example
+    apps and starters report nothing; `citry_ui` reports 23 findings, each
+    a TypeScript DOM typing a JSDoc cast would settle (element expando
+    properties, `children` typed `Element`, `getRootNode()` typed `Node`).
+    A mapped range that does not cover the text TypeScript meant, or a
+    finding that TypeScript reports only in VS Code or only in `tsc`, would
+    mean the two runners disagree.
 
 Step 5 selected the companion `citry_lsp` distribution. It exposes the
 `citry-lsp` console command, declares Citry 0.4.0 through 0.4.x, catalog v1,

@@ -833,6 +833,12 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
 EXTERNAL_CODE_PREFIXES: Final = [{'prefix': 'citry.python.',
   'provider': 'ty',
   'summary': 'Python semantic diagnostics retained from the pinned ty analyzer. The suffix and message remain '
-             'provider-owned.'}]
+             'provider-owned.'},
+ {'prefix': 'citry.typescript.',
+  'provider': 'TypeScript',
+  'summary': 'TypeScript errors in component JavaScript and Vue template expressions, such as a wrong argument type, '
+             "an unknown member, or a wrong argument count. The suffix is TypeScript's own error number, such as "
+             "ts2322, and the message is TypeScript's. Citry drops a TypeScript error that one of its own diagnostics "
+             'already reports.'}]
 
 # fmt: on

@@ -75,7 +75,19 @@ def _repository_tsc() -> Path | None:
 
 
 # TypeScript reports the type it infers for each `__probe(read)` argument.
-_PROBE = "\n/** @param {null} value */\nfunction __probe(value) {}\n"
+_PROBE = (
+    "\n/** @param {null} value */\nfunction __probe(value) {}\n"
+    # `any` passes the `null` parameter silently, so this names it instead.
+    "/** @template T @param {T} value @returns {0 extends (1 & T) ? 'any' : 'typed'} */\n"
+    "function __isAny(value) { return /** @type {any} */ (value); }\n"
+)
+# The probe type of a value TypeScript reads as `any`.
+ANY = '"any"'
+
+
+def _probe_call(read: str, expected: str) -> str:
+    """Probe `read`, through `__isAny` when the expected type is `any`."""
+    return f"__probe(__isAny({read}))" if expected == ANY else f"__probe({read})"
 
 
 def _probe_message(expected: str) -> str:
@@ -139,7 +151,8 @@ _ALL_MEMBERS = {
     "computed": ("this.double", "number"),
     "method": ("this.toggle()", "boolean"),
     "prop": ("this.label", "string"),
-    "inject": ("this.theme", "unknown"),
+    # Nothing says what the provider gives, so an injection is `any`.
+    "inject": ("this.theme", ANY),
     "js_data": ("this.title", "string"),
     "helper": ("this.$loading()", "boolean"),
 }
@@ -163,7 +176,7 @@ _ALL_MEMBERS = {
             "data() {",
             {
                 "prop": ("this.label", "string"),
-                "inject": ("this.theme", "unknown"),
+                "inject": ("this.theme", ANY),
                 "js_data": ("this.title", "string"),
                 "helper": ("this.$loading()", "boolean"),
             },
@@ -182,7 +195,7 @@ def test_options_functions_see_the_full_instance(card, body_start, probes):
     tmp_path, project, javascript, _template, documents = card
     projection = browser_projection(javascript, _position(_JS, body_start, 1), project, documents)
     assert projection is not None
-    reads = "".join(f"__probe({read});" for read, _expected in probes.values())
+    reads = "".join(f"{_probe_call(read, expected)};" for read, expected in probes.values())
     source = projection.source.replace(body_start, body_start + reads, 1)
     errors = _type_errors(tmp_path, source)
     for name, (_read, expected) in probes.items():
@@ -200,13 +213,13 @@ def test_template_names_take_the_instance_types(card):
         "count": "number",
         "double": "number",
         "query": "string",
-        "theme": "unknown",
+        "theme": ANY,
         "startDrag": "(event: Event) => void",
         "label": "string",
         # `open` is also a browser global; the component's own name must win.
         "open": "boolean",
     }
-    reads = ", ".join(f"__probe({name})" for name in expected)
+    reads = ", ".join(_probe_call(name, type_source) for name, type_source in expected.items())
     source = projection.source.replace(authored, reads, 1)
     assert source != projection.source
     errors = _type_errors(tmp_path, source)
@@ -309,7 +322,7 @@ class Second(Component):
     assert projection is not None
     # Two components may infer different types, so no single instance is claimed.
     assert "CitryTemplateInstance" not in projection.source
-    assert "/** @type {unknown} */\nvar count;" in projection.source
+    assert "/** @type {any} */\nvar count;" in projection.source
     # Navigation still reaches the one shared declaration.
     target = definition(template, _position(template_source, "count", 1), project)
     declared = types.Range(types.Position(0, 31), types.Position(0, 36))
@@ -385,10 +398,11 @@ def test_unlisted_member_is_never_silently_never(tmp_path, javascript, app_extra
     projection = browser_projection(document, _position(javascript, "typo", 1), project)
     assert projection is not None
     errors = _type_errors(tmp_path, projection.source)
-    # A closed instance reports the typo; an open one reads it as unknown.
-    # Neither may type it `never`, which would hide the mistake.
+    # A closed instance reports the typo; an open one reads it as `any`,
+    # because nothing proves its type. Neither may type it `never`, which
+    # would hide the mistake.
     assert _probe_message("never") not in errors, errors
-    assert any("'typo' does not exist" in message for message in errors) or _probe_message("unknown") in errors, errors
+    assert any("'typo' does not exist" in message for message in errors) or errors == [], errors
 
 
 def test_initializer_method_has_no_instance_this(card):
