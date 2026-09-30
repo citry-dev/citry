@@ -271,12 +271,14 @@ instance when the component participates in Citry Events.
 
 <h3 class="doc-heading" id="state"><code>$state</code></h3>
 
-Read the component's reactive public Events State. Assigning a writable whole
-field updates the browser immediately and queues that value for the component's
-next non-GET event call. State is client input and must be validated on the
-server. Nested values and public fields that are not declared client-writable
-are read-only. Non-public State names are unavailable. Invalid assignments
-throw synchronously and leave the prior value unchanged.
+Read the component's reactive public Events State. This is Citry's own object,
+filled from the component's `State` class, and is separate from Vue's `data()`
+and from any Pinia store. Assigning a writable whole field updates the browser
+immediately and queues that value for the component's next non-GET event call.
+State is client input and must be validated on the server. Nested values and
+public fields that are not declared client-writable are read-only. Non-public
+State names are unavailable. Invalid assignments throw synchronously and leave
+the prior value unchanged.
 
 ```citry-html
 <button @click="$state.count += 1">Add one</button>

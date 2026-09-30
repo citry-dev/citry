@@ -23,6 +23,16 @@ All notable changes to `citry-lsp` are documented here.
   `$sendEvent`. Vue expressions in the template get the same types, and Go
   to Definition from either place opens the member's declaration, or the
   Python field for a `js_data()` key.
+- `$el` is typed from the component template's top-level node, such as
+  `HTMLButtonElement` for a `<button>` root, instead of `any` in component
+  JavaScript and `Element` in templates.
+- `$emit` follows the component's `emits` option like Vue's
+  `defineComponent()`: completion offers the declared names, hover shows
+  each event's values, and a listener on a child component tag types
+  `$event` from the child's `emits`. The editor also marks an event name
+  that `emits` does not declare.
+- Hovering `$state` explains that it is Citry's Events State, typed from
+  the component's `State` class, not Vue's `data()` or a Pinia store.
 - Completion, hover, go-to-definition, and unknown-variable diagnostics now
   work for keys returned by a `template_data`, `js_data`, or `css_data`
   written as a `@staticmethod` or `@classmethod`, not only for instance

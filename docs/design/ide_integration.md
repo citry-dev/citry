@@ -1784,7 +1784,18 @@ degradation contract in section 3.4.1.
     `provide`/`inject`/`unprovide`, `sendEvent`, and `onEvent`. Callback and
     configuration-object forms share one generic signature, like Vue's
     `defineComponent()`, so TypeScript infers each Options section and types
-    `this` as the full instance. An initializer may return a cleanup
+    `this` as the full instance, including `$emit` from the `emits` option.
+    `$el` is typed from the template's top-level node (`Node` for several
+    nodes or an unreadable template), and a listener on a child component tag
+    types `$event` from the child's `emits`. The analyzer reports `emits`
+    separately from the instance names, so an `emits` it cannot read leaves
+    the other names typed. When it can read `emits`, Citry reports a literal
+    event name that `emits` does not declare as
+    `citry.browser.undeclared-emit` (an `$emit` call) or
+    `citry.browser.undeclared-component-event` (a listener on a child tag).
+    An `emits` built from a variable, a spread, a computed key, or a mixin
+    turns both checks off for that component.
+    An initializer may return a cleanup
     function, or a Promise that resolves to one. Direct synchronous
     initialization writes such as `scope.name = value`, `scope["name"] =
     value`, and a static `Object.assign(scope, {...})` add proven variables to

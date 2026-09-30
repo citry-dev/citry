@@ -78,6 +78,7 @@ from citry.analysis import (
     build_inferred_template_shadow,
     build_schema_template_shadow,
     component_js_i18n_owners,
+    component_listener_event,
     component_name_match,
     css_data_completion_at,
     css_data_reference_at,
@@ -86,6 +87,9 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_csp_compatibility,
+    lint_undeclared_component_js_emits,
+    lint_undeclared_component_listeners,
+    lint_undeclared_template_emits,
     lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
@@ -102,6 +106,7 @@ from citry.analysis import (
     template_python_queries,
     template_python_query_at,
     unknown_component_uses,
+    vue_listener_event_names,
 )
 from citry_core.i18n import CatalogCompiler, I18nCompileError
 from citry_core.template_parser import (
@@ -135,6 +140,7 @@ from citry_lsp.regions import (
     standalone_js_region,
     standalone_region,
 )
+from citry_lsp.root_element import TAG_ELEMENT_TYPEDEF, UNKNOWN_ROOT, template_root_element_type
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
@@ -1270,6 +1276,17 @@ def browser_diagnostics(
                         source="citry",
                     )
                 )
+        diagnostics.extend(
+            _vue_finding_diagnostic(region, finding)
+            for finding in (
+                *lint_undeclared_template_emits(
+                    expressions, _consumer_js_sources(consumers, project, document, open_documents)
+                ),
+                *lint_undeclared_component_listeners(
+                    expressions, lambda tag: _tag_js_source(tag, project, document, open_documents)
+                ),
+            )
+        )
         for csp_finding in lint_csp_compatibility(
             expressions,
             vue_consumers or (),
@@ -1359,6 +1376,10 @@ def browser_diagnostics(
                     source="citry",
                 )
             )
+        diagnostics.extend(
+            _vue_finding_diagnostic(js_region, finding)
+            for finding in lint_undeclared_component_js_emits(js_region.source_map.template_source)
+        )
         js_lint_consumers = _component_js_lint_consumers(js_consumers, project)
         if js_lint_consumers is not None:
             for component_finding in lint_unknown_component_js_variables(
@@ -1416,6 +1437,54 @@ def browser_diagnostics(
                 )
             )
     return tuple(diagnostics)
+
+
+def _vue_finding_diagnostic(region: TemplateRegion | JsRegion, finding: Any) -> types.Diagnostic:
+    """Map one Citry browser lint finding to an editor diagnostic in its region."""
+    return types.Diagnostic(
+        range=_range(region.source_map.map_range(finding.start_index, finding.end_index)),
+        message=finding.message,
+        severity=types.DiagnosticSeverity.Error if finding.severity == "error" else types.DiagnosticSeverity.Warning,
+        code=finding.code,
+        code_description=types.CodeDescription(diagnostic_documentation_url(finding.code)),
+        source="citry",
+    )
+
+
+def _consumer_js_sources(
+    consumers: tuple[ComponentRecord, ...],
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> tuple[str, ...]:
+    """
+    Return the current JavaScript of every component that renders a template.
+
+    An empty result means some consumer's events cannot be checked: it has no
+    JavaScript, so it declares no `emits` and accepts any name, or its source
+    cannot be proven current.
+    """
+    sources: list[str] = []
+    for component in consumers:
+        resolved = _component_js_asset_source(component, project, document, open_documents)
+        if not resolved:
+            return ()
+        sources.append(resolved[0])
+    return tuple(sources)
+
+
+def _tag_js_source(
+    tag: str,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> str | None:
+    """Return the current JavaScript of the component a `c-*` tag renders, if it has any."""
+    component = None if project.catalog is None else project.catalog.get_tag(tag)
+    if component is None:
+        return None
+    resolved = _component_js_asset_source(component, project, document, open_documents)
+    return resolved[0] if resolved else None
 
 
 def _browser_i18n_profile_diagnostics(
@@ -1786,6 +1855,7 @@ def browser_projection(
         }
         native_names = _shared_vue_public_names(consumers, project, document, open_documents)
         instance = _template_component_instance(consumers, project, document, open_documents)
+        listener = _component_listener_payload(expression, project, document, open_documents)
         preamble, name_declarations = _browser_preamble(
             roots,
             (*expression.bindings, *native_names),
@@ -1798,9 +1868,19 @@ def browser_projection(
             i18n=project.i18n,
             js_data_policy=_shared_js_data_policy(consumers, project, document, open_documents),
             instance_names=frozenset() if instance is None else frozenset(native_names),
+            # Reading every template in the tree is only worth it when `$el` is read.
+            root_element_type=(
+                _shared_root_element_type(consumers, project, document, open_documents)
+                if "$el" in expression.source
+                else UNKNOWN_ROOT
+            ),
+            template_instance=instance is not None,
+            dollar_event_type="Event" if listener is None else f"CitryFirstArg<{listener.arguments}>",
         )
         if instance is not None:
             preamble = f"{preamble}\n{instance.source}"
+        if listener is not None:
+            preamble = f"{preamble}\n{listener.source}"
         # One function scope holds the names and the expression. VS Code
         # checks each projection as a module, where this changes nothing; a
         # checker that reads the file as a script would otherwise merge a
@@ -1812,7 +1892,12 @@ def browser_projection(
             if normalized is None:
                 return None
             projected_expression, _ = normalized
-        if expression.mode == "statement":
+        if listener is not None and _VUE_FUNCTION_EXPRESSION.match(projected_expression):
+            # Vue calls an inline function with the emitted values, so its
+            # parameters take the child's payload types.
+            prefix = f"{preamble}\nvoid (/** @type {{(...args: {listener.arguments}) => unknown}} */ (\n"
+            suffix = "\n));\n"
+        elif expression.mode == "statement":
             prefix = f"{preamble}\n(function () {{\n"
             suffix = "\n})();\n"
         elif expression.mode == "loop":
@@ -1838,6 +1923,8 @@ def browser_projection(
         if instance is not None:
             # The generated helper is not a template name, so never offer it.
             owned_names = (*owned_names, _TEMPLATE_COMPONENT_SOURCE)
+        if listener is not None:
+            owned_names = (*owned_names, _CHILD_COMPONENT_EMITS)
         owns_position = _browser_projection_owns_position(
             expression,
             parser_index,
@@ -1901,6 +1988,12 @@ def browser_projection(
         writable_state_names=writable_state_names,
         i18n=project.i18n,
         js_data_policy=_shared_js_data_policy(consumers, project, document, open_documents),
+        # Reading every template in the tree is only worth it when `$el` is read.
+        root_element_type=(
+            _shared_root_element_type(consumers, project, document, open_documents)
+            if "$el" in js_region.source_map.template_source
+            else UNKNOWN_ROOT
+        ),
     )
     # Configured host globals stay global: the authored source is a top-level script.
     prefix = f"{preamble_declarations}\n{global_declarations}\n"
@@ -1971,9 +2064,14 @@ def _template_component_instance(
         return None
     source = resolved[0]
     analysis = analyze_browser_component_source(source)
-    # Without Options names there is nothing for the template to read from
-    # the inferred instance; js_data() keys are typed from Python already.
-    if not analysis.valid or len(analysis.component_calls) != 1 or not analysis.public_names:
+    # Without Options names or declared events there is nothing for the
+    # template to read from the inferred instance; js_data() keys are typed
+    # from Python already, and `$emit` accepts any name.
+    if (
+        not analysis.valid
+        or len(analysis.component_calls) != 1
+        or (not analysis.public_names and not analysis.declared_events)
+    ):
         return None
     call = analysis.component_calls[0]
     if call.argument_start_index is None or call.argument_end_index is None:
@@ -1997,6 +2095,172 @@ def _template_component_instance(
         )
     )
     return _TemplateComponentInstance(block, browser_component_props(source), analysis)
+
+
+# The generated function that runs a child component's source to read its `emits`.
+_CHILD_COMPONENT_EMITS = "__citryChildEmits"
+
+# Vue's own test for an inline function handler (`fnExpRE` in
+# compiler-core): Vue calls such a handler with the emitted values instead of
+# wrapping it in `$event => ...`.
+_VUE_FUNCTION_EXPRESSION = re.compile(
+    r"^\s*(?:async\s*)?(?:\([^)]*?\)|[\w$_]+)\s*(?::[^=]+)?=>|^\s*(?:async\s+)?function(?:\s+[\w$]+)?\s*\("
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _ListenerPayload:
+    """A child component's `emits`, ready to type one listener in the parent template."""
+
+    # Declarations that define `ReturnType<typeof __citryChildEmits>` as the child's emits.
+    source: str
+    # A TypeScript tuple type of the values the child emits with this event.
+    arguments: str
+
+
+def _component_listener_payload(
+    expression: BrowserExpression,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> _ListenerPayload | None:
+    """
+    Type a `@name` listener on a child component tag from the child's `emits`.
+
+    The child's source runs in a function whose return type is the `emits`
+    TypeScript infers, as `$component` infers it in the child. Vue matches
+    the listener to a declared event in camelCase or kebab-case, so each
+    spelling is tried. A child whose `emits` cannot be read gives `None`.
+    An event the child does not declare keeps `$event` a DOM `Event`, because
+    Vue passes such a listener to the child's root element.
+    """
+    event = component_listener_event(expression)
+    if event is None or expression.element is None:
+        return None
+    source = _tag_js_source(expression.element, project, document, open_documents)
+    if source is None:
+        return None
+    analysis = analyze_browser_component_source(source)
+    if analysis.declared_events is None or len(analysis.component_calls) != 1:
+        return None
+    call = analysis.component_calls[0]
+    if call.argument_start_index is None or call.argument_end_index is None:
+        return None
+    try:
+        argument = _parser_source_slice(source, call.argument_start_index, call.argument_end_index)
+    except UnicodeDecodeError:
+        return None
+    block = "\n".join(
+        (
+            f"function {_CHILD_COMPONENT_EMITS}() {{",
+            "/** @type {CitryComponentFunction} */ var $component = /** @type {any} */ (function () {});",
+            source,
+            # The leading semicolon ends an authored statement left open.
+            ";return /** @type {CitryDefineEmits} */ (/** @type {any} */ (null))(",
+            argument,
+            ");",
+            "}",
+        )
+    )
+    spellings = ", ".join(_js_string_literal(name) for name in vue_listener_event_names(event))
+    arguments = f"CitryListenerArgs<ReturnType<typeof {_CHILD_COMPONENT_EMITS}>, {spellings}>"
+    return _ListenerPayload(block, arguments)
+
+
+# How many nested child components `$el` typing follows before it answers `Node`.
+_ROOT_ELEMENT_DEPTH = 8
+
+
+def _shared_root_element_type(
+    consumers: tuple[ComponentRecord, ...],
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> str:
+    """
+    Type `$el` for code shared by these components.
+
+    Each component renders its own template, so shared code sees any of their
+    root nodes. Without a consumer the root is unknown, which is `Node`.
+    """
+    if not consumers:
+        return UNKNOWN_ROOT
+    found = [
+        _component_root_element_type(component, project, document, open_documents, frozenset())
+        for component in consumers
+    ]
+    if UNKNOWN_ROOT in found:
+        return UNKNOWN_ROOT
+    return " | ".join(dict.fromkeys(found))
+
+
+def _component_root_element_type(
+    component: ComponentRecord,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+    resolving: frozenset[str],
+) -> str:
+    """Type one component's `$el` from its current template, following child components."""
+    # A component that renders itself, directly or through another, has no
+    # root this analysis can finish, and a deep chain is not worth reading.
+    if component.class_id in resolving or len(resolving) >= _ROOT_ELEMENT_DEPTH:
+        return UNKNOWN_ROOT
+    template = _component_template_ast(component, project, document, open_documents)
+    if template is None:
+        return UNKNOWN_ROOT
+    catalog = project.catalog
+    nested = resolving | {component.class_id}
+
+    def resolve(tag: str) -> str | None:
+        child = None if catalog is None else catalog.get_tag(tag)
+        if child is None:
+            return None
+        return _component_root_element_type(child, project, document, open_documents, nested)
+
+    return template_root_element_type(template, resolve)
+
+
+def _component_template_ast(
+    component: ComponentRecord,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> Any | None:
+    """Parse one component's current template, preferring unsaved editor text."""
+    asset = component.assets.template
+    if asset.kind == "none" or not _template_consumer_is_current(component, project, open_documents):
+        return None
+    documents = dict(open_documents or {})
+    documents[document.uri] = document
+    if asset.resolved_path is not None:
+        source_file = asset.resolved_path.resolve()
+        found, source = _synchronized_document_source(source_file, documents)
+        if not found:
+            try:
+                source = source_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                return None
+        if source is None:
+            return None
+    else:
+        if asset.owner_file is None or asset.owner_qualname is None or "<locals>" in asset.owner_qualname:
+            return None
+        python_source = _python_source(asset.owner_file, document, open_documents)
+        if python_source is None:
+            return None
+        owner_name = asset.owner_qualname.rsplit(".", 1)[-1]
+        matches = [
+            region for region in discover_python_regions(python_source).regions if region.component_name == owner_name
+        ]
+        if len(matches) != 1:
+            return None
+        source = matches[0].source_map.template_source
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    try:
+        return parser(source)
+    except Exception:  # noqa: BLE001 - a template that does not parse has no provable root.
+        return None
 
 
 def _browser_source_mappings(
@@ -8057,7 +8321,11 @@ _ALPINE_API_SPECS = {
     "$state": _BrowserApiSpec(
         "magic",
         "CitryEventsState",
-        "Read or update this component's public Events state.",
+        (
+            "Citry Events State for this component: the public fields of its `State`, typed from the "
+            "Python class. It is not Vue's `data()` or a Pinia store. Read-only fields cannot be assigned, "
+            "and a component without `State` has no fields."
+        ),
         f"{_BROWSER_APIS_URL}#state",
     ),
     "$loading": _BrowserApiSpec(
@@ -8131,7 +8399,10 @@ _COMPONENT_CONTEXT_SPECS = {
     "state": _BrowserApiSpec(
         "parameter",
         "CitryEventsState | null",
-        "The same object as `component.$state`, or null when the component declares no Events.",
+        (
+            "The same Citry Events State object as `component.$state` (not Vue's `data()` or a Pinia "
+            "store), or null when the component declares no Events."
+        ),
         f"{_BROWSER_APIS_URL}#state",
     ),
     "sendEvent": _BrowserApiSpec(
@@ -8281,7 +8552,6 @@ def _component_public_instance_shape(
     analysis: Any | None,
     *,
     js_data_policy: Literal["closed", "open", "unavailable"] = "closed",
-    i18n: Any | None = None,
 ) -> str:
     """Render the closed, source-proven additions to Vue's public instance."""
     members: dict[str, tuple[str, bool]] = {root.name: (root.wire_type.javascript, False) for root in roots}
@@ -8313,7 +8583,7 @@ def _component_public_instance_shape(
     readonly = _js_member_shape(
         tuple((name, type_source, True) for name, (type_source, readonly) in members.items() if readonly)
     )
-    helpers, open_namespace = _component_instance_helpers(analysis, js_data_policy=js_data_policy, i18n=i18n)
+    helpers, open_namespace = _component_instance_helpers(analysis, js_data_policy=js_data_policy)
     return f"{writable} & Readonly<{readonly}> & {helpers}{open_namespace}"
 
 
@@ -8321,18 +8591,10 @@ def _component_instance_helpers(
     analysis: Any | None,
     *,
     js_data_policy: Literal["closed", "open", "unavailable"],
-    i18n: Any | None,
 ) -> tuple[str, str]:
     """Return the type of Citry's helper members, and an open index signature when some names are unproven."""
-    helpers = (
-        "{$state: CitryEventsState, $sendEvent: (name: CitryServerEventName, "
-        "args?: Record<string, unknown>, opts?: CitrySendOptions) => Promise<unknown>, "
-        "$loading: (name?: CitryServerEventName) => boolean, "
-        "$error: (name?: CitryServerEventName) => CitryEventError | null, "
-        "$onEvent: (name: string, callback: (detail: unknown) => void) => CitryCleanup}"
-    )
-    if i18n is not None and i18n.configured:
-        helpers = helpers[:-1] + ", $i18n: CitryI18nService | null}"
+    # `_instance_helpers_typedef` defines the type, with a description per member.
+    helpers = "CitryInstanceHelpers"
     # An open js_data() result or an Options section the analyzer cannot read
     # may add any name, so an unlisted member reads as `unknown`.
     open_namespace = (
@@ -8351,7 +8613,6 @@ def _component_instance_extras_shape(
     analysis: Any | None,
     *,
     js_data_policy: Literal["closed", "open", "unavailable"],
-    i18n: Any | None,
 ) -> str:
     """
     Render what Citry adds to a Vue instance: js_data() keys and the helpers.
@@ -8363,8 +8624,44 @@ def _component_instance_extras_shape(
     js_data = _js_member_shape(
         tuple((root.name, root.wire_type.javascript, root.presence != "conditional") for root in roots)
     )
-    helpers, open_namespace = _component_instance_helpers(analysis, js_data_policy=js_data_policy, i18n=i18n)
+    helpers, open_namespace = _component_instance_helpers(analysis, js_data_policy=js_data_policy)
     return f"{js_data} & {helpers}{open_namespace}"
+
+
+def _instance_helpers_typedef(i18n: Any | None, *, has_state: bool) -> tuple[str, ...]:
+    """
+    Define the members Citry adds to every Vue instance, with hover text.
+
+    A description on each `@property` is what the JavaScript provider shows
+    when the author hovers `this.$state` or completes `this.$`.
+    """
+    state_text = (
+        "Citry Events State for this component: the public fields of its `State` class, "
+        "not Vue's `data()` or a Pinia store. Read-only fields cannot be assigned."
+        if has_state
+        else "Citry Events State for this component. This component declares no public `State` "
+        "fields, so it has nothing to read or assign."
+    )
+    lines = [
+        "/** @typedef {Object} CitryInstanceHelpers",
+        f" * @property {{CitryEventsState}} $state {state_text} {_BROWSER_APIS_URL}#state",
+        " * @property {(name: CitryServerEventName, args?: Record<string, unknown>, opts?: CitrySendOptions) "
+        "=> Promise<unknown>} $sendEvent Call one of this component's declared Citry server event handlers. "
+        f"{_BROWSER_APIS_URL}#send-event",
+        " * @property {(name?: CitryServerEventName) => boolean} $loading Check whether any Citry server "
+        f"handler, or one named handler, is queued or running. {_BROWSER_APIS_URL}#loading",
+        " * @property {(name?: CitryServerEventName) => CitryEventError | null} $error Read the latest "
+        f"retained Citry server-handler error. {_BROWSER_APIS_URL}#error",
+        " * @property {(name: string, callback: (detail: unknown) => void) => CitryCleanup} $onEvent Listen "
+        f"for a Citry server-dispatched event for this component instance. {_BROWSER_APIS_URL}#on-event",
+    ]
+    if i18n is not None and i18n.configured:
+        lines.append(
+            " * @property {CitryI18nService | null} $i18n Translate and format inside the nearest client i18n "
+            f"provider, or null outside one. {_BROWSER_I18N_URL}"
+        )
+    lines.append(" */")
+    return tuple(lines)
 
 
 def _browser_preamble(
@@ -8382,6 +8679,9 @@ def _browser_preamble(
     i18n: Any | None = None,
     js_data_policy: Literal["closed", "open", "unavailable"] = "closed",
     instance_names: frozenset[str] = frozenset(),
+    root_element_type: str = "Node",
+    template_instance: bool = False,
+    dollar_event_type: str = "Event",
 ) -> tuple[str, str]:
     """
     Render collision-tolerant JSDoc facts for VS Code's JS provider.
@@ -8392,7 +8692,13 @@ def _browser_preamble(
 
     `instance_names` are template names the component's Vue Options declare.
     They take their types from `CitryTemplateInstance`, which the caller
-    defines from the component's own `$component` source.
+    defines from the component's own `$component` source; `template_instance`
+    says that type exists, so `$emit` can take the declared event names too.
+
+    `root_element_type` is the type of `$el`, worked out from the rendered
+    template's top-level nodes by `template_root_element_type`.
+    `dollar_event_type` is the type of `$event`: a DOM `Event`, or the first emitted value when
+    the expression listens to a child component's declared event.
     """
     lines = ["// Generated Citry browser-analysis declarations."]
     lines.extend(_i18n_browser_typedefs(i18n))
@@ -8447,7 +8753,6 @@ def _browser_preamble(
         props,
         component_analysis,
         js_data_policy=js_data_policy,
-        i18n=i18n,
     )
     option_names: dict[str, set[str]] = {}
     if component_analysis is not None and component_analysis.valid:
@@ -8460,7 +8765,6 @@ def _browser_preamble(
         roots,
         component_analysis,
         js_data_policy=js_data_policy,
-        i18n=i18n,
     )
     inject_unknown = (
         component_analysis is None
@@ -8480,9 +8784,16 @@ def _browser_preamble(
     )
     event_type = " | ".join(_js_string_literal(name) for name in event_names) or "string"
     vue_import = f"import({_js_string_literal(vue_types)})"
+    # Slots, local components, directives, exposed names and template refs
+    # keep Vue's defaults; the last argument types `$el`.
+    # The `$el` type is written out rather than named, so a hover shows the
+    # element types themselves instead of an alias.
+    root_element = f"({root_element_type})"
+    instance_tail = f"{{}}, {{}}, {{}}, string, {{}}, {root_element}"
     generics = (
         "<B extends Record<string, unknown> = {}, D extends Record<string, unknown> = {}, "
-        f"C extends {vue_import}.ComputedOptions = {{}}, M extends {vue_import}.MethodOptions = {{}}>"
+        f"C extends {vue_import}.ComputedOptions = {{}}, M extends {vue_import}.MethodOptions = {{}}, "
+        f"E extends {vue_import}.EmitsOptions = {{}}, EE extends string = string>"
     )
     lines.extend(
         (
@@ -8492,9 +8803,13 @@ def _browser_preamble(
             "T extends readonly (infer U)[] ? readonly CitryDeepReadonly<U>[] : "
             "T extends object ? {readonly [K in keyof T]: CitryDeepReadonly<T[K]>} : T} CitryDeepReadonly */",
             f"/** @typedef {{{state_shape}}} CitryEventsState */",
+            *_instance_helpers_typedef(i18n, has_state=bool(state_roots)),
             f"/** @typedef {{typeof import({_js_string_literal(vue_types)})}} CitryVueNamespace */",
-            "/** @typedef {import("
-            f"{_js_string_literal(vue_types)}).ComponentPublicInstance}} CitryVuePublicInstance */",
+            TAG_ELEMENT_TYPEDEF,
+            # Vue types `$el` from its last type argument; the others keep Vue's defaults.
+            f"/** @typedef {{{vue_import}.ComponentPublicInstance<{{}}, {{}}, {{}}, {{}}, {{}}, {{}}, {{}}, {{}}, "
+            f"false, {vue_import}.ComponentOptionsBase<any, any, any, any, any, any, any, any, any>, "
+            f"{{}}, {{}}, '', {{}}, {root_element}>}} CitryVuePublicInstance */",
             f"/** @typedef {{CitryVuePublicInstance & {component_shape}}} CitryComponentPublicInstance */",
             # `Citry.vue` is the Vue runtime plus `use`, which Citry adds to install a page plugin.
             "/** @type {{vue: CitryVueNamespace & {use(plugin: import("
@@ -8536,46 +8851,60 @@ def _browser_preamble(
             # the methods would make that result depend on itself, so data()
             # sees props, injections, js_data() keys and Citry's helpers, which
             # Citry installs before data() runs.
-            f"/** @typedef {{import({_js_string_literal(vue_types)}).CreateComponentPublicInstanceWithMixins<"
-            f"Readonly<CitryClientProps>, {{}}, {{}}, {{}}, {{}}, "
-            f"import({_js_string_literal(vue_types)}).ComponentOptionsMixin, "
-            f"import({_js_string_literal(vue_types)}).ComponentOptionsMixin, {{}}, "
-            "Readonly<CitryClientProps>, {}, false, CitryInjectOptions> & CitryInstanceExtras} CitryDataThis */",
+            f"/** @typedef {{{vue_import}.CreateComponentPublicInstanceWithMixins<"
+            f"Readonly<CitryClientProps>, {{}}, {{}}, {{}}, {{}}, {vue_import}.ComponentOptionsMixin, "
+            f"{vue_import}.ComponentOptionsMixin, {{}}, Readonly<CitryClientProps>, {{}}, false, CitryInjectOptions, "
+            f"{instance_tail}> & CitryInstanceExtras}} CitryDataThis */",
             # Vue's own data() and setup() types would join their `this` and
             # return types with the ones below, so drop them; mapping over each
             # key keeps the other Options and the open index signature.
             "/** @template T @typedef {{[K in keyof T as K extends 'data' | 'setup' ? never : K]: T[K]}} "
             "CitryOwnDataAndSetup */",
-            # The live instance: Vue infers setup(), data(), computed and methods
-            # from the Options object, and Citry adds its own names.
-            f"/** @template B, D @template {{import({_js_string_literal(vue_types)}).ComputedOptions}} C "
-            f"@template {{import({_js_string_literal(vue_types)}).MethodOptions}} M "
-            f"@typedef {{import({_js_string_literal(vue_types)}).CreateComponentPublicInstanceWithMixins<"
-            f"Readonly<CitryClientProps>, B, D, C, M, import({_js_string_literal(vue_types)}).ComponentOptionsMixin, "
-            f"import({_js_string_literal(vue_types)}).ComponentOptionsMixin, {{}}, Readonly<CitryClientProps>, "
-            "{}, false, CitryInjectOptions> & "
+            # The live instance: Vue infers setup(), data(), computed, methods
+            # and emits from the Options object, and Citry adds its own names.
+            f"/** @template B, D @template {{{vue_import}.ComputedOptions}} C "
+            f"@template {{{vue_import}.MethodOptions}} M @template {{{vue_import}.EmitsOptions}} [E={{}}] "
+            f"@typedef {{{vue_import}.CreateComponentPublicInstanceWithMixins<"
+            f"Readonly<CitryClientProps>, B, D, C, M, {vue_import}.ComponentOptionsMixin, "
+            f"{vue_import}.ComponentOptionsMixin, E, Readonly<CitryClientProps>, "
+            f"{{}}, false, CitryInjectOptions, {instance_tail}> & "
             "CitryInstanceExtras} CitryOptionsInstance */",
-            f"/** @template B, D @template {{import({_js_string_literal(vue_types)}).ComputedOptions}} C "
-            f"@template {{import({_js_string_literal(vue_types)}).MethodOptions}} M "
-            f"@typedef {{CitryOwnDataAndSetup<import({_js_string_literal(vue_types)}).ComponentOptionsBase<"
-            f"CitryClientProps, B, D, C, M, import({_js_string_literal(vue_types)}).ComponentOptionsMixin, "
-            f"import({_js_string_literal(vue_types)}).ComponentOptionsMixin, any, string, {{}}, CitryInjectOptions, "
+            f"/** @template B, D @template {{{vue_import}.ComputedOptions}} C "
+            f"@template {{{vue_import}.MethodOptions}} M @template {{{vue_import}.EmitsOptions}} E "
+            "@template {string} EE "
+            f"@typedef {{CitryOwnDataAndSetup<{vue_import}.ComponentOptionsBase<"
+            f"CitryClientProps, B, D, C, M, {vue_import}.ComponentOptionsMixin, "
+            f"{vue_import}.ComponentOptionsMixin, E, EE, {{}}, CitryInjectOptions, "
             f"{inject_names}>> & "
             "{data?: (this: CitryDataThis, vm: CitryDataThis) => D, "
             "mixins?: never, extends?: never, render?: never, "
             "setup?: (this: void, props: Readonly<CitryClientProps>, "
-            f"context: import({_js_string_literal(vue_types)}).SetupContext) => B | undefined, "
-            "onServerRender?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M>>, "
-            "init?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M>>} & "
-            "ThisType<CitryOptionsInstance<B, D, C, M>>} CitryComponentDefinition */",
+            f"context: {vue_import}.SetupContext<E>) => B | undefined, "
+            "onServerRender?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M, E>>, "
+            "init?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M, E>>} & "
+            "ThisType<CitryOptionsInstance<B, D, C, M, E>>} CitryComponentDefinition */",
             # One generic signature, as in Vue's defineComponent(), lets
             # TypeScript infer each section from the authored object. It must be
             # a function type: a JSDoc `@template` function declaration loses
             # the inference that the Options methods' `this` depends on.
             f"/** @typedef {{{generics}(definition: CitryComponentInitializer | "
-            "CitryComponentDefinition<B, D, C, M>) => void} CitryComponentFunction */",
+            "CitryComponentDefinition<B, D, C, M, E, EE>) => void} CitryComponentFunction */",
             f"/** @typedef {{{generics}(definition: CitryComponentInitializer | "
-            "CitryComponentDefinition<B, D, C, M>) => CitryOptionsInstance<B, D, C, M>} CitryDefineComponent */",
+            "CitryComponentDefinition<B, D, C, M, E, EE>) => CitryOptionsInstance<B, D, C, M, E>} "
+            "CitryDefineComponent */",
+            # The same inference, returning only the `emits` a child declares.
+            f"/** @typedef {{{generics}(definition: CitryComponentInitializer | "
+            "CitryComponentDefinition<B, D, C, M, E, EE>) => E} CitryDefineEmits */",
+            # The values one event is emitted with: a validator's parameters,
+            # any values for `null` or the array form, as in Vue's `EmitFn`.
+            "/** @template V @typedef {V extends (...args: infer A) => any ? A : any[]} CitryEmitArgs */",
+            "/** @template E, K1, K2, K3 @typedef {E extends readonly (infer N)[] ? "
+            "([Extract<K1 | K2 | K3, N>] extends [never] ? [Event] : any[]) : "
+            "K1 extends keyof E ? CitryEmitArgs<E[K1]> : K2 extends keyof E ? CitryEmitArgs<E[K2]> : "
+            "K3 extends keyof E ? CitryEmitArgs<E[K3]> : [Event]} CitryListenerArgs */",
+            # `$event` is the first emitted value, or undefined for none.
+            "/** @template {any[]} A @typedef {A extends [infer F, ...any[]] ? F : "
+            "A extends [] ? undefined : A[number]} CitryFirstArg */",
         )
     )
     if component_js:
@@ -8600,8 +8929,13 @@ def _browser_preamble(
                 "function $loading(name) { return false; }",
                 "/** @param {CitryServerEventName} [name] @returns {CitryEventError | null} */",
                 "function $error(name) { return null; }",
-                "/** @type {Event} */ var $event;",
-                "/** @type {Element} */ var $el;",
+                f"/** @type {{{dollar_event_type}}} */ var $event;",
+                f"/** @type {{{root_element}}} */ var $el;",
+                # Vue checks the event name and payload against `emits` only
+                # when the component's Options are known.
+                "/** @type {CitryTemplateInstance['$emit']} */ var $emit;"
+                if template_instance
+                else "/** @type {(event: string, ...args: any[]) => void} */ var $emit;",
                 "/** @type {Record<string, Element>} */ var $refs;",
             )
         )

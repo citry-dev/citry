@@ -214,10 +214,13 @@ async function exerciseOptionsInstance(folder) {
 		'    """',
 		'    js = """',
 		"      $component({",
+		"        emits: ['toggled'],",
 		"        data() { return { count: 1 }; },",
 		"        methods: {",
 		"          toggle() {",
 		"            this.count += 1;",
+		"            this.$emit('toggled', this.$el);",
+		"            this.$emit('toggeld');",
 		"            return this.title;",
 		"          },",
 		"        },",
@@ -274,6 +277,34 @@ async function exerciseOptionsInstance(folder) {
 	);
 	await eventually("template method definition", async () =>
 		opens(at('@click="toggle', '@click="t'.length), "toggle() {"),
+	);
+	// `$el` is typed from the template's root element.
+	await eventually("root element hover", async () =>
+		/\$el: HTMLButtonElement\b/.test(await hoverText(at("this.$el", "this.$e".length))),
+	);
+	// `$emit` offers the declared event names, like Vue's defineComponent().
+	await eventually("declared emit completion", async () => {
+		const result = await vscode.commands.executeCommand(
+			"vscode.executeCompletionItemProvider",
+			uri,
+			at("this.$emit('toggled'", "this.$emit('".length),
+		);
+		return (result?.items ?? []).some(
+			(item) => (typeof item.label === "string" ? item.label : item.label.label) === "toggled",
+		);
+	});
+	const typo = source.indexOf("toggeld");
+	await eventually("undeclared emit diagnostic", async () =>
+		vscode.languages
+			.getDiagnostics(uri)
+			.some(
+				(diagnostic) =>
+					(typeof diagnostic.code === "object" ? diagnostic.code.value : diagnostic.code) ===
+						"citry.browser.undeclared-emit" &&
+					diagnostic.severity === vscode.DiagnosticSeverity.Error &&
+					diagnostic.range.start.isEqual(document.positionAt(typo)) &&
+					diagnostic.range.end.isEqual(document.positionAt(typo + "toggeld".length)),
+			),
 	);
 }
 

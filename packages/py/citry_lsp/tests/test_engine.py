@@ -1321,8 +1321,8 @@ def test_init_callback_context_fields_have_types_and_documentation_links(tmp_pat
         " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
         " * @property {CitryI18nService | null} i18n",
         "=> Promise<unknown>} sendEvent",
-        "onServerRender?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M>>, "
-        "init?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M>>}",
+        "onServerRender?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M, E>>, "
+        "init?: CitryComponentInitializer<CitryOptionsInstance<B, D, C, M, E>>}",
     ):
         assert line in projection.source, line
 
@@ -2108,7 +2108,7 @@ class Card(Component):
     )
 
     assert projection is not None
-    assert "$i18n: CitryI18nService | null" in projection.source
+    assert "@property {CitryI18nService | null} $i18n" in projection.source
     projected = tmp_path / "callback-i18n.js"
     projected.write_text("// @ts-check\n" + projection.source, encoding="utf-8")
     tsc = _require_repository_tsc()
@@ -2225,7 +2225,9 @@ $component(({ component }) => {
     assert "@property {(name: string, handler: (detail: unknown) => void) => CitryCleanup} onEvent" in (
         projection.source
     )
-    assert "$onEvent: (name: string, callback: (detail: unknown) => void) => CitryCleanup" in projection.source
+    assert "@property {(name: string, callback: (detail: unknown) => void) => CitryCleanup} $onEvent" in (
+        projection.source
+    )
 
 
 # Each method form Citry can call as component.method(kwargs, slots): the

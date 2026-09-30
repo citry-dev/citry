@@ -186,7 +186,8 @@ handlers, lifecycle hooks such as `mounted()`, and `provide()`. When
 `onServerRender` or `init` is part of the same object, its `component`
 value gets the same type. Citry's helpers, such as `$sendEvent`,
 `$loading`, and `$state`, and Vue's own `$el`, `$refs`, and `$emit` are
-included. `$emit` accepts any event name.
+included. The next section describes how `$el`, `$state`, and `$emit` are
+typed.
 
 `this` in `data()` has props, injections, `js_data()` keys, and Citry's
 helpers. The editor does not type the `data()` result or the methods
@@ -199,6 +200,86 @@ fix it. A
 template that several components share keeps names untyped, because each
 component may declare them differently, but **Go to Definition** still lists
 each component's declaration.
+
+### Types for `$el`, `$state`, and `$emit`
+
+`$el` takes its type from the top-level node of the component's template,
+because Vue sets it to the node that the template renders first:
+
+| Template root | Type of `$el` |
+| --- | --- |
+| One element, such as `<button>` | That element's type, such as `HTMLButtonElement`. `<svg>` is `SVGSVGElement` |
+| `v-if` and `v-else`, or `c-if` and `c-else` | Each branch's type joined with `\|`, plus `Comment` when there is no `v-else` or `<c-else>`, because Vue then renders a comment |
+| A child component tag, such as `<c-Lane>` | The child's own `$el` type |
+| Text only | `Text` |
+| Several nodes, `v-for`, `c-for`, a slot, or a template the editor cannot read | `Node` |
+
+When the template renders several nodes, Vue sets `$el` to an empty marker
+node placed before them, not to the first element. The marker is a text
+node, or a comment on a page Vue took over from the server. To reach the elements,
+use `$refs` or the `els` value in `onServerRender`. As in Vue's own types,
+`$el` never includes `null`, but it is `null` until the component mounts,
+for example in `data()` or `created()`.
+
+`$state` is Citry's [Events State](/reference/browser-apis/#state) for the
+component, not Vue's `data()` and not a Pinia store. Its fields come from the
+component's `State` class. Every public field can be assigned unless the
+`State` class sets `_model`; then only the fields it lists can be assigned,
+and the rest are read-only. A component without `State` has no
+fields, so completion offers none. Hovering `this.$state` says the same.
+
+`$emit` follows the `emits` option, as Vue's `defineComponent()` does:
+
+```javascript
+$component({
+  emits: {
+    'drop-task'(/** @type {{taskId: number}} */ payload) {
+      return true;
+    },
+    closed: null,
+  },
+});
+```
+
+- The array form, such as `emits: ['drop-task']`, limits `$emit` to the
+  listed names and accepts any values after the name.
+- In the object form, the validator's parameters type the values. A `null`
+  validator accepts any values.
+- Without `emits`, `$emit` accepts any name, as in Vue.
+
+Completion inside `this.$emit('')` offers the declared names, and hovering
+`$emit` in component JavaScript or a template shows the values each event
+takes. In a parent template, a listener on the child's tag uses the same
+types: `@drop-task="move($event)"` on `<c-Lane>` types `$event` as the first
+value the child emits, and the parameters of an inline function such as
+`@drop-task="(payload) => move(payload)"` get the emitted values' types. A
+listener for an event the child does not declare keeps `$event` a DOM
+`Event`, because Vue then passes the listener to the child's root element.
+When the child lists its events as an array, a declared event's `$event` is
+`any`.
+
+Citry also checks event names, in the editor and in `citry check`, when
+`emits` is an array of strings or an object with plain keys:
+
+- `this.$emit('name')`, `component.$emit('name')`, or a template's
+  `$emit('name')` with a name that `emits` does not list is an error
+  ([`citry.browser.undeclared-emit`](/ide/diagnostics/#citry.browser.undeclared-emit)).
+  A prop named `on<Event>`, such as `onPing` for `ping`, also declares the
+  event, as it does in Vue.
+- A listener on a child component tag whose name the child does not declare
+  is a warning
+  ([`citry.browser.undeclared-component-event`](/ide/diagnostics/#citry.browser.undeclared-component-event)).
+  Vue passes such a listener to the child's root element, where it runs
+  only if that element dispatches a DOM event with the same name, so a
+  misspelled name stays silent. A child's `on<Event>` prop also declares
+  the event. Only a name with a hyphen, a colon, or an uppercase letter is
+  reported, because a plain lowercase name such as `@click` is usually a
+  native DOM event.
+
+A value that does not match a validator's parameter types shows up only in
+hover, not as an error, because the editor does not report TypeScript errors
+for Vue expressions and component JavaScript, and `citry check` does not run
+TypeScript.
 
 ### Types, checks, and navigation in component JavaScript
 
@@ -515,6 +596,9 @@ setting.
 - Embedded CSS and JavaScript receive highlighting, completion, hover, and
   formatting through VS Code providers, but Citry cannot request their
   diagnostics through VS Code's public API.
+- TypeScript type errors in Vue expressions and component JavaScript, such
+  as an `$emit` value that does not match its validator, are not reported.
+  Citry reports its own checks, such as undeclared event names, instead.
 - Embedded JavaScript and CSS use bundled Prettier 3.9.6 unless Prettier for VS
   Code is installed and selected for that language. Other editor formatters do
   not replace that fallback.
