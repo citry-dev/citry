@@ -104,8 +104,9 @@ One Citry server serves both mappings for that project.
 The server also reports
 [TypeScript errors in component JavaScript and templates](/ide/vscode/#typescript-errors-in-component-javascript-and-templates)
 when it finds Node.js and TypeScript's `tsc`, in the project's
-`node_modules` or on `PATH`. Add `"typeCheck": false` to the
-initialization options to turn them off.
+`node_modules` or on `PATH`. When it finds neither, it logs a warning and
+looks again every minute. Add `"typeCheck": false` to the initialization
+options to turn them off.
 
 ## Current limitations
 

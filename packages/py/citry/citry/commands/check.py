@@ -111,6 +111,9 @@ class CheckCommand(ExtensionCommand):
         report = check_project(selection, Path.cwd())
         if types and report.app_failure is None and selection.spec is not None:
             report = _with_type_findings(report, selection.spec, Path.cwd())
+        elif types:
+            # A registry that failed to load has no components to type-check.
+            report = CheckReport(report.findings, report.app_failure, (*report.notes, TYPES_SKIPPED_NOTE))
         if format == "json":
             print(_json_report(report, static=static, app_spec=selection.spec))
         else:
@@ -119,7 +122,13 @@ class CheckCommand(ExtensionCommand):
             for note in report.notes:
                 sys.stderr.write(f"citry check: note: {note}\n")
             for finding in report.findings:
-                sys.stderr.write(f"{finding.origin}: {finding.severity}: {finding.message}\n")
+                # TypeScript's own spelling of its code leads the message, as `tsc` prints it.
+                code = (
+                    f"{finding.code.removeprefix(TYPESCRIPT_CODE_PREFIX).upper()}: "
+                    if finding.code.startswith(TYPESCRIPT_CODE_PREFIX)
+                    else ""
+                )
+                sys.stderr.write(f"{finding.origin}: {finding.severity}: {code}{finding.message}\n")
         if report.exit_code:
             raise SystemExit(report.exit_code)
 
@@ -157,6 +166,11 @@ def _json_report(report: CheckReport, *, static: bool, app_spec: str | None) -> 
     return json.dumps(payload, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":"))
 
 
+# The code prefix of a TypeScript finding; the rest is TypeScript's number, such as `ts2322`.
+TYPESCRIPT_CODE_PREFIX = "citry.typescript."
+TYPES_SKIPPED_NOTE = "--types did not run TypeScript because the app's registry is unavailable"
+
+
 def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckReport:
     """Add TypeScript's findings for the components in `cwd` to `report`."""
     # citry-lsp is an optional companion package that itself imports citry, so
@@ -169,7 +183,10 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
             find_typescript_compiler,
         )
     except ImportError:
-        _type_check_error("it needs the citry-lsp package; install it with 'python -m pip install citry-lsp'")
+        _type_check_error(
+            "it needs a citry-lsp release with TypeScript checks; "
+            "install or upgrade it with 'python -m pip install --upgrade citry-lsp'"
+        )
     try:
         command = find_typescript_compiler(cwd)
     except TypeScriptUnavailableError as exc:
@@ -190,8 +207,7 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
         findings.append(
             CheckFinding(
                 f"{item.path}:{start.line + 1}:{start.character + 1}",
-                # TypeScript's own spelling of the code leads the message, as `tsc` prints it.
-                f"{code.rsplit('.', 1)[-1].upper()}: {item.diagnostic.message}",
+                item.diagnostic.message,
                 code,
                 "error",
                 *(coordinates or ()),

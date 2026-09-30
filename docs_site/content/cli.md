@@ -146,8 +146,10 @@ and column, with TypeScript's code (wrapped here to fit):
 'boolean' is not assignable to type '() => void'.
 ```
 
-In `--format json`, its code is `citry.typescript.ts2322`. An error makes
-the command exit with status 1, like any other error.
+In `--format json`, its code is `citry.typescript.ts2322` and its message
+is TypeScript's text. An error makes the command exit with status 1, like
+any other error. When the app's registry does not load, `--types` does not
+run and the report notes that.
 
 `--types` needs three things, and the command exits with status 2 and says
 what to install when one is missing:

@@ -256,8 +256,8 @@ value the child emits, and the parameters of an inline function such as
 Citry's `@c-drop-task` server-event binding on the same tag reads the same
 `$event`. A listener for an event the child does not declare gets the DOM
 event of that name, because Vue then passes the listener to the child's
-root element. When the child lists its events as an array, or its `emits`
-cannot be read, a declared event's `$event` is `any`.
+root element. When the child lists its events as an array, or Citry cannot
+read its `emits`, `$event` is `any`.
 
 On an HTML element, `$event` is the DOM event of the listener's name, such
 as `KeyboardEvent` for `@keydown`. A name the DOM does not define, such as
@@ -369,17 +369,21 @@ reports these kinds of TypeScript errors:
 | A value of the wrong type | `this.clearDropTarget = true` | 2322, 2345, 2769, and related |
 | A member that does not exist | `this.$el.fooBar` | 2339, 2551, 2353, 2561 |
 | The wrong number of arguments | `this.startDrag(1, 2)` | 2554, 2555, 2556, 2575 |
-| A name that does not exist, in component JavaScript | `formatDte(value)` | 2304, 2552 |
 | A syntax error in JavaScript inside a Python string | `const = 1` | 1000 to 1999 |
 
-VS Code's own TypeScript runs the check, so you need no Node.js install. The
-check uses the same types that completion and hover show, and it runs after
-Citry's own diagnostics, so its errors can appear a moment later.
+VS Code's own TypeScript runs the check, so you need no Node.js install, but
+the built-in TypeScript and JavaScript Language Features extension must be
+enabled. When it does not answer, the Citry Formatter output channel says
+so once. The check uses the same types that completion and hover show, and
+it runs after Citry's own diagnostics, so its errors can appear a moment
+later.
 
 Some TypeScript errors are left out on purpose:
 
 - A mistake that Citry already reports keeps only Citry's finding. For
-  example, `this.startDargg()` shows
+  example, an unknown name inside `$component` shows
+  [`citry.component-js.unknown-variable`](/ide/diagnostics/#citry.component-js.unknown-variable),
+  `this.startDargg()` shows
   [`citry.component-js.unknown-member`](/ide/diagnostics/#citry.component-js.unknown-member),
   and an event name `emits` does not declare shows
   [`citry.browser.undeclared-emit`](/ide/diagnostics/#citry.browser.undeclared-emit).

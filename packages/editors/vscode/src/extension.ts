@@ -199,6 +199,7 @@ let browserScripts: BrowserScriptFiles;
 let pendingCompletionRetrigger: { uri: string; offset: number } | undefined;
 let pendingCompletionDispatch: { uri: string; version: number; position: vscode.Position } | undefined;
 let nextPerformanceRequest = 0;
+let reportedTypeCheckFailure = false;
 
 function clearProjectionResponses(): void {
 	projectionGeneration += 1;
@@ -987,8 +988,15 @@ async function handleTypeCheck(params: unknown, token: vscode.CancellationToken)
 				includeLinePosition: false,
 			});
 			files.push({ id: file.id, diagnostics: [...typeCheckDiagnostics(syntactic), ...typeCheckDiagnostics(semantic)] });
-		} catch {
-			// The TypeScript extension is disabled or has not started yet.
+		} catch (error) {
+			// The TypeScript extension is disabled or has not started yet. Say so
+			// once, because otherwise the missing errors would look like clean code.
+			if (!reportedTypeCheckFailure) {
+				reportedTypeCheckFailure = true;
+				formatterOutput.appendLine(
+					`TypeScript errors are unavailable: VS Code's TypeScript and JavaScript Language Features extension did not answer (${errorMessage(error)}).`,
+				);
+			}
 			return null;
 		}
 	}

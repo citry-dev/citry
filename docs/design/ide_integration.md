@@ -2032,19 +2032,23 @@ degradation contract in section 3.4.1.
     TypeScript one of two ways. A client that sends
     `initializationOptions.typeCheckClient = {"version": 1}` receives a
     `citry/typeCheck` request with the files; the VS Code extension writes
-    them beside its completion projections with a `// @ts-check` header,
-    asks VS Code's TypeScript server through the `typescript.tsserverRequest`
+    them beside its completion projections (the server starts each with a
+    `// @ts-check` line, which turns checking on for that file), asks VS Code's TypeScript server through the `typescript.tsserverRequest`
     command for `syntacticDiagnosticsSync` and `semanticDiagnosticsSync`,
     and returns the raw diagnostics. Any other client gets the server's own
     run of the project's `tsc` (the nearest `node_modules/.bin/tsc`, then
     `PATH`). Either way `typescript.map_type_check_findings` keeps errors of
     the reported kinds (type mismatch, unknown member, call arity, and
     unknown names outside templates; syntax errors only for JavaScript in a
-    Python string), maps both ends through the projection's source runs,
-    drops anything in generated text, and drops a finding that overlaps a
+    Python string), maps both ends of each finding back through the recorded
+    pieces of authored text, drops anything in generated text, and drops a finding that overlaps a
     Citry finding for the same mistake. The server publishes Citry's
     findings first and adds TypeScript's, with the source `Citry (ts)` and
-    codes `citry.typescript.ts<number>`, when the check answers.
+    codes `citry.typescript.ts<number>`, when the check answers. When it
+    refreshes several documents, every document's own findings go out
+    before any TypeScript check starts. A change to a template or component
+    JavaScript file also re-checks that component's other open assets,
+    because each is typed from the other.
     `initializationOptions.typeCheck = false` (VS Code: `citry.typeCheck`)
     turns it off. `citry check --types` loads the same project facts,
     checks every workspace document in one `tsc` run, and reports the same
@@ -2052,12 +2056,12 @@ degradation contract in section 3.4.1.
 
     The projections were changed so ordinary code produces no findings.
     Unproven values (`JsonWireType` unknowns, dynamic props, injections,
-    server-event results, open instance names) render as `any` instead of
-    `unknown`. `js_data()` literal values widen to their base type. Strict
+    server-event results, open instance names) render as `any`, so
+    TypeScript does not report reading them. `js_data()` literal values widen to their base type. Strict
     mode stays off, matching the VS Code projection folder's `jsconfig.json`.
     A native listener's `$event` is the named DOM event with `target` open,
     and a Citry `@c-*` binding on a child tag reads the child's emitted value.
-    `citry-dom.d.ts`, shipped beside the Vue types, types a selector query
+    `citry_lsp/citry-dom.d.ts` types a selector query
     and an unknown `window` member as `any`. A component without an
     `inject` option injects nothing, so a misspelled `this.<name>` is an
     error rather than `unknown`. Minified files are not checked.
@@ -2074,14 +2078,19 @@ degradation contract in section 3.4.1.
     shows TypeScript in another language, so false positives are fixed in
     the projection types instead.
 
-    *Error modes.* A client answer of `null`, a timeout (30 s), or an
-    invalid answer keeps the previous TypeScript findings and logs a
-    warning; the server never fails Citry's own diagnostics because of it.
-    A missing Node.js or `tsc` logs one warning per session in the editor,
-    and makes `citry check --types` exit with status 2 and name what to
-    install. A `tsc` configuration error is reported the same way. An
-    invalid `typeCheck` or `typeCheckClient` option is rejected at
-    initialization.
+    *Error modes.* A client answer of `null` (VS Code's extension logs once
+    to its output channel when TypeScript does not answer), a timeout
+    (30 s), or an invalid answer (logged as a warning) keeps the previous
+    TypeScript findings on lines the edit did not touch; the server never
+    fails Citry's own diagnostics because of it. A missing Node.js or `tsc`
+    logs a warning in the editor and is looked for again every minute, and
+    makes `citry check --types` exit with status 2 and name what to
+    install. A `tsc` failure logs each distinct message once. A cancelled
+    check kills its `tsc`. An unchanged document is not checked again after
+    a hover or completion. An invalid `typeCheck` option, or a
+    `typeCheckClient` without an integer version, is rejected at
+    initialization; a `typeCheckClient` version this server does not know
+    makes the server run `tsc` itself.
 
     *What would falsify it.* A false positive on authored code that runs
     correctly in the browser, found in the example apps or `citry_ui`,

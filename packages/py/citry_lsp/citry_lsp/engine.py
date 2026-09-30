@@ -8959,8 +8959,9 @@ def _instance_helpers_typedef(i18n: Any | None, *, has_state: bool) -> tuple[str
     return tuple(lines)
 
 
-# Citry's additions to the DOM types, shipped beside the Vue types.
-_CITRY_DOM_TYPES = (Path(__file__).parent / "types" / "citry-dom.d.ts").resolve().as_posix()
+# Citry's additions to the DOM types. The `types` folder holds only Vue's own
+# declarations, which a build script regenerates, so this file sits beside it.
+_CITRY_DOM_TYPES = (Path(__file__).parent / "citry-dom.d.ts").resolve().as_posix()
 
 
 def _browser_preamble(
@@ -8980,7 +8981,6 @@ def _browser_preamble(
     instance_names: frozenset[str] = frozenset(),
     root_element_type: str = "Node",
     template_instance: bool = False,
-    dollar_event_type: str = "Event",
 ) -> tuple[str, str]:
     """
     Render collision-tolerant JSDoc facts for VS Code's JS provider.
@@ -8996,8 +8996,7 @@ def _browser_preamble(
 
     `root_element_type` is the type of `$el`, worked out from the rendered
     template's top-level nodes by `template_root_element_type`.
-    `dollar_event_type` is the type of `$event`: a DOM `Event`, or the first emitted value when
-    the expression listens to a child component's declared event.
+    `$event` is a DOM `Event` here; a listener's own function declares its real type.
     """
     lines = [
         # A reference must come before the first statement of the file.
@@ -9228,7 +9227,7 @@ def _browser_preamble(
                 "function $loading(name) { return false; }",
                 "/** @param {CitryServerEventName} [name] @returns {CitryEventError | null} */",
                 "function $error(name) { return null; }",
-                f"/** @type {{{dollar_event_type}}} */ var $event;",
+                "/** @type {Event} */ var $event;",
                 f"/** @type {{{root_element}}} */ var $el;",
                 # Vue checks the event name and payload against `emits` only
                 # when the component's Options are known.

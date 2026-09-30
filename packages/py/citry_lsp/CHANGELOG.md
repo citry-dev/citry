@@ -17,13 +17,14 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Changed
 
-- Editor types match what JavaScript can check without casts: a value
-  Citry cannot type, such as an injection or a server event's result, is
-  `any` instead of `unknown`; a `js_data()` value types its key as
-  `boolean`, `number`, or `string` instead of its initial literal;
-  `$event` on an HTML element is the DOM event of that name with an open
-  `target`; and a selector query such as `querySelector('#name')` returns
-  `any`.
+- A value Citry cannot type, such as an injection or a server event's
+  result, is `any` in completion and hover.
+- A `js_data()` value types its key by the value's general type, such as
+  `boolean` for `False`.
+- `$event` on an HTML element is the DOM event of that name, such as
+  `KeyboardEvent` for `@keydown`, and a name the DOM does not define is a
+  `CustomEvent`.
+- A selector query such as `querySelector('#name')` returns `any`.
 
 - citry-lsp 0.2.0 understands Vue templates and component JavaScript.
   It requires Citry 0.6.0 or newer, with no upper bound, so upgrade

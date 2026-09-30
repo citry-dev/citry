@@ -317,6 +317,14 @@ def test_tsc_output_is_read_with_chained_messages():
     assert finding.range == types.Range(types.Position(1, 0), types.Position(1, 20))
 
 
+def test_tsc_output_is_read_when_the_folder_name_has_parentheses():
+    output = "../tmp (x)/projection-0.js(1,1): error TS2322: m\n"
+
+    (finding,) = parse_tsc_output(output, {"projection-0.js": ("js:0", "value")})
+
+    assert finding.range.end == types.Position(0, 5)
+
+
 def test_a_configuration_error_stops_the_check():
     with pytest.raises(TypeScriptUnavailableError, match="TS5023"):
         parse_tsc_output("error TS5023: Unknown compiler option 'x'.\n", {})
@@ -360,7 +368,9 @@ def test_client_answers_are_validated():
         ],
     }
 
-    (finding,) = parse_type_check_response(answer, ["js:0"])
+    parsed = parse_type_check_response(answer, ["js:0"])
+    assert parsed is not None
+    (finding,) = parsed
     assert finding.range.end == types.Position(1, 4)
     # The client could not run TypeScript this time.
     assert parse_type_check_response(None, ["js:0"]) is None
@@ -469,6 +479,45 @@ async def test_the_editor_receives_typescript_findings_from_the_client(type_chec
     assert [item.id for item in request.files] == ["js:0"]
 
 
+async def _typescript_ranges(client: LanguageClient, uri: str, expected: set[int]) -> set[int]:
+    """Wait until the document's TypeScript findings start at exactly `expected` characters."""
+    found: set[int] = set()
+    for _attempt in range(200):
+        found = {
+            diagnostic.range.start.character
+            for diagnostic in client.diagnostics.get(uri, ())
+            if str(diagnostic.code).startswith("citry.typescript.")
+        }
+        if found == expected:
+            break
+        await asyncio.sleep(0.05)
+    return found
+
+
+@pytest.mark.asyncio
+async def test_a_component_javascript_change_rechecks_its_open_template(type_check_client, tmp_path):
+    _command()
+    js_uri = (tmp_path / "lane.js").as_uri()
+    html_uri = (tmp_path / "lane.html").as_uri()
+    for uri, language, source in ((js_uri, "javascript", _LANE_JS), (html_uri, "citry-html", _LANE_HTML)):
+        type_check_client.text_document_did_open(
+            types.DidOpenTextDocumentParams(types.TextDocumentItem(uri, language, 1, source))
+        )
+    # `startDrag('a')` and the `$emit` payload `'y'` are both wrong.
+    assert await _typescript_ranges(type_check_client, html_uri, {26, 59}) == {26, 59}
+
+    # Only the JavaScript changes: `startDrag` now takes a string.
+    changed = _LANE_JS.replace("/** @type {number} */ id", "/** @type {string} */ id")
+    type_check_client.text_document_did_change(
+        types.DidChangeTextDocumentParams(
+            types.VersionedTextDocumentIdentifier(version=2, uri=js_uri),
+            [types.TextDocumentContentChangeWholeDocument(changed)],
+        )
+    )
+
+    assert await _typescript_ranges(type_check_client, html_uri, {59}) == {59}
+
+
 def _configured(tmp_path, options: dict[str, object]) -> CitryLanguageServer:
     language_server = CitryLanguageServer()
     language_server.configure(
@@ -486,9 +535,11 @@ def test_type_check_options_are_validated(tmp_path):
     assert _configured(tmp_path, {}).type_check_client is False
     assert _configured(tmp_path, {"typeCheck": False}).type_check is False
     assert _configured(tmp_path, {"typeCheckClient": {"version": 1}}).type_check_client is True
+    # A client version this server does not know makes the server run `tsc` itself.
+    assert _configured(tmp_path, {"typeCheckClient": {"version": 2, "extra": True}}).type_check_client is False
     invalid_options: tuple[dict[str, object], ...] = (
         {"typeCheck": "yes"},
-        {"typeCheckClient": {"version": 2}},
+        {"typeCheckClient": {"version": "1"}},
         {"typeCheckClient": True},
     )
     for invalid in invalid_options:
@@ -529,15 +580,17 @@ def test_check_types_reports_findings_with_file_positions(tmp_path):
     payload = json.loads(result.stdout)
     typed = [item for item in payload["findings"] if item["code"].startswith("citry.typescript.")]
     lane_js = str((tmp_path / "lane.js").resolve())
-    assert [(item["origin"], item["code"], item["message"].split(":", 1)[0]) for item in typed] == [
-        (f"{(tmp_path / 'card.html').resolve()!s}:1:53", "citry.typescript.ts2339", "TS2339"),
-        (f"{(tmp_path / 'lane.html').resolve()!s}:1:27", "citry.typescript.ts2345", "TS2345"),
-        (f"{(tmp_path / 'lane.html').resolve()!s}:1:60", "citry.typescript.ts2345", "TS2345"),
-        (f"{lane_js}:10:7", "citry.typescript.ts2322", "TS2322"),
-        (f"{lane_js}:11:31", "citry.typescript.ts2345", "TS2345"),
-        (f"{lane_js}:13:25", "citry.typescript.ts2554", "TS2554"),
-        (f"{lane_js}:14:16", "citry.typescript.ts2339", "TS2339"),
+    assert [(item["origin"], item["code"]) for item in typed] == [
+        (f"{(tmp_path / 'card.html').resolve()!s}:1:53", "citry.typescript.ts2339"),
+        (f"{(tmp_path / 'lane.html').resolve()!s}:1:27", "citry.typescript.ts2345"),
+        (f"{(tmp_path / 'lane.html').resolve()!s}:1:60", "citry.typescript.ts2345"),
+        (f"{lane_js}:10:7", "citry.typescript.ts2322"),
+        (f"{lane_js}:11:31", "citry.typescript.ts2345"),
+        (f"{lane_js}:13:25", "citry.typescript.ts2554"),
+        (f"{lane_js}:14:16", "citry.typescript.ts2339"),
     ]
+    # JSON keeps TypeScript's message as it is; the text report prefixes the code.
+    assert typed[0]["message"] == "Property 'nope' does not exist on type '{ taskId: number; }'."
     # The JSON range is the file's own zero-based position.
     assert typed[3]["range"]["start"] == {"line": 9, "column": 6}
 
@@ -555,3 +608,138 @@ def test_check_types_says_what_to_install_without_node(tmp_path):
     assert result.returncode == 2
     assert "--types cannot run TypeScript: Node.js was not found on PATH" in result.stderr
     assert "npm install --save-dev typescript" in result.stderr
+
+
+def _server_with_documents(tmp_path: Path, options: dict[str, object]) -> tuple[CitryLanguageServer, DocumentState]:
+    project, documents = _documents(
+        tmp_path,
+        {
+            "lane.js": ("javascript", _LANE_JS),
+            "lane.html": ("citry-html", _LANE_HTML),
+            "card.html": ("citry-html", _CARD_HTML),
+            "card.js": ("javascript", "$component({});\n"),
+        },
+    )
+    language_server = _configured(tmp_path, options)
+    language_server.project = project
+    language_server.documents = documents
+    return language_server, documents[(tmp_path / "lane.js").as_uri()]
+
+
+@pytest.mark.asyncio
+async def test_the_server_runs_tsc_for_an_editor_without_a_typescript_client(tmp_path, monkeypatch):
+    command = _command()
+    monkeypatch.setattr("citry_lsp.server.find_typescript_compiler", lambda _workspace: command)
+    language_server, document = _server_with_documents(tmp_path, {})
+    citry = browser_diagnostics(document, language_server.project, language_server.documents)
+
+    found = await language_server.typescript_diagnostics(document, citry)
+
+    assert found is not None
+    assert sorted(str(item.code) for item in found) == [
+        "citry.typescript.ts2322",
+        "citry.typescript.ts2339",
+        "citry.typescript.ts2345",
+        "citry.typescript.ts2554",
+    ]
+    # An unchanged document is answered from the last check instead of a new `tsc` run.
+    language_server.type_findings[document.uri] = found
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("an unchanged document must not start tsc")
+
+    monkeypatch.setattr("citry_lsp.server.run_typescript_compiler_async", forbidden)
+    assert await language_server.typescript_diagnostics(document, citry) == found
+
+
+@pytest.mark.asyncio
+async def test_a_missing_tsc_logs_once_and_is_looked_for_again_later(tmp_path, monkeypatch):
+    searches: list[Path] = []
+
+    def missing(workspace: Path) -> tuple[str, ...]:
+        searches.append(workspace)
+        raise TypeScriptUnavailableError("tsc was not found.")
+
+    monkeypatch.setattr("citry_lsp.server.find_typescript_compiler", missing)
+    language_server, document = _server_with_documents(tmp_path, {})
+    logged: list[types.LogMessageParams] = []
+    monkeypatch.setattr(language_server, "window_log_message", logged.append)
+
+    assert await language_server.typescript_diagnostics(document, ()) == ()
+    assert await language_server.typescript_diagnostics(document, ()) == ()
+    assert len(searches) == 1
+    assert len(logged) == 1
+    assert "looks again every minute" in logged[0].message
+
+    # A minute later the server looks again.
+    language_server._typescript_missing_since = -1000.0
+    assert await language_server.typescript_diagnostics(document, ()) == ()
+    assert len(searches) == 2
+    assert len(logged) == 1
+
+
+def test_previous_findings_stay_only_on_untouched_lines(tmp_path):
+    language_server, document = _server_with_documents(tmp_path, {})
+    finding = types.Diagnostic(types.Range(types.Position(9, 6), types.Position(9, 26)), "m")
+    language_server.type_findings[document.uri] = (finding,)
+    language_server._type_findings_source[document.uri] = document.source
+
+    assert language_server._previous_type_findings(document) == (finding,)
+    # Editing another line keeps it; editing its line or adding a line drops it.
+    for changed, kept in (
+        (document.source.replace("dragging: false", "dragging: true"), True),
+        (document.source.replace("this.clearDropTarget = true", "this.clearDropTarget = 1"), False),
+        ("\n" + document.source, False),
+    ):
+        document.source = changed
+        assert language_server._previous_type_findings(document) == ((finding,) if kept else ())
+
+
+@pytest_lsp.fixture(config=ClientServerConfig(server_command=[sys.executable, "-m", "citry_lsp"]))
+async def type_check_off_client(client: LanguageClient, tmp_path):
+    (tmp_path / "app.py").write_text(_APP, encoding="utf-8")
+    for name, source in (("lane.js", _LANE_JS), ("lane.html", _LANE_HTML), ("card.html", _CARD_HTML)):
+        (tmp_path / name).write_text(source, encoding="utf-8")
+    (tmp_path / "card.js").write_text("$component({});\n", encoding="utf-8")
+    client.type_check_requests = []  # type: ignore[attr-defined]
+
+    @client.feature("citry/status")
+    def receive_status(_client: LanguageClient, _params: object) -> None:
+        return None
+
+    @client.feature(TYPE_CHECK_METHOD)
+    def type_check(_client: LanguageClient, params: object) -> None:
+        client.type_check_requests.append(params)  # type: ignore[attr-defined]
+
+    await client.initialize_session(
+        types.InitializeParams(
+            capabilities=types.ClientCapabilities(),
+            root_uri=tmp_path.as_uri(),
+            initialization_options={
+                "protocolVersion": PROTOCOL_VERSION,
+                "app": "app:engine",
+                "typeCheck": False,
+                "typeCheckClient": {"version": 1},
+            },
+        )
+    )
+    yield
+    await client.shutdown_session()
+
+
+@pytest.mark.asyncio
+async def test_type_check_off_sends_no_request_and_publishes_only_citry_findings(type_check_off_client, tmp_path):
+    uri = (tmp_path / "lane.js").as_uri()
+    type_check_off_client.text_document_did_open(
+        types.DidOpenTextDocumentParams(types.TextDocumentItem(uri, "javascript", 1, _LANE_JS))
+    )
+    for _attempt in range(200):
+        codes = [diagnostic.code for diagnostic in type_check_off_client.diagnostics.get(uri, ())]
+        if "citry.component-js.unknown-member" in codes:
+            break
+        await asyncio.sleep(0.05)
+    await asyncio.sleep(0.5)
+
+    assert "citry.component-js.unknown-member" in codes
+    assert not [code for code in codes if str(code).startswith("citry.typescript.")]
+    assert type_check_off_client.type_check_requests == []

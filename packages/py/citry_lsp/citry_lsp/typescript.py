@@ -13,6 +13,8 @@ rest to the authored source.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import os
 import re
@@ -149,7 +151,7 @@ _TSC_TIMEOUT_SECONDS = 300.0
 # One `tsc --pretty false` finding: `file(line,column): error TS1234: message`.
 # A chained message continues on the following lines, indented.
 _TSC_LINE = re.compile(
-    r"^(?P<file>[^\s(][^(]*)\((?P<line>\d+),(?P<column>\d+)\): "
+    r"^(?P<file>\S.*?)\((?P<line>\d+),(?P<column>\d+)\): "
     r"(?P<category>error|warning|message) TS(?P<code>\d+): (?P<message>.*)$"
 )
 _TSC_GLOBAL_ERROR = re.compile(r"^error TS(?P<code>\d+): (?P<message>.*)$")
@@ -256,11 +258,11 @@ def _map_position(
     edge: Literal["start", "end"],
 ) -> types.Position | None:
     """
-    Map one projection position through the runs the engine recorded.
+    Map one projection position through the stretches of authored text the engine recorded.
 
     This follows the VS Code client's `mapSegmentedPosition`, so the editor and
-    `citry check` place a finding on the same authored text. A run whose
-    authored and projected widths differ, such as a Python escape sequence,
+    `citry check` place a finding on the same authored text. A stretch whose
+    authored and generated lengths differ, such as a Python escape sequence,
     maps only its two ends.
     """
     containing = [
@@ -359,17 +361,10 @@ def run_typescript_compiler(
     if not files:
         return ()
     with tempfile.TemporaryDirectory(prefix="citry-type-check-") as directory:
-        folder = Path(directory)
-        names: dict[str, tuple[str, str]] = {}
-        for index, (file_id, source) in enumerate(files):
-            name = f"projection-{index}.js"
-            (folder / name).write_text(source, encoding="utf-8", newline="")
-            names[name] = (file_id, source)
-        config = {"compilerOptions": dict(TYPE_CHECK_COMPILER_OPTIONS), "include": ["*.js"]}
-        (folder / "tsconfig.json").write_text(json.dumps(config), encoding="utf-8")
+        folder, names = _write_check_folder(Path(directory), files)
         try:
             result = subprocess.run(
-                [*command, "--project", str(folder / "tsconfig.json"), "--pretty", "false"],
+                _tsc_arguments(command),
                 cwd=folder,
                 capture_output=True,
                 check=False,
@@ -381,11 +376,86 @@ def run_typescript_compiler(
         except (OSError, subprocess.SubprocessError) as exc:
             msg = f"TypeScript could not run ({' '.join(command)}): {exc}"
             raise TypeScriptUnavailableError(msg) from exc
-    output = f"{result.stdout}\n{result.stderr}"
+    return _tsc_findings(command, result.returncode, f"{result.stdout}\n{result.stderr}", names)
+
+
+async def run_typescript_compiler_async(
+    command: Sequence[str],
+    files: Sequence[tuple[str, str]],
+    *,
+    timeout: float = _TSC_TIMEOUT_SECONDS,
+) -> tuple[TypeScriptFinding, ...]:
+    """
+    Run `run_typescript_compiler` without blocking the language server.
+
+    A newer edit cancels the waiting task, and the `tsc` process is killed
+    with it, so cancelled checks never pile up.
+
+    Raises:
+        TypeScriptUnavailableError: As `run_typescript_compiler` does.
+
+    """
+    if not files:
+        return ()
+    with tempfile.TemporaryDirectory(prefix="citry-type-check-") as directory:
+        folder, names = _write_check_folder(Path(directory), files)
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *_tsc_arguments(command),
+                cwd=folder,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except OSError as exc:
+            msg = f"TypeScript could not run ({' '.join(command)}): {exc}"
+            raise TypeScriptUnavailableError(msg) from exc
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        except BaseException as exc:
+            # Cancelled or too slow: stop `tsc` before the folder it reads is removed.
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
+            await process.wait()
+            if isinstance(exc, asyncio.TimeoutError):
+                msg = f"TypeScript took longer than {timeout:g} seconds ({' '.join(command)})"
+                raise TypeScriptUnavailableError(msg) from exc
+            raise
+    output = f"{stdout.decode('utf-8', 'replace')}\n{stderr.decode('utf-8', 'replace')}"
+    return _tsc_findings(command, process.returncode or 0, output, names)
+
+
+def _write_check_folder(
+    folder: Path,
+    files: Sequence[tuple[str, str]],
+) -> tuple[Path, dict[str, tuple[str, str]]]:
+    """Write the projection files and their `tsconfig.json`; return the folder and each file's owner."""
+    # `tsc` prints paths relative to the real folder, so name it by its real path.
+    folder = folder.resolve()
+    names: dict[str, tuple[str, str]] = {}
+    for index, (file_id, source) in enumerate(files):
+        name = f"projection-{index}.js"
+        (folder / name).write_text(source, encoding="utf-8", newline="")
+        names[name] = (file_id, source)
+    config = {"compilerOptions": dict(TYPE_CHECK_COMPILER_OPTIONS), "include": ["*.js"]}
+    (folder / "tsconfig.json").write_text(json.dumps(config), encoding="utf-8")
+    return folder, names
+
+
+def _tsc_arguments(command: Sequence[str]) -> list[str]:
+    # A relative project path keeps every printed file name short and relative.
+    return [*command, "--project", "tsconfig.json", "--pretty", "false"]
+
+
+def _tsc_findings(
+    command: Sequence[str],
+    returncode: int,
+    output: str,
+    names: Mapping[str, tuple[str, str]],
+) -> tuple[TypeScriptFinding, ...]:
     findings = parse_tsc_output(output, names)
-    if result.returncode != 0 and not findings:
+    if returncode != 0 and not findings:
         detail = output.strip().splitlines()[:5]
-        msg = f"TypeScript failed ({' '.join(command)}): {' '.join(detail) or f'exit status {result.returncode}'}"
+        msg = f"TypeScript failed ({' '.join(command)}): {' '.join(detail) or f'exit status {returncode}'}"
         raise TypeScriptUnavailableError(msg)
     return findings
 
@@ -664,5 +734,6 @@ __all__ = [
     "parse_tsc_output",
     "parse_type_check_response",
     "run_typescript_compiler",
+    "run_typescript_compiler_async",
     "type_check_request_params",
 ]
