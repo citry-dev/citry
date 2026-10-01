@@ -49,7 +49,7 @@ class TaskRow(Component):
 
     class Events:
         # Update the task title in TASKS.
-        # Dispatch an event so the row can show a message.
+        # Send the row a browser event so it can show a message.
         def save(self, data: RenameTaskIn, state: "TaskRow.State"):
             title = data.title.strip()
             if len(title) < 3:
