@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Literal, TypedDict, TypeVar, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
@@ -18,13 +18,15 @@ CTimelineDensity = Literal["comfortable", "compact"]
 CTimelineSize = Literal["sm", "md", "lg"]
 CTimelineState = Literal["neutral", "complete", "current", "pending", "error"]
 
-_ORIENTATIONS = ("vertical", "horizontal")
-_SIDES = ("start", "end", "alternate")
-_ITEM_SIDES = ("auto", "start", "end")
-_LINE_STYLES = ("solid", "dashed")
-_DENSITIES = ("comfortable", "compact")
-_SIZES = ("sm", "md", "lg")
-_STATES = ("neutral", "complete", "current", "pending", "error")
+# Each tuple is annotated with its Literal type, so `_choice` returns that
+# Literal type and a child component's Literal-typed kwarg accepts the result.
+_ORIENTATIONS: tuple[CTimelineOrientation, ...] = ("vertical", "horizontal")
+_SIDES: tuple[CTimelineSide, ...] = ("start", "end", "alternate")
+_ITEM_SIDES: tuple[CTimelineItemSide, ...] = ("auto", "start", "end")
+_LINE_STYLES: tuple[CTimelineLineStyle, ...] = ("solid", "dashed")
+_DENSITIES: tuple[CTimelineDensity, ...] = ("comfortable", "compact")
+_SIZES: tuple[CTimelineSize, ...] = ("sm", "md", "lg")
+_STATES: tuple[CTimelineState, ...] = ("neutral", "complete", "current", "pending", "error")
 _TIMELINE_CONTEXT = "citry_ui_timeline"
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_OWNED = frozenset(
@@ -100,6 +102,14 @@ class _TimelineRegistry:
     items: list[_TimelineDeclaration] = field(default_factory=list)
 
 
+class _TimelineRow(TypedDict):
+    """One item as CInternalTimeline passes it to CInternalTimelineItem."""
+
+    declaration: _TimelineDeclaration
+    index: int
+    side: Literal["start", "end"]
+
+
 def _plain(name: str, value: object, *, optional: bool = False) -> str | None:
     raw = const_value(value)
     if raw is None and optional:
@@ -112,12 +122,18 @@ def _plain(name: str, value: object, *, optional: bool = False) -> str | None:
     return plain
 
 
-def _choice(name: str, value: object, allowed: tuple[str, ...]) -> str:
+_Choice = TypeVar("_Choice", bound=str)
+
+
+def _choice(name: str, value: object, allowed: tuple[_Choice, ...]) -> _Choice:
     plain = _plain(name, value)
-    if plain not in allowed:
-        expected = ", ".join(repr(item) for item in allowed)
-        raise ValueError(f"{name} must be one of {expected}, got {plain!r}.")
-    return cast("str", plain)
+    # Returning the matching member of `allowed`, not the input string, gives
+    # the caller that member's Literal type rather than plain `str`.
+    for choice in allowed:
+        if plain == choice:
+            return choice
+    expected = ", ".join(repr(item) for item in allowed)
+    raise ValueError(f"{name} must be one of {expected}, got {plain!r}.")
 
 
 def _attrs(
@@ -231,8 +247,8 @@ class CTimelineItem(LibraryComponent):
         registry = _registry(self)
         registry.items.append(
             _TimelineDeclaration(
-                state=cast("CTimelineState", _choice("CTimelineItem state", kwargs.state, _STATES)),
-                side=cast("CTimelineItemSide", _choice("CTimelineItem side", kwargs.side, _ITEM_SIDES)),
+                state=_choice("CTimelineItem state", kwargs.state, _STATES),
+                side=_choice("CTimelineItem side", kwargs.side, _ITEM_SIDES),
                 attrs=_attrs("CTimelineItem", kwargs.attrs, _ITEM_OWNED, kwargs.class_, kwargs.style),
                 content=cast("Slot[CTimelineItemDefaultSlotData]", slots.default),
                 opposite=cast("Slot[CTimelineItemOppositeSlotData] | None", slots.opposite),
@@ -293,6 +309,23 @@ class CInternalTimeline(LibraryComponent):
         if current_count > 1:
             raise ValueError("CTimeline permits at most one CTimelineItem with state='current'.")
         self.unprovide(_TIMELINE_CONTEXT)
+        # An "auto" item takes the timeline side. When the timeline alternates,
+        # it uses "end" at even positions and "start" at odd ones, counting
+        # every item.
+        items: list[_TimelineRow] = [
+            {
+                "declaration": declaration,
+                "index": index,
+                "side": (
+                    declaration.side
+                    if declaration.side != "auto"
+                    else ("end" if kwargs.side == "alternate" and index % 2 == 0 else "start")
+                    if kwargs.side == "alternate"
+                    else kwargs.side
+                ),
+            }
+            for index, declaration in enumerate(kwargs.registry.items)
+        ]
         return {
             "attrs": {
                 **kwargs.attrs,
@@ -304,20 +337,7 @@ class CInternalTimeline(LibraryComponent):
                 "data-has-opposite": "" if any(item.opposite is not None for item in kwargs.registry.items) else None,
                 "data-size": kwargs.size,
             },
-            "items": [
-                {
-                    "declaration": declaration,
-                    "index": index,
-                    "side": (
-                        declaration.side
-                        if declaration.side != "auto"
-                        else ("end" if kwargs.side == "alternate" and index % 2 == 0 else "start")
-                        if kwargs.side == "alternate"
-                        else kwargs.side
-                    ),
-                }
-                for index, declaration in enumerate(kwargs.registry.items)
-            ],
+            "items": items,
             "count": len(kwargs.registry.items),
         }
 
