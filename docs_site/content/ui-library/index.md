@@ -23,13 +23,13 @@ wants the built-in design system, while keeping the core `citry` package small.
 
 <c-ui-library-list />
 
-Citry UI is currently a preview. Review the package version before upgrading
-and test the component states your application depends on.
+Citry UI is in alpha. Read the
+[Citry UI changelog](https://github.com/citry-dev/citry/blob/main/packages/py/citry_ui/CHANGELOG.md){: target="_blank" rel="noopener"}
+before upgrading and test the component states your application depends on.
 
 ## Help shape Citry UI
 
-The 0.2.0 release is an early-access alpha. Report bugs, missing states,
-accessibility problems, and awkward APIs in the
+Report bugs, missing states, accessibility problems, and awkward APIs in the
 [Citry issue tracker](https://github.com/citry-dev/citry/issues){: target="_blank" rel="noopener"}.
 Include the component name, Citry UI version, browser, and a small reproduction
 when possible.

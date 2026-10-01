@@ -120,8 +120,8 @@ options to turn them off.
 - LSP4IJ does not display Citry's private registry status notification. An app
   discovery failure still appears through the standard editor warning and the
   server falls back to syntax-only analysis.
-- The completed spike covered local PyCharm. JetBrains remote development was
-  not part of the tested matrix.
+- The setup was tested in local PyCharm only, not in JetBrains remote
+  development.
 
 These are the reasons a small official JetBrains plugin may still be useful
 later: easier setup, first-party status UI, Citry coloring, and private

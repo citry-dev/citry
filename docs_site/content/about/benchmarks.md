@@ -29,7 +29,8 @@ Button, Icon and HeroIcon are declared as
 live, but they give up independent instances, hooks and browser identity.
 HeroIcon and ProjectOutputBadge also retain the scenario's existing `pure`
 declarations. The page constructs 146 ordinary instances and emits 989,431 bytes,
-including dependencies, browser runtimes and ownership data. It takes about 55%
+including dependencies, browser runtimes, and the data that tells the browser
+which component rendered each part of the page. It takes about 55%
 less time than django-components once warm.
 
 These optimizations are explicit application choices with documented contracts.
@@ -51,7 +52,10 @@ workloads, not equivalent implementations of every Citry feature.
 ## How the run is measured
 
 The run uses Apple M4, CPython 3.14.3 and the release Citry Core extension,
-with Django 6.0.6, django-components 0.152.0 and Jinja2 3.1.6. Citry 0.5.0 is measured with the qualified Core 1.7.0 release wheel.
+with Django 6.0.6, django-components 0.152.0 and Jinja2 3.1.6. Citry 0.5.0 is
+measured with the Core 1.7.0 release wheel. Citry 0.5.0 ran Alpine.js in the
+browser, so the Citry byte counts above describe that release's browser output,
+not the Vue runtime Citry uses now.
 
 The underlying run also measured ordinary Citry as a control; the chart shows
 four configurations. Ten blocks each start a fresh process for every configuration, balancing
@@ -65,10 +69,12 @@ The warmed column is the median of each process's mean of 80 renders.
 A warmed average can be higher than one second-render observation because
 it includes a longer execution period and garbage collection.
 
-Every timed Citry output is checked after timing using a projection that
-removes ownership markers and normalizes generated IDs; its browser manifests
-are validated too. Callback and ownership counts come from a separate observed
-render after each Citry process's timed loop. The other engines retain output
+After timing, the runner checks every timed Citry output. It first removes
+the component markers and replaces generated IDs with stable ones, then
+compares the result with the expected page content, and it also validates
+the data Citry sends to the browser. Callback counts, and counts of the data
+that tells the browser which component rendered each part of the page, come
+from a separate observed render after each Citry process's timed loop. The other engines retain output
 hashes and sizes; their scenario content tests run separately.
 
 These results are relative to this workload and machine. Use them to compare

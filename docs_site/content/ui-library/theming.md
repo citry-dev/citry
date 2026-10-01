@@ -27,8 +27,11 @@ component tag.
 ```
 
 Both inputs accept Citry's structured class/style values. Use `attrs` for
-other native, ARIA, Vue, and `data-*` attributes. If `attrs` also contains
-class or style values, Citry merges them with the direct inputs.
+other native, ARIA, and `data-*` attributes. If `attrs` also contains
+class or style values, Citry merges them with the direct inputs. `attrs`
+rejects Vue directive names, such as `:open` or `@click`, with an error that
+names the component. Write Vue bindings and listeners on the component tag
+in your template instead.
 Python annotations can import the corresponding `CClassValue` and
 `CStyleValue` aliases from `citry_ui`.
 
@@ -67,7 +70,7 @@ anatomy. Use it when a variable cannot express the focused change:
 Each component page lists its public parts and variables. Internal `.cui-*`
 classes and `--_cui-*` variables are implementation details.
 
-## Keep application ownership explicit
+## Choose the color scheme in your application
 
 Citry UI responds to `color-scheme`, but it does not choose, persist, or toggle
 an application's theme. Put the scheme on the application root or on a nested

@@ -40,11 +40,11 @@ If pip has no prebuilt wheel for your platform, it falls back to the source dist
 
 ## Browser runtime
 
-Citry's JavaScript browser code is tested aginst Chromium, Firefox, and
+Citry's JavaScript browser code is tested against Chromium, Firefox, and
 WebKit.
 
 Citry loads a pinned Vue runtime for interactive component output. Do not mount
-another Vue application over Citry-managed component ranges. Composition API
+another Vue application over HTML that Citry components rendered. Composition API
 helpers from the exact runtime used by the page are available through
 `Citry.vue`.
 

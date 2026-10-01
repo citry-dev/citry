@@ -15,9 +15,8 @@ Chances are someone has already run into the same thing. Before you open
 anything, search:
 
 - The
-[existing isssues and discussions]({{ repo_issues_url }}?q=){: target="_blank" rel="noopener"} for your question or the exact error message.
-- Use the [documentation search feature](/community/help/?q=help)
- feature.
+[existing issues and discussions]({{ repo_issues_url }}?q=){: target="_blank" rel="noopener"} for your question or the exact error message.
+- The documentation, using the [search feature](/community/help/?q=help).
 
 ## Ask a question
 

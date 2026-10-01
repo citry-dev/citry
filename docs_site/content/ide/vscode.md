@@ -12,10 +12,10 @@ process for each workspace folder. Formatter commands edit definite template,
 JavaScript, and CSS sections while leaving Fluent and the selected Python
 formatter unchanged.
 
-`citry-lsp` 0.1.3 is public on PyPI. Install the extension's 0.1.2 release from
-the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry),
-[Open VSX](https://open-vsx.org/extension/citry-dev/citry), or the matching
-[GitHub Release](https://github.com/citry-dev/citry/releases/tag/vscode-citry%400.1.2).
+The language server, `citry-lsp`, is published on PyPI. The extension is
+published on the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry),
+[Open VSX](https://open-vsx.org/extension/citry-dev/citry), and
+[GitHub Releases](https://github.com/citry-dev/citry/releases).
 
 ## See it in action
 
@@ -45,8 +45,8 @@ Install **Citry** from the
 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry)
 or [Open VSX](https://open-vsx.org/extension/citry-dev/citry). Cursor, Windsurf,
 VSCodium, and other compatible desktop forks can use the Open VSX release. The
-same qualified VSIX is attached to the
-[GitHub Release](https://github.com/citry-dev/citry/releases/tag/vscode-citry%400.1.2).
+same VSIX file is attached to each `vscode-citry` release on
+[GitHub Releases](https://github.com/citry-dev/citry/releases).
 
 ## Select the registry target
 
@@ -595,8 +595,8 @@ CSS while preserving readable Python triple-quoted strings:
 <c-image src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/formatting.gif" alt="Citry formatting an inline template, JavaScript, and CSS inside a Python component" width="960" />
 
 The commands do not format `messages` blocks or standalone `.ftl` files.
-Fluent syntax highlighting is available in both places, but Citry does not yet
-define a Fluent formatting contract.
+Fluent syntax highlighting is available in both places, but Citry does not
+format Fluent source.
 
 Both include Citry/HTML structure and Python expressions, eligible direct
 JavaScript and CSS, and eligible `<script>` and `<style>` bodies. A cursor on a
@@ -668,7 +668,7 @@ HTML assistance also enters parser-proven nested-template values. Use the
 opposite quote for attributes inside the nested value, so a double-quoted host
 contains ordinary single-quoted HTML attributes:
 
-```html
+```citry-html
 <c-card c-body="<><input type='email' autocomplete='email' /></>" />
 ```
 
@@ -695,12 +695,13 @@ inside that physical template. Go to declaration targets the authored field,
 dict key, or lexical introduction. Go to type definition targets the actual
 Python class or standard-library type when every component consumer and return
 path produces a safe mapped answer. Unused fill bindings target their current
-neutral `Any` contract. Unsaved Python edits that change component inheritance
-or template ownership are revalidated before these registry-backed results are
-shown.
-The live ownership proof covers direct string and `pathlib.Path(...)`
-declarations. Imported constants, factories, decorators, metaclasses, and
-other dynamic template selection use the loaded registry, but variable
+neutral `Any` contract. When an unsaved Python edit changes component
+inheritance or which component uses a template, Citry checks the edit again
+before it shows these registry-backed results.
+This live check reads `template` and `template_file` declarations written as
+a direct string or `pathlib.Path(...)`. Imported constants, factories,
+decorators, metaclasses, and other dynamic template selection use the loaded
+registry, but variable
 navigation is withheld while Python source is synchronized because those
 dependencies cannot be bounded safely. Save and restart the language server to
 refresh that registry state.
@@ -726,9 +727,10 @@ configured on the `Citry` application, not a separate VS Code preference.
 
 Open Python files use synchronized editor text, so adding or renaming a direct
 key updates completion, hover, and navigation without saving or reloading the
-app. Invalid source, ambiguous ownership, unsupported mapping escapes, and
-roots not shared by every physical-template consumer are withheld rather than
-guessed. The semantic analyzer is likewise limited to those mapped template
+app. Citry shows no result, rather than a guess, for invalid source, a
+template whose component it cannot pin down, a `template_data()` value it
+cannot follow, or a variable that not every component using the same
+template file defines. The semantic analyzer is likewise limited to those mapped template
 expressions and does not replace the Python extension for ordinary `.py` code.
 
 ### Check `c-*` values against their target's type
@@ -848,8 +850,8 @@ setting.
 - Each embedded provider pass is bounded to 30 seconds. VS Code does not expose
   cancellation for the underlying public formatter command, so Citry discards
   any result that arrives after that bound.
-- `<script>` and `<style>` bodies containing Citry interpolation remain
-  unchanged until a context-safe placeholder adapter is available.
+- `<script>` and `<style>` bodies containing Citry interpolation are left
+  unchanged.
 - A TextMate grammar cannot prove that a class with a `template`, `js`, or
   `css` assignment inherits from `Component`, so unrelated assignments with
   those exact names may receive Citry highlighting.
