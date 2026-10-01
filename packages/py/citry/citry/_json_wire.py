@@ -5,8 +5,7 @@ from __future__ import annotations
 import ast
 import json
 import math
-from dataclasses import dataclass
-from types import MappingProxyType
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, cast
 
 from citry._source_lines import source_lines
@@ -365,7 +364,9 @@ class _ExpressionContext:
     member_types: Mapping[str, Mapping[str, JsonWireType]]
     member_annotations: Mapping[str, Mapping[str, str | None]]
     classes: Mapping[str, WireClass]
-    inferred: Mapping[tuple[int, int], JsonWireType] = MappingProxyType({})
+    # Each context gets its own empty mapping. A dataclass default must be
+    # hashable on Python 3.11+, and a mapping proxy is not on 3.11.
+    inferred: Mapping[tuple[int, int], JsonWireType] = field(default_factory=dict)
     unproven: list[tuple[int, int]] | None = None
     widen_literals: bool = False
     line_starts: tuple[int, ...] = ()
