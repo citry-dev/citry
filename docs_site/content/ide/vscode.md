@@ -722,6 +722,58 @@ to an `int`. On an HTML element, `c-class` and `c-style` are checked the
 same way: they take a string, a dict, a list or tuple of those, or
 `None`, so `c-class="1"` is an error.
 
+#### Fix a value whose type comes out too wide
+
+ty reads each key of the dict that `template_data()` returns on its
+own, so `{"size": "sm"}` passes `Literal["sm"]` to a
+`size: Literal["sm", "md", "lg"]` input. A dict nested inside that
+dict, such as each row of a list, is typed as a whole, and ty merges
+its values into one union. A row's `size` then reports
+`str | int` even though the template only reads the string:
+
+```citry
+class Steps(Component):
+    def template_data(self, kwargs, slots):
+        rows = [
+            # ty types each row as dict[str, str | int]
+            {"size": "sm", "index": index}
+            for index in range(3)
+        ]
+        return {"rows": rows}
+
+    template = """
+      <c-for each="row in rows">
+        <c-Step c-size="row['size']" />
+      </c-for>
+    """
+```
+
+Give the row a type of its own. A `TypedDict` keeps the value a plain
+dict, so the template does not change:
+
+```citry
+from typing import Literal, TypedDict
+
+
+class StepRow(TypedDict):
+    size: Literal["sm", "md", "lg"]
+    index: int
+
+
+class Steps(Component):
+    def template_data(self, kwargs, slots):
+        rows: list[StepRow] = [
+            {"size": "sm", "index": index}
+            for index in range(3)
+        ]
+        return {"rows": rows}
+```
+
+A value computed by a function typed `-> str` is `str`, not one of the
+input's choices. Annotate the function or variable with the `Literal`
+type it really returns, or wrap the value in `typing.cast()` when the
+check before it has already narrowed it.
+
 ## Keep template strings from becoming f-strings
 
 Pylance can add an `f` prefix when you type `{` in a Python string. Its

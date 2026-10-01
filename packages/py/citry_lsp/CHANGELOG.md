@@ -76,6 +76,13 @@ All notable changes to `citry-lsp` are documented here.
 - In an app without i18n settings, the editor no longer reports "Unknown
   i18n format profile" for a `self.i18n.format.number(..., format=...)`
   call guarded by `self.i18n.configured`, as `citry check` does.
+- A template loop variable now has its own type in hover and type checks
+  when `template_data()` has a local of the same name. Before, `c-for="row
+  in rows"` next to a local `row: list[Row]` typed the loop variable as
+  the list.
+- Each key of the dict `template_data()` returns keeps its own type when
+  the method returns a variable, such as `return data`, or when only some
+  returns include the key.
 
 ## [0.1.7] - 2026-09-11
 
