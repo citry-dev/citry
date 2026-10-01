@@ -344,7 +344,8 @@ class CToolbar(LibraryComponent):
           const observer = new MutationObserver((records) => {
             const meaningful = records.some((record) => {
               if (record.attributeName !== "tabindex") return true;
-              const target = record.target;
+              // An attribute record's target is always an element.
+              const target = /** @type {Element} */ (record.target);
               if (!controls.includes(target)) return true;
               const expected = target === current && !unavailable(target) ? "0" : "-1";
               return target.getAttribute("tabindex") !== expected;

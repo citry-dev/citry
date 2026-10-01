@@ -468,9 +468,18 @@ class CPagination(LibraryComponent):
                 || (["first", "previous"].includes(kind) && current === 1)
                 || (["next", "last"].includes(kind) && current === data.pages);
               const href = data.href && !unavailable ? data.href.replace("{page}", String(page)) : null;
-              const control = document.createElement(href ? "a" : "button");
-              if (href) control.href = href;
-              else { control.type = "button"; control.disabled = unavailable; }
+              // A page with a URL is a link; any other page is a button that may be disabled.
+              let control;
+              if (href) {
+                const link = document.createElement("a");
+                link.href = href;
+                control = link;
+              } else {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.disabled = unavailable;
+                control = button;
+              }
               control.dataset.citryUiPart = "control";
               control.dataset.page = String(page);
               control.dataset.kind = kind;

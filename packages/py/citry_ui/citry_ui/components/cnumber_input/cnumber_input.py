@@ -582,6 +582,8 @@ class CNumberInput(LibraryComponent):
             const text = scale ? `${digits.slice(0, -scale)}.${digits.slice(-scale)}` : digits;
             return canonical(`${negative ? '-' : ''}${text}`);
           };
+          // Both integers come from `parts()`, so the arithmetic below stays in BigInt.
+          /** @returns {[bigint, bigint, number]} */
           const align = (left, right) => {
             const scale = Math.max(left.scale, right.scale);
             return [left.integer * power(scale - left.scale), right.integer * power(scale - right.scale), scale];

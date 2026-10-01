@@ -360,7 +360,13 @@ class CTagGroup(LibraryComponent):
         },
         inject: {formService: {from: Symbol.for("citry-ui:form"), default: null}},
         onServerRender: ({component}) => {
-          const root = component.$el;
+          // The group keeps its browser-side selection on its root element, so a later
+          // server render that reruns this callback on the same element restores it.
+          // Each CTag calls `__citryTagChanged` on this root to ask for a reconcile.
+          /** @typedef {{selection: string | string[] | null, serverValueFingerprint: string | null,
+           *   focusedValue: string | null, order: string[]}} TagGroupRuntime */
+          const root = /** @type {HTMLElement & {__citryUiTagRuntime?: TagGroupRuntime,
+           *   __citryTagChanged?: () => void}} */ (component.$el);
           const data = {...component.serverDefaults,
             serverValueFingerprint: component.serverValueFingerprint};
           const props = component.$props;
@@ -709,7 +715,10 @@ class CTagGroup(LibraryComponent):
           }));
           const structureObserver = new MutationObserver((records) => {
             if (records.some((record) => record.type === "childList"
-              || record.target.closest?.('[data-citry-ui-part="tag-label"], [data-citry-ui-part="start"]'))) {
+              // Only attribute records reach this test, and their target is always an element.
+              || /** @type {Element} */ (record.target).closest?.(
+                '[data-citry-ui-part="tag-label"], [data-citry-ui-part="start"]',
+              ))) {
               schedule();
             }
           });
@@ -873,7 +882,11 @@ class CTag(LibraryComponent):
       $component({
         props: {disabled: {}, textValue: {}},
         onServerRender: ({component}) => {
-          const root = component.$el;
+          // The tag publishes its entry on its own root, where the group's callback reads it.
+          /** @typedef {{root: HTMLElement, label: Element | null, indicator: Element | null,
+           *   remove: Element | null, value: string | undefined, localDisabled: boolean,
+           *   disabled: boolean, textValue: string}} TagEntry */
+          const root = /** @type {HTMLElement & {__citryTagEntry?: TagEntry}} */ (component.$el);
           const data = component.serverDefaults;
           const props = component.$props;
           const group = root.closest('[data-citry-ui-part="tag-group"]');

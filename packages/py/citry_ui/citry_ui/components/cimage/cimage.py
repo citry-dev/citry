@@ -730,8 +730,9 @@ class CImage(LibraryComponent):
             if (record.fallback) record.fallback.hidden = true;
             if (record.root[handoffKey] === record) delete record.root[handoffKey];
           };
+          // A matched first child is the template's `<picture>` element, which has `dataset`.
           const picture = root.firstElementChild?.matches('[data-citry-ui-part="picture"]')
-            ? root.firstElementChild : null;
+            ? /** @type {HTMLElement} */ (root.firstElementChild) : null;
           const image = picture
             ? picture.querySelector(':scope > [data-citry-ui-part="image"]')
             : root.querySelector(':scope > [data-citry-ui-part="image"]');

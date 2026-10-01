@@ -1157,7 +1157,8 @@ class CCommandPalette(LibraryComponent):
             element.dataset.value,
             element,
           ]));
-          const regionElements = [...listbox.children];
+          // Each child is a group or separator element that the palette hides or shows.
+          const regionElements = /** @type {HTMLElement[]} */ ([...listbox.children]);
           const documentOwner = host.ownerDocument;
           let actualRoot = host.getRootNode();
           const activators = [...host.children].filter((element) => element !== dialog);

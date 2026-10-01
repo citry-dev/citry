@@ -661,7 +661,11 @@ class CAccordion(LibraryComponent):
           return {[Symbol.for("citry-ui:accordion")]: this.accordionService};
         },
         onServerRender: ({component}) => {
-          const root = component.$el;
+          // The accordion keeps its browser-side state on its root element, so a later
+          // server render that reruns this callback on the same element restores it.
+          /** @typedef {{value: string | string[] | null, itemOrder: string[], focusedValue: string | null,
+           *   serverFingerprint: string | null, reconciliations: number}} AccordionRuntime */
+          const root = /** @type {HTMLElement & {__citryUiAccordionRuntime?: AccordionRuntime}} */ (component.$el);
           const data = component;
           const defaults = data.serverDefaults;
           const props = component.$props;
