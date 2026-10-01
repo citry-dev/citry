@@ -14,8 +14,6 @@ class PriorityBadge(Component):
         pass
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
-        # One component owns both variants, so the label and its styling can't
-        # drift apart the way two separate badge components could.
         return {
             "label": "High priority" if kwargs.high else "Standard",
             "high": kwargs.high,

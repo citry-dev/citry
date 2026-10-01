@@ -1,6 +1,11 @@
+from typing import TYPE_CHECKING
+
 from app.citry_app import citry_app
 from app.store import LANES, Task
 from citry import Component
+
+if TYPE_CHECKING:
+    from app.components.provides import ThemeData
 
 
 class TaskCard(Component):
@@ -14,7 +19,7 @@ class TaskCard(Component):
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
         task = kwargs.task
-        theme = self.inject("board_theme")
+        theme: ThemeData = self.inject("board_theme")
         return {
             "title": task.title,
             "owner": task.owner,
@@ -81,7 +86,19 @@ class TaskCard(Component):
 
     js = """
       $component({
-        emits: ['move', 'set-completed'],
+        // Each validator's parameter type is the payload type: `$emit` and
+        // a parent's `@move` / `@set-completed` listeners are checked
+        // against it. Returning true accepts every payload at runtime.
+        emits: {
+          move(/** @type {{ taskId: number, lane: string }} */ payload) {
+            return true;
+          },
+          'set-completed'(
+            /** @type {{ taskId: number, completed: boolean }} */ payload,
+          ) {
+            return true;
+          },
+        },
         data() {
           return { dragging: false };
         },

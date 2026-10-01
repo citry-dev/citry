@@ -1,5 +1,6 @@
 from app.citry_app import citry_app
 from app.components.event_inputs import AddTaskIn, MoveTaskIn, SetTaskCompletedIn
+from app.components.provides import ThemeData
 from app.store import LANES, LaneView, add_task, board_snapshot, list_tasks, move_task, set_task_completed
 from citry import Component
 from citry.ext.events import EventError, actions
@@ -85,7 +86,8 @@ class ProjectBoard(Component):
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
         # The board provides one accent so each column and its cards use the same color.
-        self.provide("board_theme", accent="var(--color-accent)")
+        theme = ThemeData(accent="var(--color-accent)")
+        self.provide("board_theme", theme)
         visible_count = sum(len(lane.tasks) for lane in kwargs.lanes)
         return {
             "lanes": kwargs.lanes,
@@ -124,7 +126,7 @@ class ProjectBoard(Component):
             class="quiet-button"
             type="button"
             @click="helpOpen = !helpOpen"
-            :aria-expanded="String(helpOpen)"
+            :aria-expanded="helpOpen"
             aria-controls="board-help"
             v-text="helpOpen ? 'Hide explanation' : 'How this page works'"
           >
@@ -211,7 +213,7 @@ class ProjectBoard(Component):
                 maxlength="80"
                 aria-describedby="task-title-error"
                 :aria-invalid="
-                  Boolean($error('add')?.fieldErrors?.title).toString()
+                  Boolean($error('add')?.fieldErrors?.title)
                 "
               />
               <span
@@ -523,7 +525,7 @@ class ProjectBoard(Component):
     """
 
 
-def board_for(state: ProjectBoard.State) -> ProjectBoard:
+def board_for(state: ProjectBoard.State):
     """Render the board again with the search text and filter the browser sent."""
     return ProjectBoard(
         lanes=board_snapshot(state.query, state.show_completed),

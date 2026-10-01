@@ -1,5 +1,10 @@
+from typing import TYPE_CHECKING
+
 from app.citry_app import citry_app
 from citry import Component, SlotInput
+
+if TYPE_CHECKING:
+    from app.components.provides import ThemeData
 
 
 class Lane(Component):
@@ -14,7 +19,7 @@ class Lane(Component):
         default: SlotInput
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
-        theme = self.inject("board_theme")
+        theme: ThemeData = self.inject("board_theme")
         task_label = "task" if kwargs.count == 1 else "tasks"
         return {
             "title": kwargs.title,
