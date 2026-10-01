@@ -596,6 +596,8 @@ test("the fallback action check uses the protocol's target and swap rules", asyn
     [prepared({ target: "render:abc", swap: "replace" }), /morph swap for a vue-prepared\/1 render/],
     [{ action: "event", eventName: "ready", target: "mark:abc:cart" }, /render:<renderId> event target/],
     [{ action: "event", eventName: "ready", target: ".cart" }, /render:<renderId> event target/],
+    [{ action: "state", targetRenderId: "abc", stateToken: "t" }, /missing \/actions\/0\/publicState/],
+    [{ action: "state", targetRenderId: "abc", stateToken: "t", publicState: [] }, /public State object/],
   ];
   for (const [action, message] of refused) {
     await assert.rejects(fixture.publicEvents.applyActions(fixture.realm([action])), message);
@@ -604,6 +606,7 @@ test("the fallback action check uses the protocol's target and swap rules", asyn
   for (const action of [
     prepared({ target: "mark:abc:cart", swap: "morph" }),
     { action: "event", eventName: "ready", target: "render:abc" },
+    { action: "state", targetRenderId: "abc", stateToken: "t", publicState: {} },
   ]) {
     await assert.rejects(fixture.publicEvents.applyActions(fixture.realm([action])), /stale or retired/);
   }

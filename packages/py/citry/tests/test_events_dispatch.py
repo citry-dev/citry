@@ -439,6 +439,89 @@ class TestStateResign:
         assert state_action["publicState"] == {"alpha": "b", "zeta": 1}
         assert list(state_action["publicState"]) == ["alpha", "zeta"]
 
+    def test_state_action_sends_a_tuple_as_a_list(self):
+        c = _citry()
+
+        class Tagged(Component):
+            citry = c
+            template = "<div>t</div>"
+
+            class State:
+                tags: list[str] | None = None
+
+            class Events:
+                def tag(self, state):
+                    state.tags = ("a", "b")
+
+        call = {
+            "componentClassId": Tagged.class_id,
+            "handlerName": "tag",
+            "callerRenderId": "t1",
+            "stateToken": _token(Tagged),
+        }
+        [state_action] = _dispatch(c, call)["results"][0]["actions"]
+        # The token stores the tuple as a JSON list, so the browser receives the same form.
+        assert state_action["publicState"] == {"tags": ["a", "b"]}
+
+    def test_public_value_outside_the_browser_number_range_is_an_encoding_error(self):
+        c = _citry()
+
+        class Huge(Component):
+            citry = c
+            template = "<div>h</div>"
+
+            class State:
+                n: int = 0
+
+            class Events:
+                def grow(self, state):
+                    state.n = 2**1100
+
+        call = {
+            "componentClassId": Huge.class_id,
+            "handlerName": "grow",
+            "callerRenderId": "h1",
+            "stateToken": _token(Huge),
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["ok"] is False
+        assert item["error"]["code"] == "handler_error"
+
+    def test_server_storage_state_action_carries_public_values(self):
+        c = _citry()
+
+        class Stored(Component):
+            citry = c
+            template = "<div>s</div>"
+
+            class State:
+                count: int = 0
+                _storage = "server"
+
+            class Events:
+                def bump(self, state):
+                    state.count += 1
+
+        token = mint_state_token(
+            Stored.State(),
+            class_id=Stored.class_id,
+            secret=SIGNING_KEY,
+            max_age=None,
+            max_bytes=8192,
+            storage="server",
+            cache=c.cache,
+        )
+        call = {
+            "componentClassId": Stored.class_id,
+            "handlerName": "bump",
+            "callerRenderId": "s1",
+            "stateToken": token,
+        }
+        [state_action] = _dispatch(c, call)["results"][0]["actions"]
+        # The token is only a cache key here, so the values must travel beside it.
+        assert state_action["stateToken"].startswith("ces1.")
+        assert state_action["publicState"] == {"count": 1}
+
     def test_state_without_public_fields_sends_an_empty_object(self):
         c = _citry()
 

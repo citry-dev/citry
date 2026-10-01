@@ -1003,18 +1003,29 @@ class EventsDispatcher:
                 )
         else:
             final_actions = encoded
-        final_actions = self._resign_state(plan, ctx, final_actions, capabilities)
+        try:
+            final_actions = self._resign_state(plan, ctx, final_actions, capabilities)
+        except ProtocolValueError:
+            # A public State value the browser cannot read (such as an integer wider
+            # than a browser number) is a result encoding failure, not a handler bug.
+            return build_error_result(build_error(500, "handler_error", _MSG_UNENCODABLE_RESULT), plan.send_sequence)
         final_actions = self._apply_capabilities(final_actions, capabilities, handler=plan.handler.name)
 
         if _debug_enabled() and plan.state is not None and self._state_changed(plan):
             kinds = {action.get("action") for action in final_actions}
             if not (kinds & _VISIBLE_KINDS):
+                # Only a `state` action that reached the response updates `$state`.
+                refreshed = (
+                    " The browser receives the new public State for `$state` and State bindings,"
+                    " but server-rendered content stays as it was."
+                    if "state" in kinds
+                    else ""
+                )
                 logger.debug(
                     f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} mutated"
                     f" state but returned nothing visible (no render, data, dispatch, redirect, or URL"
-                    f" action). The browser receives the new public State for `$state` and State bindings,"
-                    f" but server-rendered content stays as it was. If that content should change too,"
-                    f" return a rendering, e.g. 'return state.render()'."
+                    f" action).{refreshed} If the page should change, return a rendering,"
+                    f" e.g. 'return state.render()'."
                 )
 
         try:
@@ -1081,7 +1092,7 @@ class EventsDispatcher:
         fresh fragment's manifest carries the new token and values); otherwise
         a ``state`` action is placed before the handler's own actions. The
         placement breaks no ordering promise: the action is server-added, and
-        the client applies a result's token refresh before the actions array
+        the client applies a result's State refresh before the actions array
         either way.
         """
         if plan.state is None or not self._state_changed(plan):
@@ -1122,7 +1133,6 @@ class EventsDispatcher:
             return wire_actions
         # The browser shows public State through `$state` and State bindings, and
         # nothing else will refresh them: the caller is not rendered again here.
-        # The token check above already proved every State value is plain JSON.
         state_action = build_state_action(plan.instance_id, token, public_state_values(plan.state, meta))
         return [state_action, *wire_actions]
 

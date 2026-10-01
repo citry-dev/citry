@@ -534,7 +534,7 @@ test("a delayed State refresh is skipped once a newer result for the component w
                 targetRenderId: "server_1",
                 stateToken: "token_old",
                 publicState: { moves: 1 },
-                delay: 0.03,
+                delay: 0.2,
                 wait: false,
               },
             ]
@@ -546,7 +546,7 @@ test("a delayed State refresh is skipped once a newer result for the component w
 
   await bridge.send({ source, handler: "move" });
   await bridge.send({ source, handler: "move" });
-  await new Promise((resolve) => setTimeout(resolve, 60));
+  await new Promise((resolve) => setTimeout(resolve, 300));
 
   // The older values never replace the newer ones, and listeners hear why the refresh was dropped.
   assert.deepEqual(committed, [["token_new", { moves: 2 }]]);

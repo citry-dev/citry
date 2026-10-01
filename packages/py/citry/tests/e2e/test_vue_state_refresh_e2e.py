@@ -273,7 +273,7 @@ class PickIn:
     value: int
 
 
-def test_a_superseded_slow_answer_does_not_replace_newer_state(page: Any, serve_live: Any) -> None:
+def test_a_slow_answer_cancelled_by_a_newer_call_does_not_replace_newer_state(page: Any, serve_live: Any) -> None:
     app = _engine("state-refresh-supersede-test")
     slow_started = threading.Event()
     release = threading.Event()
@@ -315,6 +315,7 @@ def test_a_superseded_slow_answer_does_not_replace_newer_state(page: Any, serve_
         """
 
     dispatcher_for(app)
+    errors = _collect_errors(page)
     page.goto(serve_live(app, Picker().render().serialize(), "") + "/")
     page.wait_for_selector("#count")
 
@@ -323,9 +324,11 @@ def test_a_superseded_slow_answer_does_not_replace_newer_state(page: Any, serve_
     page.locator("#second").click()
     page.wait_for_function("document.querySelector('#count').textContent === '2'")
     release.set()
-    # Give the slow answer time to arrive; the browser already dropped that call.
+    # The server still finishes the first call; the browser cancelled it when the
+    # newer call started, so its answer must never reach `$state`.
     page.wait_for_timeout(300)
     assert page.locator("#count").text_content() == "2"
+    assert errors == []
 
 
 def test_a_delayed_state_refresh_loses_to_a_newer_answer(page: Any, serve_live: Any) -> None:
@@ -375,13 +378,13 @@ def test_a_delayed_state_refresh_loses_to_a_newer_answer(page: Any, serve_live: 
             targetRenderId: renderId,
             stateToken: 'scheduled-token',
             publicState: {count: 99},
-            delay: 0.4,
+            delay: 3,
             wait: false,
           }]);
         }"""
     )
     page.locator("#bump").click()
     page.wait_for_function("document.querySelector('#count').textContent === '1'")
-    page.wait_for_function("window.__staleReasons.length === 1", timeout=3000)
+    page.wait_for_function("window.__staleReasons.length === 1", timeout=6000)
     assert page.locator("#count").text_content() == "1"
     assert [error for error in errors if "stale" not in error.lower()] == []

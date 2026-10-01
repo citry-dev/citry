@@ -259,7 +259,7 @@
         },
         "publicState": {
           "type": "object",
-          "description": "Open application data: every public State field of the target after the handler ran, which replaces the browser State object."
+          "description": "Open application data: every public State field of the target after the handler ran. The browser updates its State to these values, except fields with an unsent browser write."
         },
         "delay": {"$ref": "#/$defs/delay"},
         "wait": {"$ref": "#/$defs/wait"}

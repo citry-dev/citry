@@ -1599,8 +1599,8 @@ is opaque, minted and verified by the same binding.
   same counter an epoch internally; `sendSequence` is the wire name.
   A response's instance-mutating actions (the self-targeted render,
   the `state` refresh of the token and public values) apply only when
-  its epoch is **strictly greater** than the anchor's highest-applied; otherwise they are
-  dropped, while its `data` still resolves the caller's own promise
+  its epoch is **strictly greater** than the anchor's highest-applied;
+  otherwise they are dropped, while its `data` still resolves the caller's own promise
   and non-instance actions apply normally. Over HTTP's at-most-once
   delivery, dropping at equal-or-lower behaves exactly like dropping
   only the lower ones (a response's own epoch becomes the highest
@@ -3142,8 +3142,9 @@ without a round trip per click. (The section 2 counter stays the
 canonical server-round-trip form; this is the local-first variant.)
 
 **Reconcile rule.** When a response arrives, whether it carries a new
-manifest or a `state` action, the runtime updates `$state` in place: **server wins per field, except fields with a
-pending, not-yet-sent local write, which keep the local value** (they
+manifest or a `state` action, the runtime updates `$state` in place:
+**server wins per field, except fields with a pending, not-yet-sent
+local write, which keep the local value** (they
 are still queued and will reach the server on the next call). Combined
 with `@alpinejs/morph` preserving the living Alpine scope across morphs,
 a re-render never recreates the scope; `$state` object identity is

@@ -378,7 +378,7 @@ The IDs are deliberately separate because they answer different questions:
 | `componentClassId` | The registered component class containing the Python handler. |
 | `renderId` | One rendered occurrence of a component. Each new render receives a new ID. |
 | `callerRenderId` | The rendered occurrence that sent a call. |
-| `targetRenderId` | The rendered occurrence whose State token a `state` action replaces. |
+| `targetRenderId` | The rendered occurrence whose State token and public State values a `state` action updates. |
 | `render:<renderId>` | A render or DOM-event action target that names one rendered occurrence. |
 | `mark:<callerRenderId>:<name>` | A render action target that names one `<c-mark>` region inside the calling occurrence. |
 | `handlerName` | The Python handler the server runs. |
@@ -550,14 +550,19 @@ These inputs fail or degrade as follows:
   action.
 - Field names inside `publicState` are application data, so the protocol does
   not reject an extra or missing field. The browser adds the extra field and
-  removes the missing one, as the steps above say. A server sends exactly the
-  component's public fields.
+  removes the missing one, as the steps above say. When the class record omits
+  `writableStateFields`, Citry's browser client also treats an extra field as
+  writable, and the server then rejects the next call that sends it as
+  `invalid_args`. A server sends exactly the component's public fields.
 - The protocol does not check a field's value against the State declaration.
   The browser shows the value it receives, so a server sends values of the
   declared types. The server still validates every browser write against the
   declaration when the next call carries it.
-- Citry's browser client skips a `state` action whose `targetRenderId` names
-  no component that its Vue app currently shows.
+- Citry's browser client skips a `state` action in a server result whose
+  `targetRenderId` names no component that its Vue app currently shows. Page
+  code that passes such an action to `Citry.events.applyActions` gets a
+  rejected promise instead, because that function first finds the component
+  each action names.
 
 ### Targets
 
@@ -746,8 +751,8 @@ and verifies it.
 
 The plain public State values are separate. They appear in `publicState` in
 two places: the component's Events record, where browser code reads them to
-set up the component's reactive State, and a `state` action, which replaces
-them after a handler changes State. Server-only values never appear in either
+set up the component's reactive State, and a `state` action, which updates
+them after a handler changes State (see [State refresh](#state-refresh)). Server-only values never appear in either
 place. A refreshed token arrives the same two ways: in the Events records of a
 new render, or in a `state` action beside the refreshed values.
 

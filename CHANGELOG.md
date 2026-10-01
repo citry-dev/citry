@@ -52,8 +52,9 @@ walks through every step.
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#move-component-initializers-to-vue-options)).
 - **Events code:** render targets are `mark:<name>` or `render:<id>`
   instead of CSS selectors, custom transports must forward
-  `request.headers`, and a `state` action passed to
-  `Citry.events.applyActions` needs a `publicState` object
+  `request.headers`, and a `state` action you build, for
+  `Citry.events.applyActions` or an `on_event_result` hook, needs a
+  `publicState` object
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-events-code)).
 - **Page scripts and selectors:** `Citry.alpine`, `Citry.manager`, and
   `Citry.i18n` are removed, and Vue-rendered elements carry no

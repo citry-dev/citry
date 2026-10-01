@@ -13,6 +13,7 @@ kwargs. Design: ``docs/design/events.md`` sections 3.2 and 7.2.
 from __future__ import annotations
 
 import inspect
+import json
 from dataclasses import MISSING, dataclass, fields
 from datetime import timedelta
 from typing import Any
@@ -256,12 +257,14 @@ def build_state_instance(comp_name: str, state_cls: type, raw_kwargs: dict[str, 
 
 def public_state_values(state: Any, meta: StateMeta) -> dict[str, Any]:
     """
-    The plain values of a State instance's public fields, in sorted key order.
+    Return the JSON form of a State instance's public fields, sorted by name.
 
-    Only these fields ever reach the browser: the first render puts them in
-    the component's Events record, and a handler that changes State without
+    Only these fields ever reach the browser: every render puts them in the
+    component's Events record, and a handler that changes State without
     rendering the component sends them in its ``state`` action. Both use this
     function, so a field outside ``_public`` cannot leak through either one.
-    Sorting keeps the emitted JSON identical from one run to the next.
+    The JSON round trip turns a tuple into a list, the same as the token
+    stores it, and sorting gives both places the same key order.
     """
-    return {name: getattr(state, name) for name in sorted(meta.public)}
+    values = {name: getattr(state, name) for name in sorted(meta.public)}
+    return json.loads(json.dumps(values, allow_nan=False))
