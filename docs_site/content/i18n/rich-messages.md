@@ -93,10 +93,11 @@ component.
 or recreate its fills. Render the page or fragment again when a rich message
 needs another locale.
 
-The component adds no wrapper of its own, so it cannot attach a fallback
-message's language to the translated text. Project checking therefore requires
-equivalent-language coverage for each selectable locale used at a rich call.
-A cross-language rich fallback fails rather than emitting text with incorrect
+The component adds no element around the whole message. It wraps only each fill
+in `<bdi dir="auto">` to isolate its direction, so it has no element that could
+carry a fallback message's `lang`. Project checking therefore requires
+equivalent-language coverage for each selectable locale used at a rich call. A
+cross-language rich fallback fails rather than emitting text with incorrect
 language metadata.
 
 Use ordinary `tr()` when the result is text only. Use `<c-trans>` only when a

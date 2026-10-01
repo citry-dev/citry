@@ -47,15 +47,15 @@ provider locale retranslates it with the latest values.
 Square brackets select the HTML attribute to write. With no brackets, the
 destination is `textContent`. A dot is reserved for a Fluent message attribute,
 so the complete form is
-`$c-tr:message.fluent-attribute[html-attribute]`. Citry permits only a small,
-documented set of safe HTML attribute destinations.
+`$c-tr:message.fluent-attribute[html-attribute]`. The HTML attribute must be
+one of `alt`, `aria-description`, `aria-label`, `aria-placeholder`,
+`aria-roledescription`, `aria-valuetext`, `placeholder`, or `title`.
 
-Like other flexible Citry attributes, a translation binding may be written
-directly, as `c-$c-tr:...="expression"`, or returned as a `$c-tr:...` key from
-`c-bind`. The binding is valid only on the final literal HTML element that owns
-the text or attribute. Citry removes the directive and emits an opaque checked
-binding ID; it never sends the directive expression as an unchecked DOM
-protocol.
+Python can also decide the binding during the server render: write
+`c-$c-tr:...="python_expression"`, or return a `$c-tr:...` key from `c-bind`.
+The binding is valid only on the final literal HTML element that owns the text
+or attribute. Citry checks the directive during the render, removes it from
+the HTML, and leaves a binding ID that points to the checked binding.
 
 The directive name has one exact grammar:
 
@@ -101,9 +101,10 @@ means presence-only, but `True` communicates that intent more clearly.
 Vue owns the `<span>` text. Calling `switchLocale()` replaces the provider's
 readonly context, so the expression runs again.
 
-Use this general Vue form when the expression itself owns more than a
-translation binding. For a stable server-rendered text or attribute,
-`$c-tr` avoids duplicating that broader ownership logic.
+Use this general Vue form when the expression computes more than a
+translation. For a stable server-rendered text or attribute, `$c-tr` keeps the
+server value and only retranslates it, so you do not repeat the expression in
+Vue.
 
 ### Change a whole page from the server
 
@@ -142,9 +143,11 @@ The real element owns the browser scope and its `lang` and `dir` attributes.
 The i18n browser runtime loads only when a rendered tree contains a
 client-enabled provider.
 
-`$i18n` resolves the nearest client provider at the element where the Vue
-expression runs. It is the concise form of Citry's ordinary browser
-provide/inject lookup.
+`$i18n` is the service of the nearest client provider that encloses the Vue
+expression. Citry passes each provider's service down to its descendants
+through Vue's provide/inject, so a provider elsewhere on the page does not
+affect it. Below a server-only provider, or outside every client provider,
+`$i18n` is `null`.
 
 ## Use the browser service
 
@@ -155,6 +158,8 @@ The service exposes:
 - `bind()` for browser-created or custom destinations;
 - `ensureMessages()`;
 - `switchLocale()`;
+- `subscribe()`, which runs a callback now and after each successful locale
+  switch, and returns a function that stops it;
 - named operations under `format`; and
 - strict number and percent operations under `parse`.
 
@@ -186,8 +191,8 @@ Format values with the same named profiles as the server:
 ```
 
 Browser parsing supports numbers and percentages. See
-[Parse localized input](/i18n/parsing/) for the exact result shape and the
-current temporal boundary.
+[Parse localized input](/i18n/parsing/) for the exact result shape and for
+why date and time parsing runs only on the server.
 
 ## Bind a browser-created or custom destination
 
@@ -246,10 +251,10 @@ ordinary non-reactive state.
 
 Citry finds literal `$i18n.tr()` and `$i18n.resolve()` calls in Vue
 expressions, checked `$c-tr` declarations, and literal calls on
-`component.$i18n` or `this.$i18n` in component JavaScript. A bounded
-object-literal `i18n.bind({ message: "...", output: "...", ... })` contributes its exact
-output too. Citry includes those outputs and their referenced messages and
-private terms in the browser artifact.
+`component.$i18n` or `this.$i18n` in component JavaScript. An `i18n.bind({
+message: "...", output: "...", ... })` call written as an object literal
+contributes its exact output too. Citry includes those outputs and their
+referenced messages and private terms in the browser artifact.
 
 In component JavaScript, Citry recognizes a call when it can prove the
 receiver is the component's i18n service:
@@ -281,7 +286,9 @@ updates. Their rendered output stays server-owned.
 
 ## Load a dynamic message before calling tr
 
-In a mounted application, load a dynamic public ID before the synchronous
+When Citry is mounted in one of its
+[web framework integrations](/web-frameworks/), the browser can ask the
+server for more messages. Load a dynamic public ID before the synchronous
 `tr()` call:
 
 ```javascript

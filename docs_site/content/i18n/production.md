@@ -7,10 +7,10 @@ description: Compile standalone catalogs, validate installed artifacts, deliver 
 
 Development and production load standalone catalog packages differently.
 
-In development, Citry reads the package's `.ftl` files. A new engine sees the
-current files from a source checkout or editable install. In production, Citry
-requires checked generated artifacts and links the package without reopening
-its Fluent source.
+With `Citry(mode="development")`, Citry reads the package's `.ftl` files. A
+new engine sees the current files from a source checkout or editable install.
+In production mode, which is the default, Citry requires checked generated
+artifacts and links the package without reopening its Fluent source.
 
 This source-free package linking reduces production startup work and ensures
 the deployed runtime uses the exact catalog that passed the build.
@@ -68,9 +68,8 @@ import-package name.
 Test the source distribution, its rebuilt wheel, and the installed wheel, not
 only the source checkout. Start a production `Citry` instance from outside the
 repository, resolve a package-owned message, and inspect the built archive for
-every path named by `_compiled/manifest.json`. Citry's release checks do this
-with the real `citry_ui_i18n` package and require production linking to parse
-zero package FTL files. Citry also supports importable zip resources.
+every path named by `_compiled/manifest.json`. A catalog package also loads
+when it is installed as an importable zip archive.
 
 ## Production rejects stale or incomplete packages
 
@@ -138,24 +137,27 @@ The two extensions compose by passing one ordinary immutable public value.
 
 Server-only pages ship no i18n browser runtime or browser catalog.
 
-A client-enabled provider records literal `$i18n` and injected `i18n` calls in
-the rendered tree. Citry includes those public outputs, their referenced
-messages, private terms, and required profile records. It does not send the
-complete project catalog.
+A client-enabled provider records literal `$i18n` calls in Vue expressions and
+`component.$i18n` or `this.$i18n` calls in component JavaScript. Citry includes
+those public outputs, their referenced messages, private terms, and required
+profile records. It does not send the complete project catalog.
 
 For static output with no Citry server endpoint, serialization includes the
 finite required message set for every configured selectable locale. Dynamic
 browser IDs must appear in `Component.I18n.client_messages`.
 
-For a mounted application, the first response includes the current locale's
-required data. `switchLocale()` or `ensureMessages()` requests another checked
-partition when needed. The request carries the current revision and a bounded
-set of public roots. The server rejects unknown private IDs, stale revisions,
-unsupported locales, and oversized requests as one operation.
+When Citry is mounted in a [web framework integration](/web-frameworks/), the
+first response includes the messages the current locale needs. `switchLocale()`
+and `ensureMessages()` ask the server for more messages when needed. Each
+request names the locale, the catalog revision, and a limited list of public
+message IDs. The server rejects the whole request when it names an unknown or
+private message ID, an old revision, an unsupported locale, or too many
+messages.
 
-Inserted HTML fragments carry their own browser message requirements. The
-provider adds those requirements while the fragment is present and removes
-them when the fragment leaves the document.
+When an Events handler renders part of the page again, the new content brings
+the messages it uses and the content it replaces releases its own. An inserted
+[HTML fragment](/advanced/html-fragments/) starts its own Vue app, so it needs
+its own client provider, which carries the messages the fragment uses.
 
 ## Keep locale changes atomic
 

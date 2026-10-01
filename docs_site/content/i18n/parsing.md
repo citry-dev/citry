@@ -190,10 +190,12 @@ IANA time zone:
 from citry import (
     DateSegments,
     DateTimeFormat,
+    FormatRegistry,
     DateTimeInput,
     DateTimeSegments,
     TimeSegments,
 )
+from citry.ext.i18n import make_context
 
 formats = FormatRegistry(
     datetime={
@@ -204,22 +206,31 @@ formats = FormatRegistry(
     },
 )
 
-context = i18n.make_context(
+context = make_context(
+    app,
     locale="en-US",
     time_zone="Europe/Prague",
 )
+i18n = app.extensions.get_extension("i18n")
 parser = i18n.for_context(context).parse
 
 edit = DateTimeSegments(
     date=DateSegments(year="2026", month="10", day="25"),
-    time=TimeSegments(hour="2", minute="30", second="00"),
+    time=TimeSegments(
+        hour="2",
+        minute="30",
+        second="00",
+        day_period="AM",
+    ),
 )
 result = parser.datetime_segments(edit, format="appointment")
 ```
 
-A local time in a daylight-saving gap is `invalid`. A local time in a fold is
-`ambiguous` and contains both possible aware instants in `alternatives`.
-Resolve the user's choice explicitly:
+A local time that the clocks skip when daylight saving starts is `invalid`.
+A local time that happens twice when the clocks go back is `ambiguous`, and
+the result lists both possible aware instants in `alternatives`. The example
+above is ambiguous: 2:30 AM happens twice in Prague on 25 October 2026.
+Pass the user's choice as `fold`:
 
 ```python
 result = parser.datetime_segments(
@@ -229,13 +240,14 @@ result = parser.datetime_segments(
 )
 ```
 
-Citry reads time-zone transitions from its pinned `tzdata` package rather than
-the host machine's unversioned zone database.
+Citry reads time-zone transitions from the `tzdata` Python package it
+depends on, not from the host machine's zone database. A context with a time
+zone records the exact `tzdata` version it used.
 
-## Know the browser boundary
+## Parse numbers and percentages in the browser
 
-The browser service currently provides synchronous strict parsing for numbers
-and percentages:
+The browser service provides synchronous strict parsing for numbers and
+percentages:
 
 ```javascript
 const result = $i18n.parse.number(
@@ -248,10 +260,10 @@ It returns a frozen object with `input`, `state`, `value`, `error`, and
 `valid`. The canonical numeric `value` is a string so JavaScript does not lose
 decimal precision.
 
-Date, time, and datetime parsing currently runs on the server. Those browser
-methods are absent because safe parity requires generated calendar-conversion
-and daylight-saving records; Citry does not reverse-engineer arbitrary
-`Intl.DateTimeFormat` output.
+Date, time, and datetime parsing runs only on the server, and the browser
+service has no methods for it. Parsing these values the same way as the
+server needs the server's calendar and daylight-saving data, and Citry does not
+try to reconstruct that data from `Intl.DateTimeFormat` output.
 
 Unit controls parse their numeric field with `parse.number()` and keep the
 unit as separate domain data. Currency controls likewise keep the currency
