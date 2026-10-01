@@ -869,11 +869,11 @@ class DirectVueEventsProducer:
             dependency_ctx.styles,
             dependency_ctx.early_scripts,
         )
-        # An interactive page has no static manifest to write tags ahead of.
-        # The Vue app loads its scripts in list order, so loading these
-        # entries first, in the order the hooks added them, keeps what static
-        # output promises: they run before every other dependency script.
-        # They are then ordinary scripts and follow the same loading rules.
+        # The Vue app loads every dependency script itself, in list order, so
+        # putting these entries first, in the order the hooks added them,
+        # makes them run before every other dependency script, as static
+        # output does. They are then ordinary scripts and follow the same
+        # loading rules.
         dependency_scripts = [*dependency_ctx.early_scripts, *dependency_ctx.scripts]
         dependency_styles = dependency_ctx.styles
         if javascript_policy is not None:

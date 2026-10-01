@@ -42,7 +42,7 @@
         if (firstAppCreated)
           throw new Error("Citry.vue.use() was called after Citry created a Vue app on this page, so that app " +
             "would run without the plugin. Call it from a script that runs before Citry creates its first app, " +
-            "such as a script loaded with `defer` in the page <head> or a script an extension adds to early_scripts.");
+            "such as a script loaded with `defer` in the page <head> or, on the first page load, a script an extension adds to `ctx.early_scripts`.");
         // As with `app.use`, registering the same plugin again does nothing, even with other options.
         if (pageVuePlugins.some(entry => entry.plugin === plugin)) return;
         pageVuePlugins.push(Object.freeze({plugin, options}));

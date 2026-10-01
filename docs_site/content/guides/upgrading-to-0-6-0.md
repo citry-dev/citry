@@ -499,9 +499,8 @@ Also check these settings and hooks:
   `ctx.scripts` and `ctx.early_scripts`. A `type="module"` or JSON data
   script, or a script marked `async`, `defer`, or `nomodule`, raises
   `ValueError` when the page or an Events response is serialized, because Citry loads these
-  scripts itself, one after another in list order. `ctx.early_scripts`
-  now works on interactive pages too, and its scripts load before
-  `ctx.scripts`.
+  scripts itself, one after another in list order. Scripts in
+  `ctx.early_scripts` load before `ctx.scripts`.
 - **`@event(methods=...)` and `Events._methods`** accept only GET, HEAD,
   POST, PUT, PATCH, DELETE, and OPTIONS. Any other method raises
   `ValueError` when the class is defined.
@@ -528,7 +527,7 @@ Also check these settings and hooks:
   Rename `ctx.before_manifest` to `ctx.early_scripts` in your
   `on_dependencies()` hooks; the scripts it holds still run before
   `ctx.scripts`. The old name has no alias, so a hook that still uses it
-  raises `AttributeError` the first time a page is serialized.
+  raises `AttributeError`, naming `early_scripts`, when the hook runs.
 - **Ownership APIs** are removed: the `citry.ownership` and
   `citry.ownership_manifest` modules and the `ownership` parameters of
   `CitryContext` and `CitryElement`. Delete imports of these modules and

@@ -642,9 +642,9 @@ assets use Citry routes. Static CSS-only and script-only fragments can emit
 ordinary external URLs without installing the Citry runtime. Component JavaScript
 that requires a browser app is rejected if no prepared Vue plan exists.
 
-An `on_dependencies` hook adds scripts that must run before the other
-dependency scripts to `ctx.early_scripts`. On an
-interactive render its entries become the first scripts of the prepared Vue
+An `on_dependencies` hook puts scripts that must run before the other
+dependency scripts in `ctx.early_scripts`. On an interactive render these
+entries become the first scripts of the prepared Vue
 payload, in the order the extension added them, so the browser loads them
 before `ctx.scripts` and the other assets and only after the descriptor has
 passed validation. On the static path they are written before ordinary

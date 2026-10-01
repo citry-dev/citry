@@ -167,10 +167,9 @@ Where `early_scripts` entries end up depends on the page:
 
 - **Static page:** Citry writes them as `<script>` tags ahead of the
   dependency scripts.
-- **Interactive page:** the page's Vue app loads its scripts itself, so
-  there are no tags to write first. Citry makes the `early_scripts`
-  entries the app's first scripts, in the order you added them, followed by
-  `ctx.scripts`. They follow the same rules as any other script on an
+- **Interactive page:** Citry makes the `early_scripts` entries the
+  app's first dependency scripts, in the order you added them, followed
+  by `ctx.scripts`. They follow the same rules as any other script on an
   interactive page: classic JavaScript only. A `type="module"` or
   `type="application/json"` script, or a script with `async`, `defer`, or
   `nomodule`, makes serialization raise `ValueError`. An extension can

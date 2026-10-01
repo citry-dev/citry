@@ -73,8 +73,9 @@ nodes). The rest are seven consequences of running components on Vue:
    them, and those contents may not hold components or Vue bindings.
 
 All seven are recorded in the CHANGELOG and the upgrade guide.
-`OnDependenciesContext.early_scripts`, which failed on interactive pages
-at the time of the audit, works again under its new name (decision 6.8).
+`OnDependenciesContext.before_manifest` is renamed to `early_scripts`
+(decision 6.8); under that name it works on interactive pages, which it
+did not at the time of the audit.
 
 What still works as in 0.5.1:
 
@@ -465,7 +466,7 @@ No 0.5.1 default changed.
 | Custom hooks via `ExtensionManager.emit` | | `:1593` | unchanged | |
 | `ExtensionCommand`, `ExtensionManager.commands`, `get_extension_command` | | | unchanged | `command.py` is byte-identical. |
 | The other 28 context classes | | `:92-553` | unchanged | |
-| `on_dependencies` / `OnDependenciesContext` | `P/ext/dependencies/emission.py:74-108` | `:70-106` | changed-incompatible | `selected_render` added before `strategy`. `early_scripts` raised on interactive pages at audit time. In CHANGELOG (decision 6.8). |
+| `on_dependencies` / `OnDependenciesContext` | `P/ext/dependencies/emission.py:74-108` | `:70-106` | changed-incompatible | `selected_render` added before `strategy`. `before_manifest` renamed to `early_scripts`; the old name raises `AttributeError` that names the replacement. In CHANGELOG (decision 6.8). |
 | `Component.on_dependencies` | `P/component.py` | `:1274` | changed-compatible | Overriding it turns off hydration. |
 | `EventsExtension.on_dependencies` | `P/ext/events/extension.py:438` | none | removed | Internal to a built-in extension. |
 | `Extension.browser_plugin()` | none | `P/extension.py:950` | new | Undocumented. The only extension-facing way to add browser code (decision 6.2). |
@@ -965,12 +966,12 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Status:** option (a); the Python and browser messages now show the
   element form to move into the child (`c6230150`, `ddd553e6`).
 
-### 6.8 `OnDependenciesContext.early_scripts`
+### 6.8 `OnDependenciesContext.before_manifest` (now `early_scripts`)
 
-- **Question:** an extension that adds tags to `early_scripts` now fails
+- **Question:** an extension that adds tags to `before_manifest` now fails
   on interactive pages (`P/_vue/events.py:631-635`).
 - **Options:** (a) keep the rejection (in CHANGELOG, "add them to
-  `ctx.scripts`"); (b) treat `early_scripts` entries as leading
+  `ctx.scripts`"); (b) treat `before_manifest` entries as leading
   `scripts` in prepared Vue serialization, which keeps old extensions
   working.
 - **Recommendation:** (b) is one place to change and removes a break with
@@ -980,7 +981,9 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   (`22b90c45`). The field was later renamed from `before_manifest` to
   `early_scripts`, because "manifest" named the Alpine-era ownership JSON
   that 0.6.0 removes; the CHANGELOG and upgrade guide tell extension
-  authors to rename it.
+  authors to rename it. A hook that still reads the old name raises
+  `AttributeError` naming `early_scripts` (`_REPLACED_DEPENDENCY_FIELDS`
+  in `P/ext/dependencies/emission.py`).
 
 ### 6.9 The Events protocol contract
 

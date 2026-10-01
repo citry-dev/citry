@@ -98,14 +98,41 @@ class OnDependenciesContext:
     """Scripts that must run before the other dependency scripts (mutable).
     Static output writes them as tags ahead of the dependency scripts; under
     ``simple`` they are emitted with the other direct dependency tags. On an
-    interactive page the Vue app loads them after the Vue runtime and before
-    ``scripts`` and any component's JavaScript, in list order, under the same
-    rules as any entry in ``scripts``. A script here can therefore call
-    ``Citry.vue.use()`` to install a Vue plugin that components rely on."""
+    interactive page the Vue app loads them after the Vue runtime and ahead
+    of ``scripts``, in list order, under the same rules as any entry in
+    ``scripts``. When the page loads, these scripts
+    run before Citry creates the page's first Vue app, so one of them can
+    call ``Citry.vue.use()`` to install a Vue plugin for that app."""
     _security_csp: SecurityCspMode = "off"
     """The effective call-local CSP mode used by built-in dependency producers."""
     _security_javascript: SecurityJavascriptMode = "allow"
     """The effective call-local JavaScript delivery mode."""
+
+    # Hidden from type checkers: a class-level __getattr__ would make mypy
+    # accept any misspelled field instead of reporting it.
+    if not TYPE_CHECKING:
+
+        def __getattr__(self, name: str) -> Any:
+            # Python calls this only for a name the instance lacks. A hook
+            # written against citry 0.5.x reads the old field name; say which
+            # field replaced it rather than leave a bare AttributeError.
+            replacement = _REPLACED_DEPENDENCY_FIELDS.get(name)
+            if replacement is not None:
+                msg = (
+                    f"OnDependenciesContext has no field {name!r}; use {replacement!r} instead "
+                    "(see the citry 0.6.0 upgrade guide)."
+                )
+                raise AttributeError(msg, name=name, obj=self)
+            msg = f"{type(self).__name__!r} object has no attribute {name!r}"
+            raise AttributeError(msg, name=name, obj=self)
+
+
+# Context field names from citry 0.5.x mapped to the field that took over
+# their job. They are not aliases; the map only lets the error name the
+# replacement for an extension hook that still uses the old name.
+_REPLACED_DEPENDENCY_FIELDS: dict[str, str] = {
+    "before_manifest": "early_scripts",
+}
 
 
 @dataclass(eq=False)
@@ -360,7 +387,7 @@ def _emit_without_javascript(
     scripts = javascript_policy.process_dependencies(hook_ctx.scripts, position="page")
     early_scripts = javascript_policy.process_dependencies(
         hook_ctx.early_scripts,
-        position="early-scripts",
+        position="early_scripts",
     )
     styles = javascript_policy.process_dependencies(hook_ctx.styles, position="stylesheet")
 
@@ -821,7 +848,7 @@ def _emit_fragment(
         styles = javascript_policy.process_dependencies(styles, position="fragment stylesheet")
         early_scripts = javascript_policy.process_dependencies(
             early_scripts,
-            position="fragment early-scripts",
+            position="fragment early_scripts",
         )
 
     # Static fragments have no Vue application. Emit their already-resolved

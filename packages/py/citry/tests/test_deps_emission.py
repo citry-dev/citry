@@ -563,6 +563,37 @@ class TestOnDependenciesHooks:
         html = str(page())
         assert any(item["source"]["url"] == "/static/analytics.js" for item in _prepared(html)["scripts"])
 
+    def test_hook_using_a_0_5_field_name_is_told_the_replacement(self):
+        # A hook written for citry 0.5.x fails on its first run with an error
+        # that names the current field, so its author knows what to change.
+        class OldHook(Extension):
+            name = "old_hook"
+
+            def on_dependencies(self, ctx):
+                ctx.before_manifest.append(Script(url="/static/early.js"))
+
+        c = Citry(extensions=[OldHook])
+        page = _page(c, js="console.log(1);")
+        with pytest.raises(AttributeError, match="use 'early_scripts' instead"):
+            str(page())
+
+    def test_hook_reading_an_unknown_field_gets_the_usual_attribute_error(self):
+        # Only the listed 0.5.x names get the replacement hint; any other
+        # missing name raises the ordinary error, so hasattr() still works.
+        class Probe(Extension):
+            name = "probe"
+            seen: bool | None = None
+
+            def on_dependencies(self, ctx):
+                type(self).seen = hasattr(ctx, "missing_field")
+                ctx.missing_field  # noqa: B018 - the read is the behavior under test
+
+        c = Citry(extensions=[Probe])
+        page = _page(c, js="console.log(1);")
+        with pytest.raises(AttributeError, match="object has no attribute 'missing_field'"):
+            str(page())
+        assert Probe.seen is False
+
     def test_returning_none_keeps_the_component_assets(self):
         # The hook returns None (the default) to mean "no change": the
         # component's own js and css must survive untouched.
