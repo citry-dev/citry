@@ -145,6 +145,28 @@ class _TourRegistry:
     steps: list[_TourDeclaration] = field(default_factory=list)
 
 
+class _TourRow(TypedDict):
+    """One declared step with its ids, progress text, and slot wrappers, as CInternalTourStep renders it."""
+
+    declaration: _TourDeclaration
+    index: int
+    total: int
+    title_id: str
+    description_id: str
+    active: bool
+    progress: str
+    progress_current: str
+    progress_total: str
+    progress_values: str
+    step_positions: list[int]
+    # Each wrapper Slot ignores the data it is rendered with and passes the
+    # step's own slot data to the authored slot, so it accepts any data.
+    title: Slot[object]
+    content: Slot[object]
+    media: Slot[object] | None
+    morph_key: str
+
+
 def _plain(name: str, value: object, *, optional: bool = False) -> str | None:
     raw = const_value(value)
     if raw is None and optional:
@@ -473,7 +495,7 @@ class CInternalTour(LibraryComponent):
         if kwargs.active >= len(kwargs.registry.steps):
             raise ValueError(f"CTour active {kwargs.active} is outside its {len(kwargs.registry.steps)} Steps.")
         self.unprovide(_TOUR_CONTEXT)
-        items = []
+        items: list[_TourRow] = []
         total = len(kwargs.registry.steps)
         for index, declaration in enumerate(kwargs.registry.steps):
             slot_data: CTourStepSlotData = {"index": index, "total": total, "value": declaration.value}
@@ -590,7 +612,7 @@ class CInternalTourStep(LibraryComponent):
 
     @dataclass(slots=True)
     class Kwargs:
-        item: dict[str, object]
+        item: _TourRow
         skippable: bool
         labels: dict[str, str]
         catalog: dict[str, bool]
@@ -601,9 +623,9 @@ class CInternalTourStep(LibraryComponent):
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item
-        declaration = cast("_TourDeclaration", item["declaration"])
-        index = cast("int", item["index"])
-        total = cast("int", item["total"])
+        declaration = item["declaration"]
+        index = item["index"]
+        total = item["total"]
         return {
             **item,
             "attrs": {
