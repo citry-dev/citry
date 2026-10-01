@@ -1003,6 +1003,7 @@ def test_component_js_lint_knows_citry_and_dom_globals_but_vue_templates_do_not(
   if (!(input instanceof HTMLInputElement)) return;
   const observer = new MutationObserver(() => getComputedStyle(input));
   Citry.vue.nextTick(() => observer.disconnect());
+  if (input.getRootNode() instanceof Document) new EventTarget();
   missingHelper(input);
 } });"""
 

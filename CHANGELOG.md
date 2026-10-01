@@ -299,6 +299,9 @@ Upgrading from 0.5.x? Follow
 
 ### Fixed
 
+- `citry check` and the editor no longer report `Document`, `Window`,
+  `EventTarget`, `Range`, `Selection`, and several DOM event classes as
+  unknown names in component JavaScript.
 - `citry check` and the editor no longer report
   `citry.js-data.unsupported-type` for a `js_data()` value that reads a
   `Kwargs` field annotated with a type alias of a `Literal`, such as
