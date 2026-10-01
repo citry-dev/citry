@@ -110,6 +110,7 @@ areas:
         collapsible: true
         section_style: true
         items:
+          - { title: Performance overview, path: /performance/, needs_review: true }
           - { title: Simple components, path: /performance/simple-components/, needs_review: true }
           - { title: Constant values, path: /performance/const/, needs_review: true }
           - { title: Pure components, path: /performance/pure/, needs_review: true }

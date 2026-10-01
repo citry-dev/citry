@@ -124,7 +124,8 @@ not your editor has a dedicated Citry integration.
 When a project needs more control, read how to ship
 [component JavaScript and CSS](/advanced/js-and-css-dependencies/), return
 [HTML fragments](/advanced/html-fragments/),
-[cache rendered output](/performance/caching/), and
+[make rendering faster](/performance/), including
+[caching rendered output](/performance/caching/), and
 [test components](/advanced/testing/).
 
 ## Useful links

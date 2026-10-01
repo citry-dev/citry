@@ -297,6 +297,8 @@ not make the stored artifact safe to expose.
 
 ## Related pages
 
+- [Performance overview](/performance/) compares caching with the other
+  rendering optimizations.
 - [Cache backends](/performance/cache-backends/) for in-process and shared
   storage.
 - [Constant values](/performance/const/) and

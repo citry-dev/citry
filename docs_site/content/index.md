@@ -182,7 +182,7 @@ Read about [caching](/performance/caching/),
 [strict CSP](/security/#choose-a-csp-compatibility-mode),
 [HTML fragments](/advanced/html-fragments/),
 [component libraries](/advanced/component-libraries/), and
-[performance](/performance/pure/#choose-an-optimization).
+[performance](/performance/).
 
 <c-landing-depth />
 

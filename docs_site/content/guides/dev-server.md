@@ -249,7 +249,8 @@ Two related calls help when a single path is not enough:
   do not run `citry watch` and do not add the framework helper; leaving them out
   is all it takes.
 
-For how Citry reuses rendered work, see
+For how Citry reuses rendered work, see the
+[Performance overview](/performance/),
 [Constant values](/performance/const/),
 [Pure components](/performance/pure/), and
 [Cache rendered output](/performance/caching/). For loading JavaScript and CSS

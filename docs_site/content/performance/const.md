@@ -17,7 +17,7 @@ where the measurement shows repeated template work.
 
 `Const(...)` describes one value. To reuse a whole component body, see
 [Pure components](/performance/pure/). To compare `Const` with the other
-options, see [Choose an optimization](/performance/pure/#choose-an-optimization).
+options, see the [Performance overview](/performance/).
 
 ## Mark a stable input
 

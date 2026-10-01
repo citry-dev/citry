@@ -54,24 +54,10 @@ Purity pays only when equal instances repeat within the same tree. A component
 that appears once, or whose inputs are unique every time, should not declare
 it.
 
-## Choose an optimization
-
-Citry provides three explicit rendering optimizations. Each one avoids
-different work and asks your code for a different promise:
-
-| Choice | What it avoids | What your code promises |
-| --- | --- | --- |
-| [`simple = True`](/performance/simple-components/) | Independent component setup and ownership records | The component needs no instance, hooks, or JS/CSS of its own |
-| [`Const(value)`](/performance/const/) | Repeating template work based only on that value | The marked value will not change |
-| `pure = True` | Repeating safe body work for equal data within one root render | The template is deterministic and side-effect-free |
-
-Use `Const(...)` when only selected values are stable; use `pure = True` only
-when the complete body satisfies the stronger promise. You can combine simple
-and pure declarations when both contracts apply. The data callback still
-runs, and a simple body with a default outlet stays live.
-
 ## Related pages
 
+- [Performance overview](/performance/) compares `pure = True` with the
+  other optimizations.
 - [Constant values](/performance/const/) for reusing template work tied to
   individual stable inputs.
 - [Simple components](/performance/simple-components/) for skipping

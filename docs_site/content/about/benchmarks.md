@@ -13,7 +13,7 @@ from 2026-09-10. Lower bars mean less rendering time.
 <c-image src="/static/img/benchmark.png" alt="First, second and warmed render times for optimized Citry, Django, django-components and Jinja2" width="720" />
 
 \* Citry uses `simple` and `pure` optimizations. See the
-[performance optimization guide](/performance/pure/#choose-an-optimization).
+[performance optimization guide](/performance/).
 
 | Configuration | First render | Second render | Warmed render |
 | --- | ---: | ---: | ---: |
@@ -94,7 +94,7 @@ comparable Citry timings.
 
 ## Related pages
 
-- [Choose an optimization](/performance/pure/#choose-an-optimization)
-  compares simple rendering, `Const` and pure component bodies.
+- [Performance overview](/performance/) compares simple rendering,
+  `Const`, pure component bodies, and rendered output caching.
 - [Simple components](/performance/simple-components/) explains the opt-in
   contract used by the Citry result.

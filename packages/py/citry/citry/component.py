@@ -723,13 +723,14 @@ class Component(metaclass=ComponentMeta):
 
     For ``simple="vue"``, use the default data method or a synchronous static
     ``template_data(kwargs, slots)`` method. Authored component JS/CSS and static
-    ``js_data`` or ``css_data`` callbacks are supported; slots, child calls,
-    provide/inject, instance hooks and instance configuration are not. The data
-    callback runs for every invocation; neither mode makes the component pure.
+    ``js_data`` or ``css_data`` callbacks are supported; slots, child calls
+    that pass content, provide/inject, instance hooks and instance
+    configuration are not. The data callback runs for every invocation;
+    neither mode makes the component pure.
 
     See [Simple components](/performance/simple-components/) for the full contract
-    and [Choose an optimization](/performance/pure/#choose-an-optimization) to
-    compare the available options.
+    and the [Performance overview](/performance/) to compare the available
+    options.
     """
 
     pure: ClassVar[bool] = False

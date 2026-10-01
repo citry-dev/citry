@@ -12,7 +12,7 @@ redirects:
   - from: /advanced/const-optimization/
     to: /performance/const/
   - from: /advanced/performance/
-    to: /performance/const/
+    to: /performance/
   - from: /advanced/simple-components/
     to: /performance/simple-components/
   - from: /advanced/caching/
