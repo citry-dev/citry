@@ -48,7 +48,9 @@ Upgrading from 0.5.x? Follow
   that event (`citry.browser.undeclared-component-event`).
 - `citry check --types` and the editor check a bound attribute on an
   HTML element, such as `:draggable` or `:style`, against Vue's types for
-  that attribute, so `:style="1"` is a TypeScript error.
+  that attribute, so `:style="1"` is a TypeScript error. This can report
+  existing bindings such as `:aria-expanded="String(open)"`; bind the
+  boolean instead.
 - `citry check --types` checks each `c-*` value on a component tag
   against the child's `Kwargs` annotation, so `<c-TaskCard c-task="1">`
   is an error when `task` is a `Task`. It also checks that `c-class` and

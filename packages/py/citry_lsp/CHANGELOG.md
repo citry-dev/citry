@@ -16,7 +16,8 @@ All notable changes to `citry-lsp` are documented here.
   turn it off.
 - The editor checks a bound attribute on an HTML element, such as
   `:draggable` or `:style`, against Vue's types for that attribute, so
-  `:style="1"` is a TypeScript error.
+  `:style="1"` is a TypeScript error. This can report existing bindings
+  such as `:aria-expanded="String(open)"`; bind the boolean instead.
 - The editor checks each `c-*` value on a component tag against the
   child's `Kwargs` annotation, so `<c-TaskCard c-task="1">` is an error
   when `task` is a `Task`. It also checks that `c-class` and `c-style` on

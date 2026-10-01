@@ -396,21 +396,23 @@ reports these kinds of TypeScript errors:
 
 A bound attribute such as `:draggable` or `:style` on an HTML element is
 checked against Vue's types for that element's attributes, so
-`:style="1"` is an error while `:style="{ color: 'red' }"` passes. A value
-the HTML Standard allows, such as `:translate="''"`, is also accepted, so a
-value that the static
+`:style="1"` is an error while `:style="{ color: 'red' }"` passes. A
+keyword the HTML Standard lists for the attribute, such as the empty value
+in `:translate="''"`, is also accepted, as the static
 [attribute-value check](/ide/template-linting/#find-invalid-html-attribute-values)
-accepts is not an error when you bind it instead. Some attributes Vue types
-as any string, such as `dir`, so a bound `:dir="'sideways'"` is not
-reported, though the same static value is. Vue's types also compare with
-letter case, so a bound `'LAZY'` is an error where a static `"LAZY"`
-passes. An attribute Vue does not declare, such as `data-id`, a custom
-element, and a binding with a modifier such as `.prop` are not checked.
+accepts it. Some attributes Vue types as any string, such as `dir`, so a
+bound `:dir="'sideways'"` is not reported, though the same static value
+is. Vue's types are case-sensitive, so a bound `'LAZY'` is an error where
+a static `"LAZY"` passes. Citry does not check an attribute Vue does not
+declare, such as `data-id`, any attribute on a custom element, or a
+binding with a modifier such as `.prop`.
 
 Vue types `aria-*` attributes too. `aria-expanded` takes a boolean or
 `'true'`/`'false'`, so `:aria-expanded="String(open)"` is an error because
 `String()` returns any string. Bind the boolean itself:
-`:aria-expanded="open"`.
+`:aria-expanded="open"`. Vue also types `id` and `title` as strings, so
+`:id="task.id"` is an error when the id is a number; bind
+`:id="String(task.id)"`.
 
 VS Code's own TypeScript runs the check, so you need no Node.js install, but
 the built-in TypeScript and JavaScript Language Features extension must be

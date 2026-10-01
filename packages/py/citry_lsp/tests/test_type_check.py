@@ -24,6 +24,7 @@ from citry_lsp.engine import (
     ProjectionSourceMapping,
     TypeCheckProjection,
     browser_diagnostics,
+    browser_projection,
     type_check_projections,
 )
 from citry_lsp.project import load_project
@@ -141,13 +142,15 @@ class Bound(Component):
     citry = engine
     template_file = 'bound.html'
     def js_data(self, kwargs, slots):
-        return {'enabled': True, 'color': 'red'}
+        return {'enabled': True, 'color': 'red', 'name': 'title'}
 """
 
 _BOUND_HTML = (
     '<div :draggable="\'treu\'" :style="1" :data-id="1" :class="{ on: enabled }">'
     '<p :draggable="enabled" :style="{ color: color }" :translate="\'\'" :hidden="\'until-found\'"></p>'
-    "<my-el :draggable=\"'treu'\"></my-el><p :draggable.prop=\"'treu'\"></p></div>"
+    "<my-el :draggable=\"'treu'\"></my-el><p :draggable.prop=\"'treu'\"></p>"
+    '<p v-bind:hidden="1" :[name]="1" v-bind="{ draggable: \'treu\' }"></p>'
+    '<slot :name="1"></slot></div>'
 )
 
 
@@ -155,12 +158,30 @@ def test_native_bindings_are_checked_against_vue_attribute_types(tmp_path):
     project, documents = _documents(tmp_path, {"bound.html": ("citry-html", _BOUND_HTML)}, app=_BOUND_APP)
 
     # Valid values pass, including `translate=""`, which the HTML Standard
-    # allows and the static attribute-value rule accepts. A custom element
-    # and a `.prop` binding are left alone.
+    # allows and the static attribute-value rule accepts. The long
+    # `v-bind:` form is checked too. A custom element, a `.prop` binding, a
+    # dynamic or object `v-bind`, and a `<slot>` prop are left alone.
     assert [(code, text) for code, text, _range in _findings(tmp_path, "bound.html", project, documents)] == [
         ("citry.typescript.ts2345", "'treu'"),
         ("citry.typescript.ts2345", "1"),
+        ("citry.typescript.ts2345", "1"),
     ]
+
+
+def test_bound_attribute_helper_is_never_offered_as_a_completion(tmp_path):
+    project, documents = _documents(tmp_path, {"bound.html": ("citry-html", _BOUND_HTML)}, app=_BOUND_APP)
+    document = documents[(tmp_path / "bound.html").as_uri()]
+    cursor = _BOUND_HTML.index(':draggable="enabled') + len(':draggable="en')
+
+    projection = browser_projection(
+        document,
+        types.Position(0, cursor),
+        project,
+        documents,
+    )
+
+    assert projection is not None
+    assert "__citryBindAttribute" in projection.owned_root_names
 
 
 @pytest.fixture

@@ -1898,6 +1898,8 @@ def browser_projection(
             owned_names = (*owned_names, _TEMPLATE_COMPONENT_SOURCE)
         if listener:
             owned_names = (*owned_names, _CHILD_COMPONENT_EMITS)
+        if _native_bound_attribute(expression) is not None:
+            owned_names = (*owned_names, _BIND_ATTRIBUTE_HELPER)
         owns_position = _browser_projection_owns_position(
             expression,
             parser_index,
@@ -2151,7 +2153,7 @@ def _template_expression_block(
         tag, attribute, keywords = bound
         prefix = (
             f"{opening}\n{_bind_attribute_declaration(keywords)}\n"
-            f"__citryBindAttribute({_js_string_literal(tag)}, {_js_string_literal(attribute)}, (\n"
+            f"{_BIND_ATTRIBUTE_HELPER}({_js_string_literal(tag)}, {_js_string_literal(attribute)}, (\n"
         )
         suffix = "\n));\n"
     else:
@@ -2160,28 +2162,29 @@ def _template_expression_block(
     return prefix, projected_expression, f"{suffix}}})();\n", listener is not None
 
 
-_VUE_TYPES_IMPORT = (
-    f"import({json.dumps((Path(__file__).parent / 'types' / 'node_modules' / 'vue').resolve().as_posix())})"
-)
+# The Vue type files citry-lsp ships, named by absolute path so TypeScript
+# finds them wherever the project's own `node_modules` is, or without one.
+_VUE_TYPES_PATH = (Path(__file__).parent / "types" / "node_modules" / "vue").resolve().as_posix()
+# The generated helper that types one bound attribute value; completion hides it.
+_BIND_ATTRIBUTE_HELPER = "__citryBindAttribute"
 
 
 def _bind_attribute_declaration(keywords: tuple[str, ...]) -> str:
     """
     Declare the function whose last parameter types one bound attribute value.
 
-    Vue's `IntrinsicElementAttributes` types the attributes of each HTML tag,
-    and an attribute Vue does not declare, such as `data-id`, takes any
-    value. The HTML Standard's keywords for the attribute, which the static
-    `citry.template.invalid-attribute-value` rule checks, are also accepted,
-    so a value that rule accepts, such as `translate=""`, is never an error
-    when it is bound instead.
+    Vue's `IntrinsicElementAttributes` types the attributes of each HTML tag.
+    A tag or attribute Vue does not declare, such as `data-id`, takes any
+    value. A keyword that the static `citry.template.invalid-attribute-value`
+    rule lists for the attribute, such as `translate=""`, is also accepted
+    when bound, in the letter case the HTML Standard gives.
     """
-    attributes = f"{_VUE_TYPES_IMPORT}.IntrinsicElementAttributes"
+    attributes = f"import({_js_string_literal(_VUE_TYPES_PATH)}).IntrinsicElementAttributes"
     extra = "".join(f" | {_js_string_literal(keyword)}" for keyword in keywords)
     return (
-        f"/** @type {{<K extends keyof {attributes}, A extends string>(tag: K, attribute: A, "
-        f"value: (A extends keyof {attributes}[K] ? {attributes}[K][A] : any){extra}) => void}} */ "
-        "var __citryBindAttribute;"
+        f"/** @type {{<K extends string, A extends string>(tag: K, attribute: A, "
+        f"value: (K extends keyof {attributes} ? A extends keyof {attributes}[K] ? {attributes}[K][A] : any : any)"
+        f"{extra}) => void}} */ var {_BIND_ATTRIBUTE_HELPER};"
     )
 
 
@@ -2193,12 +2196,12 @@ def _native_bound_attribute(expression: BrowserExpression) -> tuple[str, str, tu
     rule does, so a component or custom element keeps its own attributes. A
     modifier such as `.prop` or `.camel` changes what is set, and a dynamic
     `:[name]` or an object `v-bind` names no single attribute, so those are
-    left alone.
+    left alone. A binding on `<slot>` is a Vue slot prop, not an attribute.
     """
     if expression.mode != "expression" or expression.host != "vue" or expression.transform != "identity":
         return None
     element = expression.element
-    if element is None or element not in HTML_ELEMENT_NAMES:
+    if element is None or element not in HTML_ELEMENT_NAMES or element == "slot":
         return None
     authored = expression.attribute
     name = authored[1:] if authored.startswith(":") else authored.removeprefix("v-bind:")
@@ -9179,7 +9182,7 @@ def _browser_preamble(
         )
     )
     state_shape = f"{writable_state_shape} & Readonly<{readonly_state_shape}>"
-    vue_types = (Path(__file__).parent / "types" / "node_modules" / "vue").resolve().as_posix()
+    vue_types = _VUE_TYPES_PATH
     component_shape = _component_public_instance_shape(
         roots,
         props,
