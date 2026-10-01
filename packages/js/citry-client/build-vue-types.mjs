@@ -65,6 +65,9 @@ for (const [name, declarations] of Object.entries(packages)) {
 
 const inventoryPath = resolve(outputRoot, "../inventory.json");
 expectedTargets.add(inventoryPath);
+// The README beside the generated files is written by hand. List it as
+// expected so the check for unexpected files below does not fail on it.
+expectedTargets.add(resolve(outputRoot, "../README.md"));
 const inventoryText = `${JSON.stringify({ vue: expectedVueVersion, packages: inventory }, null, 2)}\n`;
 if (checking) {
   if ((await readFile(inventoryPath, "utf8")) !== inventoryText)

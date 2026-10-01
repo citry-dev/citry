@@ -35,3 +35,7 @@ document's checks, and `check_project_python_types` runs it before the
 CLI's TypeScript check, so the TypeScript projections read the answers. A
 project reload copies the answers as stale ones, used until ty answers
 again (`adopt_js_data_inferred_types`).
+
+The Vue type declarations under `citry_lsp/types/` are generated and shipped
+in the wheel; [`citry_lsp/types/README.md`](citry_lsp/types/README.md) says
+how to regenerate them.
