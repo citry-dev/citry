@@ -12,14 +12,15 @@ boundaries, and a way to capture the exact HTML a component produced.
 
 ## Debug the editor integration
 
-The VS Code status bar shows the active Citry analysis level for each workspace
-folder. `registry` means the server loaded the configured Citry instance or
-component library and can check component names, inputs, and slots. A selected
-component library has its library-only scope named in status. `syntax only`
-means parser diagnostics still run, but registry-backed checks and component
-intelligence are disabled.
+The VS Code status bar shows how much the Citry language server can check in
+the active workspace folder. `Citry` with a check mark means the server loaded
+the configured Citry instance or component library (registry mode), so it can
+check component names, inputs, and slots. When you select a component library,
+the status message says that only that library's components are loaded.
+`Citry: syntax only` means template syntax errors are still reported, but the
+checks and completions that need your components are off.
 
-If the status is `syntax only` unexpectedly:
+If the status shows `Citry: syntax only` unexpectedly:
 
 1. Install `citry-lsp` in the Python environment selected for the workspace:
 
@@ -56,14 +57,15 @@ first error in the chain:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Vue component failed to mount | A prepared definition, manifest reference, or component asset is incomplete | Fix the first validation or asset error before retrying the render |
+| Vue component failed to mount | The component's definition or one of its assets did not arrive complete | Fix the first validation or asset error before retrying the render |
 | A required Vue prop is missing or incompatible | The parent omitted a declared prop or supplied a value with a proven incompatible type | Check the child's native `props` option and the parent's `:` or `v-bind` binding |
 | Generated Vue host or configuration is missing | An optimizer, sanitizer, or DOM update removed part of the interactive delivery | Preserve the [Vue host, configuration, and fragment descriptors](/advanced/vue-runtime/#preserve-interactive-html) |
-| Fragment graph or asset adoption failed | Citry routes are not mounted, or one manifest or asset is incomplete | Mount the integration and inspect the first network or graph error |
+| A fragment is discarded or its assets do not load | Citry's routes are not mounted, or the fragment's data or one of its assets is incomplete | Mount the integration and inspect the first network or `[Citry]` console error |
 | A `v-for` cannot create the expected Citry child | Vue owns the browser loop and cannot run Python | Use `<c-for>` when the loop creates Python component instances |
 
-Citry rejects invalid prepared metadata before callbacks can observe a partial update. Do
-not suppress the diagnostic and continue with only the visible HTML.
+Citry rejects invalid data from the server before any of your code can see a
+partly applied update. Do not suppress the diagnostic and continue with only
+the visible HTML.
 
 ## Read the component path in errors
 
@@ -146,8 +148,10 @@ Error in variable: KeyError: 'user_name'
 
 In template of 'Profile' (/path/to/profile.py::Profile):
 
-     2 |       <p>Welcome, {{ user_name }}</p>
-                           ^^^^^^^^^^^^^^^
+     1 |
+     2 | <p>Welcome, {{ user_name }}</p>
+                     ^^^^^^^^^^^^^^^
+     3 |
 ```
 
 The header names the component whose template failed and the file it lives in,
@@ -177,13 +181,17 @@ Rendering a small page (a `HomePage` that renders a `Hello` greeting) then logs
 each step of the walk:
 
 ```text
-TRACE citry RENDER COMPONENT: 'HomePage' ID cz9kert00 PATH: HomePage
-TRACE citry RENDER NODE ComponentNode @22:44
-TRACE citry RENDER COMPONENT: 'Hello' ID cz9keru00 PATH: HomePage > Hello
+TRACE citry RENDER COMPONENT: 'HomePage' ID ck52imnvf PATH: HomePage
+TRACE citry RENDER NODE PreparedStaticRunNode
+TRACE citry RENDER NODE ComponentNode @7:18
+TRACE citry RENDER NODE PreparedStaticRunNode
+TRACE citry RENDER COMPONENT: 'Hello' ID ck52imnvg PATH: HomePage > Hello
 ```
 
-Each line shows the component (or node) and its `PATH` in the tree. The `ID` and
-the `@start:end` span identify one instance and its place in the template source.
+Each `RENDER COMPONENT` line shows the component, its `ID`, and its `PATH` in
+the tree. Each `RENDER NODE` line shows one piece of the template being
+rendered; when it has an `@start:end` span, the span marks where that piece
+sits in the template source.
 
 `basicConfig` turns on logging for the whole program. To keep the rest of your
 app quiet and raise only citry's level, target the named logger:

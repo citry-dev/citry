@@ -8,7 +8,7 @@ description: Port django-components Component.View handlers to typed Citry Event
 If one component's `post()` now inspects a flag to decide whether to save,
 archive, or preview, the HTTP verb has become a second router. Citry Events lets
 the initial verb-shaped handler keep working, then lets you move each operation
-to a named, typed handler without changing component ownership.
+to a named, typed handler that still lives on the same component.
 
 The mental-model shift is small: a component still owns its HTTP behavior, but
 the public operation is named after what the user does. Handlers return page
@@ -118,14 +118,14 @@ fetch activation step to maintain.
 Citry treats an ordinary HTML attribute value as a literal string. The Django
 template spelling therefore leaves braces in the browser:
 
-```html
+```citry-html
 <!-- Wrong in a Citry template: the href contains literal braces. -->
 <a href="{{ detail_url }}">Details</a>
 ```
 
 Prefix a dynamic attribute with `c-` so Citry evaluates the Python expression:
 
-```html
+```citry-html
 <!-- Right: detail_url is evaluated during the component render. -->
 <a c-href="detail_url">Details</a>
 ```

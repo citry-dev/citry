@@ -85,10 +85,10 @@ def _verify_unicorn() -> None:
     rating = _events_info(unicorn.Rating).events_cls().rate(SimpleNamespace(stars=5))
     assert ">5</output>" in _serialized_html(rating)
 
-    submit = _events_info(unicorn.ContactForm).events_cls().submit
+    save = _events_info(unicorn.ContactForm).events_cls().save
     caught_error = None
     try:
-        submit(SimpleNamespace(email="invalid"))
+        save(SimpleNamespace(email="invalid"))
     except EventError as error:
         caught_error = error
     assert caught_error is not None

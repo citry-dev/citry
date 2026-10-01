@@ -11,9 +11,10 @@ can become hard to separate. Citry keeps the convenient server-method call but
 splits the contract into render inputs, strict JSON State, typed event data,
 and a closed list of browser actions.
 
-Citry uses Vue for browser state and template directives. Citry owns the
-component and slot graph, then mounts a Vue instance for each interactive
-component. Browser state does not define the server component's identity.
+Citry uses Vue for browser state and template directives. Citry renders the
+component tree and its slots on the server, then mounts a Vue instance for
+each interactive component. Browser state does not define the server
+component's identity.
 
 The Citry examples assume the configured `citry_app` from
 [Server events](/events/#configure-a-signing-secret-before-using-state)
@@ -46,7 +47,7 @@ class Counter(Component):
       <button
         {% ... attrs %}
         @click="increment(1)"
-        v-text="count"
+        x-text="count"
       ></button>
     """
 ```
@@ -137,7 +138,7 @@ return value.
 ## Keep Vue behavior local to the receiving component
 
 Tetra merges public state, generated server methods, and component JavaScript
-into one browser object. Citry instead keeps three ownership rules:
+into one browser object. Citry keeps each kind of value with one owner:
 
 - `State` belongs to the interactive Citry component instance.
 - `$component({...})` adds instance-local Vue data, methods, computed values,
@@ -156,14 +157,14 @@ one Vue instance.
 An ordinary Citry HTML attribute is a literal string, so Django-style braces
 inside it are not evaluated:
 
-```html
+```citry-html
 <!-- Wrong in a Citry template: braces appear in the final URL. -->
 <a href="{{ task_url }}">Open task</a>
 ```
 
 Use a `c-` dynamic attribute for a Python expression:
 
-```html
+```citry-html
 <!-- Right: task_url is evaluated during rendering. -->
 <a c-href="task_url">Open task</a>
 ```
@@ -192,11 +193,12 @@ attributes. `{{ expression }}` remains the text-interpolation spelling.
 
 ## Choose explicit behavior for larger Tetra features
 
-Citry v1 focuses on HTTP interactions. Reactive server push and WebSocket
-topics are a separate later decision. Multipart uploads, batched download
-actions, and optional State encryption also sit outside v1. A dedicated
-`@event(bundle=False)` handler can return `actions.Download(...)`, while
-history updates use `actions.PushUrl(...)` or `actions.ReplaceUrl(...)`.
+Citry Events runs over HTTP and has no server push or WebSocket support.
+Its built-in payload codecs do not parse multipart uploads, and State is
+signed, not encrypted; use `_storage = "server"` to keep a value out of the
+page. A dedicated `@event(bundle=False)` handler called through its
+per-event route can return `actions.Download(...)`, while history updates
+use `actions.PushUrl(...)` or `actions.ReplaceUrl(...)`.
 The [Events migration parity matrix](/guides/events-migration-parity/) records
 the delivery tag for each capability.
 
@@ -222,4 +224,4 @@ Before shipping a migrated component, check that:
 Continue with [event bindings](/events/bindings/) and [event
 actions](/events/actions/) for the complete runtime workflow. See [Client
 interactivity](/concepts/client-interactivity/) for
-component JavaScript, native props, slots, and Vue ownership.
+component JavaScript, native props, and slots.

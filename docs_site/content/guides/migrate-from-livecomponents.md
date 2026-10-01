@@ -142,14 +142,14 @@ silently reappearing on a later call.
 Citry leaves ordinary HTML attribute values as literal strings. Django-style
 interpolation inside an attribute therefore produces the wrong URL:
 
-```html
+```citry-html
 <!-- Wrong in a Citry template: braces are sent to the browser. -->
 <a href="{{ command_url }}">Run command</a>
 ```
 
 Use `c-` for a dynamic HTML attribute:
 
-```html
+```citry-html
 <!-- Right: command_url is evaluated during rendering. -->
 <a c-href="command_url">Run command</a>
 ```
@@ -190,10 +190,10 @@ The session id is not authorization. Put authentication and authorization in
 the host middleware, an Events guard, or the handler itself. Repeat the check
 for every event even when the page that rendered the component was protected.
 
-Staged uploads, batched download actions, and server push sit outside Events
-v1. A dedicated `@event(bundle=False)` handler can return
-`actions.Download(...)`; history updates use `actions.PushUrl(...)` or
-`actions.ReplaceUrl(...)`. The
+Citry Events has no staged uploads or server push. A download comes only
+from a dedicated `@event(bundle=False)` handler called through its per-event
+route, which can return `actions.Download(...)`; history updates use
+`actions.PushUrl(...)` or `actions.ReplaceUrl(...)`. The
 [Events migration parity matrix](/guides/events-migration-parity/) records
 their delivery tags and the accepted replacement for deliberately excluded
 behavior.

@@ -98,8 +98,8 @@ on the page.
 
 Put a plain `<div>` or `<section>` around each complete Vue app that HTMX will
 update. Keep the wrapper outside the HTML returned by the route. `innerHTML`
-then replaces the old app and its fragment manifest while leaving the wrapper
-on the page. For a list, render the list wrapper on the server and serialize
+then replaces the old app, together with the data Citry uses to start it,
+while leaving the wrapper on the page. For a list, render the list wrapper on the server and serialize
 each interactive row independently. Insert those trusted final fragment
 strings as HTML; never compile serialized fragment HTML as Vue template source.
 
@@ -130,7 +130,7 @@ HTMX file you deploy, and check that:
   expected;
 - authenticated changes reject bad CSRF tokens and unauthorized users;
 - a component inserted later receives its CSS and JavaScript;
-- interactive Vue fragments release their app-owned styles when the app is replaced;
+- a replaced Vue app releases the styles it loaded;
 - static fragment dependency tags remain attached to the inserted HTML, while
   repeated URL fetches use the browser cache; and
 - the browser console and network log stay free of unexpected errors.

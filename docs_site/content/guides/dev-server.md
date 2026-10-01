@@ -193,7 +193,7 @@ watcher straight to this method and skip citry's watcher entirely.
 
 Take a [Component][citry.Component] whose template lives in a file:
 
-```html
+```citry-html
 <!-- components/greeting.html -->
 <p>Hello, {{ name }}!</p>
 ```

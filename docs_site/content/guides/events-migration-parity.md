@@ -22,7 +22,7 @@ The source-specific walkthroughs are:
 | Label | Meaning |
 |---|---|
 | **v1** | Shipped and supported now. |
-| **v1.x** | A scoped follow-up release; the Citry answer column says whether it is shipped or planned. |
+| **v1.x** | A scoped follow-up to the first Events release; the Citry answer column says what works today. |
 | **v2** | A separate design decision, not a compatibility promise. |
 | **Dropped** | Intentionally represented another way or left to application code. |
 
@@ -50,7 +50,7 @@ capability as a first-class feature.
 | ORM-primary-key revival | - | Automatic | Object token state | Stored model objects | Load by validated id and authorize explicitly | **Dropped** |
 | JSON return to caller | Host response | Return value | Promise result | Execution-result model | `dict` or `actions.Data` resolves the caller promise | **v1** |
 | OpenAPI document | - | - | - | - | Deterministic OpenAPI 3.1 CLI output | **v1** |
-| Served `openapi.json` | - | - | - | - | Planned HTTP document route | **v1.x** |
+| Served `openapi.json` | - | - | - | - | Not served over HTTP; write the document with the CLI and serve the file | **v1.x** |
 | Native form without JavaScript | Manual | Client runtime expected | Client runtime expected | htmx expected | Per-event URL with HTML, redirect, or JSON translation | **v1** |
 
 `ViewEvents` preserves the method-selected route only. Its handler bodies still
@@ -65,7 +65,7 @@ method-only compatibility URL has no dedicated public builder;
 | State declaration | None | Public class attributes | Public/private component attributes | Pydantic state model | Explicit dataclass-shaped `State`, separate from `Kwargs` | **v1** |
 | Default storage | Application-owned | Client data plus checksum and cached pickle | Encrypted pickle token | Redis pickle | Full-HMAC signed strict JSON token | **v1** |
 | Server-held State | Application-owned | Cached component | - | Default | `_storage = "server"` through `Citry.cache`, strict JSON | **v1** |
-| Optional encrypted State | Application-owned | - | Default | Server-held | Optional encrypted token | **v1.x** |
+| Optional encrypted State | Application-owned | - | Default | Server-held | Not built in; server-held State keeps values out of the token | **v1.x** |
 | Browser visibility control | Application-owned | `javascript_exclude` | Public/private split | Server-held | `_public` controls projection, not secrecy; server storage keeps values out of the token | **v1** |
 | Client-writable State | Application-owned | Rich public setters | Public attributes | Commands only | `_model` selects writable public fields | **v1** |
 | Rich Python values in State | Application-owned | Models and custom objects | Pickled component graph | Pickled/Pydantic values | Strict JSON only | **Dropped** |
@@ -104,7 +104,7 @@ choice when a value must not appear in the page token.
 | Polling | Handwritten | Rich poll object | Application code | htmx | `@c-poll.<time>="handler"`, hidden-tab pause | **v1** |
 | Dynamic poll retiming | Handwritten | `PollUpdate` | Application code | htmx | Re-render a different binding or use app code | **Dropped** |
 | Viewport trigger | Handwritten | `unicorn:visible` | Alpine/plugin | htmx trigger | IntersectionObserver or Vue integration | **Dropped** |
-| Morph opt-out | Manual | `unicorn:ignore` | Alpine morph controls | `no_morph` helper | No opt-out: Vue updates every element it renders. `#c-ignore` raises an error, on a component tag when the template loads and on an element when the component renders. Keep content that a browser library manages inside an element reached through a Vue `ref` | **Dropped** |
+| Keep library-managed DOM across updates | Manual | `unicorn:ignore` | Alpine morph controls | `no_morph` helper | `#c-ignore` on an HTML element keeps its server-rendered contents through later renders; it fails on a component tag | **v1** |
 | Stable item identity | Manual ids | Component key | Component id | Path id | `#c-key` gives Vue sibling identity at its authored position | **v1** |
 | Single element root | Not required by core | Required | Required | Root attrs required | Supported | **v1** |
 | Multi-root component | Supported by core | - | - | - | Logical root group | **v1** |
@@ -120,7 +120,7 @@ choice when a value must not appear in the page token.
 | Browser call outside markup | Fetch | `Unicorn.call` | Generated method | htmx request | `Citry.events.send`, `sendEvent`, `$sendEvent` | **v1** |
 | Python lifecycle matrix | View hooks | Hydrate/update/call/render hooks | Component lifecycle | Command lifecycle | Events extension hooks, not per-field callback parity | **Dropped** |
 | Browser lifecycle events | Handwritten | Framework events | Tetra events | htmx events | before, after, error, swapped, and stale Events lifecycle | **v1** |
-| Fragment assets activate | Manual dependency strategy | Framework runtime | Response bundle list | Manual five-part client setup | Fragment descriptor validates, loads and mounts a Vue app | **v1** |
+| Fragment assets activate | Manual dependency strategy | Framework runtime | Response bundle list | Manual five-part client setup | An inserted fragment loads its assets and mounts its own Vue app | **v1** |
 | Client prerequisite | Application choice | Unicorn JS | Tetra plus Alpine | htmx, json-enc, Alpine, morph, config | Citry-managed runtime with pinned Vue | **v1** |
 | Template-load validation | Limited | Mostly runtime | Mostly runtime | Mostly runtime | Literal event, State, and modifier mistakes fail early | **v1** |
 | Slot/fill scope after update | Application-owned | Template re-render | Saved component | Saved template | New fills in the returned tree; each fill keeps the Vue scope of the template that wrote it | **v1** |
@@ -135,16 +135,16 @@ own Vue data.
 | Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry answer | Delivery |
 |---|---|---|---|---|---|---|
 | HTTP calls | Native view | Message POST | Call POST | Command POST | Fetch over batch or per-event route | **v1** |
-| Pending updates plus calls | Application code | Action queue | Full public data | Command body | Queue batches co-eligible calls and pending State writes | **v1** |
-| Opt out of bundling | Application code | - | - | - | `@event(bundle=False)` | **v1** |
-| Same-tick global coalescing | Application code | Queue-specific | - | - | Separate later queue optimization | **v2** |
+| Pending updates plus calls | Application code | Action queue | Full public data | Command body | Pending State writes travel with the next call | **v1** |
+| Opt out of bundling | Application code | - | - | - | `@event(bundle=False)` sends the call to its own per-event route | **v1** |
+| Same-tick global coalescing | Application code | Queue-specific | - | - | Not built in; each call is sent on its own | **v2** |
 | Stale-response defense | Application code | Epoch | Old-value/focus checks | Session State | Epoch plus optional `latest_wins` | **v1** |
-| Call ordering | Host order | Optional serial cache | Client queue | One command, several dirty results | Same-instance order, containment dependencies, sibling parallelism | **v1** |
+| Call ordering | Host order | Optional serial cache | Client queue | One command, several dirty results | Calls from one Vue app are sent one at a time, in the order they were made | **v1** |
 | Offline replay queue | Application code | - | Shipped | - | Application-specific retry and conflict policy | **Dropped** |
 | Custom transport | Custom view | - | HTTP/WS internals | htmx | Public transport registration | **v1** |
-| postMessage bridge | Custom code | - | - | - | No built bridge yet; an explicit bridge is planned | **v1.x** |
-| WebSocket and server push | Custom code | - | Reactive components | - | Signed-topic WebSocket design decision | **v2** |
-| Server-sent events | Custom code | - | - | - | Evaluated with the push decision | **v2** |
+| postMessage bridge | Custom code | - | - | - | Not built in; register a custom transport that uses `postMessage` | **v1.x** |
+| WebSocket and server push | Custom code | - | Reactive components | - | Not built in | **v2** |
+| Server-sent events | Custom code | - | - | - | Not built in | **v2** |
 
 ## Security, forms, files, and navigation
 
@@ -155,11 +155,11 @@ own Vue data.
 | Custom payload codec | Host code | - | Framework protocol | JSON/form parsing | Registered payload codec | **v1** |
 | Custom return resolver | Host response | Framework return handling | Framework callbacks | Execution result classes | Registered event-result resolver | **v1** |
 | Typed form collection | Manual | Model binding | Form components | Body kwargs | Named controls into typed `data` | **v1** |
-| Django `form_class` sugar | Manual | Shipped | Form/ModelForm components | - | Convenience integration | **v1.x** |
+| Django `form_class` sugar | Manual | Shipped | Form/ModelForm components | - | Not built in; run the form in the handler and raise `EventError` with its errors | **v1.x** |
 | Field-error map | Manual | Shipped | `form_errors` | Application code | Schema errors and `EventError.fields` in `$error(name).fieldErrors` | **v1** |
 | Error attrs/template tag | Manual | Shipped | Template state | Application code | Render from `$error(name)` explicitly | **Dropped** |
-| Multipart upload | Raw request files | Limited | Shipped | Shipped | Built-in multipart to `UploadedFile` | **v1.x** |
-| Staged multi-request upload | Application code | - | Temporary files | Upload flow | Single-request multipart is the planned scope | **Dropped** |
+| Multipart upload | Raw request files | Limited | Shipped | Shipped | Built-in codecs do not parse multipart; a custom payload codec can pass `UploadedFile` values to the handler | **v1.x** |
+| Staged multi-request upload | Application code | - | Temporary files | Upload flow | Not built in; upload flows stay in application code | **Dropped** |
 | HTTP file response | Native response | - | `FileResponse` | Application response | `RouteResponse` from `@event(bundle=False)` on a per-event HTTP call | **v1** |
 | File download action | Handwritten client | - | Shipped | Header result | Shipped per-event `actions.Download` response; batches are rejected | **v1.x** |
 | Redirect | Native response | Shipped | Shipped | `RedirectPage` | `actions.Redirect` | **v1** |
