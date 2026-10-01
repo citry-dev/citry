@@ -528,8 +528,8 @@ def test_unchanged_definition_renders_new_js_data_key(page: Any, serve_live: Any
 
 @pytest.mark.e2e
 def test_render_that_changes_the_component_type_names_both_types_and_the_fix(page: Any, serve_live: Any) -> None:
-    # A nested caller keeps its slot in the parent's compiled template, which
-    # calls the caller's own component type, so a Render must keep that type.
+    # The parent's compiled template calls the nested caller by its component
+    # type, so a Render must keep that type.
     engine = Citry(secret="vue-type-change-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 

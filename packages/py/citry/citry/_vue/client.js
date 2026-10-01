@@ -111,8 +111,8 @@
     }
     return applyPublicActionsWithoutApp(checked);
   };
-  // `send` and `applyActions` return Promises, and callers await them, so a check that fails partway down
-  // (an unknown handler, args that are not a plain object, a missing Events bridge) must arrive as a rejection
+  // `send` and `applyActions` return Promises, and callers await them, so a check inside the matched app that
+  // throws (an unknown handler, args that are not a plain object, a missing Events bridge) must arrive as a rejection
   // the caller can catch, the same way `$sendEvent` reports it, rather than as an exception from the call.
   const rejectOnThrow = call => {
     try {
