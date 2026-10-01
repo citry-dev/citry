@@ -1,4 +1,4 @@
-"""Citry UI's component JavaScript and Vue templates have no TypeScript errors under `citry check --types`."""
+"""Citry UI's component JavaScript, Vue templates, and template Python have no `citry check --types` findings."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def _typescript_path() -> list[str]:
     return [str(tsc.parent), str(Path(node).parent), "/usr/bin", "/bin"]
 
 
-def test_citry_ui_component_javascript_has_no_typescript_errors(tmp_path):
+def test_citry_ui_components_have_no_typescript_or_ty_findings(tmp_path):
     path_entries = _typescript_path()
     (tmp_path / "app_without_i18n.py").write_text(_APP_WITHOUT_I18N, encoding="utf-8")
     (tmp_path / "app_with_i18n.py").write_text(_APP_WITH_I18N, encoding="utf-8")
@@ -90,16 +90,18 @@ def test_citry_ui_component_javascript_has_no_typescript_errors(tmp_path):
     reports: dict[str, str] = {}
     for module, ((stdout, stderr), returncode) in results.items():
         # Status 2 means TypeScript or ty did not run. Status 1 is expected,
-        # because the report also carries Citry's own template findings and
-        # ty's findings in Citry UI's templates, which this test does not
-        # cover yet.
+        # because the report also carries Citry's own template findings,
+        # which this test does not cover yet (GitHub issue #149).
         assert returncode in {0, 1}, f"{module}: {stderr}"
         payload = json.loads(stdout)
         assert payload["mode"] == "registry", f"{module}: {payload.get('app_failure')}"
         assert not any("--types did not run" in note for note in payload["notes"]), payload["notes"]
-        typed = [item for item in payload["findings"] if item["code"].startswith("citry.typescript.")]
+        # TypeScript reports `citry.typescript.*` and ty reports `citry.python.*`.
+        typed = [
+            item for item in payload["findings"] if item["code"].startswith(("citry.typescript.", "citry.python."))
+        ]
         reports[module] = "\n".join(f"- {item['origin']}: {item['code']} {item['message']}" for item in typed)
 
     assert reports == {"app_without_i18n": "", "app_with_i18n": ""}, "\n".join(
-        f"TypeScript errors in Citry UI ({module}):\n{report}" for module, report in reports.items() if report
+        f"TypeScript or ty findings in Citry UI ({module}):\n{report}" for module, report in reports.items() if report
     )
