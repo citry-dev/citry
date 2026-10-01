@@ -144,12 +144,12 @@ class TransportContext:
     passed to [`EventsDispatcher.dispatch`][citry.ext.events.EventsDispatcher.dispatch].
 
     Attributes:
-        transport: The transport's name (``"http"``, later ``"ws"``); handlers
-            see it as ``event.transport``.
+        transport: The transport's name, such as ``"http"``; handlers see it
+            as ``event.transport``.
         citry: The engine the call dispatches against.
         host_request: The untouched host request object (Django's
-            ``HttpRequest``, the ASGI scope, a WS connection); ``None`` when
-            the transport has none.
+            ``HttpRequest``, the ASGI scope, or a custom transport's own
+            object); ``None`` when the transport has none.
         headers: A case-insensitive view of the request headers; empty when
             the transport carries none.
         response_mode: ``"wire"`` for an ordinary result envelope, or
@@ -170,7 +170,7 @@ class EventRequest:
     """
     The ``request`` value injected into event handlers.
 
-    The framework-neutral request fields (design 3.3), always populated: the
+    The framework-neutral request fields, always populated: the
     HTTP routes fill everything; other transports fill what they carry. The
     untouched host object stays reachable as ``native``, and
     ``event.transport`` says which transport built it.
@@ -215,7 +215,7 @@ class CallEvent:
         transport: The transport that carried the call (``"http"``, ...).
         args: The raw, unvalidated wire args payload. Guards read this when
             they need payload values, because one guard covers handlers with
-            different schemas (design 3.5).
+            different schemas.
 
     """
 
@@ -372,7 +372,8 @@ class EventsDispatcher:
     [`TransportContext`][citry.ext.events.TransportContext], so
     one instance (or a fresh one per call) serves every transport. The HTTP
     routes own the built-in usage; a custom transport (a GraphQL mutation
-    resolver, say) decodes its request into the call envelope of design 4.2
+    resolver, say) decodes its request into the same JSON call that Citry's
+    browser code sends (the ``citry-events/1`` call envelope)
     and calls [`dispatch`][citry.ext.events.EventsDispatcher.dispatch]
     (or its async twin) directly.
     """
@@ -416,7 +417,7 @@ class EventsDispatcher:
         private event loop.
 
         Args:
-            envelope: The decoded call envelope (design 4.2).
+            envelope: The decoded ``citry-events/1`` call envelope.
             ctx: What the transport knows about the request.
             request: The neutral request injected into handlers as
                 ``request``; ``None`` builds an empty one carrying
@@ -433,7 +434,7 @@ class EventsDispatcher:
                 its own protection, or a direct caller).
 
         Returns:
-            The result envelope (design 4.3), or the handler's
+            The ``citry-events/1`` result envelope, or the handler's
             ``RouteResponse`` when the per-event escape hatch was used.
 
         """
@@ -473,8 +474,7 @@ class EventsDispatcher:
         The one behavioral difference from
         [`dispatch`][citry.ext.events.EventsDispatcher.dispatch]:
         ``async def`` event handlers are awaited on the running loop, and
-        sync handlers are offloaded to a worker thread
-        (``citry.util.routing.call_maybe_sync``) so they cannot block it.
+        sync handlers run in a worker thread so they cannot block it.
 
         Args:
             envelope: The decoded call envelope.

@@ -115,12 +115,13 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
     Build the ASGI application serving ``citry_instance.urls``.
 
     The returned app handles lifespan events (so it also works served
-    standalone), routes each http request to the matched citry handler
-    (preferring a route's ``handler_async`` twin when it carries one),
-    translates the scope into a ``RouteRequest`` (``_build_request``),
-    dispatches it (``call_maybe_sync``: async handlers are awaited, sync
-    ones run in a worker thread), and translates the returned
-    ``RouteResponse`` into ASGI messages (``_send_response``).
+    standalone) and routes each HTTP request to the matching citry
+    handler, preferring the route's ``handler_async`` (its async version)
+    when it has one.
+    It builds a [`RouteRequest`][citry.RouteRequest] from the ASGI scope,
+    awaits an async handler or runs a sync one in a worker thread, and
+    sends the returned [`RouteResponse`][citry.RouteResponse] as ASGI
+    messages.
     """
 
     async def app(scope: Scope, receive: Receive, send: Send) -> None:
@@ -205,13 +206,31 @@ def reload_lifespan(
 
         app = FastAPI(lifespan=lifespan)   # or Starlette(...)
 
-    It starts the :mod:`citry.reload` watcher on startup and stops it on
-    shutdown, so editing a component's template/JS/CSS shows up on the next
-    render without restarting. It manages only the watcher and does not call
+    It starts Citry's file watcher on startup and stops it on shutdown, so
+    editing a component's template/JS/CSS shows up on the next render
+    without restarting. It manages only the watcher and does not call
     [`Citry.initialize()`][citry.Citry.initialize]; the root lifespan owns
     initialization. For development; in production simply do not add it. If you
-    already have a lifespan, nest this one inside yours. The keyword arguments
-    mirror :func:`citry.reload.watch`.
+    already have a lifespan, nest this one inside yours.
+
+    Args:
+        engine: The Citry instance whose component caches are reset when
+            a watched file changes.
+        roots: Directories to watch. ``None`` watches the instance's
+            ``dirs`` setting.
+        watcher: The file-watching backend. ``None`` uses ``watchfiles`` if
+            installed, else ``watchdog``, else a polling watcher.
+        on_reload: Called after each batch of changes with the changed
+            paths and the component classes that were reset.
+
+    Returns:
+        A function that takes the app and returns the lifespan context
+        manager.
+
+    Raises:
+        ValueError: On startup, if none of the roots exists. Missing
+            directories are skipped.
+
     """
 
     @asynccontextmanager

@@ -72,8 +72,12 @@ class CitryContext:
             current component is stored on the context, so each component render
             gets its own ``CitryContext``.
         extra: Tree-wide scratch space for extensions (for example the
-            collected JS/CSS dependency records). Top-level keys are
-            namespaced by owner; see the module docstring.
+            collected JS/CSS dependency records). Citry does not copy these
+            entries itself: when a child render is placed into its parent,
+            Citry calls the ``on_render_context_merge`` hook, and each
+            extension copies its own entries from the child's ``extra`` into
+            the parent's. Each extension stores its data under a top-level
+            key named after itself (``extra["dependencies"]``).
         provides: The provide/inject entries active at this point of the
             render. Entries may hold a direct caller value, a frozen keyword-
             field payload, or a private blocked marker. Read-only by convention;

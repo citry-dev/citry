@@ -135,15 +135,15 @@ class Citry:
     A Citry instance owns:
 
     - A private component-name registry reached through the engine's methods
-    - Settings (to be expanded as the engine grows)
+    - Settings
     - Transient rendering state
 
     All Component classes are assigned to a Citry instance at class
     definition time. If no instance is specified, the default instance
     is used.
 
-    Call :meth:`initialize` after startup-time registration and before a
-    server starts request threads. Lazy initialization remains available, but
+    Call [`initialize()`][citry.Citry.initialize] after startup-time
+    registration and before a server starts request threads. Lazy initialization remains available, but
     a thread that encounters lifecycle work owned by another thread receives
     [`CitryLifecycleInProgress`][citry.CitryLifecycleInProgress].
 
@@ -213,7 +213,7 @@ class Citry:
 
         # The build environment (dev_prod_mode.md), validated in the settings.
         # Read directly off the instance by the pieces that vary by environment:
-        # the built-in extension set below, and the client ownership graph.
+        # the built-in extension set below, and how i18n loads catalog packages.
         self.mode: Literal["production", "development"] = self.settings.mode
 
         # The cache backend (docs/design/dependencies.md section 10): derived
@@ -1699,7 +1699,8 @@ class Citry:
         """
         The component classes whose assets resolved to ``path``.
 
-        Most callers want :meth:`invalidate_file`, which both finds these
+        Most callers want
+        [`invalidate_file()`][citry.Citry.invalidate_file], which both finds these
         classes and resets them. This lower-level lookup is for a caller that
         wants the classes without resetting (a custom hot-reload handler, a
         test). Dead weakrefs are pruned on read.
@@ -1728,8 +1729,9 @@ class Citry:
         Returns the component classes it reset. An empty list means the file
         backs no loaded component, which a hot-reload handler can read as "not
         mine" and, if it wants, fall through to a full restart. This is the
-        host-neutral call a file watcher drives; see the watcher in
-        :mod:`citry.reload` and ``docs/design/hot_reload.md``.
+        call a file watcher makes, whatever web framework hosts the app; see
+        [Hot reload during development](/guides/dev-server/) for the built-in
+        watchers.
         """
         classes = self.get_components_for_file(path)
         for comp_cls in classes:
@@ -1748,7 +1750,7 @@ class Citry:
 
         For when a change cannot be mapped to a single path: a bulk edit, a
         branch switch, or a custom watcher reporting an event it cannot resolve
-        to one file. Unlike :meth:`clear`, this leaves the registry and
+        to one file. Unlike [`clear()`][citry.Citry.clear], this leaves the registry and
         autodiscovery untouched.
         """
         # First-seen order, de-duplicated: a class can be indexed under several

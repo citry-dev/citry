@@ -232,7 +232,10 @@ def normalize_style(value: StyleValue) -> str:
 
     Example::
 
-        normalize_style(["color: red; width: 100px", {"color": "green", "width": False}])
+        normalize_style([
+            "color: red; width: 100px",
+            {"color": "green", "width": False},
+        ])
         # -> "color: green;"
     """
     merged: dict[str, Any]

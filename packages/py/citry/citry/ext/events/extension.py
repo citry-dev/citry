@@ -253,9 +253,8 @@ class EventsExtension(Extension):
         nested ``Events`` class, so they are rejected in
         ``extensions_defaults`` (an event handler cannot be defaulted
         globally), and on the component they must be plain methods defined
-        with ``def``, which is exactly what handler enumeration collects
-        (design ``events.md`` 3.1). A ``staticmethod`` or ``classmethod``
-        passes here so enumeration can reject it with its own pointed error;
+        with ``def``, which is exactly what handler enumeration collects.
+        A ``staticmethod`` or ``classmethod`` passes here so enumeration can reject it with its own pointed error;
         anything else (a ``property``, a ``functools.partial``, a plain
         value) fails here rather than sit on Events as silently neither
         handler nor config. Citry calls this at engine construction (for the

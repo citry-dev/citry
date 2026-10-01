@@ -39,7 +39,14 @@ def make_mark_component(citry_instance: Citry) -> type[Component]:
     """Create the engine-owned, nontransparent ``<c-mark>`` component."""
 
     class Mark(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
-        """Keep one named default-slot region addressable in prepared Vue output."""
+        """
+        Name part of a component's template so an event handler can update only that part.
+
+        ``name`` (required) is case-sensitive, must be unique within the
+        component, starts with a letter, and contains only letters, digits,
+        hyphens, and underscores. The tag accepts no other attribute and only
+        its default slot.
+        """
 
         citry = citry_instance
         name = "mark"

@@ -229,8 +229,9 @@ class OnComponentDataContext:
     template_data: dict[str, Any]
     """The template variables from ``Component.template_data()`` (mutable)."""
     js_data: dict[str, Any]
-    """The JS variables from ``Component.js_data()`` (mutable). Consumed by
-    the built-in ``dependencies`` extension."""
+    """The JS variables from ``Component.js_data()`` (mutable). Citry sends
+    them to the browser as fields on the component's Vue instance, and checks
+    the keys after this hook runs."""
     css_data: dict[str, Any]
     """The CSS variables from ``Component.css_data()`` (mutable). Consumed by
     the built-in ``dependencies`` extension."""
@@ -564,8 +565,8 @@ class ExtensionCommand:
     Subclass this, set ``name`` (and usually ``help``), declare any ``arguments``,
     and define ``handle`` to do the work. A command that only groups
     ``subcommands`` leaves ``handle`` unset, and the runner prints its help
-    instead of running anything. The declarations are turned into an ``argparse``
-    parser and dispatched by :mod:`citry.command`; an extension lists its command
+    instead of running anything. Citry turns the declarations into an
+    ``argparse`` parser and runs the matching command; an extension lists its command
     classes in ``Extension.commands`` and a user reaches one as
     ``citry ext run <extension> <command>``. (Extension HTTP routes are a
     separate surface, ``Extension.urls``.)
@@ -578,7 +579,7 @@ class ExtensionCommand:
     """One-line description of the command, shown in ``--help`` output."""
 
     arguments: ClassVar[Sequence[CommandArg | CommandArgGroup]] = ()
-    """Positional arguments and options, declared with :class:`~citry.command.CommandArg`."""
+    """Positional arguments and options, declared with [`CommandArg`][citry.CommandArg]."""
 
     subcommands: ClassVar[Sequence[type[ExtensionCommand]]] = ()
     """Nested commands. A command with subcommands usually has no ``handle`` of its own."""
@@ -593,7 +594,7 @@ class ExtensionCommand:
 
     citry: Citry | None = None
     """The engine the command runs against, bound by the runner before ``handle``
-    is called (mirrors :attr:`Extension.citry`). A command's ``handle`` reads it
+    is called (like [`Extension.citry`][citry.Extension.citry]). A command's ``handle`` reads it
     to reach the component registry and the installed extensions."""
 
 
@@ -611,9 +612,9 @@ class ExtensionConfig:
     as a subclass of this base (binding ``component_class``), then instantiates it
     per render and attaches it as ``component.view``.
 
-    The component back-reference is a weakref, and the component may be ``None``
-    for extensions that run outside a component lifecycle (for example a future
-    Storybook extension).
+    The config holds only a weak reference to its component, and the
+    component may be ``None`` when an extension creates the config outside a
+    component render.
     """
 
     component_class: ClassVar[type[Component]]
@@ -629,8 +630,10 @@ class ExtensionConfig:
         """
         The owning Component instance.
 
-        Raises ``RuntimeError`` if this config runs outside a component lifecycle
-        (no component), or if the component has been garbage-collected.
+        Raises:
+            RuntimeError: If this config was created without a component, or
+                the component has been garbage-collected.
+
         """
         if self._component_ref is None:
             msg = f"{type(self).__name__} runs outside a component lifecycle (no component)"
@@ -661,17 +664,19 @@ class Extension:
     name: ClassVar[str]
     """Name of the extension. Lowercase, a valid Python identifier. Determines
     the attribute the per-component config is reachable under
-    (``component.<name>``) and, via :attr:`class_name`, the nested class name."""
+    (``component.<name>``) and, through
+    [`class_name`][citry.Extension.class_name], the nested class name."""
 
     class_name: ClassVar[str]
     """PascalCase name of the per-component nested config class, derived from
-    :attr:`name` at subclass creation (``my_extension`` -> ``MyExtension``)."""
+    [`name`][citry.Extension.name] at subclass creation (``my_extension`` ->
+    ``MyExtension``)."""
 
     Config: ClassVar[type[ExtensionConfig]] = ExtensionConfig
     """Base class the per-component nested config inherits from."""
 
     commands: ClassVar[list[type[ExtensionCommand]]] = []
-    """CLI commands this extension provides (see :class:`ExtensionCommand`)."""
+    """CLI commands this extension provides (see [`ExtensionCommand`][citry.ExtensionCommand])."""
 
     introspection_version: ClassVar[int | None] = None
     """Positive schema version when this extension publishes component metadata."""
@@ -696,7 +701,7 @@ class Extension:
     @property
     def urls(self) -> list[URLRoute]:
         """
-        HTTP routes this extension provides (see ``citry/util/routing.py``).
+        HTTP routes this extension provides, as [`URLRoute`][citry.URLRoute] values.
 
         Mounted by the web-integration adapters as part of ``Citry.urls``: a
         user extension's routes live under ``ext/<extension name>/``;
@@ -769,13 +774,18 @@ class Extension:
             ```python
             from citry import Extension
 
-            class CacheExtension(Extension):
-                name = "cache"
+            class TimeoutExtension(Extension):
+                name = "timeout"
 
-                def validate_config_fields(self, fields, *, component=None):
+                def validate_config_fields(
+                    self, fields, *, component=None
+                ):
                     for name in fields:
-                        if name != "ttl":
-                            msg = f"unknown config field {name!r}; the only field is 'ttl'"
+                        if name != "seconds":
+                            msg = (
+                                f"unknown field {name!r}; "
+                                "the only field is 'seconds'"
+                            )
                             raise ValueError(msg)
             ```
 
@@ -791,7 +801,7 @@ class Extension:
 
         Citry calls this direct query method only when a caller explicitly
         requests the extension by name. Override it together with a positive
-        :attr:`introspection_version`. Return an exact built-in ``dict`` made
+        [`introspection_version`][citry.Extension.introspection_version]. Return an exact built-in ``dict`` made
         only from strict JSON values, or ``None`` when this component has no
         entry. The method must be observational, deterministic, reentrant, and
         thread-safe; it must not render, load assets, mutate registration, or
@@ -1114,15 +1124,16 @@ class ExtensionManager:
     """
     Fans each lifecycle hook out across a ``Citry`` instance's extensions.
 
-    Owned by :class:`~citry.citry.Citry` and built once in its ``__init__``.
-    Unlike DJC's module-level singleton, there is no deferred-event machinery: a
-    component class is bound to its ``Citry`` (and thus these extensions) at
-    definition time, so the extensions are always present when a hook fires.
+    Each [`Citry`][citry.Citry] instance builds one manager when it is
+    created. A component class is bound to its ``Citry`` instance (and so to
+    these extensions) when the class is defined, so the extensions are
+    always present when a hook fires.
 
-    Dispatch is *smart*: for each hook name, only the extensions that actually
-    override that hook are called (an extension that does not implement a hook
-    costs nothing). The same name-keyed dispatch underlies :meth:`emit`, which
-    extensions use for their own custom hooks (e.g. ``on_dependencies``).
+    For each hook name, the manager calls only the extensions that override
+    that hook, so an extension that does not implement a hook costs nothing.
+    [`emit()`][citry.ExtensionManager.emit] uses the same lookup by name,
+    which lets extensions fire their own custom hooks (e.g.
+    ``on_dependencies``).
     """
 
     def __init__(
@@ -1601,10 +1612,10 @@ class ExtensionManager:
           (via ``dataclasses.replace``) and is passed to the next extension; the
           final field value is returned.
 
-        An extension defines ``name`` by overriding it (see
-        ``_extensions_with_hook``). ``name`` need not be a hook declared on
-        :class:`Extension`, so an extension can fire its own custom hook for
-        others to implement.
+        An extension takes part by defining a method called ``name``.
+        ``name`` need not be a hook declared on
+        [`Extension`][citry.Extension], so an extension can fire its own
+        custom hook for others to implement.
 
         Examples:
             Most named hooks delegate here. ``on_component_data`` notifies every
@@ -1615,7 +1626,12 @@ class ExtensionManager:
             ``on_template_loaded`` threads ``ctx.content`` through the extensions
             (``"map"``) and returns the final string::
 
-                manager.emit("on_template_loaded", ctx, result="map", field="content")
+                manager.emit(
+                    "on_template_loaded",
+                    ctx,
+                    result="map",
+                    field="content",
+                )
 
             A custom hook can let an extension short-circuit (``"first"`` returns
             the first non-``None`` value)::
@@ -2282,9 +2298,9 @@ class ExtensionManager:
         reset, so each drops its own per-class state (the ``dependencies``
         built-in drops its merged result here).
 
-        Deliberately not declared on the :class:`Extension` base: this is the
-        first consumer of the duck-typed custom-hook dispatch (an extension
-        subscribes by defining a method named ``on_files_reset``).
+        This hook is not declared on the [`Extension`][citry.Extension]
+        base. An extension receives it by defining a method named
+        ``on_files_reset``.
         """
         self.emit(
             "on_files_reset",

@@ -90,8 +90,11 @@ class InMemoryCache:
     Unbounded by default. Pass ``max_entries`` to cap the size; when full,
     the entry that was read or written longest ago is dropped to make room.
 
-    Single-process only: each instance is its own store. For multi-worker
-    deployments use a shared backend instead (see the module docstring).
+    Single-process only: each instance is its own store. With several worker
+    processes, a page rendered by one worker can link a generated Vue bundle
+    or ``css_data()`` stylesheet that another worker then answers with a 404, so use a shared backend such as
+    [`RedisCache`][citry.contrib.caches.RedisCache] or
+    [`DjangoCache`][citry.contrib.django.DjangoCache] instead.
     """
 
     def __init__(self, max_entries: int | None = None) -> None:

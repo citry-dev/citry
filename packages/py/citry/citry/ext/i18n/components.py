@@ -123,7 +123,17 @@ $component({});
 """
 
     class I18nProvider(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
-        """Set locale context below this tag and optionally render a semantic host."""
+        """
+        Set the locale for the content inside this tag.
+
+        ``locale``, ``direction`` (``"ltr"`` or ``"rtl"``), ``time_zone``, and
+        ``context`` (a whole locale context) override the inherited values.
+        Add ``tag`` to wrap the content in that HTML element with ``lang`` and
+        ``dir`` set from the locale. The ``client`` attribute, which sends the
+        locale to browser code, requires ``tag``, and so does a ``<c-i18n>``
+        placed inside a ``client`` one; without it the tag raises
+        ``ValueError``.
+        """
 
         citry = citry_instance
         name = "i18n"

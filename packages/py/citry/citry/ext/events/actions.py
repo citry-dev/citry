@@ -2,20 +2,24 @@
 The action constructors of the ``events`` extension: what a handler returns.
 
 An event handler's return value is its whole response, and what flows back to
-the browser is **actions**: self-addressed instructions the client runtime
-applies in order (design ``docs/design/events.md`` 3.4). The capitalized
-constructors here build those action values; calling one performs nothing.
-Import the namespace once and return what you build::
+the browser is **actions**: instructions the browser applies in the order the
+handler returned them. The capitalized constructors here build those action
+values; calling one performs nothing. Import the namespace once and return
+what you build::
 
     from citry.ext.events import actions
 
-    class Events:
-        def save(self, state):
-            order = create_order(state.draft_id)
-            return [
-                actions.Dispatch("order-saved", {"id": order.id}),
-                actions.Redirect(f"/orders/{order.id}"),
-            ]
+    class Checkout(Component):
+        class Events:
+            def save(self, state):
+                order = create_order(state.draft_id)
+                return [
+                    actions.Dispatch(
+                        "Checkout:order-saved",
+                        {"id": order.id},
+                    ),
+                    actions.Redirect(f"/orders/{order.id}"),
+                ]
 
 Every envelope action accepts ``delay`` (seconds before the client applies the
 action). Most also accept ``wait`` (whether later actions hold for it). A
@@ -23,9 +27,9 @@ action). Most also accept ``wait`` (whether later actions hold for it). A
 promise. ``Download`` is not an envelope action; it constructs a raw HTTP
 response result.
 
-Turning return values into these actions (dicts, elements, resolver-claimed
-values) and encoding them for the wire lives in the sibling ``results``
-module; this module is only the vocabulary.
+A handler may also return a bare ``dict`` (a ``Data`` action), a component
+element or ``CitryRender`` (a ``Render`` action), or a value that one of the
+``event_result_resolvers`` converts into actions.
 """
 
 from __future__ import annotations
@@ -118,11 +122,11 @@ class Action:
 @dataclass(frozen=True)
 class Render(Action):
     """
-    Render a component element server-side and morph it into the page.
+    Render a component element on the server and update the page with it.
 
-    The element becomes a validated prepared Vue revision for ``target``. A
-    handler builds a fresh tree to render; nothing of the instance's original
-    render is replayed (design ``events.md`` 7.5).
+    Citry renders the element, and the browser updates ``target`` with the
+    result through Vue. A handler builds a fresh tree to render; nothing of
+    the instance's original render is replayed.
 
     Several independent targets may be updated by one contiguous run of
     immediate, blocking Render actions. Every Render in that run must omit
@@ -137,8 +141,11 @@ class Render(Action):
         target: The component address ``render:<id>``, the caller-relative
             marker address ``mark:<name>``, or ``None`` for the calling
             component instance.
-        swap: How the prepared component is applied. Addressed component and
-            marker updates support ``"morph"``.
+        swap: How the browser applies the rendered component. Only
+            ``"morph"`` (the default), which updates the existing content in
+            place, is supported. Any other value raises ``ValueError``: at
+            construction for a ``render:`` or ``mark:`` target or an unknown
+            value, and when Citry builds the response otherwise.
         delay: Seconds the client waits before applying the action.
         wait: Whether later actions hold until this one has applied.
 
@@ -246,17 +253,25 @@ class Data(Action):
 @dataclass(frozen=True)
 class Dispatch(Action):
     """
-    Dispatch a named browser event (a DOM ``CustomEvent``).
+    Send a named event to the browser.
 
-    The event fires under the exact given name on the calling instance's first
-    connected element in its current Vue subtree. If that subtree has no
-    element, its connected Vue root node carries the event instead. The event
-    bubbles to DOM ancestors. A multi-root instance deliberately uses one
-    canonical carrier so a logical dispatch reaches document-level listeners
-    only once.
-    Names starting with ``citry:`` are reserved for the runtime's own events;
-    the documented convention is prefixing with the component name
-    (``"MyCard:submit"``).
+    The browser delivers the event under the exact given name in two ways.
+    Listeners that the calling component registered with ``this.$onEvent``
+    in its Vue code, or with ``onEvent`` in its ``$component`` callback,
+    receive ``detail``. Citry also dispatches a bubbling DOM
+    ``CustomEvent`` on the first element the calling component currently
+    renders, so listeners on that element, its ancestors, or ``document``
+    receive it. If the component renders no element (only text, for
+    example), the event goes to the component's root DOM node instead. A
+    component that renders several top-level elements still dispatches one
+    event, on the first of them, so a ``document`` listener runs once. When
+    page code applies the actions itself with ``Citry.events.applyActions``,
+    the event is dispatched only on ``document``, and no ``$onEvent``
+    listener is called.
+
+    Prefix the name with the component name, such as ``"MyCard:submit"``,
+    so events from different components do not collide. Names starting with
+    ``citry:`` are reserved for Citry's own events and raise ``ValueError``.
 
     Attributes:
         name: The event name, dispatched verbatim.
@@ -264,6 +279,10 @@ class Dispatch(Action):
             value; ``None`` (the default) sends no detail.
         delay: Seconds the client waits before applying the action.
         wait: Whether later actions hold until this one has applied.
+
+    Raises:
+        ValueError: If ``name`` is empty or starts with ``citry:``, or a
+            timing value is invalid.
 
     """
 

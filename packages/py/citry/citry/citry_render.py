@@ -235,8 +235,8 @@ class RenderFrame:
     is_component_root: bool
     root_markers: tuple[str, ...]
     is_transparent_root: bool = False
-    prepared_occurrence: PreparedOccurrenceMetadata | None = None
     """True for a transparent component's whole output, excluding caller-owned interiors."""
+    prepared_occurrence: PreparedOccurrenceMetadata | None = None
 
     @classmethod
     def from_context(
@@ -375,19 +375,30 @@ class CitryRender:
         """
         Turn this render into a final HTML string.
 
-        Static component-root HTML receives ``data-cid-<id>`` attributes.
-        When prepared output requires Vue, Citry preserves the document shell,
-        replaces its logical UI with one generated host, and emits the validated
-        manifest and assets that mount the occurrence graph there. Collected
-        JS/CSS is placed per the chosen strategy and position.
+        In static output, each component's root element gets a
+        ``data-cid-<id>`` attribute. When a rendered component needs Vue in
+        the browser, Citry keeps the surrounding page markup, puts the
+        rendered content (the page body, for a full document) in one element
+        where Vue mounts, and adds the data and scripts Vue needs to mount
+        it. Collected JS/CSS is placed
+        per the chosen strategy and position.
+
+        With ``security_csp="warn"``, Citry reports content that would break
+        under a Content Security Policy but leaves the output unchanged. With
+        ``"strict"``, it uses the CSP-safe browser runtime and raises on
+        incompatible content. With ``security_javascript="warn"``, it reports
+        which components need JavaScript; ``"omit"`` drops Citry's scripts but
+        keeps the HTML and CSS; ``"forbid"`` raises when a rendered component
+        needs browser behavior.
 
         Args:
             deps_strategy: How to handle the collected JS/CSS.
 
                 - ``"document"`` (default): emit the tags, plus the
-                client-side dependency manager and the page manifest when
-                a component needs per-instance browser behavior, including
-                ``js_data()`` Vue-instance seeding and ``$component`` callbacks.
+                  client-side dependency manager and the page manifest when
+                  a component needs per-instance browser behavior, such as
+                  ``js_data()`` values on its Vue instance or ``$component``
+                  callbacks.
                 - ``"simple"``: the tags only, no JavaScript runtime. For
                   static pages and emails; per-instance JS does not run
                   (CSS variables still work, they are pure CSS).
@@ -414,18 +425,14 @@ class CitryRender:
             security_script_integrity: Override this render's engine-level
                 script integrity policy.
             ssr: Override the engine's initial Vue HTML hydration setting.
-                ``None`` uses :class:`CitrySettings`'s ``ssr`` value.
+                ``None`` uses the [`ssr`][citry.CitrySettings.ssr] setting.
 
-        Raises ``RuntimeError`` if any child component was left unrendered (a
-        ``DeferredComponent`` still in the parts), which can only happen if this
-        render did not come from ``render()``.
-
-        CSP warning mode reports incompatibilities without changing the
-        standard-runtime output. Strict mode selects the CSP runtime and
-        rejects incompatible reached-tree or final HTML. JavaScript warning
-        mode inventories client requirements, omit removes Citry-managed
-        executable output while retaining HTML and CSS, and forbid rejects a
-        rendered subtree that requires client behavior.
+        Raises:
+            RuntimeError: If a child component was left unrendered, which can
+                only happen when this render did not come from ``render()``.
+            ValueError: If an argument is invalid, or a strict security
+                mode rejects the output.
+            TypeError: If ``ssr`` is not a bool or ``None``.
 
         """
         return self.serialize_result(
@@ -452,8 +459,9 @@ class CitryRender:
         """
         Return final HTML together with security metadata for those exact bytes.
 
-        Arguments and validation match :meth:`serialize`; this richer method
-        exposes the host-facing metadata while :meth:`serialize` returns only
+        Arguments and validation match
+        [`serialize()`][citry.CitryRender.serialize]; this method also returns
+        the security metadata a host needs, while ``serialize()`` returns only
         ``result.html``.
         """
         # Imported here, not at module load, to avoid an import cycle:

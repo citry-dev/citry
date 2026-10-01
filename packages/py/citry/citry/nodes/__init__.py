@@ -678,9 +678,9 @@ class ExprNode(Node):
         chooses the security sandbox or plain evaluation; it is read only on the
         first call, when the evaluator is compiled, and ignored afterwards (the
         instance's setting is fixed, so every call passes the same value).
-        Called by ``render``, and by the ``Const`` optimization
-        (``citry/constness.py``), which evaluates an expression ahead of time
-        when all of its variables are marked constant.
+        Called by ``render``, and by the ``Const`` optimization, which
+        evaluates an expression ahead of time when all of its variables are
+        marked constant.
         """
         if self._eval is None:
             self._eval = compile_expr(self.expr, sandboxed=sandboxed)
@@ -716,20 +716,21 @@ class ExprNode(Node):
 @final
 class TemplateNode(Node):
     """
-    A nested template value on an HTML tag's dynamic attribute.
+    A body node that renders a nested template source in the surrounding scope.
 
-    Emitted when a ``c-*`` attribute value is itself a template (starts with a
-    tag and ends with a closing tag), as opposed to a plain expression (which
-    becomes an ``ExprNode``). The ``expr`` field holds the nested template
-    source string.
+    The ``expr`` field holds the nested template source string, such as
+    ``"<span>{{ x }}</span>"``. The node compiles it on first use and renders
+    it against the enclosing component's variables, the same way
+    [`TemplateHtmlAttr`][citry.TemplateHtmlAttr] renders a template-valued
+    attribute. The template compiler does not generate this node: a
+    template-valued ``c-*`` attribute on an HTML element compiles to a
+    ``TemplateHtmlAttr`` inside an
+    [`ElementAttrsNode`][citry.ElementAttrsNode]. An extension can build one
+    by hand in ``on_template_compiled``.
 
-    Generated as: ``TemplateNode(source, (start, end), "template", ("var1", ...))``
+    Constructed as::
 
-    Example:
-        Template ``<div c-body="<span>{{ x }}</span>">`` compiles the
-        ``c-body`` value to::
-
-            TemplateNode(source, (13, 33,), "<span>{{ x }}</span>", ("x",))
+        TemplateNode(source, (start, end), "template", ("var1", ...))
 
     """
 
@@ -810,9 +811,9 @@ class StaticHtmlAttr(HtmlAttr):
         The value is returned as-is, without the ``Const`` marker ("this is
         the same on every render"). Attribute values serve double duty: they
         can be slot and fill names, provide keys, or component inputs, and
-        only the component-input use benefits from the marker. So the marking
-        happens in ``ComponentNode._resolve_inputs``, where the value becomes
-        a component input, not here.
+        only the component-input use benefits from the marker. So
+        ``ComponentNode`` adds the marker where the value becomes a component
+        input, not here.
         """
         return self.value
 
@@ -857,8 +858,8 @@ class ExprHtmlAttr(HtmlAttr):
         Python object). Escaping happens later, when the child component renders
         the value through an ``ExprNode``. The value is returned without the
         ``Const`` marker; for an expression that uses no variables (a literal
-        written in the template), ``ComponentNode._resolve_inputs`` adds the
-        marker where the value becomes a component input.
+        written in the template), ``ComponentNode`` adds the marker where the
+        value becomes a component input.
         """
         # The parser rejects a value-less `c-*` attribute, but node classes
         # are public API: an extension building an ExprHtmlAttr by hand (via
@@ -879,12 +880,19 @@ class TemplateHtmlAttr(HtmlAttr):
     """
     A nested template attribute (``c-body="<div>...</div>"``).
 
-    Generated as: ``TemplateHtmlAttr(source, (start, end), "c-body", "<div>...</div>", ("var",))``
+    Generated as::
+
+        TemplateHtmlAttr(
+            source, (start, end), "c-body", "<div>...</div>", ("var",)
+        )
 
     Example:
         Template ``<c-Card c-body="<span>{{ x }}</span>" />`` produces::
 
-            TemplateHtmlAttr(source, (8, 37,), "c-body", "<span>{{ x }}</span>", ("x",))
+            TemplateHtmlAttr(
+                source, (8, 37,),
+                "c-body", "<span>{{ x }}</span>", ("x",),
+            )
 
     """
 
@@ -1002,7 +1010,11 @@ class ElementAttrsNode(Node):
     Example:
         Template ``<div id="x" c-class="cls">hi</div>`` produces::
 
-            ElementAttrsNode(source, (0, 26,), (StaticHtmlAttr(...), ExprHtmlAttr(...),), ("cls",))
+            ElementAttrsNode(
+                source, (0, 26,),
+                (StaticHtmlAttr(...), ExprHtmlAttr(...),),
+                ("cls",),
+            )
 
     """
 
@@ -1409,13 +1421,16 @@ class ComponentNode(Node):
 
     Generated as::
 
-        ComponentNode(source, (start, end), (attrs,...), [body], (used_vars,), "name", contains_fills)
+        ComponentNode(
+            source, (start, end), (attrs,...), [body],
+            (used_vars,), "name", contains_fills,
+        )
 
     Example:
         Template ``<c-Card title="Hi">body</c-Card>`` produces::
 
             ComponentNode(
-                source, (0, 21,),
+                source, (0, 32,),
                 (StaticHtmlAttr(source, (8, 18,), "title", "Hi", ()),),
                 ["body"],
                 (), "card", False,
@@ -2225,7 +2240,10 @@ class SlotNode(Node):
 
     Generated as::
 
-        SlotNode(source, (start, end), (attrs,), [body], (used_vars,), (introduced_vars,))
+        SlotNode(
+            source, (start, end), (attrs,), [body],
+            (used_vars,), (introduced_vars,),
+        )
 
     Example:
         Template ``<c-slot name="header" />`` produces::
@@ -2489,12 +2507,19 @@ class FillNode(Node):
 
     Generated as::
 
-        FillNode(source, (start, end), (attrs,), [body], (used_vars,), (introduced_vars,))
+        FillNode(
+            source, (start, end), (attrs,), [body],
+            (used_vars,), (introduced_vars,),
+        )
 
     Example:
-        Template ``<c-fill name="header">content</c-fill>`` produces::
+        The fill in ``<c-Card><c-fill name="header">content</c-fill></c-Card>``
+        produces (positions are those of the fill tag on its own)::
 
-            FillNode(source, (0, 40,), (StaticHtmlAttr(...),), ["content"], (), ())
+            FillNode(
+                source, (0, 38,),
+                (StaticHtmlAttr(...),), ["content"], (), (),
+            )
 
     A fill is consumed during fill collection (``collect_fills`` wraps its body
     as a ``Slot`` and registers it), so it is never rendered as output; it

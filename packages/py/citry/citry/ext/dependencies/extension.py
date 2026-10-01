@@ -68,9 +68,9 @@ class CitryDependencies:
     - ``Script``/``Style`` objects - unchanged
     - Pre-rendered tags (`__html__`) - unchanged
 
-    The entry's type is what tells the emission step what
-    to do with it (inline the file content, emit a ``src``/``href`` tag, or
-    output the tag verbatim; see ``emission.py``).
+    The entry's type tells Citry what to do with it when it writes the
+    page: inline the file content, emit a ``src``/``href`` tag, or output
+    the tag verbatim.
 
     Attributes:
         js: JS entries, base classes' entries first, then the class's own,
@@ -162,16 +162,18 @@ class DependenciesExtension(Extension):
     """
     The built-in extension owning the ``Dependencies`` secondary-asset class.
 
-    The loading half reads each component or reusable definition base's
-    preserved ``Dependencies`` declaration, resolves and merges declarations
-    lazily in :meth:`resolve`, and drops a class's derived state when its files
-    are reset or its final registry alias is removed.
+    The first time
+    [`resolve()`][citry.ext.dependencies.DependenciesExtension.resolve] is
+    called for a class, the extension reads its ``Dependencies``
+    declaration, merges it with its bases' declarations, and caches the
+    result. It drops that result when the class's files are reset or its
+    last registered name is removed.
 
-    The emission half (docs/design/dependencies.md): records each component
-    render (``on_component_data``), bubbles the records up as nested renders
-    are consumed (``on_render_context_merge``), and at serialize time turns them into
-    ``<script>``/``<style>``/``<link>`` tags placed into the page
-    (``on_serialize``, implemented in ``emission.py``).
+    During a render, the extension records each component render
+    (``on_component_data``) and passes the records up to the parent as
+    nested renders finish (``on_render_context_merge``). When the page is
+    serialized (``on_serialize``), it turns the records into
+    ``<script>``/``<style>``/``<link>`` tags placed into the page.
     """
 
     name = "dependencies"
@@ -360,7 +362,7 @@ class DependenciesExtension(Extension):
         Merge order is **bases first, own entries last**: list order becomes
         document order at emission and CSS breaks equal-specificity ties by
         document order, so the more specialized class's styles must come later
-        to win (docs/design/asset_loading.md section 7.3).
+        to win.
 
         ``Component.Dependencies.extend`` picks the bases:
 

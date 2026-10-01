@@ -86,7 +86,7 @@ class EventError(Exception):
                     if is_taken(data.email):
                         raise EventError(
                             "Please fix the errors below.",
-                            fields={"email": "This address is already subscribed."},
+                            fields={"email": "Already subscribed."},
                         )
         ```
 

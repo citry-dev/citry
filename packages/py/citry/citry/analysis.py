@@ -2024,7 +2024,7 @@ class TemplateAnalysis:
 
     @classmethod
     def from_dict(cls, value: object) -> TemplateAnalysis:
-        """Rebuild a snapshot from :meth:`to_dict` portable data."""
+        """Rebuild a snapshot from the data that ``to_dict()`` returned."""
         if type(value) is not dict:
             msg = "template analysis data must be a dict"
             raise TypeError(msg)
@@ -3532,7 +3532,7 @@ def format_python_component_assets(
     This synchronous convenience function prepares a plan, invokes ``provider``
     once per JavaScript or CSS request, then validates and finishes the plan.
     Call the two-pass prepare and finish functions directly when provider work
-    must be asynchronous. With no provider, M2 template formatting still runs
+    must be asynchronous. With no provider, template formatting still runs
     while JavaScript and CSS requests remain unchanged with notices.
 
     Args:

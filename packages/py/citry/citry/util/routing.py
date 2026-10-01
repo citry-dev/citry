@@ -170,8 +170,15 @@ class URLRoute:
 
     Example::
 
-        URLRoute("cache/{class_id}.{script_type}", handler=serve_script, name="citry_cached_script")
-        URLRoute("ext/", children=[URLRoute("my_ext/status", handler=status)])
+        URLRoute(
+            "cache/{class_id}.{script_type}",
+            handler=serve_script,
+            name="citry_cached_script",
+        )
+        URLRoute(
+            "ext/",
+            children=[URLRoute("my_ext/status", handler=status)],
+        )
 
     ``methods`` is always a non-empty tuple of uppercase HTTP method names
     (``("GET",)``, ``("POST", "PUT")``), so an adapter can iterate it to

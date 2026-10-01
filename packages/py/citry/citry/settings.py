@@ -341,12 +341,15 @@ class CitrySettings:
             ``sys.path``/``PYTHONPATH``). See ``Citry.autodiscover`` and
             ``citry.autodiscovery``.
         mode: The build environment, ``"production"`` (the default) or
-            ``"development"``. It is the single source of truth for whether the
-            engine includes developer-only output: in ``"development"`` the
-            built-in ``debug`` extension is auto-registered (visual component
-            boundaries) and the client ownership graph carries source
-            provenance. An unrecognized value raises ``ValueError`` at
-            construction. See ``docs/design/dev_prod_mode.md``.
+            ``"development"``. In ``"production"``, each configured i18n
+            catalog package must ship a valid compiled manifest, written by
+            ``citry ext run i18n compile``; creating the ``Citry`` instance
+            raises ``ValueError`` when it is missing or does not match. In
+            ``"development"``, Citry reads the Fluent sources directly; if
+            the package also contains a compiled manifest, it must still
+            match the sources, so delete or recompile it after editing
+            translations. An unrecognized value raises ``ValueError`` at
+            construction.
         template_globals: Variables exposed to every component's template
             without being returned from each ``template_data()``. They are
             merged into every component's template variables on render, so a
