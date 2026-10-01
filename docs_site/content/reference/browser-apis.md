@@ -54,7 +54,9 @@ $component({
     if (!(root instanceof HTMLElement)) return;
 
     const controller = connectWidget(root);
-    const stop = onEvent("cart:changed", (detail) => refreshBadge(detail));
+    const stop = onEvent("Cart:changed", (detail) => {
+      refreshBadge(detail);
+    });
     console.log("rendered revision", revision);
     return () => {
       stop();
@@ -148,9 +150,9 @@ never runs, because only the component's own server handlers dispatch these
 events and it has none:
 
 ```js
-$component(({ component, onEvent }) => {
-  onEvent("cart:changed", (detail) => {
-    component.$el.dataset.items = String(detail.count);
+$component(({ els, onEvent }) => {
+  onEvent("Cart:changed", (detail) => {
+    els[0]?.setAttribute("data-items", String(detail.count));
   });
 });
 ```
@@ -342,7 +344,7 @@ and the error names it.
 Subscribe to a server-dispatched event for this component instance:
 
 ```js
-const stop = this.$onEvent("cart:changed", (detail) => {
+const stop = this.$onEvent("Cart:changed", (detail) => {
   refreshBadge(detail);
 });
 ```
@@ -392,7 +394,7 @@ matches `target`, or when more than one does. An unknown handler name, or
 Listen page-wide for a server-dispatched event:
 
 ```js
-const stop = Citry.events.on("cart:changed", (detail) => {
+const stop = Citry.events.on("Cart:changed", (detail) => {
   updateHeader(detail);
 });
 ```

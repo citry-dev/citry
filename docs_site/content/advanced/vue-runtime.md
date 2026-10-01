@@ -39,8 +39,8 @@ events, component JavaScript, and server Events state. Complete documents
 and [HTML fragments](/advanced/html-fragments/) work the same way.
 
 Do not mount another Vue application over Citry-managed output. Citry creates
-the component types, validates the prepared component graph, and coordinates
-accepted server revisions with the live instances. Composition API helpers
+the Vue component types, checks the components and data the server sends
+for the page, and applies each server render to the live component instances. Composition API helpers
 from the pinned runtime are available through `Citry.vue`.
 
 ## React to server renders the page applies
@@ -154,9 +154,10 @@ do not gain trust automatically. See
 [Security](/security/#apply-a-request-csp-nonce-centrally) for the complete
 policy boundary.
 
-An interactive fragment relies on the compatible Citry runtime already
-installed by its document. The fragment loader rejects incompatible runtime,
-nonce, graph, and asset metadata before mounting the fragment.
+An interactive fragment uses the Citry runtime that its document already
+loaded. Before mounting a fragment, Citry checks that its runtime, CSP
+nonce, components, and assets match the page. A fragment that does not match
+is not mounted, and Citry reports an error in the browser console.
 
 ## Omit or forbid JavaScript
 
@@ -223,14 +224,18 @@ from citry import Citry, Component
 
 app = Citry(ssr_element_threshold=5_000)
 
+
 class Page(Component):
     citry = app
+
     template = """
-<main>Ready</main>
-"""
+      <main>Ready</main>
+    """
+
     js = """
-$component({});
-"""
+      $component({});
+    """
+
 
 html = Page().render().serialize(ssr=False)
 ```

@@ -93,7 +93,7 @@ An underscore-prefixed method is a private helper or configuration hook.
 - [Handle and validate forms](/events/forms/) when named controls should become
   typed Python data.
 - [Bind events in templates](/events/bindings/) for `@c-*`, `:c-*`, loading
-  feedback, errors, and the current status of planned polling support.
+  feedback, errors, and polling.
 - [Event actions](/events/actions/) for renders, browser
   events, history changes, and stable update targets.
 - [Use event routes directly](/events/http/) for GET handlers, native forms,

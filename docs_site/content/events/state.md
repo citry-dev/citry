@@ -164,11 +164,13 @@ the handler must obtain it and pass it to the new tree.
 | Data kind | Put it in | Lifetime |
 |---|---|---|
 | Small values a later server call needs, or values used by `:c-*` | `State` | Survives calls and self-renders; signed storage travels through the browser. |
-| Large or derived browser values | `js_data()` | Recomputed for each render; transport is deduplicated, but each instance gets a fresh nested graph. |
+| Large or derived browser values | `js_data()` | Recomputed for each render. Each component instance gets its own copy. |
 | Client-only UI state such as an open accordion | Vue `data()` | Owned by the current Vue component instance. |
 
-`js_data()` is not persistent Events State. Citry seeds its top-level keys into
-the instance's reactive Vue instance, but a server rerender refreshes those
-server-owned keys. Put ongoing browser-only values in Vue `data()` and behavior in `methods`; put values needed by later server calls in Events `State`. See [Client
-interactivity](/concepts/client-interactivity/) for the complete component
-boundary and Component.js contract.
+`js_data()` is not persistent Events State. Citry copies its top-level keys
+onto the component's Vue instance as reactive members, and a server rerender
+replaces them with the new values, removing keys the new render no longer
+returns. Put ongoing browser-only values in Vue `data()` and behavior in
+`methods`; put values needed by later server calls in Events `State`. See
+[Client interactivity](/concepts/client-interactivity/) for the complete
+component boundary and Component.js contract.
