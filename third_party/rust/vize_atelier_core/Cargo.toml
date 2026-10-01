@@ -82,6 +82,10 @@ name = "v_for_unwrapped_runtime_directives"
 path = "tests/v_for_unwrapped_runtime_directives.rs"
 
 [[test]]
+name = "event_handler_statements"
+path = "tests/event_handler_statements.rs"
+
+[[test]]
 name = "expression_guard_regex"
 path = "tests/expression_guard_regex.rs"
 

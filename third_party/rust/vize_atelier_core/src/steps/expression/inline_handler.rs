@@ -8,7 +8,8 @@ use vize_s0::{Box, String};
 use crate::{ConstantType, ExpressionNode, SimpleExpressionNode, lane::TransformContext};
 
 use super::{
-    clone_expression, is_function_expression, normalize_expression,
+    clone_expression, is_event_handler_reference_expression, is_function_expression,
+    normalize_expression,
     prefix::{get_identifier_prefix, is_simple_identifier},
     rewrite::{report_invalid_expression, rewrite_expression, rewrite_props_aliases},
     shape_checks::{is_event_handler_reference_node, is_function_expression_node},
@@ -36,6 +37,11 @@ pub fn process_inline_handler<'a>(
     }
 
     let content = &normalized.content;
+    // `@vue/compiler-core` reads a handler as statements only when its text
+    // contains `;`. A lone statement such as `if (ok) run()` is rejected there,
+    // and accepting it here would emit it inside the `$event => (...)` wrap
+    // below, which the browser cannot parse.
+    let as_raw_statements = content.contains(';');
     let ts_stripped_content = if ctx.options.is_ts {
         Some(strip_typescript_from_expression(content))
     } else {
@@ -59,7 +65,7 @@ pub fn process_inline_handler<'a>(
     if is_function {
         // Process identifiers in the handler
         if ctx.options.prefix_identifiers {
-            let result = rewrite_expression(content, ctx, false, retained);
+            let result = rewrite_expression(content, ctx, false, as_raw_statements, retained);
             if result.used_unref {
                 ctx.helper(crate::RuntimeHelper::Unref);
             }
@@ -102,7 +108,15 @@ pub fn process_inline_handler<'a>(
 
     // Check if it's an identifier/member-expression handler reference.
     // Vue passes these directly without wrapping them in `$event => (...)`.
-    if is_simple_identifier(content) || is_event_handler_reference_node(&normalized) {
+    // Like the function check, this reads the TS-stripped text: the check
+    // needs the whole text to be one expression, and `foo!` is one only once
+    // the `!` is gone.
+    let is_reference = if function_check_source == *content {
+        is_event_handler_reference_node(&normalized)
+    } else {
+        is_event_handler_reference_expression(function_check_source)
+    };
+    if is_simple_identifier(content) || is_reference {
         let new_content: String = if ctx.options.prefix_identifiers {
             if is_simple_identifier(content) {
                 if let Some(prefix) = get_identifier_prefix(content, ctx) {
@@ -114,7 +128,7 @@ pub fn process_inline_handler<'a>(
                     (*content).into()
                 }
             } else {
-                let result = rewrite_expression(content, ctx, false, retained);
+                let result = rewrite_expression(content, ctx, false, as_raw_statements, retained);
                 if result.used_unref {
                     ctx.helper(crate::RuntimeHelper::Unref);
                 }
@@ -149,7 +163,7 @@ pub fn process_inline_handler<'a>(
 
     // Compound expression - rewrite and wrap in arrow function
     let rewritten: String = if ctx.options.prefix_identifiers {
-        let result = rewrite_expression(content, ctx, false, retained);
+        let result = rewrite_expression(content, ctx, false, as_raw_statements, retained);
         if result.used_unref {
             ctx.helper(crate::RuntimeHelper::Unref);
         }
@@ -167,9 +181,16 @@ pub fn process_inline_handler<'a>(
     // concise body ( ... ) for single expressions. Vue emits the block body
     // with no surrounding spaces (`$event => {...}`).
     let new_content = if rewritten.contains(';') {
-        let mut s = String::with_capacity(12 + rewritten.len() + 1);
+        // A trailing `// note` would comment out the closing `}`, so line
+        // comments become block comments before the body is wrapped.
+        let body = if rewritten.contains("//") {
+            crate::codegen::convert_line_comments_to_block(&rewritten)
+        } else {
+            rewritten
+        };
+        let mut s = String::with_capacity(12 + body.len() + 1);
         s.push_str("$event => {");
-        s.push_str(&rewritten);
+        s.push_str(&body);
         s.push('}');
         s
     } else {

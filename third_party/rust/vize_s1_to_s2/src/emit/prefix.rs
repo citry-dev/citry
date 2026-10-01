@@ -10,7 +10,7 @@
 //! shipped file it names, with binding metadata, `inline` and `is_ts`
 //! left out until their installments; byte-identical output against the
 //! shipped lane is the bar, so the ports keep the shipped quirks (the
-//! second `$event =>` wrap, the two different strips, the prefix parse).
+//! second `$event =>` wrap, the two different strips).
 
 mod aliases;
 mod codegen_visitor;
@@ -42,16 +42,16 @@ pub(in crate::emit) fn strip_typescript_from_expression(content: &str) -> String
     String::from(content)
 }
 
-/// `is_event_handler_reference_expression`: the shipped codegen's prefix
-/// parse of a handler text, which reads `a; b` as the reference `a`.
+/// `is_event_handler_reference_expression`: whether the whole handler text
+/// is one name or member access, which Vue passes through unwrapped.
 pub(super) fn handler_source_is_reference(source: &str) -> bool {
     shape::is_event_handler_reference_expression(source)
 }
 
-/// Whether the shipped codegen's prefix parse admits the text as an
-/// expression at all (`foo() // c` does, `return false` does not).
+/// Whether the whole text parses as one expression, trailing comments
+/// allowed (`foo() // c` does, `return false` does not).
 pub(super) fn handler_source_is_expression(source: &str) -> bool {
-    rewrite::with_prefix_parse(source, |_| true).unwrap_or(false)
+    rewrite::with_whole_expression_parse(source, |_| true).unwrap_or(false)
 }
 
 use vize_s0::{Span, String};
@@ -179,7 +179,9 @@ pub(super) fn prefix_expression(
         });
     }
     let retained = content.retained(js);
-    let rewritten = rewrite::rewrite_expression(content.text.as_str(), retained, scope, false);
+    // Only an event handler may hold statements (see `handler::process`).
+    let rewritten =
+        rewrite::rewrite_expression(content.text.as_str(), retained, scope, false, false);
     if rewritten.parse_error {
         return Err(Refused);
     }

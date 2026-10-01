@@ -124,6 +124,10 @@ name = "citry_runtime_directives"
 path = "tests/citry_runtime_directives.rs"
 
 [[test]]
+name = "citry_event_handler_statements"
+path = "tests/citry_event_handler_statements.rs"
+
+[[test]]
 name = "emit_fragments"
 path = "tests/emit_fragments.rs"
 

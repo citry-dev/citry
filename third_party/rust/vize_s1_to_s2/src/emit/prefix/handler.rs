@@ -38,9 +38,14 @@ pub(super) fn process_inline_handler(
     if is_function {
         return process(content, retained, scope);
     }
-    // Only the function check reads the stripped text; the reference check
-    // is the shipped lane's, over the node's own bytes.
-    if is_simple_identifier(content) || is_event_handler_reference_node(content, retained) {
+    // The reference check reads the stripped text too: it needs the whole
+    // text to be one expression, and `foo!` is one only once the `!` is gone.
+    let is_reference = if shape_source == content {
+        is_event_handler_reference_node(content, retained)
+    } else {
+        is_event_handler_reference_expression(shape_source)
+    };
+    if is_simple_identifier(content) || is_reference {
         if is_simple_identifier(content) {
             let code = match scope.identifier_prefix(content) {
                 Some(prefix) => {
@@ -63,7 +68,7 @@ pub(super) fn process_inline_handler(
     let mut code = String::with_capacity(rewritten.code.len() + 13);
     if rewritten.code.contains(';') {
         code.push_str("$event => {");
-        code.push_str(rewritten.code.as_str());
+        push_block_body(&mut code, rewritten.code.as_str());
         code.push('}');
     } else {
         code.push_str("$event => (");
@@ -87,7 +92,10 @@ fn process(
     scope: &PrefixScope<'_>,
 ) -> RewriteResult {
     if scope.prefixes_identifiers() {
-        return rewrite_expression(content, retained, scope, false);
+        // `@vue/compiler-core` reads a handler as statements only when its
+        // text contains `;`; a lone statement such as `if (ok) run()` is a
+        // parse error there and would land inside `$event => (...)` here.
+        return rewrite_expression(content, retained, scope, false, content.contains(';'));
     }
     RewriteResult {
         code: if scope.is_ts() {
@@ -110,6 +118,14 @@ pub(super) fn finish_event_handler(
 ) -> String {
     let processed = if scope.has_slot_params() {
         strip_scope_prefixes_for_slot_params(scope, processed.as_str())
+    } else {
+        processed
+    };
+    // The handler is written on one line among the other props, so a trailing
+    // `// note` would comment out the `,` or `}` after it; every branch below
+    // writes the text with its line comments turned into block comments.
+    let processed = if processed.contains("//") {
+        super::super::js_comment::convert_line_comments_to_block(processed.as_str())
     } else {
         processed
     };
@@ -136,7 +152,7 @@ pub(super) fn finish_event_handler(
     let mut code = String::with_capacity(processed.len() + 13);
     if processed.contains(';') {
         code.push_str("$event => {");
-        code.push_str(processed.as_str());
+        push_block_body(&mut code, processed.as_str());
         code.push('}');
     } else {
         code.push_str("$event => (");
@@ -144,4 +160,14 @@ pub(super) fn finish_event_handler(
         code.push(')');
     }
     code
+}
+
+/// Write a handler body inside `$event => {...}`. A trailing `// note` would
+/// comment out the closing `}`, so line comments become block comments first.
+fn push_block_body(code: &mut String, body: &str) {
+    if body.contains("//") {
+        code.push_str(super::super::js_comment::convert_line_comments_to_block(body).as_str());
+    } else {
+        code.push_str(body);
+    }
 }

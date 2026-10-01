@@ -17,7 +17,7 @@ use crate::{
 
 use super::{context::CodegenContext, helpers::escape_js_string};
 
-use comment_rewrite::convert_line_comments_to_block;
+pub(crate) use comment_rewrite::convert_line_comments_to_block;
 use scope_prefix::{contains_slot_param_scope_prefix, strip_scope_prefixes_for_slot_params};
 use vize_s0::String;
 use vize_s0::ToCompactString;
