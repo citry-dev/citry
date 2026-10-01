@@ -37,6 +37,7 @@ from citry._html_attribute_values import ENUMERATED_VALUES as ENUMERATED_ATTRIBU
 from citry._html_attribute_values import HTML_ELEMENTS as HTML_ELEMENT_NAMES
 from citry._i18n_directives import looks_like_i18n_binding
 from citry._i18n_guards import i18n_configured_guarded_calls
+from citry._source_lines import source_lines
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
     AlpineAttributeFinding,
@@ -3313,7 +3314,7 @@ def _ast_string_content_span(source: str, node: ast.Constant) -> tuple[int, int]
 
 
 def _python_ast_byte_offset(source: str, line: int, column: int) -> int:
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     return sum(len(item.encode("utf-8")) for item in lines[: line - 1]) + column
 
 
@@ -4789,8 +4790,8 @@ def _insert_shadow_preamble(
     if not preamble:
         return document
     prefix_end_line = _module_prefix_end_line(module_source)
-    module_lines = module_source.splitlines(keepends=True)
-    shadow_lines = document.source.splitlines(keepends=True)
+    module_lines = source_lines(module_source)
+    shadow_lines = source_lines(document.source)
     # The shadow is a copy of `module_source` whose import rewrites all come
     # after this prefix, so the prefix lines must match; anything else gets
     # the preamble at the end, where it is always valid.
@@ -7072,7 +7073,7 @@ def _python_name_at(source: str, cursor: int) -> bool:
         tree = ast.parse(source, mode="eval")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return False
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     line_offsets = [0]
     for line in lines[:-1]:
         line_offsets.append(line_offsets[-1] + len(line))
@@ -8517,13 +8518,15 @@ def js_data_inference_requests(
             for definition in root.definitions:
                 _js_data_value_type(component, project, shape, source, definition.value_range, {}, unproven)
         # Ask only about the largest unknown parts; a part inside another is
-        # typed by the answer for the part around it.
+        # typed by the answer for the part around it. A part that is not a
+        # whole expression on its own cannot be wrapped, so it stays unknown.
         spans = tuple(
             sorted(
                 {
                     span
                     for span in unproven
                     if not any(other != span and other[0] <= span[0] and span[1] <= other[1] for other in unproven)
+                    and _is_expression(source[span[0] : span[1]])
                 }
             )
         )
@@ -8535,6 +8538,15 @@ def js_data_inference_requests(
             spans=spans,
         )
     return tuple(requests.values())
+
+
+def _is_expression(text: str) -> bool:
+    """Return whether `text` parses as one Python expression inside parentheses."""
+    try:
+        ast.parse(f"(\n{text}\n)", mode="eval")
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return False
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -12324,7 +12336,7 @@ def _source_offset_at_position(source: str, position: types.Position) -> int | N
     """Translate an LSP position without accepting half of an astral character."""
     if position.line < 0 or position.character < 0:
         return None
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     if position.line >= len(lines):
         return None
     prefix = sum(len(line) for line in lines[: position.line])

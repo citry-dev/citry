@@ -109,6 +109,7 @@ def kwargs_wire_classes(component_class: type) -> KwargsWireClasses:
         return KwargsWireClasses()
     if members is None:
         return KwargsWireClasses()
+    members = {name: _alias_value(hint) for name, hint in members.items()}
     classes: dict[str, WireClass] = {}
     pending: list[object] = list(members.values())
     while pending and len(classes) < _MAX_CLASSES:
@@ -155,6 +156,19 @@ def _collect_class_modules(hint: object, found: dict[str, str], *, depth: int) -
         return
     for argument in arguments if type(arguments) is tuple else ():
         _collect_class_modules(argument, found, depth=depth + 1)
+
+
+def _alias_value(hint: object) -> object:
+    """Return what a `type Name = ...` alias (Python 3.12+) stands for, or `hint` itself."""
+    # An alias can name another alias; a few steps cover real code and stop a cycle.
+    for _ in range(_MAX_ANNOTATION_DEPTH):
+        if type(hint).__name__ != "TypeAliasType":
+            return hint
+        try:
+            hint = hint.__value__  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - an alias whose value fails to evaluate names nothing
+            return _UNRESOLVED
+    return _UNRESOLVED
 
 
 def _followed_class_name(hint: object) -> str | None:

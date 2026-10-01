@@ -738,10 +738,13 @@ class ProjectState:
     _js_data_inferred: dict[tuple[Path, str, str], Mapping[tuple[int, int], JsonWireType]] = field(
         init=False, repr=False, compare=False
     )
+    # Answers copied from an earlier project generation: used until ty answers again.
+    _js_data_stale: set[tuple[Path, str, str]] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Index portable slot-data rules once for completion and hover."""
         object.__setattr__(self, "_js_data_inferred", {})
+        object.__setattr__(self, "_js_data_stale", set())
         indexed: dict[str, dict[str, tuple[str, ...]]] = {}
         if self.analysis is not None:
             raw_rules = self.analysis.to_dict().get("tag_rules")
@@ -778,8 +781,22 @@ class ProjectState:
         return self._js_data_inferred.get((source_file.resolve(), source, qualname), {})
 
     def has_js_data_inferred_types(self, source_file: Path, source: str, qualname: str) -> bool:
-        """Return whether ty has already been asked about this exact source."""
-        return (source_file.resolve(), source, qualname) in self._js_data_inferred
+        """Return whether ty has answered for this exact source in this project generation."""
+        key = (source_file.resolve(), source, qualname)
+        return key in self._js_data_inferred and key not in self._js_data_stale
+
+    def adopt_js_data_inferred_types(self, previous: ProjectState, *, stale: bool) -> None:
+        """
+        Copy ty's answers from the project this one replaces.
+
+        A reload can change the types ty sees, so with `stale` the copied
+        answers are used only until ty is asked again; until then, values
+        keep their earlier types rather than becoming `any`.
+        """
+        for key, inferred in previous._js_data_inferred.items():
+            self._js_data_inferred.setdefault(key, inferred)
+            if stale or key in previous._js_data_stale:
+                self._js_data_stale.add(key)
 
     def store_js_data_inferred_types(
         self,
@@ -794,6 +811,7 @@ class ProjectState:
         # does not keep every earlier version alive.
         for stale in [item for item in self._js_data_inferred if item[0] == key[0] and item[2] == qualname]:
             del self._js_data_inferred[stale]
+            self._js_data_stale.discard(stale)
         self._js_data_inferred[key] = dict(inferred)
 
     def component_slot_data_fields(

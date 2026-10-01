@@ -133,6 +133,7 @@ from citry._portable_ide import (
     template_tag_uses,
     unknown_component_uses,
 )
+from citry._source_lines import source_lines
 from citry._template_python import ShadowPythonCopy as _ShadowPythonCopy
 from citry._template_python import ShadowPythonDocument as _ShadowPythonDocument
 from citry._template_python import ShadowPythonSourceCopy as _ShadowPythonSourceCopy
@@ -4339,7 +4340,7 @@ def _incomplete_template_regions(source: str) -> list[PythonTemplateRegion]:
     imported_names: set[str] = set()
     import_citry = False
     active_class: tuple[str, int] | None = None
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     for line_number, line in enumerate(lines, start=1):
         stripped = line.strip()
         if stripped.startswith("from citry import "):

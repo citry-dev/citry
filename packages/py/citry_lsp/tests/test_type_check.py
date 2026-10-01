@@ -964,6 +964,8 @@ engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
 class Task:
     title: str
 
+Label = str
+
 class Rows(Component):
     citry = engine
     template_file = 'rows.html'
@@ -971,7 +973,7 @@ class Rows(Component):
     class Kwargs:
         names: list[str]
         flag: bool = False
-    def labels(self) -> list[str]:
+    def labels(self) -> list[Label]:
         return []
     def task(self) -> Task:
         return Task("x")
@@ -1097,3 +1099,69 @@ def test_a_bound_string_the_attribute_rule_reports_is_not_reported_by_typescript
     assert [(item.diagnostic.code, item.diagnostic.range.start.character) for item in typed] == [
         ("citry.typescript.ts2345", 46),
     ]
+
+
+def _rows_project(tmp_path: Path, app: str = _INFERRED_APP):
+    return _documents(
+        tmp_path,
+        {"rows.html": ("citry-html", '<p v-text="labels"></p>'), "rows.js": ("javascript", _INFERRED_JS)},
+        app=app,
+    )
+
+
+def _labels_type(project, documents, tmp_path: Path) -> str:
+    """Return the type the template's projection gives `labels`."""
+    template = documents[(tmp_path / "rows.html").as_uri()]
+    projection = browser_projection(template, types.Position(0, 12), project, documents)
+    assert projection is not None
+    lines = projection.source.splitlines()
+    return lines[lines.index("var labels;") - 1]
+
+
+def test_js_data_answers_survive_a_reload_and_follow_a_saved_edit(tmp_path):
+    project, documents = _rows_project(tmp_path)
+    asyncio.run(_infer_js_data(tmp_path, project, documents))
+    assert _labels_type(project, documents, tmp_path) == "/** @type {Array<string>} */"
+
+    # A reloaded project keeps using the answers, but asks ty again.
+    reloaded, documents = _rows_project(tmp_path)
+    reloaded.adopt_js_data_inferred_types(project, stale=True)
+    assert _labels_type(reloaded, documents, tmp_path) == "/** @type {Array<string>} */"
+    assert not reloaded.has_js_data_inferred_types(tmp_path / "app.py", _INFERRED_APP, "Rows")
+    asyncio.run(_infer_js_data(tmp_path, reloaded, documents))
+    assert reloaded.has_js_data_inferred_types(tmp_path / "app.py", _INFERRED_APP, "Rows")
+
+    # A saved edit is asked about again, and only the newest text is kept.
+    edited, documents = _rows_project(tmp_path, _INFERRED_APP.replace("Label = str", "Label = int"))
+    edited.adopt_js_data_inferred_types(reloaded, stale=True)
+    asyncio.run(_infer_js_data(tmp_path, edited, documents))
+    assert _labels_type(edited, documents, tmp_path) == "/** @type {Array<number>} */"
+    assert len(edited._js_data_inferred) == 1
+
+
+def test_js_data_values_stay_any_when_the_module_uses_reveal_type(tmp_path):
+    app = _INFERRED_APP.replace("def task(self) -> Task:", "def task(self) -> Task:  # reveal_type\n   ")
+    project, documents = _rows_project(tmp_path, app)
+
+    asyncio.run(_infer_js_data(tmp_path, project, documents))
+
+    # The module's own `reveal_type` would hide ty's, so nothing is asked.
+    assert _labels_type(project, documents, tmp_path) == "/** @type {any} */"
+
+
+class _FailedAnalyzer:
+    failure = "ty is not installed"
+
+    async def diagnostics(self, *_args: object, **_kwargs: object) -> tuple[()]:
+        raise AssertionError
+
+
+def test_js_data_inference_does_nothing_without_ty(tmp_path, monkeypatch):
+    project, documents = _rows_project(tmp_path)
+    scanned: list[object] = []
+    monkeypatch.setattr("citry_lsp.semantic.js_data_inference_requests", lambda *args: scanned.append(args) or ())
+
+    asyncio.run(infer_js_data_value_types(_FailedAnalyzer(), project, documents))  # type: ignore[arg-type]
+
+    # A ty that cannot run is not asked, and the sources are not scanned for it.
+    assert scanned == []

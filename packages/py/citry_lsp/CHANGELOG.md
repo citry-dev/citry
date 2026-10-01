@@ -31,17 +31,18 @@ All notable changes to `citry-lsp` are documented here.
   such as `:dir="'rlt'"`, is checked the same way, and TypeScript does
   not report the same value again.
 - The editor asks ty for the type of a `js_data()` value Citry has no
-  rule for, such as `self.labels()` or a list comprehension, so
-  completion, hover, and TypeScript checks know `this.labels` is a
-  `string[]` instead of `any`.
+  rule for, such as `self.labels()` or a list comprehension, so when
+  `labels()` returns `list[str]`, completion, hover, and TypeScript checks
+  type `this.labels` as `string[]` instead of `any`.
 
 ### Changed
 
 - A value Citry cannot type, such as an injection or a server event's
   result, is `any` in completion and hover.
 - A `js_data()` constant types its key by the value's general type, such
-  as `boolean` for `False`, while a `Literal` or `Enum` annotation keeps
-  its values, such as `"sm" | "md"`.
+  as `boolean` for `False`, while a Kwargs field annotated with a
+  `Literal`, or an `Enum` member's `.value`, keeps its values, such as
+  `"sm" | "md"`.
 - A `js_data()` value that reads attributes of a Kwargs field, such as
   `kwargs.task.lane`, types its key from the annotations of the classes
   it passes through, so `lane: str` makes `this.laneKey` a `string`

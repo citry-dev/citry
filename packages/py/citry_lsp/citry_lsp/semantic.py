@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import io
 import re
 import tokenize
@@ -12,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from lsprotocol import types
 
+from citry._source_lines import source_lines
 from citry.analysis import JsonWireType, build_reveal_shadow, json_wire_type_from_annotation
 from citry_lsp.engine import (
     _I18N_CALL_SIGNATURES,
@@ -529,12 +531,18 @@ async def infer_js_data_value_types(
     TypeScript check and completion, reads them. An answer that does not
     describe a JSON value leaves the part unknown.
     """
-    workspace = Path(project.status.workspace)
-    requests = js_data_inference_requests(project, workspace, open_documents)
-    if not requests:
+    # Without ty, or with two open copies of one file that disagree, there is
+    # nothing to ask, so the scan of every js_data() method is skipped.
+    if analyzer.failure is not None:
         return
     synchronized = _python_documents(open_documents)
     if synchronized is None:
+        return
+    workspace = Path(project.status.workspace)
+    # Reading and analyzing every js_data() source can take a while in a
+    # large project, so it runs off the event loop.
+    requests = await asyncio.to_thread(js_data_inference_requests, project, workspace, open_documents)
+    if not requests:
         return
     for request in requests:
         shadow = (
@@ -564,9 +572,9 @@ async def infer_js_data_value_types(
                 if revealed is None or offset is None:
                     continue
                 for span, (start, end) in zip(request.spans, shadow.reveals, strict=True):
-                    # ty marks the argument, which starts inside the generated
-                    # `reveal_type((` call text just before the expression.
-                    if start - len("reveal_type((") <= offset <= end:
+                    # ty marks the expression itself; the window also takes
+                    # the parenthesis just before it.
+                    if start - 1 <= offset <= end:
                         wire_type = _json_type_from_ty_display(revealed)
                         if wire_type is not None:
                             answers[span] = wire_type
@@ -583,8 +591,11 @@ def _revealed_type(code: str | int | None, message: str) -> str | None:
 
 
 # Parts of ty's type display that name no JSON value: a type ty could not
-# infer, one it does not support yet, or a display it shortened.
-_UNPROVEN_TY_DISPLAY = re.compile(r"\bUnknown\b|@Todo|\.\.\.|omitted")
+# infer, one it does not support yet, or a union it shortened.
+_UNPROVEN_TY_DISPLAY = re.compile(r"\bUnknown\b|@Todo|\.\.\. omitted \d+")
+# A string literal in a display, such as `Literal["Unknown"]`, is a value,
+# not a type name, so it is removed before the check above.
+_TY_DISPLAY_STRING = re.compile(r'"(?:[^"\\]|\\.)*"' + r"|'(?:[^'\\]|\\.)*'")
 
 
 def _json_type_from_ty_display(display: str) -> JsonWireType | None:
@@ -596,7 +607,7 @@ def _json_type_from_ty_display(display: str) -> JsonWireType | None:
     A literal is widened to its kind, as Citry's own rules do for a
     `js_data()` constant.
     """
-    if _UNPROVEN_TY_DISPLAY.search(display):
+    if _UNPROVEN_TY_DISPLAY.search(_TY_DISPLAY_STRING.sub('""', display)):
         return None
     wire_type = json_wire_type_from_annotation(re.sub(r"\bLiteralString\b", "str", display))
     if wire_type.unsupported or _has_unknown_part(wire_type):
@@ -762,7 +773,7 @@ def _generated_query_function_bounds(source: str) -> tuple[int, int] | None:
 
 def _ast_source_offset(source: str, line: int, byte_column: int) -> int | None:
     """Convert Python AST byte columns to string offsets for generated source."""
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     if line < 1 or line > len(lines):
         return None
     raw_line = lines[line - 1].encode("utf-8")

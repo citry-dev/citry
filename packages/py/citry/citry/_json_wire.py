@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, cast
 
+from citry._source_lines import source_lines
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -219,7 +221,7 @@ def json_wire_type_from_expression(
         unproven=unproven,
         widen_literals=widen_literals,
         line_starts=_line_starts(source),
-        lines=tuple(source.splitlines(keepends=True)),
+        lines=tuple(source_lines(source)),
     )
     return _expression_type(expression, context)
 
@@ -388,7 +390,7 @@ class _ExpressionContext:
 
 def _line_starts(source: str) -> tuple[int, ...]:
     starts = [0]
-    for line in source.splitlines(keepends=True):
+    for line in source_lines(source):
         starts.append(starts[-1] + len(line))
     return tuple(starts)
 
@@ -417,7 +419,7 @@ def _attribute_chain_type(chain: tuple[str, ...], context: _ExpressionContext) -
             return _class_value_type(annotation, context)
         declared = context.member_types.get(root, {}).get(member, UNKNOWN_JSON_TYPE)
         # The schema writes a type alias such as `Size = Literal["sm", "md"]`
-        # by its name, which proves nothing, while the resolved annotation
+        # by its name, which the JSON rules cannot read, while the resolved annotation
         # spells out its values. The resolved one is used only when it is a
         # JSON type, so a class keeps the schema's shorter name in messages.
         if annotation is not None and declared.unsupported:
@@ -490,7 +492,8 @@ def _expression_type(
     value = _rule_expression_type(node, context)
     # Only a part the rules leave unknown without a reason may be filled from
     # a type checker's answer; a part with a reason is known not to fit.
-    if value.kind != "unknown" or value.unsupported:
+    # A `*items` element is no expression of its own, so it cannot be asked about.
+    if value.kind != "unknown" or value.unsupported or isinstance(node, ast.Starred):
         return value
     span = context.span(node)
     if span is None:

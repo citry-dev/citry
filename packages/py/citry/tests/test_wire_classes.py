@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, EnumMeta, Flag
-from typing import TYPE_CHECKING, ClassVar, Generic, NamedTuple, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Generic, Literal, NamedTuple, TypeVar
 
 import pydantic
 import pytest
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import NotRequired, TypeAliasType, TypedDict
 
 from citry import Citry, Component
 from citry._app_selection import CheckAppSelection
@@ -350,3 +350,42 @@ def test_kwargs_wire_classes_record_the_module_of_a_nested_class():
     assert classes.members["inner"] == f"{_PREFIX}Outer.Inner"
     assert classes.class_modules == {f"{_PREFIX}Outer.Inner": __name__}
     assert KwargsWireClasses.from_dict(classes.to_dict()) == classes
+
+
+# What `type Tone = Literal["a", "b"]` creates on Python 3.12+.
+_Tone = TypeAliasType("_Tone", Literal["a", "b"])
+
+
+class ToneCard(Component):
+    citry = Citry(autodiscover=False)
+    template = """
+      <p></p>
+    """
+
+    class Kwargs:
+        tone: _Tone
+
+
+def test_a_type_statement_alias_member_reads_as_its_value():
+    assert kwargs_wire_classes(ToneCard).members == {"tone": 'Literal["a", "b"]'}
+
+
+def test_a_spread_list_element_is_not_collected_as_a_part():
+    unproven: list[tuple[int, int]] = []
+
+    value = json_wire_type_from_expression("[*self.rows(), 'x']", unproven=unproven)
+
+    # `*self.rows()` is no expression on its own, so it cannot be asked about.
+    assert unproven == []
+    assert value.javascript == "Array<unknown>"
+
+
+def test_unknown_part_offsets_count_only_real_line_breaks():
+    # A form feed or U+2028 inside the value is no line break for Python's
+    # parser, so the offsets must not treat it as one.
+    source = '["a\\u2028b",\n\x0c self.x()]'
+    unproven: list[tuple[int, int]] = []
+
+    json_wire_type_from_expression(source, unproven=unproven)
+
+    assert [source[start:end] for start, end in unproven] == ["self.x()"]

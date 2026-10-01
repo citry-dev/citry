@@ -155,12 +155,13 @@ class TaskCard(Component):
 ```
 
 Here `this.laneKey` is a `string`. Dataclasses, NamedTuples, Pydantic
-models, and plain annotated classes can be read this way. An annotation
-keeps the values it declares: a field `size: Literal["sm", "md"]`, or a
-type alias of it, is `"sm" | "md"`, and an `Enum` member's `.value` is
-the union of its values, such as `"todo" | "done"`. A constant you write
-in `js_data()` keeps only its kind, so `False` is a `boolean`, because
-browser code may change the value later. A NamedTuple is sent as an
+models, and plain annotated classes can be read this way. A Kwargs
+field's annotation keeps the values it declares: a field
+`size: Literal["sm", "md"]`, or a type alias of it, is `"sm" | "md"`,
+and an `Enum` member's `.value` is the union of its values, such as
+`"todo" | "done"`. A constant you write in `js_data()` keeps only its
+kind, so `False` is a `boolean`, because browser code may change the
+value later. A NamedTuple is sent as an
 array and a TypedDict as an object. A chain through an optional value,
 such as `reviewer: Owner | None`, is untyped. Returning a whole
 dataclass or other class instance, such as `kwargs.task`, is reported as
@@ -182,8 +183,10 @@ class TaskList(Component):
         }
 ```
 
-Both `this.labels` and `this.upper` are `string[]`. ty's answer arrives
-with the editor's next check of the file, and
+Both `this.labels` and `this.upper` are `string[]`. A literal type in
+ty's answer keeps only its kind, as a constant does. The editor asks ty
+when it next checks an open file, so these types can take a moment to
+appear after you open or save the project, and
 [`citry check --types`](/cli/#check-types-with-typescript-and-ty) asks
 ty before it runs TypeScript. A value ty types as a class, as `Any`, or
 as a type it could not infer stays `any`. When ty cannot run, these

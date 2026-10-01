@@ -20,6 +20,7 @@ from typing import Any, NoReturn
 from lsprotocol import types
 from pygls.client import JsonRPCClient
 
+from citry._source_lines import line_break_count, source_lines
 from citry_lsp.uri import canonical_document_uri, file_uri_path
 
 TY_VERSION = "0.0.78"
@@ -638,16 +639,17 @@ def position_at_offset(source: str, offset: int) -> types.Position:
     """Convert a Python string index to an LSP UTF-16 position."""
     bounded = min(max(offset, 0), len(source))
     before = source[:bounded]
-    line = before.count("\n")
-    line_text = before.rsplit("\n", 1)[-1]
-    return types.Position(line, len(line_text.encode("utf-16-le")) // 2)
+    lines = source_lines(before)
+    # A trailing line break starts a new, still empty line.
+    line_text = "" if not lines or lines[-1].endswith(("\n", "\r")) else lines[-1]
+    return types.Position(line_break_count(before), len(line_text.encode("utf-16-le")) // 2)
 
 
 def offset_at_position(source: str, position: types.Position) -> int | None:
     """Convert an LSP UTF-16 position to a Python string index exactly."""
     if position.line < 0 or position.character < 0:
         return None
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     if position.line >= len(lines):
         if position.line == 0 and not lines and position.character == 0:
             return 0

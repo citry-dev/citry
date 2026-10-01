@@ -677,7 +677,11 @@ class CitryLanguageServer(LanguageServer):
         semantic = self._semantic_task
         if semantic is not None and not semantic.done():
             semantic.cancel()
+        previous = self.project
         self.project = _project_with_embedded_capability(project, self.embedded_formatting)
+        # ty's earlier js_data() answers stay in use until it answers for the
+        # reloaded project, so types do not flicker to `any` after a save.
+        self.project.adopt_js_data_inferred_types(previous, stale=True)
         self._reload_applied_generation = generation
         for uri, document in tuple(self.documents.items()):
             snapshot = prepared.get(uri)
@@ -881,7 +885,10 @@ def _project_with_embedded_capability(
     capability: EmbeddedFormattingCapability | None,
 ) -> ProjectState:
     status = replace(project.status, embedded_formatting=capability)
-    return replace(project, status=status)
+    updated = replace(project, status=status)
+    # The same project generation keeps ty's answers as they are.
+    updated.adopt_js_data_inferred_types(project, stale=False)
+    return updated
 
 
 @server.feature(types.TEXT_DOCUMENT_DID_OPEN)

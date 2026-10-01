@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Literal
 
+from citry._source_lines import source_lines
 from citry_core.template_parser import HtmlAttrKind, TemplateElement, parse_template
 
 if TYPE_CHECKING:
@@ -537,8 +538,8 @@ def build_reveal_shadow(
     covering one whole expression; they must not overlap. Relative imports
     are made absolute, as in the template shadows, because ty reads the copy
     as a sibling file. Returns ``None`` when the module cannot be copied,
-    already uses the name ``reveal_type``, or a span is not a whole
-    expression of unchanged source.
+    mentions ``reveal_type`` anywhere, even in a comment, or a span is not a
+    whole expression of unchanged source.
     """
     if not spans or re.search(r"\breveal_type\b", module_source):
         # A module's own `reveal_type` would replace the analyzer's built-in one.
@@ -1599,7 +1600,7 @@ def _absolute_relative_import(
 
 def _ast_source_offset(source: str, lineno: int, byte_column: int) -> int | None:
     """Convert CPython's UTF-8 AST column to a Python string offset."""
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     if lineno < 1 or lineno > len(lines) or byte_column < 0:
         return None
     line = lines[lineno - 1]
@@ -1621,13 +1622,13 @@ def _line_after(source: str, lineno: int | None) -> int:
     if lineno is None:
         return len(source)
     starts = [0]
-    starts.extend(match.end() for match in re.finditer("\n", source))
+    starts.extend(match.end() for match in re.finditer(r"\r\n|\r|\n", source))
     return starts[lineno] if lineno < len(starts) else len(source)
 
 
 def _line_indent(source: str, lineno: int) -> str:
     """Return the exact whitespace prefix of one one-based source line."""
-    lines = source.splitlines()
+    lines = source_lines(source)
     if lineno < 1 or lineno > len(lines):
         return ""
     match = re.match(r"[ \t\f]*", lines[lineno - 1])
