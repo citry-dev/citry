@@ -134,6 +134,35 @@ def _findings(tmp_path: Path, name: str, project, documents) -> list[tuple[str, 
     return found
 
 
+_BOUND_APP = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Bound(Component):
+    citry = engine
+    template_file = 'bound.html'
+    def js_data(self, kwargs, slots):
+        return {'enabled': True, 'color': 'red'}
+"""
+
+_BOUND_HTML = (
+    '<div :draggable="\'treu\'" :style="1" :data-id="1" :class="{ on: enabled }">'
+    '<p :draggable="enabled" :style="{ color: color }" :translate="\'\'" :hidden="\'until-found\'"></p>'
+    "<my-el :draggable=\"'treu'\"></my-el><p :draggable.prop=\"'treu'\"></p></div>"
+)
+
+
+def test_native_bindings_are_checked_against_vue_attribute_types(tmp_path):
+    project, documents = _documents(tmp_path, {"bound.html": ("citry-html", _BOUND_HTML)}, app=_BOUND_APP)
+
+    # Valid values pass, including `translate=""`, which the HTML Standard
+    # allows and the static attribute-value rule accepts. A custom element
+    # and a `.prop` binding are left alone.
+    assert [(code, text) for code, text, _range in _findings(tmp_path, "bound.html", project, documents)] == [
+        ("citry.typescript.ts2345", "'treu'"),
+        ("citry.typescript.ts2345", "1"),
+    ]
+
+
 @pytest.fixture
 def lane_project(tmp_path):
     return _documents(

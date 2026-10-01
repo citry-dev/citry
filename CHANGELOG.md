@@ -46,6 +46,9 @@ Upgrading from 0.5.x? Follow
   (`citry.browser.undeclared-emit`), and warn about a listener such as
   `@drop-tsak` on a child component tag when the child does not declare
   that event (`citry.browser.undeclared-component-event`).
+- `citry check --types` and the editor check a bound attribute on an
+  HTML element, such as `:draggable` or `:style`, against Vue's types for
+  that attribute, so `:style="1"` is a TypeScript error.
 - `citry check --types` and the editor check each `c-*` value on a
   component tag against the child's `Kwargs` annotation, so
   `<c-TaskCard c-task="1">` is an error when `task` is a `Task`. They also

@@ -14,6 +14,9 @@ All notable changes to `citry-lsp` are documented here.
   Citry's finding. VS Code uses its own TypeScript; other editors use the
   project's `tsc`. Set the `typeCheck` initialization option to `false` to
   turn it off.
+- The editor checks a bound attribute on an HTML element, such as
+  `:draggable` or `:style`, against Vue's types for that attribute, so
+  `:style="1"` is a TypeScript error.
 - The editor checks each `c-*` value on a component tag against the
   child's `Kwargs` annotation, so `<c-TaskCard c-task="1">` is an error
   when `task` is a `Task`, and checks that `c-class` and `c-style` on an

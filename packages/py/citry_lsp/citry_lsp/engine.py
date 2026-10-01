@@ -32,6 +32,8 @@ from citry._diagnostic_catalog import (
     TEMPLATE_UNKNOWN_COMPONENT,
 )
 from citry._diagnostics import diagnostic_documentation_url, render_diagnostic
+from citry._html_attribute_values import ENUMERATED_VALUES as ENUMERATED_ATTRIBUTE_VALUES
+from citry._html_attribute_values import HTML_ELEMENTS as HTML_ELEMENT_NAMES
 from citry._i18n_directives import looks_like_i18n_binding
 from citry._i18n_guards import i18n_configured_guarded_calls
 from citry.analysis import (
@@ -2142,10 +2144,69 @@ def _template_expression_block(
     elif expression.mode == "binding-pattern":
         prefix = f"{opening}\nvoid (("
         suffix = ") => {});\n"
+    elif (bound := _native_bound_attribute(expression)) is not None:
+        # Passing the value as an argument typed from Vue's own attribute
+        # types makes TypeScript report a wrong value, such as
+        # `:draggable="'treu'"`, on the value itself.
+        tag, attribute, keywords = bound
+        prefix = (
+            f"{opening}\n{_bind_attribute_declaration(keywords)}\n"
+            f"__citryBindAttribute({_js_string_literal(tag)}, {_js_string_literal(attribute)}, (\n"
+        )
+        suffix = "\n));\n"
     else:
         prefix = f"{opening}\nvoid (\n"
         suffix = "\n);\n"
     return prefix, projected_expression, f"{suffix}}})();\n", listener is not None
+
+
+_VUE_TYPES_IMPORT = (
+    f"import({json.dumps((Path(__file__).parent / 'types' / 'node_modules' / 'vue').resolve().as_posix())})"
+)
+
+
+def _bind_attribute_declaration(keywords: tuple[str, ...]) -> str:
+    """
+    Declare the function whose last parameter types one bound attribute value.
+
+    Vue's `IntrinsicElementAttributes` types the attributes of each HTML tag,
+    and an attribute Vue does not declare, such as `data-id`, takes any
+    value. The HTML Standard's keywords for the attribute, which the static
+    `citry.template.invalid-attribute-value` rule checks, are also accepted,
+    so a value that rule accepts, such as `translate=""`, is never an error
+    when it is bound instead.
+    """
+    attributes = f"{_VUE_TYPES_IMPORT}.IntrinsicElementAttributes"
+    extra = "".join(f" | {_js_string_literal(keyword)}" for keyword in keywords)
+    return (
+        f"/** @type {{<K extends keyof {attributes}, A extends string>(tag: K, attribute: A, "
+        f"value: (A extends keyof {attributes}[K] ? {attributes}[K][A] : any){extra}) => void}} */ "
+        "var __citryBindAttribute;"
+    )
+
+
+def _native_bound_attribute(expression: BrowserExpression) -> tuple[str, str, tuple[str, ...]] | None:
+    """
+    Return the HTML tag, attribute, and keywords of a plain `:attr` binding, or `None`.
+
+    Only a lowercase HTML element name is typed, as the static attribute-value
+    rule does, so a component or custom element keeps its own attributes. A
+    modifier such as `.prop` or `.camel` changes what is set, and a dynamic
+    `:[name]` or an object `v-bind` names no single attribute, so those are
+    left alone.
+    """
+    if expression.mode != "expression" or expression.host != "vue" or expression.transform != "identity":
+        return None
+    element = expression.element
+    if element is None or element not in HTML_ELEMENT_NAMES:
+        return None
+    authored = expression.attribute
+    name = authored[1:] if authored.startswith(":") else authored.removeprefix("v-bind:")
+    if name == authored or not name or "." in name or name.startswith("["):
+        return None
+    by_element = ENUMERATED_ATTRIBUTE_VALUES.get(name.lower(), {})
+    keywords = by_element.get(element, by_element.get("*", ()))
+    return element, name, keywords
 
 
 # The first line of every type-check projection. It turns on TypeScript's

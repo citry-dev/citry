@@ -392,6 +392,25 @@ reports these kinds of TypeScript errors:
 | A member that does not exist | `this.$el.fooBar` | 2339, 2551, 2353, 2561 |
 | The wrong number of arguments | `this.startDrag(1, 2)` | 2554, 2555, 2556, 2575 |
 | A syntax error in JavaScript inside a Python string | `const = 1` | 1000 to 1999 |
+| A bound HTML attribute value of the wrong type | `:draggable="'treu'"` | 2345 |
+
+A bound attribute such as `:draggable` or `:style` on an HTML element is
+checked against Vue's types for that element's attributes, so
+`:style="1"` is an error while `:style="{ color: 'red' }"` passes. A value
+the HTML Standard allows, such as `:translate="''"`, is also accepted, so a
+value that the static
+[attribute-value check](/ide/template-linting/#find-invalid-html-attribute-values)
+accepts is not an error when you bind it instead. Some attributes Vue types
+as any string, such as `dir`, so a bound `:dir="'sideways'"` is not
+reported, though the same static value is. Vue's types also compare with
+letter case, so a bound `'LAZY'` is an error where a static `"LAZY"`
+passes. An attribute Vue does not declare, such as `data-id`, a custom
+element, and a binding with a modifier such as `.prop` are not checked.
+
+Vue types `aria-*` attributes too. `aria-expanded` takes a boolean or
+`'true'`/`'false'`, so `:aria-expanded="String(open)"` is an error because
+`String()` returns any string. Bind the boolean itself:
+`:aria-expanded="open"`.
 
 VS Code's own TypeScript runs the check, so you need no Node.js install, but
 the built-in TypeScript and JavaScript Language Features extension must be
