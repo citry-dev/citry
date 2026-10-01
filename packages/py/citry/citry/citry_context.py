@@ -76,8 +76,10 @@ class CitryContext:
             entries itself: when a child render is placed into its parent,
             Citry calls the ``on_render_context_merge`` hook, and each
             extension copies its own entries from the child's ``extra`` into
-            the parent's. Each extension stores its data under a top-level
-            key named after itself (``extra["dependencies"]``).
+            the parent's. By convention, each extension stores its data
+            under a top-level key named after itself
+            (``extra["dependencies"]``). Citry uses some other top-level keys
+            too, so choose a distinctive name.
         provides: The provide/inject entries active at this point of the
             render. Entries may hold a direct caller value, a frozen keyword-
             field payload, or a private blocked marker. Read-only by convention;

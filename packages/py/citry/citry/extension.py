@@ -562,14 +562,14 @@ class ExtensionCommand:
     """
     Base class for an extension's CLI command.
 
-    Subclass this, set ``name`` (and usually ``help``), declare any ``arguments``,
-    and define ``handle`` to do the work. A command that only groups
-    ``subcommands`` leaves ``handle`` unset, and the runner prints its help
-    instead of running anything. Citry turns the declarations into an
-    ``argparse`` parser and runs the matching command; an extension lists its command
-    classes in ``Extension.commands`` and a user reaches one as
-    ``citry ext run <extension> <command>``. (Extension HTTP routes are a
-    separate surface, ``Extension.urls``.)
+    Subclass this, set ``name`` (and usually ``help``), declare any
+    ``arguments``, and define ``handle`` to do the work. A command that only
+    groups ``subcommands`` leaves ``handle`` unset, and the runner prints its
+    help instead of running anything. Citry turns the declarations into an
+    ``argparse`` parser and runs the matching command; an extension lists its
+    command classes in ``Extension.commands`` and a user reaches one as
+    ``citry ext run <extension> <command>``. An extension declares HTTP
+    routes separately, in ``Extension.urls``.
     """
 
     name: ClassVar[str]
@@ -593,9 +593,10 @@ class ExtensionCommand:
     command overrides this with ``def handle(self, **kwargs)``."""
 
     citry: Citry | None = None
-    """The engine the command runs against, bound by the runner before ``handle``
-    is called (like [`Extension.citry`][citry.Extension.citry]). A command's ``handle`` reads it
-    to reach the component registry and the installed extensions."""
+    """The engine the command runs against, bound by the runner before
+    ``handle`` is called (like [`Extension.citry`][citry.Extension.citry]).
+    A command's ``handle`` reads it to reach the component registry and the
+    installed extensions."""
 
 
 ################################################
@@ -801,9 +802,9 @@ class Extension:
 
         Citry calls this direct query method only when a caller explicitly
         requests the extension by name. Override it together with a positive
-        [`introspection_version`][citry.Extension.introspection_version]. Return an exact built-in ``dict`` made
-        only from strict JSON values, or ``None`` when this component has no
-        entry. The method must be observational, deterministic, reentrant, and
+        [`introspection_version`][citry.Extension.introspection_version].
+        Return an exact built-in ``dict`` made only from strict JSON values,
+        or ``None`` when this component has no entry. The method must be observational, deterministic, reentrant, and
         thread-safe; it must not render, load assets, mutate registration, or
         depend on request state.
 

@@ -141,11 +141,13 @@ class Render(Action):
         target: The component address ``render:<id>``, the caller-relative
             marker address ``mark:<name>``, or ``None`` for the calling
             component instance.
-        swap: How the browser applies the rendered component. Only
-            ``"morph"`` (the default), which updates the existing content in
-            place, is supported. Any other value raises ``ValueError``: at
-            construction for a ``render:`` or ``mark:`` target or an unknown
-            value, and when Citry builds the response otherwise.
+        swap: How the browser applies the rendered component. The Vue
+            browser runtime supports only ``"morph"`` (the default), which
+            updates the existing content in place. Another value raises
+            ``ValueError`` when you build the action if Citry does not know
+            the value or you also pass a ``target``. Otherwise the Vue
+            renderer raises it when Citry builds a response for the browser
+            runtime.
         delay: Seconds the client waits before applying the action.
         wait: Whether later actions hold until this one has applied.
 
@@ -265,9 +267,10 @@ class Dispatch(Action):
     example), the event goes to the component's root DOM node instead. A
     component that renders several top-level elements still dispatches one
     event, on the first of them, so a ``document`` listener runs once. When
-    page code applies the actions itself with ``Citry.events.applyActions``,
-    the event is dispatched only on ``document``, and no ``$onEvent``
-    listener is called.
+    page code makes the call without a component (a hand-written ``fetch``,
+    for example) and applies the returned actions itself with
+    ``Citry.events.applyActions``, the event is dispatched only on
+    ``document``, and no ``$onEvent`` listener is called.
 
     Prefix the name with the component name, such as ``"MyCard:submit"``,
     so events from different components do not collide. Names starting with

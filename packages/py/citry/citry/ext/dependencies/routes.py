@@ -7,7 +7,7 @@ extensions own their paths directly; see ``ExtensionManager.urls``)::
     <prefix>/cache/{class_id}.{script_type}                  legacy/current class JS or CSS
     <prefix>/cache/{class_id}.{hash}.{script_type}           a class version or variables script
     <prefix>/asset/{file_name}                               a served Dependencies file (local_files="serve")
-    <prefix>/citry.js                                        the client-side dependency manager
+    <prefix>/citry.js                                        Citry's Vue browser runtime
 
 These are what HTML fragments fetch: a fragment carries URLs instead of
 inlined tags, so the same component used by many fragments is downloaded

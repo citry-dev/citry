@@ -2,7 +2,7 @@
 Framework-neutral URL routes.
 
 Citry (and its extensions) serve a few things over HTTP: cached component
-JS/CSS, the client-side dependency manager, and later whole components. Citry
+JS/CSS, Citry's browser runtime, event calls, and component previews. Citry
 itself cannot listen on a port, so it describes its endpoints as
 :class:`URLRoute` objects, and a thin adapter per web framework
 (``citry.contrib.asgi``, ``citry.contrib.wsgi``, ``citry.contrib.fastapi``,

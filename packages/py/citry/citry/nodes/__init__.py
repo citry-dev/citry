@@ -716,7 +716,7 @@ class ExprNode(Node):
 @final
 class TemplateNode(Node):
     """
-    A body node that renders a nested template source in the surrounding scope.
+    A node in a template's output list that renders a nested template source in the surrounding scope.
 
     The ``expr`` field holds the nested template source string, such as
     ``"<span>{{ x }}</span>"``. The node compiles it on first use and renders

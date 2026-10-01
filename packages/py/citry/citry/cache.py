@@ -85,14 +85,15 @@ class CitryCache(Protocol):
 
 class InMemoryCache:
     """
-    The default cache backend: a thread-safe in-process LRU store.
+    The default cache backend: a thread-safe store inside the current process.
 
     Unbounded by default. Pass ``max_entries`` to cap the size; when full,
     the entry that was read or written longest ago is dropped to make room.
 
     Single-process only: each instance is its own store. With several worker
     processes, a page rendered by one worker can link a generated Vue bundle
-    or ``css_data()`` stylesheet that another worker then answers with a 404, so use a shared backend such as
+    or ``css_data()`` stylesheet that another worker then answers with a
+    404, so use a shared backend such as
     [`RedisCache`][citry.contrib.caches.RedisCache] or
     [`DjangoCache`][citry.contrib.django.DjangoCache] instead.
     """

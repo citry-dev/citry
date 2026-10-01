@@ -143,8 +143,9 @@ class Citry:
     is used.
 
     Call [`initialize()`][citry.Citry.initialize] after startup-time
-    registration and before a server starts request threads. Lazy initialization remains available, but
-    a thread that encounters lifecycle work owned by another thread receives
+    registration and before a server starts request threads. Lazy
+    initialization remains available, but a thread that encounters
+    lifecycle work owned by another thread receives
     [`CitryLifecycleInProgress`][citry.CitryLifecycleInProgress].
 
     """
@@ -1749,9 +1750,9 @@ class Citry:
         (in first-seen order).
 
         For when a change cannot be mapped to a single path: a bulk edit, a
-        branch switch, or a custom watcher reporting an event it cannot resolve
-        to one file. Unlike [`clear()`][citry.Citry.clear], this leaves the registry and
-        autodiscovery untouched.
+        branch switch, or a custom watcher reporting an event it cannot
+        resolve to one file. Unlike [`clear()`][citry.Citry.clear], this
+        leaves the registry and autodiscovery untouched.
         """
         # First-seen order, de-duplicated: a class can be indexed under several
         # files (template + js + css), and dict keys preserve insertion order.

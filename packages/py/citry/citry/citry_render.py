@@ -380,8 +380,8 @@ class CitryRender:
         the browser, Citry keeps the surrounding page markup, puts the
         rendered content (the page body, for a full document) in one element
         where Vue mounts, and adds the data and scripts Vue needs to mount
-        it. Collected JS/CSS is placed
-        per the chosen strategy and position.
+        it. Citry places the collected JS/CSS according to
+        ``deps_strategy`` and ``deps_position``.
 
         With ``security_csp="warn"``, Citry reports content that would break
         under a Content Security Policy but leaves the output unchanged. With
@@ -394,19 +394,23 @@ class CitryRender:
         Args:
             deps_strategy: How to handle the collected JS/CSS.
 
-                - ``"document"`` (default): emit the tags, plus the
-                  client-side dependency manager and the page manifest when
-                  a component needs per-instance browser behavior, such as
-                  ``js_data()`` values on its Vue instance or ``$component``
-                  callbacks.
+                - ``"document"`` (default): emit the tags, plus Citry's
+                  Vue browser runtime and the data it needs to mount the
+                  page when a component needs per-instance browser
+                  behavior, such as ``js_data()`` values on its Vue
+                  instance or ``$component`` callbacks.
                 - ``"simple"``: the tags only, no JavaScript runtime. For
                   static pages and emails; per-instance JS does not run
                   (CSS variables still work, they are pure CSS).
                 - ``"fragment"``: HTML meant to be inserted into an
                   already-loaded page (an HTMX swap, ``fetch`` +
-                  ``innerHTML``, ...). The output carries a descriptor for
-                  the compatible document runtime to validate, load, and
-                  mount. Requires a mounted web integration.
+                  ``innerHTML``, ...). A fragment without browser behavior
+                  carries its tags directly. An interactive fragment
+                  carries a script that loads Citry's browser runtime if
+                  the page does not have it yet, plus JSON that tells the
+                  runtime which assets to load before it mounts the
+                  fragment. A fragment that carries JS, CSS, or browser
+                  behavior requires a mounted web integration.
                 - ``"ignore"``: no tags inserted.
             deps_position: Where the tags go (``document``/``simple`` only).
 
@@ -429,9 +433,15 @@ class CitryRender:
 
         Raises:
             RuntimeError: If a child component was left unrendered, which can
-                only happen when this render did not come from ``render()``.
-            ValueError: If an argument is invalid, or a strict security
-                mode rejects the output.
+                only happen when this render did not come from ``render()``;
+                if the same render is placed more than once in the output;
+                or if ``deps_strategy="fragment"`` needs a mounted web
+                integration and none is mounted.
+            ValueError: If an argument is invalid; if
+                ``security_csp="strict"`` rejects the output or the output
+                needs ``csp_nonce`` and none was given; or if
+                ``security_javascript="forbid"`` finds a component that
+                needs browser behavior.
             TypeError: If ``ssr`` is not a bool or ``None``.
 
         """

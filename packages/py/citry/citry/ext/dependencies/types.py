@@ -116,8 +116,7 @@ def _script_type_should_wrap(attrs: dict[str, str | bool]) -> bool:
 @dataclass(eq=False)
 class Dependency:
     """
-    Shared base of [`Script`][citry.ext.dependencies.Script] and
-    [`Style`][citry.ext.dependencies.Style].
+    Shared base of [`Script`][citry.ext.dependencies.Script] and [`Style`][citry.ext.dependencies.Style].
 
     Holds either inline ``content`` or a ``url``, never both; rendering
     raises when neither or both are set.
@@ -132,7 +131,9 @@ class Dependency:
     attrs: dict[str, str | bool] = field(default_factory=dict)
     """Extra HTML attributes (``True`` renders a bare boolean attribute)."""
     kind: DependencyKind = "extra"
-    """What this dependency is for: ``"core"`` (Citry's browser runtime),
+    """What this dependency is for: ``"core"`` (scripts Citry adds itself
+    to run its browser runtime, such as the runtime, the script that loads
+    it for a fragment, and the data it reads to mount components),
     ``"component"`` (a component's own ``js`` or ``css``), ``"variables"`` (a
     generated stylesheet carrying ``css_data()`` values), or ``"extra"``
     (anything else, such as a ``Dependencies`` entry)."""

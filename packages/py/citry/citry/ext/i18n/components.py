@@ -241,8 +241,10 @@ $component({});
                 "tag": tag,
             }
 
-        # One dynamic call keeps the public slot in the checked ownership
-        # graph while the selected private host remains unavailable as a tag.
+        # One dynamic <c-component> call forwards this provider's public slot
+        # to the selected host, so Citry's checks still see which component
+        # owns the slot content, while the private host classes stay
+        # unavailable as tags.
         template = """\
 <c-component c-is="host" c-tag="tag" c-attrs="attrs" c-policy="policy"><c-slot /></c-component>\
 """
