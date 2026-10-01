@@ -40,6 +40,7 @@ class ContactForm(Component):
 
     template = """
       <form
+        ref="form"
         class="contact-form"
         novalidate
         c-hx-post="save_url"
@@ -52,12 +53,12 @@ class ContactForm(Component):
         <label>
           <span>Name</span>
           <input
+            ref="nameInput"
             name="name"
             c-value="name"
             c-aria-invalid="name_invalid"
             c-aria-describedby="name_error_id"
             autocomplete="name"
-            autofocus
           />
           <span c-id="name_error_id" class="field-error" role="alert">{{ name_error }}</span>
         </label>
@@ -81,7 +82,11 @@ class ContactForm(Component):
             c-aria-describedby="team_error_id"
           >
             <c-for each="team in teams">
-              <option c-value="team.id" c-selected="team.id == selected_team_id">{{ team.name }}</option>
+              <option
+                #c-key="team.id"
+                c-value="team.id"
+                c-selected="team.id == selected_team_id"
+              >{{ team.name }}</option>
             </c-for>
           </select>
           <span c-id="team_error_id" class="field-error" role="alert">{{ team_error }}</span>
@@ -104,8 +109,13 @@ class ContactForm(Component):
     """
 
     js = """
-      $component(({ els }) => {
-        els[0]?.querySelector("input[name='name']")?.focus();
+      $component({
+        mounted() {
+          window.htmx.process(this.$refs.form);
+          // Vue builds this form after HTMX inserts it, so focus the name
+          // field once Vue has mounted it.
+          this.$refs.nameInput.focus();
+        },
       });
     """
 

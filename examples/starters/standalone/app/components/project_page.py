@@ -23,7 +23,7 @@ class ProjectPage(Component):
             <h1>Render an interactive page without a web server.</h1>
             <p class="hero__intro">
               Python renders the project cards and bundles the page's CSS and
-              JavaScript. Alpine opens the help panel after you open the file.
+              JavaScript. Vue opens the help panel after you open the file.
             </p>
           </section>
         </c-fill>
@@ -31,4 +31,40 @@ class ProjectPage(Component):
           <c-ProjectExplorer c-projects="projects" />
         </c-fill>
       </c-PageShell>
+    """
+
+    css = """
+      .hero {
+        display: grid;
+        max-width: 45rem;
+        gap: 0.75rem;
+        margin-bottom: 2rem;
+      }
+
+      .eyebrow {
+        margin: 0 0 0.15rem;
+        color: var(--color-muted);
+      }
+
+      h1 {
+        margin: 0;
+        color: var(--color-text);
+        font-size: 2.25rem;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1.3;
+      }
+
+      .hero__intro {
+        max-width: 43rem;
+        margin: 0;
+        color: var(--color-muted);
+        font-size: 1.05rem;
+      }
+
+      @media (max-width: 35rem) {
+        h1 {
+          font-size: 2rem;
+        }
+      }
     """

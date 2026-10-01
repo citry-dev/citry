@@ -26,7 +26,6 @@ class ContactView:
     email: str
     team_id: int
     team_name: str
-    detail_url: str
     edit_url: str
 
 
@@ -86,7 +85,6 @@ def _as_view(contact: Contact) -> ContactView:
         email=contact.email,
         team_id=contact.team_id,
         team_name=team.name,
-        detail_url=f"/fragments/contacts/{contact.id}",
         edit_url=f"/fragments/contacts/{contact.id}/edit",
     )
 

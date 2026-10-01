@@ -2,18 +2,31 @@ from app.citry_app import citry_app
 from citry import Component
 
 
-class BadgeStyles(Component):
-    """Provide the CSS shared by both priority badges."""
+class PriorityBadge(Component):
+    """Show a task's priority as a small pill, highlighted for high priority."""
 
     citry = citry_app
 
     class Kwargs:
-        pass
+        high: bool
 
     class Slots:
         pass
 
-    template = ""
+    def template_data(self, kwargs: Kwargs, slots: Slots):
+        return {
+            "label": "High priority" if kwargs.high else "Standard",
+            "high": kwargs.high,
+        }
+
+    template = """
+      <span
+        class="priority"
+        c-class="{'priority--high': high}"
+      >
+        {{ label }}
+      </span>
+    """
 
     css = """
       .priority {

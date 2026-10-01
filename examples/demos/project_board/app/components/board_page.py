@@ -37,7 +37,6 @@ class BoardPage(Component):
         </c-fill>
         <c-fill name="default">
           <div class="board-frame">
-            <c-BadgeStyles />
             <c-ProjectBoard c-lanes="lanes" />
           </div>
         </c-fill>
