@@ -119,6 +119,7 @@ export interface StateAction extends ActionTiming {
 	action: "state";
 	targetRenderId: string;
 	stateToken: string;
+	publicState: JsonObject;
 }
 
 export interface DispatchEventAction extends ActionTiming {

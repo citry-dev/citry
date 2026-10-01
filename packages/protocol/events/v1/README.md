@@ -2,7 +2,7 @@
 
 Citry Events turns a browser interaction into a named server call, then turns
 the server's answer into browser actions. A click might send `save` with JSON
-arguments; the answer might replace a component, update a state token,
+arguments; the answer might replace a component, update a component's State,
 dispatch a DOM event, or resolve the caller with data.
 
 This directory is the language-neutral contract for protocol major 1. It

@@ -172,6 +172,24 @@
       "implementations": ["python", "javascript"]
     },
     {
+      "id": "result-state-requires-public-state",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/stateAction/required/3",
+      "seed": "rename_coerce.result.json",
+      "operations": [{"op": "remove", "path": "/results/0/actions/0/publicState"}],
+      "expected": {"path": "/results/0/actions/0/publicState", "category": "required"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-state-public-state-must-be-object",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/stateAction/properties/publicState/type",
+      "seed": "rename_coerce.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/actions/0/publicState", "value": ["count"]}],
+      "expected": {"path": "/results/0/actions/0/publicState", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
       "id": "result-render-target-rejects-css-selector",
       "schema": "result.schema.json",
       "constraint": "/$defs/renderTarget/pattern",

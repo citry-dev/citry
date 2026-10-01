@@ -81,7 +81,7 @@ and self-addressed `render:` targets derived from a live render ID.
 | `baseline_swap` | Omitting capabilities uses the v1 baseline, so `morph` becomes `replace`. |
 | `data_only` | A stateless call can omit caller State metadata and return one data value. |
 | `history` | `push` and `replace` history actions retain their authored order and timing. |
-| `rename_coerce` | A State mutation returns the token refresh first, then an event and data value. |
+| `rename_coerce` | A State mutation returns the State refresh first, with the token and public State values, then an event and data value. |
 | `batch_two` | `results[i]` answers `calls[i]`, including mixed stateful and stateless calls. |
 | `error_invalid_args` | `invalid_args` carries a strict `fieldErrors` map. |
 | `error_invalid_state` | A malformed or tampered token answers `invalid_state`. |

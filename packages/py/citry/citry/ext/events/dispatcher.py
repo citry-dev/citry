@@ -77,6 +77,7 @@ from citry.ext.events.results import (
     warn_unreturned_actions,
 )
 from citry.ext.events.schemas import validate_args
+from citry.ext.events.state import public_state_values
 from citry.ext.events.tokens import (
     InvalidStateError,
     StaleStateError,
@@ -1011,7 +1012,9 @@ class EventsDispatcher:
                 logger.debug(
                     f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} mutated"
                     f" state but returned nothing visible (no render, data, dispatch, redirect, or URL"
-                    f" action). If the page should update, return a rendering, e.g. 'return state.render()'."
+                    f" action). The browser receives the new public State for `$state` and State bindings,"
+                    f" but server-rendered content stays as it was. If that content should change too,"
+                    f" return a rendering, e.g. 'return state.render()'."
                 )
 
         try:
@@ -1072,11 +1075,11 @@ class EventsDispatcher:
         capabilities: dict[str, frozenset[str]],
     ) -> list[dict[str, Any]]:
         """
-        Changed State means a fresh token in the response (design 4.3).
+        Changed State means a fresh token and fresh public values in the response (design 4.3).
 
         A render that re-renders the calling instance needs no companion (the
-        fresh fragment's manifest carries the new token); otherwise a
-        ``state`` action is placed before the handler's own actions. The
+        fresh fragment's manifest carries the new token and values); otherwise
+        a ``state`` action is placed before the handler's own actions. The
         placement breaks no ordering promise: the action is server-added, and
         the client applies a result's token refresh before the actions array
         either way.
@@ -1114,10 +1117,13 @@ class EventsDispatcher:
             # emitting one anyway would violate the capability contract.
             logger.warning(
                 f"Event handler {plan.handler.name!r} mutated state, but the client's advertised"
-                f" capabilities exclude the 'state' action; the token refresh is dropped."
+                f" capabilities exclude the 'state' action; the State refresh is dropped."
             )
             return wire_actions
-        state_action = build_state_action(plan.instance_id, token)
+        # The browser shows public State through `$state` and State bindings, and
+        # nothing else will refresh them: the caller is not rendered again here.
+        # The token check above already proved every State value is plain JSON.
+        state_action = build_state_action(plan.instance_id, token, public_state_values(plan.state, meta))
         return [state_action, *wire_actions]
 
     @staticmethod

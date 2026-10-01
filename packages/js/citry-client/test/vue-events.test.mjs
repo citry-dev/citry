@@ -153,8 +153,8 @@ test("Vue bridge sends current credentials, commits renders, and resets sequence
     async commitRender() {
       context = { ...context, serverRenderId: "server_2", stateToken: "token_2", publicState: { moves: 1 } };
     },
-    commitState(_id, token) {
-      context = { ...context, stateToken: token };
+    commitState(_id, token, publicState) {
+      context = { ...context, stateToken: token, publicState };
     },
     dispatchEvent(name) {
       events.push([name, context.serverRenderId, context.stateToken]);
@@ -376,7 +376,7 @@ test("unsupported targets reject the whole result before state mutation", async 
             ok: true,
             sendSequence: envelope.calls[0].sendSequence,
             actions: [
-              { action: "state", targetRenderId: "server_1", stateToken: "token_2" },
+              { action: "state", targetRenderId: "server_1", stateToken: "token_2", publicState: { moves: 2 } },
               {
                 action: "render",
                 target: "#arbitrary-css",
@@ -425,7 +425,7 @@ test("synchronous host preflight runs before State hoisting and carries its rend
   const fetch = async (_url, init) => {
     const envelope = JSON.parse(init.body);
     return resultResponse(envelope, [
-      { action: "state", targetRenderId: "server_1", stateToken: "token_2" },
+      { action: "state", targetRenderId: "server_1", stateToken: "token_2", publicState: { moves: 2 } },
       {
         action: "render",
         target: "render:server_1",
@@ -456,7 +456,7 @@ test("synchronous target preflight failure commits no immediate State", async ()
   const fetch = async (_url, init) => {
     const envelope = JSON.parse(init.body);
     return resultResponse(envelope, [
-      { action: "state", targetRenderId: "server_1", stateToken: "token_2" },
+      { action: "state", targetRenderId: "server_1", stateToken: "token_2", publicState: { moves: 2 } },
       {
         action: "render",
         target: "render:server_2",
@@ -482,8 +482,8 @@ test("accepted State is not restored when a later response action fails", async 
     ...basicHost(),
     takePendingState: () => ({ draft: "sent" }),
     restorePendingState: (_source, updates) => restored.push(updates),
-    commitState(renderId, stateToken) {
-      committed.push([renderId, stateToken]);
+    commitState(renderId, stateToken, publicState) {
+      committed.push([renderId, stateToken, publicState]);
     },
     async prepareRender() {
       throw new Error("the later render action failed");
@@ -495,14 +495,62 @@ test("accepted State is not restored when a later response action fails", async 
     host,
     fetch: async (_url, init) =>
       resultResponse(JSON.parse(init.body), [
-        { action: "state", targetRenderId: "server_1", stateToken: "token_2" },
+        { action: "state", targetRenderId: "server_1", stateToken: "token_2", publicState: { moves: 2 } },
         { action: "render", target: "render:server_1", swap: "morph", renderer: "vue-prepared/1", prepared: {} },
       ]),
   });
 
   await assert.rejects(bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }), /later render/);
-  assert.deepEqual(committed, [["server_1", "token_2"]]);
+  // The host receives the public values with the token, so `$state` can show what the handler set.
+  assert.deepEqual(committed, [["server_1", "token_2", { moves: 2 }]]);
   assert.deepEqual(restored, []);
+});
+
+test("a delayed State refresh is skipped once a newer result for the component was applied", async () => {
+  const committed = [];
+  const stale = [];
+  const host = {
+    ...basicHost(),
+    commitState(_renderId, stateToken, publicState) {
+      committed.push([stateToken, publicState]);
+    },
+    lifecycle(kind, _source, _event, detail) {
+      if (kind === "stale") stale.push(detail);
+      return true;
+    },
+  };
+  let sent = 0;
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async (_url, init) => {
+      sent += 1;
+      // The first answer delays its refresh without blocking; the second answers before that delay ends.
+      const actions =
+        sent === 1
+          ? [
+              {
+                action: "state",
+                targetRenderId: "server_1",
+                stateToken: "token_old",
+                publicState: { moves: 1 },
+                delay: 0.03,
+                wait: false,
+              },
+            ]
+          : [{ action: "state", targetRenderId: "server_1", stateToken: "token_new", publicState: { moves: 2 } }];
+      return resultResponse(JSON.parse(init.body), actions);
+    },
+  });
+  const source = { stableId: "board", generation: 1 };
+
+  await bridge.send({ source, handler: "move" });
+  await bridge.send({ source, handler: "move" });
+  await new Promise((resolve) => setTimeout(resolve, 60));
+
+  // The older values never replace the newer ones, and listeners hear why the refresh was dropped.
+  assert.deepEqual(committed, [["token_new", { moves: 2 }]]);
+  assert.deepEqual(stale, [{ reason: "epoch" }]);
 });
 
 const contextFor = (id = "server_1") => ({
@@ -1946,7 +1994,7 @@ test("a response that fails the strict JSON check reaches no host step and stays
           ok: true,
           sendSequence: envelope.calls[0].sendSequence,
           actions: [
-            { action: "state", targetRenderId: "server_1", stateToken: "token_2" },
+            { action: "state", targetRenderId: "server_1", stateToken: "token_2", publicState: { moves: 2 } },
             renderAction({ occurrences: [{ serverData: { count: Number.POSITIVE_INFINITY } }] }),
           ],
         },

@@ -237,7 +237,7 @@
       const required = {
         render: ["target", "swap"],
         data: ["value"],
-        state: ["targetRenderId", "stateToken"],
+        state: ["targetRenderId", "stateToken", "publicState"],
         event: ["eventName"],
         redirect: ["url"],
         url: ["url", "mode"],
@@ -246,7 +246,7 @@
       const fields = {
         render: ["action", "target", "swap", "renderer", "html", "prepared", "delay", "wait"],
         data: ["action", "value", "delay"],
-        state: ["action", "targetRenderId", "stateToken", "delay", "wait"],
+        state: ["action", "targetRenderId", "stateToken", "publicState", "delay", "wait"],
         event: ["action", "eventName", "detail", "target", "delay", "wait"],
         redirect: ["action", "url", "delay", "wait"],
         url: ["action", "url", "mode", "delay", "wait"],
@@ -271,6 +271,8 @@
       } else if (action.action === "state") {
         if (typeof action.targetRenderId !== "string" || !safeRenderId(action.targetRenderId)) throw new TypeError(`Citry.events.applyActions needs a valid state target at ${path}/targetRenderId`);
         if (typeof action.stateToken !== "string" || action.stateToken.length === 0) throw new TypeError(`Citry.events.applyActions needs a state token at ${path}/stateToken`);
+        if (!action.publicState || Array.isArray(action.publicState) || (Object.getPrototypeOf(action.publicState) !== Object.prototype && Object.getPrototypeOf(action.publicState) !== null))
+          throw new TypeError(`Citry.events.applyActions needs public State object data at ${path}/publicState`);
       } else if (action.action === "event") {
         if (typeof action.eventName !== "string" || action.eventName.length === 0 || action.eventName.startsWith("citry:")) throw new TypeError(`Citry.events.applyActions needs a public event name at ${path}/eventName`);
         if (has(action, "target")) publicTarget(action.target, `${path}/target`, false);
@@ -3446,9 +3448,18 @@
           if (staged === transaction) staged = null;
         }
       },
-      commitState(serverRenderId, stateToken) {
-        for (const [id, value] of contexts) if (value.serverRenderId === serverRenderId)
-          contexts.set(id, {...value, stateToken});
+      commitState(serverRenderId, stateToken, publicState) {
+        for (const [id, value] of contexts) {
+          if (value.serverRenderId !== serverRenderId) continue;
+          const context = {...value, stateToken, publicState};
+          contexts.set(id, context);
+          // `$state` and State bindings read the mounted record, not this context, so a handler that
+          // changed State without rendering the component again must reach the record as well.
+          // `adopt` keeps every field with an unsent browser write.
+          const source = sources.get(id);
+          const mounted = ownedApp.mounted.get(id);
+          if (source && mounted?.record.generation === source.generation) mounted.record.state.adopt(context);
+        }
       },
       dispatchEvent(name, detail, source) {
         const mounted = ownedApp.mounted.get(source.stableId);

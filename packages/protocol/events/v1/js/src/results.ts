@@ -60,7 +60,14 @@ const ACTION_FIELDS: Record<EventActionKind, ReadonlySet<string>> = {
 		"wait",
 	]),
 	data: new Set(["action", "value", "delay"]),
-	state: new Set(["action", "targetRenderId", "stateToken", "delay", "wait"]),
+	state: new Set([
+		"action",
+		"targetRenderId",
+		"stateToken",
+		"publicState",
+		"delay",
+		"wait",
+	]),
 	event: new Set(["action", "eventName", "detail", "target", "delay", "wait"]),
 	redirect: new Set(["action", "url", "delay", "wait"]),
 	url: new Set(["action", "url", "mode", "delay", "wait"]),
@@ -68,7 +75,7 @@ const ACTION_FIELDS: Record<EventActionKind, ReadonlySet<string>> = {
 const ACTION_REQUIRED: Record<EventActionKind, readonly string[]> = {
 	render: ["action", "target", "swap"],
 	data: ["action", "value"],
-	state: ["action", "targetRenderId", "stateToken"],
+	state: ["action", "targetRenderId", "stateToken", "publicState"],
 	event: ["action", "eventName"],
 	redirect: ["action", "url"],
 	url: ["action", "url", "mode"],
@@ -334,6 +341,14 @@ const validateActionShape = (
 				path: pointer(path, "stateToken"),
 				category: "range",
 				message: "The state token must not be empty.",
+			};
+		}
+		// The field names inside are application data; only the container is fixed.
+		if (!isPlainObject(value.publicState)) {
+			return {
+				path: pointer(path, "publicState"),
+				category: "type",
+				message: "Public State must be an object.",
 			};
 		}
 	} else if (kind === "event") {

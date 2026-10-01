@@ -51,8 +51,9 @@ walks through every step.
   must be renamed
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#move-component-initializers-to-vue-options)).
 - **Events code:** render targets are `mark:<name>` or `render:<id>`
-  instead of CSS selectors, and custom transports must forward
-  `request.headers`
+  instead of CSS selectors, custom transports must forward
+  `request.headers`, and a `state` action passed to
+  `Citry.events.applyActions` needs a `publicState` object
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-events-code)).
 - **Page scripts and selectors:** `Citry.alpine`, `Citry.manager`, and
   `Citry.i18n` are removed, and Vue-rendered elements carry no
@@ -111,6 +112,10 @@ walks through every step.
 
 ### Fixes
 
+- `$state` and State bindings now show the State an Events handler changed
+  when the handler returns nothing, returns data, or renders only a
+  `<c-mark>` region, instead of keeping the old values until the component
+  renders again.
 - Events handlers declared with `PUT`, `DELETE`, or another non-POST
   method now work, and each still rejects other methods and checks CSRF.
 - `GET` Events calls reject arguments with unpaired surrogates instead of

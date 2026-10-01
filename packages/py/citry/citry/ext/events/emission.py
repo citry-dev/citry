@@ -14,6 +14,7 @@ from citry._protocol.events import (
 )
 from citry.constness import const_value
 from citry.ext.events.handlers import event_options
+from citry.ext.events.state import public_state_values
 from citry.ext.events.tokens import mint_state_token
 
 if TYPE_CHECKING:
@@ -54,7 +55,7 @@ def capture_instance(extension: EventsExtension, ctx: OnComponentDataContext) ->
             storage=meta.storage,
             cache=ctx.citry.cache,
         )
-        values = {name: getattr(state, name) for name in meta.public}
+        values = public_state_values(state, meta)
     else:
         token = None
         values = {}

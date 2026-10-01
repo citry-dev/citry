@@ -52,7 +52,7 @@ _ERROR_FIELDS = ("status", "code", "message", "fieldErrors")
 _ACTION_FIELDS: dict[str, tuple[str, ...]] = {
     "render": ("action", "target", "swap", "renderer", "html", "prepared", "delay", "wait"),
     "data": ("action", "value", "delay"),
-    "state": ("action", "targetRenderId", "stateToken", "delay", "wait"),
+    "state": ("action", "targetRenderId", "stateToken", "publicState", "delay", "wait"),
     "event": ("action", "eventName", "detail", "target", "delay", "wait"),
     "redirect": ("action", "url", "delay", "wait"),
     "url": ("action", "url", "mode", "delay", "wait"),
@@ -60,7 +60,7 @@ _ACTION_FIELDS: dict[str, tuple[str, ...]] = {
 _ACTION_REQUIRED: dict[str, tuple[str, ...]] = {
     "render": ("action", "target", "swap"),
     "data": ("action", "value"),
-    "state": ("action", "targetRenderId", "stateToken"),
+    "state": ("action", "targetRenderId", "stateToken", "publicState"),
     "event": ("action", "eventName"),
     "redirect": ("action", "url"),
     "url": ("action", "url", "mode"),
@@ -356,6 +356,9 @@ def _validate_action_shape(value: Any, path: str) -> ValidationIssue | None:
             return ValidationIssue(pointer(path, "stateToken"), "type", "The state token must be a string.")
         if not token:
             return ValidationIssue(pointer(path, "stateToken"), "range", "The state token must not be empty.")
+        # The field names inside are application data; only the container is fixed.
+        if not isinstance(value["publicState"], dict):
+            return ValidationIssue(pointer(path, "publicState"), "type", "Public State must be an object.")
     elif kind == "event":
         name = value["eventName"]
         if not isinstance(name, str):
@@ -430,10 +433,23 @@ def build_data_action(value: Any, *, delay: float = 0) -> dict[str, Any]:
 
 
 def build_state_action(
-    target_render_id: str, state_token: str, *, delay: float = 0, wait: bool = True
+    target_render_id: str,
+    state_token: str,
+    public_state: Mapping[str, Any],
+    *,
+    delay: float = 0,
+    wait: bool = True,
 ) -> dict[str, Any]:
+    """Build a State refresh: the fresh token plus the public values the browser shows."""
     return _with_timing(
-        {"action": "state", "targetRenderId": target_render_id, "stateToken": state_token}, delay, wait
+        {
+            "action": "state",
+            "targetRenderId": target_render_id,
+            "stateToken": state_token,
+            "publicState": copy_json(dict(public_state)),
+        },
+        delay,
+        wait,
     )
 
 

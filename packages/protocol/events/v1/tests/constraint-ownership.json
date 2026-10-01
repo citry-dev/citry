@@ -130,8 +130,8 @@
       "pythonValidators": ["python/citry_events/results.py:validate_action"],
       "javascriptValidators": ["js/src/results.ts:validateAction"],
       "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
-      "constraintCount": 81,
-      "constraintSha256": "51d561eceb0d01182de36c161336504fc78000f43d66dc7f64d104512d82488c"
+      "constraintCount": 83,
+      "constraintSha256": "5bd9d2567812e54d0f3bad47efdb761c50859778134cd2da4ffe3974046775f7"
     }
   ]
 }

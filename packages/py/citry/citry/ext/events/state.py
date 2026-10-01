@@ -252,3 +252,16 @@ def build_state_instance(comp_name: str, state_cls: type, raw_kwargs: dict[str, 
         )
         raise ValueError(msg)
     return state_cls(**values)
+
+
+def public_state_values(state: Any, meta: StateMeta) -> dict[str, Any]:
+    """
+    The plain values of a State instance's public fields, in sorted key order.
+
+    Only these fields ever reach the browser: the first render puts them in
+    the component's Events record, and a handler that changes State without
+    rendering the component sends them in its ``state`` action. Both use this
+    function, so a field outside ``_public`` cannot leak through either one.
+    Sorting keeps the emitted JSON identical from one run to the next.
+    """
+    return {name: getattr(state, name) for name in sorted(meta.public)}

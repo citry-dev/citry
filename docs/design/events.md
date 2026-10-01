@@ -991,7 +991,7 @@ the contested calls are recorded in 14.1.11.
 | Parameter | What is injected |
 |---|---|
 | `data` | The user input, as **one schema object** (the whole wire `args` payload validated against the annotation). Omit it for handlers that take no input. |
-| `state` | The typed `State` instance, rebuilt from the verified token plus any pending two-way binding updates. Mutable; mutations travel back in the refreshed token. `None` when the component declares no State. |
+| `state` | The typed `State` instance, rebuilt from the verified token plus any pending two-way binding updates. Mutable; mutations travel back in the refreshed token, and changed public fields travel back as plain values too. `None` when the component declares no State. |
 | `context` | Whatever the `_context` hook returned for this call (3.6); `None` when no hook is configured. |
 | `request` | A small framework-neutral request (`method`, `headers`, `query`, `body`, `form`, `files`) plus `native`, the untouched host object. **Always populated**: HTTP fills everything; WebSocket fills headers and cookies from connect time; every transport that reaches the server has a real carrier (the postMessage transport arrives as the bridge's HTTP request). Only `native`'s type varies per adapter, and `event.transport` discriminates. |
 | `event` | Call metadata: `name`, `instance_id`, `transport`, and the raw args payload. |
@@ -1130,7 +1130,7 @@ Return-value rules, strict by design (ambiguity is refused, not guessed):
 
 | Return | Meaning |
 |---|---|
-| `None` | Acknowledged, no actions. If the handler mutated the state, the response still refreshes the client's token (the `state` action, 4.3). In debug mode the runtime logs a hint when state changed but nothing visible was returned. |
+| `None` | Acknowledged, no actions. If the handler mutated the state, the response still carries a `state` action (4.3) with the refreshed token and the public State values, so `$state` and State bindings show the change. In debug mode the runtime logs a hint when state changed but nothing visible was returned, because server-rendered content stays as it was. |
 | an action instance | That action. |
 | a `list` / `tuple` | Ordered actions; each element coerced by these same rules. Empty means acknowledged. |
 | a `CitryElement` / `CitryRender` | `Render` targeting the calling instance. The element can be any component; you are building a fresh tree, not resuming the old one. The Vue browser runtime currently rejects a root whose component type differs from the target's, because the parent's compiled template still calls the original type (see the paragraph that begins "Changing the target's component type" in [vue.md](vue.md)); restoring it is tracked in [#164](https://github.com/citry-dev/citry/issues/164). |
@@ -1598,8 +1598,8 @@ is opaque, minted and verified by the same binding.
   response echoes the request's value. The browser implementation calls the
   same counter an epoch internally; `sendSequence` is the wire name.
   A response's instance-mutating actions (the self-targeted render,
-  the `state` token refresh) apply only when its epoch is **strictly
-  greater** than the anchor's highest-applied; otherwise they are
+  the `state` refresh of the token and public values) apply only when
+  its epoch is **strictly greater** than the anchor's highest-applied; otherwise they are
   dropped, while its `data` still resolves the caller's own promise
   and non-instance actions apply normally. Over HTTP's at-most-once
   delivery, dropping at equal-or-lower behaves exactly like dropping
@@ -1688,7 +1688,7 @@ Streams and htmx out-of-band swaps are the same shape):
 |---|---|---|
 | `render` | `target`, `swap`, `html` | Insert or update HTML. `html` is a complete citry fragment. A `vue-prepared/1` render instead carries the prepared Vue payload, whose occurrences hold the Events descriptors and State tokens, and must use `swap: "morph"`. |
 | `data` | `value` | Resolve an imperative caller's promise with this JSON value. A declarative `@c-*` binding has no caller-owned promise and does not expose the value. At most one per result: a handler whose return would encode two `data` actions is an encode-time error naming the fix (two bare dicts in one list is semantically contradictory, which promise value wins?), unlike the trailing-after-redirect case, whose actions are individually valid and merely unreliable, so it warns. It carries no `wait` field; receiving one is a protocol validation error. |
-| `state` | `targetRenderId`, `stateToken` | Replace the stored state token for a rendered component occurrence whose handler mutated state without re-rendering; the server places it before the handler's own actions. (A `render` action needs no companion; the fresh fragment's manifest carries the new token.) Client rule, either carrier: the runtime applies a result's token refresh to its registry before applying the actions array, so user code running mid-application (a dispatch listener that immediately sends) already carries the fresh token. |
+| `state` | `targetRenderId`, `stateToken`, `publicState` | Replace the stored state token and the public State values for a rendered component occurrence whose handler mutated state without re-rendering; the server places it before the handler's own actions. `publicState` holds every public field after the handler ran (never a field outside `_public`), and the browser writes it into `$state` under the reconcile rule of 5.5: a field with an unsent browser write keeps the browser's value. (A `render` action needs no companion; the fresh fragment's manifest carries the new token and values.) Client rule, either carrier: the runtime applies a result's State refresh to its registry before applying the actions array, so user code running mid-application (a dispatch listener that immediately sends) already carries the fresh token and sees the fresh values. |
 | `event` | `eventName`, `detail`, `target` | Dispatch one bubbling DOM CustomEvent under the **exact given name** on the target instance's first live root, or on `document`. A multi-root or mirrored instance uses one canonical root deliberately: dispatching the same logical action on every root would duplicate document/global delivery and `onEvent` callbacks. Raw names are the field's converged interop choice (Livewire and htmx both fire developer-chosen names verbatim); `citry:*` is reserved for the runtime's own events, and the documented best practice is prefixing with the component name (`MyCard:submit`, the BEM idea applied to events). A handler-returned `event` action with no explicit target is self-addressed by the server at encode time to the caller's `callerRenderId`; only calls without a rendered caller produce a document-targeted dispatch. |
 | `redirect` | `url` | Navigate the page. |
 | `url` | `url`, `mode` | History push or replace without navigation. `PushUrl` and `ReplaceUrl` are its two producers; the client accepts only exact `push` or `replace` modes, preserves `history.state`, and skips invalid or browser-rejected updates without interrupting later actions. |
@@ -1739,8 +1739,9 @@ when it is instance-mutating, re-runs the epoch comparison (4.2) at
 the moment it fires, never at response arrival: it applies to the DOM
 as it is then, which may have changed while the action waited, and an
 action fresh at arrival but stale by fire time drops instead of
-applying old state (the concrete case: a delayed token refresh firing
-after a newer response already landed).
+applying old state (the concrete case: a delayed State refresh firing
+after a newer response already landed, which would otherwise put an older
+token and older public values back).
 `data` is the exception to non-blocking scheduling: it settles the caller's
 promise in sequence and carries no `wait` field. Python rejects
 `Data(..., wait=False)` at construction, and the client rejects any Data wire
@@ -1838,7 +1839,10 @@ read-only.
 
 `componentInstances` carries each occurrence's `renderId`, class reference,
 opaque `stateToken`, and `publicState`. `publicState` seeds one-way bindings
-and `$state` reads; non-public fields appear nowhere in it. A stateless record
+and `$state` reads; non-public fields appear nowhere in it. After a handler
+changes State without re-rendering the occurrence, the `state` action (4.3)
+carries the same two values, so the manifest and that action are the two
+places public State reaches the browser. A stateless record
 uses `stateToken: null` and an empty `publicState` object.
 
 The runtime rejects an out-of-model `$state` write before changing reactive
@@ -3137,8 +3141,8 @@ travel only when `save` is called, so the server sees the final count
 without a round trip per click. (The section 2 counter stays the
 canonical server-round-trip form; this is the local-first variant.)
 
-**Reconcile rule.** When a response arrives, the runtime updates
-`$state` in place: **server wins per field, except fields with a
+**Reconcile rule.** When a response arrives, whether it carries a new
+manifest or a `state` action, the runtime updates `$state` in place: **server wins per field, except fields with a
 pending, not-yet-sent local write, which keep the local value** (they
 are still queued and will reach the server on the next call). Combined
 with `@alpinejs/morph` preserving the living Alpine scope across morphs,
@@ -3988,7 +3992,7 @@ transports would both need belongs in the dispatcher, never duplicated):
 | Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then guards most-specific-wins (engine default, component `_guard`, `@event(guard=...)`). | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result. |
 | Handler invocation | By-name injection of `data` / `state` / `context` / `request` / `event`; the same values populate the ambient attributes on the per-call events instance. | Async dispatch awaits `async def` handlers; sync handlers offload to a worker thread via the routing helper `call_maybe_sync` (plan WP2). |
 | Action encoding | Return-value coercion, result resolvers, faithful ordering, and the render-to-fragment serialize. | The actions module (plan WP11); a `Render` re-enters the normal fragment serialize, so its HTML carries a fresh manifest. |
-| State re-sign | Changed State means a fresh token in the response: riding the render action's manifest when there is one, else as an explicit `state` action placed before the handler's actions (4.3). | Mint via plan WP8; the request's `sendSequence` echoes per result. |
+| State re-sign | Changed State means a fresh token and fresh public values in the response: riding the render action's manifest when there is one, else as an explicit `state` action placed before the handler's actions (4.3). | Mint via plan WP8; the request's `sendSequence` echoes per result. |
 | Error mapping | `EventError` and uncaught exceptions map to the fixed code-to-status table (3.7); tracebacks only in debug mode. | Message content is contract: tests assert the text, not just the exception type. |
 
 The "custom transport" story is honest and small: call the dispatcher
@@ -4219,9 +4223,9 @@ the class id against the route, rebuild `cls.State(**s)`, apply `stateUpdates`
 to `_model` fields (7.2), validate args, run `_context`, run guards, run the
 handler. After the handler, a mutated State is re-signed and returned
 (inside the fragment manifest when a render action exists, as a `state`
-action otherwise), so the client's stored token always reflects the
-latest state and the browser is never left holding stale client-side
-state.
+action otherwise, each carrying the public State values beside the
+token), so the client's stored token and its `$state` values always
+reflect the latest state.
 
 An optional server-side state store (the token becomes a random key into
 `Citry.cache`) ships in v1 as the opt-in `_storage = "server"`

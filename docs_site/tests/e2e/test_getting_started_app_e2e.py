@@ -108,14 +108,6 @@ def test_step10_state_alternates_the_loaded_batch(page: Any, getting_started_url
     assert errors == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason=(
-        "A `state` action carries only the signed token, not the public State values, so `$state` "
-        "keeps its first value until the component renders again."
-    ),
-)
 def test_step10_counter_shows_the_state_python_advanced(page: Any, getting_started_urls: dict[str, str]) -> None:
     errors = _open(page, getting_started_urls["10"])
     counter = page.locator("p output").first

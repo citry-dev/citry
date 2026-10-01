@@ -2,8 +2,8 @@
 
 Citry Events lets browser code call a named component handler on the Python server.
 The browser sends JSON describing what events to call, and the server answers with a
-small list of actions such as render this fragment, update this State token,
-dispatch this DOM event, or return this data value.
+small list of actions such as render this fragment, update this component's
+State, dispatch this DOM event, or return this data value.
 
 This document defines protocol major 1. The JSON Schemas are the exact
 structural rules, [`validate.py`](validate.py) checks the worked examples, and
@@ -301,6 +301,7 @@ interface StateAction extends ActionTiming {
   action: "state";
   targetRenderId: string;
   stateToken: string;
+  publicState: JsonObject;
 }
 
 interface DispatchEventAction extends ActionTiming {
@@ -482,7 +483,7 @@ Actions are a closed v1 vocabulary:
 |---|---|---|---|
 | `render` | `target`, `swap`, and `html` or `prepared` | `renderer`, `delay`, `wait` | Update one component occurrence, or one marked region inside the caller, with newly rendered content, as `swap` says. |
 | `data` | `value` | `delay` | Resolve the caller with any JSON value, including `null`. A result has at most one data action. |
-| `state` | `targetRenderId`, `stateToken` | `delay`, `wait` | Replace one rendered component occurrence's stored State token. |
+| `state` | `targetRenderId`, `stateToken`, `publicState` | `delay`, `wait` | Replace one rendered component occurrence's State token and the public State values the browser shows. |
 | `event` | `eventName` | `detail`, `target`, `delay`, `wait` | Dispatch a bubbling DOM `CustomEvent`. Names beginning `citry:` are reserved. |
 | `redirect` | `url` | `delay`, `wait` | Navigate the page. |
 | `url` | `url`, `mode` | `delay`, `wait` | Push or replace browser history without navigation. `mode` is `push` or `replace`. |
@@ -505,10 +506,58 @@ may use any v1 swap. Citry's browser client applies only `vue-prepared/1`
 renders; `html-fragment/1` serves other clients and form posts without
 JavaScript, which read the HTML directly.
 
-When a handler changes State but does not render, the server places a `state`
-action before the handler's own actions. Code triggered while later actions
-run therefore sees the fresh token. A rendered fragment carries its fresh
-token in its Events records instead.
+### State refresh
+
+A handler can change State without rendering the calling component again, for
+example when it only returns data or renders a `<c-mark>` region. The browser
+still shows the old values in `$state` and in State bindings, and it still
+holds a token for State that the server has replaced. So the server places a
+`state` action before the handler's own actions. A counter handler that only
+runs `state.count += 1` answers:
+
+```json
+{
+  "action": "state",
+  "targetRenderId": "c9zk1q00",
+  "stateToken": "cev1.eyJ...k2Qa",
+  "publicState": {"count": 1, "name": "Counter"}
+}
+```
+
+`publicState` holds every public State field of the target after the handler
+ran, under the same rules as `publicState` in the manifest's component
+instance record. A field outside the component's public State never appears.
+A render of the calling component carries its fresh token and values in its
+Events records instead, so the server sends no `state` action for it.
+
+The browser applies the action in three steps:
+
+1. It stores `stateToken`, which the component's next call sends back.
+2. It sets each field of the target's browser State object to the value in
+   `publicState`. A field the browser changed but has not sent yet keeps the
+   browser's value, and that value travels with the next call.
+3. It removes a field that is missing from `publicState`, unless that field
+   has an unsent browser value.
+
+Citry's browser client applies a `state` action that has no `delay` and no
+`wait: false` before the other actions in the result, so code triggered while
+later actions run sees the fresh token and values.
+
+These inputs fail or degrade as follows:
+
+- A missing `publicState`, or one that is not a JSON object, fails protocol
+  validation. The receiver rejects the whole result before it applies any
+  action.
+- Field names inside `publicState` are application data, so the protocol does
+  not reject an extra or missing field. The browser adds the extra field and
+  removes the missing one, as the steps above say. A server sends exactly the
+  component's public fields.
+- The protocol does not check a field's value against the State declaration.
+  The browser shows the value it receives, so a server sends values of the
+  declared types. The server still validates every browser write against the
+  declaration when the next call carries it.
+- Citry's browser client skips a `state` action whose `targetRenderId` names
+  no component that its Vue app currently shows.
 
 ### Targets
 
@@ -589,6 +638,8 @@ When a delayed action runs, Citry's browser client first checks that the
 calling component is still mounted and that no newer result for it has been
 applied; otherwise it skips a non-blocking action and fires
 `citry:events:stale`, or rejects the caller's promise for a blocking one.
+This check is what keeps a delayed `state` action from replacing newer State
+values and a newer token with older ones.
 Actions after a redirect race the navigation, so a server should warn when it encodes
 such a list even though the authored order remains unchanged.
 
@@ -693,11 +744,12 @@ caller's advertised set are invalid.
 it back verbatim. The server binding that minted it owns its internal format
 and verifies it.
 
-The plain public State values are separate. They appear only in
-`publicState` inside the component's Events record, where browser code reads
-them to set up the component's reactive State. Server-only values never appear
-there. A refreshed token arrives in the Events records of a new render or
-through a `state` action.
+The plain public State values are separate. They appear in `publicState` in
+two places: the component's Events record, where browser code reads them to
+set up the component's reactive State, and a `state` action, which replaces
+them after a handler changes State. Server-only values never appear in either
+place. A refreshed token arrives the same two ways: in the Events records of a
+new render, or in a `state` action beside the refreshed values.
 
 ## How the browser learns what it can call
 

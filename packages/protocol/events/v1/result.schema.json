@@ -245,7 +245,7 @@
     "stateAction": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["action", "targetRenderId", "stateToken"],
+      "required": ["action", "targetRenderId", "stateToken", "publicState"],
       "properties": {
         "action": {"const": "state"},
         "targetRenderId": {
@@ -256,6 +256,10 @@
         "stateToken": {
           "type": "string",
           "minLength": 1
+        },
+        "publicState": {
+          "type": "object",
+          "description": "Open application data: every public State field of the target after the handler ran, which replaces the browser State object."
         },
         "delay": {"$ref": "#/$defs/delay"},
         "wait": {"$ref": "#/$defs/wait"}

@@ -323,6 +323,7 @@ class TestHappyPaths:
         assert state_action["targetRenderId"] == "c9zk1q00"
         verified = verify_state_token(state_action["stateToken"], cls=counter, secrets=[SIGNING_KEY])
         assert verified.state_kwargs == {"count": 0, "name": "Tally"}
+        assert state_action["publicState"] == {"count": 0, "name": "Tally"}
         # The handler did not address the dispatch, so the server
         # self-addressed it to the calling instance, with the timing fields.
         assert event_action == {
@@ -405,6 +406,63 @@ class TestStateResign:
         assert kinds == ["state", "data"]
         verified = verify_state_token(item["actions"][0]["stateToken"], cls=Bumper, secrets=[SIGNING_KEY])
         assert verified.state_kwargs["count"] == 11
+        # The browser shows these values in `$state`; the token alone would leave it stale.
+        assert item["actions"][0]["publicState"] == {"count": 11, "name": "Counter"}
+
+    def test_state_action_carries_only_public_fields_in_sorted_order(self):
+        c = _citry()
+
+        class Vault(Component):
+            citry = c
+            template = "<div>v</div>"
+
+            class State:
+                zeta: int = 0
+                internal_note: str = "hidden"
+                alpha: str = "a"
+                _public = ("zeta", "alpha")
+
+            class Events:
+                def touch(self, state):
+                    state.zeta += 1
+                    state.internal_note = "still hidden"
+                    state.alpha = "b"
+
+        call = {
+            "componentClassId": Vault.class_id,
+            "handlerName": "touch",
+            "callerRenderId": "v1",
+            "stateToken": _token(Vault),
+        }
+        [state_action] = _dispatch(c, call)["results"][0]["actions"]
+        # A field outside `_public` stays in the signed token and never reaches the browser.
+        assert state_action["publicState"] == {"alpha": "b", "zeta": 1}
+        assert list(state_action["publicState"]) == ["alpha", "zeta"]
+
+    def test_state_without_public_fields_sends_an_empty_object(self):
+        c = _citry()
+
+        class Hidden(Component):
+            citry = c
+            template = "<div>h</div>"
+
+            class State:
+                count: int = 0
+                _public = ()
+
+            class Events:
+                def bump(self, state):
+                    state.count += 1
+
+        call = {
+            "componentClassId": Hidden.class_id,
+            "handlerName": "bump",
+            "callerRenderId": "h1",
+            "stateToken": _token(Hidden),
+        }
+        [state_action] = _dispatch(c, call)["results"][0]["actions"]
+        assert state_action["action"] == "state"
+        assert state_action["publicState"] == {}
 
     def test_render_targeting_elsewhere_still_refreshes_the_token(self):
         # A render that does not re-render the calling instance carries no
@@ -438,6 +496,7 @@ class TestStateResign:
         actions = result["results"][0]["actions"]
         kinds = [action["action"] for action in actions]
         assert kinds == ["state", "render"]
+        assert actions[0]["publicState"] == {"count": 1, "name": "Counter"}
         # The wire form names the caller, since a marker name is unique only inside it.
         assert actions[1]["target"] == "mark:i9:badge"
 
@@ -537,6 +596,8 @@ class TestUpdates:
         # token even though the handler itself mutated nothing.
         assert kinds == ["state", "data"]
         assert item["actions"][1]["value"] == {"title": "Drafts"}
+        # `secret_note` is outside `_public`, so it stays in the signed token only.
+        assert item["actions"][0]["publicState"] == {"title": "Drafts"}
 
     def test_non_writable_update_is_a_per_field_422(self):
         c = _citry()
@@ -1238,8 +1299,10 @@ class TestPipelineOrder:
             [{"action": "render", "target": "", "swap": "replace", "html": "<p>x</p>"}],
             [{"action": "render", "target": "render:MixedCase", "swap": "replace", "html": "<p>x</p>"}],
             [{"action": "data"}],
-            [{"action": "state", "targetRenderId": "", "stateToken": "token"}],
-            [{"action": "state", "targetRenderId": "MixedCase", "stateToken": "token"}],
+            [{"action": "state", "targetRenderId": "", "stateToken": "token", "publicState": {}}],
+            [{"action": "state", "targetRenderId": "MixedCase", "stateToken": "token", "publicState": {}}],
+            [{"action": "state", "targetRenderId": "target", "stateToken": "token"}],
+            [{"action": "state", "targetRenderId": "target", "stateToken": "token", "publicState": []}],
             [{"action": "event", "eventName": "citry:reserved"}],
             [{"action": "redirect", "url": ""}],
             [{"action": "url", "url": "/next", "mode": "reload"}],

@@ -143,7 +143,7 @@ def test_render_ids_are_case_safe_in_calls_actions_and_manifests():
         "results": [
             {
                 "ok": True,
-                "actions": [{"action": "state", "targetRenderId": "MixedCase", "stateToken": "t"}],
+                "actions": [{"action": "state", "targetRenderId": "MixedCase", "stateToken": "t", "publicState": {}}],
             }
         ],
     }

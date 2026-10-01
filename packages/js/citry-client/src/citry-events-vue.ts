@@ -62,7 +62,11 @@ export interface VueEventsHost {
   abortRender(prepared: PreparedVueRender | undefined, source: VueEventSource): void;
   /** Publishes credentials after Vue flush/generation checks and before callbacks. */
   commitRender(prepared: PreparedVueRender, source: VueEventSource): Promise<void>;
-  commitState(serverRenderId: string, stateToken: string, source: VueEventSource): void;
+  /**
+   * Stores a State refresh: the new token and the public values that `$state` shows. The host keeps
+   * any field the browser changed but has not sent yet, so a refresh never discards a local write.
+   */
+  commitState(serverRenderId: string, stateToken: string, publicState: JsonObject, source: VueEventSource): void;
   dispatchEvent(name: string, detail: JsonValue | undefined, source: VueEventSource): void;
   dispatchEventGlobal?(name: string, detail: JsonValue | undefined): void;
   redirect(url: string): void;
@@ -518,7 +522,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       }
     } else if (action.action === "state") {
       stillCurrent(source, state, epoch);
-      options.host.commitState(action.targetRenderId, action.stateToken, source);
+      options.host.commitState(action.targetRenderId, action.stateToken, action.publicState, source);
     } else if (action.action === "event") {
       stillCurrent(source, state, epoch);
       const rootTarget = `render:${current(source).serverRenderId}`;
@@ -559,7 +563,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         action.wait !== false
       ) {
         stillCurrent(source, state, epoch);
-        options.host.commitState(action.targetRenderId, action.stateToken, source);
+        options.host.commitState(action.targetRenderId, action.stateToken, action.publicState, source);
         hoisted.add(index);
       }
     });
