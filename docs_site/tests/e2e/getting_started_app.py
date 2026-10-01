@@ -80,8 +80,6 @@ def _live_app() -> FastAPI:
         return HTMLResponse(str(welcome_card(name="ada lovelace", accent="#6f42c1")))
 
     for name, value in LIVE_EXAMPLES.items():
-        # The file builds its element once; build a fresh one for every
-        # request from the same class and inputs, as a playground reload does.
         app.get(f"/{name}")(_page_route(run(name)[value]))
 
     # Without a lifespan, set up the instance before the first request here.

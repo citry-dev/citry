@@ -401,16 +401,6 @@ def getting_started_urls() -> Iterator[dict[str, str]]:
     secret = secrets.token_urlsafe(32)
     servers: dict[str, tuple[subprocess.Popen[str], str]] = {}
 
-    def stop_all() -> None:
-        for process, _url in servers.values():
-            process.terminate()
-        for process, _url in servers.values():
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
-
     # Hold every probe socket until all ports are chosen, so no two servers get the same free port.
     probes = [socket.socket() for _step in GETTING_STARTED_STEPS]
     for probe in probes:
@@ -419,54 +409,57 @@ def getting_started_urls() -> Iterator[dict[str, str]]:
     for probe in probes:
         probe.close()
 
-    # Start every server before waiting for any, so their startups overlap.
-    for step, port in zip(GETTING_STARTED_STEPS, ports, strict=True):
-        env = os.environ.copy()
-        env["CITRY_SECRET"] = secret
-        env["CITRY_GETTING_STARTED_STEP"] = step
-        process = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "uvicorn",
-                "docs_site.tests.e2e.getting_started_app:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(port),
-                # Nothing reads the output until a failure, so keep per-request
-                # lines from filling the pipe and stalling a long session.
-                "--no-access-log",
-            ],
-            cwd=repo_dir,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        servers[step] = (process, f"http://127.0.0.1:{port}")
-
-    # The live server has no `/` page, so probe a page every server has.
-    probe_paths = {"live": "/welcome"}
-    deadline = time.monotonic() + 30
-    for step, (process, url) in servers.items():
-        while True:
-            if process.poll() is not None:
-                output = process.stdout.read() if process.stdout else ""
-                stop_all()
-                pytest.fail(f"Getting started step {step} exited during startup:\n{output}")
-            try:
-                with urllib.request.urlopen(url + probe_paths.get(step, "/"), timeout=0.5) as response:  # noqa: S310
-                    if response.status == 200:
-                        break
-            except OSError:
-                pass
-            if time.monotonic() > deadline:
-                stop_all()
-                pytest.fail(f"Getting started step {step} did not start within 30 seconds")
-            time.sleep(0.05)
-
+    # One `finally` stops every server that started, whether startup, a test, or a later Popen fails.
     try:
+        # Start every server before waiting for any, so their startups overlap.
+        for step, port in zip(GETTING_STARTED_STEPS, ports, strict=True):
+            env = os.environ.copy()
+            env["CITRY_SECRET"] = secret
+            env["CITRY_GETTING_STARTED_STEP"] = step
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "docs_site.tests.e2e.getting_started_app:app",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    str(port),
+                    # Nothing reads the output until a failure, so keep per-request
+                    # lines from filling the pipe and stalling a long session.
+                    "--no-access-log",
+                ],
+                cwd=repo_dir,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            servers[step] = (process, f"http://127.0.0.1:{port}")
+
+        # The live server has no `/` page, so probe its `/welcome` page instead.
+        probe_paths = {"live": "/welcome"}
+        deadline = time.monotonic() + 30
+        for step, (process, url) in servers.items():
+            while True:
+                if process.poll() is not None:
+                    pytest.fail(f"Getting started step {step} exited during startup:\n{_stop_process(process)}")
+                try:
+                    with urllib.request.urlopen(url + probe_paths.get(step, "/"), timeout=0.5) as response:  # noqa: S310
+                        if response.status == 200:
+                            break
+                except OSError:
+                    pass
+                if time.monotonic() > deadline:
+                    pytest.fail(
+                        f"Getting started step {step} did not start within 30 seconds:\n{_stop_process(process)}"
+                    )
+                time.sleep(0.05)
+
         yield {step: url for step, (_process, url) in servers.items()}
     finally:
-        stop_all()
+        for process, _url in servers.values():
+            _stop_process(process)
+            if process.stdout:
+                process.stdout.close()

@@ -1,9 +1,12 @@
 """
-Browser coverage for every getting-started tutorial step.
+Browser coverage for the getting-started steps that have runnable files.
 
 Each step's files run in a real server (see getting_started_app.py), and each
 test does what the step asks the reader to do, so a step that stops working
-fails here. The earlier, browser-only steps run from the `live` server.
+fails here. The browser-only steps 3, 5, 6, and 7 run from the `live` server;
+steps 8 to 13 each run in their own. Steps 1 and 4 show code only inside the
+page, and the step 2 card example has its own tests beside it in
+docs_site/examples/card.
 """
 
 from __future__ import annotations
@@ -107,6 +110,7 @@ def test_step10_state_alternates_the_loaded_batch(page: Any, getting_started_url
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason=(
         "A `state` action carries only the signed token, not the public State values, so `$state` "
         "keeps its first value until the component renders again."
@@ -146,7 +150,7 @@ def test_step11_form_shows_the_field_error_then_the_accepted_address(
     assert errors == []
 
 
-@pytest.mark.xfail(strict=True, reason="type-changing Render, #164")
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason="type-changing Render, #164")
 def test_step12_python_replaces_the_form_with_a_confirmation(page: Any, getting_started_urls: dict[str, str]) -> None:
     errors = _open(page, getting_started_urls["12"])
     _submit_email(page, "ada@elsewhere.test")
@@ -154,7 +158,15 @@ def test_step12_python_replaces_the_form_with_a_confirmation(page: Any, getting_
 
     _submit_email(page, "ada@example.com")
     confirmation = page.locator(".confirmation")
-    expect(confirmation).to_contain_text("ada@example.com", timeout=3_000)
+    try:
+        expect(confirmation).to_contain_text("ada@example.com", timeout=3_000)
+    except AssertionError:
+        # Only the browser's type-change rejection is the expected failure;
+        # anything else fails the test outright instead of hiding behind it.
+        if not any("cannot replace component" in error for error in errors):
+            msg = f"step 12 failed without the type-change rejection; page errors: {errors}"
+            raise RuntimeError(msg) from None
+        raise
     expect(page.locator("form")).to_have_count(0)
     # The confirmation's CSS and Vue data arrived with the response.
     assert confirmation.evaluate("element => getComputedStyle(element).borderTopStyle") == "solid"
