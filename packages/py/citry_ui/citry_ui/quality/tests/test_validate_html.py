@@ -285,3 +285,90 @@ def test_nu_result_rejects_an_unexpected_html_error():
             },
             scenario="tabs.overview",
         )
+
+
+def test_nu_result_uses_the_reported_tag_span_for_inline_anchor_styles():
+    # Nu reports an inline `style` problem at the whole start tag, and a page
+    # written on one line repeats the declaration in many tags.
+    first = '<button style="anchor-name: --_cui-popover-anchor-ref-a;">'
+    second = '<button style="anchor-name: not-a-name;">'
+    source = first + "A</button>" + second + "B</button>"
+    second_start = source.index(second) + 1
+
+    def finding(first_column: int, last_column: int) -> dict[str, object]:
+        return {
+            "type": "error",
+            "lastLine": 1,
+            "firstColumn": first_column,
+            "lastColumn": last_column,
+            "message": "CSS: “anchor-name”: Property “anchor-name” doesn't exist.",
+        }
+
+    report = qualify_nu_result(
+        {"version": "test", "messages": [finding(1, len(first))]},
+        scenario="popover.states",
+        source=source,
+    )
+    assert report.css_anchor_features == ("anchor-name",)
+
+    with pytest.raises(HtmlQualificationError, match="anchor-name"):
+        qualify_nu_result(
+            {"version": "test", "messages": [finding(second_start, second_start + len(second) - 1)]},
+            scenario="popover.states",
+            source=source,
+        )
+
+
+def test_nu_result_uses_the_reported_value_span_in_a_minified_style_element():
+    # Shape observed from Nu 26.8.30: for a `<style>` declaration the span
+    # covers part of the value, such as `span-inline-end`.
+    source = (
+        ":where(.a){position-area:block-end span-inline-end;margin:0}"
+        ":where(.b){position-area:block-start span-inline-start;margin:0}"
+    )
+    value_start = source.index("span-inline-start") + 1
+    report = qualify_nu_result(
+        {
+            "version": "test",
+            "messages": [
+                {
+                    "type": "error",
+                    "lastLine": 1,
+                    "firstColumn": value_start,
+                    "lastColumn": value_start + len("span-inline-start") - 1,
+                    "message": "CSS: “position-area”: Property “position-area” doesn't exist.",
+                }
+            ],
+        },
+        scenario="popover.states",
+        source=source,
+    )
+
+    assert report.css_anchor_features == ("position-area",)
+
+
+def test_nu_result_checks_an_inline_anchor_style_on_a_multi_line_tag():
+    # The start tag begins deep into line 1, past where the declaration sits
+    # on line 2, so only reading the span from column 1 of the reported line
+    # finds the declaration.
+    indent = " " * 60
+    source = f'{indent}<button\n  style="anchor-name: --_cui-a;">A</button><b style="anchor-name: bad;">B</b>'
+    report = qualify_nu_result(
+        {
+            "version": "test",
+            "messages": [
+                {
+                    "type": "error",
+                    "firstLine": 1,
+                    "lastLine": 2,
+                    "firstColumn": len(indent) + 1,
+                    "lastColumn": source.splitlines()[1].index(">") + 1,
+                    "message": "CSS: “anchor-name”: Property “anchor-name” doesn't exist.",
+                }
+            ],
+        },
+        scenario="popover.states",
+        source=source,
+    )
+
+    assert report.css_anchor_features == ("anchor-name",)

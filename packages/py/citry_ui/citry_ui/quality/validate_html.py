@@ -60,6 +60,31 @@ class HtmlReport:
     information: int
 
 
+def _matches_in_reported_span(finding: dict[str, Any], matches: list[re.Match[str]]) -> list[re.Match[str]]:
+    """
+    Keep the matches on a line that overlap the columns Nu reported.
+
+    For CSS in a `<style>` element Nu reports a short span inside the
+    declaration (sometimes only `lastColumn`). For an inline `style`
+    attribute it reports the whole start tag that carries it, from
+    `firstColumn` to `lastColumn`. A page written on one line can
+    hold the same declaration in many tags, so the span is what tells them
+    apart. Nu columns are 1-based and inclusive.
+    """
+    last_column = finding.get("lastColumn")
+    if not isinstance(last_column, int):
+        return []
+    first_column = finding.get("firstColumn")
+    first_line = finding.get("firstLine", finding.get("lastLine"))
+    if not isinstance(first_column, int):
+        first_column = last_column
+    elif first_line != finding.get("lastLine"):
+        # A start tag that spans several lines starts on an earlier line,
+        # so on the reported line the span begins at the first column.
+        first_column = 1
+    return [match for match in matches if match.start() + 1 <= last_column and match.end() >= first_column]
+
+
 def _source_declaration_value(finding: dict[str, Any], source: str | None, property_name: str) -> str | None:
     """Return one exact declaration value from Nu's reported source line."""
     line_number = finding.get("lastLine")
@@ -73,10 +98,7 @@ def _source_declaration_value(finding: dict[str, Any], source: str | None, prope
     matches = list(declaration.finditer(line))
     if len(matches) == 1:
         return matches[0].group("value").strip()
-    last_column = finding.get("lastColumn")
-    if not isinstance(last_column, int):
-        return None
-    matches = [match for match in matches if match.start() + 1 <= last_column <= match.end()]
+    matches = _matches_in_reported_span(finding, matches)
     return matches[0].group("value").strip() if len(matches) == 1 else None
 
 
@@ -113,10 +135,7 @@ def _source_at_rule_condition(finding: dict[str, Any], source: str | None, rule_
     matches = list(rule.finditer(line))
     if len(matches) == 1:
         return matches[0].group("condition").strip()
-    last_column = finding.get("lastColumn")
-    if not isinstance(last_column, int):
-        return None
-    matches = [match for match in matches if match.start() + 1 <= last_column <= match.end()]
+    matches = _matches_in_reported_span(finding, matches)
     return matches[0].group("condition").strip() if len(matches) == 1 else None
 
 
