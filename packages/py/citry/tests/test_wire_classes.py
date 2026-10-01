@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar, Generic, Literal, NamedTuple, TypeVa
 
 import pydantic
 import pytest
-from typing_extensions import NotRequired, TypeAliasType, TypedDict
+from typing_extensions import NotRequired, ReadOnly, TypeAliasType, TypedDict
 
 from citry import Citry, Component
 from citry._app_selection import CheckAppSelection
@@ -48,6 +48,10 @@ class Owner(NamedTuple):
 class Meta(TypedDict):
     rank: int
     tag: NotRequired[str]
+    # `ReadOnly` around `NotRequired` stays in resolved annotations before
+    # 3.13, so this key checks that both its value type and its optional
+    # marker are read the same on every Python.
+    label: ReadOnly[NotRequired[str]]
 
 
 class Audit(pydantic.BaseModel):
@@ -130,7 +134,7 @@ def _type(expression: str) -> str:
         # The wire sends a NamedTuple as an array and a TypedDict as an object.
         ("kwargs.task.owner", "Array<string>"),
         ("kwargs.owner", "Array<string>"),
-        ("kwargs.meta", "{rank: number, tag?: string}"),
+        ("kwargs.meta", "{rank: number, tag?: string, label?: string}"),
         # A TypedDict value is a plain dict, so it has no attributes to read.
         ("kwargs.task.meta.rank", "unknown"),
         # An Enum member carries its value and name.
@@ -155,6 +159,19 @@ def _type(expression: str) -> str:
 )
 def test_attribute_chains_follow_class_annotations(expression, expected):
     assert _type(expression) == expected
+
+
+@pytest.mark.parametrize(
+    "annotation",
+    [
+        "ReadOnly[str]",
+        "typing_extensions.NotRequired[str]",
+        "typing_extensions.Annotated[str, 1]",
+        "ReadOnly[NotRequired[str]]",
+    ],
+)
+def test_key_markers_written_in_source_wrap_the_value_type(annotation):
+    assert json_wire_type_from_annotation(annotation).javascript == "string"
 
 
 def test_a_whole_dataclass_instance_is_unsupported_on_the_wire():

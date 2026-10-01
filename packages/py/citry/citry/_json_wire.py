@@ -269,13 +269,12 @@ def _annotation_type(node: ast.expr) -> JsonWireType:
     if isinstance(node, ast.Subscript):
         name = _qualified_name(node.value)
         arguments = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+        # `Annotated` metadata and TypedDict key markers wrap the value type,
+        # however the annotation spells their module.
         if name in {
-            "Annotated",
-            "typing.Annotated",
-            "Required",
-            "NotRequired",
-            "typing.Required",
-            "typing.NotRequired",
+            f"{prefix}{wrapper}"
+            for prefix in ("", "typing.", "typing_extensions.")
+            for wrapper in ("Annotated", "Required", "NotRequired", "ReadOnly")
         }:
             return _annotation_type(arguments[0]) if arguments else UNKNOWN_JSON_TYPE
         if name in {"Optional", "typing.Optional"}:

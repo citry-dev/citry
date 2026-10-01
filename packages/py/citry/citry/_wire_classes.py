@@ -30,6 +30,17 @@ _LEAF_MODULES = frozenset({"builtins", "typing", "types", "collections.abc", "da
 # An annotation that could not be resolved; its attribute stays untyped.
 _UNRESOLVED = object()
 
+# Wrappers around an attribute's value type: TypedDict key markers and
+# `Annotated` metadata. Each takes the value type as its first argument.
+_VALUE_WRAPPERS = frozenset(
+    {
+        typing_extensions.Annotated,
+        typing_extensions.NotRequired,
+        typing_extensions.ReadOnly,
+        typing_extensions.Required,
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class KwargsWireClasses:
@@ -229,13 +240,32 @@ def _typed_dict_key_required(cls: type, name: str) -> bool:
         marked = typing_extensions.get_type_hints(cls, include_extras=True).get(name)
     except Exception:  # noqa: BLE001 - fall back to the class's own record
         return name in getattr(cls, "__required_keys__", ())
-    # typing_extensions spells the markers the same way on every supported Python.
-    origin = typing_extensions.get_origin(marked)
-    if origin is typing_extensions.NotRequired:
-        return False
-    if origin is typing_extensions.Required:
-        return True
+    # A key can carry several markers, such as `ReadOnly[NotRequired[str]]`,
+    # so look through each of them for the one that decides presence.
+    for _ in range(_MAX_ANNOTATION_DEPTH):
+        # typing_extensions spells the markers the same way on every supported Python.
+        origin = typing_extensions.get_origin(marked)
+        if origin is typing_extensions.NotRequired:
+            return False
+        if origin is typing_extensions.Required:
+            return True
+        if origin not in _VALUE_WRAPPERS:
+            break
+        marked = typing_extensions.get_args(marked)[0]
     return bool(getattr(cls, "__total__", True))
+
+
+def _value_hint(hint: object) -> object:
+    """Return the value type inside key markers and `Annotated`, such as `str` for `NotRequired[str]`."""
+    # A marker says whether a TypedDict key is present or writable, not what
+    # its value is, and Python 3.10 (3.12 and earlier for `ReadOnly`) leaves
+    # the typing_extensions markers in place, so remove them here to read the
+    # same type on every version.
+    for _ in range(_MAX_ANNOTATION_DEPTH):
+        if typing_extensions.get_origin(hint) not in _VALUE_WRAPPERS:
+            return hint
+        hint = typing_extensions.get_args(hint)[0]
+    return _UNRESOLVED
 
 
 def _is_json_scalar(value: object) -> bool:
@@ -262,10 +292,17 @@ def _attribute_hints(cls: type) -> dict[str, object] | None:
         # Resolves string annotations in the class's own module, including
         # every base class, and works for dataclasses, NamedTuple, TypedDict,
         # Pydantic models, and plain annotated classes alike.
-        hints: dict[str, object] = typing.get_type_hints(cls)
+        # typing_extensions' version also removes the TypedDict key markers
+        # that the standard one keeps (all of them on 3.10, `ReadOnly` through 3.12).
+        hints: dict[str, object] = typing_extensions.get_type_hints(cls)
     except Exception:  # noqa: BLE001 - one unresolvable annotation falls back to resolving each alone
         hints = _resolved_one_by_one(cls)
-    public = {name: hint for name, hint in hints.items() if not name.startswith("_") and not _is_class_var(hint)}
+    values = {name: _value_hint(hint) for name, hint in hints.items() if not name.startswith("_")}
+    # The fallback keeps `Annotated`, so a ClassVar can sit inside one; check
+    # both forms so a class attribute is never read as an instance attribute.
+    public = {
+        name: value for name, value in values.items() if not _is_class_var(hints[name]) and not _is_class_var(value)
+    }
     return public or None
 
 
