@@ -678,9 +678,10 @@ def _map_diagnostic_range(
     if start is None or end is None or end < start:
         return None
     for copied in diagnostic_document.copies:
-        # Each copy sits inside generated `(\n...\n)`. A finding over exactly
-        # those parentheses, such as a value that fails its annotated
-        # assignment, covers the authored expression and nothing else.
+        # A copied value sits inside generated `(\n...\n)`; a loop copy uses
+        # brackets and never matches. A finding over exactly those
+        # parentheses, such as a value that fails its annotated assignment,
+        # covers the authored expression and nothing else.
         if (
             start == copied.combined_start - 2
             and end == copied.combined_end + 2

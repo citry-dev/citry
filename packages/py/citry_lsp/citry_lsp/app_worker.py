@@ -182,8 +182,7 @@ def _source_analysis(
                     if selected_class
                     else {"handlers": None, "state": None, "state_resolution": {"resolution_chain": None}}
                 ),
-                # Only a js_data() method reads through Kwargs classes.
-                "kwargs_classes": _kwargs_classes(selected_class if js_data_chain else None),
+                "kwargs_classes": _kwargs_classes(selected_class, with_classes=bool(js_data_chain)),
                 "template_lint": {
                     "variables": _component_lint_sources(
                         selected_class,
@@ -197,11 +196,18 @@ def _source_analysis(
     return {"version": _SOURCE_ANALYSIS_VERSION, "components": components}
 
 
-def _kwargs_classes(component_class: type | None) -> dict[str, object]:
-    """Copy the classes `js_data()` can read through from the component's Kwargs fields."""
+def _kwargs_classes(component_class: type | None, *, with_classes: bool) -> dict[str, object]:
+    """
+    Copy the resolved Kwargs field annotations, and the classes `js_data()` can read through.
+
+    A parent template's `c-*` values are checked against the resolved
+    annotations of every component. Only a component with `js_data()` reads
+    attributes through the classes, so the others copy no class table.
+    """
     if component_class is None:
         return KwargsWireClasses().to_dict()
-    return kwargs_wire_classes(component_class).to_dict()
+    resolved = kwargs_wire_classes(component_class)
+    return (resolved if with_classes else KwargsWireClasses(members=resolved.members)).to_dict()
 
 
 def _schema_resolution_chain(

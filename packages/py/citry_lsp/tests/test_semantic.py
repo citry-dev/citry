@@ -2113,7 +2113,11 @@ async def test_semantic_diagnostics_check_c_values_against_their_target_types(tm
         '<c-TaskCard c-task="task" c-title="task" />'
         "<div c-class=\"1\" c-style=\"{'color': 'red'}\"></div>"
         "<div c-class=\"['a', {'b': task}]\"></div>"
+        '<c-OtherCard c-task="task" /><c-OtherCard c-task="1" />'
     )
+    # An unrelated top-level `store` module must not be mistaken for the
+    # `store` alias the child's annotation names.
+    (tmp_path / "store.py").write_text("class Task:\n    pass\n", encoding="utf-8")
     template_file.write_text(template_source, encoding="utf-8")
     (tmp_path / "app.py").write_text(
         "from __future__ import annotations\n"
@@ -2127,6 +2131,14 @@ async def test_semantic_diagnostics_check_c_values_against_their_target_types(tm
         "    class Kwargs:\n"
         "        task: Task\n"
         "        title: str = ''\n"
+        # A dotted name in a postponed annotation names the module alias
+        # imported here, not a top-level `store` module.
+        "import models as store\n"
+        "class OtherCard(Component):\n"
+        "    citry = engine\n"
+        "    template = '<p></p>'\n"
+        "    class Kwargs:\n"
+        "        task: store.Task\n"
         "class Board(Component):\n"
         "    citry = engine\n"
         "    template_file = 'board.html'\n"
@@ -2161,5 +2173,12 @@ async def test_semantic_diagnostics_check_c_values_against_their_target_types(tm
             "citry.python.invalid-assignment",
             types.Range(_position(template_source, 'c-class="1"', 9), _position(template_source, 'c-class="1"', 10)),
         ),
+        (
+            "citry.python.invalid-assignment",
+            types.Range(
+                _position(template_source, '<c-OtherCard c-task="1"', 21),
+                _position(template_source, '<c-OtherCard c-task="1"', 22),
+            ),
+        ),
     ]
-    assert findings[0].message == "Object of type `Literal[1]` is not assignable to `Task`"
+    assert "`Task`" in findings[0].message

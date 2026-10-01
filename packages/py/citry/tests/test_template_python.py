@@ -733,3 +733,29 @@ def test_value_check_is_skipped_when_the_annotation_cannot_be_resolved(value_typ
     source = _checked_shadow(value_type)
 
     assert "__citry_checked_value" not in source
+
+
+def test_value_check_is_added_at_each_inferred_template_data_return() -> None:
+    module_source = textwrap.dedent(
+        """
+        class Board:
+            def template_data(self, kwargs, slots):
+                if kwargs:
+                    return {"task": 1}
+                return {"task": 2}
+        """
+    )
+    source = '<c-TaskCard c-task="task" />'
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("task", "always"),),
+        _query(source, 'c-task="ta'),
+        source_module="app.board",
+        value_type=TemplatePythonValueType("app.store.Task"),
+    )
+
+    assert shadow is not None
+    assert shadow.source.count("__citry_checked_value: __citry_checked_type_0.Task = (\ntask\n)") == 2
+    ast.parse(shadow.source)

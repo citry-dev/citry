@@ -4860,11 +4860,12 @@ def _build_expression_shadows(
     return tuple(shadows)
 
 
-# What `c-class` and `c-style` accept on an HTML element: a string, a mapping,
-# or a list of those, nested, or None to leave the attribute out. Mapping
-# values are read for truth or as CSS values, so any value type is accepted.
+# What `c-class` and `c-style` accept on an HTML element: a string, a
+# mapping, a list or tuple of those (nested), or None to leave the attribute
+# out. List items are not checked here, so a list holding None fails only
+# when rendering. Mapping values are read for truth or as CSS values.
 _CLASS_OR_STYLE_VALUE_TYPE = TemplatePythonValueType(
-    "str | collections.abc.Mapping[str, object] | collections.abc.Sequence[object] | None"
+    "str | collections.abc.Mapping[typing.Any, object] | list[object] | tuple[object, ...] | None"
 )
 
 
@@ -4882,16 +4883,19 @@ def _query_value_type(query: TemplatePythonQuery, project: ProjectState) -> Temp
     tag, name = query.attribute_target
     lowered = tag.lower()
     if not lowered.startswith("c-") or lowered == "c-element":
-        return _CLASS_OR_STYLE_VALUE_TYPE if name in {"class", "style"} else None
+        # HTML attribute names ignore case, as the renderer does.
+        return _CLASS_OR_STYLE_VALUE_TYPE if name.lower() in {"class", "style"} else None
     catalog = project.catalog
     component = catalog.get_tag(tag) if catalog is not None else None
-    # A built-in tag such as `<c-trans>` reads its attributes itself.
-    if component is None or component.builtin or component.schemas.kwargs.kind != "fields":
+    # A built-in tag such as `<c-trans>` reads its attributes itself, and
+    # `c-bind` spreads a mapping of inputs rather than setting one.
+    if component is None or component.builtin or name == "bind" or project.source_analysis is None:
         return None
-    field = next((item for item in component.schemas.kwargs.fields if item.name == name), None)
-    if field is None or field.type_display is None or field.type_fidelity != "normalized":
-        return None
-    return TemplatePythonValueType(field.type_display, field.source_module)
+    # The app worker resolved each annotation in its own module, so a class is
+    # its import path even when the child postpones its annotations. A field
+    # it could not resolve is not checked.
+    annotation = project.source_analysis.kwargs_wire_classes(component).members.get(name)
+    return TemplatePythonValueType(annotation) if annotation is not None else None
 
 
 def _query_contains_named_expression(query: TemplatePythonQuery) -> bool:

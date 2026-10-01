@@ -236,8 +236,9 @@ def build_inferred_template_shadow(
     """
     Copy one proven ``template_data`` method and evaluate the query at each return.
 
-    With ``value_type``, the query's value is also assigned to a name with
-    that annotation, so ty checks it, such as a component input's type.
+    With ``value_type``, such as a component input's type, the generated
+    code also assigns the query's value to a variable annotated with that
+    type, so ty checks the value against it.
     """
     tree = _parsed_module(module_source)
     if tree is None:
@@ -352,8 +353,9 @@ def build_schema_template_shadow(
     """
     Evaluate a query against fields on one exact authored schema class.
 
-    With ``value_type``, the query's value is also assigned to a name with
-    that annotation, so ty checks it, such as a component input's type.
+    With ``value_type``, such as a component input's type, the generated
+    code also assigns the query's value to a variable annotated with that
+    type, so ty checks the value against it.
     """
     if not _qualified_identifier(schema_qualname):
         return None
@@ -782,7 +784,9 @@ def _value_check(
         value_type.annotation,
         value_type.module or "",
     )
-    # A user name that starts the same way could be shadowed, so skip the check.
+    # A user name containing this prefix could clash with the generated
+    # names, so skip the check. A user name that hides a name the annotation
+    # uses, such as a local `list`, only makes the check miss a mistake.
     if any(_VALUE_CHECK_PREFIX in value for value in occupied):
         return None
     return _value_check_source(value_type, alias_prefix=f"{_VALUE_CHECK_PREFIX}_type", source_module=source_module)
@@ -803,7 +807,8 @@ def _value_check_source(
 
     A dotted name such as ``app.store.Task`` imports its module under a private
     alias, and a bare name such as ``Task`` is read from ``value_type.module``,
-    where the annotation was written. Builtins stay as they are. A name from
+    where the annotation was written. Names such as ``Literal`` and
+    ``Sequence`` come from ``typing``, and builtins stay as they are. A name from
     ``source_module`` stays bare: the generated code is a copy of that module,
     and importing the real module would name a different class.
     """

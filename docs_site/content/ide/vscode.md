@@ -682,21 +682,6 @@ clauses, and nested templates. Template conditions narrow optional and union
 types, while shared templates keep only suggestions that apply to every
 proven component consumer and return path.
 
-A `c-*` value on a component tag is a keyword argument, so it is also
-checked against the child's `Kwargs` annotation. A wrong value shows a
-`citry.python.invalid-assignment` error on the value:
-
-```citry-html
-{# TaskCard declares `task: Task` #}
-<c-TaskCard c-task="1" />
-```
-
-The error reads "Object of type `Literal[1]` is not assignable to `Task`".
-A missing or unknown input is reported by the template's own input checks
-instead. On an HTML element, `c-class` and `c-style` are checked the same
-way: they take a string, a dict, a list of those, or `None`, so
-`c-class="1"` is an error.
-
 Citry also gives every name used as a call target the standard Python function
 or method syntax scope. That keeps calls such as `tr(...)`, `fmt.currency(...)`,
 and application helpers visually distinct even before the language server has
@@ -715,6 +700,25 @@ app. Invalid source, ambiguous ownership, unsupported mapping escapes, and
 roots not shared by every physical-template consumer are withheld rather than
 guessed. The semantic analyzer is likewise limited to those mapped template
 expressions and does not replace the Python extension for ordinary `.py` code.
+
+### Check `c-*` values against their target's type
+
+A `c-*` value on a component tag is a keyword argument, so it is also
+checked against the child's `Kwargs` annotation. A wrong value shows a
+`citry.python.invalid-assignment` error on the value:
+
+```citry-html
+{# TaskCard declares `task: Task` #}
+<c-TaskCard c-task="1" />
+```
+
+ty's error names both types, here `Literal[1]` and `Task`. A missing or
+unknown input is reported by the template's own input checks instead. The
+check follows the annotation, not runtime validation, so a Pydantic
+`Kwargs` field that turns `"1"` into `1` still reports a string passed
+to an `int`. On an HTML element, `c-class` and `c-style` are checked the
+same way: they take a string, a dict, a list or tuple of those, or
+`None`, so `c-class="1"` is an error.
 
 ## Keep template strings from becoming f-strings
 
