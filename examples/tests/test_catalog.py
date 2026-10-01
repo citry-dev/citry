@@ -36,6 +36,48 @@ def project_python(project) -> str:
     )
 
 
+def _strip_jsonc(source: str) -> str:
+    """
+    Turn VS Code's JSON-with-comments text into plain JSON.
+
+    These tests also run from a clean copy without Citry installed, so they
+    cannot borrow Citry's own JSONC reader. Comments and the commas before a
+    closing bracket are dropped outside strings; everything else is kept.
+    """
+    result: list[str] = []
+    index = 0
+    in_string = False
+    while index < len(source):
+        char = source[index]
+        if in_string:
+            result.append(char)
+            if char == "\\":
+                # Keep the escaped character so an escaped quote does not end the string.
+                result.append(source[index + 1 : index + 2])
+                index += 2
+                continue
+            in_string = char != '"'
+        elif char == '"':
+            in_string = True
+            result.append(char)
+        elif source.startswith("//", index):
+            # Skip to the end of the line; the newline itself is kept.
+            index = source.find("\n", index)
+            if index == -1:
+                break
+            continue
+        elif source.startswith("/*", index):
+            end = source.find("*/", index + 2)
+            index = len(source) if end == -1 else end + 2
+            continue
+        elif char == "," and source[index + 1 :].lstrip().startswith(("}", "]")):
+            pass
+        else:
+            result.append(char)
+        index += 1
+    return "".join(result)
+
+
 def test_catalog_projects_have_complete_independent_inventory() -> None:
     projects = load_catalog()
 
@@ -73,7 +115,10 @@ def test_catalog_projects_include_locked_citry_editor_setup() -> None:
     assert not (EXAMPLES_ROOT / "starters" / ".vscode").exists()
 
     for project in load_catalog():
-        settings = json.loads(project.source.joinpath(".vscode/settings.json").read_text(encoding="utf-8"))
+        # VS Code reads settings.json as JSON with comments and trailing commas,
+        # so the test accepts what the editor accepts.
+        source = project.source.joinpath(".vscode/settings.json").read_text(encoding="utf-8")
+        settings = json.loads(_strip_jsonc(source))
         expected_settings = {
             "citry.python": "${workspaceFolder}/.venv/bin/python",
             "citry.app": EXPECTED_CITRY_APPS[project.id],
@@ -83,12 +128,14 @@ def test_catalog_projects_include_locked_citry_editor_setup() -> None:
         assert settings == expected_settings
 
         manifest = tomllib.loads(project.source.joinpath("pyproject.toml").read_text(encoding="utf-8"))
-        assert "citry-lsp>=0.1,<0.2" in manifest["dependency-groups"]["dev"]
+        # citry-lsp 0.2 is the line that supports Citry 0.6.
+        assert "citry-lsp>=0.2,<0.3" in manifest["dependency-groups"]["dev"]
 
+        # The locked version must satisfy that range, but a lock can only name a
+        # published release, so the release gate checks it after publication.
         lock = tomllib.loads(project.source.joinpath("uv.lock").read_text(encoding="utf-8"))
         locked_servers = [package for package in lock["package"] if package.get("name") == "citry-lsp"]
         assert len(locked_servers) == 1
-        assert locked_servers[0]["version"].startswith("0.1.")
 
 
 def test_profiles_lock_the_shared_starter_curriculum() -> None:

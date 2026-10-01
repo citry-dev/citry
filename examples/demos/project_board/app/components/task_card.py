@@ -1,6 +1,11 @@
+from typing import TYPE_CHECKING
+
 from app.citry_app import citry_app
 from app.store import LANES, Task
 from citry import Component
+
+if TYPE_CHECKING:
+    from app.components.provides import ThemeData
 
 
 class TaskCard(Component):
@@ -14,13 +19,13 @@ class TaskCard(Component):
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
         task = kwargs.task
-        theme = self.inject("board_theme")
+        theme: ThemeData = self.inject("board_theme")
         return {
             "title": task.title,
             "owner": task.owner,
             "completed": task.completed,
             "toggle_label": "Reopen task" if task.completed else "Mark complete",
-            "badge_component": ("high-priority-badge" if task.priority == "high" else "standard-priority-badge"),
+            "high_priority": task.priority == "high",
             "accent_style": f"--board-accent: {theme.accent};",
             "lane_options": LANES,
             "current_lane": task.lane,
@@ -39,18 +44,14 @@ class TaskCard(Component):
         c-id="task_dom_id"
         class="task-card"
         c-class="{'task-card--done': completed}"
+        :data-dragging="dragging"
         c-style="accent_style"
         draggable="true"
-        @dragstart="
-          $el.classList.add('task-card--dragging');
-          $event.dataTransfer.effectAllowed = 'move';
-          $event.dataTransfer.setData('text/plain', taskId.toString());
-          $event.dataTransfer.setData('application/x-citry-lane', laneKey);
-        "
-        @dragend="$el.classList.remove('task-card--dragging')"
+        @dragstart="startDrag($event)"
+        @dragend="dragging = false"
       >
         <div class="task-card__meta">
-          <c-component c-is="badge_component" />
+          <c-PriorityBadge c-high="high_priority" />
           <span>{{ owner }}</span>
         </div>
         <h3>{{ title }}</h3>
@@ -59,18 +60,11 @@ class TaskCard(Component):
             <span>Move to column</span>
             <select
               c-aria-label="'Move ' + title + ' to column'"
-              @change="
-                if ($event.target.value !== laneKey) {
-                  $dispatch('board:move', {
-                    taskId,
-                    lane: $event.target.value,
-                    focusControl: true,
-                  });
-                }
-              "
+              @change="requestMove($event)"
             >
               <c-for each="lane_key, lane_title in lane_options">
                 <option
+                  #c-key="lane_key"
                   c-value="lane_key"
                   c-selected="lane_key == current_lane"
                 >
@@ -82,17 +76,60 @@ class TaskCard(Component):
           <button
             class="task-card__toggle"
             type="button"
-            @click="
-              $dispatch('board:set-completed', {
-                taskId,
-                completed: !taskCompleted,
-              })
-            "
+            @click="toggleCompleted()"
           >
             {{ toggle_label }}
           </button>
         </div>
       </article>
+    """
+
+    js = """
+      $component({
+        // Each validator's parameter type is the payload type: `$emit` and
+        // a parent's `@move` / `@set-completed` listeners are checked
+        // against it. Returning true accepts every payload at runtime.
+        emits: {
+          move(/** @type {{ taskId: number, lane: string }} */ payload) {
+            return true;
+          },
+          'set-completed'(
+            /** @type {{ taskId: number, completed: boolean }} */ payload,
+          ) {
+            return true;
+          },
+        },
+        data() {
+          return { dragging: false };
+        },
+        methods: {
+          startDrag(event) {
+            this.dragging = true;
+            event.dataTransfer.effectAllowed = 'move';
+            // The column reads both values on drop: the id says which task
+            // to move, and the source column lets it ignore a drop back
+            // onto the column the card came from.
+            event.dataTransfer.setData('text/plain', this.taskId.toString());
+            event.dataTransfer.setData('application/x-citry-lane', this.laneKey);
+          },
+          // The Move to column menu lets keyboard and touchscreen users
+          // make the same move that dragging makes.
+          requestMove(event) {
+            const lane = event.target.value;
+            // Choosing the card's current column is not a move, so the card
+            // does not tell the board.
+            if (lane !== this.laneKey) {
+              this.$emit('move', { taskId: this.taskId, lane });
+            }
+          },
+          toggleCompleted() {
+            this.$emit('set-completed', {
+              taskId: this.taskId,
+              completed: !this.taskCompleted,
+            });
+          },
+        },
+      });
     """
 
     css = """
@@ -111,7 +148,7 @@ class TaskCard(Component):
           transform 120ms ease;
       }
 
-      .task-card--dragging {
+      .task-card[data-dragging="true"] {
         opacity: 0.55;
         cursor: grabbing;
         transform: scale(0.98);

@@ -10,7 +10,7 @@ python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
 build = ["uv", "run", "python", "-m", "app.render"]
 profile = "starter-standalone-v1"
-docs = ["/getting-started/installation/", "/syntax/alpine/"]
+docs = ["/getting-started/installation/", "/syntax/vue/"]
 
 [[projects]]
 id = "starter-fastapi"

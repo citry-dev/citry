@@ -1,5 +1,6 @@
 from app.citry_app import citry_app
 from app.components.event_inputs import AddTaskIn, MoveTaskIn, SetTaskCompletedIn
+from app.components.provides import ThemeData
 from app.store import LANES, LaneView, add_task, board_snapshot, list_tasks, move_task, set_task_completed
 from citry import Component
 from citry.ext.events import EventError, actions
@@ -22,11 +23,7 @@ class ProjectBoard(Component):
 
     class Events:
         def refresh(self, state: "ProjectBoard.State"):
-            return ProjectBoard(
-                lanes=board_snapshot(state.query, state.show_completed),
-                query=state.query,
-                show_completed=state.show_completed,
-            )
+            return board_for(state)
 
         def add(self, data: AddTaskIn, state: "ProjectBoard.State"):
             title = data.title.strip()
@@ -40,13 +37,7 @@ class ProjectBoard(Component):
             except ValueError as error:
                 raise EventError("Choose a valid column and priority.") from error
             return [
-                actions.Render(
-                    ProjectBoard(
-                        lanes=board_snapshot(state.query, state.show_completed),
-                        query=state.query,
-                        show_completed=state.show_completed,
-                    )
-                ),
+                actions.Render(board_for(state)),
                 actions.Dispatch(
                     "board:notice",
                     {"message": f"Added “{task.title}”."},
@@ -64,13 +55,7 @@ class ProjectBoard(Component):
                 raise EventError("That task no longer exists. Refresh the board.") from error
             verb = "Completed" if task.completed else "Reopened"
             return [
-                actions.Render(
-                    ProjectBoard(
-                        lanes=board_snapshot(state.query, state.show_completed),
-                        query=state.query,
-                        show_completed=state.show_completed,
-                    )
-                ),
+                actions.Render(board_for(state)),
                 actions.Dispatch(
                     "board:notice",
                     {
@@ -89,13 +74,7 @@ class ProjectBoard(Component):
                 raise EventError("That task no longer exists. Refresh the board.") from error
             lane_title = dict(LANES)[task.lane]
             return [
-                actions.Render(
-                    ProjectBoard(
-                        lanes=board_snapshot(state.query, state.show_completed),
-                        query=state.query,
-                        show_completed=state.show_completed,
-                    )
-                ),
+                actions.Render(board_for(state)),
                 actions.Dispatch(
                     "board:notice",
                     {
@@ -107,10 +86,12 @@ class ProjectBoard(Component):
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
         # The board provides one accent so each column and its cards use the same color.
-        self.provide("board_theme", accent="var(--color-accent)")
+        theme = ThemeData(accent="var(--color-accent)")
+        self.provide("board_theme", theme)
         visible_count = sum(len(lane.tasks) for lane in kwargs.lanes)
         return {
             "lanes": kwargs.lanes,
+            "lane_options": LANES,
             "query": kwargs.query,
             "show_completed": kwargs.show_completed,
             "visible_count": visible_count,
@@ -125,33 +106,7 @@ class ProjectBoard(Component):
     template = """
       <section
         class="board-region"
-        @c-board:set-completed="
-          set_completed({
-            task_id: $event.detail.taskId,
-            completed: $event.detail.completed,
-          })
-        "
-        @c-board:move="
-          move({
-            task_id: $event.detail.taskId,
-            lane: $event.detail.lane,
-            focus_control: Boolean($event.detail.focusControl),
-          })
-        "
-        @board:notice.window="
-          notice = $event.detail.message;
-          if ($event.detail.focusBoard) {
-            $nextTick(() => $refs.boardStatus.focus());
-          }
-          if ($event.detail.focusTaskId) {
-            $nextTick(() => {
-              document
-                .getElementById('task-' + $event.detail.focusTaskId)
-                ?.querySelector('.task-card__move select')
-                ?.focus();
-            });
-          }
-        "
+        @board:notice="showNotice($event.detail)"
       >
         <div class="board-toolbar">
           <label class="filter-control filter-control--search">
@@ -171,15 +126,15 @@ class ProjectBoard(Component):
             class="quiet-button"
             type="button"
             @click="helpOpen = !helpOpen"
-            :aria-expanded="helpOpen.toString()"
+            :aria-expanded="helpOpen"
             aria-controls="board-help"
-            x-text="helpOpen ? 'Hide explanation' : 'How this page works'"
+            v-text="helpOpen ? 'Hide explanation' : 'How this page works'"
           >
             How this page works
           </button>
         </div>
 
-        <aside id="board-help" class="board-help" x-cloak x-show="helpOpen">
+        <aside id="board-help" class="board-help" v-cloak v-show="helpOpen">
           You can open this explanation and dismiss notices without calling
           Python. When you search, add, move, or complete a task, Citry sends
           an Event to Python. Python updates the in-memory tasks and returns a
@@ -189,7 +144,7 @@ class ProjectBoard(Component):
 
         <div
           class="board-stats"
-          x-ref="boardStatus"
+          ref="boardStatus"
           tabindex="-1"
           aria-live="polite"
         >
@@ -197,46 +152,45 @@ class ProjectBoard(Component):
             {{ visible_count }} {{ visible_task_label }} shown
           </strong>
           <span>{{ completed_count }} of {{ total_count }} complete</span>
-          <span x-show="$loading()">Updating board…</span>
+          <span v-show="$loading()">Updating board…</span>
         </div>
         <p
           class="event-error"
           role="alert"
-          x-show="
-            $error('refresh') ||
-            $error('set_completed') ||
-            $error('move')
-          "
-          x-text="
-            (
-              $error('refresh') ||
-              $error('set_completed') ||
-              $error('move')
-            )?.message || ''
-          "
+          v-show="boardError()"
+          v-text="boardError()?.message || ''"
         ></p>
 
         <div class="board-grid">
           <c-for each="lane in lanes">
             <c-Lane
+              #c-key="lane.key"
               c-lane_key="lane.key"
               c-title="lane.title"
               c-count="lane.count"
+              @c-drop-task="
+                move({task_id: $event.taskId, lane: $event.lane})
+              "
             >
-              <c-fill name="default">
-                <c-if cond="lane.tasks">
-                  <c-for each="task in lane.tasks">
-                    <c-TaskCard c-task="task" />
-                  </c-for>
-                </c-if>
-                <c-else>
-                  <p class="lane-empty">No tasks shown</p>
-                </c-else>
-              </c-fill>
-              <c-fill name="footer">
-                {{ lane.title }}: {{ lane.count }}
-                {{ lane.task_label }} shown
-              </c-fill>
+              <c-for each="task in lane.tasks">
+                <c-TaskCard
+                  #c-key="task.id"
+                  c-task="task"
+                  @c-move="
+                    move({
+                      task_id: $event.taskId,
+                      lane: $event.lane,
+                      focus_control: true,
+                    })
+                  "
+                  @c-set-completed="
+                    set_completed({
+                      task_id: $event.taskId,
+                      completed: $event.completed,
+                    })
+                  "
+                />
+              </c-for>
             </c-Lane>
           </c-for>
         </div>
@@ -259,23 +213,28 @@ class ProjectBoard(Component):
                 maxlength="80"
                 aria-describedby="task-title-error"
                 :aria-invalid="
-                  Boolean($error('add')?.fieldErrors?.title).toString()
+                  Boolean($error('add')?.fieldErrors?.title)
                 "
               />
               <span
                 id="task-title-error"
                 class="field-error"
                 role="alert"
-                x-show="$error('add')?.fieldErrors?.title"
-                x-text="$error('add')?.fieldErrors?.title || ''"
+                v-show="$error('add')?.fieldErrors?.title"
+                v-text="$error('add')?.fieldErrors?.title || ''"
               ></span>
             </label>
             <label class="filter-control">
               <span>Column</span>
               <select name="lane">
-                <option value="backlog">Backlog</option>
-                <option value="progress">In progress</option>
-                <option value="review">Review</option>
+                <c-for each="lane_key, lane_title in lane_options">
+                  <option
+                    #c-key="lane_key"
+                    c-value="lane_key"
+                  >
+                    {{ lane_title }}
+                  </option>
+                </c-for>
               </select>
             </label>
             <label class="filter-control">
@@ -289,7 +248,7 @@ class ProjectBoard(Component):
               class="primary-button"
               type="submit"
               :disabled="$loading('add')"
-              x-text="$loading('add') ? 'Adding…' : 'Add task'"
+              v-text="$loading('add') ? 'Adding…' : 'Add task'"
             >
               Add task
             </button>
@@ -297,16 +256,57 @@ class ProjectBoard(Component):
           <p
             class="event-error"
             role="alert"
-            x-show="$error('add') && !$error('add')?.fieldErrors?.title"
-            x-text="$error('add')?.message || ''"
+            v-show="$error('add') && !$error('add')?.fieldErrors?.title"
+            v-text="$error('add')?.message || ''"
           ></p>
         </section>
 
-        <div class="toast" role="status" x-cloak x-show="notice">
-          <span x-text="notice"></span>
-          <button type="button" @click="notice = ''" aria-label="Dismiss notification">&times;</button>
+        <div class="toast" role="status" v-cloak v-show="notice">
+          <span v-text="notice"></span>
+          <button
+            type="button"
+            aria-label="Dismiss notification"
+            @click="notice = ''"
+          >
+            &times;
+          </button>
         </div>
       </section>
+    """
+
+    js = """
+      $component({
+        methods: {
+          // The board shows one error line for the handlers the board itself
+          // calls. The add form shows its own error beside the form.
+          boardError() {
+            return (
+              this.$error('refresh') ||
+              this.$error('set_completed') ||
+              this.$error('move')
+            );
+          },
+          // Python dispatches board:notice from this component's root after
+          // it renders the new board, so the new cards already exist here.
+          showNotice(detail) {
+            this.notice = detail.message;
+            if (detail.focusBoard) {
+              // The completed card disappeared, so focus the board summary
+              // instead of letting focus fall back to the page.
+              this.$nextTick(() => this.$refs.boardStatus?.focus());
+            }
+            if (detail.focusTaskId) {
+              // A move from the card's menu puts focus back on that menu,
+              // which now sits in the destination column.
+              this.$nextTick(() => {
+                this.$el
+                  .querySelector('#task-' + detail.focusTaskId + ' select')
+                  ?.focus();
+              });
+            }
+          },
+        },
+      });
     """
 
     css = """
@@ -523,3 +523,12 @@ class ProjectBoard(Component):
         }
       }
     """
+
+
+def board_for(state: ProjectBoard.State):
+    """Render the board again with the search text and filter the browser sent."""
+    return ProjectBoard(
+        lanes=board_snapshot(state.query, state.show_completed),
+        query=state.query,
+        show_completed=state.show_completed,
+    )

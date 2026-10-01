@@ -21,7 +21,10 @@ class PageShell(Component):
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <meta name="description" content="Search a small project catalog with Citry" />
+          <meta
+            name="description"
+            content="Search a small project catalog with Citry"
+          />
           <title>{{ title }}</title>
           <c-css />
         </head>
@@ -76,14 +79,20 @@ class PageShell(Component):
       }
 
       @media (min-width: 48rem) {
-        :root { --page-gutter: 2rem; }
+        :root {
+          --page-gutter: 2rem;
+        }
       }
 
       @media (min-width: 80rem) {
-        :root { --page-gutter: 3rem; }
+        :root {
+          --page-gutter: 3rem;
+        }
       }
 
-      *, *::before, *::after { box-sizing: border-box; }
+      *, *::before, *::after {
+        box-sizing: border-box;
+      }
 
       html {
         min-width: 20rem;
@@ -91,7 +100,9 @@ class PageShell(Component):
         scroll-padding-top: 5rem;
       }
 
-      [x-cloak] { display: none !important; }
+      [v-cloak] {
+        display: none !important;
+      }
 
       body {
         min-height: 100vh;
@@ -104,7 +115,9 @@ class PageShell(Component):
         -moz-osx-font-smoothing: grayscale;
       }
 
-      button, input { font: inherit; }
+      button, input {
+        font: inherit;
+      }
 
       button:focus-visible, input:focus-visible, a:focus-visible {
         outline: 2px solid var(--color-focus);
@@ -186,44 +199,18 @@ class PageShell(Component):
         padding: 6.5rem 0 4rem;
       }
 
-      .hero {
-        display: grid;
-        max-width: 45rem;
-        gap: 0.75rem;
-        margin-bottom: 2rem;
-      }
-
-      .eyebrow {
-        margin: 0 0 0.15rem;
-        color: var(--color-muted);
-      }
-
-      h1 {
-        margin: 0;
-        color: var(--color-text);
-        font-size: 2.25rem;
-        font-weight: 700;
-        letter-spacing: -0.025em;
-        line-height: 1.3;
-      }
-
-      .hero__intro {
-        max-width: 43rem;
-        margin: 0;
-        color: var(--color-muted);
-        font-size: 1.05rem;
-      }
-
       @media (max-width: 35rem) {
-        .site-title { display: none; }
+        .site-title {
+          display: none;
+        }
 
         .mode-label {
           max-width: 10rem;
           text-align: right;
         }
 
-        .page-frame { padding-top: 6rem; }
-
-        h1 { font-size: 2rem; }
+        .page-frame {
+          padding-top: 6rem;
+        }
       }
     """

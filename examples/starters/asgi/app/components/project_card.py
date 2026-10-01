@@ -32,7 +32,10 @@ class ProjectCard(Component):
           <h3>{{ name }}</h3>
           <p>{{ summary }}</p>
         </div>
-        <footer><span class="language-dot" aria-hidden="true"></span>{{ language }}</footer>
+        <footer>
+          <span class="language-dot" aria-hidden="true"></span>
+          {{ language }}
+        </footer>
       </article>
     """
 
@@ -54,6 +57,7 @@ class ProjectCard(Component):
         justify-content: space-between;
         gap: 0.75rem;
       }
+
       .project-card__initial {
         display: grid;
         width: 2.4rem;

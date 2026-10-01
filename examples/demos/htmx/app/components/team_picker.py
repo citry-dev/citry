@@ -7,7 +7,6 @@ class TeamPicker(Component):
     citry = citry_app
 
     class Kwargs:
-        department: str
         teams: tuple[Team, ...]
 
     class Slots:

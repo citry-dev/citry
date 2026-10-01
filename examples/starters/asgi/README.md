@@ -2,7 +2,7 @@
 
 This project shows how Citry runs directly on ASGI without a web framework.
 The root application handles startup and the page route, then sends requests
-under `/citry` to Citry's ASGI application. The page still includes Alpine in
+under `/citry` to Citry's ASGI application. The page uses Vue in
 the browser and a Citry Event that calls Python.
 
 ## What this starter shows
@@ -11,7 +11,7 @@ the browser and a Citry Event that calls Python.
   component.
 - Typed inputs pass projects between components. Slots fill the page shell
   with its heading and project list.
-- Alpine opens the help panel without sending a request.
+- Vue opens the help panel without sending a request.
 - A debounced Citry Event sends the search query to Python and replaces the
   project list with the matches.
 - The root ASGI application owns lifespan and delegates `/citry` itself.
@@ -21,7 +21,7 @@ the browser and a Citry Event that calls Python.
 - Python 3.10 through 3.14
 - [uv](https://docs.astral.sh/uv/)
 
-The project accepts Citry 0.5.0 or newer. Its
+The project accepts Citry 0.6.0 or newer. Its
 lockfile pins the version exercised by the tests.
 
 ## Run the project

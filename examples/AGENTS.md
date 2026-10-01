@@ -9,7 +9,7 @@ These rules apply to every complete project under `examples/`.
 - Use public `citry` APIs and explicit component schemas.
 - Keep host routing, lifecycle, security, and server setup visible and
   idiomatic for that host.
-- Every web starter includes the shared Events and Alpine journey. The
+- Every web starter includes the shared Events and Vue journey. The
   standalone starter deliberately has no Events transport.
 - Keep data deterministic and make the default run independent of external
   services, CDNs, and network APIs.
