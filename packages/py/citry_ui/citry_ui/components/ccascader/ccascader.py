@@ -192,7 +192,16 @@ def _group_id(root_id: str, path: tuple[str, ...]) -> str:
     return f"{root_id}-group-{_token(path)}"
 
 
-def _entries(options: Sequence[_Option], *, selected: tuple[str, ...], root: bool) -> list[dict[str, object]]:
+class _OptionEntry(TypedDict):
+    """The CInternalCascaderOption kwargs that a column computes for each option."""
+
+    option: _Option
+    position: int
+    set_size: int
+    initial_focus: bool
+
+
+def _entries(options: Sequence[_Option], *, selected: tuple[str, ...], root: bool) -> list[_OptionEntry]:
     first_enabled = next((option for option in options if not option.disabled), None)
     return [
         {
