@@ -65,4 +65,8 @@ def test_render_writes_an_importable_module():
     exec(compile(render(_PAGE, retrieved="2030-01-02"), "generated", "exec"), namespace)  # noqa: S102
 
     assert namespace["HTML_ELEMENTS"] == frozenset({"a", "h1", "h2"})
-    assert namespace["CASE_SENSITIVE"] == frozenset({("ol", "type"), ("li", "type")})
+    assert namespace["CASE_SENSITIVE_KEYWORDS"] == {
+        ("ol", "type"): ("1", "a", "A", "i", "I"),
+        ("li", "type"): ("1", "a", "A", "i", "I"),
+    }
+    assert namespace["FRAME_NAME_ELEMENTS"] == ("iframe", "object")

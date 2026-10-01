@@ -218,9 +218,9 @@
     {
       "code": "citry.template.invalid-attribute-value",
       "constant": "TEMPLATE_INVALID_ATTRIBUTE_VALUE",
-      "title": "Invalid value for an enumerated HTML attribute",
+      "title": "HTML attribute value the browser does not accept",
       "summary": "A static HTML attribute that accepts only a fixed set of keywords, such as draggable or type, has a value outside that set, so the browser ignores it or falls back to a default.",
-      "when": "A plain HTML element has an attribute with a fixed set of keywords in the HTML Standard, such as draggable, dir, hidden, contenteditable, type on input, button, ol, or li, method on form, loading, or crossorigin, and its written value is not one of them. Keywords compare without regard to ASCII letter case, except type on ol and li, where \"a\" and \"A\" are different markers. An attribute that allows the empty string, such as hidden or crossorigin, may be written with no value. For target, formtarget, and the name of an iframe or object, only a name that starts with an underscore is checked, because any other name is a valid window name. Bound values (c-*, :attr), component tags, <c-element>, custom elements with a hyphen, and elements inside <svg> or <math> are not checked, and neither are attributes such as sandbox or rel that take a list of tokens.",
+      "when": "A plain HTML element has an attribute with a fixed set of keywords in the HTML Standard, such as draggable, dir, hidden, contenteditable, type on input, button, ol, li, or ul, method on form, loading, or crossorigin, and its written value is not one of them. Keywords compare without regard to ASCII letter case, except the list markers 1, a, A, i, and I of type on ol and li, where \"a\" and \"A\" are different markers. Character references are decoded first, as the browser does. An attribute that allows the empty string, such as hidden or crossorigin, may be written with no value. For target and formtarget, only a name that starts with an underscore is checked, because any other name is a valid window name; the name of an iframe or object may not start with an underscore at all. Bound values (c-*, :attr), component tags, <c-element>, custom elements with a hyphen, and elements inside <svg> or <math> are not checked, and neither are attributes such as sandbox or rel that take a list of tokens.",
       "defaultSeverity": "warning",
       "configurableSeverity": true,
       "surfaces": [
@@ -238,7 +238,8 @@
         "default": "'{value}' is not a valid value for '{attribute}' on <{element}>. Valid values: {allowed}.",
         "suggestion": "'{value}' is not a valid value for '{attribute}' on <{element}>. Did you mean '{suggestion}'? Valid values: {allowed}.",
         "empty": "'{attribute}' on <{element}> needs a value. Valid values: {allowed}.",
-        "target": "'{value}' is not a valid value for '{attribute}' on <{element}>. A name that starts with '_' must be one of: {allowed}."
+        "target": "'{value}' is not a valid value for '{attribute}' on <{element}>. A name that starts with '_' must be one of: {allowed}.",
+        "frame-name": "'{value}' is not a valid value for '{attribute}' on <{element}>. A frame name cannot start with '_'."
       },
       "examples": [
         {

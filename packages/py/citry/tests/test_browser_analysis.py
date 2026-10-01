@@ -1177,7 +1177,9 @@ def _attribute_values(
         '<img loading="lazy" decoding="async" fetchpriority="high" crossorigin referrerpolicy="no-referrer">',
         '<video preload crossorigin="use-credentials"></video><track kind="captions">',
         '<textarea wrap="hard"></textarea><table><tr><th scope="colgroup"></th></tr></table>',
-        '<ol type="I"><li type="disc">x</li></ol><bdo dir="rtl">x</bdo>',
+        '<ol type="I"><li type="DISC">x</li></ol><ul type="Square"></ul><bdo dir="rtl">x</bdo>',
+        # The browser decodes character references before it reads the keyword.
+        '<div draggable="&#116;rue" dir="&#x61;uto"></div>',
         # A window name is any name that does not start with "_".
         '<a target="preview">a</a><a target="_BLANK">b</a><form target="_self"></form><iframe name="frame"></iframe>',
         # Open or token-list attributes are left alone.
@@ -1218,18 +1220,20 @@ def test_attribute_value_lint_messages_without_a_close_match_and_for_a_missing_v
     assert _attribute_values("<div draggable></div>") == [("draggable", "warning", "draggable")]
 
 
-def test_attribute_value_lint_compares_ol_and_li_type_with_letter_case():
-    assert _attribute_values('<ol type="A"><li type="i">x</li></ol>') == []
-    assert _attribute_values('<ol type="b"><li type="X">x</li></ol>') == [
+def test_attribute_value_lint_compares_list_markers_with_letter_case():
+    assert _attribute_values('<ol type="A"><li type="i">x</li><li type="Circle">y</li></ol>') == []
+    # "a" and "A" are different markers, so "B" does not match "b" by case.
+    assert _attribute_values('<ol type="b"><li type="X">x</li></ol><ul type="1"></ul>') == [
         ("type", "warning", "b"),
         ("type", "warning", "X"),
+        ("type", "warning", "1"),
     ]
 
 
 def test_attribute_value_lint_uses_element_specific_keywords_before_global_ones():
     # `dir` on `<bdo>` has no "auto", and `type` depends on the element.
     assert _attribute_values('<bdo dir="auto">x</bdo><div dir="auto"></div>') == [("dir", "warning", "auto")]
-    assert _attribute_values('<button type="text">b</button><ul type="text"></ul>') == [("type", "warning", "text")]
+    assert _attribute_values('<button type="text">b</button><menu type="x"></menu>') == [("type", "warning", "text")]
 
 
 def test_attribute_value_lint_reports_underscore_window_names():
@@ -1239,6 +1243,21 @@ def test_attribute_value_lint_reports_underscore_window_names():
         "'_new' is not a valid value for 'target' on <a>. "
         "A name that starts with '_' must be one of: _blank, _self, _parent, _top."
     )
+
+
+def test_attribute_value_lint_reports_frame_names_that_start_with_an_underscore():
+    source = '<iframe name="preview"></iframe><iframe name="_blank"></iframe><object name="_x"></object>'
+    findings = lint_attribute_values(parse_template(source), ())
+    assert [(finding.element, finding.value) for finding in findings] == [("iframe", "_blank"), ("object", "_x")]
+    assert findings[0].message == (
+        "'_blank' is not a valid value for 'name' on <iframe>. A frame name cannot start with '_'."
+    )
+
+
+def test_attribute_value_lint_shows_the_written_value_of_a_character_reference():
+    (finding,) = lint_attribute_values(parse_template('<div draggable="&#116;ru"></div>'), ())
+    assert finding.value == "&#116;ru"
+    assert "Did you mean 'true'?" in finding.message
 
 
 def test_attribute_value_lint_skips_elements_it_cannot_type():

@@ -150,13 +150,17 @@ ENUMERATED_VALUES: Final[dict[str, dict[str, tuple[str, ...]]]] = {'accept-chars
                     'url',
                     'week'),
           'li': ('1', 'a', 'A', 'i', 'I', 'none', 'disc', 'circle', 'square'),
-          'ol': ('1', 'a', 'A', 'i', 'I')},
+          'ol': ('1', 'a', 'A', 'i', 'I'),
+          'ul': ('none', 'disc', 'circle', 'square')},
  'wrap': {'textarea': ('soft', 'hard')},
  'writingsuggestions': {'*': ('true', 'false', '')}}
 
-# (element, attribute) pairs whose keywords compare with letter case.
-CASE_SENSITIVE: Final[frozenset[tuple[str, str]]] = frozenset((('ol', 'type'), ('li', 'type')))
+# (element, attribute) -> the keywords that compare with letter case.
+CASE_SENSITIVE_KEYWORDS: Final[dict[tuple[str, str], tuple[str, ...]]] = {('li', 'type'): ('1', 'a', 'A', 'i', 'I'), ('ol', 'type'): ('1', 'a', 'A', 'i', 'I')}
 
 # Keywords for an attribute that otherwise takes any name not starting with "_".
 NAVIGABLE_TARGET_KEYWORDS: Final[tuple[str, ...]] = ('_blank', '_self', '_parent', '_top')
-NAVIGABLE_TARGET_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {'formtarget': ('button', 'input'), 'name': ('iframe', 'object'), 'target': ('a', 'area', 'base', 'form')}
+NAVIGABLE_TARGET_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {'formtarget': ('button', 'input'), 'target': ('a', 'area', 'base', 'form')}
+
+# Elements whose `name` may not start with "_" at all.
+FRAME_NAME_ELEMENTS: Final[tuple[str, ...]] = ('iframe', 'object')

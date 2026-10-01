@@ -68,9 +68,11 @@ SUPPLEMENTS: dict[str, dict[str, tuple[str, ...]]] = {
             "url",
             "week",
         ),
-        # `type` on `li` is obsolete (16.2), but browsers still read it to pick
-        # the marker; the rendering section (15.3.8) lists these values.
+        # `type` on `li` and `ul` is obsolete (16.2), but browsers still read
+        # it to pick the list marker; the rendering section (15.3.8) lists
+        # these values.
         "li": ("1", "a", "A", "i", "I", "none", "disc", "circle", "square"),
+        "ul": ("none", "disc", "circle", "square"),
     },
     # "Referrer policy": the referrer policy keywords of the Referrer Policy
     # standard, which `referrerpolicy` attributes accept, including the empty string.
@@ -90,9 +92,13 @@ SUPPLEMENTS: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 
-# `ol` and `li` list markers tell "a" from "A", so their keywords compare with
-# letter case (4.4.5). Every other enumerated attribute ignores ASCII case.
-CASE_SENSITIVE = (("ol", "type"), ("li", "type"))
+# The numbered and lettered list markers of `type` on `ol` and `li` tell "a"
+# from "A", so they compare with letter case (4.4.5, 15.3.8). Every other
+# keyword, including "disc" on `li`, ignores ASCII case.
+CASE_SENSITIVE_KEYWORDS = {
+    ("ol", "type"): ("1", "a", "A", "i", "I"),
+    ("li", "type"): ("1", "a", "A", "i", "I"),
+}
 
 # Attributes whose value is a "valid navigable target name or keyword": any
 # name that does not start with "_", or one of these keywords (7.3.1.1).
@@ -100,8 +106,10 @@ NAVIGABLE_TARGET_KEYWORDS = ("_blank", "_self", "_parent", "_top")
 NAVIGABLE_TARGET_ATTRIBUTES = {
     "target": ("a", "area", "base", "form"),
     "formtarget": ("button", "input"),
-    "name": ("iframe", "object"),
 }
+# The `name` of an `iframe` or `object` must be a "valid navigable target
+# name" (4.8.5, 4.8.7), so no value there may start with "_".
+FRAME_NAME_ELEMENTS = ("iframe", "object")
 
 
 class _TableReader(HTMLParser):
@@ -236,12 +244,15 @@ def render(page: str, *, retrieved: str) -> str:
         '# attribute -> element ("*" for every HTML element) -> allowed keywords.\n'
         '# "" means the empty string, or the attribute with no value, is allowed.\n'
         f"ENUMERATED_VALUES: Final[dict[str, dict[str, tuple[str, ...]]]] = {pformat(table, width=110)}\n\n"
-        "# (element, attribute) pairs whose keywords compare with letter case.\n"
-        f"CASE_SENSITIVE: Final[frozenset[tuple[str, str]]] = frozenset({pformat(CASE_SENSITIVE)})\n\n"
+        "# (element, attribute) -> the keywords that compare with letter case.\n"
+        "CASE_SENSITIVE_KEYWORDS: Final[dict[tuple[str, str], tuple[str, ...]]] = "
+        f"{pformat(CASE_SENSITIVE_KEYWORDS, width=110)}\n\n"
         '# Keywords for an attribute that otherwise takes any name not starting with "_".\n'
         f"NAVIGABLE_TARGET_KEYWORDS: Final[tuple[str, ...]] = {pformat(NAVIGABLE_TARGET_KEYWORDS)}\n"
         "NAVIGABLE_TARGET_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = "
-        f"{pformat(NAVIGABLE_TARGET_ATTRIBUTES, width=110)}\n"
+        f"{pformat(NAVIGABLE_TARGET_ATTRIBUTES, width=110)}\n\n"
+        '# Elements whose `name` may not start with "_" at all.\n'
+        f"FRAME_NAME_ELEMENTS: Final[tuple[str, ...]] = {pformat(FRAME_NAME_ELEMENTS)}\n"
     )
 
 

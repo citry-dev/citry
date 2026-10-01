@@ -12,6 +12,7 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher, get_close_matches
 from enum import Enum
+from html import unescape as _html_unescape
 from itertools import pairwise
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal
@@ -102,10 +103,13 @@ from citry._diagnostic_catalog import (
 )
 from citry._diagnostics import render_diagnostic
 from citry._html_attribute_values import (
-    CASE_SENSITIVE as _CASE_SENSITIVE_ATTRIBUTES,
+    CASE_SENSITIVE_KEYWORDS as _CASE_SENSITIVE_KEYWORDS,
 )
 from citry._html_attribute_values import (
     ENUMERATED_VALUES as _ENUMERATED_ATTRIBUTE_VALUES,
+)
+from citry._html_attribute_values import (
+    FRAME_NAME_ELEMENTS as _FRAME_NAME_ELEMENTS,
 )
 from citry._html_attribute_values import (
     HTML_ELEMENTS as _HTML_ELEMENTS,
@@ -360,7 +364,7 @@ class AttributeValueFinding:
     Report one static HTML attribute value outside its enumerated keywords.
 
     The span covers the value inside its quotes, or the attribute name when
-    the attribute has no value.
+    the value is empty or missing.
     """
 
     element: str
@@ -978,17 +982,19 @@ def lint_attribute_values(
     silently does nothing. The keywords come from the HTML Standard; see
     ``scripts/generate_html_attribute_values.py``.
 
-    Keywords compare without regard to ASCII letter case, except ``type`` on
-    ``<ol>`` and ``<li>``. An attribute with no value counts as the empty
-    string. For ``target``, ``formtarget``, and an ``<iframe>`` or
-    ``<object>`` ``name``, only a value starting with ``_`` is checked,
-    because any other value is a valid window name.
+    Keywords compare without regard to ASCII letter case, except the list
+    markers ``1``, ``a``, ``A``, ``i``, and ``I`` of ``type`` on ``<ol>`` and
+    ``<li>``. Character references are decoded first, as the browser does,
+    and an attribute with no value counts as the empty string. For
+    ``target`` and ``formtarget``, only a value starting with ``_`` is
+    checked, because any other value is a valid window name; the ``name`` of
+    an ``<iframe>`` or ``<object>`` may not start with ``_`` at all.
 
     Only static attributes on lowercase HTML element names are checked,
     including elements inside nested templates. Component tags,
     ``<c-element>``, custom elements, PascalCase Vue components, elements
-    inside ``<svg>`` or ``<math>``, bound attributes, and attributes that
-    carry extension-owned source are skipped.
+    inside ``<svg>`` or ``<math>``, bound attributes, and attributes whose
+    value contains syntax an extension handles are skipped.
 
     A finding is reported unless every consumer ignores the rule, and it is an
     error when any reporting consumer says ``"error"``. The check needs no
@@ -1077,13 +1083,26 @@ def _attribute_value_finding(
     attribute = _ascii_lower(name)
     inner = attr.inner_value
     value = inner.content if inner is not None else ""
-    # The value span sits inside the quotes; a value-less attribute marks its name.
+    # The browser decodes character references such as `&#116;` before it
+    # reads the keyword, so compare the decoded text.
+    decoded = _html_unescape(value)
+    # The value span sits inside the quotes; an empty or missing value marks the name.
     span = (inner.start_index, inner.end_index) if inner is not None and inner.content else None
     start, end = span if span is not None else (attr.key.start_index, attr.key.end_index)
-    targets = _NAVIGABLE_TARGET_ATTRIBUTES.get(attribute)
-    if targets is not None and element in targets:
-        # Any name is a valid window name, unless it starts with "_".
-        if not value.startswith("_") or _ascii_lower(value) in _NAVIGABLE_TARGET_KEYWORDS:
+    if attribute == "name" and element in _FRAME_NAME_ELEMENTS:
+        # A frame name may be anything that does not start with "_".
+        if not decoded.startswith("_"):
+            return None
+        message = render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            variant="frame-name",
+            value=value,
+            attribute=name,
+            element=element,
+        )
+    elif element in _NAVIGABLE_TARGET_ATTRIBUTES.get(attribute, ()):
+        # Any window name is valid, unless it starts with "_" and is not a keyword.
+        if not decoded.startswith("_") or _ascii_lower(decoded) in _NAVIGABLE_TARGET_KEYWORDS:
             return None
         message = render_diagnostic(
             TEMPLATE_INVALID_ATTRIBUTE_VALUE,
@@ -1100,44 +1119,12 @@ def _attribute_value_finding(
         allowed = by_element.get(element, by_element.get("*"))
         if allowed is None:
             return None
-        case_sensitive = (element, attribute) in _CASE_SENSITIVE_ATTRIBUTES
-        written = value if case_sensitive else _ascii_lower(value)
-        keywords = allowed if case_sensitive else tuple(_ascii_lower(keyword) for keyword in allowed)
-        if written in keywords:
+        exact = _CASE_SENSITIVE_KEYWORDS.get((element, attribute), ())
+        if decoded in exact or _ascii_lower(decoded) in {
+            _ascii_lower(keyword) for keyword in allowed if keyword not in exact
+        }:
             return None
-        listed = ", ".join(f"'{keyword}'" for keyword in allowed if keyword) + (
-            ", or no value" if "" in allowed else ""
-        )
-        if not value:
-            message = render_diagnostic(
-                TEMPLATE_INVALID_ATTRIBUTE_VALUE,
-                variant="empty",
-                attribute=name,
-                element=element,
-                allowed=listed,
-            )
-        else:
-            # Suggest the nearest keyword so a typo such as "treu" names its fix.
-            nearest = get_close_matches(written, [keyword for keyword in keywords if keyword], n=1, cutoff=0.6)
-            if nearest:
-                suggestion = allowed[keywords.index(nearest[0])]
-                message = render_diagnostic(
-                    TEMPLATE_INVALID_ATTRIBUTE_VALUE,
-                    variant="suggestion",
-                    value=value,
-                    attribute=name,
-                    element=element,
-                    suggestion=suggestion,
-                    allowed=listed,
-                )
-            else:
-                message = render_diagnostic(
-                    TEMPLATE_INVALID_ATTRIBUTE_VALUE,
-                    value=value,
-                    attribute=name,
-                    element=element,
-                    allowed=listed,
-                )
+        message = _attribute_value_message(name, element, value, decoded, allowed)
     return AttributeValueFinding(
         element=element,
         attribute=name,
@@ -1147,6 +1134,51 @@ def _attribute_value_finding(
         severity=severity,
         start_index=base_index + start,
         end_index=base_index + end,
+    )
+
+
+def _attribute_value_message(
+    name: str,
+    element: str,
+    value: str,
+    decoded: str,
+    allowed: tuple[str, ...],
+) -> str:
+    """Render the message for a value outside ``allowed``, naming the closest keyword when one is near."""
+    listed = ", ".join(f"'{keyword}'" for keyword in allowed if keyword) + (", or no value" if "" in allowed else "")
+    if not decoded:
+        return render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            variant="empty",
+            attribute=name,
+            element=element,
+            allowed=listed,
+        )
+    # Suggest the nearest keyword so a typo such as "treu" names its fix.
+    keywords = [keyword for keyword in allowed if keyword]
+    nearest = get_close_matches(
+        _ascii_lower(decoded),
+        [_ascii_lower(keyword) for keyword in keywords],
+        n=1,
+        cutoff=0.6,
+    )
+    if not nearest:
+        return render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            value=value,
+            attribute=name,
+            element=element,
+            allowed=listed,
+        )
+    suggestion = next(keyword for keyword in keywords if _ascii_lower(keyword) == nearest[0])
+    return render_diagnostic(
+        TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+        variant="suggestion",
+        value=value,
+        attribute=name,
+        element=element,
+        suggestion=suggestion,
+        allowed=listed,
     )
 
 

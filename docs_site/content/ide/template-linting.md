@@ -295,27 +295,33 @@ valid keyword:
 {# Warning: 'treu' is not a valid value; did you mean 'true'? #}
 <div draggable="treu">Drag me</div>
 
-{# Warning: 'datetime'; did you mean 'datetime-local'? #}
+{# Warning: did you mean 'datetime-local'? #}
 <input type="datetime" name="start">
 ```
 
-The keywords come from the HTML Standard. The check covers global
-attributes such as `dir`, `hidden`, `contenteditable`, `spellcheck`,
-`translate`, `inputmode`, `enterkeyhint`, `autocapitalize`, and `popover`,
-and element attributes such as `type` on `<input>`, `<button>`, `<ol>`, and
-`<li>`, `method`, `enctype`, and `autocomplete` on `<form>`, `loading`,
-`decoding`, `fetchpriority`, `crossorigin`, `referrerpolicy`, `preload`,
-`kind` on `<track>`, `wrap` on `<textarea>`, and `scope` on `<th>`.
+The keywords come from the HTML Standard. The check covers:
 
-Letter case does not matter, so `type="Email"` passes, except for `type` on
-`<ol>` and `<li>`, where `"a"` and `"A"` are different list markers. An
-attribute that accepts an empty value, such as `hidden`, `crossorigin`, or
-`contenteditable`, may also be written with no value at all.
+- attributes every element accepts, such as `dir`, `hidden`,
+  `contenteditable`, `draggable`, `spellcheck`, `translate`, `inputmode`,
+  `enterkeyhint`, `autocapitalize`, and `popover`;
+- `type` on `<input>`, `<button>`, `<ol>`, `<li>`, and `<ul>`;
+- `method`, `enctype`, and `autocomplete` on `<form>`;
+- `loading`, `decoding`, `fetchpriority`, `crossorigin`, and
+  `referrerpolicy` on the elements that take them, such as `<img>`;
+- `preload` on `<audio>` and `<video>`, `kind` on `<track>`, `wrap` on
+  `<textarea>`, and `scope` on `<th>`.
+
+Letter case does not matter, so `type="Email"` passes. The exception is
+the list markers of `type` on `<ol>` and `<li>`, where `"a"` and `"A"` are
+different. An attribute that accepts an empty value, such as `hidden`,
+`crossorigin`, or `contenteditable`, may also be written with no value at
+all.
 
 `target` and `formtarget` take any window name, so only a name that starts
 with an underscore is checked. `target="_new"` is reported, because the
 only valid names with an underscore are `_blank`, `_self`, `_parent`, and
-`_top`.
+`_top`. The `name` of an `<iframe>` or `<object>` may not start with an
+underscore at all.
 
 Only values written directly in the template are checked. A bound value
 such as `c-dir` or `:draggable`, a component tag, `<c-element>`, a custom
@@ -337,7 +343,9 @@ class LegacyWidget(Component):
 
 Like the Alpine rules, this rule needs no component data, so
 `citry check --static` and an editor without a loaded app run it with the
-default severity.
+default severity. Without a loaded app they also cannot tell which values
+an extension's template syntax produces, so such a value may be reported
+there but not by `citry --app <module>:<app> check`.
 
 ## Understand open schemas
 
