@@ -221,12 +221,11 @@ declared defaults are filled and validating schema libraries such as Pydantic
 can coerce values before templates and extensions receive them.
 
 When you use `JsData`, the returned names and values become a strict-JSON
-payload for that rendered component. Citry seeds its top-level keys into the
-component's Alpine scope and also passes a fresh instance-local graph to the
-component's [`$component()`][$component] callback when one exists. A component
-with Alpine expressions does not need `$component()` only to copy data into
-scope. When a render has neither Alpine expressions nor `$component()`, Citry
-does not send the payload.
+payload for that rendered component. Citry exposes its top-level keys as
+reactive members of the component's Vue instance and template scope. A
+component does not need [`$component()`][$component] only to expose that data;
+register Options when it also needs local state, methods, computed values, or
+lifecycle work.
 
 ```citry
 from citry import Component
@@ -247,20 +246,27 @@ class Counter(Component):
         return self.JsData(initial_count=kwargs.initial_count)
 
     template = """
-      <button class="counter" x-text="initial_count">Count</button>
+      <button
+        class="counter"
+        type="button"
+        @click="increment"
+        v-text="initial_count"
+      ></button>
     """
 
     js = """
-      $component(({ data }) => {
-        const initialCount = data.initial_count;
-        console.log(initialCount);
+      $component({
+        methods: {
+          increment() {
+            this.initial_count += 1;
+          },
+        },
       });
     """
 ```
 
-Python writes the payload key `initial_count`, and the Alpine expression reads
-that exact key directly. Component JavaScript can still assign it to a
-`camelCase` local when useful. See
+Python writes the payload key `initial_count`. The Vue expression reads that
+exact member directly, and the method accesses it through `this`. See
 [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) for delivery
 and CSS custom properties.
 

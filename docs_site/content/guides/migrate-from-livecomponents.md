@@ -99,17 +99,17 @@ def save(self, call_context: CallContext[TaskState], task_id: int):
     ]
 ```
 
-Citry returns the same intent as ordered actions. A selector names the region
-to render, and a browser event handles client-owned follow-up behavior:
+Citry returns the same intent as ordered actions. A named marker identifies
+the region to render, and a browser event handles client-owned follow-up
+behavior:
 
 ```citry
 --8<-- "docs_site/snippets/migrate_livecomponents.py:multi-component-result"
 ```
 
-Use `actions.Render` for each independent component instance that must evolve
-separately. If one selector matches several elements, Citry creates mirrored
-placements of one logical instance: they share State and later self-renders
-update all placements together.
+Use `actions.Render` for each independent marker region that must evolve
+separately. Declare a region with `<c-mark name="...">` and target it with
+`mark:<name>`; the marker is resolved within the caller's rendered component.
 
 Automatic `parent` and `find_one()` command routing is intentionally absent.
 Use an explicit target when Python owns the update, or Dispatch an application
@@ -176,7 +176,7 @@ attributes. Text interpolation continues to use `{{ expression }}`.
 | `PushUrl` / `ReplaceUrl` | `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` |
 | `parent_id` and component path | No author-managed hierarchy id; use target or Dispatch |
 | `{% call_command ... %}` / `hx-post` | `@c-*`, `$sendEvent`, or a per-event URL |
-| htmx + json-enc + Alpine morph setup | Citry loads and coordinates its client runtimes automatically |
+| htmx + json-enc + Alpine morph setup | Citry loads its pinned Vue runtime and the Events client automatically |
 | Saved context and template source | Fresh tree with explicit kwargs and fills |
 
 ## Keep serialization and authorization explicit

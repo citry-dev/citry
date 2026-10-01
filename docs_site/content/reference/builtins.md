@@ -126,6 +126,29 @@ You can pass plain body content when you only need the default slot.
 Read [Dynamic components](/advanced/dynamic-components/) for complete examples
 and the difference between component names and HTML tag names.
 
+## Targeted updates
+
+<c-builtin tag="mark" c-level="3" />
+
+Use `<c-mark>` to name a default-body region for an Events update. Its only
+attribute is the required `name`, supplied as a static literal matching
+`[A-Za-z][A-Za-z0-9_-]*`; names are case-sensitive and unique within a
+component. The marker accepts default body content only. An Events handler can
+return `actions.Render(element, target="mark:summary")` to address it relative
+to the component handling the event. See [Events actions](/events/actions/).
+
+Because `<c-mark>` is built in, your own component cannot use the name
+`mark`. A class named `Mark`, or one registered as `mark`, fails when it is
+defined:
+
+```text
+AlreadyRegistered: Cannot register 'Mark' as 'mark': the name is
+reserved for the built-in <c-mark> component.
+```
+
+Rename the class, for example to `Highlight`, and write `<c-highlight>` in
+your templates.
+
 ## Data and resilience
 
 <c-builtin tag="provide" c-level="3" />

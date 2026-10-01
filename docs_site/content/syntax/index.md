@@ -35,10 +35,9 @@ This example inserts the heading, adds the `has-books` class, and creates one
 paragraph for every book.
 
 When part of the page should respond immediately to a click, keystroke, or
-other browser action, use [Alpine](https://alpinejs.dev/){: target="_blank" rel="noopener"}
-in the component's HTML. Its `x-data`, `x-show`, and `@click` attributes run after the page loads, without asking
-Python to render the page again. Start with
-[Alpine in templates](/syntax/alpine/).
+other browser action, use Vue directives in the component's HTML. They run
+after the page loads without asking Python to render the page again. Start
+with [Vue in templates](/syntax/vue/).
 
 ## The syntax at a glance
 
@@ -49,7 +48,7 @@ Core features:
 - `c-title="heading"`: set a Python value as
   [attribute or component input](/syntax/dynamic-attributes/)
 - `c-if`, `c-for`: [conditions and loops](/syntax/control-flow/)
-- `x-*`, `@event`, `:name`: [Alpine behavior](/syntax/alpine/)
+- `v-*`, `@event`, `:name`: [Vue behavior](/syntax/vue/)
 - `<c-Card>`, `<c-slot>`:
   [components](/concepts/components/) and
   [built-in tags](/reference/builtins/)
@@ -60,12 +59,8 @@ Core features:
 
 Citry also has attributes for browser and server interaction:
 
-- `$c-props`, `@c-*`, and `:c-*` are covered in
+- Vue props, `@c-*`, and `:c-*` are covered in
 [Client interactivity](/concepts/client-interactivity/) and [Events](/events/)
-- `#c-key` and `#c-ignore` are the template's
-[template flags](/syntax/dynamic-attributes/#c-template-flags). They guide how
-an event response updates existing HTML. See also
-[Event actions](/events/actions/).
 
 ## Self-closing tags
 

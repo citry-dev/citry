@@ -1,10 +1,10 @@
-"""Standalone page that renders the contact-form example (the live demo)."""
+"""Standalone page that renders the contact-form example."""
 
 from citry import Component
 
 
 class FormSubmissionPage(Component):
-    """A full page showing the ContactForm handling its own submission client-side."""
+    """A full page where ContactForm handles its own submission."""
 
     class Kwargs:
         pass
@@ -19,10 +19,15 @@ class FormSubmissionPage(Component):
           <meta charset="utf-8" />
           <title>Form submission example</title>
           <c-css />
+          <style>
+            body {
+              margin: 0;
+              padding: 1.5rem;
+              font-family: system-ui, sans-serif;
+            }
+          </style>
         </head>
-        <body
-          style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"
-        >
+        <body>
           <c-ContactForm />
           <c-js />
         </body>

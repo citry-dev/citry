@@ -116,9 +116,9 @@ With no app configured, the status bar reports **syntax only**. Definite
 inline templates and files explicitly using the Citry Template language are
 still checked, but unknown components and their contracts are not inferred.
 
-## Complete Alpine and component JavaScript
+## Complete Vue expressions and component JavaScript
 
-In a registry-owned component template, Citry connects Alpine expressions to
+In a registry-owned component template, Citry connects Vue expressions to
 the component's browser data:
 
 ```citry
@@ -131,31 +131,230 @@ class Search(Component):
         page: int
 
     template = """
-      <p x-text="query.toUpperCase()"></p>
+      <p v-text="query.toUpperCase()"></p>
       <button @click="$state.page += 1">Next</button>
     """
 ```
 
-Top-level `JsData` names complete in `x-*`, `@*`, and `:*` values. Hover shows
+Top-level `JsData` names complete in native Vue directives and bindings. Hover shows
 their JSON-derived JavaScript type, and **Go to Definition**, **Go to
 Declaration**, and **Find All References** connect them to the exact Python
 field or a conservatively inferred `js_data()` dict key. Public Events
 `State` fields receive the same navigation through `$state`.
 
+A `js_data()` value that reads attributes of a Kwargs field takes its type
+from the annotations of the classes it passes through:
+
+```citry
+class TaskCard(Component):
+    class Kwargs:
+        task: Task  # a dataclass with `lane: str`
+
+    def js_data(self, kwargs, slots):
+        return {"laneKey": kwargs.task.lane}
+```
+
+Here `this.laneKey` is a `string`. Dataclasses, NamedTuples, Pydantic
+models, and plain annotated classes can be read this way. A Kwargs
+field's annotation keeps the values it declares: a field
+`size: Literal["sm", "md"]`, or a type alias of it, is `"sm" | "md"`,
+and an `Enum` member's `.value` is the union of its values, such as
+`"todo" | "done"`. A constant you write in `js_data()` keeps only its
+kind, so `False` is a `boolean`, because browser code may change the
+value later. A NamedTuple is sent as an
+array and a TypedDict as an object. A chain through an optional value,
+such as `reviewer: Owner | None`, is untyped. Returning a whole
+dataclass or other class instance, such as `kwargs.task`, is reported as
+[`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type),
+because Citry cannot prove it crosses the JSON wire.
+
+Citry has no rule for a value such as a method call or a list
+comprehension, so the editor asks ty for its type:
+
+```citry
+class TaskList(Component):
+    def labels(self) -> list[str]:
+        return ["todo", "done"]
+
+    def js_data(self, kwargs, slots):
+        return {
+            "labels": self.labels(),
+            "upper": [label.upper() for label in self.labels()],
+        }
+```
+
+Both `this.labels` and `this.upper` are `string[]`. A literal type in
+ty's answer keeps only its kind, as a constant does. The editor asks ty
+when it next checks an open file, so these types can take a moment to
+appear after you open or save a file, and
+[`citry check --types`](/cli/#check-types-with-typescript-and-ty) asks
+ty before it runs TypeScript. A value ty types as a class, as `Any`, or
+as a type it could not infer stays `any`. When ty cannot run, these
+values stay `any`.
+
+### Work with component members in `this` and the template
+
+Inside `$component({ ... })`, `this` has the type of the live component, and
+so does each name a Vue expression in the template reads. Completion and
+hover know every member, and **Go to Definition** opens where it is declared:
+
+```citry
+class Counter(Component):
+    class JsData:
+        step: int
+
+    template = """
+      <button @click="add()" v-text="count"></button>
+    """
+
+    js = """
+      $component({
+        data() { return { count: 0 }; },
+        methods: {
+          add() { this.count += this.step; },
+        },
+      });
+    """
+```
+
+Hovering `this.count` or `count` in the template shows `number`, and
+**Go to Definition** from either opens the `count` key in `data()`. From
+`this.step`, it opens the `step` field in `JsData`.
+
+| Member | Declared in | Go to Definition opens |
+| --- | --- | --- |
+| Prop | `props` | The prop's key |
+| Injection | `inject` | The injected name |
+| `data()` value | `data()` | The returned key |
+| `setup()` binding | `setup()` | The returned key |
+| Computed value | `computed` | The computed entry |
+| Method | `methods` | The method |
+| Browser data | `js_data()` or `JsData` | The Python field or dict key |
+
+`this` has this type in methods, computed getters and setters, `watch`
+handlers, lifecycle hooks such as `mounted()`, and `provide()`. When
+`onServerRender` or `init` is part of the same object, its `component`
+value gets the same type. Citry's helpers, such as `$sendEvent`,
+`$loading`, and `$state`, and Vue's own `$el`, `$refs`, and `$emit` are
+included. The next section describes how `$el`, `$state`, and `$emit` are
+typed.
+
+`this` in `data()` has props, injections, `js_data()` keys, and Citry's
+helpers. The editor does not type the `data()` result or the methods
+there.
+
+Types come from the `$component` object as you write it. A section with the
+wrong shape, such as a `computed` entry that is a number instead of a
+function, can stop computed values and methods from being typed until you
+fix it. A
+template that several components share keeps names untyped, because each
+component may declare them differently, but **Go to Definition** still lists
+each component's declaration.
+
+### Types for `$el`, `$state`, and `$emit`
+
+`$el` takes its type from the top-level node of the component's template,
+because Vue sets it to the node that the template renders first:
+
+| Template root | Type of `$el` |
+| --- | --- |
+| One element, such as `<button>` | That element's type, such as `HTMLButtonElement`. `<svg>` is `SVGSVGElement` |
+| `v-if` and `v-else`, or `c-if` and `c-else` | Each branch's type joined with `\|`, plus `Comment` when there is no `v-else` or `<c-else>`, because Vue then renders a comment |
+| A child component tag, such as `<c-Lane>` | The child's own `$el` type |
+| Text only | `Text` |
+| Several nodes, `v-for`, `c-for`, a slot, or a template the editor cannot read | `Node` |
+
+When the template renders several nodes, Vue sets `$el` to an empty marker
+node placed before them, not to the first element. The marker is a text
+node, or a comment on a page Vue took over from the server. To reach the elements,
+use `$refs` or the `els` value in `onServerRender`. As in Vue's own types,
+`$el` never includes `null`, but it is `null` until the component mounts,
+for example in `data()` or `created()`.
+
+`$state` is Citry's [Events State](/reference/browser-apis/#state) for the
+component, not Vue's `data()` and not a Pinia store. Its fields come from the
+component's `State` class. Every public field can be assigned unless the
+`State` class sets `_model`; then only the fields it lists can be assigned,
+and the rest are read-only. A component without `State` has no
+fields, so completion offers none. Hovering `this.$state` says the same.
+
+`$emit` follows the `emits` option, as Vue's `defineComponent()` does:
+
+```javascript
+$component({
+  emits: {
+    'drop-task'(/** @type {{taskId: number}} */ payload) {
+      return true;
+    },
+    closed: null,
+  },
+});
+```
+
+- The array form, such as `emits: ['drop-task']`, limits `$emit` to the
+  listed names and accepts any values after the name.
+- In the object form, the validator's parameters type the values. A `null`
+  validator accepts any values.
+- Without `emits`, `$emit` accepts any name, as in Vue.
+
+Completion inside `this.$emit('')` offers the declared names, and hovering
+`$emit` in component JavaScript or a template shows the values each event
+takes. In a parent template, a listener on the child's tag uses the same
+types: `@drop-task="move($event)"` on `<c-Lane>` types `$event` as the first
+value the child emits, and the parameters of an inline function such as
+`@drop-task="(payload) => move(payload)"` get the emitted values' types.
+Citry's `@c-drop-task` server-event binding on the same tag reads the same
+`$event`. A listener for an event the child does not declare gets the DOM
+event of that name, because Vue then passes the listener to the child's
+root element. When the child lists its events as an array, or Citry cannot
+read its `emits`, `$event` is `any`.
+
+On an HTML element, `$event` is the DOM event of the listener's name, such
+as `KeyboardEvent` for `@keydown`. A name the DOM does not define, such as
+`@board:notice`, is a `CustomEvent`, so `$event.detail` works. A template
+cannot cast, so `$event.target` and `$event.currentTarget` are `any`.
+
+Citry also checks event names, in the editor and in `citry check`, when
+`emits` is an array of strings or an object with plain keys:
+
+- `this.$emit('name')`, `component.$emit('name')`, or a template's
+  `$emit('name')` with a name that `emits` does not list is an error
+  ([`citry.browser.undeclared-emit`](/ide/diagnostics/#citry.browser.undeclared-emit)).
+  A prop named `on<Event>`, such as `onPing` for `ping`, also declares the
+  event, as it does in Vue.
+- A listener on a child component tag whose name the child does not declare
+  is a warning
+  ([`citry.browser.undeclared-component-event`](/ide/diagnostics/#citry.browser.undeclared-component-event)).
+  Vue passes such a listener to the child's root element, where it runs
+  only if that element dispatches a DOM event with the same name, so a
+  misspelled name stays silent. A child's `on<Event>` prop also declares
+  the event. Only a name with a hyphen, a colon, or an uppercase letter is
+  reported, because a plain lowercase name such as `@click` is usually a
+  native DOM event.
+
+A value that does not match a validator's parameter types is a TypeScript
+error; see
+[TypeScript errors in component JavaScript and templates](#typescript-errors-in-component-javascript-and-templates).
+
+### Types, checks, and navigation in component JavaScript
+
 The component's direct `js` or resolved `js_file` receives matching types for
 the complete `$component` callback context. Direct synchronous writes to
-`scope` become typed Alpine names, and `x-for` bindings receive
-iterable-derived types and exact navigation. A static
-`$component({ props, init })` declaration also types its read-only `props`.
+the callback's `component` value use the generated public-instance type, and
+`v-for` and `v-slot` bindings receive lexical scope and exact navigation. A static
+`$component({ props, onServerRender })` declaration also types its read-only props.
 VS Code's installed JavaScript service supplies ordinary JavaScript member
 completion, hover, and definitions; Citry keeps the Python-backed origins
-authoritative. Unknown Alpine roots are errors by default through the shared
+authoritative. Unknown Vue expression roots are errors by default through the shared
 Citry lint policy. Free names inside a `$component` initializer are also
-errors by default, which catches a context value such as `scope` when it was
+errors by default, which catches an undeclared context value when it was
 used but not destructured. Configure the severity or real host-provided
 globals through `LintSettings`; see [Template linting](/ide/template-linting/).
+A `component.<name>` or `this.<name>` read that names nothing the component
+defines is an error. Citry checks this only when it can read every
+`js_data()` key and every Vue Options section from the source.
 
-Hovering `$component`, a destructured callback value, or a Citry Alpine magic
+Hovering `$component`, a destructured callback value, or a Citry Vue helper
 such as `$sendEvent`, `$loading`, or `$error` shows its Citry contract and a
 link to the matching browser API reference. Handler-name completion opens
 inside the literal arguments to `sendEvent`, `$sendEvent`, `$loading`, and
@@ -166,19 +365,125 @@ and a handler passed to `$loading()` or `$error()` must match an effective
 Python event handler and navigate to that method. Dynamic names are left open,
 as are all `onEvent()` and `$onEvent()` names.
 
-Direct `$c-props` objects on statically resolved child components validate
+Native props on statically resolved child components validate
 unknown keys, required props, and proven value types against the child's
 static `$component({props})` declaration. A prop key hovers and navigates to
 that declaration. A spread keeps explicit keys checkable but suppresses a
-missing-required conclusion; dynamic targets and `c-$c-props` remain
-unproven. When a `JsData` annotation or known literal value cannot cross
+missing-required conclusion; dynamic component targets remain unproven. When a
+`JsData` annotation or known literal value cannot cross
 Citry's strict JSON wire, Citry reports `citry.js-data.unsupported-type` as a
-warning and lets JavaScript tooling treat that value as `unknown`.
+warning and lets JavaScript tooling treat that value as `any`.
+
+### TypeScript errors in component JavaScript and templates
+
+The editor reports TypeScript's own errors in component JavaScript and in Vue
+expressions, on the line you wrote, whether the code sits in a `.js` file, a
+template file, or a string in a Python file:
+
+```citry
+class Lane(Component):
+    template = """
+      <button @click="startDrag('first')">Drag</button>
+    """
+    js = """
+      $component({
+        emits: {
+          'drop-task'(/** @type {{taskId: number}} */ payload) {
+            return true;
+          },
+        },
+        methods: {
+          clearDropTarget() {},
+          startDrag(/** @type {number} */ id) {
+            // A method is not a boolean.
+            this.clearDropTarget = true;
+            // The payload does not match the validator.
+            this.$emit('drop-task', 'x');
+            // One argument too many.
+            this.startDrag(1, 2);
+            // `$el` is the template's <button>.
+            this.$el.fooBar;
+          },
+        },
+      });
+    """
+```
+
+Each of those lines, and `startDrag('first')` in the template, shows an
+error with the source `Citry (ts)` and a code such as
+`citry.typescript.ts2322`, where the number is TypeScript's own. Citry
+reports these kinds of TypeScript errors:
+
+| Mistake | Example | TypeScript codes |
+| --- | --- | --- |
+| A value of the wrong type | `this.clearDropTarget = true` | 2322, 2345, 2769, and related |
+| A member that does not exist | `this.$el.fooBar` | 2339, 2551, 2353, 2561 |
+| The wrong number of arguments | `this.startDrag(1, 2)` | 2554, 2555, 2556, 2575 |
+| A syntax error in JavaScript inside a Python string | `const = 1` | 1000 to 1999 |
+| A bound HTML attribute value of the wrong type | `:draggable="'treu'"` | 2345 |
+
+A bound attribute such as `:draggable` or `:style` on an HTML element is
+checked against Vue's types for that element's attributes, so
+`:style="1"` is an error while `:style="{ color: 'red' }"` passes. A
+keyword the HTML Standard lists for the attribute, such as the empty value
+in `:translate="''"`, is also accepted, as the static
+[attribute-value check](/ide/template-linting/#find-invalid-html-attribute-values)
+accepts it. Some attributes Vue types as any string, such as `dir`, so a
+bound `:dir="'sideways'"` is not reported, though the same static value
+is. Vue's types are case-sensitive, so a bound `'LAZY'` is an error where
+a static `"LAZY"` passes. Citry does not check an attribute Vue does not
+declare, such as `data-id`, any attribute on a custom element, or a
+binding with a modifier such as `.prop`.
+
+Vue types `aria-*` attributes too. `aria-expanded` takes a boolean or
+`'true'`/`'false'`, so `:aria-expanded="String(open)"` is an error because
+`String()` returns any string. Bind the boolean itself:
+`:aria-expanded="open"`. Vue also types `id` and `title` as strings, so
+`:id="task.id"` is an error when the id is a number; bind
+`:id="String(task.id)"`.
+
+VS Code's own TypeScript runs the check, so you need no Node.js install, but
+the built-in TypeScript and JavaScript Language Features extension must be
+enabled. When it does not answer, the workspace folder's Citry output
+channel says so once. The check uses the same types that completion and hover show, and
+it runs after Citry's own diagnostics, so its errors can appear a moment
+later.
+
+Some TypeScript errors are left out on purpose:
+
+- A mistake that Citry already reports keeps only Citry's finding. For
+  example, an unknown name inside `$component` shows
+  [`citry.component-js.unknown-variable`](/ide/diagnostics/#citry.component-js.unknown-variable),
+  `this.startDargg()` shows
+  [`citry.component-js.unknown-member`](/ide/diagnostics/#citry.component-js.unknown-member),
+  and an event name `emits` does not declare shows
+  [`citry.browser.undeclared-emit`](/ide/diagnostics/#citry.browser.undeclared-emit).
+- An unknown name in a template follows
+  [`citry.vue.unknown-variable`](/ide/diagnostics/#citry.vue.unknown-variable)
+  and its lint severity, so TypeScript does not report it.
+- A value Citry cannot type, such as an injection, a server event's result,
+  or a `JsData` field that cannot cross the JSON wire, is `any`, so reading
+  it is never an error.
+- TypeScript's strict mode is off, so a `data()` value that starts as
+  `null` can take any value later, and implicit `any` is not reported.
+- A query by CSS selector, such as `this.$el.querySelector('#name')`, returns
+  `any`, because the selector does not say which element it finds. A query
+  by tag name, such as `querySelector('input')`, keeps the tag's type. A
+  member of `window` that the DOM does not declare, such as `window.htmx`,
+  is `any`, because a page script may add it.
+- A minified file such as `runtime.min.js` is not checked.
+- A `js_data()` value types its key as the value's general type, such as
+  `boolean` for `False`, because Vue code may change it later.
+
+Set `citry.typeCheck` to `false` to turn these errors off. The language
+server can also run the check for other editors; it then uses the `tsc` in
+your project's `node_modules` or on `PATH`. Run the same check in a terminal
+or CI with [`citry check --types`](/cli/#check-types-with-typescript-and-ty).
 
 ## Navigate i18n messages and profiles
 
 When the selected application configures i18n, Citry uses its checked catalog
-index across Python, templates, Fluent, Alpine, and component JavaScript.
+index across Python, templates, Fluent, Vue expressions, and component JavaScript.
 Literal message IDs complete and navigate from `tr()`,
 `<c-trans message="...">`, `self.i18n.tr()`,
 `Component.I18n.client_messages`, `$i18n.tr()`, and the injected component
@@ -194,17 +499,17 @@ in another component, another Python file, or a configured catalog package.
 Hover an argument name such as `count` in
 `tr("account-unread", count=value)` to see its `@param` type and description.
 Go to definition on that argument to open the exact `@param` declaration.
-The same rule works in template and Python `tr()` calls, Alpine `$i18n.tr()`,
-the injected component JavaScript `i18n.tr()`, and literal `<c-trans>` values
-and fills.
+The same rule works in template and Python `tr()` calls, Vue `$i18n.tr()`,
+`component.$i18n.tr()` or `this.$i18n.tr()` in component JavaScript, and
+literal `<c-trans>` values and fills.
 
 Named formatter and parser profiles complete in the matching operation, such
 as `fmt.number(..., format="...")`, `self.i18n.parse.percent(...)`, and
 `$i18n.format.currency(...)`. Template `fmt` methods include their call
 signatures and return types. A misspelled template method or a literal profile
-that is not registered for that exact operation is an error. `$i18n` and the
-`i18n` value in a `$component`
-callback include the nested `context`, `format`, and `parse` APIs. Public
+that is not registered for that exact operation is an error. `$i18n` in a
+template and `component.$i18n` or `this.$i18n` in component JavaScript
+include the nested `context`, `format`, and `parse` APIs. Public
 Fluent message references navigate to the same defining source; private term
 references navigate within their own `messages` block.
 
@@ -426,6 +731,88 @@ roots not shared by every physical-template consumer are withheld rather than
 guessed. The semantic analyzer is likewise limited to those mapped template
 expressions and does not replace the Python extension for ordinary `.py` code.
 
+### Check `c-*` values against their target's type
+
+A `c-*` value on a component tag is a keyword argument, so it is also
+checked against the child's `Kwargs` annotation. A wrong value shows a
+`citry.python.invalid-assignment` error on the value:
+
+```citry-html
+{# TaskCard declares `task: Task` #}
+<c-TaskCard c-task="1" />
+```
+
+ty's error names both types, here `Literal[1]` and `Task`. A static
+attribute on a component tag passes its text as a string, so it is
+checked the same way:
+
+```citry-html
+{# TaskCard declares `size: Literal["sm", "md", "lg"]` #}
+<c-TaskCard size="xl" />
+```
+
+An attribute without a value, such as `<c-TaskCard compact>`, passes
+`True` and is not checked. An unquoted value, or one with a backslash or
+a line break, is not checked either. A missing or unknown input is reported by the
+template's own input checks instead. The
+check follows the annotation, not runtime validation, so a Pydantic
+`Kwargs` field that turns `"1"` into `1` still reports a string passed
+to an `int`. On an HTML element, `c-class` and `c-style` are checked the
+same way: they take a string, a dict, a list or tuple of those, or
+`None`, so `c-class="1"` is an error.
+
+#### Fix a `c-*` value that ty types as a union
+
+If ty reports `str | int` for a row's `size` that only ever holds a
+string, the row is a dict nested inside the dict `template_data()`
+returns. ty types each top-level key on its own, so `{"size": "sm"}`
+passes `Literal["sm"]` to a `size: Literal["sm", "md", "lg"]` input,
+but it types a nested dict as a whole and merges its values into one
+union:
+
+```citry
+class Steps(Component):
+    def template_data(self, kwargs, slots):
+        rows = [
+            # ty types each row as dict[str, str | int]
+            {"size": "sm", "index": index}
+            for index in range(3)
+        ]
+        return {"rows": rows}
+
+    template = """
+      <c-for each="row in rows">
+        <c-Step c-size="row['size']" />
+      </c-for>
+    """
+```
+
+Give the row a type of its own. A `TypedDict` keeps the value a plain
+dict, so the template does not change:
+
+```citry
+from typing import Literal, TypedDict
+
+
+class StepRow(TypedDict):
+    size: Literal["sm", "md", "lg"]
+    index: int
+
+
+class Steps(Component):
+    def template_data(self, kwargs, slots):
+        rows: list[StepRow] = [
+            {"size": "sm", "index": index}
+            for index in range(3)
+        ]
+        return {"rows": rows}
+```
+
+A value computed by a function typed `-> str` is `str`, not one of the
+input's choices. Annotate the function or variable with the `Literal`
+type it really returns, or wrap the value in `typing.cast()` when code
+before it has already checked that the value is one of the choices.
+
 ## Keep template strings from becoming f-strings
 
 Pylance can add an `f` prefix when you type `{` in a Python string. Its
@@ -449,9 +836,12 @@ setting.
 - Parsing stops after the first syntax error.
 - General Python-file analysis remains the responsibility of the configured
   Python extension; Citry analyzes only mapped template expressions.
-- Embedded CSS and JavaScript receive highlighting, completion, hover, and
-  formatting through VS Code providers, but Citry cannot request their
-  diagnostics through VS Code's public API.
+- Embedded CSS receives highlighting, completion, hover, and formatting
+  through VS Code providers, but Citry cannot request its diagnostics through
+  VS Code's public API. Embedded JavaScript reports the TypeScript errors
+  listed in
+  [TypeScript errors in component JavaScript and templates](#typescript-errors-in-component-javascript-and-templates),
+  not every JavaScript warning.
 - Embedded JavaScript and CSS use bundled Prettier 3.9.6 unless Prettier for VS
   Code is installed and selected for that language. Other editor formatters do
   not replace that fallback.

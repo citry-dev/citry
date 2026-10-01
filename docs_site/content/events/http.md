@@ -35,6 +35,18 @@ component with [`get_event_url()`][citry.ext.events.get_event_url]. GET handlers
 must not mutate server state. Their flat query format accepts scalar strings,
 booleans, finite numbers, and non-empty arrays of those values.
 
+A handler can declare `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and
+`OPTIONS`, the methods its per-event URL accepts. Declaring any other method,
+such as `PURGE`, raises `ValueError` when the component class is defined,
+because a request with that method could never reach the handler's URL. On
+that URL, a request with a method the handler did not declare gets a `405`
+response whose `Allow` header lists the methods it did declare.
+
+The browser runtime cannot call a handler whose first declared method is
+`HEAD` or `OPTIONS`. It raises an error before sending anything, and the
+component's pending State edits stay unsent. Call such a handler with a
+server-side HTTP client instead.
+
 ## Keep a form working without JavaScript
 
 The same per-event route accepts a native form post. Use the component's URL

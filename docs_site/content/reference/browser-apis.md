@@ -1,14 +1,12 @@
 ---
 title: Browser APIs
-description: Reference for $component, Citry's Alpine magics, and the public Citry browser methods.
+description: Reference for $component, Citry.vue, server-render callbacks, and component Events helpers.
 ---
 
 # Browser APIs
 
-Citry adds a small browser API around its component boundaries, Alpine
-runtime, server events, and client-enabled i18n providers. This page covers the names Citry provides. For
-standard Alpine directives and magics, use the
-[Alpine documentation](https://alpinejs.dev/){: target="_blank" rel="noopener"}.
+Citry uses Vue for component state, rendering, props, events, and lifecycle
+hooks. This page covers the browser names Citry adds to that runtime.
 
 ## Component JavaScript
 
@@ -16,361 +14,448 @@ standard Alpine directives and magics, use the
 
 Register the JavaScript that belongs to one component class. Use
 `$component` inside `Component.js` or the file named by `Component.js_file`.
-Citry binds that registration to the Python component class, then calls its
-initializer for every live rendered instance.
+A component class may register one Options object or callback.
 
-The callback form accepts one initializer:
-
-```js
-$component(({ els, data, scope }) => {
-  console.log(data.name, scope.name);
-  els[0].dataset.ready = "true";
-});
-```
-
-The configuration form adds declared client props:
+The object form accepts the Vue Options that Citry can compose safely:
 
 ```js
 $component({
   props: {
-    name: {
-      type: String,
-      required: true,
+    label: String,
+  },
+  data() {
+    return { open: false };
+  },
+  methods: {
+    toggle() {
+      this.open = !this.open;
     },
   },
-  init: ({ props, scope }) => {
-    scope.name = props.name;
+});
+```
+
+Citry composes `data()`, synchronous `setup()`, props, injections, methods,
+computed values, and lifecycle hooks with its component wrapper. Native Vue
+rules apply to these options. Citry reserves its generated render function and
+reports public-name collisions with Python `js_data()` or Events helpers.
+`mixins`, `extends`, an authored `render`, asynchronous `setup`, and a `setup`
+function that returns a render function are rejected. `setup` must return a
+plain bindings object or `undefined` synchronously.
+
+<h3 class="doc-heading" id="on-server-render"><code>onServerRender</code></h3>
+
+Add `onServerRender` when work must run after the initial mount and again after
+each server render that the page applies to this component:
+
+```js
+$component({
+  onServerRender({ component, revision, onEvent }) {
+    const root = component.$refs.root;
+    if (!(root instanceof HTMLElement)) return;
+
+    const controller = connectWidget(root);
+    const stop = onEvent("cart:changed", (detail) => refreshBadge(detail));
+    console.log("rendered revision", revision);
+    return () => {
+      stop();
+      controller.disconnect();
+    };
   },
 });
 ```
 
-A component class may register exactly one `$component` initializer. Citry
-seeds the component scope from `js_data()` first, then runs the initializer
-synchronously after the component boundary, parent initialization, and client
-props are ready. Do not return a Promise.
+The component template declares the referenced element:
 
-Return a function when the initializer creates something that must be cleaned
-up. Citry calls it before that instance initializes again and when the
-instance leaves the page:
-
-```js
-$component(({ els }) => {
-  const chart = createChart(els[0]);
-  return () => chart.destroy();
-});
+```citry-html
+<section ref="root"></section>
 ```
-
-The initializer receives these values:
 
 | Name | Value |
-|---|---|
-| `id` | The current server render ID. A rerender may replace it. |
-| `els` | A stable array containing the instance's current element roots. It is empty for a rootless component. |
-| `data` | A fresh instance-local graph parsed from the JSON returned by [`js_data()`][citry.Component.js_data], or `null`. |
-| `graph` | The current ownership route and source metadata when the instance belongs to a client graph. |
-| `props` | The stable, reactive, top-level read-only values declared by the configuration form. The callback form receives an empty object. |
-| `scope` | The stable reactive object available to Alpine expressions inside this component. Its top-level server-data keys are seeded before init. |
-| `state` | The component's reactive Events State, or `null` when the component declares no Events. |
-| `i18n` | The nearest client-enabled i18n service, or `null` outside such a provider. |
-| `effect(fn)` | Run a managed reactive effect. It returns an early-stop function and stops automatically before cleanup. |
-| `reactive(value)` | Turn an object or array into an Alpine reactive proxy. |
-| `provide(key, value)` | Provide a value to rendered descendants during synchronous initialization. |
-| `inject(key, default?)` | Read the nearest inherited client value. Missing values throw unless a default was supplied. |
-| `unprovide(key)` | Hide an inherited value from rendered descendants during synchronous initialization. |
-| `sendEvent(name, args?, opts?)` | Call one of this component's declared server events and return a Promise for its data result. |
-| `onEvent(name, callback)` | Listen for server-dispatched events targeting this instance and return an unsubscribe function. |
-| `loading(name?)` | Return whether any handler, or one named handler, is queued or running. |
-| `error(name?)` | Return the newest retained error, or the retained error for one named handler. |
+| --- | --- |
+| `component` | The live Vue public instance for this Citry component. |
+| `revision` | The accepted server revision visible to the component. |
+| [`onEvent(name, handler)`](#on-server-render-on-event) | Listens for an event this component's server handler dispatches and returns a function that stops listening. |
+| `id` | The component's current server render ID, the value `Citry.events.send()` accepts and the `instance` in `citry:events:*` details. `null` when the component has none. Read-only. |
+| `els` | The component's connected top-level elements. It is one array for the component's lifetime. Citry refills it on each server render and each time you read `els` from the context, so an `els` you destructured earlier follows server renders. It does not follow a change made only in the browser, such as a `v-if` toggle, until the next refill. |
+| `state` | The same object as [`component.$state`](#state), or `null` when the component declares no `Events`. |
+| `sendEvent(name, args?, opts?)` | Calls [`component.$sendEvent`](#send-event). |
+| `loading(name?)` | Calls [`component.$loading`](#loading). |
+| `error(name?)` | Calls [`component.$error`](#error). |
+| `i18n` | The same service as [`component.$i18n`](#i18n), or `null` outside a client i18n provider or when the app does not configure the i18n extension. |
 
-`$component` is optional when the template only needs server data in Alpine
-expressions. Returning `{"count": 0}` from `js_data()` makes `count` available
-to `x-text="count"` and `@click="count++"` directly. On a compatible rerender,
-Citry refreshes current seeded keys and removes old seeded keys that disappeared,
-while preserving unrelated fields added by the callback.
+`state`, `sendEvent`, `loading`, `error`, and `i18n` repeat instance helpers,
+so code written either way reads the same values. On a component without
+`Events`, `loading()` returns
+`false`, `error()` returns `null`, and `sendEvent()` returns a rejected
+Promise that says the component declares no `Events` class.
 
-A prop declaration accepts `type`, `required`, and `default`. `type` may be a
-constructor or an array of constructors. `required` defaults to `false`. Use a
-factory for an object or array default so instances do not share one mutable
-value:
+The callback runs when this component mounts and after an accepted server
+render that updates this component. An unrelated Vue update does not call it.
+The callback may return a cleanup function or `undefined`. Citry runs cleanup
+before the next callback and when the component unmounts. A different return
+value is an error.
+
+Effects registered synchronously inside the callback run in a Vue effect scope
+that Citry stops at the same time. Asynchronous continuations must arrange
+their own cleanup.
+
+The callback may be `async`. Citry does not wait for it: the page becomes
+ready, and later server renders apply, while it is still running. It may
+resolve to a cleanup function. If the next callback run or the unmount comes
+first, Citry calls that cleanup as soon as the Promise resolves. A rejected
+Promise, or one that resolves to anything else, is logged to the console as
+a `[Citry]` error and does not stop the page:
 
 ```js
-props: {
-  filters: {
-    type: Object,
-    default: () => ({}),
+$component({
+  async onServerRender({ component }) {
+    const { createChart } = await import("/static/chart.js");
+    const chart = createChart(component.$refs.chart);
+    return () => chart.destroy();
   },
-}
+});
 ```
 
-The [Client interactivity](/concepts/client-interactivity/) page explains
-component boundaries, client props, slot scope, and rootless components. The
-[Component JavaScript and CSS](/advanced/js-and-css-dependencies/) explains
-when component scripts load.
+The callback form of `$component` is shorthand for `onServerRender`:
 
-<h3 class="doc-heading" id="component-i18n"><code>$component.i18n</code></h3>
+```js
+$component(({ component, revision, onEvent }) => {
+  console.log(component, revision, onEvent);
+});
+```
 
-The `i18n` value in a `$component` initializer is the same service exposed as
-`$i18n` to Alpine expressions. It is `null` unless the component is below a
-client-enabled `<c-i18n>` provider. Use it for browser-created destinations or
-other imperative code; use the `$c-tr` template binding for stable text and
-HTML attributes.
+`init` is another name for `onServerRender` in the object form, and receives
+the same context. A definition that names both is an error when its script
+loads:
 
-## Alpine magics
+```js
+$component({
+  props: { label: String },
+  init({ component, els }) {
+    els[0]?.setAttribute("title", component.label);
+  },
+});
+```
 
-Citry adds the following magics to Alpine expressions inside an active Citry
-component. The event-related magics act on the component instance that owns
-the expression. The context magics follow Citry's rendered ownership path,
-including slots and teleports.
+<h4 class="doc-heading" id="on-server-render-on-event"><code>onEvent</code> in the callback context</h4>
+
+`onEvent` takes the same arguments as [`$onEvent`](#on-event), but each
+listener lasts only as long as the callback run that added it. Citry removes
+it before the next callback and when the component unmounts, so a listener
+added on every run is never registered twice. On a component without an
+`Events` declaration, calling `onEvent` is not an error, but the listener
+never runs, because only the component's own server handlers dispatch these
+events and it has none:
+
+```js
+$component(({ component, onEvent }) => {
+  onEvent("cart:changed", (detail) => {
+    component.$el.dataset.items = String(detail.count);
+  });
+});
+```
+
+<h3 class="doc-heading" id="js-data-members"><code>js_data()</code> members</h3>
+
+Every top-level key returned by
+[`Component.js_data()`][citry.Component.js_data] becomes a reactive member of
+the live Vue instance. Templates can read it directly, and JavaScript can read
+or assign it through `this` or the callback's `component` value.
+
+Citry updates the server-owned keys each time the page applies a server
+render to the component. A key cannot collide with local Vue data, setup bindings, props,
+injections, methods, computed values, or
+[names Citry reserves on the instance](/advanced/vue-runtime/#names-citry-reserves-on-the-component-instance).
+Python rejects a key that starts with `$` or `_`, or the key `citryId`, when
+the component renders.
 
 <h3 class="doc-heading" id="i18n"><code>$i18n</code></h3>
 
-Read the nearest client-enabled i18n provider. Access outside one throws an
-error. The service has this public shape:
+Read the browser translation service of the nearest client-enabled
+`<c-i18n>` provider. Templates use `$i18n` inside a client provider.
+Component JavaScript uses `this.$i18n` or `component.$i18n`, which is
+`null` outside a client provider and `undefined` when the app does not
+configure the i18n extension. The service has these members:
 
 | Member | Meaning |
-|---|---|
+| --- | --- |
 | `context` | Readonly locale, fallback, direction, time-zone, and revision data. |
 | `status` | Readonly provider loading state. |
 | `tr(message, values?, options?)` | Return loaded message text. Use `{ attr: "name" }` for a Fluent attribute. |
 | `resolve(message, values?, options?)` | Return frozen `{ text, locale, direction, usedFallback }` metadata. |
 | `format` | Named number, percent, currency, date, time, datetime, relative-time, list, and unit formatters. |
-| `parse` | Strict number and percent parsers. Each returns `{ input, state, value, error, valid }`. |
-| `ensureMessages(messages)` | Load one public message ID or a list before a dynamic synchronous lookup. |
-| `switchLocale(locale)` | Atomically switch this provider subtree and return a committed or stale result. |
-| `subscribe(callback)` | Call back immediately and after context changes; returns an unsubscribe function. |
-| `bind(options)` | Keep a browser-created destination translated; returns `refresh()` and `dispose()`. |
+| `parse` | Strict number and percent parsers. |
+| `ensureMessages(messages)` | Load one message ID or a list before a dynamic synchronous lookup. |
+| `switchLocale(locale)` | Switch this provider's subtree to another locale. |
+| `subscribe(callback)` | Call back now and after each context change; returns a function that stops the calls. |
+| `bind(options)` | Keep a browser-created element translated; returns `refresh()` and `dispose()`. |
 
 ```citry-html
 <c-i18n tag="section" client>
-  <output x-text="$i18n.tr('my-app-status')"></output>
+  <output v-text="$i18n.tr('my-app-status')"></output>
   <button @click="$i18n.switchLocale('cs-CZ')">Čeština</button>
 </c-i18n>
 ```
 
-Ordinary server `tr()` output is plain HTML and does not react to
-`switchLocale()`. See [Browser i18n](/i18n/browser/) for `$c-tr`, dynamic
-message loading, `bind()`, and the exact ownership rules.
+See [Browser i18n](/i18n/browser/) for `$c-tr`, message loading, and `bind()`.
+
+<h3 class="doc-heading" id="citry-vue"><code>Citry.vue</code></h3>
+
+`Citry.vue` is the exact Vue runtime used by the page. Use it when an ordinary
+component script needs Composition API helpers without an ES module import:
+
+```js
+$component({
+  setup() {
+    const query = Citry.vue.ref("");
+    const normalized = Citry.vue.computed(() => query.value.trim());
+    return { query, normalized };
+  },
+});
+```
+
+<h3 class="doc-heading" id="citry-vue-use"><code>Citry.vue.use</code></h3>
+
+Install a Vue plugin, such as a store or a global directive, on every Vue app
+Citry creates on the page. Citry calls `app.use(plugin, ...options)` on each
+app before it mounts:
+
+```js
+Citry.vue.use({
+  install(app) {
+    app.directive("autofocus", {
+      mounted(el) {
+        el.focus();
+      },
+    });
+  },
+});
+```
+
+A component template can then use `v-autofocus`. Register a store plugin,
+or any other Vue plugin, the same way.
+
+Call it before Citry creates its first Vue app, from a script that runs
+after Citry's runtime has loaded; `Citry.vue` does not exist before that.
+Three places work:
+
+- A script in the page `<head>` loaded with `defer`. A page that Citry
+  renders loads the runtime with an ordinary script and starts its apps
+  from a module script, so a deferred script runs between the two:
+
+  ```html
+  <script defer src="/static/vue-plugins.js"></script>
+  ```
+
+- A script an extension adds to `ctx.before_manifest` in
+  `on_dependencies()`. On an interactive page the app loads it first,
+  before it creates the Vue app.
+- A component's own JavaScript, when the component is in the page's
+  first app. The app loads it before creating the Vue app, and the plugin
+  then applies to the whole app, not only to that component.
+
+Other calls behave as follows:
+
+- A call after Citry has created a Vue app throws an `Error`, because that
+  app would run without the plugin. Move the call earlier.
+- A value that is neither a function nor an object with an `install(app)`
+  method throws a `TypeError`.
+- Registering the same plugin again does nothing, as with `app.use`, even
+  when the options differ.
+- An error thrown by the plugin's `install` stops that app from starting
+  and is reported as a page error.
+
+## Component Events helpers
+
+The following helpers are available to templates and on the live Vue public
+instance when the component participates in Citry Events.
 
 <h3 class="doc-heading" id="state"><code>$state</code></h3>
 
-Read the component's reactive public Events State. Assigning a writable field
-queues that change for the component's next server call. A field excluded by
-`State._public` cannot be read, and a field excluded by `State._model` cannot
-be written.
+Read the component's reactive public Events State. This is Citry's own object,
+filled from the component's `State` class, and is separate from Vue's `data()`
+and from any Pinia store. Assigning a writable whole field updates the browser
+immediately and queues that value for the component's next non-GET event call.
+State is client input and must be validated on the server. Nested values and
+public fields that are not declared client-writable are read-only. Non-public
+State names are unavailable. Invalid assignments throw synchronously and leave
+the prior value unchanged.
 
 ```citry-html
-<button @click="$state.count++">Add one</button>
-<output x-text="$state.count"></output>
+<button @click="$state.count += 1">Add one</button>
+<output v-text="$state.count"></output>
 ```
-
-State travels through the browser and must be treated as client input. See
-[Security](/security/#treat-state-as-client-input).
 
 <h3 class="doc-heading" id="loading"><code>$loading</code></h3>
 
-Return whether this component has a queued or running server call. Pass an
-event name to check only that handler. An unknown handler name throws an
-error.
+Return whether the component has a queued or running server call. Pass an event
+name to check only that handler. An unknown handler name is an error.
 
 ```citry-html
 <button :disabled="$loading('save')">
-  <span x-show="!$loading('save')">Save</span>
-  <span x-show="$loading('save')">Saving...</span>
+  <span v-if="$loading('save')">Saving...</span>
+  <span v-else>Save</span>
 </button>
 ```
 
 <h3 class="doc-heading" id="error"><code>$error</code></h3>
 
-Read retained handler errors as
-`{ status, code, message, fieldErrors? }`, or `null` when there is no matching
-error. Call `$error()` for the newest retained error across this component's
-handlers. Pass a handler name to read only that handler. An unknown handler
-name throws an error.
+Return the newest retained handler error, or `null`. Pass an event name to read
+only that handler. An unknown handler name is an error.
 
 ```citry-html
-<p
-  x-show="$error('save')"
-  x-text="$error('save')?.message"
-></p>
+<p v-if="$error('save')" v-text="$error('save').message"></p>
 ```
 
-A successful call clears only its own handler's error. A retry leaves that
-error visible while the new call is queued or running, then replaces it on
-failure or clears it on success. Reading an error does not clear it.
+A successful call clears its own handler's retained error.
 
 <h3 class="doc-heading" id="send-event"><code>$sendEvent</code></h3>
 
-Call a declared server event from an Alpine expression:
+Call a declared server event from a Vue expression or component method:
 
 ```js
-$sendEvent(name, args?, opts?)
+const result = await this.$sendEvent("preview", {page: 2});
 ```
 
-The method returns a Promise. It resolves with the handler's data result and
-rejects with a structured event error. `opts.timeout` overrides the request
-timeout. `opts.wait: false` lets a call bypass the component's event queue.
+The method returns a Promise for the handler's data result and rejects with a
+structured event error. An unknown handler name, or a component that declares
+no `Events`, also rejects the Promise instead of throwing. Use declarative `@c-*` bindings when no browser code
+needs the returned result.
 
-```citry-html
-<button
-  @click="result = await $sendEvent('preview', { page: 2 })"
->
-  Preview page 2
-</button>
-```
+The optional third argument accepts these options:
 
-Only imperative calls receive a returned
-[`actions.Data`][citry.ext.events.actions.Data] value. A declarative `@c-*`
-binding starts the same handler but does not expose its Promise result. Return
-[`actions.Dispatch`][citry.ext.events.actions.Dispatch] when browser code must
-observe a result from a declarative call.
+| Option | Meaning |
+| --- | --- |
+| `timeout` | Milliseconds to wait for the server before the call fails. Overrides the page default. |
+| `wait` | Accepts only `true`, the default. See below. |
+
+Citry sends the calls from one Vue app one at a time, in the order they were
+made, because each server render builds on the one before it. A call cannot
+skip ahead, so `wait: false` rejects the Promise with a `TypeError`. To
+replace an older call to the same handler, as live search does, declare the
+handler with `@event(latest_wins=True)`. An unknown option also rejects,
+and the error names it.
 
 <h3 class="doc-heading" id="on-event"><code>$onEvent</code></h3>
 
-Listen for server-dispatched events targeting this component instance:
+Subscribe to a server-dispatched event for this component instance:
 
 ```js
-const stop = $onEvent("cart:changed", (detail) => {
-  console.log(detail);
+const stop = this.$onEvent("cart:changed", (detail) => {
+  refreshBadge(detail);
 });
 ```
 
-The return value removes the listener. Use the `onEvent` member inside
-`$component` when the subscription should automatically share the component
-initializer's cleanup lifetime.
+The callback receives the event detail and `stop()` removes that subscription.
+A listener added from `mounted()`, a method, or a timer lasts until the
+component is unmounted or remounted; a server render does not remove it.
+Call `$onEvent` once per instance, for example in `mounted()`, so the same
+listener is not added twice.
 
-<h3 class="doc-heading" id="provide"><code>$provide</code></h3>
+A call made while this component's own `onServerRender` callback is still
+executing (not later from a timer or promise it started) belongs to that
+callback instead, like the callback's own [`onEvent`](#on-server-render): Citry
+removes the listener before it calls the callback again. After the component
+is unmounted, `$onEvent` adds nothing. On a component without an `Events`
+declaration, no server handler can dispatch to it, so `$onEvent` adds nothing
+and returns a `stop()` that does nothing.
 
-Provide one value to rendered descendants:
+<h3 class="doc-heading" id="citry-events"><code>Citry.events</code></h3>
 
-```citry-html
-<section x-init="$provide('theme', { name: 'dark' })">
-  <c-slot />
-</section>
-```
-
-The key may be a non-empty string or a Symbol. Call `$provide` during
-synchronous directive initialization, normally from `x-init`. To change the
-value later, provide one reactive object and update its fields.
-
-<h3 class="doc-heading" id="inject"><code>$inject</code></h3>
-
-Read the nearest inherited value. Citry returns the exact value that was
-provided. A missing key throws unless you pass a default:
-
-```citry-html
-<output x-text="$inject('theme', 'system')"></output>
-```
-
-The helper is bound to the element where the magic is read. Its lookup follows
-Citry's rendered ownership path rather than relying only on physical DOM
-parents.
-
-<h3 class="doc-heading" id="unprovide"><code>$unprovide</code></h3>
-
-Hide an inherited value from rendered descendants:
-
-```citry-html
-<section x-init="$unprovide('theme')">
-  <output x-text="$inject('theme', 'system')"></output>
-</section>
-```
-
-Call `$unprovide` during synchronous directive initialization. A nearer
-`$provide` can establish the same key again for its own descendants.
-
-See [Provide and inject](/concepts/provide-and-inject/) for shadowing, slot
-placement, reactive updates, and multi-placement behavior.
-
-## Page-wide APIs
-
-Use these methods from page scripts and integrations rather than from one
-component's Alpine expressions.
-
-<h3 class="doc-heading" id="citry-alpine-before-start"><code>Citry.alpine.beforeStart</code></h3>
-
-Register an Alpine plugin before Citry starts its owned Alpine runtime:
-
-```js
-Citry.alpine.beforeStart((Alpine) => {
-  Alpine.plugin(myPlugin);
-});
-```
-
-The callback receives Citry's pinned Alpine object. Calling `beforeStart`
-after startup has begun throws an error. Do not load a second Alpine build.
-
-<h3 class="doc-heading" id="citry-events-send"><code>Citry.events.send</code></h3>
-
-Call a server event on any interactive component instance:
-
-```js
-Citry.events.send(target, name, args?, opts?)
-```
-
-`target` is a current render ID or an Element inside the target instance. The
-method returns the same kind of Promise as `$sendEvent` and the component
-initializer's `sendEvent` member.
-
-<h3 class="doc-heading" id="citry-events-on"><code>Citry.events.on</code></h3>
-
-Listen page-wide for a server-dispatched event:
+Use the page-wide API from ordinary scripts or other browser integrations:
 
 ```js
 const stop = Citry.events.on("cart:changed", (detail) => {
-  updateHeader(detail);
+  refreshHeader(detail);
 });
+await Citry.events.send("render_abc123", "refresh", {page: 2});
 ```
 
-The callback receives the event's `detail`. The returned function removes the
-listener. Unlike `$onEvent`, this listener is not limited to one component
-instance.
+`send(target, name, args?, opts?)` accepts a current render ID or an Element
+inside its mounted component. The returned Promise has the same data and
+error behavior as `$sendEvent`, and `opts` takes the same
+[options](#send-event). The other methods are:
 
-<h3 class="doc-heading" id="citry-events-configure"><code>Citry.events.configure</code></h3>
+| Method | Purpose |
+| --- | --- |
+| `on(name, callback)` | Listen page-wide for a server-dispatched event; the callback receives its detail. |
+| `configure({csrf, timeout, url, transport})` | Set defaults used by current and future event calls. |
+| `registerTransport(name, {send})` | Register a transport that returns a Citry event result envelope. See [custom transports](#custom-event-transports). |
+| `applyActions(actions)` | Apply a validated result action list from an intercepted or custom transport. |
 
-Set page-wide defaults for later event calls:
+#### Custom event transports
+
+A custom transport replaces the browser's `fetch` for event calls. Citry calls
+`send(envelope, request)` for each call and expects the result envelope back,
+or a Promise for it:
 
 ```js
-Citry.events.configure({
-  timeout: 45_000,
-  url: "/citry/ext/events/",
+Citry.events.registerTransport("bridge", {
+  send(envelope, request) {
+    const get = request.method === "GET";
+    return bridge.request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: get ? undefined : JSON.stringify(envelope),
+      signal: request.signal,
+    });
+  },
 });
+Citry.events.configure({transport: "bridge"});
 ```
 
-| Option | Meaning |
-|---|---|
-| `csrf` | The token source and request-header name. It accepts `cookie`, `header`, or a `token` string or function. |
-| `timeout` | Milliseconds before a call rejects. The default is `30000`. |
-| `transport` | The registered transport name. The default is `"fetch"`. |
-| `url` | Override the Events route base URL. Normally Citry reads it from the page manifest. |
+`request` describes the HTTP request the built-in transport would send. A
+`GET` handler carries its arguments in `url` and has no body, so send the
+envelope only for other methods:
 
-<h3 class="doc-heading" id="citry-events-register-transport"><code>Citry.events.registerTransport</code></h3>
+| Field | Value |
+| --- | --- |
+| `url` | The event endpoint, with the query string for a `GET` handler. |
+| `method` | The HTTP method, usually `POST`. |
+| `headers` | A fresh object with the request headers, including the CSRF token on non-`GET` calls. |
+| `signal` | An `AbortSignal` that fires when the call times out or Citry cancels it, for example because the component was removed. |
 
-Register a page-wide event transport under a name:
+Forward `request.headers` to the server with the envelope. When a handler
+returns a render, the server reads the `X-Citry-Vue-App`,
+`X-Citry-Vue-Occurrence`, and `X-Citry-Vue-Revision` headers to find the
+component the browser is showing. Without them, the call fails with "Vue
+Events requires current app, occurrence, and revision headers." A server
+bridge that calls `EventsDispatcher.dispatch` itself passes these headers in
+`TransportContext.headers`.
+
+Event calls also emit bubbling `citry:events:before`, `after`, `error`,
+`swapped`, and `stale` events. Their detail always includes `instance`,
+`class`, and `event`; `after` adds `ok`, `error` adds `error`, `swapped` adds
+`els`, and `stale` adds `reason`. The `before` event is cancellable with
+`preventDefault()`. Each event bubbles from the calling component's first
+element. When that component has no element on the page, for example
+because it was removed before the call finished, the event fires on
+`document` instead, so a listener on `document` still hears it. `instance`
+and `class` then name the component as Citry last saw it.
+
+`stale` fires when a call's result will not reach the page. Its `reason` says
+why:
+
+| `reason` | What happened |
+| --- | --- |
+| `superseded` | A newer call to the same handler replaced this one. This happens only for a handler declared with `@event(latest_wins=True)`. |
+| `retired` | The component was removed or replaced before the call finished. |
+| `epoch` | The page accepted a newer result for the component first, so the rest of this one was dropped. |
+| `disposed` | The page's Vue app was shut down. |
+| `version` | The server no longer accepts the State token this page holds, usually because the app was deployed or its signing secret changed after the page loaded. |
+
+For `version`, the call also rejects with a `stale_state` error, and Citry
+asks the user once per page whether to reload. To show your own message
+instead, cancel the event:
 
 ```js
-Citry.events.registerTransport("custom", {
-  send: async (envelope) => sendThroughHost(envelope),
+document.addEventListener("citry:events:stale", (event) => {
+  if (event.detail.reason !== "version") return;
+  event.preventDefault();
+  showUpdateBanner();
 });
 ```
-
-The transport's `send` method receives one Citry event envelope and returns
-its result envelope or a Promise for it. Select the transport with
-`Citry.events.configure({ transport: "custom" })`.
-
-<h3 class="doc-heading" id="citry-events-apply-actions"><code>Citry.events.applyActions</code></h3>
-
-Apply a valid result envelope's `actions` array to the current page:
-
-```js
-await Citry.events.applyActions(result.actions);
-```
-
-The method validates the array, applies its actions in order, and returns a
-Promise. It is primarily useful for custom transports, integration tests, and
-hosts that intercept Citry event responses.
 
 The Events guides cover [State](/events/state/), [template
 bindings](/events/bindings/), [returned actions](/events/actions/), and
-[direct HTTP routes](/events/http/). [Alpine
-runtime](/advanced/alpine-runtime/) covers plugins, CSP, graph markers, and
-deployment.
+[direct HTTP routes](/events/http/).

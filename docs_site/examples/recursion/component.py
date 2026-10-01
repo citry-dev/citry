@@ -1,12 +1,16 @@
 """A self-rendering tree, used as a live example in the docs.
 
-TreeNode renders one node's label and then renders itself for each child,
-so a nested structure of any depth is drawn with one component.
+TreeNode renders one node's label and then renders itself for each
+child, so a nested structure of any depth is drawn with one component.
 """
 
 from __future__ import annotations
 
-from typing import Any, NotRequired, TypedDict
+from typing import Any
+
+# Both come from typing_extensions so a NotRequired key is optional
+# on Python 3.10 too.
+from typing_extensions import NotRequired, TypedDict
 
 from citry import Component
 
@@ -19,9 +23,8 @@ class TreeNodeData(TypedDict):
 class TreeNode(Component):
     """One node of a tree: its label, then itself for each child.
 
-    The recursion stops on its own: a node with no children has an empty
-    child list, so the ``<c-for>`` body (which is what recurses) runs zero
-    times.
+    The recursion stops on its own: a leaf has no children, so the
+    ``c-if`` skips the child list and no further TreeNode is rendered.
     """
 
     class Kwargs:
@@ -29,6 +32,24 @@ class TreeNode(Component):
 
     class Slots:
         pass
+
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
+        node = kwargs.node
+        children = node.get("children", [])
+        has_children = len(children) > 0
+        # An open-folder arrow marks a node with children, a dot a
+        # leaf.
+        icon = "▾" if has_children else "•"
+        return {
+            "label": node["label"],
+            "children": children,
+            "has_children": has_children,
+            "icon": icon,
+        }
 
     template = """
       <div class="tree-node">
@@ -63,16 +84,3 @@ class TreeNode(Component):
         border-left: 1px solid #d0d7de;
       }
     """
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
-        node = kwargs.node
-        children = node.get("children", [])
-        has_children = len(children) > 0
-        # Folder icon when there are children, file icon when it's a leaf.
-        icon = "▾" if has_children else "•"
-        return {
-            "label": node["label"],
-            "children": children,
-            "has_children": has_children,
-            "icon": icon,
-        }

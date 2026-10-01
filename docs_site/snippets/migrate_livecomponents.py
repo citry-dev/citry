@@ -108,7 +108,7 @@ class TaskEditor(Component):
             return [
                 actions.Render(
                     TaskSummary(task_id=data.task_id),
-                    target="#task-summary",
+                    target="mark:task-summary",
                 ),
                 actions.Dispatch(
                     "TaskEditor:saved",
@@ -120,7 +120,9 @@ class TaskEditor(Component):
       <button @c-click="save({ task_id: 42 })">
         Save task
       </button>
-      <p id="task-summary">Task 42 not saved</p>
+      <c-mark name="task-summary">
+        <p id="task-summary">Task 42 not saved</p>
+      </c-mark>
     """
 
 

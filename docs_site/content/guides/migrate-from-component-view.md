@@ -39,16 +39,18 @@ class ContactForm(Component):
 ```
 
 For the first port, subclass `ViewEvents`. The HTTP method still selects
-`post`, while `data` is parsed and validated from the form fields. Returning a
-`Render` describes where the new fragment belongs:
+`post`, while `data` is parsed and validated from the form fields. Return the
+thank-you component directly so a native form post uses its rendered HTML as
+the complete response:
 
 ```citry
 --8<-- "docs_site/snippets/migrate_component_view.py:view-events"
 ```
 
 The compatibility URL ends at the component class id, so a native POST can
-reach it without naming an event. This is the mechanical bridge used by a form
-that is not running JavaScript.
+reach it without naming an event. Its rendered HTML becomes the response body;
+the verb handler does not target a region inside the submitted page. This is
+the mechanical bridge used by a form that is not running JavaScript.
 
 The native forms in this guide omit host-specific CSRF markup for brevity.
 They are not deployable without it: include the host's normal form token, such
@@ -107,7 +109,7 @@ schema, OpenAPI operation, and middleware path:
 --8<-- "docs_site/snippets/migrate_component_view.py:named-fragments"
 ```
 
-Returning a Citry fragment activates its component JavaScript, CSS, Alpine
+Returning a Citry fragment activates its component JavaScript, CSS, Vue
 scope, and Events bindings through one lifecycle. There is no separate htmx or
 fetch activation step to maintain.
 

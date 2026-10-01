@@ -1,6 +1,6 @@
 ---
 title: Citry documentation
-description: Learn to build fully typed web interfaces in Python with reusable components, server events, and Alpine.js browser behavior.
+description: Learn to build fully typed web interfaces in Python with reusable components, server events, and Vue browser behavior.
 ---
 
 # Build with Citry
@@ -8,7 +8,7 @@ description: Learn to build fully typed web interfaces in Python with reusable c
 Welcome to Citry documentation!
 
 Citry is a fully typed frontend framework for Python with server events and
-Alpine.js. One component holds its server-rendered HTML, browser behavior, CSS,
+Vue. One component holds its server-rendered HTML, browser behavior, CSS,
 translations, and Python event handlers. No second frontend application or
 separate build. It is inspired by Vue and Livewire.
 
@@ -42,7 +42,7 @@ Follow it in order, or start with the part you need:
    [compose components](/getting-started/build-page/) and
    [let them accept flexible content](/getting-started/add-slots/).
 3. **Add behavior in the browser:**
-   [use Alpine](/getting-started/browser-interactivity/) and
+   [use Vue](/getting-started/browser-interactivity/) and
    [connect parent and child components](/getting-started/client-props-and-handlers/).
 4. **Connect the browser to Python:**
    [serve the page with FastAPI](/getting-started/fastapi/),
@@ -104,7 +104,7 @@ not your editor has a dedicated Citry integration.
 
 - [Template syntax](/syntax/) explains how to insert Python values, set HTML
   attributes from Python, show or repeat content, use built-in tags, and add
-  Alpine behavior.
+  Vue behavior.
 - [Components](/concepts/components/) explains how component classes accept
   inputs, prepare template data, compose other components, and render HTML.
 - [Registration](/concepts/registration/) explains how a component tag finds
@@ -112,8 +112,8 @@ not your editor has a dedicated Citry integration.
 - [Slots](/concepts/slots/) shows how a component can accept whole pieces of
   HTML as content.
 - [Client interactivity](/concepts/client-interactivity/) covers component
-  browser data as Alpine variables, advanced setup with `$component`,
-  `$c-props`, and browser communication between parents and children.
+  browser data as Vue instance members, `$component` options,
+  native props, and browser communication between parents and children.
 - [Server events](/events/) covers Python handlers, State, forms, loading and
   error feedback, browser events, and page updates.
 - [Web frameworks](/web-frameworks/) shows how to mount Citry in FastAPI,

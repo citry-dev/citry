@@ -482,13 +482,40 @@ class DocPage(Component):
 
           <script>
             (function () {
-              // Key matches the vendored site.js theme picker; rebranded together
-              // with the rest of the djc-* hooks later.
               var t = localStorage.getItem('djc-theme');
               if (t === 'dark' || t === 'light') {
                 document.documentElement.setAttribute('data-theme', t);
               }
             })();
+            globalThis.__citryDocsReady = new Promise(function (resolve) {
+              var readyAppIds = new Set();
+              var expectedAppId = null;
+              var settled = false;
+              var finish = function () {
+                if (settled) return;
+                settled = true;
+                document.removeEventListener('citry:ready', onCitryReady);
+                resolve();
+              };
+              var onCitryReady = function (event) {
+                var appId = event.detail && event.detail.appId;
+                if (typeof appId !== 'string') return;
+                readyAppIds.add(appId);
+                if (appId === expectedAppId) finish();
+              };
+              var inspectBody = function () {
+                var host = document.querySelector('body > [id^="citry-vue-"]');
+                if (!host) return finish();
+                expectedAppId = host.id.slice('citry-vue-'.length);
+                if (readyAppIds.has(expectedAppId)) finish();
+              };
+              document.addEventListener('citry:ready', onCitryReady);
+              if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', inspectBody, { once: true });
+              } else {
+                inspectBody();
+              }
+            });
           </script>
 
           <link
@@ -527,6 +554,24 @@ class DocPage(Component):
           </c-if>
           <meta name="djc-base-path" c-content="base_path">
           <c-css />
+          <script defer src="/static/js/site.js"></script>
+          <script defer src="/static/js/search.js"></script>
+          <c-if cond="is_playground">
+            <script type="module" src="/static/playground/playground.js"></script>
+          </c-if>
+          <c-if cond="has_interactive_live_code">
+            <script type="module" src="/static/playground/live_code.js"></script>
+          </c-if>
+          <c-if cond="is_landing">
+            <script type="module" src="/static/playground/landing_composer.js"></script>
+          </c-if>
+          <c-if cond="cloudflare_web_analytics_config">
+            <script
+              defer
+              src="https://static.cloudflareinsights.com/beacon.min.js"
+              c-data-cf-beacon="cloudflare_web_analytics_config"
+            ></script>
+          </c-if>
         </head>
         <body
           c-class="{
@@ -1301,24 +1346,6 @@ class DocPage(Component):
           />
 
           <c-js />
-          <script src="/static/js/site.js"></script>
-          <script src="/static/js/search.js"></script>
-          <c-if cond="is_playground">
-            <script type="module" src="/static/playground/playground.js"></script>
-          </c-if>
-          <c-if cond="has_interactive_live_code">
-            <script type="module" src="/static/playground/live_code.js"></script>
-          </c-if>
-          <c-if cond="is_landing">
-            <script type="module" src="/static/playground/landing_composer.js"></script>
-          </c-if>
-          <c-if cond="cloudflare_web_analytics_config">
-            <script
-              defer
-              src="https://static.cloudflareinsights.com/beacon.min.js"
-              c-data-cf-beacon="cloudflare_web_analytics_config"
-            ></script>
-          </c-if>
         </body>
       </html>
     """

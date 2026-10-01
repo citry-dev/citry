@@ -9,10 +9,15 @@ smaller document also parses faster in the browser.
 The configuration is deliberately cautious: closing tags, the ``<html>`` /
 ``<head>`` opening tags, and comments are kept. Citry's client ownership graph
 uses paired comments as physical range caps, so dropping comments breaks
-component activation. Inline CSS is shrunk. Inline JavaScript is left untouched
+component activation. Inline CSS and inline JavaScript are left untouched
 on purpose, so ``<script type="application/ld+json">`` structured-data blocks
 stay valid JSON. The minifier handles ``<pre>`` and other whitespace-sensitive
 regions itself.
+
+A page whose Vue app hydrates (adopts the server's HTML instead of building
+it) is left as written. Vue compares the served text with its own render, so
+collapsed whitespace inside the Vue host would make every such page report
+"Hydration completed but contains mismatches".
 
 The ``minify-html`` import is loaded only when this runs and is guarded, so a
 build on a machine without it simply skips this step instead of failing.
@@ -20,12 +25,20 @@ build on a machine without it simply skips this step instead of failing.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
+
+# A document app's configuration is a JSON data block
+# (``<script type="application/json" data-citry-vue-document=...>``) written
+# with sorted keys, so the ``hydrate`` flag appears within the first few keys,
+# before the manifest. The JSON escapes every ``<``, so the match cannot run
+# past the block.
+_HYDRATING_APP_RE = re.compile(r'data-citry-vue-document="[^"]*"[^>]*>\{[^<]{0,4096}?"hydrate":true')
 
 # Options passed to minify_html.minify (v0.18+). The cautious defaults we want
 # (doctype kept, attribute values left spec-compliant, spaces between attributes
@@ -38,6 +51,7 @@ if TYPE_CHECKING:
 # and takes the whole declaration with it: gradients and grid track lists
 # silently stop applying. The `rendered_css` guard fails a build that contains
 # the pattern, so this cannot come back unnoticed.
+
 _MINIFY_CONFIG = {
     "minify_css": False,
     "keep_comments": True,
@@ -51,6 +65,7 @@ class MinifyOutcome:
     """How the minify pass went: counts, byte totals, and why it was skipped."""
 
     files: int = 0  # html files minified
+    hydrating: int = 0  # html files left as written because their Vue app hydrates
     before: int = 0  # total bytes before
     after: int = 0  # total bytes after
     skipped_reason: str = ""  # set when minify-html is not available
@@ -67,6 +82,9 @@ def minify_site(output_dir: Path, *, log: Callable[[str], None] = lambda _msg: N
     outcome = MinifyOutcome()
     for html_path in output_dir.rglob("*.html"):
         src = html_path.read_text(encoding="utf-8")
+        if _HYDRATING_APP_RE.search(src) is not None:
+            outcome.hydrating += 1
+            continue
         out = minify_html.minify(src, **_MINIFY_CONFIG)
         html_path.write_text(out, encoding="utf-8")
         outcome.files += 1

@@ -34,10 +34,12 @@ class WelcomeCard(Component):
     def css_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, str]:
         return {"accent": kwargs.accent}
 
+    def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, int]:
+        return {"greetings": kwargs.greetings}
+
     template = """
       <article
         class="welcome-card"
-        c-x-data="{ 'greetings': greetings }"
         @welcome-card:welcomed="greetings = $event.detail.greetings"
       >
         <p>Welcome, <strong>{{ name }}</strong>.</p>
@@ -50,7 +52,7 @@ class WelcomeCard(Component):
         </button>
         <p>
           Replies from Python:
-          <output x-text="greetings">{{ greetings }}</output>
+          <output v-text="greetings">{{ greetings }}</output>
         </p>
       </article>
     """

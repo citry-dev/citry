@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -15,11 +14,10 @@ pytestmark = pytest.mark.e2e
 
 _WELCOME_SOURCE = Path(__file__).parents[2] / "live_snippets" / "welcome.py"
 _ACTIVE_PREVIEW = ".citry-live-code__preview:not(.citry-playground__preview--candidate)"
-_RUNTIME_PATH = Path(__file__).parents[2] / "static" / "playground" / "runtime.json"
-_RUNTIME = json.loads(_RUNTIME_PATH.read_text(encoding="utf-8"))
-_CITRY_VERSION = _RUNTIME["citry"]["version"]
 
 
+# Clicks through the client code of the workspace welcome snippet.
+@pytest.mark.workspace_citry
 def test_inline_example_loads_lazily_runs_events_and_recovers_a_draft(
     page: Any,
     docs_site_url: str,
@@ -210,15 +208,18 @@ def test_incomplete_inline_example_can_be_edited_into_a_renderable_module(
     expect(root.locator("[data-live-python-diagnostic]")).to_be_hidden()
 
 
+# Clicks through the client code of the workspace lesson snippets.
+@pytest.mark.workspace_citry
 def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     page: Any,
     docs_site_url: str,
+    playground_runtime: dict[str, Any],
 ) -> None:
     page.goto(docs_site_url + "/getting-started/browser-interactivity/", wait_until="domcontentloaded")
     runtime_version = page.evaluate(
         "async () => (await (await fetch('/static/playground/runtime.json')).json()).citry.version"
     )
-    assert runtime_version == _CITRY_VERSION
+    assert runtime_version == playground_runtime["citry"]["version"]
     examples = page.locator("[data-citry-live-code]")
     expect(examples).to_have_count(1)
 

@@ -1,4 +1,4 @@
-"""A task list that shows off c-for, c-if, and c-empty control flow."""
+"""A task list that shows c-for, c-if, and c-empty control flow."""
 
 from typing import Any, TypedDict
 
@@ -13,8 +13,9 @@ class Task(TypedDict):
 class TaskList(Component):
     """Renders a list of {text, done} tasks.
 
-    Done tasks are struck through with a check mark; pending tasks get a
-    hollow bullet. When there are no tasks, the c-empty branch is shown.
+    One <c-if> check picks how a task looks: done tasks get a check
+    mark and struck-through text, pending tasks a hollow bullet. When
+    there are no tasks, the <c-empty> branch is shown.
     """
 
     class Kwargs:
@@ -24,20 +25,39 @@ class TaskList(Component):
     class Slots:
         pass
 
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
+        return {"tasks": kwargs.tasks, "title": kwargs.title}
+
     template = """
       <section class="tasklist">
         <h3 class="tasklist__title">{{ title }}</h3>
         <ul class="tasklist__items">
           <c-for each="task in tasks">
             <li class="tasklist__item">
-              <span c-if="task['done']" class="tasklist__mark tasklist__mark--done">&#10003;</span>
-              <span c-else class="tasklist__mark tasklist__mark--todo">&#9675;</span>
-              <span c-if="task['done']" class="tasklist__text tasklist__text--done">{{ task['text'] }}</span>
-              <span c-else class="tasklist__text">{{ task['text'] }}</span>
+              <c-if cond="task['done']">
+                <span class="tasklist__mark tasklist__mark--done">
+                  &#10003;
+                </span>
+                <span class="tasklist__text tasklist__text--done">
+                  {{ task['text'] }}
+                </span>
+              </c-if>
+              <c-else>
+                <span class="tasklist__mark tasklist__mark--todo">
+                  &#9675;
+                </span>
+                <span class="tasklist__text">{{ task['text'] }}</span>
+              </c-else>
             </li>
           </c-for>
           <c-empty>
-            <li class="tasklist__item tasklist__item--empty">Nothing to do yet.</li>
+            <li class="tasklist__item tasklist__item--empty">
+              Nothing to do yet.
+            </li>
           </c-empty>
         </ul>
       </section>
@@ -82,6 +102,3 @@ class TaskList(Component):
         font-style: italic;
       }
     """
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
-        return {"tasks": kwargs.tasks, "title": kwargs.title}

@@ -210,12 +210,28 @@ The built-in Events extension also exposes its client runtime, batch endpoint,
 and one URL per named component handler. See
 [Server events](/events/) for the handler workflow and
 [Security](/security/#protect-event-posts-from-csrf) before deploying those
-routes.
+routes. It also serves the compiled component code and stylesheets that
+interactive pages load, at `/{prefix}/ext/events/definitions/{digest}.js` and
+`/{prefix}/ext/events/assets/{digest}.css`.
 
-The per-instance variables endpoint cannot be rebuilt from the component class
-on a cache miss. If you run more than one worker process and serve fragments,
-point every worker at a shared cache backend (Redis, Memcached, or DiskCache),
-or those URLs return 404 on a worker that did not render them.
+## Share the cache between worker processes
+
+The worker that renders a page stores the page's per-instance variables,
+compiled component code, and stylesheets in the Citry cache, or in its own
+memory when no cache is configured. The browser then requests them by URL,
+and a different worker may answer. Without a shared cache, that worker has
+nothing stored and answers 404, so the page's interactive components
+cannot load their code or styles.
+
+If you run more than one worker process, point every worker at a shared cache
+backend: DiskCache, Redis, or your Django cache through `DjangoCache` (see
+[Cache backends](/advanced/cache-backends/)). Citry writes these entries
+without an expiry, because a page that is already open can request them at
+any later time. Give the backend enough room that it does not drop them
+while such pages are still in use. A single worker without a configured
+cache keeps compiled code and stylesheets in memory up to the
+`vue_asset_max_bytes` setting; see
+[Limit memory for interactive page assets](/advanced/cache-backends/#limit-memory-for-interactive-page-assets).
 
 ## URL building in a render-only process
 

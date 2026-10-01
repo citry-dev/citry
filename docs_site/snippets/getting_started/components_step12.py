@@ -1,7 +1,7 @@
+from citry_setup import citry_app
+
 from citry import Component
 from citry.ext.events import EventError, actions
-
-from citry_setup import citry_app
 
 
 # New in this step: render this component after a valid form.
@@ -23,7 +23,7 @@ class Confirmation(Component):
         <p>We will write to {{ email }}.</p>
         <p
           class="confirmation__status"
-          x-text="'Confirmation ready for ' + email"
+          v-text="'Confirmation ready for ' + email"
         >
           Preparing confirmation...
         </p>
@@ -60,12 +60,8 @@ class SignupForm(Component):
                     "Please fix the email address.",
                     fields={"email": "Use an @example.com address."},
                 )
-            # New in this step: replace the result area's contents.
-            return actions.Render(
-                Confirmation(email=email),
-                target="#signup-result",
-                swap="inner",
-            )
+            # New in this step: replace this calling component.
+            return actions.Render(Confirmation(email=email))
 
     template = """
       <section class="signup-form">
@@ -81,22 +77,18 @@ class SignupForm(Component):
             <span
               class="signup-form__error"
               role="alert"
-              x-show="$error('submit')?.fieldErrors?.email"
-              x-text="$error('submit')?.fieldErrors?.email || ''"
+              v-show="$error('submit')?.fieldErrors?.email"
+              v-text="$error('submit')?.fieldErrors?.email || ''"
             ></span>
           </label>
           <button
             type="submit"
             :disabled="$loading('submit')"
-            x-text="$loading('submit') ? 'Sending' : 'Send request'"
+            v-text="$loading('submit') ? 'Sending' : 'Send request'"
           >
             Send request
           </button>
         </form>
-        {# New in this step: give Render a stable target. #}
-        <div id="signup-result" aria-live="polite">
-          <p>Your confirmation will appear here.</p>
-        </div>
       </section>
     """
 

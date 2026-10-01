@@ -14,6 +14,10 @@ from docs_site._internal.config import DocsConfig
 from docs_site._internal.nav import SCOPE_SITE, NavArea, NavGroup, NavItem, NavTree
 from docs_site._internal.pipeline import render_page
 
+# Read repository files from this file's location rather than the working
+# directory, so the tests pass however pytest is launched.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _nav() -> NavTree:
     return NavTree(
@@ -245,7 +249,7 @@ def test_navigation_renders_review_hint_and_area_badge_without_changing_titles()
     assert current.text_content().strip() == "Citry UI"
     assert tree.find_title("/ui-library/") == "Overview"
 
-    css = Path("docs_site/static/css/site.css").read_text(encoding="utf-8")
+    css = (_REPO_ROOT / "docs_site" / "static" / "css" / "site.css").read_text(encoding="utf-8")
     assert ".djc-sidebar__link:hover .djc-sidebar__review-hint" in css
     assert ".djc-sidebar__link:focus-visible .djc-sidebar__review-hint" in css
 
@@ -436,7 +440,9 @@ def test_head_has_structured_data_and_card_meta() -> None:
     assert 'property="og:image" content="https://x.test/citry/static/img/favicon.png"' in html
     assert 'name="twitter:image" content="https://x.test/citry/static/img/favicon.png"' in html
     # Agents can fetch this page as Markdown and find the site-wide index.
-    assert 'rel="alternate" type="text/markdown" href="/concepts/components/index.md"' in html
+    alternate_links = document.xpath('//head/link[@rel="alternate" and @type="text/markdown"]')
+    assert len(alternate_links) == 1
+    assert alternate_links[0].get("href") == "/concepts/components/index.md"
     assert 'rel="describedby" href="/llms.txt"' in html
 
 
@@ -455,7 +461,10 @@ def test_version_page_links_its_versioned_markdown_companion() -> None:
 def test_home_page_links_its_root_markdown_companion() -> None:
     html = render_page("# Home\n", current_path="").html
 
-    assert 'rel="alternate" type="text/markdown" href="/index.md"' in html
+    document = lxml_html.document_fromstring(html)
+    alternate_links = document.xpath('//head/link[@rel="alternate" and @type="text/markdown"]')
+    assert len(alternate_links) == 1
+    assert alternate_links[0].get("href") == "/index.md"
     assert 'rel="describedby" href="/llms.txt"' in html
 
 
@@ -524,7 +533,14 @@ def test_version_picker_seeded_when_version_set() -> None:
     html = render_page("# X\n\ntext.", nav_tree=_nav(), current_path="concepts/slots/", version="9.9.9").html
     assert 'class="djc-version-picker"' in html
     assert 'data-current="9.9.9"' in html
-    assert '<option value="9.9.9" selected>9.9.9</option>' in html
+    document = lxml_html.document_fromstring(html)
+    pickers = document.xpath("//div[@data-version-picker]")
+    assert pickers
+    for picker in pickers:
+        selected_options = picker.xpath("./select/option[@selected]")
+        assert len(selected_options) == 1
+        assert selected_options[0].get("value") == "9.9.9"
+        assert selected_options[0].text == "9.9.9"
 
 
 def test_version_picker_omitted_without_version() -> None:
@@ -617,7 +633,10 @@ def test_google_site_verification_meta() -> None:
         config=DocsConfig(google_site_verification="tok-ABC123"),
         current_path="x/",
     ).html
-    assert '<meta name="google-site-verification" content="tok-ABC123"/>' in present
+    document = lxml_html.document_fromstring(present)
+    verification_tags = document.xpath('//head/meta[@name="google-site-verification"]')
+    assert len(verification_tags) == 1
+    assert verification_tags[0].get("content") == "tok-ABC123"
 
     absent = render_page(
         "# X\n\ntext.",

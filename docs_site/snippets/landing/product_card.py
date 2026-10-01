@@ -2,6 +2,7 @@ from citry import Component, SlotInput
 
 class ProductCard(Component):
     class Kwargs:
+        product_id: int
         tags: list[str]
         likes: int = 0
         accent: str = "#175cd3"
@@ -15,9 +16,13 @@ class ProductCard(Component):
 
     class Events:
         def like(self, state: ProductCard.State):
+            product = load_product(state.product_id)
             return ProductCard(
+                product_id=product.id,
                 tags=state.tags,
                 likes=state.likes + 1,
+                accent=state.accent,
+                slots={"body": product.name},
             )
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
@@ -35,14 +40,14 @@ class ProductCard(Component):
     template = """
       <article
         class="card"
-        x-data="{ open: false }"
+        :class="{ 'card--open': open }"
       >
         <c-slot name="body" />
 
         <c-for each="tag in tags">
           <c-Tag
             c-label="tag"
-            $c-props="{ highlight: open }"
+            :highlight="open"
             @click="open = !open"
           />
         </c-for>
@@ -51,7 +56,7 @@ class ProductCard(Component):
         </c-empty>
 
         <button type="button" @c-click="like">
-          Like <span x-text="likes">{{ likes }}</span>
+          Like <span v-text="likes">{{ likes }}</span>
         </button>
 
         <c-slot name="footer">
@@ -61,9 +66,11 @@ class ProductCard(Component):
     """
 
     js = """
-      $component(({ els, data }) => {
-        const cardEl = els[0];
-        animateLikes(cardEl, data.likes);
+      $component({
+        data() { return {open: false}; },
+        onServerRender: ({ component }) => {
+          animateLikes(component.$el, component.likes);
+        },
       });
     """
 
@@ -72,7 +79,7 @@ class ProductCard(Component):
         border-left: 3px solid var(--accent);
       }
 
-      .tag--active {
+      .card--open {
         color: var(--accent);
       }
     """
@@ -82,11 +89,13 @@ class ProductCard(Component):
     """
 
     class Dependencies:
-        js = ["https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"]
+        js = ["https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"]
         css = ["https://unpkg.com/normalize.css@8.0.1/normalize.css"]
 
 
+lamp = load_product(7)
 html = str(ProductCard(
-    tags=["new", "sale"],
-    slots={"body": "Aurora Lamp"}
+    product_id=lamp.id,
+    tags=lamp.tags,
+    slots={"body": lamp.name},
 ))

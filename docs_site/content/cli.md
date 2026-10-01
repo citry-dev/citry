@@ -127,6 +127,74 @@ The exit status is:
 - `2` for a missing or conflicting mode, or when explicit app selection or
   discovery fails after syntax-only fallback finishes
 
+### Check types with TypeScript and ty
+
+Add `--types` to also type-check every component in the current directory
+the way the editor does. TypeScript checks each component's JavaScript and
+Vue template expressions, the same check the
+[VS Code extension](/ide/vscode/#typescript-errors-in-component-javascript-and-templates)
+runs. ty, the Python type checker that `citry-lsp` installs, checks the
+Python expressions in its templates:
+
+```bash
+citry --app myproject.engine:app check --types
+```
+
+Each TypeScript error is an error finding at its file's full path, line,
+and column, with TypeScript's code (wrapped here to fit):
+
+```text
+/srv/shop/app/components/lane.py:24:13: error: TS2322: Type
+'boolean' is not assignable to type '() => void'.
+```
+
+In `--format json`, its code is `citry.typescript.ts2322` and its message
+is TypeScript's text.
+
+A ty finding in a template expression, such as adding a number to a
+string, keeps ty's severity and leads with ty's rule name (wrapped here to
+fit):
+
+```text
+/srv/shop/app/components/card.py:56:16: error: unsupported-operator:
+Operator `+` is not supported between objects of type `str` and
+`Literal[1]`
+```
+
+In `--format json`, its code is `citry.python.unsupported-operator`. The
+command reports the same ty findings the editor shows. ty's own
+unknown-name finding is left out, because Citry's
+[`citry.template.unknown-variable`](/ide/diagnostics/#citry.template.unknown-variable)
+rule reports that mistake.
+
+ty also types the `js_data()` values Citry has no rule for, such as a
+method call, before TypeScript runs, so TypeScript checks the browser code
+that reads them, as in the
+[editor](/ide/vscode/#complete-vue-expressions-and-component-javascript).
+
+An error makes the command exit with status 1, like any other error. A ty
+warning is reported but does not change the exit status. When the app's
+registry does not load, `--types` does not run and the report notes that.
+
+ty resolves imports from the current directory, so run the command from
+the project root. Run from a subdirectory, it can miss findings in code
+that imports the rest of the project.
+
+`--types` needs three things, and the command exits with status 2 and says
+what to install when one is missing:
+
+- the `citry-lsp` package, which builds the files TypeScript and ty check
+  and installs ty;
+- Node.js on `PATH`;
+- TypeScript's `tsc`, from the project's `node_modules` (the nearest one in
+  the current directory or a parent) or from `PATH`. Install it with
+  `npm install --save-dev typescript`.
+
+Components installed from another package are skipped. `--types` cannot be
+combined with `--static`, because it needs the registry. If ty cannot
+start or stops responding, the command also exits with status 2 and prints
+the reason.
+
 ## Format component assets
 
 `citry format` formats standalone Citry files and statically identifiable

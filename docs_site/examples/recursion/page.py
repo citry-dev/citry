@@ -1,4 +1,4 @@
-"""Standalone page that renders the recursion example (the live demo)."""
+"""Standalone page that renders the recursion example."""
 
 from typing import Any
 
@@ -6,7 +6,7 @@ from citry import Component
 
 
 class RecursionPage(Component):
-    """A full page showing a nested tree drawn by the self-rendering TreeNode."""
+    """A full page showing a nested tree drawn by TreeNode."""
 
     class Kwargs:
         pass
@@ -14,24 +14,11 @@ class RecursionPage(Component):
     class Slots:
         pass
 
-    template = """
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-          <meta charset="utf-8" />
-          <title>Recursion example</title>
-          <c-css />
-        </head>
-        <body
-          style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"
-        >
-          <c-TreeNode c-node="tree" />
-          <c-js />
-        </body>
-      </html>
-    """
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
         # A small folder tree, three levels deep, passed in one piece.
         tree = {
             "label": "project",
@@ -59,3 +46,25 @@ class RecursionPage(Component):
             ],
         }
         return {"tree": tree}
+
+    template = """
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <title>Recursion example</title>
+          <c-css />
+          <style>
+            body {
+              margin: 0;
+              padding: 1.5rem;
+              font-family: system-ui, sans-serif;
+            }
+          </style>
+        </head>
+        <body>
+          <c-TreeNode c-node="tree" />
+          <c-js />
+        </body>
+      </html>
+    """

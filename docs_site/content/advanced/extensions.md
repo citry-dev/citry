@@ -135,6 +135,52 @@ named context field. See
 [`ExtensionManager.emit()`][citry.ExtensionManager.emit] for the exact
 contract.
 
+## Add scripts and stylesheets to a page
+
+An extension's `on_dependencies()` hook runs each time Citry serializes a
+render, after it has collected every rendered component's scripts and
+stylesheets. Its context holds three lists you can change in place:
+
+- `ctx.scripts`: the page's scripts, in the order they run.
+- `ctx.styles`: the page's stylesheets.
+- `ctx.before_manifest`: scripts that must run before everything in
+  `ctx.scripts`.
+
+```python
+from citry import Extension
+from citry.ext.dependencies import Script
+
+
+class Analytics(Extension):
+    name = "analytics"
+
+    def on_dependencies(self, ctx):
+        ctx.before_manifest.append(
+            Script(url="https://cdn.example.com/consent.js"),
+        )
+        ctx.scripts.append(
+            Script(url="https://cdn.example.com/analytics.js"),
+        )
+```
+
+Where `before_manifest` entries end up depends on the page:
+
+- **Static page:** Citry writes them as `<script>` tags ahead of the
+  dependency scripts.
+- **Interactive page:** the page's Vue app loads its scripts itself, so
+  there are no tags to write first. Citry makes the `before_manifest`
+  entries the app's first scripts, in the order you added them, followed by
+  `ctx.scripts`. They follow the same rules as any other script on an
+  interactive page: classic JavaScript only. A `type="module"` or
+  `type="application/json"` script, or a script with `async`, `defer`, or
+  `nomodule`, makes serialization raise `ValueError`. An extension can
+  install a Vue plugin on the page's apps by adding a `before_manifest`
+  script that calls `Citry.vue.use(plugin)`; the page runs it before it
+  creates the Vue app.
+
+Citry adds its own browser runtime after the hook returns, so the hook
+cannot move or remove it. The runtime still loads before these scripts.
+
 ## Give components extension settings
 
 An extension can define defaults and let each component override them. The
@@ -314,6 +360,10 @@ The handler receives a [`RouteRequest`][citry.RouteRequest] and returns a
 [`RouteResponse`][citry.RouteResponse]. A route accepts `GET` by default. Pass
 `methods=("POST",)` or another tuple to change it. `{name}` path segments are
 passed to the handler as keyword arguments.
+
+Pass `methods=None` when the handler owns method admission itself. Host
+adapters then forward every HTTP method to that handler, which must return its
+own `405 Method Not Allowed` response and `Allow` header when appropriate.
 
 A plain `def` handler works with every host adapter. An `async def` handler
 passed as `handler` works only with the direct ASGI adapter. To support both

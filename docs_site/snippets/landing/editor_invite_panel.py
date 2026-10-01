@@ -7,7 +7,7 @@ class InvitePanel(Component):
       <section class="invite-panel">
         <h2>{{ title }}</h2>
 
-        <template x-for="member in visibleMembers">
+        <template v-for="member in visibleMembers">
           <c-MemberChip
             c-name="member.name"
             c-status="<>
@@ -15,7 +15,7 @@ class InvitePanel(Component):
                 Available now
               </small>
             </>"
-            $c-props="{ online: member.online }"
+            :online="member.online"
           />
         </template>
 
@@ -25,11 +25,11 @@ class InvitePanel(Component):
           @submit.prevent="$sendEvent('invite', { email })"
           :aria-busy="$loading('invite')"
         >
-          <input x-model="email" type="email" />
+          <input v-model="email" type="email" />
           <button :disabled="inviting || queuedInvite">
             Invite member
           </button>
-          <small x-show="$error('invte')">
+          <small v-show="$error('invte')">
             Could not send invite.
           </small>
         </form>
@@ -39,13 +39,13 @@ class InvitePanel(Component):
     js = """
       $component({
         props: { compact: { type: Boolean } },
-        init: ({ data, scope, props, effect }) => {
-          scope.email = "";
-          effect(() => {
-            scope.visibleMembers = props.compact
-              ? data.members.slice(0, 3)
-              : data.members;
-          });
+        data() {
+          return { email: "" };
+        },
+        computed: {
+          visibleMembers() {
+            return this.compact ? this.members.slice(0, 3) : this.members;
+          },
         },
       });
     """

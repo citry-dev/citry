@@ -6,16 +6,16 @@ from lxml import html
 from docs_site._internal.components.youtube_video import YoutubeVideo
 
 
-def test_youtube_video_uses_privacy_enhanced_lazy_player_and_fallback_link() -> None:
+def test_youtube_video_uses_click_to_load_facade_and_fallback_link() -> None:
     rendered = html.fromstring(str(YoutubeVideo(video_id="d3nPqvDdNB0", title="Citry code-along")))
-    iframe = rendered.xpath(".//iframe")[0]
+    button = rendered.xpath(".//button[@data-youtube-load]")[0]
     link = rendered.xpath(".//figcaption/a")[0]
 
-    assert iframe.attrib["src"] == "https://www.youtube-nocookie.com/embed/d3nPqvDdNB0"
-    assert iframe.attrib["title"] == "Citry code-along"
-    assert iframe.attrib["loading"] == "lazy"
-    assert iframe.attrib["referrerpolicy"] == "strict-origin-when-cross-origin"
-    assert "allowfullscreen" in iframe.attrib
+    assert rendered.xpath(".//iframe") == []
+    assert rendered.attrib["data-youtube-embed-url"] == "https://www.youtube-nocookie.com/embed/d3nPqvDdNB0"
+    assert rendered.attrib["data-youtube-title"] == "Citry code-along"
+    assert button.attrib["aria-label"] == "Play Citry code-along on YouTube"
+    assert "Play Citry code-along" in button.text_content()
     assert link.attrib == {
         "href": "https://www.youtube.com/watch?v=d3nPqvDdNB0",
         "target": "_blank",

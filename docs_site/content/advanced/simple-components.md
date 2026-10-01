@@ -29,6 +29,145 @@ Use it through a component tag, insert `StatusLabel(text="Ready")` from a
 Python expression, or render it directly. Inputs are current on every call.
 The flag does not cache output or promise that the template is pure.
 
+## Choose the component's browser identity
+
+The default `simple = False` keeps an ordinary Python component and its Vue
+instance. `simple = True` keeps its existing caller-owned HTML behavior and
+has no separate Vue identity. `simple = "vue"` skips the Python component
+instance but creates an independent Vue instance with its own identity and
+authored assets:
+
+```citry
+from citry import Component
+
+
+class Toggle(Component):
+    simple = "vue"
+
+    class Kwargs:
+        label: str
+
+    @staticmethod
+    def template_data(kwargs, _slots):
+        return {"label": kwargs.label}
+
+    template = """
+      <button
+        :aria-expanded="open"
+        @click="open = !open"
+      >
+        {{ label }}
+      </button>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { open: false };
+        },
+      });
+    """
+```
+
+This mode accepts registered components whose templates contain no slots
+and do not declare `transparent = True`. Its template may use text, `c-if`,
+`c-for`, fixed `c-*` attributes, safe `c-bind` objects, authored Vue
+bindings, and calls to child components, described below. Authored
+component JS/CSS and static `js_data`/`css_data` callbacks are supported.
+Slots, provide/inject, instance hooks/configuration, component messages, and
+secondary dependency lists are unsupported. Evaluated
+template values must be JSON-like values such as strings, numbers, booleans,
+lists and dictionaries. Citry calls the callback once per call. An unsupported
+class shape fails before it runs. An unsafe returned value raises an error;
+Citry does not switch to ordinary rendering for it.
+
+The Python component instance is omitted; the browser Vue instance still owns
+`open` and updates `aria-expanded` on each click. Incompatible declarations and
+values raise a named error. `simple = False` restores ordinary component
+behavior; `simple = True` remains unchanged.
+
+Some app-wide settings need the component instance: i18n settings passed to
+`Citry`, messages declared on any other registered component, an extension
+that handles component data or lifecycle hooks, or an extension that changes
+element attributes (`on_attrs_resolved`) used by this template. While one of them applies, Citry renders the
+`simple = "vue"` component as an ordinary component instead. The page shows the
+same HTML and the data callback still runs once per call, but that component
+renders at ordinary speed.
+
+## Call child components from a `simple = "vue"` template
+
+A `simple = "vue"` template can call other components. Each child
+renders the way its own class says, whatever mode its caller uses: an
+ordinary child still gets its Python instance, hooks, data callbacks and
+assets, and a `simple = "vue"` child still skips its instance.
+
+```citry
+from citry import Component
+
+
+class Row(Component):
+    simple = "vue"
+
+    class Kwargs:
+        row: dict
+
+    template = """
+      <li>
+        <button @click="open = !open">{{ row['title'] }}</button>
+        <div v-show="open">
+          <c-Details c-row="row" />
+        </div>
+      </li>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { open: false };
+        },
+      });
+    """
+```
+
+`Details` can be an ordinary component or another `simple = "vue"`
+component; the page shows the same HTML either way, and the same HTML
+as it would if `Row` were an ordinary component.
+
+A call from a `simple = "vue"` template passes its inputs as attributes
+and nothing else:
+
+- Each input is a static attribute or a `c-*` expression that the rest
+  of the template could also use.
+- `#c-key` is allowed, and is required when `c-for` repeats a call.
+- The call cannot pass content (a tag body or `<c-fill>`), a `c-bind`
+  spread, or Vue bindings and events on the component tag (`@click`,
+  `:prop`, `v-show`). Put those on an element inside the child, or use an
+  ordinary parent.
+
+Calls outside `c-if` and `c-for` are the cheapest: Citry compiles the
+browser template once and reuses it for every row, unless the parent
+sets `css_data`. A call inside `c-if` or `c-for` works too, but Citry
+builds each row's browser template from that row's values, as it does
+for an ordinary component, so serializing it costs more.
+
+A `simple = "vue"` parent has no Python instance, so an ordinary child's
+`self.parent` is the nearest ordinary component above it, and the child
+receives the values provided above that parent. Error messages still name
+the whole path, for example `Page > Row > Details`.
+
+A child whose HTML must become part of its caller's own template cannot
+be called this way: a `simple = True` component, a transparent component,
+or a `<c-component>` that picks its target with `c-is`. Rendering the parent raises an error that names the
+child:
+
+```citry-html
+<!-- Fails when Row is simple = "vue" and Label is simple = True -->
+<c-Label c-text="row['title']" />
+```
+
+Make `Label` an ordinary or `simple = "vue"` component, or call it from
+an ordinary component.
+
 ## Calculate data without an instance
 
 The default data method exposes the keyword arguments to the template.
@@ -77,7 +216,7 @@ def template_data(kwargs, slots):
 
 ## Accept optional default content
 
-A simple template can have an empty default outlet:
+With `simple = True`, a template can have an empty default outlet:
 
 ```citry
 from citry import Component, Slot
@@ -116,18 +255,19 @@ to those children. Those children keep their own instances and hooks.
 
 ## Understand the ownership change
 
-A simple invocation gets no separate Python component instance, render ID,
-component hooks, slot hooks of its own, or automatic Alpine isolation boundary.
-HTML it produces belongs to its surrounding ordinary component. Component
-tags authored inside its template use that ordinary component as their
-parent; supplied content retains its caller's scope.
+With `simple = True`, an invocation gets no separate Python or Vue component
+instance, render ID, component hooks, or slot hooks of its own. Its HTML is rendered into the
+surrounding ordinary component instance. Component tags authored inside its
+template use that ordinary component as their parent; supplied content keeps
+the caller's Vue scope.
 
 Ordinary HTML attributes, `c-bind` spreads, expressions, branches, loops and
-Alpine attributes remain available in the template. The simple class cannot
-declare its own JavaScript, CSS or translation messages. Its ordinary child
-components can still bring those features.
+native Vue bindings remain available to `simple = True`. Those Vue expressions
+run in the surrounding ordinary component's instance scope. The class cannot
+declare its own JavaScript, `js_data`, CSS or translation messages. Its ordinary
+child components can still bring those features.
 
-Direct tags execute their data callbacks at the normal deferred stage.
+Direct tags execute their `template_data` callbacks at the normal deferred stage.
 Python values execute when their expression inserts them. A direct root
 render uses a framework owner, so rendering one simple component as an
 entire page still has root setup cost. `<c-component>` can select a simple
@@ -140,9 +280,9 @@ as an ordinary component:
 
 | Checked when | Unsupported examples |
 | --- | --- |
-| Class definition | A non-boolean `simple` value; instance data methods or lifecycle hooks; JS, CSS or messages; instance configurations such as State, Events, Cache, Dependencies or I18n; `transparent = True` |
-| Template preparation | Named or fallback outlets; `$c-tr` translation bindings; unsupported custom or foreign-template nodes, including in inactive branches |
-| Each invocation | Explicit fills; component-level client bindings or `#c-key`/`#c-ignore` on the simple call; unsupported Python slot names; invalid inputs or returned data; `$c-tr` keys arriving through an attribute spread |
+| Class definition | A `simple` value other than `False`, `True`, or `"vue"`; instance data methods or lifecycle hooks. With `simple = True`, JS, CSS, messages, and instance configurations such as State, Events, Cache, Dependencies or I18n are also unsupported. |
+| Template preparation | With `simple = True`, named or fallback outlets and unsupported custom or foreign-template nodes, including in inactive branches. With `simple = "vue"`, a child call that passes content, a `c-bind` spread, Vue bindings, or `#c-ignore`. Both simple modes reject `$c-tr` translation bindings. |
+| Each invocation | With `simple = True`, explicit fills, component-level client bindings or `#c-key`/`#c-ignore` on the call, and unsupported Python slot names. With `simple = "vue"`, a template call to a `simple = True`, transparent or dynamic component. Both modes reject invalid inputs, returned data, and `$c-tr` keys arriving through an attribute spread. |
 
 An empty asset string still declares an asset. The restrictions also apply
 to inherited declarations and to targets chosen by a dynamic selector.
@@ -151,11 +291,12 @@ simple template.
 
 ## Keep the checked class definition stable
 
-`simple` defaults to `False`, accepts only `True` or `False`, and inherits
-to subclasses. Each simple subclass is validated independently. The flag
-and a simple class's checked declarations cannot be reassigned after class
-creation; define a new subclass for a changed definition. Supported template
-file reset APIs reload and recheck the template.
+`simple` defaults to `False`, accepts exactly `False`, `True`, or `"vue"`, and
+inherits to subclasses. Each simple subclass is validated independently. The
+flag and nested schema declarations cannot be rebound after class creation.
+`simple = True` also freezes its checked class declarations; `simple = "vue"`
+checks compatible declarations on use. Supported template file reset APIs
+reload and recheck the template.
 
 A subclass can explicitly declare `simple = False` to use the ordinary
 component contract. [`LibraryComponent`][citry.LibraryComponent] also accepts

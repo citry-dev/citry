@@ -1,0 +1,8 @@
+{# Fails: <div> is opened here but closed elsewhere #}
+<c-raw><div class="panel"></c-raw>
+
+{# Fails: a bare < in text, and a self-closed <span/> #}
+<c-raw>a < b <span/></c-raw>
+
+{# Works: every element is closed, and < is written as &lt; #}
+<c-raw><div class="panel">a &lt; b <span></span></div></c-raw>

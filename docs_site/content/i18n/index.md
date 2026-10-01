@@ -140,7 +140,7 @@ Use `$i18n` only for a control that genuinely needs to change in place:
 
 ```citry-html
 <c-i18n tag="section" client>
-  <h1 x-text="$i18n.tr('my-app-account-title')"></h1>
+  <h1 v-text="$i18n.tr('my-app-account-title')"></h1>
   <button @click="$i18n.switchLocale('cs-CZ')">Čeština</button>
 </c-i18n>
 ```
@@ -148,7 +148,7 @@ Use `$i18n` only for a control that genuinely needs to change in place:
 For a page-wide language change, send the new locale as a URL, form, cookie, or
 other explicit request input and render the page again. This updates all
 server-owned content and avoids making initial page interactivity wait for a
-large number of Alpine expressions.
+large number of Vue expressions.
 
 ## Continue by user need
 

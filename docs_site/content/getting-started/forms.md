@@ -1,62 +1,28 @@
 ---
 title: Handle and validate forms
-description: Turn named form controls into typed Python data and return a useful field error.
+description: Turn named form controls into typed Python data and show field errors with Vue.
 ---
 
 # Handle and validate forms
 
-Buttons are only one way to call Python. A Citry event can also receive the
-named values from a form.
-
-You will build an email form, reject the wrong domain in Python, and show the
-field error beside the input without clearing what the reader typed.
-
-Continue from [Keep a value between
-calls](/getting-started/state/). Keep `citry_setup.py` and `app.py` unchanged.
-
-## Add the form
-
-Replace `components.py` with this version. Here we replace the ChoicePicker with a sign-in form:
+Build an email form, reject the wrong domain in Python, and show the field
+error without clearing what the visitor typed.
 
 <c-include-file path="docs_site/snippets/getting_started/components_step11.py" language="citry" />
 
-Open `http://127.0.0.1:8000/` and enter `ada@elsewhere.test`. The address is
-valid enough for the browser, so the form reaches Python. Citry then shows
-“Use an `@example.com` address.” below the input.
+Submit `ada@elsewhere.test` to see the field error, then submit
+`ada@example.com` to see the accepted address.
 
-Change the value to `ada@example.com` and submit again. The page reports that
-the address was accepted.
-
-## Submit form to event handler
-
-The form calls the `submit` Python event handler instead of performing the browser's usual
-full-page submission:
+## Submit named controls
 
 ```citry-html
 <form @c-submit.prevent="submit">
-  <label>
-    Work email
-    <input
-      name="email"
-      type="email"
-      autocomplete="email"
-      required
-    />
-  </label>
-  ...
+  <input name="email" type="email" required />
 </form>
 ```
 
-The `.prevent` modifier stops the usual page navigation. Citry collects the
-form's named controls and sends them to Python. Here, `name="email"` gives the
-typed value its field name.
-
-The browser checks that the input looks like an email address and is not empty.
-The application-specific `@example.com` rule still belongs in Python.
-
-## Declare form data
-
-On the server, `SignupIn` names the fields expected by the handler:
+The `.prevent` modifier stops normal navigation. Citry collects named controls
+and sends them to the typed handler input:
 
 ```python
 class SignupIn:
@@ -67,125 +33,70 @@ class Events:
         email = data.email.strip()
 ```
 
-The input's `name="email"` matches `SignupIn.email`, so the handler can read
-`data.email`. A larger form can add more named controls and matching fields to
-the input class.
-
-The Python type hint `SignupIn` describes the expected input shape. The [Forms guide](/events/forms/) covers larger input
-shapes and validation patterns.
-
-## Reject input in Python
-
-The handler checks the cleaned address and raises
-[`EventError`][citry.ext.events.EventError] when the domain is wrong:
+## Return field errors
 
 ```python
-if not email.endswith("@example.com"):
-    raise EventError(
-        "Please fix the email address.",
-        fields={"email": "Use an @example.com address."},
-    )
+raise EventError(
+    "Please fix the email address.",
+    fields={"email": "Use an @example.com address."},
+)
 ```
 
-The first string is the overall error message, available as
-[`$error('submit')?.message`][$error] if you want a message for the whole
-form. The
-[`fields`][citry.ext.events.EventError.fields] mapping adds messages for
-specific inputs. Its `email` key matches both `SignupIn.email` and the input's
-`name="email"`.
-
-## Show handler error in UI
-
-The span beside the input reads that field message from `$error('submit')`:
+The field name matches both `SignupIn.email` and `name="email"`. Vue reads the
+instance-scoped error and loading values directly:
 
 ```citry-html
 <span
-  class="signup-form__error"
   role="alert"
-  x-show="$error('submit')?.fieldErrors?.email"
-  x-text="$error('submit')?.fieldErrors?.email || ''"
+  v-show="$error('submit')?.fieldErrors?.email"
+  v-text="$error('submit')?.fieldErrors?.email || ''"
 ></span>
-```
-
-Before an error occurs, `$error('submit')` returns `null` and the span stays
-hidden. After the failed call, `fieldErrors.email` contains `"Use an
-@example.com address."` The form itself remains in place, so the input keeps
-the address that needs fixing. Naming the handler matters when one component
-contains several forms: a successful call clears only that handler's error.
-
-## Show handler loading in UI
-
-The submit button reads the same handler name through
-[`$loading('submit')`][$loading]:
-
-```citry-html
 <button
   type="submit"
   :disabled="$loading('submit')"
-  x-text="$loading('submit') ? 'Sending' : 'Send request'"
+  v-text="$loading('submit') ? 'Sending' : 'Send request'"
 >
   Send request
 </button>
 ```
 
-While `submit` is running, the button is disabled and its label changes to
-“Sending.” This prevents an accidental second submission and tells the person
-that the first one is still being handled.
+A successful call clears that handler's retained error.
 
-## Handle success in the browser
+## Handle success in Vue
 
-A valid address returns another browser event:
+The handler dispatches the accepted email:
 
 ```python
-return actions.Dispatch(
-    "signup:sent",
-    {"email": email},
-)
+return actions.Dispatch("signup:sent", {"email": email})
 ```
 
-The form's root listens for that event and keeps the returned address in
-Alpine:
-
-```citry-html
-<section
-  x-data="{ acceptedEmail: '' }"
-  @signup:sent="acceptedEmail = $event.detail.email"
->
-  ...
-  <p role="status" x-show="acceptedEmail">
-    Accepted <output x-text="acceptedEmail"></output>.
-  </p>
-</section>
-```
-
-The listener is on the `SignupForm` root on purpose. [`Dispatch`][citry.ext.events.actions.Dispatch] fires the
-bubbling event from that first root, so the root receives it. Moving
-`@signup:sent` inside the `<form>` would not work because the event does not
-bubble down into descendants. When root placement is awkward, use
-[`$onEvent`][$onEvent] or the `onEvent` member from
-[`$component`][$component] to listen by component instance instead. The
-[event actions guide](/events/actions/#choose-where-to-listen-for-dispatch)
-explains the complete targeting rules.
-
-Using `$component` would have looked like this:
+The component declares its local state with Vue Options:
 
 ```js
-$component(({ onEvent, scope }) => {
-  // Set initial Alpine state, replaces root x-data
-  scope.acceptedEmail = '';
-
-  // Update Alpine state on server event
-  onEvent('signup:sent', (detail) => {
-    scope.acceptedEmail = detail.email;
-  });
+$component({
+  data() {
+    return { acceptedEmail: '' };
+  },
 });
 ```
 
-The success path updates Alpine data, so it does not need new HTML from
-Python. The next lesson will keep the same form and change only that success
-result.
+`onServerRender` listens on the component root and returns the matching
+cleanup:
+
+```js
+onServerRender({ component }) {
+  const receiveSignup = (event) => {
+    component.acceptedEmail = event.detail.email;
+  };
+  component.$el.addEventListener('signup:sent', receiveSignup);
+  return () => component.$el.removeEventListener('signup:sent', receiveSignup);
+}
+```
+
+[`Dispatch`][citry.ext.events.actions.Dispatch] starts at the calling
+component's first live root. Cleanup prevents duplicate listeners after a
+server render and removes the listener on unmount.
 
 ## Next steps
 
-An event does not have to stop at an error or browser event. Next, [replace
-part of the page from Python](/getting-started/server-rendered-updates/).
+Next, [replace the calling component from Python](/getting-started/server-rendered-updates/).

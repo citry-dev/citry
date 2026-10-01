@@ -16,8 +16,8 @@ on a particular record.
 
 ## Choose a CSP compatibility mode
 
-Citry can validate its rendered component subtree against the expression
-language in its pinned Alpine CSP runtime:
+Citry can validate final rendered HTML and structured dependencies against
+its strict CSP delivery contract:
 
 ```citry
 from secrets import token_urlsafe
@@ -30,33 +30,28 @@ html = Page().render().serialize(csp_nonce=nonce)
 
 The modes have distinct rollout purposes:
 
-- `"off"` keeps the standard Alpine runtime and existing output.
-- `"warn"` keeps that same runtime and HTML, but emits one `RuntimeWarning`
-  containing incompatible reached expressions or rendered markup. Findings
-  stay separate per rendered instance when a late string hook prevents Citry
-  from proving that two occurrences came from one authored source site.
-- `"strict"` selects Citry's version-matched Alpine CSP runtime and rejects
-  incompatible output before returning HTML.
+- `"off"` performs no strict-CSP validation.
+- `"warn"` keeps the same output and emits one `RuntimeWarning` containing
+  incompatible rendered markup or dependency metadata.
+- `"strict"` rejects incompatible output before returning HTML.
 
-Strict validation covers component-boundary expressions that may disappear
-during rendering and the final HTML after extension hooks. It rejects Alpine
-syntax the pinned CSP evaluator cannot interpret, raw `<script>` and `<style>`
-elements, any ASCII-case-insensitive `on*` attribute, and `javascript:` URLs.
-Put complex browser logic in `Component.js` and call a scope method from the
-template. Put trusted
-scripts and styles in `Component.js`, `Component.css`, or structured
+Strict validation scans final HTML after extension hooks. It rejects raw
+`<script>` and `<style>` elements, ASCII-case-insensitive native `on*`
+attributes, and `javascript:` URLs. Vue templates are compiled into
+Citry-managed definition scripts rather than evaluated from directive strings
+in delivered HTML. Put browser logic in `Component.js` and call a method from
+the template. Put trusted scripts and styles in `Component.js`,
+`Component.css`, or structured
 [`Dependencies`][citry.ext.dependencies.Dependencies].
 
-Citry UI's production component definitions are checked in CI against the
-pinned Alpine CSP expression subset. That guarantee covers the public library
-components and its registered internal renderers. Documentation snippets are
-teaching material and are not a compatibility allowlist; run `citry check`
-before copying an example's browser expressions into a strict application.
+Your policy never needs `'unsafe-eval'` for Citry, and `"strict"` places no
+limit on the JavaScript you write in Vue expressions. A page under a Content
+Security Policy is sent with HTML that Vue replaces instead of adopting; see
+[Pages Vue replaces instead of adopting](/advanced/vue-runtime/#pages-vue-replaces-instead-of-adopting).
 
-Run `citry check` or use the Citry editor extension to get the same pinned
-expression findings at source locations. Per-render mode overrides are
-enforced during serialization; project tooling reports the configured engine
-default.
+Per-render mode overrides are enforced during serialization. The Citry editor
+and `citry check` report template and dependency problems at authored source
+locations where static evidence is available.
 
 Citry owns runtime selection and its rendered subtree. Your application still
 owns the response header, nonce generation, layouts, third-party resources,
@@ -80,16 +75,17 @@ The four modes answer different questions:
 - `"allow"` preserves normal interactive output.
 - `"warn"` preserves those exact bytes and emits one `RuntimeWarning` that
   inventories reached browser behavior.
-- `"omit"` removes Citry-managed executable scripts, Alpine and Events
-  runtimes, preloaders, and browser manifests. Server-rendered HTML and CSS
-  remain. Authored Alpine attributes remain inert.
+- `"omit"` removes the scripts Citry manages: the Vue runtime, the Events
+  client, component JavaScript, and the app data that starts Vue.
+  Server-rendered HTML and CSS remain. Authored Vue directives stay in the
+  HTML, where the browser ignores them.
 - `"forbid"` rejects a rendered subtree that needs executable client
   behavior, even when `deps_strategy="simple"` or `"ignore"` would otherwise
   hide the corresponding runtime or dependency tag.
 
 The inventory covers active component-boundary bindings, final structured
 dependencies after hooks, and settled HTML after string-level extensions. It
-recognizes Alpine and Events attributes, executable script types, native
+recognizes Vue and Events bindings, executable script types, native
 `on*` handlers, `javascript:` URLs, and executable HTML embedded through
 `iframe srcdoc` or HTML data documents. A declared but unused Events method
 is not by itself an active requirement.
@@ -97,22 +93,20 @@ is not by itself an active requirement.
 `"omit"` is a static-export tool, not an HTML sanitizer. Raw executable
 scripts, native handlers, and JavaScript URLs are left unchanged and reported;
 use `"forbid"` when they must make serialization fail. Omit also warns about
-high-confidence fallback hazards such as `x-cloak`, structural Alpine
-templates, and handler-only controls. Check the resulting page without
+high-confidence fallback hazards such as browser-only structural directives
+and handler-only controls. Check the resulting page without
 JavaScript and provide native links or forms for essential actions.
 
-CSS remains allowed in every mode. An omit fragment emits its CSS directly,
-without a preloader, manifest, mounted route, or existing browser manager.
+CSS remains allowed in every mode. An omit fragment includes its CSS
+directly, so it needs no mounted route and no Citry runtime on the page.
 `deps_strategy="ignore"` keeps its existing meaning and suppresses collected
 CSS too. When an exact structured stylesheet or inert data script carries an
 executable attribute, omit removes that attribute while retaining the CSS or
 data. Opaque dependency renderers are removed because Citry cannot prove what
 tag they create.
 
-With `security_csp="strict"`, omit and forbid do not validate inert Alpine
-expressions because no Alpine runtime is emitted. Strict CSP still validates
-raw executable markup and applies the response nonce to retained structured
-inline styles.
+With `security_csp="strict"`, omit and forbid still validate raw executable
+markup and apply the response nonce to retained structured inline styles.
 
 ## Pin Citry-managed scripts with SRI
 
@@ -137,10 +131,59 @@ also owns layouts, analytics, and every resource outside the component render.
 For a third-party URL, provide its published `integrity` value on a
 [`Script`][citry.ext.dependencies.Script]. Citry validates and preserves the
 value but reports it as unverified; it never downloads third-party code during
-serialization. Configure CORS and `crossorigin` as required by that resource.
+serialization. Set `crossorigin` on that `Script` yourself: the browser checks
+the digest only when the third-party host sends CORS headers.
 
-This option provides byte identity and hash metadata. It composes with
-`security_csp="strict"`, but does not enable that expression policy by itself.
+This option makes the browser run a Citry script only when its bytes
+match the hash Citry reports, and gives you those hashes for your CSP
+header. It works together
+with `security_csp="strict"`, but does not turn on strict CSP validation
+by itself.
+
+An interactive page sends its app's data, such as the rows of a table, as
+JSON that the browser reads but never runs. Your policy does not need to
+allow it, so `csp_script_hashes` lists the short script that starts the app
+but not the data. That script names an app id that is random for each
+response, so compute the hashes for each response, as for any page with
+inline scripts. `serialized.security.scripts` still records the data with its
+digest.
+
+### Embed Citry pages in sandboxed iframes
+
+Citry always adds `integrity` to the scripts and stylesheets it serves to run
+interactive components, whether or not you enable the option above. A browser
+checks a digest only on a response the page is allowed to read. So Citry
+requests its own files with `crossorigin="anonymous"`, and its asset routes
+(`/citry/citry.js`, the component JS and CSS, and the compiled component code)
+answer with `Access-Control-Allow-Origin: *`. That lets a Citry page mount
+inside `<iframe sandbox="allow-scripts">`, where every request counts as
+cross-origin.
+
+The header is safe on these routes: they return the same public bytes to
+every caller and never read cookies. Citry's event, message, and preview
+endpoints do not send it.
+
+If a sandboxed page stays blank and the browser console shows a Subresource
+Integrity error, a proxy or CDN in front of Citry is probably dropping
+`Access-Control-Allow-Origin`. Pass that header through for Citry's asset
+URLs. Pages that are not sandboxed and live on the same origin as Citry keep
+working without it.
+
+### Keep the CORS header when a proxy or CDN serves Citry's files
+
+Citry loads its own files with `crossorigin="anonymous"`, so the browser
+sends each of those requests as a CORS request. Citry writes these URLs
+relative to the page's own site, and a same-origin response loads without
+any CORS header. Two setups make the requests cross-origin: the sandboxed
+iframes described above, and a CDN or HTML optimizer that rewrites Citry's
+asset URLs to point at another host.
+
+In either setup, the browser refuses a Citry file whose response lacks
+`Access-Control-Allow-Origin`. The page shows its server-rendered HTML, but
+its interactive components never start, and the console reports a CORS or
+Subresource Integrity error. Configure the proxy or CDN to pass Citry's
+`Access-Control-Allow-Origin: *` header through for Citry's asset URLs, or to
+add it.
 
 ## Apply a request CSP nonce centrally
 
@@ -169,8 +212,11 @@ every resource outside the Citry render. The
 least 128 random bits before encoding.
 
 Citry adds the value after dependency hooks have run. Every structured
-[`Script`][citry.ext.dependencies.Script], including external scripts and inert
-JSON manifests, receives it. Every structured
+[`Script`][citry.ext.dependencies.Script], including external scripts and the
+JSON block that carries an interactive page's app data, receives it. The browser does not need the nonce on JSON
+data, but Citry's runtime does: it starts an interactive page only from app
+data that carries the same nonce as the runtime's own script, so markup
+injected into the page cannot supply its own app data. Every structured
 [`Style`][citry.ext.dependencies.Style], including external stylesheet links,
 receives it. A matching explicit nonce is accepted, while a different or
 malformed one is an error. The original dependency objects are not mutated, so
@@ -181,15 +227,13 @@ automatically trusted or nonced. Move trusted code to `Component.js`,
 `Component.css`, or a structured dependency. Strict mode rejects those raw
 elements after all render hooks have run.
 
-The browser manager records the nonce that authorized its own script tag. When
-a later fragment creates a structured script, inline style, or stylesheet
-link, the manager adds that document nonce if the descriptor omits it and
-rejects a different value before inserting the dependency batch. Off and
-warning fragments may load the
-standard manager through their preloader. Strict fragments contain only inert
-markup and manifests and require a strict Citry base document with an existing
-CSP manager. A present manager rejects nonce or runtime-variant mismatches
-before adoption; without one, the fragment remains inert.
+Citry's runtime reads the nonce from its own script tag when the page loads.
+When an [HTML fragment](/advanced/html-fragments/) arrives later, the runtime
+puts that page nonce on every script, inline style, and stylesheet link it
+adds for the fragment, so a fragment response does not need to know the
+page's nonce. Under `security_csp="strict"`, a fragment includes no script
+that loads Citry's runtime, so insert it only into a page that already
+loaded Citry.
 
 Do not cache nonce-bearing HTML separately from its response header. If a full
 response is cached, its HTML and CSP header must remain one artifact.
@@ -496,15 +540,15 @@ vectors, but it is not a formally proven-complete jail.
 The rule of thumb: only put objects and functions into your render context that
 you are comfortable exposing to template authors.
 
-### Browser CSP and Alpine expressions
+### Browser CSP and Vue expressions
 
 The Python sandbox described above does not govern browser expressions. Citry
-ships both Alpine's standard evaluator and a version-matched CSP evaluator.
-The standard `security_csp="off"` and `"warn"` modes require `unsafe-eval` when
-they evaluate Alpine attributes. `security_csp="strict"` selects the CSP
-runtime and enforces its smaller expression language before serialization.
+compiles Vue templates into managed definition scripts before the browser
+mounts the component. The browser does not evaluate authored directive strings
+from delivered HTML. `security_csp` controls final-output and dependency
+validation; it does not select a second expression evaluator.
 
-See [Alpine runtime](/advanced/alpine-runtime/#use-content-security-policy) for
+See [Vue runtime](/advanced/vue-runtime/#use-content-security-policy) for
 the client-side loading and fragment contract.
 
 ### Turning the sandbox off

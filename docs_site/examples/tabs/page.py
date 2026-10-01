@@ -4,15 +4,38 @@ from typing import Any
 
 from citry import Component
 
+# Every render shows the same three tabs, so the list is defined once.
+TABS = [
+    {
+        "label": "Overview",
+        "body": "Each Tabs keeps its open tab in browser state.",
+    },
+    {
+        "label": "Details",
+        "body": "Click a tab or use the arrow keys to open a panel.",
+    },
+    {
+        "label": "Notes",
+        "body": "CSS styles the open tab by its aria-selected value.",
+    },
+]
+
 
 class TabsPage(Component):
-    """A full page showing the Tabs component switching panels on click."""
+    """A full page showing the Tabs component switching panels."""
 
     class Kwargs:
         pass
 
     class Slots:
         pass
+
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
+        return {"tabs": TABS}
 
     template = """
       <!DOCTYPE html>
@@ -21,30 +44,17 @@ class TabsPage(Component):
           <meta charset="utf-8" />
           <title>Tabs example</title>
           <c-css />
+          <style>
+            body {
+              margin: 0;
+              padding: 1.5rem;
+              font-family: system-ui, sans-serif;
+            }
+          </style>
         </head>
-        <body
-          style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"
-        >
+        <body>
           <c-Tabs c-tabs="tabs" />
           <c-js />
         </body>
       </html>
     """
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
-        return {
-            "tabs": [
-                {
-                    "label": "Overview",
-                    "body": "Citry ships a tiny bit of JS with each component. No framework, no CDN.",
-                },
-                {
-                    "label": "Details",
-                    "body": "Clicking a tab toggles the hidden attribute on its panel, all client-side.",
-                },
-                {
-                    "label": "Notes",
-                    "body": "The active tab is styled with the component's own CSS via a data attribute.",
-                },
-            ]
-        }

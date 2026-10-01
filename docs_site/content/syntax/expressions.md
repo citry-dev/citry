@@ -238,6 +238,15 @@ class MetaTag:
         )
 ```
 
+When anything on the page or fragment has browser behavior, such as Vue
+directives or `$component`, trusted HTML must be a complete piece of HTML: every element
+it opens is closed in the same value, a non-void element is not self-closed
+(`<span/>`), and a `<` in text is written as `&lt;`. A value such as
+`Markup("<div>")` or `Markup("a < b")` makes the render fail with "A
+Markup value (trusted HTML from Python) is not a complete HTML fragment",
+followed by the value and the rule. Output with no browser behavior
+anywhere inserts the value unchanged.
+
 To make Ruff's
 [`S704`](https://docs.astral.sh/ruff/rules/unsafe-markup-use/){: target="_blank" rel="noopener"}
 rule recognize

@@ -1,6 +1,6 @@
 ---
 title: Bind events in templates
-description: Call Citry event handlers from HTML, bind controls to State, and show loading or error feedback with Alpine.
+description: Call Citry event handlers from HTML, bind controls to State, and show loading or error feedback with Vue.
 ---
 
 # Bind events in templates
@@ -15,9 +15,8 @@ fail when the template first compiles, normally on its first render.
 | Syntax | Result |
 |---|---|
 | `@c-click="save"` | Call `save` when this element receives `click`. Native and custom DOM event names work, including events that do not bubble. |
-| `@c-click="rate({stars: 5})"` | Evaluate one Alpine object expression and validate it as the handler's `data`. |
+| `@c-click="rate({stars: 5})"` | Evaluate one Vue object expression and validate it as the handler's `data`. |
 | `@c-submit.prevent="submit"` | Collect named form controls and call `submit` without native navigation. |
-| `@c-poll.30s="refresh"` | Call `refresh` every 30 seconds while the tab is visible. |
 
 | Modifier | Use |
 |---|---|
@@ -26,11 +25,16 @@ fail when the template first compiles, normally on its first render.
 | `.self` | Send only when the bound element itself was the event target. |
 | `.once` | Send at most once during the binding's lifetime. |
 | `.enter` / `.escape` | Require the concrete event's `key` to be `Enter` / `Escape`, regardless of the event name. |
-| `.debounce[.300ms]` | Wait for a quiet period. The bare form uses 250 ms. |
-| `.throttle[.1s]` | Send at most once per period. The bare form uses 250 ms. |
 
-Debounce and throttle also apply to two-way State bindings. Polling accepts one
-time segment. Invalid combinations fail when the component template compiles.
+On HTML elements, `.once` follows Vue's native listener behavior: the first
+event consumes the listener even if `.enter` or `.self` prevents the handler
+from running. For example, with `@c-keydown.enter.once`, pressing another key
+first leaves no listener for a later Enter press.
+
+Ordinary-element `@c-*` bindings support `.debounce` and `.throttle`. Each may
+take an optional whole-number duration in milliseconds or seconds immediately
+after the modifier, as in `@c-input.debounce.300ms="search"`; a bare modifier
+uses 250 ms. Two-way `:c-*` State control bindings support the same modifiers.
 
 Citry listens on the element carrying the binding. A non-bubbling event works
 on that element but does not reach a binding on an ancestor. Use a bubbling
@@ -49,18 +53,20 @@ An ordinary event with no `key` simply does not match the filter, while an
 arbitrarily named `KeyboardEvent` can.
 
 Bindings inside an HTML `<template>` definition remain inert with the rest of
-its `content`. When Alpine creates live `x-if` or `x-for` copies, Citry
+its `content`. When Vue creates live `v-if` or `v-for` copies, Citry
 activates the bindings on those inserted copies. A binding on the `<template>`
 element itself is different: that element is live, so its binding activates
 normally.
 
 An `@c-*` attribute on a child component tag is a parent-owned listener. Its
-handler name and optional argument expression use the parent's scope even
-though the child's roots carry the physical DOM listener. If the child should
-run a callback within its own scope, pass that callback as a `$c-props` value
-and use it in the child's template. See
-[Client interactivity](/concepts/client-interactivity/#send-events-up-from-a-component-tag)
-for component-boundary isolation.
+handler name and optional argument expression use the parent's Vue instance even
+though the child receives the event. If the child should run a callback from
+its own template, declare a native Vue function prop and pass the callback
+through that prop. See
+[Client interactivity](/concepts/client-interactivity/#listen-to-child-events)
+for component-boundary isolation. Debounce and throttle are currently supported
+only on `@c-*` bindings attached to HTML elements; a timed binding on a child
+component is rejected rather than sharing timing state between child placements.
 
 ## Bind controls to State
 
@@ -191,7 +197,7 @@ custom update event that exposes a compatible `key` value.
 
 Citry applies this matrix at every point where a type becomes known: template
 load for a literal type, render time for Python-resolved `c-type` / `c-bind`,
-and in the browser for Alpine `:type` / `x-bind:type`. A live invalid type
+and in the browser for Vue `:type`. A live invalid type
 turns off State application, update listeners, draft preservation, and pending
 timers. Citry reports it once and reactivates the binding if the type becomes
 valid again. The browser checks the raw `type` attribute so an unknown keyword
@@ -265,90 +271,79 @@ class SavedCounter(Component):
     template = """
       <div>
         <button @click="$state.count++">+1</button>
-        <span x-text="$state.count">{{ count }}</span>
+        <span v-text="$state.count">{{ count }}</span>
         <button @c-click="save">Save</button>
       </div>
     """
 ```
 
-The first button is ordinary Alpine and makes no request. The Save button sends
+The first button is ordinary Vue and makes no request. The Save button sends
 the queued State update with the `save` call.
 
-## Read call state from Alpine
+## Read call state from Vue
 
-These magics are available in Alpine expressions inside an interactive Citry
+These magics are available in Vue expressions inside an interactive Citry
 component:
 
 | Magic | Use |
 |---|---|
-| [`$state`][$state] | Read reactive public State or write a field allowed by `_model`. A write rides the next call from this component. |
+| [`$state`][$state] | Read reactive public State or replace a field allowed by `_model`. A write rides the next non-GET browser call from this component. |
 | [`$loading()`][$loading] | Test whether any call from this component is queued or running. |
 | [`$loading('save')`][$loading] | Test only the named handler. |
 | [`$error()`][$error] | Read the newest retained error across this component's handlers, or `null`. |
 | [`$error('save')`][$error] | Read only the named handler's retained error. |
-| [`$sendEvent(name, args?)`][$sendEvent] | Send a named event from an Alpine expression. |
-| [`$onEvent(name, callback)`][$onEvent] | Listen for server-dispatched events and receive an unsubscribe function. |
+| [`$sendEvent(name, args?)`][$sendEvent] | Send a named event from a Vue expression. |
 
 The loading and error accessors are read-only. A successful call clears only
 its handler's error. Retrying a failed handler leaves its error visible until
 the new call succeeds or fails. Unknown handler names passed to `$loading` or
 `$error` throw before a request is sent.
 
-Component JavaScript receives the same State, loading, error, and event
-helpers:
+Component JavaScript uses the same public-instance helpers through `this`:
 
 ```javascript
-$component(({ state, effect, loading, error, sendEvent, onEvent }) => {
-  const stop = onEvent("FilterPanel:reset", () => {
-    state.query = "";
-    sendEvent("refresh");
-  });
-
-  effect(() => {
-    const refreshError = error("refresh");
-    showRefreshError(
-      refreshError && !loading("refresh")
-        ? refreshError.message
-        : null,
-    );
-  });
-
-  return stop;
+$component({
+  methods: {
+    async refresh() {
+      const result = await this.$sendEvent("refresh");
+      this.result = result;
+    },
+  },
+  data() {
+    return { result: null };
+  },
 });
 ```
 
 Declarative `@c-*` bindings do not expose the handler's Promise or an
-[`actions.Data`][citry.ext.events.actions.Data] value. Use `$sendEvent` or
-`sendEvent` when browser code needs that one caller's value. Return
+[`actions.Data`][citry.ext.events.actions.Data] value. Use `$sendEvent` when browser code needs that one caller's value. Return
 [`actions.Dispatch`][citry.ext.events.actions.Dispatch] when a declarative
 call must notify browser listeners.
 
-## Refresh a dashboard on an interval
+A well-formed server `ok: false` result, including `invalid_args`, is recorded
+for `$error(...)` and consumed by a declarative `@c-*` binding. A native Vue
+listener that calls `$sendEvent`, such as `@select="$sendEvent('save')"`, owns
+a Promise instead; handle its rejection with `await` and `try`/`catch` or with
+`.catch(...)`. Client-side argument expressions that cannot be encoded as JSON,
+malformed Events protocol responses, and render or lifecycle failures still
+surface as runtime errors.
 
-`@c-poll` calls one handler repeatedly and pauses while the tab is hidden:
+## Polling status
 
-```citry
-class JobStatus(Component):
-    citry = citry_app
+Use `@c-poll.<seconds>s` on an ordinary DOM element to call a server handler at
+a fixed cadence. The first call starts after one complete interval:
 
-    class Kwargs:
-        job_id: int
-
-    class State(Kwargs):
-        pass
-
-    class Events:
-        def refresh(self, state):
-            return JobStatus(job_id=state.job_id)
-
-    def template_data(self, kwargs, slots):
-        return {"status": job_status(kwargs.job_id)}
-
-    template = """
-      <div @c-poll.30s="refresh">
-        Job is {{ status }}
-      </div>
-    """
+```citry-html
+<output @c-poll.30s="refresh({projectId})">Waiting for an update</output>
 ```
 
-Use exactly one time segment, such as `.30s`.
+Each live element owns its polling lifetime. Citry skips a tick while that
+element's previous polling request is queued or running. Removing the element
+or accepting a server revision that replaces that binding stops its old
+lifetime and starts a fresh complete interval. A revision in an unrelated
+subtree does not reset the timer. A hidden page pauses polling; returning to it
+starts a fresh complete interval, without catch-up calls.
+
+Polling currently requires a literal binding on an ordinary DOM element.
+Component-boundary `@c-poll` and polling introduced through `c-bind` are not
+supported by the Vue runtime.
