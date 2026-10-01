@@ -389,55 +389,84 @@ def local_docs_site_url() -> Iterator[str]:
         _stop_process(process)
 
 
-@pytest.fixture(scope="session")
-def getting_started_app_url() -> Iterator[str]:
-    """Run the finished FastAPI tutorial app through a real ASGI server."""
-    repo_dir = Path(__file__).resolve().parents[3]
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+# Every tutorial step from the FastAPI one on, plus the browser-only examples
+# of the earlier steps. getting_started_app.py describes what each server runs.
+GETTING_STARTED_STEPS = ("live", "8", "9", "10", "11", "12", "13")
 
-    env = os.environ.copy()
-    env["CITRY_SECRET"] = secrets.token_urlsafe(32)
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "docs_site.tests.e2e.getting_started_app:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-        ],
-        cwd=repo_dir,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    url = f"http://127.0.0.1:{port}"
-    deadline = time.monotonic() + 15
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            output = process.stdout.read() if process.stdout else ""
-            pytest.fail(f"Getting started app exited during startup:\n{output}")
-        try:
-            with urllib.request.urlopen(f"{url}/", timeout=0.5) as response:  # noqa: S310
-                if response.status == 200:
-                    break
-        except OSError:
+
+@pytest.fixture(scope="session")
+def getting_started_urls() -> Iterator[dict[str, str]]:
+    """Run each getting-started tutorial step through its own real ASGI server."""
+    repo_dir = Path(__file__).resolve().parents[3]
+    secret = secrets.token_urlsafe(32)
+    servers: dict[str, tuple[subprocess.Popen[str], str]] = {}
+
+    def stop_all() -> None:
+        for process, _url in servers.values():
+            process.terminate()
+        for process, _url in servers.values():
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+
+    # Hold every probe socket until all ports are chosen, so no two servers get the same free port.
+    probes = [socket.socket() for _step in GETTING_STARTED_STEPS]
+    for probe in probes:
+        probe.bind(("127.0.0.1", 0))
+    ports = [probe.getsockname()[1] for probe in probes]
+    for probe in probes:
+        probe.close()
+
+    # Start every server before waiting for any, so their startups overlap.
+    for step, port in zip(GETTING_STARTED_STEPS, ports, strict=True):
+        env = os.environ.copy()
+        env["CITRY_SECRET"] = secret
+        env["CITRY_GETTING_STARTED_STEP"] = step
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "docs_site.tests.e2e.getting_started_app:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+                # Nothing reads the output until a failure, so keep per-request
+                # lines from filling the pipe and stalling a long session.
+                "--no-access-log",
+            ],
+            cwd=repo_dir,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        servers[step] = (process, f"http://127.0.0.1:{port}")
+
+    # The live server has no `/` page, so probe a page every server has.
+    probe_paths = {"live": "/welcome"}
+    deadline = time.monotonic() + 30
+    for step, (process, url) in servers.items():
+        while True:
+            if process.poll() is not None:
+                output = process.stdout.read() if process.stdout else ""
+                stop_all()
+                pytest.fail(f"Getting started step {step} exited during startup:\n{output}")
+            try:
+                with urllib.request.urlopen(url + probe_paths.get(step, "/"), timeout=0.5) as response:  # noqa: S310
+                    if response.status == 200:
+                        break
+            except OSError:
+                pass
+            if time.monotonic() > deadline:
+                stop_all()
+                pytest.fail(f"Getting started step {step} did not start within 30 seconds")
             time.sleep(0.05)
-    else:
-        process.terminate()
-        pytest.fail("Getting started app did not start within 15 seconds")
 
     try:
-        yield url
+        yield {step: url for step, (_process, url) in servers.items()}
     finally:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
+        stop_all()
