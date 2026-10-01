@@ -130,11 +130,16 @@ class TemplatePythonValueType:
             types, such as ``app.store.Task | None`` or ``Task``.
         module: The module whose names an unqualified annotation uses, such
             as the module that declares the child's ``Kwargs``.
+        class_modules: The module of each dotted class path in
+            ``annotation``, such as ``("app.store.Board.Row", "app.store")``
+            for a class nested in another class. A dotted path without an
+            entry is read as a module followed by one class name.
 
     """
 
     annotation: str
     module: str | None = None
+    class_modules: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1222,9 +1227,15 @@ def _value_check_source(
     expression = ast.parse(display, mode="eval")
     aliases: dict[str, str] = {}
     unresolved = False
+    class_modules = dict(value_type.class_modules)
 
     def alias(module: str) -> str:
         return aliases.setdefault(module, f"{alias_prefix}_{len(aliases)}")
+
+    def attribute_chain(base: ast.expr, names: list[str]) -> ast.expr:
+        for name in names:
+            base = ast.Attribute(base, name, ast.Load())
+        return base
 
     class Qualifier(ast.NodeTransformer):
         def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
@@ -1237,10 +1248,13 @@ def _value_check_source(
                 return self.generic_visit(node)
             parts.append(owner.id)
             parts.reverse()
-            module = ".".join(parts[:-1])
+            # A class nested in another class, such as `app.store.Board.Row`,
+            # needs its module from the app; otherwise the last name is the class.
+            module = class_modules.get(".".join(parts), ".".join(parts[:-1]))
+            class_path = ".".join(parts)[len(module) + 1 :].split(".")
             if module == source_module:
-                return ast.Name(parts[-1], ast.Load())
-            return ast.Attribute(ast.Name(alias(module), ast.Load()), parts[-1], ast.Load())
+                return attribute_chain(ast.Name(class_path[0], ast.Load()), class_path[1:])
+            return attribute_chain(ast.Name(alias(module), ast.Load()), class_path)
 
         def visit_Name(self, node: ast.Name) -> ast.AST:
             nonlocal unresolved
@@ -1266,7 +1280,7 @@ def _value_type_inputs(value_type: TemplatePythonValueType | None) -> tuple[str,
     """Return the value type's text, so the generated names avoid it too."""
     if value_type is None:
         return ()
-    return (value_type.annotation, value_type.module or "")
+    return (value_type.annotation, value_type.module or "", *(module for _path, module in value_type.class_modules))
 
 
 def _query_placeholder(

@@ -987,3 +987,18 @@ def test_static_input_queries_cover_quoted_component_attributes() -> None:
         ('"5"', ("c-Inner", "n")),
     ]
     assert all(source.encode()[query.start_index : query.end_index].decode() == query.source for query in queries)
+
+
+def test_value_check_imports_a_nested_class_from_its_module() -> None:
+    nested = (("app.store.Board.Row", "app.store"),)
+
+    source = _checked_shadow(TemplatePythonValueType("list[app.store.Board.Row] | None", class_modules=nested))
+    same_module = _checked_shadow(
+        TemplatePythonValueType("app.store.Board.Row", class_modules=nested), source_module="app.store"
+    )
+
+    # The module is imported and the nested path read from it; in a copy of
+    # that same module the outer class is a bare name.
+    assert "import app.store as __citry_checked_type_0" in source
+    assert "__citry_checked_value: list[__citry_checked_type_0.Board.Row] | None = (\ntask\n)" in source
+    assert "__citry_checked_value: Board.Row = (\ntask\n)" in same_module

@@ -324,3 +324,29 @@ def test_unknown_parts_are_collected_and_filled_by_their_offsets():
 
     assert filled.javascript == "{rows: Array<string>, count: number, tags: unknown, plain: 1}"
     assert filled.unsupported == ("set literals are not JSON-serializable",)
+
+
+class Outer:
+    @dataclass
+    class Inner:
+        note: str
+
+
+class NestedCard(Component):
+    citry = Citry(autodiscover=False)
+    template = """
+      <p></p>
+    """
+
+    class Kwargs:
+        inner: Outer.Inner
+        rows: list[Outer.Inner | None]
+
+
+def test_kwargs_wire_classes_record_the_module_of_a_nested_class():
+    classes = kwargs_wire_classes(NestedCard)
+
+    # The import path alone does not say that `Outer` is a class, not a module.
+    assert classes.members["inner"] == f"{_PREFIX}Outer.Inner"
+    assert classes.class_modules == {f"{_PREFIX}Outer.Inner": __name__}
+    assert KwargsWireClasses.from_dict(classes.to_dict()) == classes

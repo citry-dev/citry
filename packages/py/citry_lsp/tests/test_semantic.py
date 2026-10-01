@@ -2459,3 +2459,38 @@ async def test_static_component_inputs_are_checked_against_their_target_types(tm
             'Object of type `Literal["3"]` is not assignable to `int`',
         ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_c_value_check_reads_a_class_nested_in_another_class(tmp_path: Path) -> None:
+    # `models.Board.Row` does not say where the module ends, so the check
+    # must learn from the app that `models` is the module.
+    (tmp_path / "models.py").write_text(
+        "from dataclasses import dataclass\nclass Board:\n    @dataclass\n    class Row:\n        title: str\n",
+        encoding="utf-8",
+    )
+    module_source = (
+        "from __future__ import annotations\n"
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "from models import Board\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class RowCard(Component):\n"
+        "    citry = engine\n"
+        "    template = '<p></p>'\n"
+        "    class Kwargs:\n"
+        "        row: Board.Row\n"
+        "class Page(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    class TemplateData:\n"
+        "        row: Board.Row\n"
+    )
+
+    findings = await _python_findings_in(
+        tmp_path, '<c-RowCard c-row="row" />\n<c-RowCard c-row="1" />\n', module_source
+    )
+
+    assert findings == [
+        ("citry.python.invalid-assignment", "1", "Object of type `Literal[1]` is not assignable to `Row`"),
+    ]

@@ -4931,8 +4931,16 @@ def _query_value_type(query: TemplatePythonQuery, project: ProjectState) -> Temp
     # The app worker resolved each annotation in its own module, so a class is
     # its import path even when the child postpones its annotations. A field
     # it could not resolve is not checked.
-    annotation = project.source_analysis.kwargs_wire_classes(component).members.get(name)
-    return TemplatePythonValueType(annotation) if annotation is not None else None
+    wire_classes = project.source_analysis.kwargs_wire_classes(component)
+    annotation = wire_classes.members.get(name)
+    if annotation is None:
+        return None
+    # A class nested in another class needs its module named, because its
+    # import path does not say where the module ends.
+    class_modules = tuple(
+        sorted((path, module) for path, module in wire_classes.class_modules.items() if path in annotation)
+    )
+    return TemplatePythonValueType(annotation, class_modules=class_modules)
 
 
 def _query_contains_named_expression(query: TemplatePythonQuery) -> bool:

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, ClassVar, ForwardRef, TypeVar, get_origin
 import typing_extensions
 
 from citry._annotation_introspection import _own_annotations
-from citry._class_introspection import _static_class_mro
+from citry._class_introspection import _safe_class_text, _static_class_mro
 from citry._json_wire import WireClass, WireClassKind
 from citry._schema_introspection import _effective_schema_binding, _format_annotation
 from citry.introspection import _is_utf8_string
@@ -40,23 +40,30 @@ class KwargsWireClasses:
         members: Each Kwargs field's annotation, resolved and written the way
             Citry formats schema types, so a class is its import path.
         classes: The classes those annotations reach, by import path.
+        class_modules: The module of each class named anywhere in
+            ``members``, by import path. An import path such as
+            ``app.store.Board.Row`` does not say where the module ends and
+            the nested class begins, so a tool that imports the class reads
+            the module here.
 
     """
 
     members: Mapping[str, str | None] = field(default_factory=dict)
     classes: Mapping[str, WireClass] = field(default_factory=dict)
+    class_modules: Mapping[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-ready copy for the language server's worker payload."""
         return {
             "members": dict(self.members),
             "classes": {name: item.to_dict() for name, item in self.classes.items()},
+            "class_modules": dict(self.class_modules),
         }
 
     @classmethod
     def from_dict(cls, value: object) -> KwargsWireClasses:
         """Validate and restore one copied record."""
-        if type(value) is not dict or set(value) != {"members", "classes"}:
+        if type(value) is not dict or set(value) != {"members", "classes", "class_modules"}:
             msg = "kwargs wire class data must contain the exact supported fields"
             raise ValueError(msg)
         members = value["members"]
@@ -70,9 +77,16 @@ class KwargsWireClasses:
         if type(classes) is not dict or any(type(name) is not str for name in classes):
             msg = "kwargs wire classes must be keyed by import path"
             raise ValueError(msg)
+        class_modules = value["class_modules"]
+        if type(class_modules) is not dict or any(
+            type(path) is not str or type(module) is not str for path, module in class_modules.items()
+        ):
+            msg = "kwargs wire class modules must map import paths to module names"
+            raise ValueError(msg)
         return cls(
             members=dict(members),
             classes={name: WireClass.from_dict(item) for name, item in classes.items()},
+            class_modules=dict(class_modules),
         )
 
 
@@ -111,10 +125,36 @@ def kwargs_wire_classes(component_class: type) -> KwargsWireClasses:
         wire_class, hints = described
         classes[name] = wire_class
         pending.extend(hints.values())
+    class_modules: dict[str, str] = {}
+    for hint in members.values():
+        _collect_class_modules(hint, class_modules, depth=0)
     return KwargsWireClasses(
         members={name: _hint_display(hint) for name, hint in members.items()},
         classes=classes,
+        class_modules=class_modules,
     )
+
+
+# Annotations nest only a few levels in practice; this bounds a pathological one.
+_MAX_ANNOTATION_DEPTH = 16
+
+
+def _collect_class_modules(hint: object, found: dict[str, str], *, depth: int) -> None:
+    """Record the module of each class named in one resolved annotation, such as both classes in `A | list[B]`."""
+    if depth > _MAX_ANNOTATION_DEPTH:
+        return
+    if isinstance(hint, type) and get_origin(hint) is None:
+        path = _format_annotation(hint)
+        module = _safe_class_text(hint, "__module__")
+        if path is not None and module is not None and path.startswith(f"{module}."):
+            found.setdefault(path, module)
+        return
+    try:
+        arguments = typing.get_args(hint)
+    except Exception:  # noqa: BLE001 - an unusual typing object names no class to record
+        return
+    for argument in arguments if type(arguments) is tuple else ():
+        _collect_class_modules(argument, found, depth=depth + 1)
 
 
 def _followed_class_name(hint: object) -> str | None:

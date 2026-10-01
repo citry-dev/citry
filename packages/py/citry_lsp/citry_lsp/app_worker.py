@@ -207,7 +207,9 @@ def _kwargs_classes(component_class: type | None, *, with_classes: bool) -> dict
     if component_class is None:
         return KwargsWireClasses().to_dict()
     resolved = kwargs_wire_classes(component_class)
-    return (resolved if with_classes else KwargsWireClasses(members=resolved.members)).to_dict()
+    if not with_classes:
+        resolved = KwargsWireClasses(members=resolved.members, class_modules=resolved.class_modules)
+    return resolved.to_dict()
 
 
 def _schema_resolution_chain(
