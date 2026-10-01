@@ -229,6 +229,81 @@ def template_python_queries(
     return tuple(queries)
 
 
+def template_static_input_queries(
+    template: Any,
+    *,
+    parse_nested: Callable[[str], Any] = parse_template,
+) -> tuple[TemplatePythonQuery, ...]:
+    """
+    Return a query for each quoted static attribute on a ``c-*`` component tag.
+
+    ``<c-TaskCard lane="todo">`` passes the string ``"todo"`` as the
+    ``lane`` input, so the quoted text, quotes included, is a Python string
+    literal with the value the child receives, and it can be checked
+    against the child's input type like a ``c-lane`` value. Citry passes the
+    text as written, without decoding character references, so the literal
+    matches it exactly. A value with a backslash, which Python would read
+    as an escape, or with a line break, which a quoted literal cannot hold,
+    is left out, and so is an unquoted or empty value: an empty or missing
+    value passes ``True``.
+    """
+    queries: list[TemplatePythonQuery] = []
+    _collect_static_input_queries(template, queries, base_index=0, parse_nested=parse_nested)
+    return tuple(sorted(queries, key=lambda query: query.start_index))
+
+
+def _collect_static_input_queries(
+    template: Any,
+    queries: list[TemplatePythonQuery],
+    *,
+    base_index: int,
+    parse_nested: Callable[[str], Any],
+) -> None:
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node: Any = element._0
+        tag_name = node.start_tag.name.content
+        for attr in node.start_tag.attrs:
+            name = attr.key.content
+            value = attr.value
+            if attr.kind == HtmlAttrKind.Template and attr.inner_value is not None:
+                nested = _nested_template(attr.inner_value.content, parse_nested)
+                if nested is not None:
+                    nested_template, nested_start = nested
+                    _collect_static_input_queries(
+                        nested_template,
+                        queries,
+                        base_index=base_index + attr.inner_value.start_index + nested_start,
+                        parse_nested=parse_nested,
+                    )
+                continue
+            if (
+                attr.kind != HtmlAttrKind.Static
+                or not tag_name.lower().startswith("c-")
+                or value is None
+                or attr.quote_char not in {'"', "'"}
+                or attr.inner_value is None
+                or not attr.inner_value.content
+                or "\\" in value.content
+                or "\n" in value.content
+                or "\r" in value.content
+            ):
+                continue
+            queries.append(
+                TemplatePythonQuery(
+                    value.content,
+                    base_index + value.start_index,
+                    base_index + value.end_index,
+                    "attribute",
+                    attribute_target=(tag_name, name),
+                )
+            )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_static_input_queries(body, queries, base_index=base_index, parse_nested=parse_nested)
+
+
 def build_inferred_template_shadow(
     module_source: str,
     class_qualname: str,
@@ -1821,4 +1896,5 @@ __all__ = [
     "build_schema_template_shadow",
     "template_python_queries",
     "template_python_query_at",
+    "template_static_input_queries",
 ]

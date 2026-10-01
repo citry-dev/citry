@@ -114,6 +114,7 @@ from citry.analysis import (
     python_event_handler_range,
     template_python_queries,
     template_python_query_at,
+    template_static_input_queries,
     unknown_component_uses,
     vue_listener_event_names,
 )
@@ -5094,12 +5095,24 @@ def all_expression_shadows(
     groups: list[ExpressionShadowGroup] = []
     nested_parser = project.analysis.parse_template if project.analysis is not None else parse_template
     for parsed in document.parsed.values():
-        queries = template_python_queries(parsed.template, parse_nested=nested_parser)
+        # A quoted static attribute on a component tag passes its text as a
+        # string, so it is checked against the child's input like a `c-*` value.
+        static_queries = template_static_input_queries(parsed.template, parse_nested=nested_parser)
+        queries = tuple(
+            sorted(
+                (*template_python_queries(parsed.template, parse_nested=nested_parser), *static_queries),
+                key=lambda query: query.start_index,
+            )
+        )
         consumers = _expression_shadow_consumers(document, parsed.region, project, open_documents)
         if consumers is None:
             continue
         walrus_ends: list[int] = []
         for query in queries:
+            value_type = _query_value_type(query, project)
+            if value_type is None and any(query is static for static in static_queries):
+                # A static value that sets no typed input has nothing to check.
+                continue
             has_walrus = _query_contains_named_expression(query)
             if (
                 (query.host_kind == "loop" and has_walrus)
@@ -5125,8 +5138,8 @@ def all_expression_shadows(
                 continue
             mapped = parsed.region.source_map.map_range(query.start_index, query.start_index)
             position = types.Position(mapped.start.line, mapped.start.character)
-            # Diagnostics also check a `c-*` value against the type its target takes.
-            shadows = _build_expression_shadows(consumers, query, 0, value_type=_query_value_type(query, project))
+            # Diagnostics also check a `c-*` value or a static input against the type its target takes.
+            shadows = _build_expression_shadows(consumers, query, 0, value_type=value_type)
             if shadows:
                 groups.append(ExpressionShadowGroup(position, shadows))
             if has_walrus:

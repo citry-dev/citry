@@ -2422,3 +2422,40 @@ def test_recorded_query_function_bounds_match_a_parse_of_the_shadow(build, pream
     # match a parse of the shadow.
     assert document.query_function is not None
     assert document.query_function == _generated_query_function_bounds(document.source)
+
+
+@pytest.mark.asyncio
+async def test_static_component_inputs_are_checked_against_their_target_types(tmp_path: Path) -> None:
+    module_source = (
+        f"{_SIZED_CARD}"
+        "class Counter(Component):\n"
+        "    citry = engine\n"
+        "    template = '<p></p>'\n"
+        "    class Kwargs:\n"
+        "        count: int = 0\n"
+        "        label: str = ''\n"
+        "        shown: bool = False\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return {}\n"
+    )
+    template_source = '<c-Card size="sm" />\n<c-Card size=\'xl\' />\n<c-Counter count="3" label="a&amp;b" shown />\n'
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    # A static value is a string, so `xl` is not a size and `"3"` is not an
+    # int. `shown` without a value passes `True`, which is not checked here.
+    assert findings == [
+        (
+            "citry.python.invalid-assignment",
+            "'xl'",
+            'Object of type `Literal["xl"]` is not assignable to `Literal["sm", "md", "lg"]`',
+        ),
+        (
+            "citry.python.invalid-assignment",
+            '"3"',
+            'Object of type `Literal["3"]` is not assignable to `int`',
+        ),
+    ]

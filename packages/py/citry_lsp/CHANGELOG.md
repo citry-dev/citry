@@ -20,7 +20,9 @@ All notable changes to `citry-lsp` are documented here.
   such as `:aria-expanded="String(open)"`; bind the boolean instead.
 - The editor checks each `c-*` value on a component tag against the
   child's `Kwargs` annotation, so `<c-TaskCard c-task="1">` is an error
-  when `task` is a `Task`. It also checks that `c-class` and `c-style` on
+  when `task` is a `Task`. A static attribute is checked as the string
+  it passes, so `<c-TaskCard size="xl">` is an error when `size` only
+  takes `"sm"`, `"md"`, or `"lg"`. It also checks that `c-class` and `c-style` on
   an HTML element get a string, a dict, a list or tuple of those, or
   `None`.
 - The editor warns about a static HTML attribute value that the attribute

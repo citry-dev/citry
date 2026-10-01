@@ -15,6 +15,7 @@ from citry.analysis import (
     build_schema_template_shadow,
     template_python_queries,
     template_python_query_at,
+    template_static_input_queries,
 )
 from citry_core.template_parser import parse_template
 
@@ -965,3 +966,24 @@ def test_inferred_shadow_reads_keys_before_a_spread_as_optional() -> None:
     # The spread may replace `extra`, so only `after` is read by subscript.
     assert "extra = __citry_data.get('extra')" in shadow.source
     assert "after = __citry_data['after']" in shadow.source
+
+
+def test_static_input_queries_cover_quoted_component_attributes() -> None:
+    source = (
+        '<c-Card lane="todo" mark=\'a&amp;b\' flag empty="" bare=x slash="a\\\\b">'
+        '<c-if cond="ok"><c-Inner n="5" /></c-if>'
+        "</c-Card>"
+        '<p title="x"></p>'
+    )
+
+    queries = template_static_input_queries(parse_template(source))
+
+    # Each source is the quoted text, a Python literal of the string the
+    # child receives. A value-less, empty, unquoted, or backslash value and
+    # an HTML element's attribute are left out.
+    assert [(query.source, query.attribute_target) for query in queries] == [
+        ('"todo"', ("c-Card", "lane")),
+        ("'a&amp;b'", ("c-Card", "mark")),
+        ('"5"', ("c-Inner", "n")),
+    ]
+    assert all(source.encode()[query.start_index : query.end_index].decode() == query.source for query in queries)

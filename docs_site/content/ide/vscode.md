@@ -739,8 +739,18 @@ checked against the child's `Kwargs` annotation. A wrong value shows a
 <c-TaskCard c-task="1" />
 ```
 
-ty's error names both types, here `Literal[1]` and `Task`. A missing or
-unknown input is reported by the template's own input checks instead. The
+ty's error names both types, here `Literal[1]` and `Task`. A static
+attribute on a component tag passes its text as a string, so it is
+checked the same way:
+
+```citry-html
+{# TaskCard declares `size: Literal["sm", "md", "lg"]` #}
+<c-TaskCard size="xl" />
+```
+
+An attribute without a value, such as `<c-TaskCard compact>`, passes
+`True` and is not checked. A missing or unknown input is reported by the
+template's own input checks instead. The
 check follows the annotation, not runtime validation, so a Pydantic
 `Kwargs` field that turns `"1"` into `1` still reports a string passed
 to an `int`. On an HTML element, `c-class` and `c-style` are checked the

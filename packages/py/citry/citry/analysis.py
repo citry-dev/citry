@@ -146,6 +146,7 @@ from citry._template_python import build_reveal_shadow as _build_reveal_shadow
 from citry._template_python import build_schema_template_shadow as _build_schema_template_shadow
 from citry._template_python import template_python_queries as _template_python_queries
 from citry._template_python import template_python_query_at as _template_python_query_at
+from citry._template_python import template_static_input_queries as _template_static_input_queries
 from citry_core.template_formatter import (
     EmbeddedFormatPlan as _CoreEmbeddedFormatPlan,
 )
@@ -1701,6 +1702,28 @@ def template_python_queries(
 
     """
     return _template_python_queries(template, parse_nested=parse_nested)
+
+
+def template_static_input_queries(
+    template: object,
+    *,
+    parse_nested: Callable[[str], object] = _parse_template,
+) -> tuple[TemplatePythonQuery, ...]:
+    """
+    Return a query for each quoted static attribute on a ``c-*`` component tag.
+
+    The quoted text is a Python string literal with the value the child
+    component receives, so it can be checked against the child's input type.
+
+    Args:
+        template: Parsed Citry template AST.
+        parse_nested: Parser used for nested-template attribute values.
+
+    Returns:
+        Queries ordered by their authored source position.
+
+    """
+    return _template_static_input_queries(template, parse_nested=parse_nested)
 
 
 def build_inferred_template_shadow(
@@ -5024,6 +5047,7 @@ __all__ = [
     "python_event_handler_range",
     "template_python_queries",
     "template_python_query_at",
+    "template_static_input_queries",
     "template_tag_uses",
     "unknown_component_uses",
 ]
