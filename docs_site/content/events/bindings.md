@@ -236,7 +236,8 @@ class Events:
 ### What Citry writes into the control
 
 Citry applies the field to every bound control in the browser and re-applies it
-after each update, so a one-way binding keeps showing the server's value:
+after each update, including a response that only changes State, so a
+one-way binding keeps showing the server's value:
 
 | Control | Written as |
 |---|---|

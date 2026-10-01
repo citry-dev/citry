@@ -908,8 +908,9 @@ class EventsDispatcher:
         The ``RouteResponse`` escape hatch: per-event HTTP route only.
 
         The handler opts out of bundling and must run through its own HTTP
-        route. State cannot change because this response bypasses the normal
-        state-token refresh.
+        route. State cannot change because this response has no result
+        envelope, so no ``state`` action can carry the new State token and
+        public State values to the browser.
         """
         if ctx.transport != "http" or not per_event:
             msg = (

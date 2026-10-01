@@ -165,8 +165,8 @@ your templates.
 <c-builtin tag="i18n" c-level="3" />
 
 Use it to provide a locale to one subtree. Add a real `tag` when the subtree
-needs `lang` and `dir`, or enable its browser service with the bare `client`
-attribute.
+needs `lang` and `dir`. To also give the subtree's browser code an i18n
+service, add the bare `client` attribute together with `tag`.
 See [Locales and context](/i18n/locale-context/) and
 [Browser i18n](/i18n/browser/).
 

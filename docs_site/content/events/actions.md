@@ -81,7 +81,7 @@ component, listen on an ancestor element, on `document`, or with
 | `actions.Redirect(url)` | Navigate. |
 | `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` | Change browser history without navigation. |
 | `actions.Download(...)` | Download a file. The handler must use `@event(bundle=False)`; see [Download a file from one event](/events/http/#download-a-file-from-one-event). |
-| `None` | Acknowledge the call. |
+| `None` | Acknowledge the call. State the handler changed still reaches `$state`. |
 
 The browser applies a list of actions one at a time, in list order. Each
 action waits for the one before it, so a Dispatch placed after a Render runs

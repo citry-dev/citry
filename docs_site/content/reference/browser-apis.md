@@ -284,6 +284,10 @@ public fields that are not declared client-writable are read-only. Non-public
 State names are unavailable. Invalid assignments throw synchronously and leave
 the prior value unchanged.
 
+When a handler changes State, its response updates these fields even if the
+component is not rendered again. A field the browser has assigned but not yet
+sent keeps the browser's value.
+
 ```citry-html
 <button @click="$state.count += 1">Add one</button>
 <output v-text="$state.count"></output>
@@ -465,7 +469,8 @@ Promise. This is useful for custom transports, integration tests, and hosts
 that intercept Citry event responses. The Promise rejects when the array is
 not a valid action list, when an action targets a component that is no
 longer on the page, or when the actions target components in different Vue
-apps.
+apps. A `state` action must include `publicState`, the component's public
+State values; without it the Promise rejects with a `TypeError`.
 
 #### Custom event transports
 

@@ -407,7 +407,9 @@ lists the rest.
   value that is not plain JSON such as `undefined`, or an array with gaps
   such as `[a, , b]`, with a `ProtocolValueError` (a `TypeError`), before it
   applies any action. Remove the extra fields from actions your page code
-  builds or forwards.
+  builds or forwards. A `state` action you build, for `applyActions` or in
+  an `on_event_result` hook, must now include `publicState`, the
+  component's public State values.
 - **Forward `request.headers` from a custom transport.** Citry now calls
   `send(envelope, request)`. A 0.5.1 transport that sends only the envelope
   fails every handler that returns a render, with "Vue Events requires
@@ -624,7 +626,8 @@ the limit or configure a cache. See
 16. Update `citry:events:stale` listeners that check for `cancelled` or
     `timeout`, code that reads `data-citry-events` script tags, calls
     that pass `wait: false` or unknown options, and action lists passed
-    to `Citry.events.applyActions`.
+    to `Citry.events.applyActions`, including `publicState` in any `state`
+    action you build.
 17. Remove uses of `Citry.alpine`, `Citry.manager`, and `Citry.i18n`.
 18. Rename the Alpine lint settings and diagnostic codes.
 19. Check that dependency scripts on interactive pages are classic
