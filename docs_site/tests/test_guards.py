@@ -397,15 +397,26 @@ def test_authored_reference_guard_reports_an_unexpected_anchor(tmp_path: Path) -
     assert any("Unexpected authored Reference anchor: #unlisted" in result.message for result in results)
 
 
-def test_crossref_guard_reports_an_unknown_key_with_its_line(tmp_path: Path) -> None:
+def test_crossref_guard_reports_unknown_keys_in_pages_and_docstrings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     (tmp_path / "page.md").write_text(
-        "# Page\n\nUse [`Const`][citry.Const].\n\nSee [`send`][Citry.events.missing].\n",
+        "# Page\n\nUse [`Thing`][pkg.Thing].\n\nSee [`Gone`][pkg.Gone].\n",
         encoding="utf-8",
     )
+    monkeypatch.setattr(crossref, "symbol_url_index", lambda: {"pkg.Thing": "/r/#thing"})
+    monkeypatch.setattr(
+        crossref,
+        "_docstring_texts",
+        lambda _ctx: iter([("pkg.Thing", "Pairs with [`Other`][pkg.Other].")]),
+    )
 
-    results = [result for result in crossref.check(_content_ctx(tmp_path)) if result.source == "page.md"]
+    results = [(result.source, result.line, result.message) for result in crossref.check(_content_ctx(tmp_path))]
 
-    assert [(result.line, "'Citry.events.missing'" in result.message) for result in results] == [(5, True)]
+    assert [(source, line) for source, line, _message in results] == [("page.md", 5), ("pkg.Thing", None)]
+    assert "'pkg.Gone'" in results[0][2]
+    assert "'pkg.Other'" in results[1][2]
 
 
 def test_crossref_scan_skips_code_and_markdown_link_labels() -> None:
@@ -425,6 +436,14 @@ Broken [`Gone`][pkg.Gone].
     assert list(crossref.unresolved_crossrefs(text, {"pkg.Thing": "/r/#thing", "Thing": "/r/#thing"})) == [
         ("pkg.Gone", 9),
     ]
+
+
+def test_crossref_docstring_scan_counts_brackets_inside_code() -> None:
+    # The docstring renderer rewrites bracket pairs inside code as well, so
+    # the docstring mode must report them.
+    text = "Index with `rows[i][j]`."
+
+    assert list(crossref.unresolved_crossrefs(text, {}, skip_code=False)) == [("j", 1)]
 
 
 def test_internal_link_flags_broken_and_accepts_valid(tmp_path: Path) -> None:

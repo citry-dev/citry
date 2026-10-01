@@ -366,9 +366,6 @@ and returns a `stop()` that does nothing.
 Use the page-wide API from ordinary scripts or other browser integrations:
 
 ```js
-const stop = Citry.events.on("cart:changed", (detail) => {
-  refreshHeader(detail);
-});
 await Citry.events.send("render_abc123", "refresh", {page: 2});
 ```
 
@@ -386,7 +383,9 @@ Citry.events.send(target, name, args?, opts?)
 The returned Promise has the same data and error behavior as
 [`$sendEvent`](#send-event), and `opts` takes the same
 [options](#send-event). The Promise rejects when no mounted component
-matches `target`, or when more than one does.
+matches `target`, or when more than one does. Unlike `$sendEvent`, an
+unknown handler name, or `args` that is not a plain object, throws when you
+call `send` instead of rejecting the Promise.
 
 <h4 class="doc-heading" id="citry-events-on"><code>Citry.events.on</code></h4>
 
@@ -422,9 +421,16 @@ Citry.events.configure({
 | `url` | The Events route base URL. Citry normally reads it from the page. |
 
 Each call merges its options into the earlier ones, and Citry reads them when
-it sends each call, so later calls use the new values. The argument and its
-`csrf` value must be plain objects, or the call throws a `TypeError`. A
-custom transport never reads the CSRF cookie; give it a `token` instead.
+it sends each call, so later calls use the new values. A new `csrf` value
+replaces the earlier one as a whole. The argument and its `csrf` value must
+be plain objects, or the call throws a `TypeError`. Citry ignores an unknown
+option. When `transport` names a transport that was never registered, each
+later event call fails with "Citry Events transport is not registered".
+
+By default Citry reads the `csrftoken` cookie for every transport. Once you
+pass `csrf` to `configure`, Citry reads `csrf.cookie` only for the built-in
+`fetch` transport, and a custom transport gets a token only from
+`csrf.token`.
 
 <h4 class="doc-heading" id="citry-events-register-transport"><code>Citry.events.registerTransport</code></h4>
 
@@ -455,8 +461,9 @@ await Citry.events.applyActions(result.actions);
 Citry validates the array, applies its actions in order, and returns a
 Promise. This is useful for custom transports, integration tests, and hosts
 that intercept Citry event responses. The Promise rejects when the array is
-not plain JSON, when an action targets a component that is no longer on the
-page, or when the actions target components in different Vue apps.
+not a valid action list, when an action targets a component that is no
+longer on the page, or when the actions target components in different Vue
+apps.
 
 #### Custom event transports
 

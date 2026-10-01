@@ -42,7 +42,7 @@ Citry-managed definition scripts rather than evaluated from directive strings
 in delivered HTML. Put browser logic in `Component.js` and call a method from
 the template. Put trusted scripts and styles in `Component.js`,
 `Component.css`, or structured
-[`Dependencies`][citry.DependenciesConfig].
+[`Dependencies`][citry.Component.Dependencies].
 
 Your policy never needs `'unsafe-eval'` for Citry, and `"strict"` places no
 limit on the JavaScript you write in Vue expressions. A page under a Content
