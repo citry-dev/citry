@@ -61,13 +61,23 @@ class _QuietWSGIHandler(WSGIRequestHandler):
         pass
 
 
+def _with_doctype(html: str) -> str:
+    """Return ``html`` with ``<!DOCTYPE html>`` in front unless it already starts with a doctype."""
+    # Many tests serve a rendered fragment as the whole page. Without a
+    # doctype the browser renders it in quirks mode, unlike a real app's
+    # page, and Firefox logs a warning that the tests' console checks report.
+    if html.lstrip().lower().startswith("<!doctype"):
+        return html
+    return "<!DOCTYPE html>" + html
+
+
 @pytest.fixture
 def serve_document() -> Iterator[Callable[[str], str]]:
     """Yield a function that serves one self-contained HTML page and returns its base URL."""
     servers: list[Any] = []
 
     def factory(html: str) -> str:
-        body = html.encode()
+        body = _with_doctype(html).encode()
 
         class _Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
@@ -96,6 +106,7 @@ def serve_live() -> Iterator[Callable[..., str]]:
 
     def factory(citry: Citry, page_html: str, fragment_html: str, prefix: str = "/citry") -> str:
         citry.set_mounted_prefix(prefix)
+        page_html = _with_doctype(page_html)
         citry_wsgi = wsgi_app(citry)
 
         def app(environ: dict[str, Any], start_response: Any) -> list[bytes]:
