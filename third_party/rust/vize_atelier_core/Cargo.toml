@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.95.0"
 name = "vize_atelier_core"
-version = "0.420.0+citry.1"
+version = "0.420.0+citry.2"
 build = false
 autolib = false
 autobins = false

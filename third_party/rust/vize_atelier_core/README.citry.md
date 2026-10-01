@@ -1,13 +1,13 @@
-# Citry vendored patch for `vize_atelier_core`
+# Citry's patched copy of `vize_atelier_core`
 
-This directory is a vendored, locally patched copy of the upstream
+This directory is a locally patched copy of the upstream
 `vize_atelier_core` 0.420.0 crate. It is not wholly Citry-authored and is not a
 separate hosted fork. The source came from the crates.io archive whose
 SHA-256 is
 `8db1544b90c72dbe51fe237437ff296d59934e44af7b99686f02cf09d0298d4e`; the
 upstream repository is <https://github.com/ubugeeei-prod/vize> at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`. Citry identifies the patched
-package as `0.420.0+citry.1`.
+package as `0.420.0+citry.2`.
 
 The registry archive's `Cargo.toml.orig` is preserved byte-for-byte as
 `Cargo.upstream.toml`, because Cargo reserves `Cargo.toml.orig` when building
@@ -16,7 +16,7 @@ commit.
 
 Relative to that archive, the Citry delta is:
 
-- `Cargo.toml`: records the local `0.420.0+citry.1` package version, registers
+- `Cargo.toml`: records the local `0.420.0+citry.2` package version, registers
   the `v_for_unwrapped_runtime_directives` and `event_handler_statements`
   regression targets, and drops the upstream `davinci` benchmark target
   because its source is not included here.
