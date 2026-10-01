@@ -64,6 +64,11 @@ Upgrading from 0.5.x? Follow
   `[x-cloak]` CSS rule would keep the element hidden. Set
   `rule_alpine_attribute="ignore"` when a library on the page reads
   `x-*` attributes.
+- `citry check` and the editor warn about a static HTML attribute value
+  that the attribute does not accept, such as `draggable="treu"` or
+  `<input type="datetime">`, and suggest the closest valid keyword. Set
+  `LintSettings.rule_invalid_attribute_value`, or the same name in a
+  component's `Lint` class, to change the severity.
 - Without a configured cache, cap how much memory a process spends on
   compiled component code and stylesheets for interactive pages with
   `Citry(vue_asset_max_bytes=...)` (default 64 MiB).

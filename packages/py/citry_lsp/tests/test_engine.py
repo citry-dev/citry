@@ -2829,6 +2829,57 @@ def test_template_lint_diagnostics_report_alpine_attributes_with_the_owner_polic
     )
 
 
+def test_template_lint_diagnostics_report_invalid_attribute_values_with_the_owner_policy(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = '<div draggable="treu">{{ title }}</div>'
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component, LintSettings\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, "
+        "lint=LintSettings(rule_invalid_attribute_value='ignore'))\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class TemplateData:\n"
+        "        title: str\n"
+        "    class Lint:\n"
+        "        rule_invalid_attribute_value = 'error'\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+
+    # The component's own Lint overrides the application's "ignore".
+    assert [(item.code, item.severity, item.message) for item in diagnostics] == [
+        (
+            "citry.template.invalid-attribute-value",
+            types.DiagnosticSeverity.Error,
+            "'treu' is not a valid value for 'draggable' on <div>. "
+            "Did you mean 'true'? Valid values: 'true', 'false'.",
+        ),
+    ]
+    assert diagnostics[0].range == types.Range(
+        _position(template_source, "treu"),
+        _position(template_source, "treu", len("treu")),
+    )
+
+
+def test_template_lint_diagnostics_report_invalid_attribute_values_without_a_project():
+    source = '<input type="datetime">'
+    project = _syntax_state()
+    document = _document(source, project)
+
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+
+    assert [(item.code, item.severity) for item in diagnostics] == [
+        ("citry.template.invalid-attribute-value", types.DiagnosticSeverity.Warning),
+    ]
+
+
 def test_template_lint_diagnostics_report_alpine_attributes_without_a_project():
     # The Alpine rules need no component data, so the defaults apply here.
     source = "<p x-show='open' x-cloak></p>"

@@ -22,7 +22,9 @@ lint settings are `LintSettings.rule_unknown_vue_variable` and
 `vue_variables`, reported as `citry.vue.unknown-variable`, and
 `rule_alpine_attribute` / `rule_alpine_cloak` report leftover `x-*`
 attributes (`citry.template.alpine-attribute`,
-`citry.template.alpine-cloak`). Steps below that describe Alpine attributes,
+`citry.template.alpine-cloak`). `rule_invalid_attribute_value` reports a
+static HTML attribute value outside the keywords the HTML Standard allows
+(`citry.template.invalid-attribute-value`). Steps below that describe Alpine attributes,
 magics, and scope record the earlier Alpine design; where they conflict with
 the Vue runtime, [`vue.md`](vue.md) and the code win.
 

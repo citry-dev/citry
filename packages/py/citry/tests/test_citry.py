@@ -126,6 +126,7 @@ class TestCitryInstance:
             rule_vue_python_variable="error",
             rule_alpine_attribute="ignore",
             rule_alpine_cloak="warning",
+            rule_invalid_attribute_value="error",
         )
         app = Citry(lint=lint)
         variables["later"] = str
@@ -146,6 +147,8 @@ class TestCitryInstance:
         assert LintSettings().rule_vue_python_variable == "warning"
         assert (lint.rule_alpine_attribute, lint.rule_alpine_cloak) == ("ignore", "warning")
         assert (LintSettings().rule_alpine_attribute, LintSettings().rule_alpine_cloak) == ("warning", "error")
+        assert lint.rule_invalid_attribute_value == "error"
+        assert LintSettings().rule_invalid_attribute_value == "warning"
         assert lint.component_js_globals == {
             "analytics": Annotated[object, "Application analytics client."],
         }
@@ -168,6 +171,8 @@ class TestCitryInstance:
             LintSettings(rule_alpine_attribute=severity)
         with pytest.raises(ValueError, match="rule_alpine_cloak"):
             LintSettings(rule_alpine_cloak=severity)
+        with pytest.raises(ValueError, match="rule_invalid_attribute_value"):
+            LintSettings(rule_invalid_attribute_value=severity)
 
     @pytest.mark.parametrize("name", ["", "two words", "class", "K"])  # noqa: RUF001
     def test_lint_settings_reject_names_without_exact_python_identity(self, name):

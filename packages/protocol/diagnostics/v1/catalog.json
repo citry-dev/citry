@@ -216,6 +216,45 @@
       "documentationPath": "/ide/diagnostics/#citry.template.alpine-cloak"
     },
     {
+      "code": "citry.template.invalid-attribute-value",
+      "constant": "TEMPLATE_INVALID_ATTRIBUTE_VALUE",
+      "title": "Invalid value for an enumerated HTML attribute",
+      "summary": "A static HTML attribute that accepts only a fixed set of keywords, such as draggable or type, has a value outside that set, so the browser ignores it or falls back to a default.",
+      "when": "A plain HTML element has an attribute with a fixed set of keywords in the HTML Standard, such as draggable, dir, hidden, contenteditable, type on input, button, ol, or li, method on form, loading, or crossorigin, and its written value is not one of them. Keywords compare without regard to ASCII letter case, except type on ol and li, where \"a\" and \"A\" are different markers. An attribute that allows the empty string, such as hidden or crossorigin, may be written with no value. For target, formtarget, and the name of an iframe or object, only a name that starts with an underscore is checked, because any other name is a valid window name. Bound values (c-*, :attr), component tags, <c-element>, custom elements with a hyphen, and elements inside <svg> or <math> are not checked, and neither are attributes such as sandbox or rel that take a list of tokens.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "attribute": "Attribute name as written in the template.",
+        "element": "Element name as written in the template.",
+        "value": "Attribute value as written in the template.",
+        "allowed": "The valid values, quoted and separated by commas.",
+        "suggestion": "The valid value closest to the written one."
+      },
+      "messages": {
+        "default": "'{value}' is not a valid value for '{attribute}' on <{element}>. Valid values: {allowed}.",
+        "suggestion": "'{value}' is not a valid value for '{attribute}' on <{element}>. Did you mean '{suggestion}'? Valid values: {allowed}.",
+        "empty": "'{attribute}' on <{element}> needs a value. Valid values: {allowed}.",
+        "target": "'{value}' is not a valid value for '{attribute}' on <{element}>. A name that starts with '_' must be one of: {allowed}."
+      },
+      "examples": [
+        {
+          "title": "A misspelled keyword",
+          "language": "citry-html",
+          "source": "<div draggable=\"treu\">Drag me</div>"
+        },
+        {
+          "title": "An input type the browser does not know",
+          "language": "citry-html",
+          "source": "<input type=\"datetime\" name=\"start\">"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.invalid-attribute-value"
+    },
+    {
       "code": "citry.js-data.unsupported-type",
       "constant": "JS_DATA_UNSUPPORTED_TYPE",
       "title": "JsData field is not a JSON type",

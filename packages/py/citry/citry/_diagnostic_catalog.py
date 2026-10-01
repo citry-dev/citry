@@ -18,6 +18,7 @@ TEMPLATE_UNKNOWN_COMPONENT = 'citry.template.unknown-component'
 TEMPLATE_MARKER_NAME_INVALID = 'citry.template.marker-name-invalid'
 TEMPLATE_ALPINE_ATTRIBUTE = 'citry.template.alpine-attribute'
 TEMPLATE_ALPINE_CLOAK = 'citry.template.alpine-cloak'
+TEMPLATE_INVALID_ATTRIBUTE_VALUE = 'citry.template.invalid-attribute-value'
 JS_DATA_UNSUPPORTED_TYPE = 'citry.js-data.unsupported-type'
 JS_DATA_PUBLIC_NAME_COLLISION = 'citry.js-data.public-name-collision'
 VUE_UNKNOWN_VARIABLE = 'citry.vue.unknown-variable'
@@ -719,6 +720,52 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                  'when': 'An attribute named x-cloak, compared without regard to letter case, sits on '
                                          'a plain HTML element or a <c-element>, including elements inside nested '
                                          'templates. Component tags are not checked.'},
+ 'citry.template.invalid-attribute-value': {'code': 'citry.template.invalid-attribute-value',
+                                            'configurableSeverity': True,
+                                            'constant': 'TEMPLATE_INVALID_ATTRIBUTE_VALUE',
+                                            'defaultSeverity': 'warning',
+                                            'documentationPath': '/ide/diagnostics/#citry.template.invalid-attribute-value',
+                                            'examples': [{'language': 'citry-html',
+                                                          'source': '<div draggable="treu">Drag me</div>',
+                                                          'title': 'A misspelled keyword'},
+                                                         {'language': 'citry-html',
+                                                          'source': '<input type="datetime" name="start">',
+                                                          'title': 'An input type the browser does not know'}],
+                                            'messages': {'default': "'{value}' is not a valid value for '{attribute}' "
+                                                                    'on <{element}>. Valid values: {allowed}.',
+                                                         'empty': "'{attribute}' on <{element}> needs a value. Valid "
+                                                                  'values: {allowed}.',
+                                                         'suggestion': "'{value}' is not a valid value for "
+                                                                       "'{attribute}' on <{element}>. Did you mean "
+                                                                       "'{suggestion}'? Valid values: {allowed}.",
+                                                         'target': "'{value}' is not a valid value for '{attribute}' "
+                                                                   "on <{element}>. A name that starts with '_' must "
+                                                                   'be one of: {allowed}.'},
+                                            'parameters': {'allowed': 'The valid values, quoted and separated by '
+                                                                      'commas.',
+                                                           'attribute': 'Attribute name as written in the template.',
+                                                           'element': 'Element name as written in the template.',
+                                                           'suggestion': 'The valid value closest to the written one.',
+                                                           'value': 'Attribute value as written in the template.'},
+                                            'summary': 'A static HTML attribute that accepts only a fixed set of '
+                                                       'keywords, such as draggable or type, has a value outside that '
+                                                       'set, so the browser ignores it or falls back to a default.',
+                                            'surfaces': ['check', 'lsp'],
+                                            'title': 'Invalid value for an enumerated HTML attribute',
+                                            'when': 'A plain HTML element has an attribute with a fixed set of '
+                                                    'keywords in the HTML Standard, such as draggable, dir, hidden, '
+                                                    'contenteditable, type on input, button, ol, or li, method on '
+                                                    'form, loading, or crossorigin, and its written value is not one '
+                                                    'of them. Keywords compare without regard to ASCII letter case, '
+                                                    'except type on ol and li, where "a" and "A" are different '
+                                                    'markers. An attribute that allows the empty string, such as '
+                                                    'hidden or crossorigin, may be written with no value. For target, '
+                                                    'formtarget, and the name of an iframe or object, only a name that '
+                                                    'starts with an underscore is checked, because any other name is a '
+                                                    'valid window name. Bound values (c-*, :attr), component tags, '
+                                                    '<c-element>, custom elements with a hyphen, and elements inside '
+                                                    '<svg> or <math> are not checked, and neither are attributes such '
+                                                    'as sandbox or rel that take a list of tokens.'},
  'citry.template.marker-name-invalid': {'code': 'citry.template.marker-name-invalid',
                                         'constant': 'TEMPLATE_MARKER_NAME_INVALID',
                                         'defaultSeverity': 'error',

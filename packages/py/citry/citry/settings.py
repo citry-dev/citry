@@ -155,6 +155,11 @@ class LintSettings:
         rule_alpine_cloak: Severity for ``x-cloak`` on an HTML element.
             Nothing in Citry removes the attribute, so a ``[x-cloak]`` CSS
             rule keeps the element hidden. The default is ``"error"``.
+        rule_invalid_attribute_value: Severity for a static HTML attribute
+            value outside the keywords that attribute accepts, such as
+            ``draggable="treu"`` or ``<input type="datetime">``. The browser
+            ignores such a value or falls back to a default. The default is
+            ``"warning"``.
 
     Raises:
         TypeError: If a variable or global collection is not a mapping.
@@ -173,6 +178,7 @@ class LintSettings:
     rule_vue_python_variable: LintSeverity = "warning"
     rule_alpine_attribute: LintSeverity = "warning"
     rule_alpine_cloak: LintSeverity = "error"
+    rule_invalid_attribute_value: LintSeverity = "warning"
 
     # Hidden from type checkers so they keep checking calls against the
     # generated __init__ signature.
@@ -284,9 +290,9 @@ class LintSettings:
                 f"{_ALLOWED_LINT_SEVERITIES}, got {self.rule_vue_python_variable!r}"
             )
             raise ValueError(msg)
-        # Both Alpine rules take the same severities as every other rule, so
-        # one loop reports the first invalid one by name.
-        for rule_name in ("rule_alpine_attribute", "rule_alpine_cloak"):
+        # These rules take the same severities as every other rule, so one
+        # loop reports the first invalid one by name.
+        for rule_name in ("rule_alpine_attribute", "rule_alpine_cloak", "rule_invalid_attribute_value"):
             severity = getattr(self, rule_name)
             if type(severity) is not str or severity not in _ALLOWED_LINT_SEVERITIES:
                 msg = f"{rule_name} must be one of {_ALLOWED_LINT_SEVERITIES}, got {severity!r}"

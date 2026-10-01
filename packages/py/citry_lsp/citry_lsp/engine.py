@@ -35,7 +35,10 @@ from citry._diagnostics import diagnostic_documentation_url, render_diagnostic
 from citry._i18n_directives import looks_like_i18n_binding
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
+    AlpineAttributeFinding,
     AlpineAttributeLintConsumer,
+    AttributeValueFinding,
+    AttributeValueLintConsumer,
     BrowserBinding,
     BrowserComponentBinding,
     BrowserComponentPropContribution,
@@ -86,6 +89,7 @@ from citry.analysis import (
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_alpine_attributes,
+    lint_attribute_values,
     lint_csp_compatibility,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
@@ -601,7 +605,7 @@ def template_lint_diagnostics(
     """Apply portable root linting only where current component ownership is proven."""
     # The Alpine rules need no component namespace, so they run even before
     # the project analysis is available.
-    diagnostics = list(_alpine_lint_diagnostics(document, project, open_documents))
+    diagnostics = list(_html_attribute_lint_diagnostics(document, project, open_documents))
     if project.catalog is None or project.analysis is None:
         return tuple(diagnostics)
     for region in document.regions:
@@ -659,12 +663,12 @@ def template_lint_diagnostics(
     return tuple(diagnostics)
 
 
-def _alpine_lint_diagnostics(
+def _html_attribute_lint_diagnostics(
     document: DocumentState,
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None,
 ) -> tuple[types.Diagnostic, ...]:
-    """Report leftover Alpine ``x-*`` attributes with each owner's severities."""
+    """Report leftover Alpine ``x-*`` attributes and invalid enumerated values with each owner's severities."""
     analysis = project.analysis
     parser = analysis.parse_template if analysis is not None else parse_template
     diagnostics: list[types.Diagnostic] = []
@@ -673,19 +677,26 @@ def _alpine_lint_diagnostics(
         if parsed is None:
             continue
         consumers: list[AlpineAttributeLintConsumer] = []
+        value_consumers: list[AttributeValueLintConsumer] = []
         if analysis is not None:
             for owner in _template_consumers(document, region, project, open_documents):
                 # An owner missing from the analysis still belongs to this
                 # application, so its policy is the application's.
                 lint = analysis.component_lint.get(owner.definition_id, analysis.lint)
                 consumers.append(AlpineAttributeLintConsumer(lint.rule_alpine_attribute, lint.rule_alpine_cloak))
+                value_consumers.append(AttributeValueLintConsumer(lint.rule_invalid_attribute_value))
             if not consumers:
                 # No proven owner: the application policy still applies,
                 # which is closer to the author's intent than the defaults.
                 consumers.append(
                     AlpineAttributeLintConsumer(analysis.lint.rule_alpine_attribute, analysis.lint.rule_alpine_cloak)
                 )
-        for finding in lint_alpine_attributes(parsed.template, consumers, parse_nested=parser):
+                value_consumers.append(AttributeValueLintConsumer(analysis.lint.rule_invalid_attribute_value))
+        findings: list[AlpineAttributeFinding | AttributeValueFinding] = [
+            *lint_alpine_attributes(parsed.template, consumers, parse_nested=parser),
+            *lint_attribute_values(parsed.template, value_consumers, parse_nested=parser),
+        ]
+        for finding in findings:
             try:
                 mapped = region.source_map.map_range(finding.start_index, finding.end_index)
             except ValueError:

@@ -8,6 +8,7 @@ from citry._browser_expressions import BrowserExpression, browser_component_prop
 from citry.analysis import (
     VUE_AMBIENT_NAMES,
     AlpineAttributeLintConsumer,
+    AttributeValueLintConsumer,
     ComponentJsLintConsumer,
     VueLintConsumer,
     analyze_browser_component_source,
@@ -30,6 +31,7 @@ from citry.analysis import (
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_alpine_attributes,
+    lint_attribute_values,
     lint_csp_compatibility,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
@@ -1149,6 +1151,126 @@ def test_alpine_lint_severity_across_consumers():
 def test_alpine_lint_consumer_rejects_an_unknown_severity():
     with pytest.raises(ValueError, match="rule_alpine_cloak"):
         AlpineAttributeLintConsumer(rule_alpine_cloak="fatal")  # type: ignore[arg-type]
+
+
+def _attribute_values(
+    source: str,
+    consumers: tuple[AttributeValueLintConsumer, ...] = (),
+) -> list[tuple[str, str, str]]:
+    """Return (attribute, severity, spanned source text) for each attribute-value finding."""
+    encoded = source.encode("utf-8")
+    return [
+        (finding.attribute, finding.severity, encoded[finding.start_index : finding.end_index].decode("utf-8"))
+        for finding in lint_attribute_values(parse_template(source), consumers)
+    ]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Keywords ignore ASCII case, and an attribute that allows the empty
+        # string may have no value at all.
+        '<div draggable="TRUE" dir="Auto" hidden contenteditable translate="" spellcheck></div>',
+        '<div hidden="until-found" popover inputmode="numeric" enterkeyhint="go" writingsuggestions="false"></div>',
+        '<input type="Email" formmethod="dialog"><button type="reset" popovertargetaction="hide">b</button>',
+        '<form method="POST" enctype="multipart/form-data" autocomplete="off"></form>',
+        '<img loading="lazy" decoding="async" fetchpriority="high" crossorigin referrerpolicy="no-referrer">',
+        '<video preload crossorigin="use-credentials"></video><track kind="captions">',
+        '<textarea wrap="hard"></textarea><table><tr><th scope="colgroup"></th></tr></table>',
+        '<ol type="I"><li type="disc">x</li></ol><bdo dir="rtl">x</bdo>',
+        # A window name is any name that does not start with "_".
+        '<a target="preview">a</a><a target="_BLANK">b</a><form target="_self"></form><iframe name="frame"></iframe>',
+        # Open or token-list attributes are left alone.
+        '<iframe sandbox="allow-scripts nonsense"></iframe><link rel="whatever"><input autocomplete="nickname">',
+        '<input step="any"><script type="text/x-template"></script><button command="--custom">c</button>',
+    ],
+)
+def test_attribute_value_lint_accepts_valid_and_open_values(source):
+    assert _attribute_values(source) == []
+
+
+def test_attribute_value_lint_reports_values_outside_the_keywords():
+    # The span covers the value inside its quotes.
+    source = '<div draggable="treu"><input type="datetime"><img loading="lazzy"></div>'
+    assert _attribute_values(source) == [
+        ("draggable", "warning", "treu"),
+        ("type", "warning", "datetime"),
+        ("loading", "warning", "lazzy"),
+    ]
+    (finding,) = lint_attribute_values(parse_template('<div draggable="treu"></div>'), ())
+    assert finding.code == "citry.template.invalid-attribute-value"
+    assert (finding.element, finding.attribute, finding.value) == ("div", "draggable", "treu")
+    assert finding.message == (
+        "'treu' is not a valid value for 'draggable' on <div>. Did you mean 'true'? Valid values: 'true', 'false'."
+    )
+
+
+def test_attribute_value_lint_messages_without_a_close_match_and_for_a_missing_value():
+    source = '<form autocomplete="nope"></form><div draggable></div><img crossorigin="maybe">'
+    findings = lint_attribute_values(parse_template(source), ())
+    assert [finding.message for finding in findings] == [
+        "'nope' is not a valid value for 'autocomplete' on <form>. Valid values: 'on', 'off'.",
+        "'draggable' on <div> needs a value. Valid values: 'true', 'false'.",
+        "'maybe' is not a valid value for 'crossorigin' on <img>. "
+        "Valid values: 'anonymous', 'use-credentials', or no value.",
+    ]
+    # A value-less attribute has no value span, so the finding marks its name.
+    assert _attribute_values("<div draggable></div>") == [("draggable", "warning", "draggable")]
+
+
+def test_attribute_value_lint_compares_ol_and_li_type_with_letter_case():
+    assert _attribute_values('<ol type="A"><li type="i">x</li></ol>') == []
+    assert _attribute_values('<ol type="b"><li type="X">x</li></ol>') == [
+        ("type", "warning", "b"),
+        ("type", "warning", "X"),
+    ]
+
+
+def test_attribute_value_lint_uses_element_specific_keywords_before_global_ones():
+    # `dir` on `<bdo>` has no "auto", and `type` depends on the element.
+    assert _attribute_values('<bdo dir="auto">x</bdo><div dir="auto"></div>') == [("dir", "warning", "auto")]
+    assert _attribute_values('<button type="text">b</button><ul type="text"></ul>') == [("type", "warning", "text")]
+
+
+def test_attribute_value_lint_reports_underscore_window_names():
+    findings = lint_attribute_values(parse_template('<a target="_new">a</a><button formtarget="_x">b</button>'), ())
+    assert [(finding.attribute, finding.value) for finding in findings] == [("target", "_new"), ("formtarget", "_x")]
+    assert findings[0].message == (
+        "'_new' is not a valid value for 'target' on <a>. "
+        "A name that starts with '_' must be one of: _blank, _self, _parent, _top."
+    )
+
+
+def test_attribute_value_lint_skips_elements_it_cannot_type():
+    # Component tags, `<c-element>`, custom elements, PascalCase Vue components,
+    # SVG and MathML subtrees, and bound attributes are not plain HTML values.
+    source = (
+        '<c-card dir="sideways" /><c-element is="div" dir="sideways"></c-element>'
+        '<my-widget dir="sideways"></my-widget><Button type="sideways" />'
+        '<svg><a target="_sideways"></a></svg><math dir="sideways"></math>'
+        '<div c-dir="\'sideways\'" :draggable="\'sideways\'" v-bind:hidden="x"></div>'
+    )
+    assert _attribute_values(source) == []
+
+
+def test_attribute_value_lint_maps_nested_template_offsets_into_the_outer_source():
+    source = "<c-card c-header=\"<><i dir='up'></i></>\" /><p>ok</p>"
+    assert _attribute_values(source) == [("dir", "warning", "up")]
+
+
+def test_attribute_value_lint_severity_across_consumers():
+    source = '<div draggable="nope"></div>'
+    ignore = AttributeValueLintConsumer("ignore")
+    assert _attribute_values(source, (ignore,)) == []
+    # One consumer that still reports is enough, and "error" wins over "warning".
+    assert _attribute_values(source, (ignore, AttributeValueLintConsumer("error"))) == [
+        ("draggable", "error", "nope"),
+    ]
+
+
+def test_attribute_value_lint_consumer_rejects_an_unknown_severity():
+    with pytest.raises(ValueError, match="rule_invalid_attribute_value"):
+        AttributeValueLintConsumer(rule_invalid_attribute_value="fatal")  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(

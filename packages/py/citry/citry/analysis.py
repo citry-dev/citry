@@ -10,7 +10,7 @@ from array import array
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
-from difflib import SequenceMatcher
+from difflib import SequenceMatcher, get_close_matches
 from enum import Enum
 from itertools import pairwise
 from types import MappingProxyType
@@ -95,11 +95,27 @@ from citry._diagnostic_catalog import (
     FORMAT_PROVIDER_UNAVAILABLE,
     TEMPLATE_ALPINE_ATTRIBUTE,
     TEMPLATE_ALPINE_CLOAK,
+    TEMPLATE_INVALID_ATTRIBUTE_VALUE,
     TEMPLATE_UNKNOWN_VARIABLE,
     VUE_PYTHON_VARIABLE,
     VUE_UNKNOWN_VARIABLE,
 )
 from citry._diagnostics import render_diagnostic
+from citry._html_attribute_values import (
+    CASE_SENSITIVE as _CASE_SENSITIVE_ATTRIBUTES,
+)
+from citry._html_attribute_values import (
+    ENUMERATED_VALUES as _ENUMERATED_ATTRIBUTE_VALUES,
+)
+from citry._html_attribute_values import (
+    HTML_ELEMENTS as _HTML_ELEMENTS,
+)
+from citry._html_attribute_values import (
+    NAVIGABLE_TARGET_ATTRIBUTES as _NAVIGABLE_TARGET_ATTRIBUTES,
+)
+from citry._html_attribute_values import (
+    NAVIGABLE_TARGET_KEYWORDS as _NAVIGABLE_TARGET_KEYWORDS,
+)
 from citry._inline_assets import normalize_inline_asset
 from citry._json_wire import JsonWireField, JsonWireKind, JsonWireType, merge_json_wire_types
 from citry._json_wire import json_wire_type_from_annotation as _json_wire_type_from_annotation
@@ -142,7 +158,7 @@ from citry_core.template_formatter import format_template as _format_template
 from citry_core.template_formatter import (
     prepare_embedded_format as _prepare_embedded_format,
 )
-from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TagRules, TemplateElement
+from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttr, HtmlAttrKind, TagRules, TemplateElement
 from citry_core.template_parser import parse_template as _parse_template
 
 if TYPE_CHECKING:
@@ -311,6 +327,45 @@ class AlpineAttributeFinding:
     """Report one Alpine ``x-*`` attribute on an HTML element, spanning its name."""
 
     name: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class AttributeValueLintConsumer:
+    """
+    Carry one consuming component's severity for invalid enumerated attribute values.
+
+    Attributes:
+        rule_invalid_attribute_value: Configured severity for a static value
+            outside an enumerated HTML attribute's keywords.
+
+    """
+
+    rule_invalid_attribute_value: Literal["ignore", "warning", "error"] = "warning"
+
+    def __post_init__(self) -> None:
+        severity = self.rule_invalid_attribute_value
+        if type(severity) is not str or severity not in {"ignore", "warning", "error"}:
+            msg = f"Unknown rule_invalid_attribute_value severity: {severity!r}"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class AttributeValueFinding:
+    """
+    Report one static HTML attribute value outside its enumerated keywords.
+
+    The span covers the value inside its quotes, or the attribute name when
+    the attribute has no value.
+    """
+
+    element: str
+    attribute: str
+    value: str
     message: str
     code: str
     severity: Literal["warning", "error"]
@@ -906,6 +961,193 @@ def _collect_alpine_attributes(
         body = getattr(node, "body", None)
         if body is not None:
             _collect_alpine_attributes(body, found, parse_nested=parse_nested, base_index=base_index)
+
+
+def lint_attribute_values(
+    template: Template,
+    consumers: Sequence[AttributeValueLintConsumer],
+    *,
+    parse_nested: Callable[[str], Template] = _parse_template,
+) -> tuple[AttributeValueFinding, ...]:
+    """
+    Report static HTML attribute values that an enumerated attribute does not accept.
+
+    Some HTML attributes take only fixed keywords, such as ``draggable``
+    (``"true"`` or ``"false"``) or ``type`` on ``<input>``. A browser ignores
+    any other value or falls back to a default, so ``draggable="treu"``
+    silently does nothing. The keywords come from the HTML Standard; see
+    ``scripts/generate_html_attribute_values.py``.
+
+    Keywords compare without regard to ASCII letter case, except ``type`` on
+    ``<ol>`` and ``<li>``. An attribute with no value counts as the empty
+    string. For ``target``, ``formtarget``, and an ``<iframe>`` or
+    ``<object>`` ``name``, only a value starting with ``_`` is checked,
+    because any other value is a valid window name.
+
+    Only static attributes on lowercase HTML element names are checked,
+    including elements inside nested templates. Component tags,
+    ``<c-element>``, custom elements, PascalCase Vue components, elements
+    inside ``<svg>`` or ``<math>``, bound attributes, and attributes that
+    carry extension-owned source are skipped.
+
+    A finding is reported unless every consumer ignores the rule, and it is an
+    error when any reporting consumer says ``"error"``. The check needs no
+    component namespace, so an empty ``consumers`` uses the default
+    ``"warning"``, as ``citry check --static`` and an editor without project
+    analysis do.
+
+    Args:
+        template: Parsed Citry template AST.
+        consumers: Every proven component that consumes this physical template.
+        parse_nested: Parser for template-valued attributes, so nested
+            templates use the same parse options as the outer one.
+
+    Returns:
+        Findings in source order.
+
+    """
+    effective = tuple(consumers) or (AttributeValueLintConsumer(),)
+    active = [consumer.rule_invalid_attribute_value for consumer in effective]
+    active = [severity for severity in active if severity != "ignore"]
+    if not active:
+        return ()
+    severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
+    found: list[AttributeValueFinding] = []
+    _collect_attribute_values(template, found, severity, parse_nested=parse_nested, base_index=0)
+    return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
+
+
+def _collect_attribute_values(
+    template: Template,
+    found: list[AttributeValueFinding],
+    severity: Literal["warning", "error"],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    """Check each static attribute of each HTML element in one template and its nested templates."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        tag = node.start_tag.name.content
+        # SVG and MathML elements have their own attributes with other values,
+        # so their whole subtree is left unchecked.
+        if _ascii_lower(tag) in {"svg", "math"}:
+            continue
+        # Vue resolves only lowercase names as native tags; `<Button>` may be
+        # a component, and a custom element or `c-*` tag has its own attributes.
+        checked = tag in _HTML_ELEMENTS
+        for attr in node.start_tag.attrs:
+            if checked:
+                finding = _attribute_value_finding(tag, attr, severity, base_index)
+                if finding is not None:
+                    found.append(finding)
+            # A template-valued attribute holds more HTML, whose offsets are
+            # relative to the nested source, so shift them into this template.
+            inner = attr.inner_value
+            if attr.kind == HtmlAttrKind.Template and inner is not None:
+                nested = _nested_template(inner.content, parse_nested)
+                if nested is not None:
+                    parsed, nested_start = nested
+                    _collect_attribute_values(
+                        parsed,
+                        found,
+                        severity,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_attribute_values(body, found, severity, parse_nested=parse_nested, base_index=base_index)
+
+
+def _attribute_value_finding(
+    element: str,
+    attr: HtmlAttr,
+    severity: Literal["warning", "error"],
+    base_index: int,
+) -> AttributeValueFinding | None:
+    """Return a finding for one static attribute whose value its element does not accept."""
+    # Bound and template-valued attributes are typed by other checks, and an
+    # extension-owned part means the written text is not the rendered value.
+    if attr.kind != HtmlAttrKind.Static or attr.foreign_parts:
+        return None
+    name = attr.key.content
+    attribute = _ascii_lower(name)
+    inner = attr.inner_value
+    value = inner.content if inner is not None else ""
+    # The value span sits inside the quotes; a value-less attribute marks its name.
+    span = (inner.start_index, inner.end_index) if inner is not None and inner.content else None
+    start, end = span if span is not None else (attr.key.start_index, attr.key.end_index)
+    targets = _NAVIGABLE_TARGET_ATTRIBUTES.get(attribute)
+    if targets is not None and element in targets:
+        # Any name is a valid window name, unless it starts with "_".
+        if not value.startswith("_") or _ascii_lower(value) in _NAVIGABLE_TARGET_KEYWORDS:
+            return None
+        message = render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            variant="target",
+            value=value,
+            attribute=name,
+            element=element,
+            allowed=", ".join(_NAVIGABLE_TARGET_KEYWORDS),
+        )
+    else:
+        by_element = _ENUMERATED_ATTRIBUTE_VALUES.get(attribute)
+        if by_element is None:
+            return None
+        allowed = by_element.get(element, by_element.get("*"))
+        if allowed is None:
+            return None
+        case_sensitive = (element, attribute) in _CASE_SENSITIVE_ATTRIBUTES
+        written = value if case_sensitive else _ascii_lower(value)
+        keywords = allowed if case_sensitive else tuple(_ascii_lower(keyword) for keyword in allowed)
+        if written in keywords:
+            return None
+        listed = ", ".join(f"'{keyword}'" for keyword in allowed if keyword) + (
+            ", or no value" if "" in allowed else ""
+        )
+        if not value:
+            message = render_diagnostic(
+                TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+                variant="empty",
+                attribute=name,
+                element=element,
+                allowed=listed,
+            )
+        else:
+            # Suggest the nearest keyword so a typo such as "treu" names its fix.
+            nearest = get_close_matches(written, [keyword for keyword in keywords if keyword], n=1, cutoff=0.6)
+            if nearest:
+                suggestion = allowed[keywords.index(nearest[0])]
+                message = render_diagnostic(
+                    TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+                    variant="suggestion",
+                    value=value,
+                    attribute=name,
+                    element=element,
+                    suggestion=suggestion,
+                    allowed=listed,
+                )
+            else:
+                message = render_diagnostic(
+                    TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+                    value=value,
+                    attribute=name,
+                    element=element,
+                    allowed=listed,
+                )
+    return AttributeValueFinding(
+        element=element,
+        attribute=name,
+        value=value,
+        message=message,
+        code=TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+        severity=severity,
+        start_index=base_index + start,
+        end_index=base_index + end,
+    )
 
 
 def lint_csp_compatibility(
@@ -4547,6 +4789,8 @@ __all__ = [
     "VUE_AMBIENT_NAMES",
     "AlpineAttributeFinding",
     "AlpineAttributeLintConsumer",
+    "AttributeValueFinding",
+    "AttributeValueLintConsumer",
     "BrowserBinding",
     "BrowserCompletion",
     "BrowserComponentBinding",
@@ -4657,6 +4901,7 @@ __all__ = [
     "json_wire_type_from_annotation",
     "json_wire_type_from_expression",
     "lint_alpine_attributes",
+    "lint_attribute_values",
     "lint_csp_compatibility",
     "lint_undeclared_component_js_emits",
     "lint_undeclared_component_listeners",

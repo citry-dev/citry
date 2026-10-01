@@ -1,6 +1,6 @@
 ---
 title: Template linting
-description: Configure unknown template, Vue, and component JavaScript names, and leftover Alpine attributes, consistently across Citry tools.
+description: Configure unknown template, Vue, and component JavaScript names, leftover Alpine attributes, and invalid HTML attribute values, consistently across Citry tools.
 ---
 
 # Template linting
@@ -135,14 +135,15 @@ app = Citry(
         rule_vue_python_variable="warning",
         rule_alpine_attribute="warning",
         rule_alpine_cloak="error",
+        rule_invalid_attribute_value="warning",
     ),
 )
 ```
 
 Each `rule_*` field accepts `"ignore"`, `"warning"`, or `"error"`.
-`rule_vue_python_variable` and `rule_alpine_attribute` default to
-`"warning"`; `rule_alpine_cloak` and the `rule_unknown_*` fields default to
-`"error"`.
+`rule_vue_python_variable`, `rule_alpine_attribute`, and
+`rule_invalid_attribute_value` default to `"warning"`; `rule_alpine_cloak`
+and the `rule_unknown_*` fields default to `"error"`.
 `rule_unknown_component_js_member` sets the severity of
 `citry.component-js.unknown-member`. When one JavaScript file serves several
 components, the strictest of their severities applies, so every one of them
@@ -279,6 +280,64 @@ them off: an Alpine-only event modifier such as `@click.outside`, and
 `v-once` or `v-memo`. Both fail when the template loads, on every page,
 with a message that shows what to write instead. See
 [Vue in templates](/syntax/vue/).
+
+## Find invalid HTML attribute values
+
+Some HTML attributes accept only a few keywords. `draggable` takes `"true"`
+or `"false"`, and `<input type>` takes a type the browser knows. The
+browser ignores any other value or falls back to a default, so the page
+renders without an error and the attribute silently does nothing.
+`citry check` and the editor report such a value as a
+`citry.template.invalid-attribute-value` warning and suggest the closest
+valid keyword:
+
+```citry-html
+{# Warning: 'treu' is not a valid value; did you mean 'true'? #}
+<div draggable="treu">Drag me</div>
+
+{# Warning: 'datetime'; did you mean 'datetime-local'? #}
+<input type="datetime" name="start">
+```
+
+The keywords come from the HTML Standard. The check covers global
+attributes such as `dir`, `hidden`, `contenteditable`, `spellcheck`,
+`translate`, `inputmode`, `enterkeyhint`, `autocapitalize`, and `popover`,
+and element attributes such as `type` on `<input>`, `<button>`, `<ol>`, and
+`<li>`, `method`, `enctype`, and `autocomplete` on `<form>`, `loading`,
+`decoding`, `fetchpriority`, `crossorigin`, `referrerpolicy`, `preload`,
+`kind` on `<track>`, `wrap` on `<textarea>`, and `scope` on `<th>`.
+
+Letter case does not matter, so `type="Email"` passes, except for `type` on
+`<ol>` and `<li>`, where `"a"` and `"A"` are different list markers. An
+attribute that accepts an empty value, such as `hidden`, `crossorigin`, or
+`contenteditable`, may also be written with no value at all.
+
+`target` and `formtarget` take any window name, so only a name that starts
+with an underscore is checked. `target="_new"` is reported, because the
+only valid names with an underscore are `_blank`, `_self`, `_parent`, and
+`_top`.
+
+Only values written directly in the template are checked. A bound value
+such as `c-dir` or `:draggable`, a component tag, `<c-element>`, a custom
+element such as `<my-widget>`, and elements inside `<svg>` or `<math>` are
+not. Attributes that take a list of words, such as `rel`, `sandbox`, or
+`autocomplete` on `<input>`, are not checked either.
+
+When a script on the page reads its own values from one of these
+attributes, turn the warning off for the components that use it:
+
+```citry
+from citry import Component
+
+
+class LegacyWidget(Component):
+    class Lint:
+        rule_invalid_attribute_value = "ignore"
+```
+
+Like the Alpine rules, this rule needs no component data, so
+`citry check --static` and an editor without a loaded app run it with the
+default severity.
 
 ## Understand open schemas
 

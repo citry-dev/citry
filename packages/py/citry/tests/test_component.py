@@ -49,6 +49,7 @@ class TestComponentFields:
         class Child(Base):
             class Lint:
                 rule_alpine_cloak = "warning"
+                rule_invalid_attribute_value = "ignore"
 
         class Grandchild(Child):
             class Lint:
@@ -69,6 +70,7 @@ class TestComponentFields:
         # Each nested Lint overrides only the rules it names.
         middle_lint = analysis.component_lint[Child.definition_id]
         assert (middle_lint.rule_alpine_attribute, middle_lint.rule_alpine_cloak) == ("ignore", "warning")
+        assert middle_lint.rule_invalid_attribute_value == "ignore"
         child_lint = analysis.component_lint[Grandchild.definition_id]
         reset_lint = analysis.component_lint[Reset.definition_id]
 
@@ -101,6 +103,7 @@ class TestComponentFields:
         assert reset_lint.rule_unknown_component_js_member == "error"
         assert reset_lint.rule_vue_python_variable == "warning"
         assert (reset_lint.rule_alpine_attribute, reset_lint.rule_alpine_cloak) == ("warning", "error")
+        assert reset_lint.rule_invalid_attribute_value == "warning"
         assert reset_lint.component_js_globals == ()
 
     def test_lint_declaration_names_the_vue_replacement_for_alpine_settings(self):

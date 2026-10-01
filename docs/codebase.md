@@ -244,6 +244,26 @@ The schema, review policy, disclosure rules, publication lifecycle, and future
 weekly discovery process are defined in
 [`docs_community_packages.md`](design/docs_community_packages.md).
 
+### Refreshing the HTML attribute value table
+
+The `citry.template.invalid-attribute-value` rule checks static attribute
+values against
+[`citry/_html_attribute_values.py`](../packages/py/citry/citry/_html_attribute_values.py).
+That module is generated from the HTML Standard's attribute index, and its
+docstring records the standard's update date. To pick up keywords the
+standard has added or removed, run:
+
+```sh
+python scripts/generate_html_attribute_values.py
+```
+
+The script downloads https://html.spec.whatwg.org/multipage/indices.html; pass
+`--source FILE` to read a saved copy instead. It keeps only rows whose values
+are a closed list of keywords, and adds a few closed sets that the index
+describes in words, such as `<input type>`. Review the diff before committing:
+a new keyword becomes valid, and a removed one starts being reported. No CI
+job refreshes the table, because that would need network access.
+
 ### Running tests
 
 Rust tests are scoped to the crates under `crates/`, one `-p` flag per crate.

@@ -1887,6 +1887,49 @@ def test_static_check_reports_leftover_alpine_attributes_with_default_severities
     ]
 
 
+def test_registry_check_reports_invalid_attribute_values_with_component_severities(tmp_path):
+    engine = Citry(autodiscover=False, lint=LintSettings(rule_invalid_attribute_value="error"))
+
+    class Card(Component):
+        citry = engine
+        template = """
+          <div draggable="treu">
+            <input type="datetime">
+          </div>
+        """
+
+    class Legacy(Component):
+        citry = engine
+        template = '<div dir="sideways"></div>'
+
+        class Lint:
+            rule_invalid_attribute_value = "ignore"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [
+        (item.severity, item.line, item.column, item.end_column)
+        for item in report.findings
+        if item.code == "citry.template.invalid-attribute-value"
+    ]
+
+    # The application raised the rule to an error, and Legacy ignores it.
+    # Each finding spans the value inside its quotes.
+    assert findings == [("error", 1, 16, 20), ("error", 2, 15, 23)]
+
+
+def test_static_check_reports_invalid_attribute_values_with_the_default_severity(tmp_path):
+    (tmp_path / "card.py").write_text(
+        "from citry import Component\nclass Card(Component):\n    template = '<a target=\"_new\">a</a>'\n",
+        encoding="utf-8",
+    )
+
+    report = check_project(CheckAppSelection(), tmp_path)
+
+    assert [(item.code, item.severity) for item in report.findings] == [
+        ("citry.template.invalid-attribute-value", "warning"),
+    ]
+
+
 def test_registry_check_reports_undeclared_emits_and_child_listeners(tmp_path):
     engine = Citry(autodiscover=False)
 
