@@ -35,6 +35,9 @@
 
 ### Fixed
 
+- `CMenuSubmenu` closes its submenu again when page code or a stray
+  `popovertarget` opens it while the submenu is closed. It previously threw
+  `hideNativePopover is not defined` and left the submenu open.
 - `CScrollArea` no longer calls `onScrollChange` for the scroll event its own
   offset restore causes when the area is moved to another place in the page
   before the next frame; the callback previously received that event with a

@@ -1205,6 +1205,31 @@ def test_mouse_hover_delay_cancels_before_open_and_keeps_open_on_child_transfer(
     assert errors == []
 
 
+def test_submenu_hides_a_native_popover_open_it_did_not_request(page):
+    errors = _load(page)
+    _trigger(page).click()
+    page.wait_for_function("document.querySelector('#library-menu').matches(':popover-open')")
+    submenu_surface = page.locator('[data-citry-menu-submenu] > [role="menu"]').first
+
+    # Page code (or a stray popovertarget) opens the closed submenu natively.
+    # The submenu added its toggle listener earlier, so it runs first, and a
+    # listener added here sees the state it left behind without waiting on a timer.
+    open_after_toggle = submenu_surface.evaluate(
+        """surface => new Promise((resolve) => {
+          surface.addEventListener(
+            "toggle",
+            (event) => resolve(event.newState === "open" && surface.matches(":popover-open")),
+            {once: true},
+          );
+          surface.showPopover();
+        })"""
+    )
+
+    assert open_after_toggle is False
+    assert not submenu_surface.evaluate("element => element.matches(':popover-open')")
+    assert errors == []
+
+
 @pytest.mark.parametrize("controlled", [False, True], ids=["uncontrolled", "controlled"])
 @pytest.mark.parametrize("in_shadow", [False, True], ids=["document-modal", "shadow-modal"])
 def test_unrelated_modal_force_closes_open_menu_without_resurrection(page, controlled, in_shadow):

@@ -4926,6 +4926,19 @@ class CMenuSubmenu(LibraryComponent):
             );
             return;
           }
+          // Each component script runs in its own scope, so the popover helper
+          // that CMenu's shared runtime defines is read from the record that
+          // runtime publishes. A menu context above (from CMenu, CContextMenu, or
+          // CSplitButton) means that runtime loaded, because each lists it as a dependency.
+          const hideNativePopover = globalThis[Symbol.for("citry-ui:menu-root-runtime")]
+            ?.helpers?.hideNativePopover;
+          if (typeof hideNativePopover !== "function") {
+            console.error(
+              "[citry-ui] CMenuSubmenu is inactive because the CMenu runtime script did not load.",
+              wrapper,
+            );
+            return;
+          }
           const trigger = wrapper.querySelector(
             ':scope > [data-citry-ui-part="menu-submenu-trigger"]',
           );
