@@ -102,6 +102,19 @@ class _TransferRegistry:
     items: list[_TransferDeclaration] = field(default_factory=list)
 
 
+class _TransferRow(TypedDict):
+    """One declared item with its pane placement, as the panes and native select render it."""
+
+    declaration: _TransferDeclaration
+    authored_index: int
+    in_target: bool
+    index: int
+    # The wrapper Slot ignores the data it is rendered with and passes the item's
+    # own slot data to the authored content, so it accepts any data.
+    content: str | Slot[object]
+    option_id: str
+
+
 def _plain(name: str, value: object, *, optional: bool = False, single_line: bool = False) -> str | None:
     raw = const_value(value)
     if raw is None and optional:
@@ -492,7 +505,7 @@ class CInternalTransferList(LibraryComponent):
         if unknown:
             raise ValueError(f"CTransferList value contains unknown item values: {unknown!r}.")
         chosen = set(kwargs.value)
-        items: list[dict[str, object]] = []
+        items: list[_TransferRow] = []
         for authored_index, declaration in enumerate(declarations):
             in_target = declaration.value in chosen
             pane_values = (
@@ -506,7 +519,7 @@ class CInternalTransferList(LibraryComponent):
                 "in_target": in_target,
                 "index": index,
             }
-            content: object = declaration.label
+            content: str | Slot[object] = declaration.label
             if declaration.content is not None:
                 content = Slot(
                     lambda ctx, item=declaration, data=slot_data: cast(
@@ -524,7 +537,7 @@ class CInternalTransferList(LibraryComponent):
                 }
             )
         self.unprovide(_TRANSFER_CONTEXT)
-        available_total = sum(not cast("bool", item["in_target"]) for item in items)
+        available_total = sum(not item["in_target"] for item in items)
         chosen_total = len(kwargs.value)
         count_available = (
             self.i18n.tr("citry-ui-transfer-list-count", selected=str(0), total=str(available_total))
@@ -559,11 +572,9 @@ class CInternalTransferList(LibraryComponent):
             },
             "items": items,
             "available_items": [item for item in items if not item["in_target"]],
-            "chosen_items": sorted(
-                (item for item in items if item["in_target"]), key=lambda item: cast("int", item["index"])
-            ),
+            "chosen_items": sorted((item for item in items if item["in_target"]), key=lambda item: item["index"]),
             "native_items": [item for item in items if not item["in_target"]]
-            + sorted((item for item in items if item["in_target"]), key=lambda item: cast("int", item["index"])),
+            + sorted((item for item in items if item["in_target"]), key=lambda item: item["index"]),
             "available_total": available_total,
             "chosen_total": chosen_total,
             "count_available": count_available,
@@ -739,7 +750,7 @@ class CInternalTransferListItem(LibraryComponent):
 
     @dataclass(slots=True)
     class Kwargs:
-        item: dict[str, object]
+        item: _TransferRow
 
     @dataclass(slots=True)
     class Slots:
@@ -747,7 +758,7 @@ class CInternalTransferListItem(LibraryComponent):
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item
-        declaration = cast("_TransferDeclaration", item["declaration"])
+        declaration = item["declaration"]
         return {
             "attrs": {
                 **declaration.attrs,
