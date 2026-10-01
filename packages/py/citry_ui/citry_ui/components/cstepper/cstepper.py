@@ -106,6 +106,13 @@ class _StepperRegistry:
     steps: list[_StepDeclaration] = field(default_factory=list)
 
 
+class _StepRow(TypedDict):
+    """One declared step and its position, as CInternalStepper passes it to CInternalStep."""
+
+    declaration: _StepDeclaration
+    index: int
+
+
 def _plain(name: str, value: object) -> str:
     raw = const_value(value)
     if not isinstance(raw, str):
@@ -532,6 +539,9 @@ class CInternalStepper(LibraryComponent):
         if kwargs.registry.steps[kwargs.active].disabled:
             raise ValueError(f"CStepper active index {kwargs.active} identifies a disabled Step.")
         self.unprovide(_STEPPER_CONTEXT)
+        steps: list[_StepRow] = [
+            {"declaration": declaration, "index": index} for index, declaration in enumerate(kwargs.registry.steps)
+        ]
         root_attrs = {
             **kwargs.attrs,
             "aria-label": kwargs.label,
@@ -549,9 +559,7 @@ class CInternalStepper(LibraryComponent):
             "linear": kwargs.linear,
             "root_disabled": kwargs.disabled,
             "attrs": root_attrs,
-            "steps": [
-                {"declaration": declaration, "index": index} for index, declaration in enumerate(kwargs.registry.steps)
-            ],
+            "steps": steps,
             "count": len(kwargs.registry.steps),
         }
 
