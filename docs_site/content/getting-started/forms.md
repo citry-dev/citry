@@ -106,4 +106,4 @@ server render and removes the listener on unmount.
 
 ## Next steps
 
-Next, [render the calling component again from Python](/getting-started/server-rendered-updates/).
+Next, [replace the calling component from Python](/getting-started/server-rendered-updates/).
