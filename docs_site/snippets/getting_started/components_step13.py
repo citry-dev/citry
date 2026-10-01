@@ -13,6 +13,8 @@ class Task:
     completed: bool = False
 
 
+# This represents the "database" of tasks.
+# In a real app, this would be stored in a database.
 TASKS = [
     Task(id=1, title="Review the draft", completed=True),
     Task(id=2, title="Send the invitation"),
@@ -40,10 +42,14 @@ class TaskRow(Component):
     class Slots:
         pass
 
+    # Remember the task ID in State so we don't have
+    # to send it with each event.
     class State:
         task_id: int
 
     class Events:
+        # Update the task title in TASKS.
+        # Dispatch an event so the row can show a message.
         def save(self, data: RenameTaskIn, state: "TaskRow.State"):
             title = data.title.strip()
             if len(title) < 3:
@@ -51,10 +57,13 @@ class TaskRow(Component):
                     "Give the task a longer title.",
                     fields={"title": "Use at least three characters."},
                 )
+
+            # Perform a "database" update.
             for task in TASKS:
                 if task.id == state.task_id:
                     task.title = title
                     break
+
             return actions.Dispatch(
                 "task-row:saved",
                 {"taskId": state.task_id, "title": title},
@@ -68,7 +77,11 @@ class TaskRow(Component):
         <form @c-submit.prevent="save">
           <label>
             Task {{ task_id }}
-            <input name="title" c-value="title" required />
+            <input
+              name="title"
+              c-value="title"
+              required
+            />
           </label>
           <button type="submit" :disabled="$loading('save')">Save</button>
           <p
@@ -82,6 +95,8 @@ class TaskRow(Component):
     """
 
     js = """
+      // Display a message when this row's task title
+      // is successfully saved.
       $component({
         data() {
           return { saveStatus: '' };

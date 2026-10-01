@@ -88,6 +88,8 @@ class ChoicePicker(Component):
         <span v-show="$loading('load_choices')">Loading...</span>
 
         {# New in this step: show the counter from Python. #}
+        {# The server renders the first value inside the tag. #}
+        {# `$state` takes later values returned by Python. #}
         <p>
           Sets loaded:
           <output v-text="$state.batches_loaded">
