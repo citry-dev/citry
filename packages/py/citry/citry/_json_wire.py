@@ -492,7 +492,7 @@ def _expression_type(
     value = _rule_expression_type(node, context)
     # Only a part the rules leave unknown without a reason may be filled from
     # a type checker's answer; a part with a reason is known not to fit.
-    # A `*items` element is no expression of its own, so it cannot be asked about.
+    # A `*items` element is not an expression on its own, so it cannot be asked about.
     if value.kind != "unknown" or value.unsupported or isinstance(node, ast.Starred):
         return value
     span = context.span(node)

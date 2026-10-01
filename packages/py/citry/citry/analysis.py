@@ -529,60 +529,62 @@ _COMPONENT_JS_BROWSER_GLOBALS = frozenset(
     {
         "AbortController",
         "AbortSignal",
-        "AnimationEvent",
         "Blob",
         "CSS",
+        "CSSStyleSheet",
         "Citry",
-        "ClipboardEvent",
+        "DOMException",
         "DOMParser",
         "DOMRect",
         "DataTransfer",
         "Document",
         "DocumentFragment",
-        "DragEvent",
         "EventTarget",
         "File",
         "FileReader",
-        "FocusEvent",
         "FormData",
         "HTMLCollection",
         "Headers",
-        "InputEvent",
+        "Image",
         "IntersectionObserver",
-        "KeyboardEvent",
-        "MouseEvent",
         "MutationObserver",
         "Node",
         "NodeList",
-        "PointerEvent",
         "Range",
         "Request",
         "ResizeObserver",
         "Response",
         "Selection",
         "ShadowRoot",
-        "SubmitEvent",
         "Text",
-        "TouchEvent",
-        "TransitionEvent",
+        "TextDecoder",
+        "TextEncoder",
         "WebSocket",
-        "WheelEvent",
         "Window",
+        "Worker",
+        "XMLHttpRequest",
         "alert",
+        "atob",
+        "btoa",
+        "cancelIdleCallback",
         "confirm",
         "crypto",
         "customElements",
         "getComputedStyle",
+        "getSelection",
         "innerHeight",
         "innerWidth",
         "matchMedia",
         "prompt",
         "requestIdleCallback",
+        "scrollX",
+        "scrollY",
         "self",
     }
 )
-# Every element interface, such as HTMLInputElement or SVGPathElement.
-_DOM_ELEMENT_INTERFACE = re.compile(r"(?:HTML|SVG)[A-Za-z]*Element")
+# Every element interface, such as HTMLInputElement or SVGPathElement, and
+# every event class, such as KeyboardEvent or MessageEvent.
+_DOM_INTERFACE = re.compile(r"(?:HTML|SVG)[A-Za-z]*Element|[A-Z][A-Za-z]*Event")
 
 
 VUE_AMBIENT_NAMES = frozenset(
@@ -1017,7 +1019,7 @@ def lint_attribute_values(
     values, bindings with a modifier such as ``.prop``, and attributes whose
     value contains syntax an extension handles are skipped.
 
-    A ``http-equiv`` value that is no standard pragma, such as
+    An ``http-equiv`` value that is not a standard pragma, such as
     ``Cache-Control``, is reported with a message that browsers ignore it
     and that it belongs in an HTTP response header.
 
@@ -1178,9 +1180,9 @@ def _bound_string_attribute(name: str, value: str) -> tuple[str, str] | None:
     """
     Return the attribute name and text of a Vue binding whose value is one JavaScript string.
 
-    ``:dir="'rtl'"`` and ``v-bind:dir="`rtl`"`` set ``dir`` to ``rtl``. A
-    binding with a modifier, a dynamic name, an escape sequence, or a
-    template literal with a placeholder is ``None``, because its text is
+    ``:dir="'rtl'"`` and ``v-bind:dir="`rtl`"`` set ``dir`` to ``rtl``.
+    Returns ``None`` for a binding with a modifier, a dynamic name, an escape
+    sequence, or a template literal with a placeholder, because its text is
     not simply the quoted characters.
     """
     for prefix in (":", "v-bind:"):
@@ -1294,7 +1296,7 @@ def lint_unknown_component_js_variables(
         if (
             reference.name in COMPONENT_JS_AMBIENT_NAMES
             or reference.name in _COMPONENT_JS_BROWSER_GLOBALS
-            or _DOM_ELEMENT_INTERFACE.fullmatch(reference.name)
+            or _DOM_INTERFACE.fullmatch(reference.name)
         ):
             continue
         missing = [consumer for consumer in consumers if reference.name not in consumer.known_names]

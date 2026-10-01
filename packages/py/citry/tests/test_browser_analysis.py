@@ -1004,6 +1004,7 @@ def test_component_js_lint_knows_citry_and_dom_globals_but_vue_templates_do_not(
   const observer = new MutationObserver(() => getComputedStyle(input));
   Citry.vue.nextTick(() => observer.disconnect());
   if (input.getRootNode() instanceof Document) new EventTarget();
+  new MessageEvent("x", { data: btoa("y") });
   missingHelper(input);
 } });"""
 
@@ -1313,11 +1314,11 @@ def test_attribute_value_lint_says_a_header_pragma_belongs_in_a_response_header(
         "content-security-policy-report-only",
     ]
     assert findings[0].message.startswith(
-        "'Cache-Control' is not a pragma browsers read from 'http-equiv' on <meta>, so it has no effect. "
-        "Send it as an HTTP response header instead."
+        "'Cache-Control' is not a pragma browsers act on in 'http-equiv' on <meta>. "
+        "If it is an HTTP header, send it in the HTTP response instead."
     )
     assert "Did you mean 'refresh'?" in findings[1].message
-    assert "Send it as an HTTP response header instead." in findings[2].message
+    assert "send it in the HTTP response instead." in findings[2].message
 
 
 def test_attribute_value_lint_maps_nested_template_offsets_into_the_outer_source():

@@ -250,8 +250,8 @@ def template_static_input_queries(
     text as written, without decoding character references, so the literal
     matches it exactly. A value with a backslash, which Python would read
     as an escape, or with a line break, which a quoted literal cannot hold,
-    is left out, and so is an unquoted or empty value: an empty or missing
-    value passes ``True``.
+    is left out. An unquoted value is left out too, and so is an empty or
+    missing one, which passes ``True`` rather than a string.
     """
     queries: list[TemplatePythonQuery] = []
     _collect_static_input_queries(template, queries, base_index=0, parse_nested=parse_nested)
@@ -1138,7 +1138,7 @@ def _query_lines(
             # Put generated punctuation after a newline so an authored Python
             # comment cannot consume the closing parenthesis and colon.
             lines.append(f"{current}if (")
-            lines.extend(f"{current}    {line}" for line in control.source.splitlines())
+            lines.extend(f"{current}    {line}" for line in _bare_lines(control.source))
             lines.append(f"{current}):")
             current += "    "
         elif control.kind == "for":
@@ -1146,13 +1146,13 @@ def _query_lines(
                 return []
             target = control.names[0] if len(control.names) == 1 else f"({', '.join(control.names)})"
             yielded = control.names[0] if len(control.names) == 1 else f"({', '.join(control.names)})"
-            source_lines = control.source.splitlines()
-            if not source_lines:
+            clause_lines = _bare_lines(control.source)
+            if not clause_lines:
                 return []
             lines.append(f"{current}for {target} in [")
             lines.append(f"{current}    {yielded}")
-            lines.append(f"{current}    for {source_lines[0]}")
-            lines.extend(f"{current}    {line}" for line in source_lines[1:])
+            lines.append(f"{current}    for {clause_lines[0]}")
+            lines.extend(f"{current}    {line}" for line in clause_lines[1:])
             lines.append(f"{current}]:")
             current += "    "
         else:
@@ -1168,6 +1168,11 @@ def _query_lines(
     lines.extend(f"{current}{line}" for line in imports)
     lines.append(f"{current}{_VALUE_CHECK_PREFIX}_value: {annotation} = {placeholder}")
     return lines
+
+
+def _bare_lines(source: str) -> list[str]:
+    """Split authored Python into lines as Python does, without their line breaks."""
+    return [line.rstrip("\r\n") for line in source_lines(source)]
 
 
 # Generated names for a value check. They must not contain the query

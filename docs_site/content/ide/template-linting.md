@@ -323,9 +323,11 @@ only valid names with an underscore are `_blank`, `_self`, `_parent`, and
 `_top`. The `name` of an `<iframe>` or `<object>` may not start with an
 underscore at all.
 
-`http-equiv` on `<meta>` takes only the pragmas the HTML Standard defines.
-Browsers ignore any other value, such as `Cache-Control` or `Pragma`, so
-the warning says to send it as an HTTP response header instead:
+`http-equiv` on `<meta>` is checked against the pragmas browsers act on:
+`content-type`, `default-style`, `refresh`, `x-ua-compatible`, and
+`content-security-policy`. Browsers ignore a header name such as
+`Cache-Control` or `Pragma` there, so the warning says to send it in the
+HTTP response instead:
 
 ```citry-html
 {# Warning: browsers ignore this; send Cache-Control as a header. #}
@@ -340,8 +342,10 @@ it is checked too:
 <div :dir="'rlt'">...</div>
 ```
 
-When the editor also runs TypeScript, a value that Vue's types reject as
-well is reported once, by this rule. Other bound values, such as
+When the editor or `citry check --types` also runs TypeScript, a value
+that Vue's types reject as well is reported once, by this rule, at this
+rule's severity. That is a warning by default, so set the rule to
+`"error"` if such a value should fail a check. Other bound values, such as
 `:dir="direction"` or `c-dir`, and a binding with a modifier such as
 `.prop` are not checked, and neither are component tags, `<c-element>`, a
 custom element such as `<my-widget>`, and elements inside `<svg>` or

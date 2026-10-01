@@ -186,7 +186,7 @@ class TaskList(Component):
 Both `this.labels` and `this.upper` are `string[]`. A literal type in
 ty's answer keeps only its kind, as a constant does. The editor asks ty
 when it next checks an open file, so these types can take a moment to
-appear after you open or save the project, and
+appear after you open or save a file, and
 [`citry check --types`](/cli/#check-types-with-typescript-and-ty) asks
 ty before it runs TypeScript. A value ty types as a class, as `Any`, or
 as a type it could not infer stays `any`. When ty cannot run, these
@@ -752,7 +752,8 @@ checked the same way:
 ```
 
 An attribute without a value, such as `<c-TaskCard compact>`, passes
-`True` and is not checked. A missing or unknown input is reported by the
+`True` and is not checked. An unquoted value, or one with a backslash or
+a line break, is not checked either. A missing or unknown input is reported by the
 template's own input checks instead. The
 check follows the annotation, not runtime validation, so a Pydantic
 `Kwargs` field that turns `"1"` into `1` still reports a string passed

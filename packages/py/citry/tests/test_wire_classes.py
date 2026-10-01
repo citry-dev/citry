@@ -225,19 +225,22 @@ def test_kwargs_wire_classes_leaves_out_a_class_whose_metadata_raises():
     "payload",
     [
         {"members": {}},
-        {"members": {"task": 1}, "classes": {}},
+        {"members": {"task": 1}, "classes": {}, "class_modules": {}},
         {
             "members": {},
             "classes": {
                 "x": {"attributes": {}, "kind": "enum", "required": None, "enum_values": [[1]], "enum_names": None}
             },
+            "class_modules": {},
         },
         {
             "members": {},
             "classes": {
                 "x": {"attributes": {}, "kind": "mystery", "required": None, "enum_values": None, "enum_names": None}
             },
+            "class_modules": {},
         },
+        {"members": {}, "classes": {}, "class_modules": {"a": 1}},
     ],
 )
 def test_kwargs_wire_classes_rejects_a_malformed_copy(payload):
@@ -375,7 +378,7 @@ def test_a_spread_list_element_is_not_collected_as_a_part():
 
     value = json_wire_type_from_expression("[*self.rows(), 'x']", unproven=unproven)
 
-    # `*self.rows()` is no expression on its own, so it cannot be asked about.
+    # `*self.rows()` is not an expression on its own, so it cannot be asked about.
     assert unproven == []
     assert value.javascript == "Array<unknown>"
 

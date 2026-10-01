@@ -2441,7 +2441,14 @@ async def test_static_component_inputs_are_checked_against_their_target_types(tm
         "    def template_data(self, kwargs, slots):\n"
         "        return {}\n"
     )
-    template_source = '<c-Card size="sm" />\n<c-Card size=\'xl\' />\n<c-Counter count="3" label="a&amp;b" shown />\n'
+    # The walrus makes later Python values unsafe to check, but a static
+    # string reads no template variable, so the static values still are.
+    template_source = (
+        '<p c-title="(seen := 1)"></p>\n'
+        '<c-Card size="sm" />\n'
+        "<c-Card size='xl' />\n"
+        '<c-Counter count="3" label="a&amp;b" shown />\n'
+    )
 
     findings = await _python_findings_in(tmp_path, template_source, module_source)
 

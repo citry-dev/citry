@@ -55,9 +55,9 @@ Upgrading from 0.5.x? Follow
   against the child's `Kwargs` annotation, so `<c-TaskCard c-task="1">`
   is an error when `task` is a `Task`. A static attribute is checked as
   the string it passes, so `<c-TaskCard size="xl">` is an error when
-  `size` only takes `"sm"`, `"md"`, or `"lg"`. It also checks that `c-class` and
-  `c-style` on an HTML element get a string, a dict, a list or tuple of
-  those, or `None`.
+  `size` only takes `"sm"`, `"md"`, or `"lg"`. It also checks that
+  `c-class` and `c-style` on an HTML element get a string, a dict, a
+  list or tuple of those, or `None`.
 - `citry --app module:engine check --types` type-checks component
   JavaScript and Vue template expressions with TypeScript, and Python
   template expressions with ty, and reports each finding at its file,
@@ -83,10 +83,11 @@ Upgrading from 0.5.x? Follow
   `<input type="datetime">`, and suggest the closest valid keyword. A Vue
   binding to one string, such as `:dir="'rlt'"`, is checked the same way,
   and a `<meta http-equiv>` value browsers ignore, such as
-  `Cache-Control`, is reported with the advice to send it as an HTTP
-  header. Set
-  `LintSettings.rule_invalid_attribute_value`, or the same name in a
-  component's `Lint` class, to change the severity.
+  `Cache-Control`, is reported with the advice to send it in the HTTP
+  response. With `--types`, a bound value Vue's types also reject is
+  reported once, as this rule's warning. Set the severity with
+  `LintSettings.rule_invalid_attribute_value` or the same name in a
+  component's `Lint` class.
 - `citry check` warns when `js_data()` returns a class instance read
   through a Kwargs field, such as `kwargs.task.owner`, when Citry cannot
   prove it crosses the JSON wire.
@@ -300,8 +301,9 @@ Upgrading from 0.5.x? Follow
 ### Fixed
 
 - `citry check` and the editor no longer report `Document`, `Window`,
-  `EventTarget`, `Range`, `Selection`, and several DOM event classes as
-  unknown names in component JavaScript.
+  `EventTarget`, `Range`, `Selection`, any DOM event class such as
+  `MessageEvent`, or browser functions such as `btoa` as unknown names
+  in component JavaScript.
 - `citry check` and the editor no longer report
   `citry.js-data.unsupported-type` for a `js_data()` value that reads a
   `Kwargs` field annotated with a type alias of a `Literal`, such as

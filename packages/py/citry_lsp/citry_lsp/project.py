@@ -738,7 +738,7 @@ class ProjectState:
     _js_data_inferred: dict[tuple[Path, str, str], Mapping[tuple[int, int], JsonWireType]] = field(
         init=False, repr=False, compare=False
     )
-    # Answers copied from an earlier project generation: used until ty answers again.
+    # Answers copied from the project before a reload: used until ty answers again.
     _js_data_stale: set[tuple[Path, str, str]] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:

@@ -639,9 +639,9 @@ def position_at_offset(source: str, offset: int) -> types.Position:
     """Convert a Python string index to an LSP UTF-16 position."""
     bounded = min(max(offset, 0), len(source))
     before = source[:bounded]
-    lines = source_lines(before)
-    # A trailing line break starts a new, still empty line.
-    line_text = "" if not lines or lines[-1].endswith(("\n", "\r")) else lines[-1]
+    # The line starts after the last CR or LF; a CR LF pair counts once.
+    line_start = max(before.rfind("\n"), before.rfind("\r")) + 1
+    line_text = before[line_start:]
     return types.Position(line_break_count(before), len(line_text.encode("utf-16-le")) // 2)
 
 

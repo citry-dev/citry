@@ -886,7 +886,7 @@ def _project_with_embedded_capability(
 ) -> ProjectState:
     status = replace(project.status, embedded_formatting=capability)
     updated = replace(project, status=status)
-    # The same project generation keeps ty's answers as they are.
+    # Only the formatting capability changed, so ty's answers are still current.
     updated.adopt_js_data_inferred_types(project, stale=False)
     return updated
 

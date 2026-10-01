@@ -22,14 +22,15 @@ All notable changes to `citry-lsp` are documented here.
   child's `Kwargs` annotation, so `<c-TaskCard c-task="1">` is an error
   when `task` is a `Task`. A static attribute is checked as the string
   it passes, so `<c-TaskCard size="xl">` is an error when `size` only
-  takes `"sm"`, `"md"`, or `"lg"`. It also checks that `c-class` and `c-style` on
-  an HTML element get a string, a dict, a list or tuple of those, or
-  `None`.
+  takes `"sm"`, `"md"`, or `"lg"`. It also checks that `c-class` and
+  `c-style` on an HTML element get a string, a dict, a list or tuple of
+  those, or `None`.
 - The editor warns about a static HTML attribute value that the attribute
   does not accept, such as `draggable="treu"` or `<input type="datetime">`,
   and suggests the closest valid keyword. A Vue binding to one string,
   such as `:dir="'rlt'"`, is checked the same way, and TypeScript does
-  not report the same value again.
+  not report the same value again, so such a value is now a warning
+  rather than a TypeScript error.
 - The editor asks ty for the type of a `js_data()` value Citry has no
   rule for, such as `self.labels()` or a list comprehension, so when
   `labels()` returns `list[str]`, completion, hover, and TypeScript checks

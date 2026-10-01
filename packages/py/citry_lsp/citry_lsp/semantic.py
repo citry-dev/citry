@@ -541,7 +541,9 @@ async def infer_js_data_value_types(
     workspace = Path(project.status.workspace)
     # Reading and analyzing every js_data() source can take a while in a
     # large project, so it runs off the event loop.
-    requests = await asyncio.to_thread(js_data_inference_requests, project, workspace, open_documents)
+    # The thread gets its own copy, because the server adds and removes open
+    # documents while it runs.
+    requests = await asyncio.to_thread(js_data_inference_requests, project, workspace, dict(open_documents))
     if not requests:
         return
     for request in requests:
@@ -572,8 +574,8 @@ async def infer_js_data_value_types(
                 if revealed is None or offset is None:
                     continue
                 for span, (start, end) in zip(request.spans, shadow.reveals, strict=True):
-                    # ty marks the expression itself; the window also takes
-                    # the parenthesis just before it.
+                    # ty marks the argument `(expr)`, which starts one
+                    # character before the expression.
                     if start - 1 <= offset <= end:
                         wire_type = _json_type_from_ty_display(revealed)
                         if wire_type is not None:

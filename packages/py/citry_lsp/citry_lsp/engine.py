@@ -4909,7 +4909,7 @@ _CLASS_OR_STYLE_VALUE_TYPE = TemplatePythonValueType(
 
 def _query_value_type(query: TemplatePythonQuery, project: ProjectState) -> TemplatePythonValueType | None:
     """
-    Return the type a `c-*` attribute value must have, or `None` when nothing is proven.
+    Return the type a `c-*` value or static input must have, or `None` when nothing is proven.
 
     On a component tag, the value is a keyword argument, so it must match the
     child's `Kwargs` field annotation. A missing or unknown input is reported
@@ -5107,6 +5107,7 @@ def all_expression_shadows(
         # A quoted static attribute on a component tag passes its text as a
         # string, so it is checked against the child's input like a `c-*` value.
         static_queries = template_static_input_queries(parsed.template, parse_nested=nested_parser)
+        static_ids = {id(query) for query in static_queries}
         queries = tuple(
             sorted(
                 (*template_python_queries(parsed.template, parse_nested=nested_parser), *static_queries),
@@ -5119,14 +5120,17 @@ def all_expression_shadows(
         walrus_ends: list[int] = []
         for query in queries:
             value_type = _query_value_type(query, project)
-            if value_type is None and any(query is static for static in static_queries):
+            is_static = id(query) in static_ids
+            if is_static and value_type is None:
                 # A static value that sets no typed input has nothing to check.
                 continue
             has_walrus = _query_contains_named_expression(query)
             if (
                 (query.host_kind == "loop" and has_walrus)
                 or _query_contains_lambda_named_expression(query)
-                or any(end_index <= query.start_index for end_index in walrus_ends)
+                # A static string reads no template variable, so an earlier
+                # walrus assignment cannot change it.
+                or (not is_static and any(end_index <= query.start_index for end_index in walrus_ends))
             ):
                 if has_walrus:
                     walrus_ends.append(query.end_index)
@@ -8665,7 +8669,7 @@ def _js_schema_roots(
             if token is None:
                 return None
             line, start, end = token
-            source_line = source.splitlines()[line]
+            source_line = source_lines(source)[line].rstrip("\r\n")
             location = types.Location(
                 source_file.as_uri(),
                 types.Range(
@@ -10468,7 +10472,7 @@ def _state_field_root(
     if token is None:
         return None
     line, start, end = token
-    source_line = source.splitlines()[line]
+    source_line = source_lines(source)[line].rstrip("\r\n")
     location = types.Location(
         field.source_file.resolve().as_uri(),
         types.Range(
@@ -11041,7 +11045,7 @@ def _css_schema_roots(
             if token is None:
                 return None
             line, start, end = token
-            source_line = source.splitlines()[line]
+            source_line = source_lines(source)[line].rstrip("\r\n")
             location = types.Location(
                 source_file.as_uri(),
                 types.Range(
@@ -12202,7 +12206,7 @@ def _field_definition_location(field: FieldRecord, *, source: str | None = None)
     if token is None:
         return None
     line, start, end = token
-    source_line = source.splitlines()[line]
+    source_line = source_lines(source)[line].rstrip("\r\n")
     return types.Location(
         source_file.as_uri(),
         types.Range(
@@ -12257,7 +12261,7 @@ def _annotated_field_token(
     if len(declarations) != 1:
         return None
     target = declarations[0]
-    source_line = source.splitlines()[target.lineno - 1]
+    source_line = source_lines(source)[target.lineno - 1].rstrip("\r\n")
     target_column = _utf8_byte_column_to_char(source_line, target.col_offset)
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if (
@@ -12288,7 +12292,7 @@ def _component_definition_range(component: ComponentRecord) -> types.Range:
     if token is None:
         return _zero_range()
     line, start, end = token
-    source_line = source.splitlines()[line]
+    source_line = source_lines(source)[line].rstrip("\r\n")
     return types.Range(
         types.Position(line, _utf16_units(source_line[:start])),
         types.Position(line, _utf16_units(source_line[:end])),

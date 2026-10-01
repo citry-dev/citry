@@ -738,10 +738,10 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                          'frame-name': "'{value}' is not a valid value for "
                                                                        "'{attribute}' on <{element}>. A frame name "
                                                                        "cannot start with '_'.",
-                                                         'pragma': "'{value}' is not a pragma browsers read from "
-                                                                   "'{attribute}' on <{element}>, so it has no effect. "
-                                                                   'Send it as an HTTP response header instead. Valid '
-                                                                   'values: {allowed}.',
+                                                         'pragma': "'{value}' is not a pragma browsers act on in "
+                                                                   "'{attribute}' on <{element}>. If it is an HTTP "
+                                                                   'header, send it in the HTTP response instead. '
+                                                                   'Valid values: {allowed}.',
                                                          'suggestion': "'{value}' is not a valid value for "
                                                                        "'{attribute}' on <{element}>. Did you mean "
                                                                        "'{suggestion}'? Valid values: {allowed}.",
@@ -754,9 +754,9 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                            'element': 'Element name as written in the template.',
                                                            'suggestion': 'The valid value closest to the written one.',
                                                            'value': 'Attribute value as written in the template.'},
-                                            'summary': 'A static HTML attribute that accepts only a fixed set of '
-                                                       'keywords, such as draggable or type, has a value outside that '
-                                                       'set, so the browser ignores it or falls back to a default.',
+                                            'summary': 'An HTML attribute that accepts only a fixed set of keywords, '
+                                                       'such as draggable or type, has a value outside that set, so '
+                                                       'the browser ignores it or falls back to a default.',
                                             'surfaces': ['check', 'lsp'],
                                             'title': 'HTML attribute value the browser does not accept',
                                             'when': 'A plain HTML element has an attribute with a fixed set of '
@@ -771,10 +771,16 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                     'no value. For target and formtarget, only a name that starts with '
                                                     'an underscore is checked, because any other name is a valid '
                                                     'window name; the name of an iframe or object may not start with '
-                                                    'an underscore at all. Bound values (c-*, :attr), component tags, '
-                                                    '<c-element>, custom elements with a hyphen, and elements inside '
-                                                    '<svg> or <math> are not checked, and neither are attributes such '
-                                                    'as sandbox or rel that take a list of tokens.'},
+                                                    'an underscore at all. A Vue binding whose value is one JavaScript '
+                                                    'string, such as :dir="\'rtl\'", is checked like the static '
+                                                    'attribute. A http-equiv value on meta that is not one of the '
+                                                    'pragmas browsers act on gets a message that it belongs in the '
+                                                    'HTTP response when it is a header. Other bound values (c-*, an '
+                                                    ':attr expression that is not one string, a binding with a '
+                                                    'modifier), component tags, <c-element>, custom elements with a '
+                                                    'hyphen, and elements inside <svg> or <math> are not checked, and '
+                                                    'neither are attributes such as sandbox or rel that take a list of '
+                                                    'tokens.'},
  'citry.template.marker-name-invalid': {'code': 'citry.template.marker-name-invalid',
                                         'constant': 'TEMPLATE_MARKER_NAME_INVALID',
                                         'defaultSeverity': 'error',
