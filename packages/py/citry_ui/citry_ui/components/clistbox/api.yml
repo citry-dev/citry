@@ -22,8 +22,8 @@ inputs:
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CListboxSize]}, default: {kind: literal, value: md}, effect: Selects Option geometry.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted root attributes without replacing owned state structure or runtime.}
-      - {id: listbox-attrs, name: listbox_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted attributes to the role listbox surface without replacing owned semantics or focus.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted root attributes without replacing owned state structure or runtime. Vue directive names are rejected.'}
+      - {id: listbox-attrs, name: listbox_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted attributes to the role listbox surface without replacing owned semantics or focus. Vue directive names are rejected.'}
   - id: clistbox-client-inputs
     component: CListbox
     channel: client
@@ -46,7 +46,7 @@ inputs:
       - {id: text-value, name: text_value, type: 'str | None', default: {kind: literal, value: null}, effect: Overrides normalized visible label text for typeahead.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the concrete Option.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds inline styles to the concrete Option.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted Option attributes without replacing semantics identity focus or state.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted Option attributes without replacing semantics identity focus or state. Vue directive names are rejected.'}
   - id: clistbox-option-client-inputs
     component: CListboxOption
     channel: client
@@ -62,7 +62,7 @@ inputs:
       - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the visible accessible group name.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the group.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds inline styles to the group.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted group attributes without replacing owned semantics or label relationship.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted group attributes without replacing owned semantics or label relationship. Vue directive names are rejected.'}
 
 slots:
   - id: clistbox-slots

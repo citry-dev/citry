@@ -92,11 +92,43 @@ def test_multiple_lines_require_text_kind():
 
 @pytest.mark.parametrize(
     "attribute",
-    ["role", "aria-hidden", "tabindex", "data-kind", ":data-animation", "x-if", "data-citry-morph"],
+    [
+        "role",
+        "aria-hidden",
+        "tabindex",
+        "data-kind",
+        "data-citry-morph",
+    ],
 )
 def test_owned_and_runtime_attributes_are_rejected(attribute):
     with pytest.raises(ValueError, match="cannot"):
         _render(CSkeleton(attrs={attribute: "consumer"}))
+
+
+@pytest.mark.parametrize(
+    "attribute",
+    [
+        ":data-animation",
+        "v-bind:aria-hidden.prop",
+        ".role",
+        ":class",
+        "v-if",
+        "V-IF",
+        "v-for",
+        "v-html",
+        "@click",
+        "#default",
+    ],
+)
+def test_python_attrs_reject_vue_directives(attribute):
+    with pytest.raises(ValueError, match=re.escape(f"CSkeleton attrs cannot contain the Vue directive {attribute!r}")):
+        _render(CSkeleton(attrs={attribute: "consumer"}))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(CSkeleton(attrs={"x-if": "loading", "title": "Loading"}))
+    assert 'x-if="loading"' in html
+    assert 'title="Loading"' in html
 
 
 def test_css_surface_and_zero_javascript():

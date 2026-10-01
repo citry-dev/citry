@@ -6,13 +6,22 @@ citry.register_library(citry_ui)
 
 class ControlledSwitch(Component):
     template = """
-      <section class="switch-controlled" x-data="{enabled: true}">
+      <section class="switch-controlled" >
         <c-CSwitch
-          $c-props="{checked: enabled}"
+          :checked="enabled"
           @input="enabled = $event.target.checked"
         >Reading mode</c-CSwitch>
-        <output x-text="enabled ? 'Reading mode is on' : 'Reading mode is off'"></output>
+        <output v-text="enabled ? 'Reading mode is on' : 'Reading mode is off'"></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            enabled: true
+          };
+        },
+      });
     """
     css = """
       :where(.switch-controlled) {

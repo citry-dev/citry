@@ -14,7 +14,7 @@ def test_page_and_citry_runtime_are_served() -> None:
     assert page.content_type.startswith("text/html")
     assert "Project Explorer" in page.text
     assert "Atlas" in page.text
-    assert "/citry/ext/events/runtime.js" in page.text
+    assert "/citry/citry.js" in page.text
     assert runtime.status_code == 200
     assert runtime.content_type.startswith("text/javascript")
     assert events_runtime.status_code == 200
@@ -28,7 +28,7 @@ def test_page_escapes_project_data(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.find_projects", projects_with_markup)
     page = create_app().test_client().get("/")
 
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page.text
+    assert r"\u003cscript>alert(1)\u003c/script>" in page.text
     assert "<script>alert(1)</script>" not in page.text
 
 

@@ -20,20 +20,11 @@ class ControlledCommandPalette(Component):
     template = """
       <section
         class="command-palette-controlled"
-        x-data="{
-          open:true,
-          query:'work',
-          controlOpen:true,
-          controlQuery:true,
-          acceptClose:false,
-          acceptQuery:false,
-          requests:[],
-        }"
       >
         <h2>Switch workspace</h2>
         <div role="group" aria-label="Controlled palette settings">
-          <label><input type="checkbox" x-model="acceptClose" /> Accept close</label>
-          <label><input type="checkbox" x-model="acceptQuery" /> Accept query edits</label>
+          <label><input type="checkbox" v-model="acceptClose" /> Accept close</label>
+          <label><input type="checkbox" v-model="acceptQuery" /> Accept query edits</label>
           <button type="button" @click="controlOpen=false">Release open control</button>
           <button type="button" @click="controlQuery=false">Release query control</button>
           <button type="button" @click="controlOpen=true;open=true">Open from owner</button>
@@ -41,25 +32,35 @@ class ControlledCommandPalette(Component):
         <c-CCommandPalette
           label="Switch workspace"
           c-entries="commands"
-          $c-props="{
-            open:controlOpen ? open : null,
-            query:controlQuery ? query : null,
-            onOpenChange:(value,detail)=>{
+          :open="controlOpen ? open : null" :query="controlQuery ? query : null" :onOpenChange="(value,detail)=>{
               requests.push(`open:${value}:${detail.reason}`);
               if (!controlOpen || value || acceptClose) open=value;
-            },
-            onQueryChange:(value,detail)=>{
+            }" :onQueryChange="(value,detail)=>{
               requests.push(`query:${value}:${detail.reason}`);
               if (!controlQuery || acceptQuery || detail.reason==='close') query=value;
-            },
-          }"
+            }"
         />
         <output aria-live="polite">
-          Owner: <span x-text="open ? 'open' : 'closed'">open</span>;
-          query: <span x-text="query || 'empty'">work</span>;
-          requests: <span x-text="requests.slice(-3).join(' | ') || 'none'">none</span>
+          Owner: <span v-text="open ? 'open' : 'closed'">open</span>;
+          query: <span v-text="query || 'empty'">work</span>;
+          requests: <span v-text="requests.slice(-3).join(' | ') || 'none'">none</span>
         </output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            open:true,
+            query:'work',
+            controlOpen:true,
+            controlQuery:true,
+            acceptClose:false,
+            acceptQuery:false,
+            requests:[],
+          };
+        },
+      });
     """
 
     css = """

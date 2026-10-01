@@ -13,7 +13,13 @@ from typing import Any, ClassVar, Literal, TypedDict, cast
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._aria import merge_idrefs
-from citry_ui.components._attrs import CClassValue, CStyleValue, get_html_form_owner, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    get_html_form_owner,
+    merge_root_attrs,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import (
     FORM_CONTROL_RUNTIME_DEPENDENCY,
@@ -49,9 +55,6 @@ CNumberInputExact = int | Decimal | str
 
 _PLAIN_DECIMAL = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cni", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "data-citry-number-input-initialized",
@@ -177,15 +180,6 @@ def _message(name: str, value: object, required_field: str | None = None) -> str
     return text
 
 
-def _dynamic_target(key: str) -> str | None:
-    normalized = key.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(destination: str, value: Mapping[str, object] | None, owned: frozenset[str]) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"CNumberInput {destination} must be a mapping or None, got {value!r}.")
@@ -194,13 +188,11 @@ def _attrs(destination: str, value: Mapping[str, object] | None, owned: frozense
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CNumberInput {destination} requires string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CNumberInput {destination} cannot contain runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"CNumberInput {destination} cannot use ownership directive {key!r}.")
-        if _dynamic_target(key) in owned:
-            raise ValueError(f"CNumberInput {destination} cannot dynamically bind owned attribute {key!r}.")
+    # A Vue directive could rebind the value, listeners, or Form wiring this
+    # component owns, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, f"CNumberInput {destination.removesuffix('attrs').rstrip('_')}".rstrip())
     return copied
 
 
@@ -400,7 +392,7 @@ class CNumberInput(LibraryComponent):
             "catalog_decrement_label": catalog["decrement_label"],
             "aria_describedby": described_by,
             "aria_errormessage": error_message,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "root_attrs": merge_root_attrs(root_attrs, kwargs.class_, kwargs.style),
             "input_attrs": input_attrs,
             "variant": variant,
@@ -411,24 +403,24 @@ class CNumberInput(LibraryComponent):
             "transportId": f"{public_id}-transport",
             "name": name,
             "form": form_owner,
-            "value": value,
+            "serverValue": value,
             "formattedValue": formatted,
             "localizedServerValue": bool(self.i18n.configured and value is not None and formatted != value),
-            "min": minimum,
-            "max": maximum,
-            "step": step,
-            "required": required,
-            "disabled": disabled,
-            "readonly": readonly,
-            "invalid": invalid,
+            "serverMin": minimum,
+            "serverMax": maximum,
+            "serverStep": step,
+            "serverRequired": required,
+            "serverDisabled": disabled,
+            "serverReadonly": readonly,
+            "serverInvalid": invalid,
             "inheritsReadonly": field is None and kwargs.readonly is None,
-            "showControls": kwargs.show_controls,
-            "wheel": kwargs.wheel,
-            "commitBehavior": commit_behavior,
-            "placeholder": kwargs.placeholder,
-            "autocomplete": kwargs.autocomplete,
-            "variant": variant,
-            "size": size,
+            "serverShowControls": kwargs.show_controls,
+            "serverWheel": kwargs.wheel,
+            "serverCommitBehavior": commit_behavior,
+            "serverPlaceholder": kwargs.placeholder,
+            "serverAutocomplete": kwargs.autocomplete,
+            "serverVariant": variant,
+            "serverSize": size,
             "messages": {
                 "required": required_message,
                 "invalid": invalid_message,
@@ -459,11 +451,11 @@ class CNumberInput(LibraryComponent):
     template = """
       <div
         class="cui-number-input"
-        c-data-empty="value is None"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
+        c-data-empty="'' if value is None else None"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="root_attrs"
@@ -524,8 +516,15 @@ class CNumberInput(LibraryComponent):
           showControls: {}, wheel: {}, commitBehavior: {}, placeholder: {}, autocomplete: {},
           variant: {}, size: {}, onValueChange: {}, onInputValueChange: {},
         },
-        init: ({ els, data, props, effect, inject, i18n }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+          formService: {from: Symbol.for('citry-ui:form'), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const props = component.$props;
+          const i18n = component.$i18n;
           const control = root.querySelector(':scope > [data-citry-ui-part="control"]');
           const input = control?.querySelector(':scope > [data-citry-ui-part="input"]');
           const decrement = control?.querySelector(':scope > [data-citry-ui-part="decrement"]');
@@ -534,18 +533,18 @@ class CNumberInput(LibraryComponent):
           if (!(control instanceof HTMLElement && input instanceof HTMLInputElement && transport instanceof HTMLInputElement)) {
             throw new Error('[citry-ui] CNumberInput settled anatomy is invalid.');
           }
-          const field = inject(Symbol.for('citry-ui:field'), null);
-          const form = inject(Symbol.for('citry-ui:form'), null);
+          const field = component.fieldService;
+          const form = component.formService;
           const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if (runtime?.generation !== 1) throw new Error('[citry-ui] CNumberInput form-control runtime is unavailable.');
           const resolver = runtime.resolver(root, props, 'CNumberInput');
           const listeners = runtime.listeners();
           const mutations = runtime.mutations(root);
           const owned = mutations.owned;
-          let current = data.value;
-          let committed = data.value;
+          let current = data.serverValue;
+          let committed = data.serverValue;
           let draft = data.formattedValue;
-          let initialValue = data.value;
+          let initialValue = data.serverValue;
           let controlled = false;
           let composing = false;
           let dirty = false;
@@ -583,6 +582,12 @@ class CNumberInput(LibraryComponent):
             const text = scale ? `${digits.slice(0, -scale)}.${digits.slice(-scale)}` : digits;
             return canonical(`${negative ? '-' : ''}${text}`);
           };
+          // `parts()` returns each `integer` as a BigInt, so `align()` returns two BigInt values and a scale.
+          /**
+           * @param {{integer: bigint, scale: number}} left
+           * @param {{integer: bigint, scale: number}} right
+           * @returns {[bigint, bigint, number]}
+           */
           const align = (left, right) => {
             const scale = Math.max(left.scale, right.scale);
             return [left.integer * power(scale - left.scale), right.integer * power(scale - right.scale), scale];
@@ -808,21 +813,21 @@ class CNumberInput(LibraryComponent):
             return value;
           };
           const resolveConfiguration = () => {
-            const min = configurationValue('min', data.min, true);
-            const max = configurationValue('max', data.max, true);
+            const min = configurationValue('min', data.serverMin, true);
+            const max = configurationValue('max', data.serverMax, true);
             return {
-              min, max, step: configurationValue('step', data.step, false, true),
-              required: field ? field.required : resolver.boolean('required', data.required),
-              disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled),
-              readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-              invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
-              showControls: resolver.boolean('showControls', data.showControls),
-              wheel: resolver.boolean('wheel', data.wheel),
-              commitBehavior: resolver.choice('commitBehavior', data.commitBehavior, ['validate', 'clamp']),
-              placeholder: resolver.string('placeholder', data.placeholder),
-              autocomplete: resolver.string('autocomplete', data.autocomplete),
-              variant: resolver.choice('variant', data.variant, ['outline', 'filled', 'plain']),
-              size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
+              min, max, step: configurationValue('step', data.serverStep, false, true),
+              required: field ? field.required : resolver.boolean('required', data.serverRequired),
+              disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.serverDisabled),
+              readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.serverReadonly),
+              invalid: field ? field.invalid : resolver.boolean('invalid', data.serverInvalid),
+              showControls: resolver.boolean('showControls', data.serverShowControls),
+              wheel: resolver.boolean('wheel', data.serverWheel),
+              commitBehavior: resolver.choice('commitBehavior', data.serverCommitBehavior, ['validate', 'clamp']),
+              placeholder: resolver.string('placeholder', data.serverPlaceholder),
+              autocomplete: resolver.string('autocomplete', data.serverAutocomplete),
+              variant: resolver.choice('variant', data.serverVariant, ['outline', 'filled', 'plain']),
+              size: resolver.choice('size', data.serverSize, ['sm', 'md', 'lg']),
             };
           };
           const reset = runtime.registerReset(root, input, {
@@ -890,11 +895,11 @@ class CNumberInput(LibraryComponent):
             validationBinding?.refresh();
             applyState();
           });
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             configuration = resolveConfiguration();
             if (configuration.min !== null && configuration.max !== null && compare(configuration.min, configuration.max) > 0) {
               resolver.report('min', configuration.min, 'min cannot exceed max');
-              configuration.min = data.min; configuration.max = data.max;
+              configuration.min = data.serverMin; configuration.max = data.serverMax;
             }
             const requested = props.value;
             if (requested === undefined) {

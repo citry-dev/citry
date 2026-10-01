@@ -27,10 +27,11 @@ class NativeSelectVariants(Component):
     template = """
       <section class="ocean-variants">
         <c-for each="variant in variants">
-          <c-CField>
+          <c-CField #c-key="variant">
             <c-fill name="label">{{ variant.title() }}</c-fill>
             <c-fill name="default">
               <c-CNativeSelect
+                #c-key="variant"
                 c-options="depths"
                 c-variant="variant"
                 value="twilight"

@@ -21,11 +21,6 @@ def textarea_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack textarea-quality"
             aria-labelledby="textarea-states-title"
-            x-data
-            x-init="Alpine.store('textareaQuality', {
-              controlled: true,
-              draft: 'Moss beside the north marker.',
-            })"
           >
             <h1 id="textarea-states-title">Textarea states</h1>
             <c-CForm id="textarea-quality-form">
@@ -36,12 +31,10 @@ def textarea_states_component(app: Citry) -> type[Component]:
                     id="textarea-quality-controlled"
                     name="observation"
                     value="Server observation"
-                    $c-props="{
-                      value: $store.textareaQuality.controlled
-                        ? $store.textareaQuality.draft
-                        : undefined,
-                    }"
-                    @input="$store.textareaQuality.draft = $event.target.value"
+                    :value="controlled
+                        ? draft
+                        : undefined"
+                    @input="draft = $event.target.value"
                   />
                 </c-fill>
                 <c-fill name="description">A required multiline field.</c-fill>
@@ -51,6 +44,7 @@ def textarea_states_component(app: Citry) -> type[Component]:
               <div class="citry-ui-quality-grid">
                 <c-for each="variant in variants">
                   <c-CTextarea
+                    #c-key="variant"
                     c-variant="variant"
                     c-value="variant + ' forest note'"
                     c-attrs="{'aria-label': variant + ' Textarea'}"
@@ -58,6 +52,7 @@ def textarea_states_component(app: Citry) -> type[Component]:
                 </c-for>
                 <c-for each="size in sizes">
                   <c-CTextarea
+                    #c-key="size"
                     c-size="size"
                     c-value="size + ' specimen record'"
                     c-attrs="{'aria-label': size + ' Textarea'}"
@@ -103,7 +98,7 @@ def textarea_states_component(app: Citry) -> type[Component]:
               <div class="textarea-quality__actions">
                 <c-CButton
                   type="button"
-                  @click="$store.textareaQuality.controlled = false"
+                  @click="controlled = false"
                 >
                   Release controlled value
                 </c-CButton>
@@ -113,6 +108,16 @@ def textarea_states_component(app: Citry) -> type[Component]:
               </div>
             </c-CForm>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlled: true,
+                draft: 'Moss beside the north marker.',
+              };
+            },
+          });
         """
 
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002

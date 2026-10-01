@@ -148,3 +148,23 @@ def test_release_surfaces_reject_unpublished_core_wheel(tmp_path: Path) -> None:
     problems = validate_release_surfaces(tmp_path, pypi_payload=payload, core_pypi_payload={"urls": []})
 
     assert any("absent from the public PyPI release" in item for item in problems)
+
+
+def test_release_surfaces_reject_a_language_server_lock_outside_its_declared_range(tmp_path: Path) -> None:
+    payload, core_payload = _write_fixture(tmp_path)
+    project = tmp_path / "examples/starters/fastapi"
+    project.joinpath("pyproject.toml").write_text(
+        '[project]\nname = "example"\nversion = "0.1.0"\ndependencies = ["citry>=0.4.4,<0.5"]\n'
+        '[dependency-groups]\ndev = ["citry-lsp>=0.2,<0.3"]\n',
+        encoding="utf-8",
+    )
+    lock = project.joinpath("uv.lock")
+    lock.write_text(
+        lock.read_text(encoding="utf-8")
+        + '\n[[package]]\nname = "citry-lsp"\nversion = "0.1.7"\nsource = { registry = "https://pypi.org/simple" }\n',
+        encoding="utf-8",
+    )
+
+    problems = validate_release_surfaces(tmp_path, pypi_payload=payload, core_pypi_payload=core_payload)
+
+    assert "starter-fastapi: locked citry-lsp '0.1.7' does not satisfy citry-lsp<0.3,>=0.2" in problems

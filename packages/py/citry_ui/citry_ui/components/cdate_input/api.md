@@ -44,7 +44,7 @@ readonly inputs remain submitted. `CForm` and `CField` own their shared state.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdate_input/snippets/form.py" title="Submit and reset a date" />
 
-## Control a date in Alpine
+## Control a date in Vue
 
 Client `value` accepts a canonical string or `null`. Native `input` and
 `change` events remain the observation surface; a supplied client value is
@@ -81,6 +81,12 @@ indicator or replacing its internal semantics.
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdate_input/snippets/states.py" title="Compare DateInput states" />
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdate_input/snippets/styling.py" title="Customize DateInput" />
+
+`attrs` accepts ordinary native, ARIA, and data attributes for the input. It
+rejects the attributes DateInput sets itself (such as `type` and `value`),
+Citry runtime attributes, and any Vue directive syntax: names starting with
+`v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component
+tag in your template instead.
 
 `CDateInput` owns no translation key: labels and errors belong to the
 application, while native picker and validation prose belong to the browser.

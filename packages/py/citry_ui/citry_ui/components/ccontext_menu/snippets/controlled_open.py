@@ -8,18 +8,11 @@ class ControlledContextMenu(Component):
     template = """
       <section
         class="context-menu-controlled"
-        x-data="{
-          open:false,
-          controlled:true,
-          accept:true,
-          breakClaim:false,
-          lastReason:'none',
-          candidate:'none',
-        }"
+
       >
         <c-CContextMenu
           aria_label="Diagram actions"
-          $c-props="{
+          v-bind="{
             open:controlled ? open : null,
             onOpenChange:(nextOpen,detail)=>{
               lastReason=detail.reason;
@@ -52,8 +45,8 @@ class ControlledContextMenu(Component):
         </c-CContextMenu>
 
         <div role="group" aria-label="Controlled visibility settings">
-          <label><input type="checkbox" x-model="accept" /> Claim requests</label>
-          <label><input type="checkbox" x-model="breakClaim" /> Break the claim</label>
+          <label><input type="checkbox" v-model="accept" /> Claim requests</label>
+          <label><input type="checkbox" v-model="breakClaim" /> Break the claim</label>
           <button type="button" @click="controlled=true;open=true">
             Open from owner
           </button>
@@ -67,13 +60,24 @@ class ControlledContextMenu(Component):
 
         <output>
           State:
-          <span x-text="controlled ? (open ? 'controlled open' : 'controlled closed') : 'uncontrolled'">
+          <span v-text="controlled ? (open ? 'controlled open' : 'controlled closed') : 'uncontrolled'">
             controlled closed
           </span>;
-          request: <span x-text="lastReason">none</span>;
-          candidate: <span x-text="candidate">none</span>
+          request: <span v-text="lastReason">none</span>;
+          candidate: <span v-text="candidate">none</span>
         </output>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {
+          open:false,
+          controlled:true,
+          accept:true,
+          breakClaim:false,
+          lastReason:'none',
+          candidate:'none',
+        };}});
     """
 
     css = """

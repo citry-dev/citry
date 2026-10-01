@@ -111,54 +111,54 @@ def test_invalid_inputs_fail_deterministically(input_name, bad_value, error, mat
 
 
 @pytest.mark.parametrize(
-    "attribute",
+    ("attribute", "message"),
     [
-        "data-citry-ui-part",
-        "DATA-VARIANT",
-        "data-intent",
-        ":data-size",
-        "x-bind:data-shape",
-        "role",
-        "tabindex",
-        "contenteditable",
-        "aria-hidden",
-        ":role",
-        "x-bind:aria-hidden",
-        "data-citry-morph",
-        "data-cev-action",
-        "data-cid",
-        "x-bind",
-        "x-if",
-        "x-for",
-        "x-teleport",
-        "x-ignore",
-        "x-html",
-        "x-text",
-        "x-model",
+        ("DATA-VARIANT", "cannot override owned attribute"),
+        ("data-intent", "cannot override owned attribute"),
+        ("role", "cannot override owned attribute"),
+        ("tabindex", "cannot override owned attribute"),
+        ("contenteditable", "cannot override owned attribute"),
+        ("aria-hidden", "cannot override owned attribute"),
+        ("data-citry-ui-part", "cannot override owned attribute"),
+        ("data-citry-morph", "reserved Citry runtime attribute"),
+        ("data-cev-action", "reserved Citry runtime attribute"),
+        ("data-cid", "reserved Citry runtime attribute"),
     ],
 )
-def test_badge_rejects_owned_runtime_and_structural_attributes(attribute):
-    with pytest.raises(ValueError, match="cannot"):
+def test_badge_rejects_owned_and_runtime_attributes(attribute, message):
+    with pytest.raises(ValueError, match=message):
         _render(CBadge(attrs={attribute: "consumer"}, slots={"default": "Badge"}))
 
 
-def test_unrelated_bindings_visibility_and_listeners_remain_available():
-    html = _render(
-        CBadge(
-            attrs={
-                "x-data": "{shown: true}",
-                "x-show": "shown",
-                ":class": "{active: shown}",
-                "@click": "shown = false",
-            },
-            slots={"default": "Available"},
-        )
-    )
+@pytest.mark.parametrize(
+    "attribute",
+    [
+        ":data-size",
+        ":role",
+        ".aria-hidden",
+        "v-bind:role",
+        "v-bind:aria-hidden.prop",
+        "V-BIND:data-shape",
+        "v-bind",
+        "v-if",
+        "V-IF",
+        "v-for",
+        "v-html",
+        "v-model",
+        ":class",
+        "@click",
+        "#default",
+    ],
+)
+def test_python_attrs_reject_vue_directives_before_rendering(attribute):
+    with pytest.raises(ValueError, match=r"CBadge attrs cannot contain the Vue directive"):
+        _render(CBadge(attrs={attribute: "value"}, slots={"default": "Badge"}))
 
-    assert 'x-data="{shown: true}"' in html
-    assert 'x-show="shown"' in html
-    assert ':class="{active: shown}"' in html
-    assert '@click="shown = false"' in html
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(CBadge(attrs={"x-if": "plain", "data-note": "kept"}, slots={"default": "Badge"}))
+    assert 'x-if="plain"' in html
+    assert 'data-note="kept"' in html
 
 
 def test_direct_choices_are_detrusted_before_rendering():

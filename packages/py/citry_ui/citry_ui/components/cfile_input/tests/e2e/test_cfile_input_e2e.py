@@ -28,6 +28,11 @@ def _file_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const fileTest=Citry.vue.reactive({
+            accept:'application/pdf',multiple:false,variant:'outline',events:[],
+          }); window.__fileTest=fileTest; return {state:{fileTest}};}});
+        """
         css = """
           :where(.file-brand) {
             --cui-file-input-radius: 19px;
@@ -38,7 +43,7 @@ def _file_page() -> str:
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><title>File controls</title><c-css /></head>
-            <body x-data>
+            <body>
               <form id="upload-form">
                 <c-CField control_id="field-file" required>
                   <c-fill name="label">Primary evidence</c-fill>
@@ -47,12 +52,10 @@ def _file_page() -> str:
                       name="primary"
                       accept="application/pdf"
                       class_="file-brand"
-                      $c-props="{
-                        accept: $store.fileTest.accept,
-                        multiple: $store.fileTest.multiple,
-                        variant: $store.fileTest.variant,
-                      }"
-                      @input="$store.fileTest.events.push(['file-input', $event.target.files.length])"
+                      :accept="state.fileTest.accept"
+                      :multiple="state.fileTest.multiple"
+                      :variant="state.fileTest.variant"
+                      @input="state.fileTest.events.push(['file-input', $event.target.files.length])"
                     />
                   </c-fill>
                   <c-fill name="description">One supporting file.</c-fill>
@@ -65,10 +68,10 @@ def _file_page() -> str:
                   multiple
                   variant="soft"
                   c-input_attrs="{'form': 'upload-form'}"
-                  @input="$store.fileTest.events.push([
+                  @input="state.fileTest.events.push([
                     'input', $event.target.files.length, $event.currentTarget.tagName
                   ])"
-                  @change="$store.fileTest.events.push([
+                  @change="state.fileTest.events.push([
                     'change', $event.target.files.length, $event.currentTarget.tagName
                   ])"
                 >
@@ -99,15 +102,6 @@ def _file_page() -> str:
 
         def js_data(self, kwargs, slots):
             return {}
-
-        js = """
-          Alpine.store('fileTest', {
-            accept: 'application/pdf',
-            multiple: false,
-            variant: 'outline',
-            events: [],
-          });
-        """
 
     return str(Page())
 
@@ -147,7 +141,7 @@ def test_native_picker_field_validity_formdata_reset_and_reactive_config(page: A
     assert field_root.get_attribute("data-invalid") is None
     assert page.locator("#upload-form").evaluate("form => new FormData(form).get('primary').name") == "evidence.pdf"
 
-    page.evaluate("Object.assign(Alpine.store('fileTest'), {accept: 'image/*', multiple: true, variant: 'soft'})")
+    page.evaluate("Object.assign(window.__fileTest, {accept: 'image/*', multiple: true, variant: 'soft'})")
     page.wait_for_function("document.querySelector('#field-file').multiple")
     assert field_input.get_attribute("accept") == "image/*"
     assert field_input.get_attribute("data-variant") == "soft"
@@ -177,7 +171,7 @@ def test_drop_assigns_native_filelist_and_dispatches_input_then_change(page: Any
         "second.png",
     ]
     assert drop.get_attribute("data-has-files") == ""
-    assert page.evaluate("Alpine.store('fileTest').events.slice(-2)") == [
+    assert page.evaluate("window.__fileTest.events.slice(-2)") == [
         ["input", 2, "LABEL"],
         ["change", 2, "LABEL"],
     ]

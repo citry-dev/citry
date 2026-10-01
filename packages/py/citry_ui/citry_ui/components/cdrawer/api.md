@@ -73,11 +73,11 @@ an oversized requested extent.
 
 Every server configuration input has a matching client input except identity,
 text, class, style, and attrs. Use `initialFocus`, `placement`, `size`, and
-`scroll` through `$c-props` for live changes.
+`scroll` with native Vue bindings for live changes.
 
 ## Control visibility
 
-Pass Boolean `open` and `onOpenChange` through `$c-props`. Controlled requests
+Pass Boolean `open` and `onOpenChange` with native Vue bindings. Controlled requests
 wait for the owner; retaining `open` declines an ordinary request. Forced
 ancestor/native safety closure happens first and reports `forced: true`.
 
@@ -147,7 +147,10 @@ logical placement, forced colors, and reduced motion remain component-owned.
 />
 
 `class_`, `style`, and allowed `attrs` merge onto the native Dialog. They may
-not replace modality, relationships, visibility, parts, or structure.
+not replace modality, relationships, visibility, parts, or structure. `attrs`
+also rejects Vue directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`,
+or `#`. Write Vue bindings and listeners on the component tag in your template
+instead, for example `<c-CDrawer :open="open">`.
 
 ## Composition boundaries
 

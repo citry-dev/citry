@@ -31,26 +31,31 @@ class ProjectExplorer(Component):
           <button
             class="help-button"
             type="button"
-            @click="tipsOpen = !tipsOpen"
-            :aria-expanded="tipsOpen.toString()"
+            :aria-expanded="tipsOpen"
             aria-controls="explorer-help"
+            @click="tipsOpen = !tipsOpen"
           >
             <span aria-hidden="true">?</span>
-            <span x-text="tipsOpen ? 'Hide explanation' : 'How this page works'">
+            <span v-text="tipsOpen ? 'Hide explanation' : 'How this page works'">
               How this page works
             </span>
           </button>
         </div>
 
-        <aside id="explorer-help" class="explorer__help" x-cloak x-show="tipsOpen">
+        <aside
+          id="explorer-help"
+          class="explorer__help"
+          v-cloak
+          v-show="tipsOpen"
+        >
           <strong>Opening this panel does not call Python.</strong>
-          Alpine stores whether the panel is open in your browser, so the page
+          Vue stores whether the panel is open in your browser, so the page
           stays interactive after Python finishes rendering it.
         </aside>
 
         <div class="project-grid">
           <c-for each="project in projects">
-            <c-ProjectCard c-project="project" />
+            <c-ProjectCard #c-key="project.name" c-project="project" />
           </c-for>
         </div>
       </section>
@@ -124,7 +129,9 @@ class ProjectExplorer(Component):
         line-height: 1.55;
       }
 
-      .explorer__help strong { color: var(--color-text); }
+      .explorer__help strong {
+        color: var(--color-text);
+      }
 
       .project-grid {
         display: grid;
@@ -133,7 +140,12 @@ class ProjectExplorer(Component):
       }
 
       @media (max-width: 42rem) {
-        .explorer__toolbar { align-items: stretch; flex-direction: column; }
-        .help-button { align-self: flex-start; }
+        .explorer__toolbar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+        .help-button {
+          align-self: flex-start;
+        }
       }
     """

@@ -10,7 +10,7 @@ from hashlib import sha256
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
@@ -22,9 +22,6 @@ _CONTEXT = "citry_ui_cascader"
 _SIZES = ("sm", "md", "lg")
 _VARIANTS = ("outline", "soft", "plain")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-label",
@@ -115,6 +112,10 @@ class _Option:
             current = current.parent
         return tuple(reversed(values))
 
+    @property
+    def key(self) -> str:
+        return _token(self.path)
+
 
 @dataclass(slots=True)
 class _Registry:
@@ -157,14 +158,6 @@ def _path(value: object) -> tuple[str, ...]:
     return tuple(cast("str", _plain("CCascader", "value segment", item)) for item in raw)
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     attrs: Mapping[str, object] | None,
@@ -176,16 +169,14 @@ def _attrs(
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} attrs")
+    # A Vue directive could rebind an owned attribute, add listeners, or
+    # change the tree's structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, owner)
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"{owner} attrs require string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} attrs cannot dynamically bind owned attribute {key!r}.")
     return merge_root_attrs(copied, class_, style)
 
 
@@ -201,7 +192,16 @@ def _group_id(root_id: str, path: tuple[str, ...]) -> str:
     return f"{root_id}-group-{_token(path)}"
 
 
-def _entries(options: Sequence[_Option], *, selected: tuple[str, ...], root: bool) -> list[dict[str, object]]:
+class _OptionEntry(TypedDict):
+    """The CInternalCascaderOption kwargs that a column computes for each option."""
+
+    option: _Option
+    position: int
+    set_size: int
+    initial_focus: bool
+
+
+def _entries(options: Sequence[_Option], *, selected: tuple[str, ...], root: bool) -> list[_OptionEntry]:
     first_enabled = next((option for option in options if not option.disabled), None)
     return [
         {
@@ -307,16 +307,27 @@ class CCascader(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "value": list(cast("tuple[str, ...]", snapshot["value"])),
-            **{
-                key: snapshot[key]
-                for key in ("open", "disabled", "change_on_select", "separator", "name", "form", "catalog", "labels")
-            },
+            "serverDefaults": {
+                "value": list(cast("tuple[str, ...]", snapshot["value"])),
+                **{
+                    key: snapshot[key]
+                    for key in (
+                        "open",
+                        "disabled",
+                        "change_on_select",
+                        "separator",
+                        "name",
+                        "form",
+                        "catalog",
+                        "labels",
+                    )
+                },
+            }
         }
 
     template = """
       <c-CInternalCascaderDeclarations><c-slot /></c-CInternalCascaderDeclarations>
-      <c-CInternalCascader c-snapshot="snapshot" />
+      <c-CInternalCascader ref="root" c-snapshot="snapshot" />
     """
 
     js_file = "runtime.min.js"
@@ -400,7 +411,8 @@ class CInternalCascaderDeclarations(LibraryComponent):
 
 
 class CInternalCascader(LibraryComponent):
-    transparent = True
+    # The outer runtime uses this component as its stable DOM ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -442,8 +454,8 @@ class CInternalCascader(LibraryComponent):
             "popup_id": f"{root_id}-popup",
             "root_attrs": {
                 **cast("dict[str, object]", data["attrs"]),
-                "data-disabled": True if data["disabled"] else None,
-                "data-open": True if data["open"] else None,
+                "data-disabled": "" if data["disabled"] else None,
+                "data-open": "" if data["open"] else None,
                 "data-size": data["size"],
                 "data-variant": data["variant"],
             },
@@ -460,14 +472,16 @@ class CInternalCascader(LibraryComponent):
         </button>
         <div c-id="popup_id" c-hidden="not open" data-citry-ui-part="popup">
           <ul role="tree" c-aria-labelledby="trigger_id" c-hidden="not roots" data-citry-cascader-column data-level="1" data-citry-ui-part="tree">
-            <c-for each="entry in root_entries"><c-CInternalCascaderOption c-bind="entry" c-root_id="root_id" c-selected="value" c-level="1" /></c-for>
+            <c-for each="entry in root_entries"><c-CInternalCascaderOption #c-key="entry['option'].key" c-bind="entry" c-root_id="root_id" c-selected="value" c-level="1" /></c-for>
           </ul>
-          <c-for each="parent in groups"><c-CInternalCascaderGroup c-parent="parent" c-root_id="root_id" c-selected="value" /></c-for>
+          <c-for each="parent in groups"><c-CInternalCascaderGroup #c-key="parent.key" c-parent="parent" c-root_id="root_id" c-selected="value" /></c-for>
           <p c-if="not roots" data-citry-ui-part="empty" c-$c-tr:citry-ui-cascader-empty="True if catalog_empty else None">{{ tr('citry-ui-cascader-empty') if catalog_empty else labels['empty'] }}</p>
         </div>
         <span data-citry-ui-part="inputs" hidden>
           <c-for each="segment in value"><input type="hidden" c-name="name" c-value="segment" c-form="form" c-disabled="disabled or name is None" /></c-for>
         </span>
+        <span hidden aria-hidden="true" c-$c-tr:citry-ui-cascader-placeholder="True">{{ tr('citry-ui-cascader-placeholder') }}</span>
+        <span hidden aria-hidden="true" c-$c-tr:citry-ui-cascader-selected="True">{{ tr('citry-ui-cascader-selected', path=joined) }}</span>
         <span data-citry-ui-part="status" role="status" aria-live="polite" aria-atomic="true">{{ status }}</span>
       </div>
     """
@@ -508,12 +522,12 @@ class CInternalCascaderOption(LibraryComponent):
             "aria-disabled": "true" if option.disabled else "false",
             "aria-expanded": ("true" if active else "false") if option.children else None,
             "aria-selected": "true" if selected else "false",
-            "data-active": True if active else None,
+            "data-active": "" if active else None,
             "data-citry-cascader-child-group": _group_id(kwargs.root_id, path) if option.children else None,
             "data-citry-cascader-parent": _item_id(kwargs.root_id, option.parent.path) if option.parent else None,
-            "data-disabled": True if option.disabled else None,
+            "data-disabled": "" if option.disabled else None,
             "data-level": kwargs.level,
-            "data-selected": True if selected else None,
+            "data-selected": "" if selected else None,
             "data-value": option.value,
         }
         return {
@@ -556,7 +570,7 @@ class CInternalCascaderGroup(LibraryComponent):
 
     template = """
       <ul c-id="group_id" role="group" c-hidden="not active" data-citry-cascader-column c-data-level="level" data-citry-ui-part="group">
-        <c-for each="entry in entries"><c-CInternalCascaderOption c-bind="entry" c-root_id="root_id" c-selected="selected" c-level="level" /></c-for>
+        <c-for each="entry in entries"><c-CInternalCascaderOption #c-key="entry['option'].key" c-bind="entry" c-root_id="root_id" c-selected="selected" c-level="level" /></c-for>
       </ul>
     """
 

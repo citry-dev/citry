@@ -7,17 +7,26 @@ citry.register_library(citry_ui)
 
 class WindowedDataGrid(Component):
     template = """
-      <section x-data="{notice:'This static preview supplies one complete window'}">
-        <output x-text="notice">This static preview supplies one complete window</output>
+      <section >
+        <output v-text="notice">This static preview supplies one complete window</output>
         <c-CDataGrid
           c-columns="columns"
           c-rows="rows"
           label="Audit records"
           c-total_count="16"
           c-row_height="44"
-          $c-props="{onRangeChange:(detail)=>notice=`Requested ${detail.startIndex}-${detail.endIndex - 1}`}"
+          :onRangeChange="(detail)=>notice=`Requested ${detail.startIndex}-${detail.endIndex - 1}`"
         />
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            notice:'This static preview supplies one complete window'
+          };
+        },
+      });
     """
 
     def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:

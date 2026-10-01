@@ -8,8 +8,6 @@ class TabsAlignmentAndOrientation(Component):
     template = """
       <section
         class="tabs-layout"
-        x-data="{ align: 'start', orientation: 'horizontal' }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <header>
           <p class="tabs-eyebrow">Observatory catalog</p>
@@ -19,7 +17,7 @@ class TabsAlignmentAndOrientation(Component):
         <c-CTabs
           default_value="planets"
           aria_label="Observatory target categories"
-          $c-props="{ align, orientation }"
+          :align="align" :orientation="orientation"
         >
           <c-CTab value="stars">
             Stars
@@ -42,6 +40,26 @@ class TabsAlignmentAndOrientation(Component):
           </c-CTabPanel>
         </c-CTabs>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            align: 'start', orientation: 'horizontal'
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

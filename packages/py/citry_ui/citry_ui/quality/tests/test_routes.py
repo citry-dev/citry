@@ -1,9 +1,96 @@
+import functools
+import json
 import re
+from collections import Counter
+from copy import deepcopy
+from html.parser import HTMLParser
 
 import pytest
 
-from citry_ui.quality.routes import render_scenario, renderable_scenario_ids
+from citry_ui.quality.routes import build_scenario, render_scenario, renderable_scenario_ids
 from citry_ui.quality.scenarios import SCENARIOS
+
+_PREPARED_RE = re.compile(
+    r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', re.DOTALL
+)
+_GENERATED_ID_PATTERNS = (
+    ("citrySlot", re.compile(r"citrySlot[0-9A-Za-z]+")),
+    ("citryCall", re.compile(r"citryCall[0-9A-Za-z]+")),
+    ("citryDirective", re.compile(r"citryDirective[0-9A-Za-z]+")),
+    ("citryLoop", re.compile(r"citryLoop[0-9]+")),
+    ("citryIf", re.compile(r"citryIf[0-9]+")),
+    ("citryRuntimeEvents", re.compile(r"citryRuntimeEvents[0-9A-Za-z]+")),
+    ("citryAttrs", re.compile(r"citryAttrs[0-9A-Za-z]+")),
+    ("citryText", re.compile(r"citryText[0-9A-Za-z]+")),
+    ("citryKey", re.compile(r"citryKey[0-9A-Za-z]+")),
+    ("citryOpaque", re.compile(r"citryOpaque[0-9A-Za-z]+")),
+    ("citryRun", re.compile(r"citryRun[0-9]+")),
+    ("citryPlacement", re.compile(r"citryPlacement[0-9A-Za-z]+")),
+    ("citry-dynamic-", re.compile(r"citry-dynamic-[0-9a-f]{16}")),
+    # Component-generated DOM IDs (and their references) are per-render
+    # identities.  Split-button-specific IDs are mapped structurally below
+    # before this generic fallback handles the remaining component IDs.
+    ("cui-", re.compile(r"cui-[0-9A-Za-z-]+-[0-9A-Za-z]{8,}(?:-[0-9A-Za-z-]+)?")),
+    ("quality-", re.compile(r"quality-[0-9A-Za-z-]+-[0-9A-Za-z]{8,}(?:-[0-9A-Za-z-]+)?")),
+)
+
+# SVG and MathML elements whose content is allowed to be text. Text anywhere
+# else inside `<svg>` or `<math>` is invalid HTML, and in practice it is
+# markup that was escaped by mistake, which the page shows as literal text.
+_FOREIGN_TEXT_ELEMENTS = frozenset(
+    {"text", "tspan", "textpath", "title", "desc", "style", "script", "mi", "mo", "mn", "ms", "mtext", "annotation"}
+)
+
+
+class _ForeignTextFinder(HTMLParser):
+    """Collect text that sits directly in SVG or MathML structure."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.open_tags: list[str] = []
+        self.found: list[tuple[str, str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.open_tags.append(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        # Pop up to the matching opening tag so an implicitly closed HTML
+        # element does not leave the stack thinking it is still inside SVG.
+        if tag in self.open_tags:
+            del self.open_tags[len(self.open_tags) - 1 - self.open_tags[::-1].index(tag) :]
+
+    def handle_data(self, data: str) -> None:
+        if not data.strip():
+            return
+        # Only the part of the stack below the nearest `<svg>`/`<math>`
+        # matters; `<foreignObject>` switches back to ordinary HTML content.
+        foreign_root = max(
+            (index for index, tag in enumerate(self.open_tags) if tag in {"svg", "math"}),
+            default=None,
+        )
+        if foreign_root is None:
+            return
+        inner = self.open_tags[foreign_root:]
+        if "foreignobject" in inner or inner[-1] in _FOREIGN_TEXT_ELEMENTS:
+            return
+        self.found.append((inner[-1], data.strip()[:80]))
+
+
+def _text_inside_foreign_content(html: str) -> list[tuple[str, str]]:
+    finder = _ForeignTextFinder()
+    finder.feed(html)
+    finder.close()
+    return finder.found
+
+
+# Two tests read the same standalone page; rendering each scenario once
+# saves a second full render per scenario.
+_standalone_page = functools.cache(render_scenario)
+
+
+_SPLIT_BUTTON_INSTANCE_ID = re.compile(r"cui-split-button-[0-9A-Za-z]{8,}")
+_SPLIT_BUTTON_GENERATED_ID = re.compile(r"quality-split-submit(?:-[0-9A-Za-z]+)*-[0-9A-Za-z]{8,}(?:-[0-9A-Za-z]+)*")
+_SPLIT_BUTTON_ANCHOR_REF = re.compile(r"--_cui-menu-[0-9A-Za-z-]+-anchor-ref-[0-9A-Za-z]{8,}")
 
 
 def _root_section(html: str) -> str:
@@ -14,27 +101,424 @@ def _root_section(html: str) -> str:
     return re.sub(r"c[0-9a-z]{8,}", "<generated-id>", section)
 
 
+def _prepared_configuration(html: str) -> dict[str, object] | None:
+    match = _PREPARED_RE.search(html)
+    return None if match is None else json.loads(match.group(1))
+
+
+def _prepared_contract(configuration: dict[str, object], *, wrapper_type: str | None = None) -> dict[str, object]:
+    """
+    Return the semantic part of one prepared route configuration.
+
+    An embedded route starts at the scenario component.  A standalone route
+    adds one ``ScenarioPage`` component around that same subtree, which changes
+    occurrence/definition identities and the definition bundle digest.  Those
+    are route-local identities; the prepared data, definitions' structural
+    metadata, ownership/slot graph, attributes, and output contract are the
+    values this test must compare.
+
+    The normalization is deliberately path-aware.  It rewrites only IDs that
+    are known to be generated by the prepared protocol, plus per-render app and
+    credential values.  Authored strings and prepared values otherwise remain
+    exact, so a changed value or binding cannot hide behind the normalization.
+    """
+    manifest = deepcopy(configuration["manifest"])
+    assert isinstance(manifest, dict)
+    source_occurrences = manifest["occurrences"]
+    assert isinstance(source_occurrences, list)
+
+    dropped_occurrence_ids: set[str] = set()
+    if wrapper_type is not None:
+        wrapper_occurrences = [
+            item for item in source_occurrences if isinstance(item, dict) and item.get("typeKey") == wrapper_type
+        ]
+        assert len(wrapper_occurrences) == 1
+        wrapper = wrapper_occurrences[0]
+        assert wrapper["parentId"] is None
+        assert source_occurrences[0] is wrapper
+        dropped_occurrence_ids.add(wrapper["id"])
+
+    occurrences = [
+        item for item in source_occurrences if isinstance(item, dict) and item["id"] not in dropped_occurrence_ids
+    ]
+    assert occurrences
+    used_definition_ids: list[str] = []
+    for occurrence in occurrences:
+        definition_id = occurrence["definitionId"]
+        if definition_id not in used_definition_ids:
+            used_definition_ids.append(definition_id)
+    source_definitions = manifest["definitions"]
+    assert isinstance(source_definitions, list)
+    definitions = sorted(
+        (item for item in source_definitions if isinstance(item, dict) and item["id"] in used_definition_ids),
+        key=lambda item: used_definition_ids.index(item["id"]),
+    )
+    assert [item["id"] for item in definitions] == used_definition_ids
+
+    occurrence_ids = {item["id"]: f"occurrence-{index}" for index, item in enumerate(occurrences)}
+    # References from the wrapper to the logical root are not part of the
+    # retained subtree.  Resolve any such defensive references to the retained
+    # root before comparing nested data.
+    retained_root_id = occurrence_ids[occurrences[0]["id"]]
+    occurrence_ids.update({item: retained_root_id for item in dropped_occurrence_ids})
+    definition_ids = {item["id"]: f"definition-{index}" for index, item in enumerate(definitions)}
+    placement_ids = {
+        item["placementKey"]: f"placement-{index}"
+        for index, item in enumerate(occurrences)
+        if item.get("placementKey") is not None
+    }
+    render_ids = {
+        item["renderId"]: f"render-{index}"
+        for index, item in enumerate(occurrences)
+        if item.get("renderId") is not None
+    }
+    generated_ids: dict[str, dict[str, str]] = {prefix: {} for prefix, _ in _GENERATED_ID_PATTERNS}
+    structural_ids: dict[str, str] = {}
+    for occurrence_index, occurrence in enumerate(occurrences):
+        server_data = occurrence.get("serverData", {})
+        if isinstance(server_data, dict):
+            anchor_name = server_data.get("anchorName")
+            if isinstance(anchor_name, str) and anchor_name.startswith("--_cui-"):
+                structural_ids.setdefault(anchor_name, f"<split-anchor-{occurrence_index}>")
+        prepared_data = occurrence.get("preparedData", {})
+        if not isinstance(prepared_data, dict):
+            continue
+        for attrs in prepared_data.values():
+            if not isinstance(attrs, dict):
+                continue
+            style = attrs.get("style")
+            if isinstance(style, str):
+                for anchor_ref in _SPLIT_BUTTON_ANCHOR_REF.findall(style):
+                    structural_ids.setdefault(
+                        anchor_ref,
+                        f"<split-anchor-{occurrence_index}-{len(structural_ids)}>",
+                    )
+            element_id = attrs.get("id")
+            if not isinstance(element_id, str):
+                continue
+            if _SPLIT_BUTTON_INSTANCE_ID.fullmatch(element_id):
+                structural_ids.setdefault(element_id, f"<split-instance-{occurrence_index}>")
+            elif _SPLIT_BUTTON_GENERATED_ID.fullmatch(element_id):
+                structural_ids.setdefault(element_id, f"<split-generated-id-{occurrence_index}>")
+
+    def normalize_scalar(value: object, key: str | None = None) -> object:
+        if key == "stateToken":
+            return "<state-token>" if value is not None else None
+        if key == "appId":
+            return "<app-id>"
+        if key in {"fingerprint", "S", "Z"}:
+            # These are browser handoff fingerprints.  They intentionally
+            # include route-local component IDs, while the underlying values
+            # and structure remain compared separately in the manifest.
+            return f"<runtime-{key}>" if value is not None else None
+        if not isinstance(value, str):
+            return value
+        if value in occurrence_ids:
+            return occurrence_ids[value]
+        if value in definition_ids:
+            return definition_ids[value]
+        if value in placement_ids:
+            return placement_ids[value]
+        if value in render_ids:
+            return render_ids[value]
+        if value in structural_ids:
+            return structural_ids[value]
+        for source, replacement in sorted(structural_ids.items(), key=lambda item: len(item[0]), reverse=True):
+            if source in value:
+                return value.replace(source, replacement)
+        for prefix, pattern in _GENERATED_ID_PATTERNS:
+            if pattern.fullmatch(value):
+                values = generated_ids[prefix]
+                if value not in values:
+                    values[value] = f"<{prefix}-{len(values)}>"
+                return values[value]
+        for prefix, pattern in _GENERATED_ID_PATTERNS:
+            if pattern.search(value):
+                values = generated_ids[prefix]
+
+                def replace(match: re.Match[str], *, values=values, prefix=prefix) -> str:
+                    matched = match.group(0)
+                    if matched not in values:
+                        values[matched] = f"<{prefix}-{len(values)}>"
+                    return values[matched]
+
+                return pattern.sub(replace, value)
+        return value
+
+    def normalize(value: object, key: str | None = None) -> object:
+        if key == "selectedSlots" and isinstance(value, dict):
+            # Slot IDs are opaque per-render hashes; the protocol carries the
+            # selected/fallback state as their values.  Compare that state in
+            # stable key order instead of making a route-local hash order part
+            # of the contract.
+            return sorted(
+                (normalize(item_value, "selectedSlot") for item_value in value.values()),
+                key=repr,
+            )
+        if isinstance(value, dict):
+            return {
+                str(normalize_scalar(item_key, "dict-key")): normalize(item_value, item_key)
+                for item_key, item_value in value.items()
+            }
+        if isinstance(value, list):
+            return [normalize(item, key) for item in value]
+        return normalize_scalar(value, key)
+
+    def normalize_occurrence(occurrence: dict[str, object]) -> dict[str, object]:
+        parent_id = occurrence.get("parentId")
+        retained_parent = parent_id is not None and parent_id not in dropped_occurrence_ids
+        return {
+            "id": occurrence_ids[occurrence["id"]],
+            "typeKey": occurrence["typeKey"],
+            "definitionId": definition_ids[occurrence["definitionId"]],
+            "serverData": normalize(occurrence["serverData"], "serverData"),
+            "preparedData": normalize(occurrence["preparedData"], "preparedData"),
+            "parentId": occurrence_ids[parent_id] if retained_parent else None,
+            "placementKey": normalize_scalar(occurrence["placementKey"], "placementKey") if retained_parent else None,
+            **({"renderId": render_ids[occurrence["renderId"]]} if "renderId" in occurrence else {}),
+        }
+
+    def normalize_definition(definition: dict[str, object]) -> dict[str, object]:
+        # Definition URL/digest identify the complete compiled bundle.  The
+        # standalone wrapper legitimately changes that bundle even when the
+        # retained component definition is structurally identical.
+        return {
+            str(key): normalize(value, str(key)) for key, value in definition.items() if key not in {"sha256", "url"}
+        }
+
+    def normalize_assets(assets: object) -> list[object]:
+        assert isinstance(assets, list)
+        normalized: list[object] = []
+        for asset in assets:
+            assert isinstance(asset, dict)
+            owner = asset["owner"]
+            assert isinstance(owner, dict)
+            if owner.get("kind") == "component" and owner.get("typeKey") == wrapper_type:
+                continue
+            item = normalize(asset)
+            assert isinstance(item, dict)
+            if owner.get("kind") == "component" and "occurrenceIds" in owner:
+                occurrence_owner_ids = [
+                    occurrence_ids[value]
+                    for value in owner["occurrenceIds"]
+                    if value in occurrence_ids and value not in dropped_occurrence_ids
+                ]
+                occurrence_owner_ids.sort()
+                if not occurrence_owner_ids:
+                    continue
+                item_owner = item["owner"]
+                assert isinstance(item_owner, dict)
+                item_owner["occurrenceIds"] = occurrence_owner_ids
+            source = item["source"]
+            assert isinstance(source, dict)
+            attrs = source.get("attrs")
+            if isinstance(attrs, dict) and "data-citry-vue-style-app" in attrs:
+                attrs["data-citry-vue-style-app"] = "<app-id>"
+            normalized.append(item)
+        return normalized
+
+    retained_types = {item["typeKey"] for item in occurrences}
+    normalized_manifest = {
+        "protocol": manifest["protocol"],
+        "appId": "<app-id>",
+        "revision": manifest["revision"],
+        "rootId": retained_root_id,
+        "markers": [
+            normalize(item)
+            for item in manifest.get("markers", [])
+            if item["ownerId"] not in dropped_occurrence_ids and item["occurrenceId"] not in dropped_occurrence_ids
+        ],
+        "definitions": [normalize_definition(item) for item in definitions],
+        "occurrences": [normalize_occurrence(item) for item in occurrences],
+        "scripts": normalize_assets(manifest["scripts"]),
+        "styles": normalize_assets(manifest["styles"]),
+        "typePolicies": [normalize(item) for item in manifest["typePolicies"] if item["typeKey"] in retained_types],
+        "extensions": normalize(manifest.get("extensions", {})),
+    }
+    host = configuration["host"]
+    assert isinstance(host, str)
+    assert host.startswith("#citry-vue-")
+    return {
+        "allowLazyTypeAssets": configuration["allowLazyTypeAssets"],
+        "endpoint": configuration.get("endpoint"),
+        "eventBaseUrl": configuration.get("eventBaseUrl"),
+        "host": "<vue-host>",
+        # Mounted routes fetch these descriptors; standalone routes emit the
+        # same bytes inline and ask the runtime to adopt them.
+        "loadInitialAssets": "asset-delivery",
+        "manifest": normalized_manifest,
+        "tags": {key: value for key, value in configuration["tags"].items() if key in retained_types},
+    }
+
+
+def _prepared_contract_pair(
+    embedded: dict[str, object], standalone: dict[str, object]
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Normalize the embedded route and its one standalone page wrapper."""
+    embedded_manifest = embedded["manifest"]
+    standalone_manifest = standalone["manifest"]
+    assert isinstance(embedded_manifest, dict)
+    assert isinstance(standalone_manifest, dict)
+    embedded_types = Counter(item["typeKey"] for item in embedded_manifest["occurrences"])
+    standalone_types = Counter(item["typeKey"] for item in standalone_manifest["occurrences"])
+    extra_types = standalone_types - embedded_types
+    assert sum(extra_types.values()) == 1
+    wrapper_type = next(iter(extra_types))
+    assert standalone_manifest["occurrences"][0]["typeKey"] == wrapper_type
+    return _prepared_contract(embedded), _prepared_contract(standalone, wrapper_type=wrapper_type)
+
+
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda scenario: scenario.id)
-def test_scenario_uses_the_same_markup_and_declared_assets_embedded_and_standalone(scenario):
+def test_scenario_preserves_the_same_render_contract_embedded_and_standalone(scenario):
     scenario_id = scenario.id
     embedded = render_scenario(scenario_id, embedded=True)
-    standalone = render_scenario(scenario_id)
+    standalone = _standalone_page(scenario_id)
 
-    assert _root_section(embedded) == _root_section(standalone)
     assert "<!doctype html>" in standalone
     assert '<meta name="viewport"' in standalone
     assert f'data-citry-ui-scenario="{scenario_id}"' in standalone
-    assert "citry_ui" not in standalone
-    if "css" in scenario.expected_assets:
-        assert "data-citry-css-class" in standalone
-    if "js" in scenario.expected_assets:
-        assert "registerComponent" in standalone
+    assert re.search(r'(?:src|href)="/citry/', standalone) is None
+
+    embedded_prepared = _prepared_configuration(embedded)
+    standalone_prepared = _prepared_configuration(standalone)
+    if embedded_prepared is None:
+        assert standalone_prepared is None
+        assert _root_section(embedded) == _root_section(standalone)
+        if "css" in scenario.expected_assets:
+            assert "data-citry-css-class" in standalone
+        return
+
+    assert standalone_prepared is not None
+    embedded_contract, standalone_contract = _prepared_contract_pair(embedded_prepared, standalone_prepared)
+    assert embedded_contract == standalone_contract
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda scenario: scenario.id)
+def test_scenario_page_has_no_text_inside_svg_or_math(scenario):
+    """
+    An icon's geometry must reach the page as SVG elements, not escaped text.
+
+    When a template writes a glyph string with `{{ }}`, both the server and
+    Vue escape it, so the first paint and the hydrated page both show
+    `<path ...>` as text. The renderers agree, so the Vue render parity check
+    cannot see it. This check parses the served HTML and reports text placed
+    directly inside SVG or MathML elements.
+    """
+    assert _text_inside_foreign_content(_standalone_page(scenario.id)) == []
+
+
+def test_foreign_text_finder_reports_escaped_markup_in_svg() -> None:
+    page = (
+        '<p>a &lt;b&gt; c</p><svg><g>&lt;path d="m6 9"&gt;&lt;/path&gt;</g>'
+        "<text>label</text><title>name</title>"
+        "<foreignObject><p>html text</p></foreignObject></svg><p>after</p>"
+    )
+
+    assert _text_inside_foreign_content(page) == [("g", '<path d="m6 9"></path>')]
+
+
+def test_standalone_scenario_declares_a_data_favicon() -> None:
+    """Standalone audit pages must not make a host-root favicon request."""
+    standalone = render_scenario("button.states")
+
+    assert '<link rel="icon" href="data:image/svg+xml;base64,' in standalone
+
+
+def test_build_scenario_uses_the_default_mount_for_host_routes() -> None:
+    rendered = build_scenario("button.states")
+
+    assert rendered.app.mounted_prefix == "/citry"
+    assert 'src="/citry/citry.js"' in rendered.html
+
+
+def test_build_scenario_self_contained_mode_inlines_assets() -> None:
+    rendered = build_scenario("button.states", self_contained=True)
+
+    assert rendered.app.mounted_prefix == "/citry"
+    assert 'src="/citry/' not in rendered.html
+    assert 'href="/citry/' not in rendered.html
+    assert "Citry interactive runtime" in rendered.html
+
+
+def test_render_scenario_inlines_assets_for_standalone_documents() -> None:
+    standalone = render_scenario("button.states")
+
+    assert 'src="/citry/' not in standalone
+    assert 'href="/citry/' not in standalone
+    assert "Citry interactive runtime" in standalone
+
+
+def test_prepared_route_contract_rejects_changed_prepared_binding() -> None:
+    """A route comparison must fail when a prepared call binding changes."""
+    embedded = render_scenario("button.states", embedded=True)
+    standalone = render_scenario("button.states")
+    embedded_prepared = _prepared_configuration(embedded)
+    standalone_prepared = _prepared_configuration(standalone)
+    assert embedded_prepared is not None
+    assert standalone_prepared is not None
+
+    changed = deepcopy(standalone_prepared)
+    manifest = changed["manifest"]
+    assert isinstance(manifest, dict)
+    scenario_occurrence = manifest["occurrences"][1]
+    prepared_data = scenario_occurrence["preparedData"]
+    calls = prepared_data["calls"]
+    first_call = next(iter(calls.values()))
+    first_call["key"] = "changed-prepared-key"
+
+    embedded_contract, changed_contract = _prepared_contract_pair(embedded_prepared, changed)
+    assert embedded_contract != changed_contract
 
 
 def test_every_ready_scenario_has_exactly_one_renderer():
     assert renderable_scenario_ids() == tuple(scenario.id for scenario in SCENARIOS)
 
 
+def test_default_delivery_writes_the_component_markup_into_the_served_page():
+    # A no-JavaScript test reads the served HTML, so the scenario page must
+    # carry its component markup without any extra setting.
+    html = render_scenario("button.states")
+
+    assert '<main id="main-content">' in html
+    assert '"hydrate":true' in html
+
+
 def test_unknown_scenario_fails_instead_of_silently_skipping():
     with pytest.raises(KeyError, match="Unknown Citry UI scenario"):
         render_scenario("missing.states")
+
+
+@pytest.mark.parametrize(
+    ("scenario_id", "physical_type_prefix"),
+    [("accordion.states", "CAccordionItem_"), ("disclosure.states", "CDisclosure_")],
+)
+def test_flattened_state_projection_binds_lexical_text_but_not_the_indicator_glyph(
+    scenario_id: str,
+    physical_type_prefix: str,
+) -> None:
+    """
+    The projected title is a text binding, and the indicator glyph is SVG markup, not text.
+
+    A glyph sent as a text binding is escaped by both the server and Vue, so
+    the page shows `<path ...>` where the chevron should be. The general rule
+    that projected text never reuses a physical text key is covered by
+    `test_flattened_projection_namespaces_lexical_text_after_physical_key` in
+    the citry package.
+    """
+    prepared = _prepared_configuration(render_scenario(scenario_id))
+    assert prepared is not None
+    physical_occurrences = [
+        occurrence
+        for occurrence in prepared["manifest"]["occurrences"]
+        if occurrence["typeKey"].startswith(physical_type_prefix)
+    ]
+    projected_text_occurrences = [
+        occurrence for occurrence in physical_occurrences if "outline" in occurrence["preparedData"].values()
+    ]
+    assert projected_text_occurrences
+    for occurrence in projected_text_occurrences:
+        text_values = [value for key, value in occurrence["preparedData"].items() if key.startswith("citryText")]
+        assert "outline" in text_values
+        # The chevron must reach Vue as elements; as a text value it would
+        # be escaped into visible markup.
+        assert not any("<path" in str(value) for value in text_values)

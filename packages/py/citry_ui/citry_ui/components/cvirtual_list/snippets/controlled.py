@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 import citry_ui
 from citry import Component, citry
 
@@ -6,26 +8,31 @@ citry.register_library(citry_ui)
 
 class VirtualWindowControlled(Component):
     template = """
-      <section x-data="{itemSize:56,overscan:2,last:'No request'}">
-        <label>Row size <input type="range" min="40" max="72" x-model.number="itemSize" /></label>
-        <label>Overscan <input type="range" min="0" max="8" x-model.number="overscan" /></label>
-        <output x-text="last">No request</output>
+      <section >
+        <label>Row size <input type="range" min="40" max="72" v-model.number="itemSize" /></label>
+        <label>Overscan <input type="range" min="0" max="8" v-model.number="overscan" /></label>
+        <output v-text="last">No request</output>
         <c-CVirtualWindow
           aria_label="Controlled geometry"
           c-total_count="12"
           c-item_size="56"
           c-viewport_size="280"
-          $c-props="{
-            itemSize,
-            overscan,
-            onRangeChange:(detail)=>last=`${detail.reason}: ${detail.startIndex}-${detail.endIndex - 1}`,
-          }"
+          :itemSize="itemSize" :overscan="overscan" :onRangeChange="(detail)=>last=`${detail.reason}: ${detail.startIndex}-${detail.endIndex - 1}`"
         >
           <c-for each="index in indexes">
-            <c-CVirtualListItem c-item_key="f'controlled-{index}'">Record {{ index + 1 }}</c-CVirtualListItem>
+            <c-CVirtualListItem #c-key="f'controlled-{index}'" c-item_key="f'controlled-{index}'">Record {{ index + 1 }}</c-CVirtualListItem>
           </c-for>
         </c-CVirtualWindow>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            itemSize:56,overscan:2,last:'No request'
+          };
+        },
+      });
     """
 
     def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:

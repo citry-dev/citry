@@ -14,7 +14,6 @@ class ButtonNativeForms(Component):
     template = """
       <section
         class="button-form"
-        x-data="{ result: 'No sighting recorded yet.' }"
       >
         <header>
           <p>Field journal</p>
@@ -45,10 +44,19 @@ class ButtonNativeForms(Component):
           </div>
         </form>
 
-        <p class="button-form__result" aria-live="polite" x-text="result">
+        <p class="button-form__result" aria-live="polite" v-text="result">
           No sighting recorded yet.
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            result: 'No sighting recorded yet.'
+          };
+        },
+      });
     """
 
     def template_data(

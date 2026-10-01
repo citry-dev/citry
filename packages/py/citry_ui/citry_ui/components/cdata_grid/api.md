@@ -42,9 +42,9 @@ starting on a selected Row removes the dragged range. Disabled Rows are
 skipped. Shift+Space toggles the focused Row in either direction. Touch remains
 ordinary scrolling rather than starting a drag selection.
 
-## Control models from Alpine
+## Control models from Vue
 
-Pass `sort`, `selected`, and callbacks through `$c-props`. Invalid client
+Pass `sort`, `selected`, and callbacks with native Vue bindings. Invalid client
 models are diagnosed and the last valid state remains active.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdata_grid/snippets/controlled.py" title="Control Data Grid models" />
@@ -121,6 +121,13 @@ the client locale.
 Use `density`, `striped`, `column_borders`, and `sticky_header` for common
 presentation. Customize the root and native table separately with `attrs` and
 `table_attrs`, or use the documented public variables and part selectors.
+
+`attrs`, `table_attrs`, column `header_attrs` and `cell_attrs`, row `attrs`,
+and Cell `attrs` accept ordinary native, ARIA, and data attributes. They reject
+the attributes the grid sets itself (such as `role` and `aria-colindex`), Citry
+runtime attributes, and any Vue directive syntax: names starting with `v-`,
+`:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component tag in
+your template instead.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdata_grid/snippets/customization.py" title="Customize a Data Grid" />
 

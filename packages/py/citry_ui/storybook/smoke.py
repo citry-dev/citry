@@ -26,6 +26,7 @@ _BACKEND_PORT = 8123
 _ADAPTERS = (("Server/Webpack", 6206, "server"), ("HTML/Vite", 6207, "html"))
 _STATIC_STORY_ID = "citry-ui-button-static--preview"
 _REACTIVE_STORY_ID = "citry-ui-readiness-reactive-state--preview"
+_TABS_STORY_ID = "citry-ui-tabs-interactive--preview"
 _PROXY_HEADERS = frozenset(
     (
         "connection",
@@ -46,6 +47,12 @@ class _ReusableThreadingHTTPServer(ThreadingHTTPServer):
 
 def _run(script: str) -> None:
     subprocess.run(["pnpm", "run", script], cwd=_ROOT, check=True)  # noqa: S607
+
+
+def _generate() -> None:
+    # Keep generation in the interpreter selected for this smoke run so it
+    # cannot silently create or rebuild a second project environment.
+    subprocess.run([sys.executable, "-m", "backend.generate"], cwd=_ROOT, check=True)
 
 
 def _stop(process: subprocess.Popen[bytes]) -> None:
@@ -174,7 +181,7 @@ def _check_static_adapter(browser: Browser, name: str, port: int) -> None:
     button = frame.locator('[data-citry-ui-part="button"]')
     expect(button).to_contain_text("Save changes")
     background = button.evaluate("element => getComputedStyle(element).backgroundColor")
-    if background != "rgb(23, 92, 211)":
+    if background != "rgb(0, 0, 238)":
         msg = f"{name} did not activate the Citry UI Button CSS: {background!r}."
         raise RuntimeError(msg)
 
@@ -245,6 +252,7 @@ def _check_interactive_adapter(browser: Browser, name: str, port: int) -> None:
         "clicks": [],
         "events": [],
         "inits": ["first"],
+        "retiredTasks": [],
     }:
         msg = f"{name} started with an unexpected readiness audit: {audit!r}."
         raise RuntimeError(msg)
@@ -263,9 +271,9 @@ def _check_interactive_adapter(browser: Browser, name: str, port: int) -> None:
         raise RuntimeError(f"{name} activated delayed side effects before readiness: {staging_audit!r}.")
     expect(delayed).to_have_attribute("data-ready", "true", timeout=3_000)
     expect(delayed).to_be_visible()
-    frame.locator("body").evaluate("() => globalThis.__citryUiOldButton.click()")
-    if _readiness_audit(frame)["clicks"] != ["first"]:
-        raise RuntimeError(f"{name} left the removed generation's click handler active.")
+    old_button_connected = frame.locator("body").evaluate("() => globalThis.__citryUiOldButton.isConnected")
+    if old_button_connected:
+        raise RuntimeError(f"{name} left the retired generation's button connected.")
     audit = _readiness_audit(frame)
     if audit != {
         "active": 1,
@@ -273,6 +281,7 @@ def _check_interactive_adapter(browser: Browser, name: str, port: int) -> None:
         "clicks": ["first"],
         "events": [],
         "inits": ["first", "delayed"],
+        "retiredTasks": [],
     }:
         msg = f"{name} did not promote the delayed generation cleanly: {audit!r}."
         raise RuntimeError(msg)
@@ -321,6 +330,7 @@ def _check_interactive_adapter(browser: Browser, name: str, port: int) -> None:
         "clicks": ["first"],
         "events": [],
         "inits": ["first", "delayed", "never"],
+        "retiredTasks": ["never"],
     }:
         msg = f"{name} did not preserve the last good generation after failure: {audit!r}."
         raise RuntimeError(msg)
@@ -337,6 +347,7 @@ def _check_interactive_adapter(browser: Browser, name: str, port: int) -> None:
         "clicks": ["first"],
         "events": [],
         "inits": ["first", "delayed", "never", "second"],
+        "retiredTasks": ["never"],
     }:
         msg = f"{name} did not recover from the failed generation cleanly: {audit!r}."
         raise RuntimeError(msg)
@@ -363,9 +374,68 @@ def _check_interactive_adapter(browser: Browser, name: str, port: int) -> None:
     audit = _readiness_audit(frame)
     if audit["active"] != 0 or audit["cleanups"][-1] != "first":
         raise RuntimeError(f"{name} did not clean up on story navigation: {audit!r}.")
+    if "slow" in audit["inits"] or "slow" in audit["cleanups"]:
+        raise RuntimeError(f"{name} let an aborted server render create Vue lifecycle work: {audit!r}.")
     if browser_errors:
         msg = f"{name} reported browser errors: {browser_errors!r}."
         raise RuntimeError(msg)
+    page.close()
+
+
+def _check_stalled_fragment(browser: Browser, name: str, port: int) -> None:
+    page = browser.new_page()
+    page.goto(f"http://127.0.0.1:{port}/?path=/story/{_REACTIVE_STORY_ID}")
+    frame = page.frame_locator('iframe[title="storybook-preview-iframe"]')
+    previous = frame.locator('.citry-ui-readiness-probe[data-generation="first"]')
+    expect(previous).to_be_visible()
+    frame.locator("body").evaluate(
+        """() => {
+          const original = globalThis.Citry.fragments.load.bind(globalThis.Citry.fragments);
+          globalThis.Citry.fragments.load = (manifest, tag) => new Promise((resolve, reject) => {
+            setTimeout(() => original(manifest, tag).then(resolve, reject), 2_000);
+          });
+        }""",
+    )
+    page.locator("#control-generation").select_option("second")
+    expect(frame.locator("body")).to_contain_text("did not settle within", timeout=4_000)
+    expect(previous).to_be_visible()
+    page.wait_for_timeout(1_000)
+    if frame.locator('.citry-ui-readiness-probe[data-generation="second"]').count() != 0:
+        raise RuntimeError(f"{name} promoted a Vue fragment after its asset deadline.")
+    mount_count = frame.locator("[data-citry-storybook-generation]").count()
+    if mount_count != 1:
+        raise RuntimeError(f"{name} retained a hidden timed-out Vue fragment host.")
+    audit = _readiness_audit(frame)
+    if audit["inits"] != ["first"] or audit["active"] != 1:
+        raise RuntimeError(f"{name} ran a late callback for the timed-out Vue fragment.")
+    page.close()
+
+
+def _check_tabs_adapter(browser: Browser, name: str, port: int) -> None:
+    page = browser.new_page()
+    browser_errors: list[str] = []
+    page.on("pageerror", lambda error: browser_errors.append(str(error)))
+    page.goto(f"http://127.0.0.1:{port}/?path=/story/{_TABS_STORY_ID}&addonPanel=storybook/controls/panel")
+    frame = page.frame_locator('iframe[title="storybook-preview-iframe"]')
+    root = frame.locator("[data-citry-tabs-root][data-citry-tabs-initialized]")
+    expect(root).to_have_attribute("data-value", "account", timeout=10_000)
+    expect(root.get_by_role("tab", name="Account")).to_have_attribute("aria-selected", "true")
+    expect(root.get_by_role("tabpanel")).to_have_text("Account preferences")
+
+    changes = (
+        ("selected", "security", "data-value", "security"),
+        ("orientation", "vertical", "data-orientation", "vertical"),
+        ("direction", "rtl", "dir", "rtl"),
+        ("activation", "manual", "data-activation", "manual"),
+    )
+    for control, value, attribute, expected in changes:
+        page.locator(f"#control-{control}").select_option(value)
+        root = frame.locator("[data-citry-tabs-root][data-citry-tabs-initialized]")
+        expect(root).to_have_attribute(attribute, expected, timeout=3_000)
+    expect(root.get_by_role("tab", name="Security")).to_have_attribute("aria-selected", "true")
+    expect(root.get_by_role("tabpanel")).to_have_text("Security preferences")
+    if browser_errors:
+        raise RuntimeError(f"{name} Tabs controls reported browser errors: {browser_errors!r}.")
     page.close()
 
 
@@ -376,8 +446,6 @@ def _check_standalone(browser: Browser) -> None:
     expect(probe).to_have_attribute("data-generation", "first", timeout=10_000)
     probe.get_by_role("button", name="Increment").click()
     expect(probe.locator("output")).to_have_text("1")
-    page.locator("main").evaluate("element => element.remove()")
-    page.wait_for_function("globalThis.__citryUiReadiness?.active === 0")
     page.close()
 
 
@@ -408,7 +476,7 @@ def _check_proxy_host_policy(port: int) -> None:
 
 def main() -> int:
     _run("test:dev-proxy")
-    _run("generate")
+    _generate()
     _run("build:server")
     _run("build:html")
 
@@ -440,7 +508,9 @@ def main() -> int:
             _check_standalone(browser)
             for name, port, _ in _ADAPTERS:
                 _check_static_adapter(browser, name, port)
+                _check_tabs_adapter(browser, name, port)
                 _check_interactive_adapter(browser, name, port)
+                _check_stalled_fragment(browser, name, port)
             _stop(backend)
             for _, port, _ in _ADAPTERS:
                 _check_backend_failure(browser, port)

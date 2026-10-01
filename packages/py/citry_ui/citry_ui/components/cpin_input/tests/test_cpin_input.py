@@ -204,7 +204,6 @@ def test_invalid_inputs_fail_deterministically(kwargs, error, match) -> None:
         ("attrs", "data-focused"),
         ("input_attrs", "name"),
         ("input_attrs", "pattern"),
-        ("input_attrs", "x-model"),
     ],
 )
 def test_owned_attributes_are_rejected(destination, attribute) -> None:
@@ -213,6 +212,34 @@ def test_owned_attributes_are_rejected(destination, attribute) -> None:
             '<c-CPinInput label="Code" c-bind="kwargs" />',
             {"kwargs": {destination: {attribute: "override"}}},
         )
+
+
+@pytest.mark.parametrize(
+    ("destination", "attribute", "owner"),
+    [
+        ("attrs", ":data-complete", "CPinInput attrs"),
+        ("attrs", "V-IF", "CPinInput attrs"),
+        ("attrs", "#default", "CPinInput attrs"),
+        ("input_attrs", "v-model", "CPinInput input attrs"),
+        ("input_attrs", "v-bind:pattern", "CPinInput input attrs"),
+        ("input_attrs", "@input", "CPinInput input attrs"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(destination, attribute, owner) -> None:
+    with pytest.raises(ValueError, match=re.escape(f"{owner} cannot contain the Vue directive {attribute!r}")):
+        _render(
+            '<c-CPinInput label="Code" c-bind="kwargs" />',
+            {"kwargs": {destination: {attribute: "override"}}},
+        )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(
+        '<c-CPinInput label="Code" c-bind="kwargs" />',
+        {"kwargs": {"attrs": {"x-data": "root"}, "input_attrs": {"x-init": "field"}}},
+    )
+    assert 'x-data="root"' in html
+    assert 'x-init="field"' in html
 
 
 def test_css_exposes_public_variables_parts_and_environment_rules() -> None:

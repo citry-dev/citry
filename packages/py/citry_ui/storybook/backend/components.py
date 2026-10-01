@@ -69,6 +69,8 @@ class CStorybookPage(LibraryComponent):
 
 
 class CStaticTabsContent(LibraryComponent):
+    transparent = True
+
     @dataclass(slots=True)
     class Kwargs:
         pass
@@ -121,7 +123,7 @@ class CReactiveCounterProbe(LibraryComponent):
         </button>
         <output
           aria-live="polite"
-          x-text="count"
+          v-text="count"
         >
           0
         </output>
@@ -129,49 +131,65 @@ class CReactiveCounterProbe(LibraryComponent):
     """
 
     js = """
-      $component(({ els, data, scope, effect }) => {
-        const root = els[0];
-        const audit = globalThis.__citryUiReadiness ??= {
-          active: 0,
-          cleanups: [],
-          clicks: [],
-          events: [],
-          inits: [],
-        };
-        const increment = () => {
-          audit.events.push(data.generation);
-          scope.count += 1;
-        };
-        scope.count = 0;
-        scope.increment = () => {
-          audit.clicks.push(data.generation);
-          scope.count += 1;
-        };
-        audit.inits.push(data.generation);
-        effect(() => {
-          root.dataset.count = String(scope.count);
-        });
-        let active = false;
-        let readinessTimer;
-        const activate = () => {
-          window.addEventListener("citry-ui-readiness-increment", increment);
-          audit.active += 1;
-          active = true;
-          root.dataset.ready = "true";
-        };
-        if (data.generation === "delayed") {
-          readinessTimer = window.setTimeout(activate, 800);
-        } else if (data.generation !== "never") {
-          activate();
-        }
-        return () => {
-          window.clearTimeout(readinessTimer);
-          if (active) {
-            window.removeEventListener("citry-ui-readiness-increment", increment);
-            audit.active -= 1;
+      $component({
+        data() {
+          return {count: 0};
+        },
+        methods: {
+          increment() {
+            const audit = globalThis.__citryUiReadiness;
+            audit.clicks.push(this.generation);
+            this.count += 1;
+          },
+        },
+        onServerRender: ({component, revision}) => {
+          const root = component.$el;
+          if (!(root instanceof HTMLElement)) {
+            throw new Error("[citry-ui] Storybook readiness probe anatomy is invalid.");
           }
-          audit.cleanups.push(data.generation);
-        };
+          const audit = globalThis.__citryUiReadiness ??= {
+            active: 0,
+            cleanups: [],
+            clicks: [],
+            events: [],
+            inits: [],
+            retiredTasks: [],
+          };
+          const increment = () => {
+            audit.events.push(component.generation);
+            component.count += 1;
+          };
+          audit.inits.push(component.generation);
+          root.dataset.count = String(component.count);
+          root.dataset.revision = String(revision);
+          let active = false;
+          let readinessTimer;
+          const activate = () => {
+            readinessTimer = undefined;
+            window.addEventListener("citry-ui-readiness-increment", increment);
+            audit.active += 1;
+            active = true;
+            root.dataset.ready = "true";
+          };
+          if (component.generation === "delayed") {
+            readinessTimer = window.setTimeout(activate, 800);
+          } else if (component.generation === "never") {
+            readinessTimer = window.setTimeout(() => {}, 10_000);
+          } else {
+            activate();
+          }
+          return () => {
+            if (readinessTimer !== undefined) {
+              window.clearTimeout(readinessTimer);
+              audit.retiredTasks.push(component.generation);
+            }
+            if (active) {
+              window.removeEventListener("citry-ui-readiness-increment", increment);
+              audit.active -= 1;
+            }
+            audit.cleanups.push(component.generation);
+          };
+        },
       });
     """
 

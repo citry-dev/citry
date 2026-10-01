@@ -12,7 +12,7 @@ pytest.importorskip("pytest_playwright")
 from playwright.sync_api import expect
 
 from citry_ui.quality.accessibility import AXE_INCOMPLETE_DISPOSITIONS
-from citry_ui.quality.routes import build_scenario, render_scenario
+from citry_ui.quality.routes import build_scenario
 from citry_ui.quality.scenarios import SCENARIOS, QualityTool
 
 pytestmark = pytest.mark.e2e
@@ -56,17 +56,6 @@ def _axe_findings(
         test_embedded_frames,
     )
     return result
-
-
-def _with_external_css(html: str, css: str, *, after_citry: bool) -> str:
-    stylesheet = f'<style data-quality-external-css="">{css}</style>'
-    if after_citry:
-        return html.replace("</head>", stylesheet + "</head>", 1)
-    first_citry_style = html.find('<style data-citry-css-class="')
-    if first_citry_style < 0:
-        msg = "Rendered scenario did not contain a Citry stylesheet."
-        raise RuntimeError(msg)
-    return html[:first_citry_style] + stylesheet + html[first_citry_style:]
 
 
 def _install_image_scenario_routes(page: Any) -> None:
@@ -264,13 +253,14 @@ def _activate_representative_state(page: Any, scenario_id: str) -> None:
 @pytest.mark.parametrize("scenario", _BROWSER_SCENARIOS, ids=lambda scenario: scenario.id)
 def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_findings(
     page: Any,
+    open_scenario: Any,
     scenario: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     if scenario.id == "image.states":
         _install_image_scenario_routes(page)
-    page.set_content(render_scenario(scenario.id), wait_until="load")
+    open_scenario(scenario.id)
     page.wait_for_selector(scenario.ready_selector, state="attached")
     if scenario.id == "textarea.states":
         assert page.locator(".cui-textarea").count() == 13
@@ -335,9 +325,59 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
     )
 
 
-def test_accordion_quality_form_continuity_and_brand_contrast(page: Any) -> None:
-    page.set_content(render_scenario("accordion.states"), wait_until="load")
-    page.wait_for_selector('[data-quality-states~="brand-fern"][data-citry-accordion-initialized]')
+def test_repeatable_contacts_initial_rows_keep_v_model_through_reverse_and_remove(
+    page: Any,
+    open_scenario: Any,
+) -> None:
+    open_scenario("workflow.repeatable-contacts")
+    page.wait_for_selector("#repeatable-contacts-form[data-citry-form-initialized]", state="attached")
+
+    form = page.locator("#repeatable-contacts-form")
+    assert form.locator('input[type="email"]').count() == 2
+    row_legends = form.locator("fieldset > legend:not([hidden])")
+    assert row_legends.all_text_contents() == ["Ada Lovelace", "Grace Hopper"]
+
+    primary_email = form.locator('input[name="contacts[1][email]"]')
+    primary_email.fill("ada+draft@example.com")
+    primary_fieldset = form.locator('fieldset > fieldset:has(input[name="contacts[1][email]"])')
+
+    page.get_by_role("button", name="Reverse order").click()
+    page.wait_for_function(
+        """() => [...document.querySelectorAll('#repeatable-contacts-form fieldset > legend:not([hidden])')]
+          .map(legend => legend.textContent.trim()).join('|') === 'Grace Hopper|Ada Lovelace'"""
+    )
+    assert primary_email.input_value() == "ada+draft@example.com"
+
+    primary_fieldset.get_by_role("button", name="Remove").click()
+    page.wait_for_function("document.querySelector('input[name=\"contacts[1][email]\"]') === null")
+    assert form.locator('input[type="email"]').count() == 1
+    assert row_legends.all_text_contents() == ["Grace Hopper"]
+
+
+def test_accordion_quality_form_continuity_and_brand_contrast(page: Any, serve_citry_ui_live: Any) -> None:
+    rendered = build_scenario(
+        "accordion.states",
+        configure_app=lambda app: app.set_mounted_prefix("/citry"),
+    )
+    base_url = serve_citry_ui_live(rendered.app, rendered.html)
+    page.goto(base_url + "/", wait_until="load")
+    page.wait_for_selector(
+        '[data-quality-states~="brand-fern"][data-citry-accordion-initialized]',
+        state="attached",
+    )
+    # Vue invokes mounted callbacks child-first. Every item must therefore
+    # see the nearest accordion service before its callback registers it; this
+    # also covers the nested accordion in the dark fixture.
+    page.wait_for_function(
+        """() => {
+          const roots = [...document.querySelectorAll('[data-citry-accordion-root]')];
+          const items = [...document.querySelectorAll('[data-citry-accordion-item]')];
+          return roots.length > 0
+            && roots.every(root => root.hasAttribute('data-citry-accordion-initialized'))
+            && items.length > 0
+            && items.every(item => item.hasAttribute('data-citry-accordion-item-initialized'));
+        }"""
+    )
     form = page.locator("#accordion-quality-form")
     control = form.locator('[name="ridge-note"]')
     assert form.locator('[data-value="upland"] button').get_attribute("aria-expanded") == "false"
@@ -374,8 +414,8 @@ def test_accordion_quality_form_continuity_and_brand_contrast(page: Any) -> None
         assert all(ratio >= 4.5 for ratio in page.evaluate(contrast_script))
 
 
-def test_disclosure_quality_form_continuity_and_brand_contrast(page: Any) -> None:
-    page.set_content(render_scenario("disclosure.states"), wait_until="load")
+def test_disclosure_quality_form_continuity_and_brand_contrast(page: Any, open_scenario: Any) -> None:
+    open_scenario("disclosure.states")
     page.wait_for_selector('[data-quality-states~="brand-orchard"][data-citry-disclosure-initialized]')
     form = page.locator("#disclosure-quality-form")
     control = form.locator('[name="email"]')
@@ -441,10 +481,15 @@ def test_split_button_quality_form_state_and_lifecycle(page: Any, serve_citry_ui
     )
     base_url = serve_citry_ui_live(rendered.app, rendered.html)
     scenario_component = rendered.app.get("CitryUiSplitButtonStates")
-    morph_fragments = [
-        scenario_component(include_lifecycle=False).render().serialize(deps_strategy="fragment"),
-        *(scenario_component().render().serialize(deps_strategy="fragment") for _ in range(3)),
-    ]
+    morph_step = 0
+
+    def refresh(_events: Any) -> Any:
+        nonlocal morph_step
+        morph_step += 1
+        return scenario_component(include_lifecycle=morph_step != 1)
+
+    handler = rendered.app.extensions.get_extension("events").resolve(scenario_component).handlers["refresh"]
+    object.__setattr__(handler, "func", refresh)
     page.goto(base_url + "/", wait_until="load")
     page.wait_for_selector(
         '[data-citry-ui-part="split-button"][data-citry-split-button-initialized]',
@@ -496,28 +541,22 @@ def test_split_button_quality_form_state_and_lifecycle(page: Any, serve_citry_ui
     assert lifecycle.count() == 1
 
     morph_snapshots = page.evaluate(
-        r"""async (fragments) => {
-          const internal = Citry.events._internal;
-          const root = document.querySelector('.split-button-quality');
-          const componentId = root.getAttribute('data-cid').trim().split(/\s+/).at(-1);
-          const anchor = internal.getAnchor(componentId);
+        r"""async () => {
           const snapshots = [];
-          for (const html of fragments) {
-            const epoch = anchor.epoch + 1;
-            anchor.epoch = epoch;
-            await internal.applyResult(
-              {
-                ok: true,
-                epoch,
-                actions: [{
-                  action: 'render',
-                  target: 'render:' + anchor.componentId,
-                  swap: 'morph',
-                  html,
-                }],
-              },
-              {anchor, instance: anchor.componentId, event: 'split-button-quality-morph'},
-            );
+          for (let step = 0; step < 4; step += 1) {
+            const root = document.querySelector('.split-button-quality');
+            await new Promise((resolve, reject) => {
+              const done = () => {
+                document.removeEventListener('citry:rendered', done);
+                resolve();
+              };
+              document.addEventListener('citry:rendered', done, {once: true});
+              root.dispatchEvent(new CustomEvent('quality-morph', {bubbles: true}));
+              setTimeout(() => {
+                document.removeEventListener('citry:rendered', done);
+                reject(new Error('timed out waiting for Vue server render'));
+              }, 10_000);
+            });
             await new Promise((resolve) => requestAnimationFrame(
               () => requestAnimationFrame(resolve),
             ));
@@ -537,7 +576,6 @@ def test_split_button_quality_form_state_and_lifecycle(page: Any, serve_citry_ui
           }
           return snapshots;
         }""",
-        morph_fragments,
     )
     assert len(morph_snapshots) == 4
     removed, *restored = morph_snapshots
@@ -642,8 +680,19 @@ def test_tags_input_quality_form_tokenization_focus_and_morph(page: Any, serve_c
     controlled_editor = controlled.locator('[data-citry-ui-part="input"]')
     controlled_editor.press("Enter")
     assert controlled.locator("option:checked").count() == 1
+    # A refused controlled request is settled by the owner on the next Vue
+    # flush; wait for that owner value instead of sampling the transient DOM
+    # value while the component is handing the request back.
+    page.wait_for_function(
+        """() => document.querySelector(
+          '[data-quality-states~="controlled-value"] [data-citry-ui-part="input"]',
+        ).value === 'owner draft'"""
+    )
     assert controlled_editor.input_value() == "owner draft"
     page.get_by_role("checkbox", name="Accept controlled value requests").check()
+    # Let Vue publish the checkbox's v-model before the next Enter event reads
+    # the owner's acceptance flag.
+    page.wait_for_timeout(20)
     controlled_editor.press("Enter")
     page.wait_for_function(
         """() => document.querySelector(
@@ -676,19 +725,19 @@ def test_tags_input_quality_form_tokenization_focus_and_morph(page: Any, serve_c
     )
     morph_snapshots = []
     for step in range(1, 6):
-        page.evaluate(
-            """() => {
-              void Citry.events.send(
-                document.querySelector('.tags-input-quality'),
-                'refresh',
-                {},
-              );
-            }"""
-        )
+        page.locator(".tags-input-quality").dispatch_event("quality-morph")
         page.wait_for_function(
             "step => Number(document.querySelector('[data-quality-morph-step]').textContent) === step",
             arg=step,
             timeout=10_000,
+        )
+        # The lifecycle branch is a client-side Vue v-if. Its DOM transition
+        # does not emit Citry's server-render completion event, so wait for
+        # Vue's next render turn after observing the expected state instead.
+        page.evaluate(
+            """() => new Promise(resolve => requestAnimationFrame(
+              () => requestAnimationFrame(resolve),
+            ))"""
         )
         expected_step_roots = expected_roots - 1 if step in {2, 4} else expected_roots
         page.wait_for_function(
@@ -745,8 +794,8 @@ def test_tags_input_quality_form_tokenization_focus_and_morph(page: Any, serve_c
     assert page_errors == []
 
 
-def test_menu_quality_form_safety_native_disabledness_and_brand_contrast(page: Any) -> None:
-    page.set_content(render_scenario("menu.states"), wait_until="load")
+def test_menu_quality_form_safety_native_disabledness_and_brand_contrast(page: Any, open_scenario: Any) -> None:
+    open_scenario("menu.states")
     page.wait_for_selector("#quality-menu[data-citry-menu-initialized]", state="attached")
 
     page.get_by_role("button", name="Open archive index").click()
@@ -786,6 +835,7 @@ def test_menu_quality_form_safety_native_disabledness_and_brand_contrast(page: A
 @pytest.mark.parametrize("after_citry", [False, True], ids=("framework-first", "framework-last"))
 def test_representative_compositions_coexist_with_pinned_framework_css(
     page: Any,
+    open_scenario: Any,
     scenario_id: str,
     framework: str,
     after_citry: bool,
@@ -797,14 +847,11 @@ def test_representative_compositions_coexist_with_pinned_framework_css(
         else root / "packages" / "py" / "citry_ui" / "citry_ui" / "quality" / "css" / ".generated" / "tailwind.css"
     )
     assert css_path.is_file(), "run `pnpm install` and `pnpm run citry-ui:quality-css` first"
-    html = _with_external_css(
-        render_scenario(scenario_id),
-        css_path.read_text(encoding="utf-8"),
-        after_citry=after_citry,
+    open_scenario(
+        scenario_id,
+        framework_css=css_path.read_text(encoding="utf-8"),
+        framework_css_after_citry=after_citry,
     )
-    scenario = next(scenario for scenario in SCENARIOS if scenario.id == scenario_id)
-    page.set_content(html, wait_until="load")
-    page.wait_for_selector(scenario.ready_selector)
 
     if scenario_id == "composition.orbit-access":
         control = page.get_by_role("button", name="Request access")

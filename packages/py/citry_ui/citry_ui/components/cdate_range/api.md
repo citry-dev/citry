@@ -52,7 +52,7 @@ same business rules on the server when processing a submission.
 Client `value` is either `{start, end}` or `null`. `value` and `open` are
 independent controlled channels; while supplied, requests call
 `onValueChange` or `onOpenChange` and wait for the owner to return accepted
-state through `$c-props`.
+state through native Vue props.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdate_range/snippets/controlled.py" title="Control DateRange" />
 

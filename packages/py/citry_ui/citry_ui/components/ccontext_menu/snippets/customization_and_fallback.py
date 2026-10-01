@@ -8,7 +8,7 @@ class ContextMenuCustomizationAndFallback(Component):
     template = """
       <section
         class="context-menu-customization"
-        x-data="{orchardEnhanced:false,harborEnhanced:true}"
+
       >
         <div class="context-menu-customization__controls">
           <button type="button" @click="orchardEnhanced=!orchardEnhanced">
@@ -19,7 +19,7 @@ class ContextMenuCustomizationAndFallback(Component):
           </button>
           <output
             aria-live="polite"
-            x-text="`Orchard ${orchardEnhanced ? 'enhanced' : 'native'};
+            v-text="`Orchard ${orchardEnhanced ? 'enhanced' : 'native'};
               Harbor ${harborEnhanced ? 'enhanced' : 'native'}`"
           >Orchard native; Harbor enhanced</output>
         </div>
@@ -37,7 +37,7 @@ class ContextMenuCustomizationAndFallback(Component):
                 '--cui-menu-focus-background':'#315f37',
               }"
               c-attrs="{'data-quality-brand':'orchard'}"
-              $c-props="{disabled:!orchardEnhanced}"
+              v-bind="{disabled:!orchardEnhanced}"
             >
               <c-fill name="target" data="{ target_attrs }">
                 <div
@@ -71,7 +71,7 @@ class ContextMenuCustomizationAndFallback(Component):
                 '--cui-menu-border-color':'#72b5ce',
               }"
               c-attrs="{'data-quality-brand':'harbor'}"
-              $c-props="{disabled:!harborEnhanced}"
+              v-bind="{disabled:!harborEnhanced}"
             >
               <c-fill name="target" data="{ target_attrs }">
                 <div
@@ -98,6 +98,10 @@ class ContextMenuCustomizationAndFallback(Component):
           valid enhanced request is accepted.
         </p>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {orchardEnhanced:false,harborEnhanced:true};}});
     """
 
     css = """

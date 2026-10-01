@@ -23,27 +23,13 @@ class ApplicationShortcut(Component):
     template = """
       <section
         class="command-palette-shortcut"
-        x-data="{workspaceOpen:false,helpOpen:false,enabled:true,target:'workspace',opens:0}"
-        @keydown.window="
-          enabled
-          && ($event.metaKey || $event.ctrlKey)
-          && $event.key.toLowerCase()==='k'
-          && !$event.isComposing
-          && !['INPUT','TEXTAREA','SELECT'].includes($event.target.tagName)
-          && !$event.target.isContentEditable
-          && (
-            $event.preventDefault(),
-            opens++,
-            target==='workspace' ? workspaceOpen=true : helpOpen=true
-          )
-        "
       >
         <h2>Application-owned Mod+K</h2>
         <p>Focus the app shell and press Mod+K. Editable targets stay native.</p>
-        <label><input type="checkbox" x-model="enabled" /> Enable app shortcut</label>
+        <label><input type="checkbox" v-model="enabled" /> Enable app shortcut</label>
         <label>
           Shortcut target
-          <select x-model="target">
+          <select v-model="target">
             <option value="workspace">Workspace palette</option>
             <option value="help">Help palette</option>
           </select>
@@ -56,21 +42,46 @@ class ApplicationShortcut(Component):
         <c-CCommandPalette
           label="Workspace commands"
           c-entries="workspace_commands"
-          $c-props="{
-            open:workspaceOpen,
-            onOpenChange:(value)=>workspaceOpen=value,
-          }"
+          :open="workspaceOpen" :onOpenChange="(value)=>workspaceOpen=value"
         />
         <c-CCommandPalette
           label="Help commands"
           c-entries="help_commands"
-          $c-props="{
-            open:helpOpen,
-            onOpenChange:(value)=>helpOpen=value,
-          }"
+          :open="helpOpen" :onOpenChange="(value)=>helpOpen=value"
         />
-        <output>Handled app shortcuts: <span x-text="opens">0</span></output>
+        <output>Handled app shortcuts: <span v-text="opens">0</span></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            workspaceOpen:false,helpOpen:false,enabled:true,target:'workspace',opens:0
+          };
+        },
+        methods: {
+          handleShortcut(event) {
+            if (
+              !this.enabled
+              || (!event.metaKey && !event.ctrlKey)
+              || event.key.toLowerCase() !== 'k'
+              || event.isComposing
+              || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)
+              || event.target.isContentEditable
+            ) return;
+            event.preventDefault();
+            this.opens++;
+            if (this.target === 'workspace') this.workspaceOpen = true;
+            else this.helpOpen = true;
+          },
+        },
+        mounted() {
+          window.addEventListener("keydown", this.handleShortcut);
+        },
+        beforeUnmount() {
+          window.removeEventListener("keydown", this.handleShortcut);
+        },
+      });
     """
 
     css = """

@@ -48,6 +48,12 @@ Public variables control dimensions, color, radius, spacing, and timing.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cskeleton/snippets/customization.py" title="Customize Skeleton with public CSS" />
 
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes the component sets itself (such as `aria-hidden` and `data-kind`),
+Citry runtime attributes, and any Vue directive syntax: names starting with
+`v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings on the component tag in your
+template instead, for example `<c-CSkeleton :class="{ wide: expanded }">`.
+
 ## Accessibility and loading ownership
 
 Skeletons are decorative and hidden from assistive technology. Put

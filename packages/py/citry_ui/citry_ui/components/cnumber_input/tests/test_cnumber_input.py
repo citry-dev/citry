@@ -198,22 +198,48 @@ def test_invalid_server_inputs_fail_deterministically(kwargs, error, match) -> N
     ("destination", "attribute"),
     [
         ("attrs", "data-empty"),
-        ("attrs", ":data-invalid"),
         ("attrs", "data-citry-hostile"),
-        ("attrs", "x-model"),
         ("input_attrs", "id"),
         ("input_attrs", "role"),
         ("input_attrs", "aria-valuenow"),
-        ("input_attrs", ":placeholder"),
         ("input_attrs", "data-citry-hostile"),
     ],
 )
-def test_owned_runtime_and_dynamic_attributes_are_rejected(destination: str, attribute: str) -> None:
+def test_owned_and_runtime_attributes_are_rejected(destination: str, attribute: str) -> None:
     with pytest.raises(ValueError, match="cannot"):
         _render(
             f'<c-CNumberInput c-{destination}="attributes" />',
             {"attributes": {attribute: "hostile"}},
         )
+
+
+@pytest.mark.parametrize(
+    ("destination", "attribute", "owner"),
+    [
+        ("attrs", ":data-invalid", "CNumberInput attrs"),
+        ("attrs", "v-model", "CNumberInput attrs"),
+        ("attrs", "V-IF", "CNumberInput attrs"),
+        ("attrs", "#default", "CNumberInput attrs"),
+        ("input_attrs", "v-bind:value", "CNumberInput input attrs"),
+        ("input_attrs", ".placeholder", "CNumberInput input attrs"),
+        ("input_attrs", "@input", "CNumberInput input attrs"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(destination: str, attribute: str, owner: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(f"{owner} cannot contain the Vue directive {attribute!r}")):
+        _render(
+            f'<c-CNumberInput c-{destination}="attributes" />',
+            {"attributes": {attribute: "hostile"}},
+        )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(
+        '<c-CNumberInput c-attrs="root" c-input_attrs="field" />',
+        {"root": {"x-data": "root"}, "field": {"x-init": "field"}},
+    )
+    assert 'x-data="root"' in html
+    assert 'x-init="field"' in html
 
 
 def test_explicit_translation_overrides_render_without_catalog_bindings() -> None:

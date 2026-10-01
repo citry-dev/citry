@@ -10,7 +10,13 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal, TypedDict
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_executable_event_attribute,
+    merge_root_attrs,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._scroll_geometry import SCROLL_GEOMETRY_RUNTIME_DEPENDENCY
 
 CScrollAreaAxis = Literal["block", "inline", "both"]
@@ -38,46 +44,7 @@ _IDREF_SPLIT = re.compile(r"[\t\n\f\r ]+")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ALLOWED_ARIA = frozenset({"aria-describedby", "aria-details", "aria-keyshortcuts"})
 _ALLOWED_PLAIN = frozenset({"class", "style", "lang", "dir", "title", "translate", "spellcheck"})
-_ALLOWED_EVENTS = frozenset(
-    {
-        "blur",
-        "focus",
-        "pointercancel",
-        "pointerdown",
-        "pointerenter",
-        "pointerleave",
-        "pointermove",
-        "pointerup",
-        "scroll",
-        "scrollend",
-        "touchcancel",
-        "touchend",
-        "touchmove",
-        "touchstart",
-        "wheel",
-    }
-)
-_LIFECYCLE_DIRECTIVES = frozenset(
-    {
-        "$c-props",
-        "c-bind",
-        "c-props",
-        "x-bind",
-        "x-data",
-        "x-effect",
-        "x-for",
-        "x-html",
-        "x-id",
-        "x-if",
-        "x-ignore",
-        "x-init",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
+_CITRY_DIRECTIVES = frozenset({"c-bind"})
 
 
 def _plain(name: str, value: object, *, optional: bool = False) -> str | None:
@@ -123,17 +90,6 @@ def _choice(name: str, value: object, allowed: tuple[str, ...]) -> str:
     return raw
 
 
-def _event_name(attribute: str) -> str | None:
-    modifiers = attribute.split(".")[1:]
-    if any(modifier in {"away", "document", "outside", "window"} for modifier in modifiers):
-        return None
-    if attribute.startswith("@"):
-        return attribute[1:].split(".", 1)[0]
-    if attribute.startswith("x-on:"):
-        return attribute.removeprefix("x-on:").split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"CScrollArea attrs must be a mapping or None, got {value!r}.")
@@ -141,15 +97,23 @@ def _copy_attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CScrollArea attrs require string keys, got {key!r}.")
+        # Listeners get their own message because the component offers a
+        # dedicated callback for the scroll events people usually want.
+        if is_executable_event_attribute(key):
+            raise ValueError(
+                f"CScrollArea attrs cannot use executable listener attribute {key!r}; "
+                "use onScrollChange or author a Vue listener in the template."
+            )
+    # Any other Vue directive could rebind the viewport's owned attributes or
+    # change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CScrollArea")
+    for key in copied:
         name = key.casefold()
-        event = _event_name(name)
         if name in _ALLOWED_PLAIN or name in _ALLOWED_ARIA:
-            continue
-        if event in _ALLOWED_EVENTS:
             continue
         if name.startswith("data-") and not name.startswith(_RUNTIME_PREFIXES):
             continue
-        if name.split(".", 1)[0] in _LIFECYCLE_DIRECTIVES or name.startswith(("x-bind:", ":", ".")):
+        if name in _CITRY_DIRECTIVES:
             raise ValueError(f"CScrollArea attrs cannot use ownership directive {key!r}.")
         raise ValueError(f"CScrollArea attrs cannot contain attribute {key!r} on its owned viewport.")
     return copied
@@ -216,10 +180,12 @@ class CScrollArea(LibraryComponent):
             "role": snapshot["role"],
             "ariaLabel": snapshot["aria_label"],
             "ariaLabelledby": snapshot["aria_labelledby"],
-            "axis": snapshot["axis"],
-            "scrollbarWidth": snapshot["scrollbar_width"],
-            "scrollbarGutter": snapshot["scrollbar_gutter"],
-            "overscroll": snapshot["overscroll"],
+            "serverDefaults": {
+                "axis": snapshot["axis"],
+                "scrollbarWidth": snapshot["scrollbar_width"],
+                "scrollbarGutter": snapshot["scrollbar_gutter"],
+                "overscroll": snapshot["overscroll"],
+            },
         }
 
     template = """
@@ -240,7 +206,7 @@ class CScrollArea(LibraryComponent):
     """
 
     js = r"""
-      $component({props:{axis:{},scrollbarWidth:{},scrollbarGutter:{},overscroll:{},onScrollChange:{}},init:({els:Y,data:n,props:j,effect:Z})=>{const t=Y[0],
+      $component({props:{axis:{},scrollbarWidth:{},scrollbarGutter:{},overscroll:{},onScrollChange:{}},onServerRender:({component:Y})=>{const t=Y.$el,n={rootId:Y.rootId,role:Y.role,ariaLabel:Y.ariaLabel,ariaLabelledby:Y.ariaLabelledby,...Y.serverDefaults},j=Y.$props,Z=Citry.vue.watchEffect,
       c=globalThis[Symbol.for("citry-ui:scroll-geometry")];
       if(c?.generation!==1)throw new Error("[citry-ui] CScrollArea scroll geometry dependency did not load.");
       const q=Symbol.for("citry-ui:scroll-area-handoff"),z=t[q]??null,h=z?.kind==="scroll-area"&&z.rootId===n.rootId,o=h?z:{kind:"scroll-area",rootId:n.rootId},
@@ -269,27 +235,26 @@ class CScrollArea(LibraryComponent):
       const l=M(e),i=A();
       Object.assign(b,l),!F(i,l)&&(s={...l,revision:x},t.scrollLeft=c.horizontalToRaw(l.inline,R(),d==="rtl"),t.scrollTop=l.block,w())},D=e=>{if(!m())return;
       const r=getComputedStyle(t);
-      if(r.direction!==d||r.writingMode!=="horizontal-tb"||!t.hasAttribute("data-citry-scroll-area-initialized")){p=!0,w();
+      if(r.direction!==d||r.writingMode!=="horizontal-tb"||!t.hasAttribute("data-citry-scroll-area-initialized")||ae()){p=!0,w();
       return}const l=M(A());
       if(Object.assign(b,l),s){const i=s;
       if(s=null,i.revision===x&&F(l,i))return}y=e,O=x,F(l,A())||P(l,!1),w()},H=e=>e==="id"?n.rootId:e==="role"?n.role:e==="aria-label"?n.ariaLabel:e==="aria-labelledby"?n.ariaLabelledby:e==="tabindex"?"0":e==="data-citry-ui-part"?"scroll-area":e==="data-axis"?a.axis:e==="data-scrollbar-width"?a.scrollbarWidth:e==="data-scrollbar-gutter"?a.scrollbarGutter:a.overscroll,
       V="id role aria-label aria-labelledby tabindex data-citry-ui-part data-axis data-scrollbar-width data-scrollbar-gutter data-overscroll".split(" "),K="aria-hidden aria-modal aria-orientation contenteditable hidden inert is name popover slot".split(" "),
-      B="aria-describedby aria-details aria-keyshortcuts aria-label aria-labelledby".split(" "),te=/^(?:@|x-on:)(?:blur|focus|pointer(?:cancel|down|enter|leave|move|up)|scroll(?:end)?|touch(?:cancel|end|move|start)|wheel)(?:\.(?!(?:away|document|outside|window)(?:\.|$))[^.]+)*$/,
-      J=e=>e.startsWith("@")||e.startsWith("x-on:")?!te.test(e):e.startsWith("x-")||e.startsWith(":")||e.startsWith(".")||["$c-props","c-bind","c-props"].includes(e)||e.startsWith("on"),
-      re=()=>t.getRootNode().querySelectorAll(`#${CSS.escape(n.rootId)}`).length===1,Q=()=>V.every(e=>t.getAttribute(e)===H(e))&&K.every(e=>!t.hasAttribute(e))&&[...t.attributes].every(e=>!e.name.startsWith("aria-")||B.includes(e.name))&&[...t.attributes].every(e=>!J(e.name))&&ge()&&t.style.getPropertyValue("scroll-behavior").trim()==="auto"&&t.style.getPropertyPriority("scroll-behavior")==="important",
+      B="aria-describedby aria-details aria-keyshortcuts aria-label aria-labelledby".split(" "),J=e=>e.startsWith("@")||e.startsWith(":")||e.startsWith(".")||e==="c-bind"||e.startsWith("on"),
+      re=()=>/** @type {Document|DocumentFragment|Element} */(t.getRootNode()).querySelectorAll(`#${CSS.escape(n.rootId)}`).length===1,Q=()=>V.every(e=>t.getAttribute(e)===H(e))&&K.every(e=>!t.hasAttribute(e))&&[...t.attributes].every(e=>!e.name.startsWith("aria-")||B.includes(e.name))&&[...t.attributes].every(e=>!J(e.name))&&ge()&&t.style.getPropertyValue("scroll-behavior").trim()==="auto"&&t.style.getPropertyPriority("scroll-behavior")==="important",
       U=()=>{const e=[];
       let r=t.parentNode;
       for(;
       r;
       )e.push(r),r=r instanceof ShadowRoot?r.host:r.parentNode;
-      return e},$=()=>{g.disconnect(),k=U(),g.observe(t,{attributes:!0}),k.forEach(e=>{const r={childList:!0};
+      return e},ae=()=>{const e=U();
+      return e.length!==k.length||e.some((r,l)=>r!==k[l])},$=()=>{g.disconnect(),k=U(),g.observe(t,{attributes:!0}),k.forEach(e=>{const r={childList:!0};
       e instanceof Element&&(r.attributes=!0,r.attributeFilter=["dir","class","style"]),g.observe(e,r)}),o.observedAncestors=k.length},X=e=>{g.disconnect(),
       e(),m()&&t.isConnected&&$()},le=()=>X(()=>{V.forEach(e=>{const r=H(e);
       r==null?t.removeAttribute(e):t.setAttribute(e,r)}),K.forEach(e=>t.removeAttribute(e)),[...t.attributes].forEach(e=>{e.name.startsWith("aria-")&&!B.includes(e.name)&&t.removeAttribute(e.name),
       (J(e.name)||ye(e.name)&&!Object.hasOwn(he,e.name))&&t.removeAttribute(e.name)}),Object.entries(he).forEach(([e,r])=>t.setAttribute(e,r)),t.style.setProperty("scroll-behavior","auto","important")}),C=e=>t.toggleAttribute(ce,
       e&&m()),oe=()=>{if(p=!1,!m()||!t.isConnected)return;
-      const e=U();
-      if((e.length!==k.length||e.some((i,ne)=>i!==k[ne]))&&$(),Q()?u.delete("attributes"):(C(!1),S("attributes",be()),le(),u.delete("attributes")),!re()){C(!1),S("id",n.rootId),f();
+      if(ae()&&$(),Q()?u.delete("attributes"):(C(!1),S("attributes",be()),le(),u.delete("attributes")),!re()){C(!1),S("id",n.rootId),f();
       return}u.delete("id");
       const r=getComputedStyle(t);
       if(r.writingMode!=="horizontal-tb"){C(!1),S("writingMode",r.writingMode),f();

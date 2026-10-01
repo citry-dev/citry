@@ -32,24 +32,22 @@ def _page() -> str:
         template = """
           <!doctype html>
           <html lang="en"><head><meta charset="utf-8"><title>Splitter evidence</title><c-css /></head>
-          <body x-data>
-            <form @submit.prevent="$store.splitter.submits += 1">
+          <body>
+            <form @submit.prevent="state.splitter.submits += 1">
               <c-CSplitter
                 c-sizes="[30, 70]"
                 class_="brand-splitter"
                 variant="outline"
                 c-keyboard_step="5"
-                $c-props="{
-                  sizes: $store.splitter.sizes,
-                  orientation: $store.splitter.orientation,
-                  disabled: $store.splitter.disabled,
-                  onResizeStart: (detail) => $store.splitter.events.push(['start', detail.source]),
-                  onResize: (next, detail) => {
-                    $store.splitter.events.push(['resize', detail.source, ...next]);
-                    if ($store.splitter.accept) $store.splitter.sizes = next;
-                  },
-                  onResizeEnd: (next, detail) => $store.splitter.events.push(['end', detail.source, ...next]),
-                }"
+                :sizes="state.splitter.sizes"
+                :orientation="state.splitter.orientation"
+                :disabled="state.splitter.disabled"
+                :onResizeStart="(detail) => state.splitter.events.push(['start', detail.source])"
+                :onResize="(next, detail) => {
+                    state.splitter.events.push(['resize', detail.source, ...next]);
+                    if (state.splitter.accept) state.splitter.sizes = next;
+                  }"
+                :onResizeEnd="(next, detail) => state.splitter.events.push(['end', detail.source, ...next])"
               >
                 <c-CSplitterPanel id="nav" label="Navigation" c-min_size="20" c-max_size="50">
                   <button id="inside" type="submit">Inside</button>
@@ -76,10 +74,10 @@ def _page() -> str:
           </body></html>
         """
         js = """
-          Alpine.store('splitter', {
+          $component({data(){const splitter=Citry.vue.reactive({
             sizes: [30, 70], orientation: 'horizontal', disabled: false,
             accept: false, events: [], submits: 0,
-          });
+          }); window.__splitter=splitter; return {state:{splitter}};}});
         """
 
     return str(Page())
@@ -101,21 +99,21 @@ def test_controlled_keyboard_callbacks_constraints_and_form_safety(page: Any) ->
     handle.focus()
     handle.press("ArrowRight")
     assert handle.get_attribute("aria-valuenow") == "30"
-    assert page.evaluate("Alpine.store('splitter').events")[:3] == [
+    assert page.evaluate("window.__splitter.events")[:3] == [
         ["start", "keyboard"],
         ["resize", "keyboard", 35, 65],
         ["end", "keyboard", 35, 65],
     ]
-    page.evaluate("Alpine.store('splitter').accept = true")
+    page.evaluate("window.__splitter.accept = true")
     handle.press("Shift+ArrowRight")
     page.wait_for_function(
         "document.querySelector('.brand-splitter [role=separator]').getAttribute('aria-valuenow') === '50'"
     )
     handle.press("End")
     assert handle.get_attribute("aria-valuenow") == "50"
-    assert page.evaluate("Alpine.store('splitter').submits") == 0
+    assert page.evaluate("window.__splitter.submits") == 0
     page.locator("#inside").click()
-    assert page.evaluate("Alpine.store('splitter').submits") == 1
+    assert page.evaluate("window.__splitter.submits") == 1
     assert errors == []
 
 
@@ -123,7 +121,7 @@ def test_pointer_drag_reactive_orientation_fieldset_rtl_and_css(page: Any) -> No
     errors = _load(page)
     root = page.locator(".brand-splitter")
     handle = root.locator('[data-citry-ui-part="handle"]')
-    page.evaluate("Alpine.store('splitter').accept = true")
+    page.evaluate("window.__splitter.accept = true")
     box = handle.bounding_box()
     assert box is not None
     page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
@@ -133,10 +131,10 @@ def test_pointer_drag_reactive_orientation_fieldset_rtl_and_css(page: Any) -> No
     page.wait_for_function(
         "Number(document.querySelector('.brand-splitter [role=separator]').getAttribute('aria-valuenow')) > 30"
     )
-    assert any(event[:2] == ["start", "pointer"] for event in page.evaluate("Alpine.store('splitter').events"))
-    assert any(event[:2] == ["end", "pointer"] for event in page.evaluate("Alpine.store('splitter').events"))
+    assert any(event[:2] == ["start", "pointer"] for event in page.evaluate("window.__splitter.events"))
+    assert any(event[:2] == ["end", "pointer"] for event in page.evaluate("window.__splitter.events"))
 
-    page.evaluate("Alpine.store('splitter').orientation = 'vertical'")
+    page.evaluate("window.__splitter.orientation = 'vertical'")
     page.wait_for_function("document.querySelector('.brand-splitter').dataset.orientation === 'vertical'")
     assert handle.get_attribute("aria-orientation") == "horizontal"
     assert root.evaluate("element => getComputedStyle(element).borderRadius") == "19px"

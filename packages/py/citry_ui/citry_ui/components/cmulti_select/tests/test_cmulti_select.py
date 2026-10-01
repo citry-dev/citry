@@ -94,8 +94,14 @@ def test_progressive_native_proxy_and_custom_combobox_share_values() -> None:
     assert 'aria-expanded="false"' in control
     assert 'aria-multiselectable="true"' in listbox
     assert re.search(r'<select[^>]+name="planet"[^>]+multiple[^>]*>', html)
-    assert re.search(r'<option value="earth" selected>Earth</option>', html)
-    assert re.search(r'<option value="mars" selected>Mars</option>', html)
+    assert re.search(
+        r'<option(?=[^>]*\bvalue="earth")(?=[^>]*\bselected(?:\s|=|>))[^>]*>Earth</option>',
+        html,
+    )
+    assert re.search(
+        r'<option(?=[^>]*\bvalue="mars")(?=[^>]*\bselected(?:\s|=|>))[^>]*>Mars</option>',
+        html,
+    )
     assert html.count('data-citry-ui-part="chip"') == 2
 
 
@@ -120,7 +126,15 @@ def test_required_readonly_uses_repeated_hidden_inputs() -> None:
     native = re.search(r"<select[^>]+data-cui-multi-select-native[^>]*>", html).group(0)
     assert " disabled" in native
     assert " required" not in native
-    assert html.count('<input name="planet"') == 2
+    assert (
+        len(
+            re.findall(
+                r'<input\b(?=[^>]*\btype="hidden")(?=[^>]*\bname="planet")[^>]*>',
+                html,
+            )
+        )
+        == 2
+    )
 
 
 def test_field_owns_state_and_accessible_relationships() -> None:
@@ -195,12 +209,49 @@ def test_invalid_server_contracts_fail(
     "extra",
     [
         "c-attrs=\"{'role': 'application'}\"",
-        "c-listbox_attrs=\"{'x-show':'open'}\"",
+        "c-listbox_attrs=\"{'v-show':'open'}\"",
+        "c-listbox_attrs=\"{'v-for':'item in items'}\"",
+        "c-attrs=\"{'v-bind:role':'kind'}\"",
+        "c-attrs=\"{'V-IF':'shown'}\"",
+        "c-attrs=\"{'#default':''}\"",
     ],
 )
 def test_owned_attrs_and_runtime_directives_are_rejected(extra: str) -> None:
     with pytest.raises(ValueError, match="cannot"):
         _render(_select(extra), data={"options": _options()})
+
+
+@pytest.mark.parametrize(
+    "attribute",
+    [":aria-describedby", ".aria-errormessage", "v-html", "@focus", "v-on:click"],
+)
+def test_trigger_attrs_reject_vue_directives(attribute: str) -> None:
+    # Each map names itself so the caller knows which input to fix.
+    message = f"CMultiSelect trigger_attrs cannot contain the Vue directive {attribute!r}"
+    template = '<c-CMultiSelect placeholder="Choose planets" c-options="options" c-trigger_attrs="trigger" />'
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _render(template, data={"options": _options(), "trigger": {"aria-label": "Planets", attribute: "x"}})
+
+
+@pytest.mark.parametrize("input_name", ["attrs", "trigger_attrs", "listbox_attrs"])
+@pytest.mark.parametrize("attribute", ["onclick", "ONFOCUS", "onpointerdown"])
+def test_attr_maps_reject_inline_event_handlers(input_name: str, attribute: str) -> None:
+    # An inline handler is browser code; Python attribute data must not install one.
+    message = f"CMultiSelect {input_name} cannot use executable listener attribute {attribute!r}"
+    trigger = {"aria-label": "Planets"}
+    maps: dict[str, dict[str, object]] = {"attrs": {}, "trigger_attrs": trigger, "listbox_attrs": {}}
+    maps[input_name] = {**maps[input_name], attribute: "alert(1)"}
+    template = (
+        '<c-CMultiSelect placeholder="Choose planets" c-options="options" '
+        'c-attrs="attrs" c-trigger_attrs="trigger_attrs" c-listbox_attrs="listbox_attrs" />'
+    )
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _render(template, data={"options": _options(), **maps})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(_select("c-attrs=\"{'x-data':'{}'}\""), data={"options": _options()})
+    assert 'x-data="{}"' in html
 
 
 def test_owned_trigger_attributes_are_rejected() -> None:

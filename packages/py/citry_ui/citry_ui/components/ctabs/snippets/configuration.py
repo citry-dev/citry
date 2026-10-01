@@ -8,24 +8,7 @@ class TabsConfiguration(Component):
     template = """
       <section
         class="tabs-configurator"
-        x-data="{
-          selected: 'mercury',
-          accent: 'violet',
-          accents: {
-            violet: 'light-dark(#6d28d9, #c4b5fd)',
-            coral: 'light-dark(#c2410c, #fdba74)',
-            teal: 'light-dark(#0f766e, #5eead4)',
-            pink: 'light-dark(#be185d, #f9a8d4)',
-          },
-          variant: 'underline',
-          density: 'default',
-          orientation: 'horizontal',
-          align: 'start',
-          grow: false,
-          loop: true,
-          disabled: false,
-        }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
+
         :style="{
           '--cui-tabs-accent': accents[accent],
           '--cui-tabs-focus-color': accents[accent],
@@ -39,24 +22,20 @@ class TabsConfiguration(Component):
         <div class="tabs-configurator__stage">
           <p class="tabs-configurator__status" aria-live="polite">
             Current world:
-            <strong x-text="selected">mercury</strong>
+            <strong v-text="selected">mercury</strong>
           </p>
 
           <c-CTabs
             default_value="mercury"
             aria_label="Solar system chapters"
-            $c-props="{
-              variant,
-              density,
-              orientation,
-              align,
-              grow,
-              loop,
-              disabled,
-              onValueChange: (value) => {
-                selected = value;
-              },
-            }"
+            :variant="variant"
+            :density="density"
+            :orientation="orientation"
+            :align="align"
+            :grow="grow"
+            :loop="loop"
+            :disabled="disabled"
+            :onValueChange="(value) => selected = value"
           >
             <c-CTab value="mercury">
               Mercury
@@ -83,6 +62,40 @@ class TabsConfiguration(Component):
           </c-CTabs>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            selected: 'mercury',
+            accent: 'violet',
+            accents: {
+              violet: 'light-dark(#6d28d9, #c4b5fd)',
+              coral: 'light-dark(#c2410c, #fdba74)',
+              teal: 'light-dark(#0f766e, #5eead4)',
+              pink: 'light-dark(#be185d, #f9a8d4)',
+            },
+            variant: 'underline',
+            density: 'default',
+            orientation: 'horizontal',
+            align: 'start',
+            grow: false,
+            loop: true,
+            disabled: false,
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

@@ -13,8 +13,6 @@ from citry import Citry, Component
 
 pytestmark = pytest.mark.e2e
 
-READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
-
 
 def _static_page() -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
@@ -147,7 +145,7 @@ def _static_page() -> tuple[Citry, str]:
     return app, str(Page())
 
 
-def _events_page() -> tuple[Citry, str]:
+def _events_page(*, controlled: bool = False) -> tuple[Citry, str]:
     app = Citry(secret="citry-ui-table-e2e", autodiscover=False)  # noqa: S106
     app.set_mounted_prefix("/citry")
     app.register_library(citry_ui)
@@ -191,7 +189,7 @@ def _events_page() -> tuple[Citry, str]:
                 <c-if cond="column.key == 'quantity'">
                   <input
                     c-name="row.key"
-                    c-value="cell.value"
+                    c-defaultValue="cell.value"
                     c-aria-label="row.key + ' quantity'"
                   />
                 </c-if>
@@ -203,12 +201,30 @@ def _events_page() -> tuple[Citry, str]:
           </section>
         """
 
+        template = template.replace(
+            'c-defaultValue="cell.value"',
+            f'{"c-value" if controlled else "c-defaultValue"}="cell.value"',
+        )
+
         def template_data(self, kwargs, slots):
             all_rows = (
                 citry_ui.CTableRow("alpha", {"name": "Alpha", "quantity": "10"}),
                 citry_ui.CTableRow("beta", {"name": "Beta", "quantity": "20"}),
             )
-            rows = all_rows if kwargs.step == 0 else tuple(reversed(all_rows)) if kwargs.step == 1 else all_rows[:1]
+            if controlled and kwargs.step >= 2:
+                # The controlled page keeps the reversed order and changes only
+                # alpha's server value, so a test can tell a changed value from
+                # an unchanged one within the same update.
+                rows = (
+                    all_rows[1],
+                    citry_ui.CTableRow("alpha", {"name": "Alpha", "quantity": "11"}),
+                )
+            elif kwargs.step == 0:
+                rows = all_rows
+            elif kwargs.step == 1:
+                rows = tuple(reversed(all_rows))
+            else:
+                rows = all_rows[:1]
             return {
                 "columns": (
                     citry_ui.CTableColumn("name", "Item", row_header=True),
@@ -463,12 +479,13 @@ def test_nested_tables_isolate_structural_css_and_page_sticky_mode_has_no_scroll
 
 def test_events_reorder_preserves_a_focused_edit_and_removal_drops_the_keyed_row(
     page: Any,
+    wait_for_citry_ready: Any,
     serve_citry_ui_live: Any,
 ) -> None:
     app, html = _events_page()
     base = serve_citry_ui_live(app, html)
     page.goto(base + "/")
-    page.wait_for_function(READY)
+    wait_for_citry_ready()
 
     beta = page.get_by_role("textbox", name="beta quantity")
     beta.fill("draft 27")
@@ -518,14 +535,84 @@ def test_events_reorder_preserves_a_focused_edit_and_removal_drops_the_keyed_row
     assert page.evaluate("document.activeElement?.isConnected") is True
 
 
+def test_events_reorder_keeps_each_controlled_draft_with_its_keyed_row(
+    page: Any,
+    wait_for_citry_ready: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    app, html = _events_page(controlled=True)
+    base = serve_citry_ui_live(app, html)
+    page.goto(base + "/")
+    wait_for_citry_ready()
+
+    alpha = page.get_by_role("textbox", name="alpha quantity")
+    beta = page.get_by_role("textbox", name="beta quantity")
+    # Different drafts in both rows make a draft that moved to the neighbor
+    # visible, so the checks below tie each value to its row key.
+    alpha.fill("draft 13")
+    beta.fill("draft 27")
+    page.evaluate(
+        """() => {
+          window.__alphaInput = document.querySelector('input[name=alpha]');
+          window.__betaInput = document.querySelector('input[name=beta]');
+          window.__betaRow = document.querySelector('[data-row-key=beta]');
+        }"""
+    )
+
+    def advance() -> None:
+        outcome = page.evaluate(
+            """() => Citry.events.send(document.querySelector('.advance'), 'advance', {}).then(
+              () => ({ ok: true }),
+              (error) => ({ ok: false, code: error?.code, message: error?.message }),
+            )"""
+        )
+        assert outcome == {"ok": True}
+
+    # The server reverses the rows but sends the same value for each one.
+    advance()
+    page.wait_for_function(
+        "document.querySelector('[data-row-key=beta]') === document.querySelectorAll('[data-row-key]')[0]"
+    )
+    # An unchanged server value leaves the typed text alone, and the text
+    # follows its row's key rather than the position the row used to hold.
+    assert alpha.input_value() == "draft 13"
+    assert beta.input_value() == "draft 27"
+    assert page.evaluate(
+        """() => ({
+          rowPreserved: document.querySelector('[data-row-key=beta]') === window.__betaRow,
+          alphaPreserved: document.querySelector('input[name=alpha]') === window.__alphaInput,
+          betaPreserved: document.querySelector('input[name=beta]') === window.__betaInput,
+          firstRowInput: document.querySelectorAll('[data-row-key] input')[0].name,
+        })"""
+    ) == {
+        "rowPreserved": True,
+        "alphaPreserved": True,
+        "betaPreserved": True,
+        "firstRowInput": "beta",
+    }
+
+    # The next update changes only alpha's server value, from 10 to 11.
+    advance()
+    page.wait_for_function("document.querySelector('input[name=alpha]').value === '11'")
+    # A changed server value replaces that row's draft; the unchanged row
+    # keeps its own text, and both inputs are still the same elements.
+    assert alpha.input_value() == "11"
+    assert beta.input_value() == "draft 27"
+    assert page.evaluate(
+        """() => document.querySelector('input[name=alpha]') === window.__alphaInput
+          && document.querySelector('input[name=beta]') === window.__betaInput"""
+    )
+
+
 def test_state_replacement_preserves_the_live_region_outside_the_busy_table(
     page: Any,
+    wait_for_citry_ready: Any,
     serve_citry_ui_live: Any,
 ) -> None:
     app, html = _state_events_page()
     base = serve_citry_ui_live(app, html)
     page.goto(base + "/")
-    page.wait_for_function(READY)
+    wait_for_citry_ready()
 
     page.evaluate("window.__tableAnnouncer = document.querySelector('.cui-table-announcer')")
     advance = page.locator(".advance-state")

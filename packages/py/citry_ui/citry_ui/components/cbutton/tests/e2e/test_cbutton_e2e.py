@@ -1,5 +1,7 @@
 """Browser tests for the production CButton."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 import pytest
@@ -18,6 +20,7 @@ def _interaction_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {loading:true,disabled:false,submitMounted:true};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -25,12 +28,7 @@ def _interaction_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                loading: true,
-                disabled: false,
-              }"
-            >
+            <body>
               <form
                 id="probe-form"
                 @submit.prevent="
@@ -40,14 +38,15 @@ def _interaction_page() -> str:
                 @reset="window.__buttonResets = (window.__buttonResets || 0) + 1"
               >
                 <input id="probe-input" name="title" value="Original" />
-                <span id="submit-mount">
+                <span
+                  id="submit-mount"
+                  v-if="submitMounted"
+                >
                   <c-CButton
                     type="submit"
                     c-attrs="submit_attrs"
-                    $c-props="{
-                      loading,
-                      disabled,
-                    }"
+                    :loading="loading"
+                    :disabled="disabled"
                     @click="window.__buttonClicks = (window.__buttonClicks || 0) + 1"
                   >
                     <c-fill name="start">
@@ -71,6 +70,13 @@ def _interaction_page() -> str:
                 @click="loading = !loading"
               >
                 Toggle loading
+              </button>
+              <button
+                id="unmount-submit"
+                type="button"
+                @click="submitMounted = false"
+              >
+                Remove submit
               </button>
               <button
                 id="toggle-disabled"
@@ -103,6 +109,7 @@ def _reactive_configuration_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {variant:'outline',intent:'danger',size:'lg',block:true,loadingPosition:'end'};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -110,24 +117,14 @@ def _reactive_configuration_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                variant: 'outline',
-                intent: 'danger',
-                size: 'lg',
-                block: true,
-                loadingPosition: 'end',
-              }"
-            >
+            <body>
               <c-CButton
                 c-attrs="button_attrs"
-                $c-props="{
-                  variant,
-                  intent,
-                  size,
-                  block,
-                  loadingPosition,
-                }"
+                :variant="variant"
+                :intent="intent"
+                :size="size"
+                :block="block"
+                :loadingPosition="loadingPosition"
               >
                 Save
               </c-CButton>
@@ -244,6 +241,7 @@ def _loading_presentation_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {centeredLoading:false};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -251,7 +249,7 @@ def _loading_presentation_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body x-data="{ centeredLoading: false }">
+            <body>
               <c-CButton
                 loading
                 loading_pos="start"
@@ -291,7 +289,7 @@ def _loading_presentation_page() -> str:
               </c-CButton>
               <c-CButton
                 c-attrs="center_attrs"
-                $c-props="{ loading: centeredLoading }"
+                :loading="centeredLoading"
               >
                 <c-fill name="start">
                   S
@@ -332,6 +330,7 @@ def _link_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {disabled:false,loading:true};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -339,19 +338,12 @@ def _link_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                disabled: false,
-                loading: true,
-              }"
-            >
+            <body>
               <c-CButton
                 href="/field-guide"
                 c-attrs="link_attrs"
-                $c-props="{
-                  disabled,
-                  loading,
-                }"
+                :disabled="disabled"
+                :loading="loading"
                 @click="
                   window.__linkClicks = (window.__linkClicks || 0) + 1;
                   window.__linkModifier = $event.ctrlKey;
@@ -614,14 +606,34 @@ def test_link_loading_and_disabled_states_block_activation_then_restore_native_l
 
 def test_removing_button_runs_component_listener_cleanup(page):
     _load(page, _interaction_page(), "#submit-action")
+    # A plain probe listener shows whether the Button's loading guard still
+    # intercepts clicks: the guard stops every click while the Button is loading.
+    # The same guard stops a form submission that names the Button as submitter,
+    # before the page's own submit listener can count it.
     page.evaluate(
         """() => {
           window.__removedButton = document.querySelector('#submit-action');
-          document.querySelector('#submit-mount').remove();
+          window.__probeClicks = 0;
+          window.__removedButton.addEventListener('click', () => { window.__probeClicks += 1; });
+          window.__removedButton.click();
+          window.__submitFrom = (submitter) => document.querySelector('#probe-form').dispatchEvent(
+            new SubmitEvent('submit', {submitter, cancelable: true}),
+          );
+          window.__submitFrom(window.__removedButton);
         }"""
     )
-    page.wait_for_timeout(100)
+    assert page.evaluate("window.__probeClicks") == 0
+    assert page.evaluate("window.__buttonClicks || 0") == 0
+    assert page.evaluate("window.__buttonSubmits || 0") == 0
+
+    # Vue owns the button, so removal goes through a render that unmounts it.
+    page.locator("#unmount-submit").click()
+    page.wait_for_function("!window.__removedButton.isConnected")
 
     assert page.evaluate("!window.__removedButton.hasAttribute('data-citry-button-initialized')") is True
+    # Once cleanup removed the guard, a click on the detached element is no longer stopped.
     page.evaluate("window.__removedButton.click()")
-    assert page.evaluate("window.__buttonClicks || 0") == 0
+    assert page.evaluate("window.__probeClicks") == 1
+    # The form stays mounted, and cleanup also removed its submit guard.
+    page.evaluate("window.__submitFrom(window.__removedButton)")
+    assert page.evaluate("window.__buttonSubmits || 0") == 1

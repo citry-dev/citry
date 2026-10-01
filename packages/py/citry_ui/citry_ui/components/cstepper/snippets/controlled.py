@@ -6,12 +6,12 @@ citry.register_library(citry_ui)
 
 class ControlledStepper(Component):
     template = """
-      <section x-data="{ active: 0 }">
+      <section >
         <c-CStepper
           label="Workspace setup"
           interactive
           c-linear="False"
-          $c-props="{ active, onActiveChange: (next) => active = next }"
+          :active="active" :onActiveChange="(next) => active = next"
         >
           <c-CStep>Workspace</c-CStep>
           <c-CStep>Members</c-CStep>
@@ -22,6 +22,15 @@ class ControlledStepper(Component):
           <c-CButton @click="active = Math.min(2, active + 1)">Next</c-CButton>
         </c-CRow>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            active: 0
+          };
+        },
+      });
     """
 
 

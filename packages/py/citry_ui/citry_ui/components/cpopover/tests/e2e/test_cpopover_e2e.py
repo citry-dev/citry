@@ -18,6 +18,28 @@ def _popover_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({
+            data() {
+              return {
+                controlled: false,
+                open: false,
+                accept: false,
+                dismissible: true,
+                placement: "bottom-start",
+                matchWidth: false,
+              };
+            },
+            mounted() {
+              // Tests change owner state through this Vue instance, which
+              // reaches the popover through its reactive props.
+              window.__state = this;
+            },
+            beforeUnmount() {
+              delete window.__state;
+            },
+          });
+        """
         css = """
           :where(.space-popover) {
             --cui-popover-background: rgb(15 35 54);
@@ -36,26 +58,16 @@ def _popover_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                controlled: false,
-                open: false,
-                accept: false,
-                dismissible: true,
-                placement: 'bottom-start',
-                matchWidth: false,
-              }"
-            >
+            <body>
               <div style="padding: 180px 240px; min-block-size: 900px">
                 <c-CPopover
                   id="europa-popover"
                   class_="space-popover"
-                  $c-props="{
-                    open: controlled ? open : undefined,
-                    dismissible,
-                    placement,
-                    matchWidth,
-                    onOpenChange: (nextOpen, detail) => {
+                  :open="controlled ? open : undefined"
+                  :dismissible="dismissible"
+                  :placement="placement"
+                  :matchWidth="matchWidth"
+                  :onOpenChange="(nextOpen, detail) => {
                       window.__popoverRequest = {
                         nextOpen,
                         reason: detail.reason,
@@ -64,8 +76,7 @@ def _popover_page() -> str:
                       };
                       window.__popoverRequests = (window.__popoverRequests || 0) + 1;
                       if (accept) open = nextOpen;
-                    },
-                  }"
+                    }"
                 >
                   <c-fill
                     name="activator"
@@ -211,7 +222,7 @@ def _popover_events_page() -> tuple[Citry, str]:
                 Survey step {{ step }}
               </c-fill>
               <c-fill name="default">
-                <input id="survey-note" value="Original note" />
+                <input id="survey-note" v-model="note" />
               </c-fill>
             </c-CPopover>
           </section>
@@ -222,6 +233,16 @@ def _popover_events_page() -> tuple[Citry, str]:
                 "placement": "top-end" if kwargs.step else "bottom-start",
                 "step": kwargs.step,
             }
+
+        # A server revision re-applies server-rendered input values, so the
+        # draft lives in Vue state, which the retained instance keeps.
+        js = """
+          $component({
+            data() {
+              return { note: "Original note" };
+            },
+          });
+        """
 
     class Page(Component):
         citry = app
@@ -406,7 +427,7 @@ def test_controlled_owner_can_decline_then_accept_requests(page):
     trigger.click()
     page.wait_for_function("document.querySelector('#europa-popover').matches(':popover-open')")
     requests = page.evaluate("window.__popoverRequests")
-    page.evaluate("Alpine.$data(document.body).open = false")
+    page.evaluate("window.__state.open = false")
     page.wait_for_function("!document.querySelector('#europa-popover').matches(':popover-open')")
     assert page.evaluate("window.__popoverRequests") == requests
 
@@ -452,7 +473,7 @@ def test_nested_popover_owns_escape_before_its_parent(page):
     )
 
     assert page.evaluate("window[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length") == 2
-    page.evaluate("Alpine.$data(document.body).placement = 'top-end'")
+    page.evaluate("window.__state.placement = 'top-end'")
     page.wait_for_function("document.querySelector('#europa-popover').dataset.placement === 'top-end'")
     page.keyboard.press("Escape")
     page.wait_for_function("!document.querySelector('#nested-popover').matches(':popover-open')")
@@ -979,7 +1000,12 @@ def test_correlated_rerender_retains_open_state_edits_and_one_layer(
     page.wait_for_function("document.querySelector('#survey-popover').matches(':popover-open')")
     note = page.locator("#survey-note")
     note.fill("Retained note")
-    page.evaluate("window.__popoverRoot = document.querySelector('[data-citry-popover-host]')")
+    page.evaluate(
+        """() => {
+          window.__popoverRoot = document.querySelector('[data-citry-popover-host]');
+          window.__surveyNote = document.querySelector('#survey-note');
+        }"""
+    )
 
     page.evaluate("() => Citry.events.send(document.querySelector('.advance-popover'), 'advance', {})")
     page.wait_for_function("document.querySelector('#survey-popover')?.dataset.placement === 'top-end'")
@@ -987,5 +1013,7 @@ def test_correlated_rerender_retains_open_state_edits_and_one_layer(
     assert page.evaluate("document.querySelector('[data-citry-popover-host]') === window.__popoverRoot") is True
     assert page.locator("#survey-popover").evaluate("element => element.matches(':popover-open')") is True
     assert note.input_value() == "Retained note"
+    # The open popover content is patched in place, not rebuilt.
+    assert page.evaluate("document.querySelector('#survey-note') === window.__surveyNote") is True
     assert page.evaluate("window[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length") == 1
     assert page.get_by_role("heading", name="Survey step 1").count() == 1

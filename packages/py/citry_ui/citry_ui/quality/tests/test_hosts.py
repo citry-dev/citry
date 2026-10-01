@@ -140,4 +140,4 @@ def test_generic_wsgi_adapter_serves_assets_for_the_shared_tabs_scenario():
         ),
     )
     assert captured["status"] == "200 OK"
-    assert b"client-side dependency manager" in body
+    assert b"Citry interactive runtime" in body

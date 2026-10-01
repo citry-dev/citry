@@ -10,7 +10,7 @@ the project cards without reloading the page.
 - A Django view passes Python `Project` records to a Citry component.
 - Typed inputs pass projects between components. Slots fill the page shell
   with its heading and project list.
-- Alpine opens the help panel without sending a request.
+- Vue opens the help panel without sending a request.
 - A debounced Citry Event sends the search query to Python and replaces the
   project list with the matches.
 - Django serves Citry's browser runtime and Event routes under `/citry` while
@@ -21,7 +21,7 @@ the project cards without reloading the page.
 - Python 3.10 through 3.14
 - [uv](https://docs.astral.sh/uv/)
 
-The project accepts Citry 0.5.0 or newer. Its
+The project accepts Citry 0.6.0 or newer. Its
 lockfile pins the version exercised by the tests.
 
 ## Run the project

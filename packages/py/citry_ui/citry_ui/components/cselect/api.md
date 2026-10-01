@@ -46,6 +46,13 @@ page navigation continues.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cselect/snippets/customization.py" title="Customize Select" />
 
+`attrs`, `trigger_attrs`, and `listbox_attrs` accept ordinary native, ARIA,
+and data attributes. They reject the attributes each part sets itself (such as
+the trigger's `type` or the root's `role`), Citry runtime attributes, and any
+Vue directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write
+Vue bindings and listeners on the component tag in your template instead, for
+example `<c-CSelect :title="hint" :onValueChange="save">`.
+
 ## Accessibility and forms
 
 The visible Button uses the select-only combobox pattern and keeps DOM focus

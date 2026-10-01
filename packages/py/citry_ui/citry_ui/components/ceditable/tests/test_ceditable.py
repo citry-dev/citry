@@ -154,13 +154,34 @@ def test_invalid_server_inputs_fail(extra: str, message: str) -> None:
     [
         "c-attrs=\"{'role':'application'}\"",
         "c-input_attrs=\"{'type':'email'}\"",
-        "c-preview_attrs=\"{'x-show':'visible'}\"",
+        "c-preview_attrs=\"{'v-show':'visible'}\"",
         "c-input_attrs=\"{':aria-describedby':'ids'}\"",
+        "c-input_attrs=\"{'v-bind:aria-errormessage':'ids'}\"",
+        "c-attrs=\"{'v-bind:role':'kind'}\"",
+        "c-attrs=\"{'V-IF':'shown'}\"",
+        "c-attrs=\"{'v-for':'item in items'}\"",
+        "c-preview_attrs=\"{'v-html':'markup'}\"",
+        "c-preview_attrs=\"{'#default':''}\"",
+        "c-input_attrs=\"{'@input':'typed()'}\"",
+        "c-input_attrs=\"{'.value':'draft'}\"",
     ],
 )
 def test_owned_attrs_and_directives_are_rejected(extra: str) -> None:
     with pytest.raises(ValueError, match="cannot"):
         _render(f"<c-CEditable {extra} />")
+
+
+def test_python_attrs_reject_vue_directives_before_rendering() -> None:
+    # Each map names itself so the caller knows which input to fix.
+    message = "CEditable input_attrs cannot contain the Vue directive '@input'"
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _render("<c-CEditable c-input_attrs=\"{'@input':'typed()'}\" />")
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render("<c-CEditable c-attrs=\"{'x-data':'{}'}\" c-preview_attrs=\"{'x-show':'visible'}\" />")
+    assert 'x-data="{}"' in html
+    assert 'x-show="visible"' in html
 
 
 def test_strings_are_canonicalized_and_nul_is_rejected() -> None:

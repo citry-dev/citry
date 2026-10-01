@@ -17,7 +17,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
-    reject_html_attr_bindings,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._date import canonical_date
@@ -38,9 +38,6 @@ CDateInputSize = Literal["sm", "md", "lg"]
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-text"}
-)
 _OWNED_ATTRS = frozenset(
     {
         "aria-invalid",
@@ -79,31 +76,19 @@ def _positive_step(value: object) -> int:
     return cast("int", value)
 
 
-def _dynamic_target(key: str) -> str | None:
-    normalized = key.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"CDateInput attrs must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, _OWNED_ATTRS, "CDateInput")
-    reject_html_attr_bindings(copied, _OWNED_ATTRS, "CDateInput")
+    # A Vue directive could rebind the value or bounds, add listeners, or
+    # change the input's structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CDateInput")
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CDateInput attrs require string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CDateInput attrs cannot contain reserved runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"CDateInput attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(key) in _OWNED_ATTRS:
-            raise ValueError(f"CDateInput attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 
@@ -234,23 +219,23 @@ class CDateInput(LibraryComponent):
             "autocomplete": kwargs.autocomplete,
             "variant": kwargs.variant,
             "size": kwargs.size,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "aria_describedby": described_by,
             "aria_errormessage": error_message,
             "attrs": merge_root_attrs(caller_attrs, kwargs.class_, kwargs.style),
         }
         self._cui_date_input_data: dict[str, object] = {
-            "value": value,
-            "min": minimum,
-            "max": maximum,
-            "step": step,
-            "required": required,
-            "disabled": disabled,
-            "readonly": readonly,
-            "invalid": invalid,
+            "serverValue": value,
+            "serverMin": minimum,
+            "serverMax": maximum,
+            "serverStep": step,
+            "serverRequired": required,
+            "serverDisabled": disabled,
+            "serverReadonly": readonly,
+            "serverInvalid": invalid,
             "inheritsReadonly": field is None and kwargs.readonly is None,
-            "variant": kwargs.variant,
-            "size": kwargs.size,
+            "serverVariant": kwargs.variant,
+            "serverSize": kwargs.size,
             "describedby": external_described_by,
             "errormessage": external_error_message,
         }
@@ -282,11 +267,11 @@ class CDateInput(LibraryComponent):
         c-aria-invalid="'true' if invalid else None"
         c-aria-describedby="aria_describedby"
         c-aria-errormessage="aria_errormessage"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-empty="not value"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-empty="'' if not value else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-citry-field-control="field_control"
@@ -301,13 +286,19 @@ class CDateInput(LibraryComponent):
           value: {}, min: {}, max: {}, step: {}, required: {}, disabled: {}, readonly: {}, invalid: {},
           variant: {}, size: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const input = els[0];
+        inject: {
+          fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+          formService: {from: Symbol.for('citry-ui:form'), default: null},
+        },
+        onServerRender: ({component}) => {
+          const input = component.$el;
           if (!(input instanceof HTMLInputElement) || input.type !== 'date') {
             throw new Error('[citry-ui] CDateInput settled anatomy is invalid.');
           }
-          const field = inject(Symbol.for('citry-ui:field'), null);
-          const form = inject(Symbol.for('citry-ui:form'), null);
+          const data = component;
+          const props = component.$props;
+          const field = component.fieldService;
+          const form = component.formService;
           const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if (runtime?.generation !== 1) throw new Error('[citry-ui] CDateInput form-control runtime is unavailable.');
           const resolver = runtime.resolver(input, props, 'CDateInput');
@@ -315,12 +306,12 @@ class CDateInput(LibraryComponent):
           const mutations = runtime.mutations(input);
           const owned = mutations.owned;
           let controlled = false;
-          let current = data.value ?? '';
+          let current = data.serverValue ?? '';
           const initialValue = current;
           let nativeInvalid = false;
           let invalidGeneration = 0;
           let configuration = null;
-          let previousConstraints = { min: data.min, max: data.max, step: data.step };
+          let previousConstraints = { min: data.serverMin, max: data.serverMax, step: data.serverStep };
 
           const canonicalDate = value => {
             if (typeof value !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) return null;
@@ -342,9 +333,9 @@ class CDateInput(LibraryComponent):
             return previousConstraints[name];
           };
           const resolveConstraints = () => {
-            const minimum = optionalDate('min', data.min);
-            const maximum = optionalDate('max', data.max);
-            const requestedStep = props.step === undefined ? data.step : props.step;
+            const minimum = optionalDate('min', data.serverMin);
+            const maximum = optionalDate('max', data.serverMax);
+            const requestedStep = props.step === undefined ? data.serverStep : props.step;
             const step = Number.isInteger(requestedStep) && requestedStep > 0
               ? requestedStep : previousConstraints.step;
             if (step === requestedStep) resolver.clear('step'); else resolver.report('step', requestedStep);
@@ -357,12 +348,12 @@ class CDateInput(LibraryComponent):
             return previousConstraints;
           };
           const resolveConfiguration = () => ({
-            required: field ? field.required : resolver.boolean('required', data.required),
-            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(input),
-            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-            invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
-            variant: resolver.choice('variant', data.variant, ['outline', 'filled', 'plain']),
-            size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
+            required: field ? field.required : resolver.boolean('required', data.serverRequired),
+            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.serverDisabled) || runtime.fieldsetDisabled(input),
+            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.serverReadonly),
+            invalid: field ? field.invalid : resolver.boolean('invalid', data.serverInvalid),
+            variant: resolver.choice('variant', data.serverVariant, ['outline', 'filled', 'plain']),
+            size: resolver.choice('size', data.serverSize, ['sm', 'md', 'lg']),
             constraints: resolveConstraints(),
           });
           const reportFieldOwned = () => {
@@ -441,7 +432,7 @@ class CDateInput(LibraryComponent):
             const token = ++invalidGeneration;
             runtime.invalidFocus(input, input, () => token === invalidGeneration);
           }, true);
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             reportFieldOwned();
             configuration = resolveConfiguration();
             const requested = props.value;

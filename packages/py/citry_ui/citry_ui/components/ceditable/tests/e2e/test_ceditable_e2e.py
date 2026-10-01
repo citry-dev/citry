@@ -31,32 +31,30 @@ def _page() -> str:
         css = ".primary-editable, .outside-editable, .required-editable { inline-size: 20rem; }"
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8">
-          <title>Editable evidence</title><c-css /></head><body x-data>
+          <title>Editable evidence</title><c-css /></head><body>
             <form
               id="title-form"
-              @submit.prevent="$store.editable.submits = Array.from(new FormData($event.target).entries())"
+              @submit.prevent="state.submits = Array.from(new window.FormData($event.target).entries())"
             >
               <c-CEditable
                 class_="primary-editable"
                 value="Project Atlas"
                 name="title"
-                $c-props="{
-                  value:$store.editable.value,
-                  editing:$store.editable.editing,
-                  disabled:$store.editable.disabled,
-                  readonly:$store.editable.readonly,
-                  submitMode:$store.editable.submitMode,
-                  actionPosition:$store.editable.actionPosition,
-                  variant:$store.editable.variant,
-                  size:$store.editable.size,
-                  onValueChange:(next, detail) => {
-                    $store.editable.values.push([next, detail.previousValue, detail.source, detail.controlled]);
-                    if ($store.editable.acceptValue) $store.editable.value = next;
-                  },
-                  onEditChange:(next, detail) => {
-                    $store.editable.edits.push([next, detail.reason, detail.controlled, detail.forced]);
-                    if ($store.editable.acceptEdit) $store.editable.editing = next;
-                  },
+                :value="state.value"
+                :editing="state.editing"
+                :disabled="state.disabled"
+                :readonly="state.readonly"
+                :submitMode="state.submitMode"
+                :actionPosition="state.actionPosition"
+                :variant="state.variant"
+                :size="state.size"
+                :onValueChange="(next, detail) => {
+                  state.values.push([next, detail.previousValue, detail.source, detail.controlled]);
+                  if (state.acceptValue) state.value = next;
+                }"
+                :onEditChange="(next, detail) => {
+                  state.edits.push([next, detail.reason, detail.controlled, detail.forced]);
+                  if (state.acceptEdit) state.editing = next;
                 }"
               />
               <button id="submit" type="submit">Submit</button>
@@ -77,11 +75,11 @@ def _page() -> str:
           </body></html>
         """
         js = """
-          Alpine.store('editable', {
+          $component({data(){const state=Citry.vue.reactive({
             value:'Project Atlas', editing:undefined, disabled:false, readonly:false,
             submitMode:'both', actionPosition:'inside', variant:'outline', size:'md',
             acceptValue:false, acceptEdit:false, values:[], edits:[], submits:[],
-          });
+          });window.__editable=state;return {state};}});
         """
 
     return str(Page())
@@ -112,14 +110,14 @@ def test_default_inside_edit_submit_cancel_and_controlled_value(page: Any) -> No
     root.get_by_role("button", name="Save").click()
     assert root.get_attribute("data-editing") is None
     assert root.locator('[data-citry-ui-part="preview-value"]').text_content() == "Project Atlas"
-    assert page.evaluate("Alpine.store('editable').values.at(-1)") == [
+    assert page.evaluate("window.__editable.values.at(-1)") == [
         "Project Aurora",
         "Project Atlas",
         "submit",
         True,
     ]
 
-    page.evaluate("Alpine.store('editable').acceptValue = true")
+    page.evaluate("window.__editable.acceptValue = true")
     edit.click()
     input_.fill("Project Aurora")
     input_.press("Enter")
@@ -138,35 +136,35 @@ def test_controlled_edit_reject_accept_release_and_blur(page: Any) -> None:
     errors = _load(page)
     root = _editable(page)
     edit = root.get_by_role("button", name="Edit")
-    page.evaluate("Alpine.store('editable').editing = false")
+    page.evaluate("window.__editable.editing = false")
     edit.click()
     assert root.get_attribute("data-editing") is None
-    assert page.evaluate("Alpine.store('editable').edits.at(-1).slice(0,3)") == [True, "edit", True]
+    assert page.evaluate("window.__editable.edits.at(-1).slice(0,3)") == [True, "edit", True]
 
-    page.evaluate("Alpine.store('editable').acceptEdit = true")
+    page.evaluate("window.__editable.acceptEdit = true")
     edit.click()
     page.wait_for_function("document.querySelector('.primary-editable').hasAttribute('data-editing')")
-    page.evaluate("Alpine.store('editable').editing = null")
-    page.evaluate("Alpine.store('editable').value = undefined")
+    page.evaluate("window.__editable.editing = null")
+    page.evaluate("window.__editable.value = undefined")
     page.wait_for_function("document.querySelector('.primary-editable').hasAttribute('data-editing')")
     input_ = root.get_by_role("textbox")
     input_.fill("Blur committed")
     page.locator("#after").focus()
     page.wait_for_function("!document.querySelector('.primary-editable').hasAttribute('data-editing')")
     assert root.locator('[data-citry-ui-part="preview-value"]').text_content() == "Blur committed"
-    assert page.evaluate("Alpine.store('editable').values.at(-1)[2]") == "blur"
+    assert page.evaluate("window.__editable.values.at(-1)[2]") == "blur"
     assert errors == []
 
 
 def test_native_form_reset_required_invalid_fieldset_and_outside_geometry(page: Any) -> None:
     errors = _load(page)
     root = _editable(page)
-    page.evaluate("Alpine.store('editable').value = undefined")
+    page.evaluate("window.__editable.value = undefined")
     root.get_by_role("button", name="Edit").click()
     root.get_by_role("textbox").fill("Submitted title")
     root.get_by_role("button", name="Save").click()
     page.locator("#submit").click()
-    assert page.evaluate("Alpine.store('editable').submits") == [["title", "Submitted title"]]
+    assert page.evaluate("window.__editable.submits") == [["title", "Submitted title"]]
     page.locator("#reset").click()
     page.wait_for_function(
         "document.querySelector('.primary-editable "

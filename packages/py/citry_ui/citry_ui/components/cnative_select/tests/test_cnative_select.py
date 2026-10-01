@@ -3,12 +3,15 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import fields
+from html.parser import HTMLParser
 
 import pytest
 from markupsafe import Markup
 
 import citry_ui
 from citry import Citry, Component
+from citry._vue.capture import render_prepared_direct
+from citry._vue.direct_capture import assemble_typed_render
 from citry_ui import (
     CField,
     CForm,
@@ -38,6 +41,58 @@ def _root(html: str) -> str:
     return match.group(0)
 
 
+def _vue_option_keys(value: CNativeSelect) -> tuple[str, tuple[str, ...]]:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class Page(Component):
+        citry = app
+        template = "<main>{{ value }}</main>"
+
+        def template_data(self, kwargs, slots):
+            return {"value": value}
+
+    assembly = assemble_typed_render(
+        render_prepared_direct(Page()),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    occurrence = next(item for item in assembly.view.occurrences if item.type_key.startswith("CNativeSelect_"))
+    definition = assembly.compile_inputs[occurrence.definition_id]
+    key_binding_keys = [
+        binding["keyBindingKey"] for binding in definition.element_bindings if binding["keyBindingKey"] is not None
+    ]
+    keys = tuple(occurrence.prepared_data[key] for key in key_binding_keys)
+    return definition.template, keys
+
+
+class _OptionParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.options: list[tuple[dict[str, str | None], str]] = []
+        self._current: tuple[dict[str, str | None], list[str]] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "option":
+            self._current = (dict(attrs), [])
+
+    def handle_data(self, data: str) -> None:
+        if self._current is not None:
+            self._current[1].append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "option" and self._current is not None:
+            attrs, text = self._current
+            self.options.append((attrs, "".join(text).strip()))
+            self._current = None
+
+
+def _options(html: str) -> list[tuple[dict[str, str | None], str]]:
+    parser = _OptionParser()
+    parser.feed(html)
+    return parser.options
+
+
 def test_native_select_schema_and_public_records_are_exact():
     assert [field.name for field in fields(CNativeSelect.Kwargs)] == [
         "options",
@@ -61,20 +116,19 @@ def test_native_select_schema_and_public_records_are_exact():
 
 
 def test_native_select_renders_one_native_root_with_ordered_options_and_groups():
-    html = _render(
-        CNativeSelect(
-            name="habitat",
-            options=[
-                CNativeSelectOption("reef", "Coral reef"),
-                CNativeSelectGroup(
-                    "Open ocean",
-                    [CNativeSelectOption("pelagic", "Pelagic"), CNativeSelectOption("abyss", "Abyss")],
-                ),
-            ],
-            placeholder="Choose a habitat",
-            required=True,
-        )
+    value = CNativeSelect(
+        name="habitat",
+        options=[
+            CNativeSelectOption("reef", "Coral reef"),
+            CNativeSelectGroup(
+                "Open ocean",
+                [CNativeSelectOption("pelagic", "Pelagic"), CNativeSelectOption("abyss", "Abyss")],
+            ),
+        ],
+        placeholder="Choose a habitat",
+        required=True,
     )
+    html = _render(value)
     root = _root(html)
 
     assert html.count("<select") == 1
@@ -83,7 +137,14 @@ def test_native_select_renders_one_native_root_with_ordered_options_and_groups()
     assert " required" in root
     assert html.index("Choose a habitat") < html.index("Coral reef") < html.index("Open ocean") < html.index("Pelagic")
     assert '<optgroup label="Open ocean">' in html
-    assert 'data-citry-key=":native-select-option-' in html
+    definition, keys = _vue_option_keys(value)
+    assert definition.count(':key="$citryPrepared.') == 4
+    assert len(keys) == 4
+    assert len(set(keys)) == len(keys)
+    assert "native-select-placeholder" in keys
+    option_keys = [key for key in keys if key.startswith("native-select-option-")]
+    assert len(option_keys) == 3
+    assert len(set(option_keys)) == 3
 
 
 @pytest.mark.parametrize("value", [None, ""])
@@ -96,8 +157,12 @@ def test_placeholder_is_the_only_empty_option_and_is_selected_for_empty_server_v
         )
     )
 
-    assert re.search(r"<option value selected[^>]*>Choose</option>", html) is not None
-    assert html.count("<option value ") == 1
+    empty_value_options = [
+        (attrs, label) for attrs, label in _options(html) if "value" in attrs and attrs["value"] == ""
+    ]
+    assert len(empty_value_options) == 1
+    assert empty_value_options[0][1] == "Choose"
+    assert "selected" in empty_value_options[0][0]
     assert " data-empty" in _root(html)
 
 
@@ -203,35 +268,46 @@ def test_direct_text_inputs_are_de_trusted_and_non_string_html_protocol_is_rejec
     ("attrs", "message"),
     [
         ({"readonly": True}, "owned attribute"),
-        ({":multiple": "many"}, "dynamically bind owned"),
-        ({"X-BIND:VALUE": "chosen"}, "dynamically bind owned"),
-        ({".required": True}, "dynamically bind owned"),
-        ({":form": "owner"}, "dynamically bind owned"),
-        ({"X-BIND:FORM": "owner"}, "dynamically bind owned"),
-        ({".form": "owner"}, "dynamically bind owned"),
-        ({"x-bind": {"value": "reef"}}, "ownership directive"),
-        ({"x-model": "reef"}, "ownership directive"),
-        ({"x-html": "options"}, "ownership directive"),
         ({"data-citry-root": "x"}, "reserved Citry runtime"),
+        ({":multiple": "many"}, "CNativeSelect attrs cannot contain the Vue directive ':multiple'"),
+        ({"V-BIND:VALUE": "chosen"}, "CNativeSelect attrs cannot contain the Vue directive 'V-BIND:VALUE'"),
+        ({".required": True}, "CNativeSelect attrs cannot contain the Vue directive '.required'"),
+        ({":form": "owner"}, "CNativeSelect attrs cannot contain the Vue directive ':form'"),
+        ({"v-bind": {"value": "reef"}}, "CNativeSelect attrs cannot contain the Vue directive 'v-bind'"),
+        ({"v-model": "reef"}, "CNativeSelect attrs cannot contain the Vue directive 'v-model'"),
+        ({"v-html": "options"}, "CNativeSelect attrs cannot contain the Vue directive 'v-html'"),
+        ({"V-IF": "ready"}, "CNativeSelect attrs cannot contain the Vue directive 'V-IF'"),
+        ({"@change": "changed = true"}, "CNativeSelect attrs cannot contain the Vue directive '@change'"),
+        ({"#default": "slotProps"}, "CNativeSelect attrs cannot contain the Vue directive '#default'"),
     ],
 )
 def test_root_attrs_reject_second_ownership_paths(attrs, message):
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match=re.escape(message)):
         _render(CNativeSelect(options=[], attrs=attrs))
 
 
-def test_native_event_and_unrelated_alpine_attrs_remain_allowed():
+def test_option_and_group_attrs_reject_vue_directives():
+    option = CNativeSelectOption("reef", "Reef", attrs={"v-if": "shown"})
+    with pytest.raises(ValueError, match="CNativeSelect option attrs cannot contain the Vue directive 'v-if'"):
+        _render(CNativeSelect(options=[option]))
+
+    group = CNativeSelectGroup("Pacific", [CNativeSelectOption("reef", "Reef")], attrs={":label": "name"})
+    with pytest.raises(ValueError, match="CNativeSelect group attrs cannot contain the Vue directive ':label'"):
+        _render(CNativeSelect(options=[group]))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
     root = _root(
         _render(
             CNativeSelect(
                 options=[CNativeSelectOption("reef", "Reef")],
-                attrs={"@change": "changed = true", ":title": "hint"},
+                attrs={"x-data": "{}", "title": "hint"},
             )
         )
     )
 
-    assert '@change="changed = true"' in root
-    assert ':title="hint"' in root
+    assert 'x-data="{}"' in root
+    assert 'title="hint"' in root
 
 
 def test_option_and_group_attrs_are_copied_validated_and_rendered():

@@ -14,7 +14,7 @@ class SkeletonMotion(Component):
     template = """
       <div class="skeleton-motion" aria-label="Loading archive shelves" aria-busy="true">
         <c-for each="motion in motions">
-          <div><span>{{ motion }}</span><c-CSkeleton c-animation="motion" height="2.5rem" /></div>
+          <div><span>{{ motion }}</span><c-CSkeleton #c-key="motion" c-animation="motion" height="2.5rem" /></div>
         </c-for>
       </div>
     """

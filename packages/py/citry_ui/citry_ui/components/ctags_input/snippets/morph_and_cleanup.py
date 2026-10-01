@@ -29,11 +29,6 @@ class TagsInputMorphAndCleanup(Component):
     template = """
       <section
         class="tags-input-morph"
-        x-data="{
-          controlled:false,
-          tags:['owner-one'],
-          mounted:true,
-        }"
       >
         <div class="tags-input-morph__controls">
           <button type="button" @c-click="refresh">
@@ -52,7 +47,7 @@ class TagsInputMorphAndCleanup(Component):
 
         <p>Server step: <output>{{ step }}</output></p>
 
-        <template x-if="mounted">
+        <template v-if="mounted">
           <div>
             <c-CTagsInput
               #c-key="'tags-input-morph-target'"
@@ -60,12 +55,9 @@ class TagsInputMorphAndCleanup(Component):
               c-value="baseline"
               input_value="unfinished"
               c-input_attrs="{'aria-label':'Morph labels'}"
-              $c-props="{
-                value:controlled ? tags : null,
-                onValueChange:(next)=>{
+              :value="controlled ? tags : null" :onValueChange="(next)=>{
                   if (controlled) tags=next;
-                },
-              }"
+                }"
             />
           </div>
         </template>
@@ -76,6 +68,17 @@ class TagsInputMorphAndCleanup(Component):
           composition keeps the exact editor node through either morph.
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            controlled:false,
+            tags:['owner-one'],
+            mounted:true,
+          };
+        },
+      });
     """
 
     css = """

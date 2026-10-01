@@ -8,7 +8,6 @@ class TagsInputKeyboardAndFocus(Component):
     template = """
       <section
         class="tags-input-keyboard"
-        x-data="{last:'Focus an editor to begin'}"
       >
         <article>
           <h3>Left-to-right navigation</h3>
@@ -19,14 +18,10 @@ class TagsInputKeyboardAndFocus(Component):
           </p>
           <c-CTagsInput
             c-value="['alpine', 'forest', 'harbor']"
-            c-input_attrs="{
-              'aria-label':'Keyboard labels',
-              '@focus':'last=`LTR editor focused`',
-            }"
-            $c-props="{
-              onValueChange:(next,detail)=>
-                last=`${detail.source}: ${JSON.stringify(next)}`,
-            }"
+            c-input_attrs="{'aria-label':'Keyboard labels'}"
+            @focusin="last='LTR editor focused'"
+            :onValueChange="(next,detail)=>
+                last=`${detail.source}: ${JSON.stringify(next)}`"
           />
         </article>
 
@@ -35,17 +30,24 @@ class TagsInputKeyboardAndFocus(Component):
           <p>Physical arrows follow the visual row while value order stays stable.</p>
           <c-CTagsInput
             c-value="['جبال', 'غابة', 'ميناء']"
-            c-input_attrs="{
-              'aria-label':'وسوم لوحة المفاتيح',
-              '@focus':'last=`RTL editor focused`',
-            }"
+            c-input_attrs="{'aria-label':'وسوم لوحة المفاتيح'}"
+            @focusin="last='RTL editor focused'"
           />
         </article>
 
-        <output aria-live="polite" x-text="last">
+        <output aria-live="polite" v-text="last">
           Focus an editor to begin
         </output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            last:'Focus an editor to begin'
+          };
+        },
+      });
     """
 
     css = """

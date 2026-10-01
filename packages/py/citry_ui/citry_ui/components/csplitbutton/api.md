@@ -102,9 +102,8 @@ closes cannot be refused.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/csplitbutton/snippets/controlled_menu.py" title="Control Split Button Menu visibility" />
 
-Primary native events remain distinct from Menu callbacks. Pass `@click`
-through `primary_attrs`, and use `onAction` for valued Menu commands and
-choices.
+Primary native events remain distinct from Menu callbacks. Use `onAction` for
+valued Menu commands and choices.
 
 ## Choose presentation and placement
 
@@ -188,12 +187,14 @@ owner, one horizontal anatomy, and no imperative methods or custom DOM events.
 `attrs`, `primary_attrs`, `trigger_attrs`, and `menu_attrs` are copied and
 validated for their documented roots. They accept ordinary styling, language,
 permitted ARIA, and `data-*` except `data-citry-*`, `data-cev*`, `data-cid*`,
-and owned reflections. `@event` and `x-on:event` Alpine listeners are allowed;
-raw `on*` browser-expression attributes are rejected. The primary also accepts
-the documented native Form attributes, but URL-like action destinations remain
-consumer-owned and are not sanitized or trusted by Citry. Component-owned
-identity, semantics, state, focus order, popover targeting, Citry runtime
-fields, and structural Alpine ownership are rejected.
+and owned reflections. They reject inline `on*` handlers and any Vue directive
+syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Put listeners on
+the `<c-CSplitButton>` tag instead: a click on either button bubbles to the
+root, so check `event.target.closest('[data-citry-ui-part="split-button-primary"]')`
+when only the primary action matters. The primary also accepts the documented
+native Form attributes, but URL-like action destinations remain consumer-owned
+and are not sanitized or trusted by Citry. Component-owned identity, semantics,
+state, focus order, popover targeting, and Citry runtime fields are rejected.
 
 Primary content accepts text and decorative noninteractive content. The final
 Button needs a nonempty accessible name from visible text, `aria-label`, or

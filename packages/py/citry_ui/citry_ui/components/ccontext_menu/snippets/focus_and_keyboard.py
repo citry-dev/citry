@@ -8,7 +8,7 @@ class ContextMenuFocusAndKeyboard(Component):
     template = """
       <section
         class="context-menu-focus"
-        x-data="{disableInvoker:false,last:'No close yet'}"
+
       >
         <p>
           Focus the row or nested Button, then press the Context Menu key or
@@ -16,14 +16,12 @@ class ContextMenuFocusAndKeyboard(Component):
         </p>
         <c-CContextMenu
           aria_label="Focusable row actions"
-          $c-props="{
+          v-bind="{
             onOpenChange:(next,detail)=>last=
               `${next ? 'opened' : 'closed'} by ${detail.reason}`,
             onAction:(value)=>{
               if (value === 'disable-invoker') disableInvoker=true;
-              if (value === 'remove-invoker') {
-                document.querySelector('[data-context-menu-return-target]')?.remove();
-              }
+              if (value === 'remove-invoker') invokerRemoved=true;
             },
           }"
         >
@@ -37,12 +35,14 @@ class ContextMenuFocusAndKeyboard(Component):
                 <strong>Focusable report row</strong>
                 <small>The row is the stable fallback target.</small>
               </span>
-              <c-CButton
-                size="sm"
-                variant="outline"
-                c-attrs="{'data-context-menu-return-target':''}"
-                $c-props="{disabled:disableInvoker}"
-              >Nested action</c-CButton>
+              <template v-if="!invokerRemoved">
+                <c-CButton
+                  size="sm"
+                  variant="outline"
+                  c-attrs="{'data-context-menu-return-target':''}"
+                  v-bind="{disabled:disableInvoker}"
+                >Nested action</c-CButton>
+              </template>
               <a href="#focus-linked-record">Linked record</a>
             </div>
           </c-fill>
@@ -59,7 +59,10 @@ class ContextMenuFocusAndKeyboard(Component):
         </c-CContextMenu>
 
         <div class="context-menu-focus__fallbacks">
-          <button type="button" @click="location.reload()">Reload nested Button</button>
+          <button
+            type="button"
+            @click="invokerRemoved=false; disableInvoker=false"
+          >Restore nested Button</button>
           <button type="button" disabled>Disabled fallback</button>
           <span tabindex="-1">Programmatic fallback</span>
         </div>
@@ -77,7 +80,7 @@ class ContextMenuFocusAndKeyboard(Component):
             </p>
             <c-CContextMenu
               aria_label="Modal row actions"
-              $c-props="{
+              v-bind="{
                 onOpenChange:(next,detail)=>last=
                   `modal ${next ? 'opened' : 'closed'} by ${detail.reason}`,
               }"
@@ -95,9 +98,13 @@ class ContextMenuFocusAndKeyboard(Component):
             </c-CContextMenu>
           </c-fill>
         </c-CDialog>
-        <output aria-live="polite" x-text="last">No close yet</output>
+        <output aria-live="polite" v-text="last">No close yet</output>
         <span id="focus-linked-record">Linked destination</span>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {disableInvoker:false,invokerRemoved:false,last:'No close yet'};}});
     """
 
     css = """

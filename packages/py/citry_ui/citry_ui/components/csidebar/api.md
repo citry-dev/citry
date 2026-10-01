@@ -41,7 +41,8 @@ and rejects `collapsed=True`.
 
 ## Control collapse state
 
-Supply `collapsed` through `$c-props` to control it. The callback is a request;
+Bind `collapsed` with native Vue syntax, such as `:collapsed="collapsed"`, to
+control it. Bind `onCollapsedChange` as a Vue prop callback. The callback is a request;
 keep or change your value to reject or accept it.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/csidebar/snippets/controlled.py" title="Control Sidebar collapse" />
@@ -59,6 +60,12 @@ preview iframe cannot enter a self-expanding height loop.
 ## Customize Sidebar
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/csidebar/snippets/customization.py" title="Customize Sidebar" />
+
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes the component sets itself (such as `role`, `aria-label`, and
+`data-collapsed`) and any Vue directive syntax: names starting with `v-`, `:`,
+`.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component tag in your
+template instead, for example `<c-CSidebar :title="hint">`.
 
 ## Persistent Sidebar or mobile Drawer?
 

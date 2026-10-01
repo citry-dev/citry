@@ -27,7 +27,7 @@ class IconCatalog(Component):
             <ul>
               <c-for each="name in group.names">
                 <li>
-                  <c-CIcon c-name="name" size="lg" />
+                  <c-CIcon #c-key="f'{group.title}-{name}'" c-name="name" size="lg" />
                   <code>{{ name }}</code>
                 </li>
               </c-for>

@@ -8,7 +8,7 @@ class SplitButtonMenuComposition(Component):
     template = """
       <section
         class="split-button-menu-composition"
-        x-data="{publicRecord:true, format:'tiff', last:'No Menu action yet'}"
+
         dir="rtl"
       >
         <h2>Specimen publication</h2>
@@ -16,7 +16,7 @@ class SplitButtonMenuComposition(Component):
           label="Specimen publication actions"
           menu_label="More specimen publication actions"
           c-close_on_select="False"
-          $c-props="{onAction:(value, detail)=>last=`${detail.path.join(' / ') || 'root'}: ${value}`}"
+          v-bind="{onAction:(value, detail)=>last=`${detail.path.join(' / ') || 'root'}: ${value}`}"
         >
           <c-fill name="default">Publish specimen</c-fill>
           <c-fill name="menu">
@@ -24,7 +24,7 @@ class SplitButtonMenuComposition(Component):
             <c-CMenuItem href="#specimen-public-record">Open public record</c-CMenuItem>
             <c-CMenuCheckboxItem
               value="public-record"
-              $c-props="{
+              v-bind="{
                 checked: publicRecord,
                 onCheckedChange: (next) => publicRecord = next,
               }"
@@ -33,7 +33,7 @@ class SplitButtonMenuComposition(Component):
             </c-CMenuCheckboxItem>
             <c-CMenuRadioGroup
               value="tiff"
-              $c-props="{
+              v-bind="{
                 value: format,
                 onValueChange: (next) => format = next,
               }"
@@ -60,9 +60,13 @@ class SplitButtonMenuComposition(Component):
             <c-CMenuItem value="withdraw" intent="danger">Withdraw record</c-CMenuItem>
           </c-fill>
         </c-CSplitButton>
-        <output aria-live="polite" x-text="last">No Menu action yet</output>
+        <output aria-live="polite" v-text="last">No Menu action yet</output>
         <p id="specimen-public-record">The linked public record remains native navigation.</p>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {publicRecord:true, format:'tiff', last:'No Menu action yet'};}});
     """
 
     css = """

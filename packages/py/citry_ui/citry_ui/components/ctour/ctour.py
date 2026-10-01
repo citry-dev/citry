@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
@@ -42,9 +42,6 @@ _MISSING_TARGET = ("skip", "close")
 _SIZES = ("sm", "md", "lg")
 _TOUR_CONTEXT = "citry_ui_tour"
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -148,6 +145,28 @@ class _TourRegistry:
     steps: list[_TourDeclaration] = field(default_factory=list)
 
 
+class _TourRow(TypedDict):
+    """One declared step with its ids, progress text, and slot wrappers, as CInternalTourStep renders it."""
+
+    declaration: _TourDeclaration
+    index: int
+    total: int
+    title_id: str
+    description_id: str
+    active: bool
+    progress: str
+    progress_current: str
+    progress_total: str
+    progress_values: str
+    step_positions: list[int]
+    # Each wrapper Slot ignores the data it is rendered with and passes the
+    # step's own slot data to the authored slot, so it accepts any data.
+    title: Slot[object]
+    content: Slot[object]
+    media: Slot[object] | None
+    morph_key: str
+
+
 def _plain(name: str, value: object, *, optional: bool = False) -> str | None:
     raw = const_value(value)
     if raw is None and optional:
@@ -168,14 +187,6 @@ def _choice(name: str, value: object, allowed: tuple[str, ...]) -> str:
     return cast("str", plain)
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     attrs: Mapping[str, object] | None,
@@ -187,14 +198,13 @@ def _attrs(
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, owner)
     for key in copied:
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} attrs cannot dynamically bind owned attribute {key!r}.")
     return merge_root_attrs(copied, class_, style)
 
 
@@ -334,20 +344,23 @@ class CTour(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "open": snapshot["open"],
-            "active": snapshot["active"],
-            "dismissible": snapshot["dismissible"],
-            "closeOnEscape": snapshot["close_on_escape"],
-            "closeOnOutside": snapshot["close_on_outside"],
-            "skippable": snapshot["skippable"],
-            "scroll": snapshot["scroll"],
-            "missingTarget": snapshot["missing_target"],
-            "size": snapshot["size"],
+            "serverDefaults": {
+                "open": snapshot["open"],
+                "active": snapshot["active"],
+                "dismissible": snapshot["dismissible"],
+                "closeOnEscape": snapshot["close_on_escape"],
+                "closeOnOutside": snapshot["close_on_outside"],
+                "skippable": snapshot["skippable"],
+                "scroll": snapshot["scroll"],
+                "missingTarget": snapshot["missing_target"],
+                "size": snapshot["size"],
+            }
         }
 
     template = """
       <c-CInternalTourDeclarations><c-slot required /></c-CInternalTourDeclarations>
       <c-CInternalTour
+        ref="root"
         c-root_id="root_id"
         c-dialog_id="dialog_id"
         c-open="open"
@@ -453,7 +466,8 @@ class CInternalTourDeclarations(LibraryComponent):
 
 
 class CInternalTour(LibraryComponent):
-    transparent = True
+    # The outer runtime uses this component as its stable DOM ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -481,7 +495,7 @@ class CInternalTour(LibraryComponent):
         if kwargs.active >= len(kwargs.registry.steps):
             raise ValueError(f"CTour active {kwargs.active} is outside its {len(kwargs.registry.steps)} Steps.")
         self.unprovide(_TOUR_CONTEXT)
-        items = []
+        items: list[_TourRow] = []
         total = len(kwargs.registry.steps)
         for index, declaration in enumerate(kwargs.registry.steps):
             slot_data: CTourStepSlotData = {"index": index, "total": total, "value": declaration.value}
@@ -546,7 +560,7 @@ class CInternalTour(LibraryComponent):
         class="cui-tour"
         c-id="root_id"
         c-bind="attrs"
-        c-data-open="open"
+        c-data-open="'' if open else None"
         c-data-active="active"
         c-data-value="active_value"
         c-data-size="size"
@@ -561,7 +575,7 @@ class CInternalTour(LibraryComponent):
           c-aria-labelledby="active_title_id"
           c-aria-describedby="active_description_id"
           aria-modal="false"
-          c-data-open="open"
+          c-data-open="'' if open else None"
           data-citry-tour-dialog
           data-citry-ui-part="dialog"
         >
@@ -580,6 +594,7 @@ class CInternalTour(LibraryComponent):
             </button>
             <c-for each="item in items">
               <c-CInternalTourStep
+                #c-key="item['declaration'].value"
                 c-item="item"
                 c-skippable="skippable"
                 c-labels="labels"
@@ -597,7 +612,7 @@ class CInternalTourStep(LibraryComponent):
 
     @dataclass(slots=True)
     class Kwargs:
-        item: dict[str, object]
+        item: _TourRow
         skippable: bool
         labels: dict[str, str]
         catalog: dict[str, bool]
@@ -608,9 +623,9 @@ class CInternalTourStep(LibraryComponent):
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item
-        declaration = cast("_TourDeclaration", item["declaration"])
-        index = cast("int", item["index"])
-        total = cast("int", item["total"])
+        declaration = item["declaration"]
+        index = item["index"]
+        total = item["total"]
         return {
             **item,
             "attrs": {
@@ -620,7 +635,7 @@ class CInternalTourStep(LibraryComponent):
                 "data-target-id": declaration.target_id,
                 "data-placement": declaration.placement,
                 "data-describe": "true" if declaration.describe else "false",
-                "data-current": bool(item["active"]),
+                "data-current": "" if item["active"] else None,
             },
             "target_id": declaration.target_id,
             "placement": declaration.placement,
@@ -661,7 +676,7 @@ class CInternalTourStep(LibraryComponent):
             <c-else><span aria-live="polite" data-citry-ui-part="progress">{{ progress }}</span></c-else>
             <span aria-hidden="true" data-citry-ui-part="steps">
               <c-for each="step_position in step_positions">
-                <span c-data-current="step_position == index" data-citry-ui-part="step-dot"></span>
+                <span c-data-current="'' if step_position == index else None" data-citry-ui-part="step-dot"></span>
               </c-for>
             </span>
           </div>

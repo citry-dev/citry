@@ -13,7 +13,7 @@ from citry import Citry, Component
 from citry_ui import CCascader, CCascaderOption
 
 
-def _render(source: str) -> str:
+def _render(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -21,7 +21,8 @@ def _render(source: str) -> str:
         citry = app
         template = f"<main>{source}</main>"
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 _OPTIONS = """
@@ -53,9 +54,8 @@ def test_schemas_registration_path_labels_and_native_inputs() -> None:
     ]
     assert CCascader in citry_ui.COMPONENTS
     assert CCascaderOption in citry_ui.COMPONENTS
-    html = _render(
-        f'<p id="place-label">Destination</p><c-CCascader aria_labelledby="place-label" name="place" form="profile" c-value="[\'world\',\'europe\',\'prague\']">{_OPTIONS}</c-CCascader>'
-    )
+    source = f'<p id="place-label">Destination</p><c-CCascader aria_labelledby="place-label" name="place" form="profile" c-value="[\'world\',\'europe\',\'prague\']">{_OPTIONS}</c-CCascader>'
+    html = _render(source, static_fallback=True)
     assert "World / Europe / Prague" in html
     assert len(re.findall(r'<input[^>]+name="place"', html)) == 3
     assert 'value="world"' in html
@@ -71,12 +71,12 @@ def test_schemas_registration_path_labels_and_native_inputs() -> None:
 
 
 def test_empty_hierarchy_and_unselected_server_focus_are_useful_without_client_runtime() -> None:
-    empty = _render('<c-CCascader aria_label="Empty taxonomy" />')
+    empty = _render('<c-CCascader aria_label="Empty taxonomy" />', static_fallback=True)
     assert "No options" in empty
     assert 'aria-label="Empty taxonomy"' in empty
     assert re.search(r'<ul[^>]+hidden[^>]+data-citry-ui-part="tree"', empty)
 
-    options = _render(f"<c-CCascader>{_OPTIONS}</c-CCascader>")
+    options = _render(f"<c-CCascader>{_OPTIONS}</c-CCascader>", static_fallback=True)
     world = re.search(r'<li[^>]+data-value="world"[^>]*>', options)
     assert world is not None
     assert 'tabindex="0"' in world.group(0)
@@ -110,6 +110,40 @@ def test_parent_selection_policy_and_explicit_messages() -> None:
 def test_invalid_composition_and_values_fail(source: str, match: str) -> None:
     with pytest.raises((TypeError, ValueError), match=match):
         _render(source)
+
+
+@pytest.mark.parametrize(
+    ("owner", "attribute", "message"),
+    [
+        ("CCascader", "role", "cannot override owned attribute"),
+        ("CCascader", "data-citry-morph", "Citry runtime attribute"),
+        ("CCascader", ":aria-label", "CCascader attrs cannot contain the Vue directive"),
+        ("CCascader", "v-if", "Vue directive"),
+        ("CCascader", "V-IF", "Vue directive"),
+        ("CCascader", "@click", "Vue directive"),
+        ("CCascaderOption", "aria-selected", "cannot override owned attribute"),
+        ("CCascaderOption", "v-bind:aria-selected", "CCascaderOption attrs cannot contain the Vue directive"),
+        ("CCascaderOption", "v-for", "Vue directive"),
+        ("CCascaderOption", "#default", "Vue directive"),
+    ],
+)
+def test_attrs_reject_owned_runtime_and_vue_directive_names(owner: str, attribute: str, message: str) -> None:
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    root_attrs, option_attrs = (attrs, "") if owner == "CCascader" else ("", attrs)
+    source = f'<c-CCascader aria_label="Places" {root_attrs}><c-CCascaderOption value="x" label="X" {option_attrs} /></c-CCascader>'
+    with pytest.raises(ValueError, match=message):
+        _render(source)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    source = (
+        "<c-CCascader aria_label=\"Places\" c-attrs=\"{'x-if': 'root'}\">"
+        '<c-CCascaderOption value="x" label="X" c-attrs="{\'x-show\': \'option\'}" />'
+        "</c-CCascader>"
+    )
+    html = _render(source, static_fallback=True)
+    assert 'x-if="root"' in html
+    assert 'x-show="option"' in html
 
 
 def test_assets_docs_and_translations_cover_contract() -> None:

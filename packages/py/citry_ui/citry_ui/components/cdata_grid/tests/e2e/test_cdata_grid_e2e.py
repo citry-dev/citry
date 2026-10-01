@@ -23,7 +23,7 @@ def _root() -> Path:
     raise RuntimeError("Could not locate repository root for Data Grid browser tests.")
 
 
-def _page() -> str:
+def _page() -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -32,7 +32,7 @@ def _page() -> str:
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8">
           <title>Data Grid evidence</title><c-css /></head>
-          <body x-data>
+          <body>
             <c-CDataGrid
               id="grid"
               c-columns="columns"
@@ -40,19 +40,17 @@ def _page() -> str:
               label="Project members"
               selection="multiple"
               c-selected="['grace']"
-              $c-props="{
-                sort:$store.grid.sort,
-                selected:$store.grid.selected,
-                onSortChange:(next,detail)=>{
-                  $store.grid.sortEvents.push({next:[...next],direction:detail.direction});
-                  if($store.grid.acceptSort)$store.grid.sort=[...next];
-                },
-                onSelectionChange:(next,detail)=>{
-                  $store.grid.selectionEvents.push({next:[...next],controlled:detail.controlled});
-                  if($store.grid.acceptSelection)$store.grid.selected=[...next];
-                },
-                onCellActivate:(detail)=>$store.grid.activations.push({row:detail.rowKey,column:detail.columnKey}),
-              }"
+              :sort="state.grid.sort"
+              :selected="state.grid.selected"
+              :onSortChange="(next,detail)=>{
+                  state.grid.sortEvents.push({next:[...next],direction:detail.direction});
+                  if(state.grid.acceptSort)state.grid.sort=[...next];
+                }"
+              :onSelectionChange="(next,detail)=>{
+                  state.grid.selectionEvents.push({next:[...next],controlled:detail.controlled});
+                  if(state.grid.acceptSelection)state.grid.selected=[...next];
+                }"
+              :onCellActivate="(detail)=>state.grid.activations.push({row:detail.rowKey,column:detail.columnKey})"
             />
             <c-CDataGrid
               id="windowed"
@@ -64,37 +62,35 @@ def _page() -> str:
               c-row_height="40"
               c-viewport_size="200"
               c-initial_index="20"
-              $c-props="{onRangeChange:(detail)=>$store.grid.ranges.push({
+              :onRangeChange="(detail)=>state.grid.ranges.push({
                 startIndex:detail.startIndex,
                 endIndex:detail.endIndex,
                 visibleStartIndex:detail.visibleStartIndex,
                 visibleEndIndex:detail.visibleEndIndex,
                 requestId:detail.requestId,
                 reason:detail.reason,
-              })}"
+              })"
             />
             <c-CDataGrid
               id="editable"
               c-columns="editable_columns"
               c-rows="editable_rows"
               label="Editable members"
-              $c-props="{
-                onCellEditStart:(detail)=>$store.grid.editStarts.push([detail.rowKey,detail.columnKey]),
-                onCellEditCommit:(value,detail)=>{
-                  $store.grid.editCommits.push([value,detail.rowKey,detail.columnKey,detail.reason]);
+              :onCellEditStart="(detail)=>state.grid.editStarts.push([detail.rowKey,detail.columnKey])"
+              :onCellEditCommit="(value,detail)=>{
+                  state.grid.editCommits.push([value,detail.rowKey,detail.columnKey,detail.reason]);
                   return value !== 'reject';
-                },
-                onCellEditCancel:(detail)=>$store.grid.editCancels.push([detail.rowKey,detail.columnKey,detail.reason]),
-              }"
+                }"
+              :onCellEditCancel="(detail)=>state.grid.editCancels.push([detail.rowKey,detail.columnKey,detail.reason])"
             />
           </body></html>
         """
         js = """
-          Alpine.store('grid', {
+          $component({data(){const grid=Citry.vue.reactive({
             sort:[], selected:['grace'], acceptSort:false, acceptSelection:false,
             sortEvents:[], selectionEvents:[], activations:[], ranges:[],
             editStarts:[], editCommits:[], editCancels:[],
-          });
+          }); window.__grid=grid; return {state:{grid}};}});
         """
 
         def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:
@@ -139,21 +135,22 @@ def _page() -> str:
                 ),
             }
 
-    return str(Page())
+    return app, str(Page())
 
 
-def _load(page: Any) -> list[str]:
+def _load(page: Any, serve_citry_ui_live: Any) -> list[str]:
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.set_content(_page(), wait_until="load")
+    app, html = _page()
+    page.goto(serve_citry_ui_live(app, html) + "/", wait_until="networkidle")
     for selector in ("#grid", "#windowed", "#editable"):
         page.wait_for_selector(f"{selector}[data-citry-data-grid-initialized]")
     return errors
 
 
-def test_composite_keyboard_navigation_rtl_and_activation(page: Any) -> None:
-    errors = _load(page)
+def test_composite_keyboard_navigation_rtl_and_activation(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#grid")
     first = root.locator('[data-citry-ui-part="cell"]').first
 
@@ -169,7 +166,7 @@ def test_composite_keyboard_navigation_rtl_and_activation(page: Any) -> None:
         "element => document.activeElement === element"
     )
     page.keyboard.press("Enter")
-    assert page.evaluate("Alpine.store('grid').activations") == [{"row": "grace", "column": "role"}]
+    assert page.evaluate("window.__grid.activations") == [{"row": "grace", "column": "role"}]
 
     root.evaluate("element => element.dir='rtl'")
     first.focus()
@@ -180,8 +177,8 @@ def test_composite_keyboard_navigation_rtl_and_activation(page: Any) -> None:
     assert errors == []
 
 
-def test_sort_and_selection_requests_wait_for_controlled_acceptance(page: Any) -> None:
-    errors = _load(page)
+def test_sort_and_selection_requests_wait_for_controlled_acceptance(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#grid")
     name_header = root.locator('[data-citry-ui-part="header-cell"][data-column-key="name"]')
     role_header = root.locator('[data-citry-ui-part="header-cell"][data-column-key="role"]')
@@ -189,10 +186,10 @@ def test_sort_and_selection_requests_wait_for_controlled_acceptance(page: Any) -
 
     name_header.click()
     assert name_header.get_attribute("aria-sort") is None
-    assert page.evaluate("Alpine.store('grid').sortEvents") == [
+    assert page.evaluate("window.__grid.sortEvents") == [
         {"next": [{"key": "name", "direction": "asc"}], "direction": "asc"}
     ]
-    page.evaluate("Alpine.store('grid').acceptSort=true")
+    page.evaluate("window.__grid.acceptSort=true")
     name_header.click()
     page.wait_for_function("document.querySelector('#grid [data-column-key=name]').ariaSort === 'ascending'")
     assert name_header.get_attribute("data-sort") == "asc"
@@ -217,19 +214,19 @@ def test_sort_and_selection_requests_wait_for_controlled_acceptance(page: Any) -
 
     ada.locator('[data-citry-ui-part="cell"]').first.click()
     assert ada.get_attribute("aria-selected") == "false"
-    assert page.evaluate("Alpine.store('grid').selectionEvents.at(-1)") == {
+    assert page.evaluate("window.__grid.selectionEvents.at(-1)") == {
         "next": ["ada"],
         "controlled": True,
     }
-    page.evaluate("Alpine.store('grid').acceptSelection=true")
+    page.evaluate("window.__grid.acceptSelection=true")
     ada.locator('[data-citry-ui-part="cell"]').first.click()
     page.wait_for_function("document.querySelector('#grid [data-row-key=ada]').ariaSelected === 'true'")
-    assert page.evaluate("Alpine.store('grid').selected") == ["ada"]
+    assert page.evaluate("window.__grid.selected") == ["ada"]
     assert errors == []
 
 
-def test_window_scroll_requests_range_and_reflects_pending(page: Any) -> None:
-    errors = _load(page)
+def test_window_scroll_requests_range_and_reflects_pending(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#windowed")
     viewport = root.locator(':scope > [data-citry-ui-part="viewport"]')
 
@@ -239,8 +236,8 @@ def test_window_scroll_requests_range_and_reflects_pending(page: Any) -> None:
     assert first_row.get_attribute("data-row-index") == "20"
 
     viewport.evaluate("element => { element.scrollTop = 4000; element.dispatchEvent(new Event('scroll')); }")
-    page.wait_for_function("Alpine.store('grid').ranges.some(event => event.reason === 'scroll')")
-    event = page.evaluate("Alpine.store('grid').ranges.filter(event => event.reason === 'scroll').at(-1)")
+    page.wait_for_function("window.__grid.ranges.some(event => event.reason === 'scroll')")
+    event = page.evaluate("window.__grid.ranges.filter(event => event.reason === 'scroll').at(-1)")
     assert event["endIndex"] > event["startIndex"]
     assert event["requestId"] >= 1
     assert root.get_attribute("data-pending") == ""
@@ -248,10 +245,10 @@ def test_window_scroll_requests_range_and_reflects_pending(page: Any) -> None:
     assert errors == []
 
 
-def test_shift_space_toggles_and_pointer_drag_selects_enabled_rows(page: Any) -> None:
-    errors = _load(page)
+def test_shift_space_toggles_and_pointer_drag_selects_enabled_rows(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#grid")
-    page.evaluate("Alpine.store('grid').acceptSelection=true; Alpine.store('grid').selected=[]")
+    page.evaluate("window.__grid.acceptSelection=true; window.__grid.selected=[]")
     page.wait_for_function("document.querySelectorAll('#grid [data-selected]').length === 0")
 
     ada_cell = root.locator('[data-row-key="ada"][data-citry-ui-part="cell"]').first
@@ -265,22 +262,24 @@ def test_shift_space_toggles_and_pointer_drag_selects_enabled_rows(page: Any) ->
     page.mouse.down()
     page.mouse.move(locked_box["x"] + 8, locked_box["y"] + locked_box["height"] / 2, steps=6)
     page.mouse.up()
-    page.wait_for_function("Alpine.store('grid').selected.join(',') === 'ada,grace'")
+    page.wait_for_function("window.__grid.selected.join(',') === 'ada,grace'")
     assert root.get_attribute("data-selecting") is None
     assert locked_cell.locator("xpath=..").get_attribute("aria-selected") == "false"
 
     grace_cell.focus()
     page.keyboard.press("Shift+Space")
-    page.wait_for_function("Alpine.store('grid').selected.join(',') === 'ada'")
+    page.wait_for_function("window.__grid.selected.join(',') === 'ada'")
     assert grace_cell.locator("xpath=..").get_attribute("aria-selected") == "false"
     page.keyboard.press("Shift+Space")
-    page.wait_for_function("Alpine.store('grid').selected.join(',') === 'ada,grace'")
+    page.wait_for_function("window.__grid.selected.join(',') === 'ada,grace'")
     assert grace_cell.locator("xpath=..").get_attribute("aria-selected") == "true"
     assert errors == []
 
 
-def test_inline_editors_commit_cancel_validate_and_keep_rows_authoritative(page: Any) -> None:
-    errors = _load(page)
+def test_inline_editors_commit_cancel_validate_and_keep_rows_authoritative(
+    page: Any, serve_citry_ui_live: Any
+) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#editable")
     name = root.locator('[data-row-key="ada"][data-column-key="name"]')
     name.focus()
@@ -290,13 +289,13 @@ def test_inline_editors_commit_cancel_validate_and_keep_rows_authoritative(page:
     editor.fill("Aster")
     editor.press("Enter")
     assert name.inner_text() == "Ada"
-    assert page.evaluate("Alpine.store('grid').editCommits.at(-1).slice(0,3)") == ["Aster", "ada", "name"]
+    assert page.evaluate("window.__grid.editCommits.at(-1).slice(0,3)") == ["Aster", "ada", "name"]
 
     role = root.locator('[data-row-key="ada"][data-column-key="role"]')
     role.dblclick()
     role.locator("select").select_option("lead")
     role.locator("select").press("Enter")
-    assert page.evaluate("Alpine.store('grid').editCommits.at(-1)[0]") == "lead"
+    assert page.evaluate("window.__grid.editCommits.at(-1)[0]") == "lead"
 
     score = root.locator('[data-row-key="ada"][data-column-key="score"]')
     score.focus()
@@ -305,19 +304,19 @@ def test_inline_editors_commit_cancel_validate_and_keep_rows_authoritative(page:
     score.locator("input").press("Enter")
     assert score.locator("input").get_attribute("aria-invalid") == "true"
     score.locator("input").press("Escape")
-    assert page.evaluate("Alpine.store('grid').editCancels.at(-1)") == ["ada", "score", "escape"]
+    assert page.evaluate("window.__grid.editCancels.at(-1)") == ["ada", "score", "escape"]
 
     active = root.locator('[data-row-key="ada"][data-column-key="active"]')
     active.focus()
     active.press("Enter")
     active.locator('input[type="checkbox"]').uncheck()
     active.locator('input[type="checkbox"]').press("Enter")
-    assert page.evaluate("Alpine.store('grid').editCommits.at(-1)[0]") is False
+    assert page.evaluate("window.__grid.editCommits.at(-1)[0]") is False
     assert errors == []
 
 
-def test_environment_axe_and_cleanup(page: Any) -> None:
-    errors = _load(page)
+def test_environment_axe_and_cleanup(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#grid")
     axe = _root() / "node_modules" / "axe-core" / "axe.min.js"
     page.add_script_tag(path=str(axe))

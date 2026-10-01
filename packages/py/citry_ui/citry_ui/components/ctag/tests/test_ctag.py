@@ -9,7 +9,7 @@ import citry_ui
 from citry import Citry, Component
 
 
-def _render(source: str, data: dict[str, object] | None = None) -> str:
+def _render(source: str, data: dict[str, object] | None = None, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -20,18 +20,21 @@ def _render(source: str, data: dict[str, object] | None = None) -> str:
         def template_data(self, kwargs, slots):
             return data or {}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _markup(html: str) -> str:
     start = html.find('<div class="cui-tag-group"')
+    assert start >= 0
     end = html.find("<script", start)
-    return html[start:end]
+    return html[start:] if end < 0 else html[start:end]
 
 
 def test_descriptive_group_uses_native_list_semantics() -> None:
     html = _render(
-        '<c-CTagGroup label="Topics"><c-CTag value="css">CSS</c-CTag><c-CTag value="html">HTML</c-CTag></c-CTagGroup>'
+        '<c-CTagGroup label="Topics"><c-CTag value="css">CSS</c-CTag><c-CTag value="html">HTML</c-CTag></c-CTagGroup>',
+        static_fallback=True,
     )
     markup = _markup(html)
     assert 'role="list"' in markup
@@ -47,7 +50,8 @@ def test_interactive_group_has_grid_relationships_and_form_safe_remove_buttons()
         "c-value=\"['css']\" removable actionable>"
         '<c-CTag value="css">CSS</c-CTag>'
         '<c-CTag value="html">HTML</c-CTag>'
-        "</c-CTagGroup>"
+        "</c-CTagGroup>",
+        static_fallback=True,
     )
     markup = _markup(html)
     assert 'role="grid"' in markup
@@ -72,7 +76,8 @@ def test_named_label_description_start_and_root_destinations_render() -> None:
         '<c-fill name="default">CSS</c-fill>'
         "</c-CTag>"
         "</c-fill>"
-        "</c-CTagGroup>"
+        "</c-CTagGroup>",
+        static_fallback=True,
     )
     assert "Visible topics" in html
     assert "Fallback" not in html
@@ -87,7 +92,8 @@ def test_named_label_description_start_and_root_destinations_render() -> None:
 
 def test_labelled_collection_may_settle_empty() -> None:
     html = _render(
-        '<c-CTagGroup label="Empty"><c-CTag c-for="value in []" c-value="value">{{ value }}</c-CTag></c-CTagGroup>'
+        '<c-CTagGroup label="Empty"><c-CTag c-for="value in []" c-value="value">{{ value }}</c-CTag></c-CTagGroup>',
+        static_fallback=True,
     )
     markup = _markup(html)
     assert 'role="list"' in markup
@@ -134,8 +140,6 @@ def test_invalid_composition_and_values_fail(source: str, message: str) -> None:
         {"role": "button"},
         {"tabindex": 0},
         {"aria-hidden": "true"},
-        {":data-disabled": "bad"},
-        {"x-html": "bad"},
         {"data-citry-private": "bad"},
     ],
 )
@@ -146,6 +150,36 @@ def test_owned_group_and_tag_attrs_are_rejected(attrs: dict[str, object]) -> Non
         _render(group_source, {"attrs": attrs})
     with pytest.raises(ValueError, match="cannot"):
         _render(tag_source, {"attrs": attrs})
+
+
+@pytest.mark.parametrize(
+    "attribute",
+    [":data-disabled", "v-bind:role", "v-html", "V-IF", "@click", "#default", ".tabindex"],
+)
+def test_python_attrs_reject_vue_directives(attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    group_source = '<c-CTagGroup label="Topics" c-attrs="attrs"><c-CTag value="x">X</c-CTag></c-CTagGroup>'
+    tag_source = '<c-CTagGroup label="Topics"><c-CTag value="x" c-attrs="attrs">X</c-CTag></c-CTagGroup>'
+    for owner, source in (("CTagGroup", group_source), ("CTag", tag_source)):
+        message = re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")
+        with pytest.raises(ValueError, match=message):
+            _render(source, {"attrs": {attribute: "x"}})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(
+        '<c-CTagGroup label="Topics" c-attrs="attrs"><c-CTag value="x">X</c-CTag></c-CTagGroup>',
+        {"attrs": {"x-data": "{}", "hx-get": "/topics"}},
+        static_fallback=True,
+    )
+
+    root = re.search(r'<[^>]+data-citry-ui-part="tag-group"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/topics"' in root.group(0)
 
 
 def test_public_types_and_runtime_type_hints_resolve() -> None:

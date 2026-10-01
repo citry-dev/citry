@@ -109,7 +109,9 @@ only when the original order remains understandable.
   title="Compare direction and visual order"
 />
 
-Flow renders completely without JavaScript. Attribute maps accept native,
-ARIA, data, and trusted targeted Alpine attributes, but reserve layout
-reflections, part markers, structural directives, and Citry runtime ownership
-fields.
+Flow renders completely without JavaScript. `attrs` accepts ordinary native,
+ARIA, and data attributes. It rejects the attributes each component sets
+itself (such as `data-gap`), Citry runtime attributes, and any Vue directive
+syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings
+and listeners on the component tag in your template instead, for example
+`<c-CRow :title="label" @click="select">`.

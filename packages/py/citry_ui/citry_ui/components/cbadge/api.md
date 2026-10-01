@@ -109,6 +109,12 @@ support local geometry without relying on private classes.
   title="Customize Badge with public CSS"
 />
 
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes Badge sets itself (such as `role` and `data-variant`), Citry runtime
+attributes, and any Vue directive syntax: names starting with `v-`, `:`, `.`,
+`^`, `@`, or `#`. Write Vue bindings and listeners on the component tag in your
+template instead.
+
 ## Accessibility and behavior
 
 Badge renders a neutral, unfocusable `span` with no JavaScript. Do not place

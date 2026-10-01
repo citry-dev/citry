@@ -67,7 +67,7 @@ instructions and validation feedback persistently visible.
 
 ## Update text in the browser
 
-Client inputs are passed through `$c-props="{...}"`. Client `text` safely
+Client inputs are passed with native Vue `:` bindings and callback props. Client `text` safely
 updates a Tooltip authored with the server `text` input.
 
 <c-ui-demo
@@ -106,10 +106,8 @@ to decline it.
 ```citry-html
 <c-CTooltip
   text="Europa has a hidden ocean"
-  $c-props="{
-    open,
-    onOpenChange: (nextOpen) => open = nextOpen,
-  }"
+  :open="open"
+  :onOpenChange="(nextOpen) => open = nextOpen"
 >
   ...
 </c-CTooltip>

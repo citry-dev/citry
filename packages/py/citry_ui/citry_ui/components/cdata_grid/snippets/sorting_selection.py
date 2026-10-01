@@ -7,8 +7,8 @@ citry.register_library(citry_ui)
 
 class DataGridSortingSelection(Component):
     template = """
-      <section x-data="{sort:[{key:'name',direction:'asc'}],notice:'Activate a sortable header or select a row'}">
-        <output x-text="notice">Activate a sortable header or select a row</output>
+      <section >
+        <output v-text="notice">Activate a sortable header or select a row</output>
         <c-CDataGrid
           c-columns="columns"
           c-rows="rows"
@@ -16,18 +16,23 @@ class DataGridSortingSelection(Component):
           label="Sortable people"
           selection="multiple"
           c-selected="['grace']"
-          $c-props="{
-            sort,
-            onSortChange:(next)=>{
+          :sort="sort" :onSortChange="(next)=>{
               sort=next;
               notice=next.length
                 ? `Sorted: ${next.map((item,index)=>`${index + 1}. ${item.key} ${item.direction}`).join(', ')}`
                 : 'Server row order restored';
-            },
-            onSelectionChange:(selected)=>notice=`Selected: ${selected.join(', ') || 'none'}`,
-          }"
+            }" :onSelectionChange="(selected)=>notice=`Selected: ${selected.join(', ') || 'none'}`"
         />
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            sort:[{key:'name',direction:'asc'}],notice:'Activate a sortable header or select a row'
+          };
+        },
+      });
     """
 
     def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:

@@ -12,7 +12,7 @@ from citry import Citry, Component, ComponentLike
 from citry_ui import CDataGrid, CDataGridCell, CDataGridColumn, CDataGridEditOption, CDataGridRow, CDataGridSort
 
 
-def _render(component: ComponentLike) -> str:
+def _render(component: ComponentLike, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -25,7 +25,8 @@ def _render(component: ComponentLike) -> str:
 
         template = "<main>{{ child }}</main>"
 
-    return str(Page(child=component))
+    page = Page(child=component)
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _columns() -> tuple[CDataGridColumn, ...]:
@@ -87,7 +88,10 @@ def test_public_schema_and_registration_are_explicit():
 
 
 def test_complete_grid_has_native_table_positions_and_one_server_tab_stop():
-    html = _render(CDataGrid(columns=_columns(), rows=_rows(), label="People", selection="multiple"))
+    html = _render(
+        CDataGrid(columns=_columns(), rows=_rows(), label="People", selection="multiple"),
+        static_fallback=True,
+    )
 
     assert 'role="grid"' in html
     assert 'aria-label="People"' in html
@@ -126,7 +130,8 @@ def test_sort_selection_and_cell_records_render_exact_accepted_state():
             sort=(CDataGridSort("name", "asc"),),
             selection="single",
             selected=("ada",),
-        )
+        ),
+        static_fallback=True,
     )
 
     assert 'aria-sort="ascending"' in html
@@ -154,7 +159,8 @@ def test_editable_columns_render_checked_editor_descriptors() -> None:
             columns=columns,
             rows=(CDataGridRow("ada", {"name": "Ada", "role": "engineer", "active": True}),),
             label="People",
-        )
+        ),
+        static_fallback=True,
     )
     assert html.count("data-editable") >= 4
     assert 'data-editor="select"' in html
@@ -193,7 +199,8 @@ def test_window_geometry_uses_logical_counts_indices_and_spacers():
             row_height=40,
             viewport_size=320,
             initial_index=10,
-        )
+        ),
+        static_fallback=True,
     )
 
     assert 'aria-rowcount="101"' in html
@@ -204,7 +211,10 @@ def test_window_geometry_uses_logical_counts_indices_and_spacers():
     assert "--cui-data-grid-row-height: 40px" in html
     assert "--cui-data-grid-viewport-size: 320px" in html
 
-    self_contained = _render(CDataGrid(columns=_columns(), rows=_rows(), label="People", total_count=2))
+    self_contained = _render(
+        CDataGrid(columns=_columns(), rows=_rows(), label="People", total_count=2),
+        static_fallback=True,
+    )
     assert 'data-citry-ui-part="spacer-row"' not in self_contained
 
 
@@ -216,7 +226,10 @@ def test_window_geometry_uses_logical_counts_indices_and_spacers():
     ],
 )
 def test_loading_and_error_replace_ready_rows(state: str, text: str, busy: bool):
-    html = _render(CDataGrid(columns=_columns(), rows=_rows(), label="People", state=state))
+    html = _render(
+        CDataGrid(columns=_columns(), rows=_rows(), label="People", state=state),
+        static_fallback=True,
+    )
 
     assert text in html
     assert not re.search(r'<tr[^>]+data-citry-ui-part="row"', html)
@@ -227,7 +240,7 @@ def test_loading_and_error_replace_ready_rows(state: str, text: str, busy: bool)
 
 
 def test_ready_zero_rows_becomes_localized_empty_state():
-    html = _render(CDataGrid(columns=_columns(), rows=(), label="People"))
+    html = _render(CDataGrid(columns=_columns(), rows=(), label="People"), static_fallback=True)
 
     assert 'data-state="empty"' in html
     assert "No data." in html
@@ -277,7 +290,8 @@ def test_root_table_column_row_and_cell_attrs_merge_but_owned_attrs_are_rejected
             style={"color": "red"},
             attrs={"data-root": "grid"},
             table_attrs={"data-table": "people"},
-        )
+        ),
+        static_fallback=True,
     )
     assert re.search(r'<div class="cui-data-grid brand"[^>]+data-root="grid"', html)
     assert 'data-table="people"' in html
@@ -296,6 +310,54 @@ def test_root_table_column_row_and_cell_attrs_merge_but_owned_attrs_are_rejected
                 label="People",
             )
         )
+
+
+@pytest.mark.parametrize(
+    ("destination", "attribute", "message"),
+    [
+        ("attrs", "data-citry-morph", "CDataGrid attrs cannot contain Citry runtime attribute"),
+        ("attrs", ":aria-busy", "CDataGrid attrs cannot contain the Vue directive"),
+        ("attrs", "v-if", "CDataGrid attrs cannot contain the Vue directive"),
+        ("attrs", "V-IF", "CDataGrid attrs cannot contain the Vue directive"),
+        ("attrs", "@click", "CDataGrid attrs cannot contain the Vue directive"),
+        ("table_attrs", "v-bind:role", "CDataGrid table_attrs cannot contain the Vue directive"),
+        ("table_attrs", "v-for", "CDataGrid table_attrs cannot contain the Vue directive"),
+        ("header_attrs", ".aria-colindex", "header_attrs cannot contain the Vue directive"),
+        ("cell_attrs", "v-html", "cell_attrs cannot contain the Vue directive"),
+        ("row_attrs", "#default", "attrs cannot contain the Vue directive"),
+        ("cell_value_attrs", "@keydown", "attrs cannot contain the Vue directive"),
+    ],
+)
+def test_attrs_reject_runtime_and_vue_directive_names(destination: str, attribute: str, message: str) -> None:
+    mapping = {attribute: "x"}
+    column_kwargs = {destination: mapping} if destination in {"header_attrs", "cell_attrs"} else {}
+    row_attrs = mapping if destination == "row_attrs" else None
+    cell = CDataGridCell("Ada", mapping) if destination == "cell_value_attrs" else "Ada"
+    grid_kwargs = {destination: mapping} if destination in {"attrs", "table_attrs"} else {}
+    with pytest.raises(ValueError, match=message):
+        _render(
+            CDataGrid(
+                columns=(CDataGridColumn("name", "Name", **column_kwargs),),
+                rows=(CDataGridRow("ada", {"name": cell}, attrs=row_attrs),),
+                label="People",
+                **grid_kwargs,
+            )
+        )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(
+        CDataGrid(
+            columns=_columns(),
+            rows=_rows(),
+            label="People",
+            attrs={"x-show": "root"},
+            table_attrs={"x-for": "table"},
+        ),
+        static_fallback=True,
+    )
+    assert 'x-show="root"' in html
+    assert 'x-for="table"' in html
 
 
 def test_runtime_declares_models_navigation_i18n_range_requests_and_cleanup():

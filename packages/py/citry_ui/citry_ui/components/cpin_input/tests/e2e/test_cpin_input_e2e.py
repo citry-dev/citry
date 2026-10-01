@@ -32,8 +32,8 @@ def _page_html() -> str:
               <c-css />
               <style>.pin-brand { --cui-pin-input-focus-color: rgb(124 58 237); }</style>
             </head>
-            <body x-data="{controlled:'12',accept:false}">
-              <form id="verify" @submit.prevent="window.__pinSubmits.push(Array.from(new FormData($event.target).entries()))">
+            <body>
+              <form id="verify" @submit.prevent="window.__pinSubmits.push(Array.from(new window.FormData($event.target).entries()))">
                 <c-CPinInput
                   id="code"
                   name="code"
@@ -43,12 +43,10 @@ def _page_html() -> str:
                   c-length="6"
                   required
                   class_="pin-brand"
-                  $c-props="{
-                    onValueChange:(next,detail)=>window.__pinEvents.push(['value',next,detail.source]),
-                    onComplete:(next,detail)=>window.__pinEvents.push(['complete',next,detail.source]),
-                    onValueInvalid:(detail)=>window.__pinEvents.push(['invalid',detail.rejected,detail.source]),
-                    onFocusChange:(focused)=>window.__pinEvents.push(['focus',focused]),
-                  }"
+                  :onValueChange="(next,detail)=>window.__pinEvents.push(['value',next,detail.source])"
+                  :onComplete="(next,detail)=>window.__pinEvents.push(['complete',next,detail.source])"
+                  :onValueInvalid="(detail)=>window.__pinEvents.push(['invalid',detail.rejected,detail.source])"
+                  :onFocusChange="(focused)=>window.__pinEvents.push(['focus',focused])"
                 />
                 <button id="submit" type="submit">Submit</button>
                 <button id="reset" type="reset">Reset</button>
@@ -58,13 +56,11 @@ def _page_html() -> str:
                 label="Controlled code"
                 value="12"
                 c-length="4"
-                $c-props="{
-                  value:controlled,
-                  onValueChange:(next,detail)=>{
+                :value="controlled"
+                :onValueChange="(next,detail)=>{
                     window.__pinEvents.push(['controlled',next,detail.source]);
                     if(accept) controlled=next;
-                  },
-                }"
+                  }"
               />
               <button id="accept" type="button" @click="accept=true">Accept</button>
               <form id="states">
@@ -76,6 +72,7 @@ def _page_html() -> str:
             </body>
           </html>
         """
+        js = "$component({data(){return {controlled:'12',accept:false};}});"
 
     return str(Page())
 

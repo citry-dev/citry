@@ -31,9 +31,9 @@ inputs:
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles; generated anchor ownership merges last.}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed attributes to the labelled group root.}
-      - {id: primary-attrs, name: primary_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed ARIA, Form, data, style, and native listener attributes to the primary Button.'}
-      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed descriptive, data, style, and native listener attributes to the Menu Button.'}
-      - {id: menu-attrs, name: menu_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed descriptive, language, data, style, and native listener attributes to the root Menu surface.'}
+      - {id: primary-attrs, name: primary_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed ARIA, Form, data, and style attributes to the primary Button.'}
+      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed descriptive, data, and style attributes to the Menu Button.'}
+      - {id: menu-attrs, name: menu_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed descriptive, language, data, and style attributes to the root Menu surface.'}
 
   - id: csplit-button-client-inputs
     component: CSplitButton

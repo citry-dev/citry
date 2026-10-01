@@ -1,7 +1,8 @@
 $component({
   props: {expanded:{}, selected:{}, disabled:{}, onExpandedChange:{}, onSelectionChange:{}, onCellActivate:{}},
-  init: ({els,data,props,effect,i18n}) => {
-    const root=els[0], table=root?.querySelector(':scope [data-citry-ui-part="table"]'), body=table?.querySelector('[data-citry-ui-part="body"]'), status=root?.querySelector(':scope > [data-citry-ui-part="status"]'), inputs=root?.querySelector(':scope > [data-citry-ui-part="inputs"]');
+  onServerRender: ({component}) => {
+    const root=component.$el, data=component.serverDefaults, props=component.$props, effect=Citry.vue.watchEffect, i18n=component.$i18n;
+    const table=root?.querySelector(':scope [data-citry-ui-part="table"]'), body=table?.querySelector('[data-citry-ui-part="body"]'), status=root?.querySelector(':scope > [data-citry-ui-part="status"]'), inputs=root?.querySelector(':scope > [data-citry-ui-part="inputs"]');
     if (!(root instanceof HTMLElement)||!(table instanceof HTMLTableElement)||!body||!status||!inputs) throw new Error('[citry-ui] CTreeGrid settled anatomy is invalid.');
     const rows=[...body.querySelectorAll(':scope > [data-citry-tree-grid-row]')], byKey=new Map(rows.map(row=>[row.dataset.rowKey,row]));
     const branches=new Set(rows.filter(row=>row.hasAttribute('aria-expanded')).map(row=>row.dataset.rowKey));

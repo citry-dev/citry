@@ -32,6 +32,43 @@ def _split_button_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """$component({
+          data() {
+            return {
+              acceptControlled: false,
+              controlledOpen: false,
+              submitLoading: false,
+              commonDisabled: false,
+            };
+          },
+          onServerRender({component}) {
+            window.__splitState = component;
+            let submit = null;
+            let reset = null;
+            const capture = () => window.__splitEvents.push([
+              'primary-capture-consumer',
+              submit.hasAttribute('data-open'),
+            ]);
+            const target = () => window.__splitEvents.push(['primary-target']);
+            const resetTarget = () => window.__splitEvents.push(['reset-target']);
+            queueMicrotask(() => {
+              submit = document.querySelector(
+                '#submit-split [data-citry-ui-part="split-button-primary"]',
+              );
+              reset = document.querySelector(
+                '#reset-split [data-citry-ui-part="split-button-primary"]',
+              );
+              submit?.addEventListener('click', capture, {capture: true});
+              submit?.addEventListener('click', target);
+              reset?.addEventListener('click', resetTarget);
+            });
+            return () => {
+              submit?.removeEventListener('click', capture, {capture: true});
+              submit?.removeEventListener('click', target);
+              reset?.removeEventListener('click', resetTarget);
+            };
+          },
+        });"""
         template = """
           <!doctype html>
           <html lang="en">
@@ -45,14 +82,7 @@ def _split_button_page() -> str:
               </script>
               <c-css />
             </head>
-            <body
-              x-data="{
-                acceptControlled: false,
-                controlledOpen: false,
-                submitLoading: false,
-                commonDisabled: false,
-              }"
-            >
+            <body>
               <form
                 id="record-form"
                 @submit.prevent="
@@ -60,7 +90,7 @@ def _split_button_page() -> str:
                   window.__splitEvents.push([
                     'submit',
                     $event.submitter?.id,
-                    new FormData($event.currentTarget, $event.submitter).get('action'),
+                    new window.FormData($event.currentTarget, $event.submitter).get('action'),
                   ]);
                 "
                 @reset="
@@ -77,10 +107,9 @@ def _split_button_page() -> str:
                   menu_label="More save actions"
                   type="submit"
                   c-primary_attrs="submit_attrs"
-                  $c-props="{
-                    loading: submitLoading,
-                    disabled: commonDisabled,
-                    onOpenChange: (nextOpen, detail) => {
+                  :loading="submitLoading"
+                  :disabled="commonDisabled"
+                  :onOpenChange="(nextOpen, detail) => {
                       window.__splitEvents.push([
                         'open',
                         'submit-split',
@@ -92,11 +121,10 @@ def _split_button_page() -> str:
                       if (window.__removeSubmitOnAction && detail.reason === 'action') {
                         document.querySelector('#submit-split')?.remove();
                       }
-                    },
-                    onAction: (value, detail) => {
+                    }"
+                  :onAction="(value, detail) => {
                       window.__splitEvents.push(['menu-action', value, detail.kind]);
-                    },
-                  }"
+                    }"
                 >
                   <c-fill name="default">Save record</c-fill>
                   <c-fill name="menu">
@@ -110,16 +138,14 @@ def _split_button_page() -> str:
                   menu_label="More reset actions"
                   type="reset"
                   c-primary_attrs="reset_attrs"
-                  $c-props="{
-                    onOpenChange: (nextOpen, detail) => window.__splitEvents.push([
+                  :onOpenChange="(nextOpen, detail) => window.__splitEvents.push([
                       'open',
                       'reset-split',
                       nextOpen,
                       detail.reason,
                       detail.controlled,
                       document.querySelector('#record-title').value,
-                    ]),
-                  }"
+                    ])"
                 >
                   <c-fill name="default">Reset record</c-fill>
                   <c-fill name="menu">
@@ -133,15 +159,13 @@ def _split_button_page() -> str:
                 label="Publication actions"
                 menu_label="More publication actions"
                 open
-                $c-props="{
-                  open: controlledOpen,
-                  onOpenChange: (nextOpen, detail) => {
+                :open="controlledOpen"
+                :onOpenChange="(nextOpen, detail) => {
                     window.__splitEvents.push([
                       'controlled', nextOpen, detail.reason, detail.controlled,
                     ]);
                     if (acceptControlled) controlledOpen = nextOpen;
-                  },
-                }"
+                  }"
               >
                 <c-fill name="default">Publish</c-fill>
                 <c-fill name="menu">
@@ -167,15 +191,8 @@ def _split_button_page() -> str:
                 "submit_attrs": {
                     "name": "action",
                     "value": "save",
-                    "@click.capture": (
-                        "window.__splitEvents.push(['primary-capture-consumer', "
-                        "document.querySelector('#submit-split').hasAttribute('data-open')])"
-                    ),
-                    "@click": "window.__splitEvents.push(['primary-target'])",
                 },
-                "reset_attrs": {
-                    "@click": "window.__splitEvents.push(['reset-target'])",
-                },
+                "reset_attrs": {},
             }
 
     return str(Page())
@@ -256,7 +273,7 @@ def test_request_submit_validation_loading_guard_and_click_token_dedupe(page):
     assert page.locator("#submit-split").get_attribute("data-open") == ""
 
     title.fill("Accepted")
-    page.evaluate("Alpine.$data(document.body).submitLoading = true")
+    page.evaluate("window.__splitState.submitLoading = true")
     page.wait_for_function("document.querySelector('#submit-split-primary').hasAttribute('data-loading')")
     page.evaluate(
         "document.querySelector('#record-form').requestSubmit(document.querySelector('#submit-split-primary'))"
@@ -264,7 +281,7 @@ def test_request_submit_validation_loading_guard_and_click_token_dedupe(page):
     assert page.evaluate("window.__submitCount") == 0
     assert page.locator("#submit-split").get_attribute("data-open") == ""
 
-    page.evaluate("Alpine.$data(document.body).submitLoading = false")
+    page.evaluate("window.__splitState.submitLoading = false")
     page.wait_for_function("!document.querySelector('#submit-split-primary').hasAttribute('data-loading')")
     page.evaluate(
         "document.querySelector('#record-form').requestSubmit(document.querySelector('#submit-split-primary'))"

@@ -39,7 +39,7 @@ without disabling its siblings.
 
 ## Control selection in the browser
 
-Pass `value` through `$c-props="{...}"`. A known string controls one option;
+Pass `value` with native Vue `:` bindings and callback props. A known string controls one option;
 `null` clears selection; omission releases control. Handle native `input` or
 `change` with `$event.target.value`.
 
@@ -79,6 +79,13 @@ Stable part selectors target the fieldset, legend, item, input, label, and
 description.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cradio/snippets/customization.py" title="Customize Radio with public CSS" />
+
+`attrs` on `CRadioGroup` and `CRadio`, and `input_attrs` on `CRadio`, accept
+ordinary native, ARIA, and data attributes. They reject the attributes each
+part sets itself (such as the input's `type`, `name`, and `checked`), Citry
+runtime attributes, and any Vue directive syntax: names starting with `v-`,
+`:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component tag
+in your template instead, for example `<c-CRadioGroup :title="hint">`.
 
 ## Choose the right control
 

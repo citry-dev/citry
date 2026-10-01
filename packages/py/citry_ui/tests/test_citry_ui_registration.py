@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import importlib.resources
 import inspect
+import json
 import re
 import subprocess
 import sys
@@ -123,6 +124,15 @@ from citry_ui import (
     CVirtualWindow,
 )
 from citry_ui.components import COMPONENTS
+
+
+def _prepared_button_occurrence(html: str) -> dict[str, object]:
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
+    assert match is not None
+    manifest = json.loads(match.group(1))["manifest"]
+    return next(item for item in manifest["occurrences"] if item["typeKey"].startswith("CButton_"))
 
 
 def test_import_is_inert_for_the_default_engine():
@@ -544,9 +554,13 @@ def test_installed_classes_compose_directly_and_support_runtime_subclassing():
     assert isinstance(element, CitryElement)
     html = str(element)
     assert "Save" in html
-    assert 'aria-busy="true"' in html
-    assert 'data-citry-ui-part="loading-indicator"' in html
-    assert 'class="cui-button__spinner"' in html
+    attrs = _prepared_button_occurrence(html)["preparedData"]["citryAttrs0"]
+    assert attrs["aria-busy"] == "true"
+    assert attrs["data-loading"] == ""
+    assert attrs["disabled"] is True
+    static_html = element.render().serialize(security_javascript="omit")
+    assert 'data-citry-ui-part="loading-indicator"' in static_html
+    assert 'class="cui-button__spinner"' in static_html
 
     class BrandedButton(installed[CButton]):
         name = "BrandedButton"
@@ -576,8 +590,10 @@ def test_direct_template_tag_is_the_primary_styled_usage():
 
     html = str(Page())
 
-    assert '<button class="cui-button" type="submit"' in html
-    assert "Save" in html
+    occurrence = _prepared_button_occurrence(html)
+    assert occurrence["preparedData"]["citryAttrs0"]["type"] == "submit"
+    static_html = Page().render().serialize(security_javascript="omit")
+    assert re.search(r"<button\b[^>]*\btype=\"submit\"[^>]*>.*\bSave\b", static_html, re.DOTALL)
     assert app.get("CButton") is installed[CButton]
 
 
@@ -589,7 +605,10 @@ def test_public_invocation_resolves_contextually_or_through_an_explicit_engine()
     assert isinstance(button, LibraryComponentInvocation)
     assert button.kwargs == {"loading": True}
     assert button.slots == {"default": "Save"}
-    assert '<button class="cui-button" type="button"' in str(button.render(citry=app))
+    rendered = str(button.render(citry=app))
+    occurrence = _prepared_button_occurrence(rendered)
+    assert occurrence["preparedData"]["citryAttrs0"]["type"] == "button"
+    assert occurrence["preparedData"]["citryAttrs0"]["aria-busy"] == "true"
     with pytest.raises(LibraryComponentContextError, match="Pass citry=app"):
         button.render()
     with pytest.raises(LibraryComponentContextError, match="Pass citry=app"):
@@ -606,7 +625,9 @@ def test_public_invocation_resolves_contextually_or_through_an_explicit_engine()
         def template_data(self, kwargs, slots):
             return {"button": button}
 
-    assert '<button class="cui-button" type="button"' in str(Page())
+    page_html = str(Page())
+    occurrence = _prepared_button_occurrence(page_html)
+    assert occurrence["preparedData"]["citryAttrs0"]["type"] == "button"
 
 
 def test_invocation_resolution_never_uses_an_unrelated_name_collision():
@@ -711,7 +732,7 @@ def test_distribution_metadata_and_resources_use_only_the_citry_ui_namespace():
 
     assert requirements is not None
     citry_requirement = next(requirement for requirement in requirements if requirement.startswith("citry"))
-    assert ">=0.4.2" in citry_requirement
+    assert ">=0.6.0" in citry_requirement
     assert "<" not in citry_requirement
     assert all(not requirement.startswith("typing-extensions") for requirement in requirements)
     assert resources.joinpath("py.typed").is_file()

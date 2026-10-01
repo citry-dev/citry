@@ -6,19 +6,28 @@ citry.register_library(citry_ui)
 
 class TreeMultipleSelection(Component):
     template = """
-      <section x-data="{ selected: ['alder'] }">
+      <section >
         <c-CTree
           label="Specimens"
           selection_mode="multiple"
           c-selected="['alder']"
-          $c-props="{ selected, onSelectionChange: (next) => selected = next }"
+          :selected="selected" :onSelectionChange="(next) => selected = next"
         >
           <c-CTreeItem value="alder" label="Alder" />
           <c-CTreeItem value="birch" label="Birch" />
           <c-CTreeItem value="cedar" label="Cedar" />
         </c-CTree>
-        <output x-text="selected.join(', ')"></output>
+        <output v-text="selected.join(', ')"></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            selected: ['alder']
+          };
+        },
+      });
     """
 
 

@@ -82,7 +82,7 @@ inputs:
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds item-root inline styles and merges them with `attrs`.'}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted unowned item-root attributes.}
       - {id: heading-attrs, name: heading_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted unowned native-heading attributes.}
-      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned native-button attributes and event listeners. Button semantics, activation ownership, and state are reserved.'}
+      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned native-button attributes. Button semantics, activation ownership, state, and Vue directive syntax are reserved.'}
       - {id: panel-attrs, name: panel_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned panel attributes. Visibility, region semantics, ID, and state are reserved.'}
       - {id: actions-attrs, name: actions_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned action-wrapper attributes. Requires actions; group naming and focus/live-region ownership are reserved.'}
 
