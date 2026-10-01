@@ -537,8 +537,9 @@ def test_inferred_shadow_captures_same_module_owner_before_authored_name_shadowi
     assert shadow is not None
     ast.parse(shadow.source)
     assert "kwargs: Kwargs" in shadow.source
-    assert "title = __citry_data.title" in shadow.source
-    assert "__citry_cast(Card.Kwargs, __citry_data).title" not in shadow.source
+    # A returned variable is read directly, so ty keeps what it knows about it.
+    assert "title = kwargs.title" in shadow.source
+    assert "__citry_cast(Card.Kwargs, kwargs).title" not in shadow.source
 
 
 def test_schema_root_types_can_come_from_distinct_declaring_classes() -> None:
@@ -759,3 +760,100 @@ def test_value_check_is_added_at_each_inferred_template_data_return() -> None:
     assert shadow is not None
     assert shadow.source.count("__citry_checked_value: __citry_checked_type_0.Task = (\ntask\n)") == 2
     ast.parse(shadow.source)
+
+
+def test_inferred_shadow_renames_method_locals_that_template_names_reuse() -> None:
+    module_source = textwrap.dedent(
+        """
+        import os.path
+
+        class Board:
+            def template_data(self, kwargs, slots):
+                resolved: list[int] = [1]
+                def read():
+                    return resolved
+                try:
+                    pass
+                except ValueError as item:
+                    pass
+                import json as label
+                os = 1
+                return {"items": read(), "label": label}
+        """
+    )
+    source = '<c-for each="resolved in items"><p c-title="(resolved, item, label, os)"></p></c-for>'
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("items", "always"), TemplatePythonRoot("label", "always")),
+        _query(source, "(resolved, it"),
+        source_module="app.board",
+    )
+
+    assert shadow is not None
+    ast.parse(shadow.source)
+    method = shadow.source[shadow.source.index("def __citry_analyze_template") :]
+    # Every binding of a reused name, including a closure read and an import
+    # alias, moves to its own generated name, so the template names are free.
+    assert "__citry_local_resolved: list[int] = [1]" in method
+    assert "return __citry_local_resolved" in method
+    assert "except ValueError as __citry_local_item:" in method
+    assert "import json as __citry_local_label" in method
+    assert "'label': __citry_local_label" in method
+    assert "__citry_local_os = 1" in method
+    assert "for resolved in [resolved for resolved in items]:" in method
+
+
+def test_inferred_shadow_keeps_locals_that_cannot_be_renamed_safely() -> None:
+    module_source = textwrap.dedent(
+        """
+        class Board:
+            def template_data(self, kwargs, slots):
+                item = 1
+                def touch():
+                    global item
+                import os.path
+                return {"items": [item, os.path.sep]}
+        """
+    )
+    source = '<c-for each="item in items"><p c-title="(item, os)"></p></c-for>'
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("items", "always"),),
+        _query(source, 'c-title="(it'),
+        source_module="app.board",
+    )
+
+    assert shadow is not None
+    # Renaming would point the nested `global` at a different name, and an
+    # alias on `import os.path` would bind the submodule instead of `os`.
+    assert "__citry_local_item" not in shadow.source
+    assert "__citry_local_os" not in shadow.source
+
+
+def test_inferred_shadow_reads_present_optional_keys_by_subscript() -> None:
+    module_source = textwrap.dedent(
+        """
+        class Board:
+            def template_data(self, kwargs, slots):
+                if kwargs:
+                    return {"extra": 1}
+                return {}
+        """
+    )
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("extra", "conditional"),),
+        TemplatePythonQuery("extra", 0, 5, "interpolation", free_names=("extra",)),
+    )
+
+    assert shadow is not None
+    # `.get()` would merge every value of the dict into one union, so it is
+    # used only at the return that may lack the key.
+    assert "extra = __citry_data['extra']" in shadow.source
+    assert "extra = __citry_data.get('extra')" in shadow.source

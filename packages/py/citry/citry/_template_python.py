@@ -6,6 +6,7 @@ import ast
 import builtins
 import copy
 import re
+import symtable
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Literal
@@ -281,6 +282,17 @@ def build_inferred_template_shadow(
         # result, so this uncommon control-flow shape deliberately degrades.
         return None
     _prune_unreachable_statements(duplicate)
+    # The generated code binds template names inside this copied method, so a
+    # method local with the same name, such as `resolved: list[Row]` next to a
+    # template loop `c-for="resolved in items"`, would lend its declared type
+    # to the template name. Renaming those locals gives each template name its
+    # own type, while the copied method computes the same value.
+    _rename_conflicting_locals(
+        duplicate,
+        local_names=_method_local_names(module_source, class_qualname),
+        template_names=_template_bound_names(roots, query),
+        occupied=module_source,
+    )
     duplicate.name = "__citry_analyze_template"
     duplicate.returns = None
     import_source = ""
@@ -445,16 +457,22 @@ class _ReturnQueryTransformer(ast.NodeTransformer):
             targets=[ast.Name(id="__citry_data", ctx=ast.Store())],
             value=node.value,
         )
+        # ty remembers the type of each literal key read from the variable a
+        # dict was assigned to, but not from a second name that variable is
+        # copied into. Reading roots from the returned variable itself keeps
+        # `ctx["size"]` as precise as the value the method stored there.
+        data_name = node.value.id if isinstance(node.value, ast.Name) else "__citry_data"
         generated = ast.parse(
             "\n".join(
                 [
                     *self.type_imports,
                     *_root_binding_lines(
                         self.roots,
-                        data_name="__citry_data",
+                        data_name=data_name,
                         indent="",
                         type_references=self.type_references,
                         direct_attribute_owner=self.direct_attribute_owner,
+                        present_keys=_literal_dict_keys(node.value),
                     ),
                     *_unknown_binding_lines(self.roots, self.query, indent=""),
                     *_query_lines(
@@ -551,6 +569,118 @@ def _prune_unreachable_statements(node: ast.AST) -> None:
             _prune_unreachable_statements(value)
 
 
+@lru_cache(maxsize=32)
+def _method_local_names(module_source: str, class_qualname: str) -> frozenset[str]:
+    """
+    Return the names local to one class's ``template_data`` method, parameters included.
+
+    Python's own symbol table answers this, so a name the method declares
+    ``global`` or only reads stays out, and a name bound in a nested
+    function or comprehension does not count as the method's own.
+    """
+    try:
+        table = symtable.symtable(module_source, "<citry-template-data>", "exec")
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return frozenset()
+    for part in class_qualname.split("."):
+        classes = [child for child in table.get_children() if child.get_type() == "class" and child.get_name() == part]
+        if len(classes) != 1:
+            return frozenset()
+        table = classes[0]
+    methods = [
+        child
+        for child in table.get_children()
+        if child.get_type() == "function" and child.get_name() == "template_data"
+    ]
+    if len(methods) != 1 or not isinstance(methods[0], symtable.Function):
+        return frozenset()
+    return frozenset(methods[0].get_locals())
+
+
+def _template_bound_names(roots: tuple[TemplatePythonRoot, ...], query: TemplatePythonQuery) -> frozenset[str]:
+    """Return every name the generated template code binds or reads."""
+    names = {root.name for root in roots}
+    names.update(query.free_names)
+    for control in query.controls:
+        names.update(control.names)
+        names.update(control.free_names)
+    return frozenset(names)
+
+
+def _rename_conflicting_locals(
+    method: ast.FunctionDef,
+    *,
+    local_names: frozenset[str],
+    template_names: frozenset[str],
+    occupied: str,
+) -> None:
+    """
+    Rename the method locals that a template name would otherwise reuse.
+
+    The method is a private copy, so every occurrence of the name inside it,
+    nested functions included, can be renamed together. Python resolves a
+    name that the method binds to the method's local everywhere inside it,
+    so the renamed copy computes the same values. Only a nested ``global`` or
+    ``nonlocal`` statement could point the name somewhere else, and such a
+    name is left alone.
+    """
+    conflicts = local_names & template_names
+    if not conflicts:
+        return
+    redirected = {
+        name
+        for node in ast.walk(method)
+        if isinstance(node, (ast.Global, ast.Nonlocal))
+        for name in node.names
+        if name in conflicts
+    }
+    # `import a.b` binds `a` to the top package, and an alias would bind the
+    # submodule instead, so a name bound that way cannot be renamed either.
+    redirected.update(
+        alias.name.split(".", 1)[0]
+        for node in ast.walk(method)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+        if alias.asname is None and "." in alias.name
+    )
+    renames: dict[str, str] = {}
+    for name in sorted(conflicts - redirected):
+        candidate = f"__citry_local_{name}"
+        suffix = 0
+        # A generated name that already appears in the module could refer to
+        # something real, so it gets a number until it is unused.
+        while candidate in occupied or candidate in renames.values():
+            suffix += 1
+            candidate = f"__citry_local_{name}_{suffix}"
+        renames[name] = candidate
+    if not renames:
+        return
+
+    for node in ast.walk(method):
+        if isinstance(node, ast.Name) and node.id in renames:
+            node.id = renames[node.id]
+        elif isinstance(node, ast.arg) and node.arg in renames:
+            node.arg = renames[node.arg]
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node is not method:
+            node.name = renames.get(node.name, node.name)
+        elif isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) and node.name in renames:
+            node.name = renames[node.name]
+        elif isinstance(node, ast.MatchMapping) and node.rest in renames:
+            node.rest = renames[node.rest]
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                bound = alias.asname or alias.name
+                if bound in renames:
+                    alias.asname = renames[bound]
+
+
+def _literal_dict_keys(value: ast.expr) -> frozenset[str]:
+    """Return the string keys a returned dict display always contains."""
+    if not isinstance(value, ast.Dict):
+        return frozenset()
+    return frozenset(key.value for key in value.keys if isinstance(key, ast.Constant) and isinstance(key.value, str))
+
+
 _QUERY_PLACEHOLDER_BASE = "__citry_template_expression_query__"
 
 
@@ -561,6 +691,7 @@ def _root_binding_lines(
     indent: str,
     type_references: dict[tuple[str, str], str] | None = None,
     direct_attribute_owner: tuple[str, str] | None = None,
+    present_keys: frozenset[str] = frozenset(),
 ) -> list[str]:
     lines: list[str] = []
     for root in roots:
@@ -588,7 +719,9 @@ def _root_binding_lines(
             value = f"{data_name}.{root.name}"
         elif root.access == "mixed":
             value = f'{data_name}["{root.name}"] if isinstance({data_name}, dict) else {data_name}.{root.name}'
-        elif root.presence == "conditional":
+        elif root.presence == "conditional" and root.name not in present_keys:
+            # `dict.get()` answers with the union of every value in the dict,
+            # so it is used only when this return may lack the key.
             value = f'{data_name}.get("{root.name}")'
         else:
             value = f'{data_name}["{root.name}"]'

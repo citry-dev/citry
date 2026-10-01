@@ -2182,3 +2182,153 @@ async def test_semantic_diagnostics_check_c_values_against_their_target_types(tm
         ),
     ]
     assert "`Task`" in findings[0].message
+
+
+async def _python_findings_in(
+    tmp_path: Path,
+    template_source: str,
+    module_source: str,
+) -> list[tuple[str | int | None, str, str]]:
+    """Run ty over `board.html` and return each finding's code, marked template text, and message."""
+    template_file = tmp_path / "board.html"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(module_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    analyzer = TyAnalyzer(tmp_path)
+    try:
+        findings = await semantic_diagnostics(analyzer, document, project, {document.uri: document})
+    finally:
+        await analyzer.close()
+    lines = template_source.splitlines(keepends=True)
+
+    def marked(item: types.Diagnostic) -> str:
+        start, end = item.range.start, item.range.end
+        assert start.line == end.line
+        return lines[start.line][start.character : end.character]
+
+    # ty may add `info:` lines after the first; the first line names the types.
+    return [(item.code, marked(item), item.message.split("\n", 1)[0]) for item in findings]
+
+
+# A child whose input takes three sizes, for the data shapes below.
+_SIZED_CARD = (
+    "from __future__ import annotations\n"
+    "from pathlib import Path\n"
+    "from typing import Literal, TypedDict, cast\n"
+    "from citry import Citry, Component\n"
+    "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+    "Size = Literal['sm', 'md', 'lg']\n"
+    "class Card(Component):\n"
+    "    citry = engine\n"
+    "    template = '<p></p>'\n"
+    "    class Kwargs:\n"
+    "        size: Size\n"
+)
+
+
+@pytest.mark.asyncio
+async def test_template_loop_variable_does_not_take_a_same_named_template_data_local(tmp_path: Path) -> None:
+    # `resolved` is also a declared local of template_data. The template loop
+    # variable is one row, not the list the local is declared as.
+    module_source = (
+        f"{_SIZED_CARD}"
+        "class Row(TypedDict):\n"
+        "    size: Size\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        resolved: list[Row] = [{'size': 'sm'}]\n"
+        "        label: int = 1\n"
+        "        return {'items': resolved, 'count': label}\n"
+    )
+    template_source = (
+        '<c-for each="resolved in items"><c-Card c-size="resolved[\'size\']" /></c-for>\n'
+        '<c-Card c-size="label" />\n'
+        '<c-Card c-size="1" />\n'
+    )
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    # Inside the loop `resolved` is one `Row`. `label` is a local, not a
+    # template variable, so it has no type to check; the template's own
+    # unknown-variable rule reports it instead. The last tag proves ty ran.
+    assert [(code, text) for code, text, _message in findings] == [("citry.python.invalid-assignment", "1")]
+
+
+@pytest.mark.asyncio
+async def test_c_value_check_keeps_each_returned_key_type(tmp_path: Path) -> None:
+    module_source = (
+        f"{_SIZED_CARD}"
+        "class Picked(TypedDict):\n"
+        "    size: Size\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        annotated: Size = 'md'\n"
+        "        loose = str(kwargs)\n"
+        "        picked: Picked = {'size': 'lg'}\n"
+        "        return {\n"
+        "            'plain': 'sm',\n"
+        "            'casted': cast(Size, loose),\n"
+        "            'annotated': annotated,\n"
+        "            'picked': picked,\n"
+        "            'nested': {'size': 'sm', 'count': 1},\n"
+        "            'loose': loose,\n"
+        "            'count': 1,\n"
+        "        }\n"
+    )
+    template_source = (
+        '<c-Card c-size="plain" />\n'
+        '<c-Card c-size="casted" />\n'
+        '<c-Card c-size="annotated" />\n'
+        "<c-Card c-size=\"picked['size']\" />\n"
+        "<c-Card c-size=\"nested['size']\" />\n"
+        '<c-Card c-size="loose" />\n'
+    )
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    # Each top-level key keeps its own type, so neither the `str` of `loose`
+    # nor the `int` of `count` leaks into the other keys. A dict nested in
+    # the returned dict is typed as a whole, and its values merge into one
+    # union, which the docs ask authors to replace with a TypedDict.
+    assert findings == [
+        (
+            "citry.python.invalid-assignment",
+            "nested['size']",
+            'Object of type `str | int` is not assignable to `Literal["sm", "md", "lg"]`',
+        ),
+        (
+            "citry.python.invalid-assignment",
+            "loose",
+            'Object of type `str` is not assignable to `Literal["sm", "md", "lg"]`',
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_c_value_check_keeps_key_types_of_a_returned_variable_and_an_optional_key(tmp_path: Path) -> None:
+    module_source = (
+        f"{_SIZED_CARD}"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        if kwargs:\n"
+        "            return {'size': 'sm', 'extra': 'md', 'count': 1}\n"
+        "        data = {'size': 'lg', 'count': 2}\n"
+        "        return data\n"
+    )
+    # `extra` is missing from one return, so it is optional.
+    template_source = '<c-Card c-size="size" />\n<c-Card c-size="extra" />\n'
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    # Where a return lacks `extra`, ty sees `dict.get()` and its `None`.
+    assert [(code, text) for code, text, _message in findings] == [
+        ("citry.python.invalid-assignment", "extra"),
+    ]
