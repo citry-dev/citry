@@ -441,7 +441,8 @@ class CitryRender:
                 ``security_csp="strict"`` rejects the output or the output
                 needs ``csp_nonce`` and none was given; or if
                 ``security_javascript="forbid"`` finds a component that
-                needs browser behavior.
+                needs browser behavior; or if a component uses ``Events``
+                and no web integration is mounted.
             TypeError: If ``ssr`` is not a bool or ``None``.
 
         """

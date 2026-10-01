@@ -110,7 +110,10 @@ in the handler and translate `form.errors` yourself:
 if not form.is_valid():
     raise EventError(
         "Please fix the errors.",
-        fields={name: errors[0] for name, errors in form.errors.items()},
+        fields={
+            name: errors[0]
+            for name, errors in form.errors.items()
+        },
     )
 ```
 

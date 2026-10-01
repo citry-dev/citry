@@ -74,7 +74,7 @@ markers Citry adds to show which component rendered each part of the page,
 replaces generated IDs with stable ones, and compares the result with the
 expected content. It also checks the data Citry sends to the browser. After
 each Citry process's timed loop, the runner renders once more to count
-callbacks and that component data. The other engines keep output hashes
+callbacks and those component markers. The other engines keep output hashes
 and sizes; their scenario content tests run separately.
 
 These results are relative to this workload and machine. Use them to compare

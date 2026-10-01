@@ -43,8 +43,8 @@ additions.
 
 ## Make asset routes available
 
-Citry refers to component code and styles by URL, and an interactive
-fragment also loads Citry's runtime by URL. Mount one of Citry's
+A fragment loads its components' own `js` and `css` by URL, and an
+interactive fragment also loads Citry's runtime by URL. Mount one of Citry's
 [web framework integrations](/web-frameworks/) so those URLs can be served.
 
 This applies to every fragment that carries any JavaScript or CSS, including

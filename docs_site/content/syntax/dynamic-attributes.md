@@ -55,8 +55,8 @@ the same `True`. Python's HTML writes the bare attribute, so a `data-open`
 set to `True` reads as `""`. When Vue renders or updates the component, it
 writes `True` as the text `"true"` on any attribute that the element does
 not treat as a boolean, so the same `data-open` reads as `"true"`. A
-boolean attribute on an element that supports it, such as `required` or `disabled` on an `<input>`,
-stays bare in both cases. On an element without that attribute, such as
+boolean attribute on an element that supports it, such as `required` or
+`disabled` on an `<input>`, stays bare in both cases. On an element without that attribute, such as
 `disabled` on a `<div>`, Vue writes `"true"` too. To test a flag in CSS or
 JavaScript, check whether the attribute is present (`[data-open]` or
 `hasAttribute("data-open")`) rather than comparing its value.

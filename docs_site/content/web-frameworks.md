@@ -73,8 +73,8 @@ matches your stack.
 | Bare ASGI | `citry.contrib.asgi.asgi_app(citry)` |
 | Bare WSGI | `citry.contrib.wsgi.wsgi_app(citry)` |
 
-The `prefix` must start with `/` and is stored without a trailing slash (so
-`"/citry/"` becomes `"/citry"`). A prefix without the leading `/` is
+Pass a `prefix` that starts with `/` and has no trailing slash, such as
+`"/citry"`. A prefix without the leading `/` is
 rejected: Django, Flask, and `set_mounted_prefix()` raise `ValueError`, and
 FastAPI or Starlette raises its own `AssertionError` from `app.mount()`.
 

@@ -211,8 +211,7 @@ the same inline content. For scripts, the first entry wins completely,
 including its attributes. If a script needs different attributes, change the
 first declaration rather than adding a duplicate later. Within one
 component, including what it inherits from base classes, the first
-stylesheet also wins. Two
-components that declare the same stylesheet with different attributes, or one
+stylesheet also wins. Two components that declare the same stylesheet with different attributes, or one
 stylesheet listed under two `media` keys, make serialization raise
 `ValueError`. Give the stylesheets distinct URLs instead.
 

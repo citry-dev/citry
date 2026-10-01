@@ -80,7 +80,7 @@ $component({
 });
 ```
 
-In the full template, the `<c-ChoiceButton>` child receives the selected
+In `components.py` above, the `<c-ChoiceButton>` child receives the selected
 choice through `:label` and emits `select` to ask the picker to advance it.
 Neither step needs Python to render new HTML.
 

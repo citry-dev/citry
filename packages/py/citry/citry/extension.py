@@ -804,9 +804,9 @@ class Extension:
         requests the extension by name. Override it together with a positive
         [`introspection_version`][citry.Extension.introspection_version].
         Return an exact built-in ``dict`` made only from strict JSON values,
-        or ``None`` when this component has no entry. The method must be observational, deterministic, reentrant, and
-        thread-safe; it must not render, load assets, mutate registration, or
-        depend on request state.
+        or ``None`` when this component has no entry. The method must be
+        observational, deterministic, reentrant, and thread-safe; it must not
+        render, load assets, mutate registration, or depend on request state.
 
         Args:
             ctx: The owning engine, temporary live component class, and its

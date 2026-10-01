@@ -23,7 +23,7 @@ The source-specific walkthroughs are:
 |---|---|
 | **v1** | Shipped and supported now. |
 | **v1.x** | Not built in; the Citry answer column says what to do instead. |
-| **v2** | Not built in, and a larger design question than one missing feature; the Citry answer column says what happens today. |
+| **v2** | Not built in; the Citry answer column says what to do today. |
 | **Dropped** | Intentionally represented another way or left to application code. |
 
 A dash in a source-framework column means that framework does not supply the

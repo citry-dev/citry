@@ -107,8 +107,8 @@ Call the handler normally from `@c-*`, `$sendEvent`, or
 [`Citry.events.send`][Citry.events.send]. The returned promise resolves with
 `undefined` after the browser save starts. A download cannot share a return
 list with other actions. Its handler must also leave Citry
-State unchanged, because the file response has no result envelope to carry
-the new signed State token and public State values.
+State unchanged, because a file response cannot also carry the new signed
+State token and public State values.
 
 ## Protect every handler like an HTTP endpoint
 

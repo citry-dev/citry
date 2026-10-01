@@ -7,10 +7,10 @@ description: Choose the small values a Citry component carries through the brows
 
 [`State`][citry.Component.State] holds the small values that a later server
 call needs. Citry restores those values for the next handler and keeps the
-browser's public State in sync: after every successful call that changes
-State, the response carries the new public values to `$state`. That holds
-whether the handler renders the component again, returns `None` or data, or
-renders only a `<c-mark>` region.
+browser's copy in sync. When a call from a component changes State, the
+response sends the new values of the fields the browser can read (see
+[`$state`](/reference/browser-apis/#state)), even when the handler returns
+`None` or data, or re-renders only part of the component.
 
 Start with [Server events](/events/) if you have not called a Python handler
 from a component yet.
