@@ -475,6 +475,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "brotli" },
+    { name = "citry-lsp" },
     { name = "pytest" },
     { name = "pyyaml" },
 ]
@@ -493,6 +494,7 @@ requires-dist = [{ name = "citry", editable = "packages/py/citry" }]
 [package.metadata.requires-dev]
 dev = [
     { name = "brotli", specifier = ">=1.1.0" },
+    { name = "citry-lsp", editable = "packages/py/citry_lsp" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]

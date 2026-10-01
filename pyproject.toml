@@ -67,6 +67,8 @@ members = ["packages/py/*"]
 [tool.uv.sources]
 citry = { workspace = true }
 citry-core = { workspace = true }
+# Citry UI's type-check test drives the language server package directly.
+citry-lsp = { workspace = true }
 # The docs build's citry lexer resolves to the local workspace member, not PyPI
 # (it may not be published yet); an ordinary version range applies for consumers
 # that install pygments-citry directly.
