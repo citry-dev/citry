@@ -89,7 +89,7 @@ of that expression's variables are known constant.
 Citry evaluates an expression before marking its complete result as the child
 input. In `c-total="add(1, 2)"`, the arguments remain ordinary integers. When
 every referenced variable, including `add`, is known constant, Citry marks the
-evaluated result at the child-input root.
+evaluated result as a whole, so the child's `total` input counts as constant.
 
 ## Make a default constant
 

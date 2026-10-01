@@ -5,13 +5,23 @@ description: Mount Citry on FastAPI, Starlette, Flask, Django, or bare ASGI/WSGI
 
 # Web frameworks
 
-Citry serves a few HTTP endpoints of its own: component JS and CSS, dependency
-files, client runtimes, HTML fragments, and named server events. Mounting Citry
-on your web app connects those endpoints to real URLs.
+Citry serves a few HTTP endpoints of its own: the browser runtime, component
+JS and CSS, dependency files, the compiled code of interactive components, and
+server events. Mounting Citry on your web app connects those endpoints to real
+URLs.
 
-You need this once you serve HTML fragments (HTMX-style page updates), because a
-fragment references its scripts by URL instead of inlining them. Until Citry is
-mounted, building those URLs raises a `RuntimeError`. See
+Mount Citry when:
+
+- you render a component that declares server events. Without a mount,
+  serializing it raises `ValueError`, because the browser would have no URL
+  to send its calls to;
+- you serve HTML fragments (HTMX-style page updates). A fragment references
+  its scripts by URL instead of inlining them, and until Citry is mounted,
+  building those URLs raises a `RuntimeError`.
+
+A full page without server events can render without a mount. It carries
+its scripts and styles inline instead, so the browser cannot reuse cached
+files between pages. See
 [HTML fragments](/advanced/html-fragments/) for the full fragment flow.
 
 ## The default citry instance
@@ -64,7 +74,8 @@ matches your stack.
 | Bare WSGI | `citry.contrib.wsgi.wsgi_app(citry)` |
 
 The `prefix` must start with `/` and is stored without a trailing slash (so
-`"/citry/"` becomes `"/citry"`).
+`"/citry/"` becomes `"/citry"`). A prefix without the leading `/` raises
+`ValueError`.
 
 If you would rather run and copy a complete application, the
 [starter project matrix]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}
@@ -92,11 +103,13 @@ async def lifespan(_app):
 
 
 app = FastAPI(lifespan=lifespan)
-mount(app, citry)                             # serves /citry/... (default prefix)
-# mount(app, citry, prefix="/assets/citry")   # or a custom prefix
+# Serves /citry/... (the default prefix).
+mount(app, citry)
+# Or choose another prefix:
+# mount(app, citry, prefix="/assets/citry")
 
-# After mounting, citry.mounted_prefix == "/citry" and the client runtime
-# is served at /citry/citry.js.
+# Now citry.mounted_prefix == "/citry", and the
+# browser runtime is served at /citry/citry.js.
 ```
 
 ## Flask
@@ -112,8 +125,9 @@ from citry import citry
 
 def create_app():
     app = Flask(__name__)
-    mount(app, citry)           # serves /citry/...
-    citry.initialize()          # after startup registration, before workers
+    mount(app, citry)  # serves /citry/...
+    # After startup registration, before workers start.
+    citry.initialize()
     return app
 ```
 
@@ -124,12 +138,16 @@ def create_app():
 
 ```python
 # urls.py
-from django.urls import path, include
-from citry.contrib.django import urlpatterns as citry_urlpatterns
+from django.urls import include, path
+
+from citry.contrib.django import urlpatterns as citry_urls
 from myapp import citry_instance
 
 urlpatterns = [
-    path("citry/", include(citry_urlpatterns(citry_instance, prefix="/citry"))),
+    path(
+        "citry/",
+        include(citry_urls(citry_instance, prefix="/citry")),
+    ),
 ]
 ```
 
@@ -185,7 +203,10 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from citry.contrib.wsgi import wsgi_app
 from citry import citry
 
-app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {"/citry": wsgi_app(citry)})
+app.wsgi_app = DispatcherMiddleware(
+    app.wsgi_app,
+    {"/citry": wsgi_app(citry)},
+)
 citry.set_mounted_prefix("/citry")
 citry.initialize()  # before handing app.wsgi_app to a threaded server
 ```
@@ -201,18 +222,22 @@ response type.
 
 Once mounted, the prefix exposes four dependency and asset endpoints:
 
-- `/{prefix}/citry.js` the client runtime that loads component JS/CSS on demand.
-- `/{prefix}/cache/{class_id}.{script_type}` a component's cached class-level JS or CSS.
-- `/{prefix}/cache/{class_id}.{vars_hash}.{script_type}` the per-instance JS/CSS variables for one render.
-- `/{prefix}/asset/{file_name}` a file a component depends on.
+- `{prefix}/citry.js`: the browser runtime, which bundles Vue with the code
+  that starts interactive components and sends server events.
+- `{prefix}/cache/{class_id}.{script_type}`: a component's JS or CSS.
+- `{prefix}/cache/{class_id}.{hash}.{script_type}`: a component's JS or CSS
+  addressed by a content hash, or the CSS variables that one render's
+  `css_data()` produced.
+- `{prefix}/asset/{file_name}`: a file a component depends on.
 
-The built-in Events extension also exposes its client runtime, batch endpoint,
-and one URL per named component handler. See
+The built-in Events extension also exposes its own client script, the
+endpoint the browser posts event calls to, and one URL per named component
+handler. See
 [Server events](/events/) for the handler workflow and
 [Security](/security/#protect-event-posts-from-csrf) before deploying those
 routes. It also serves the compiled component code and stylesheets that
-interactive pages load, at `/{prefix}/ext/events/definitions/{digest}.js` and
-`/{prefix}/ext/events/assets/{digest}.css`.
+interactive pages load, at `{prefix}/ext/events/definitions/{digest}.js` and
+`{prefix}/ext/events/assets/{digest}.css`.
 
 ## Share the cache between worker processes
 
@@ -242,5 +267,6 @@ same prefix the serving process mounts at, so the fragment URLs match:
 ```python
 from citry import citry
 
-citry.set_mounted_prefix("/citry")   # same prefix the web app mounts at
+# The same prefix the web app mounts at.
+citry.set_mounted_prefix("/citry")
 ```

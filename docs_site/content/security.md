@@ -33,7 +33,12 @@ The modes have distinct rollout purposes:
 - `"off"` performs no strict-CSP validation.
 - `"warn"` keeps the same output and emits one `RuntimeWarning` containing
   incompatible rendered markup or dependency metadata.
-- `"strict"` rejects incompatible output before returning HTML.
+- `"strict"` raises a `ValueError` that lists the incompatible output
+  instead of returning HTML. A dependency that is not a structured `Script`
+  or `Style` raises `TypeError`.
+
+Any other value raises `ValueError`, both when you create `Citry` and when you
+pass it to `serialize()` for one render.
 
 Strict validation scans final HTML after extension hooks. It rejects raw
 `<script>` and `<style>` elements, ASCII-case-insensitive native `on*`
@@ -82,6 +87,8 @@ The four modes answer different questions:
 - `"forbid"` rejects a rendered subtree that needs executable client
   behavior, even when `deps_strategy="simple"` or `"ignore"` would otherwise
   hide the corresponding runtime or dependency tag.
+
+As with `security_csp`, any other value raises `ValueError`.
 
 The inventory covers active component-boundary bindings, final structured
 dependencies after hooks, and settled HTML after string-level extensions. It
@@ -138,7 +145,9 @@ This option makes the browser run a Citry script only when its bytes
 match the hash Citry reports, and gives you those hashes for your CSP
 header. It works together
 with `security_csp="strict"`, but does not turn on strict CSP validation
-by itself.
+by itself. The default is `"off"`; any value other than `"off"` or `"citry"`
+raises `ValueError`, both when you create `Citry` and when you pass it to
+`serialize()`.
 
 An interactive page sends its app's data, such as the rows of a table, as
 JSON that the browser reads but never runs. Your policy does not need to
@@ -194,7 +203,8 @@ serialization:
 ```citry
 from secrets import token_urlsafe
 
-nonce = token_urlsafe(16)  # 128 random bits before URL-safe base64 encoding
+# 128 random bits before URL-safe base64 encoding
+nonce = token_urlsafe(16)
 serialized = Page().render().serialize_result(csp_nonce=nonce)
 
 policy = (
@@ -455,7 +465,10 @@ compiled = safe_eval("obj.__class__")
 try:
     compiled({"obj": object()})
 except SecurityError as e:
-    print(e)  # attribute '__class__' on object '<class 'object'>' is unsafe
+    # Prints a message starting with: Error in attribute:
+    # SecurityError: attribute '__class__' on object
+    # '<class 'object'>' is unsafe
+    print(e)
 ```
 
 And the identity-based callable check, which catches a renamed builtin:
@@ -464,12 +477,15 @@ And the identity-based callable check, which catches a renamed builtin:
 from citry import SecurityError
 from citry_core.safe_eval import safe_eval
 
-# eval() is blocked even when smuggled in under a harmless-looking name
+# eval() is blocked even under a harmless-looking name
 compiled = safe_eval("totally_no_e_val('1+1')")
 try:
     compiled({"totally_no_e_val": eval})
 except SecurityError as e:
-    print(e)  # function '<built-in function eval>' is unsafe
+    # Prints a message starting with: Error in call:
+    # SecurityError: function '<built-in function eval>'
+    # is unsafe
+    print(e)
 ```
 
 `str.format` and `str.format_map` are blocked because their format syntax can
@@ -490,12 +506,12 @@ the full pattern.
 
 ```citry
 class Cart(Component):
+    def template_data(self, kwargs, slots):
+        return {"count": len(kwargs["items"])}
+
     template = """
       <p>{{ count }} items</p>
     """
-
-    def template_data(self, kwargs, slots):
-        return {"count": len(kwargs["items"])}
 ```
 
 ### Marking your own functions unsafe
