@@ -47,12 +47,15 @@ available at `$event.detail`. The picker installs an instance listener in
 
 ```js
 onServerRender({ component }) {
-  const receiveChoices = (event) => {
+  // Keep the element the listener was added to, so cleanup
+  // removes it from that same element.
+  const root = component.$el;
+  const receive = (event) => {
     component.loadChoices(event.detail.choices);
   };
-  component.$el.addEventListener('choice-picker:loaded', receiveChoices);
+  root.addEventListener('choice-picker:loaded', receive);
   return () => {
-    component.$el.removeEventListener('choice-picker:loaded', receiveChoices);
+    root.removeEventListener('choice-picker:loaded', receive);
   };
 }
 ```

@@ -55,7 +55,9 @@ class TaskRow(Component):
             if len(title) < 3:
                 raise EventError(
                     "Give the task a longer title.",
-                    fields={"title": "Use at least three characters."},
+                    fields={
+                        "title": "Use at least three characters.",
+                    },
                 )
 
             # Perform a "database" update.
@@ -83,7 +85,12 @@ class TaskRow(Component):
               required
             />
           </label>
-          <button type="submit" :disabled="$loading('save')">Save</button>
+          <button
+            type="submit"
+            :disabled="$loading('save')"
+          >
+            Save
+          </button>
           <p
             role="alert"
             v-show="$error('save')"
@@ -103,13 +110,21 @@ class TaskRow(Component):
         },
         methods: {
           showSaved(detail) {
-            this.saveStatus = `Saved task ${detail.taskId}: ${detail.title}`;
+            this.saveStatus =
+              `Saved task ${detail.taskId}: ${detail.title}`;
           },
         },
         onServerRender({ component }) {
-          const receiveSaved = (event) => component.showSaved(event.detail);
-          component.$el.addEventListener('task-row:saved', receiveSaved);
-          return () => component.$el.removeEventListener('task-row:saved', receiveSaved);
+          // Keep the element the listener was added to, so cleanup
+          // removes it from that same element.
+          const root = component.$el;
+          const receive = (event) => {
+            component.showSaved(event.detail);
+          };
+          root.addEventListener('task-row:saved', receive);
+          return () => {
+            root.removeEventListener('task-row:saved', receive);
+          };
         },
       });
     """
@@ -151,7 +166,9 @@ class TaskFilterToggle(Component):
       <button
         type="button"
         :disabled="loading"
-        v-text="hideCompleted ? 'Show all tasks' : 'Hide completed tasks'"
+        v-text="
+          hideCompleted ? 'Show all tasks' : 'Hide completed tasks'
+        "
         @click="$emit('select')"
       ></button>
     """
@@ -183,7 +200,9 @@ class TaskList(Component):
 
     class Events:
         def filter_tasks(self, data: FilterTasksIn):
-            visible_tasks = load_tasks(hide_completed=data.hide_completed)
+            visible_tasks = load_tasks(
+                hide_completed=data.hide_completed,
+            )
             return actions.Render(
                 TaskList(
                     tasks=visible_tasks,
@@ -202,7 +221,9 @@ class TaskList(Component):
         <c-TaskFilterToggle
           :hideCompleted="hideCompleted"
           :loading="$loading('filter_tasks')"
-          @select="$sendEvent('filter_tasks', { hide_completed: !hideCompleted })"
+          @select="$sendEvent('filter_tasks', {
+            hide_completed: !hideCompleted,
+          })"
         />
 
         <ul class="task-rows">
@@ -212,7 +233,9 @@ class TaskList(Component):
         <c-TaskFilterToggle
           :hideCompleted="hideCompleted"
           :loading="$loading('filter_tasks')"
-          @select="$sendEvent('filter_tasks', { hide_completed: !hideCompleted })"
+          @select="$sendEvent('filter_tasks', {
+            hide_completed: !hideCompleted,
+          })"
         />
       </section>
     """

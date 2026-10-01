@@ -27,7 +27,11 @@ class ChoiceButton(Component):
         pass
 
     template = """
-      <button class="choice-button" type="button" @click="$emit('select')">
+      <button
+        class="choice-button"
+        type="button"
+        @click="$emit('select')"
+      >
         Choose
         <span
           class="choice-button__label"
@@ -136,12 +140,15 @@ class ChoicePicker(Component):
           },
         },
         onServerRender({ component }) {
-          const receiveChoices = (event) => {
+          // Keep the element the listener was added to, so cleanup
+          // removes it from that same element.
+          const root = component.$el;
+          const receive = (event) => {
             component.loadChoices(event.detail.choices);
           };
-          component.$el.addEventListener('choice-picker:loaded', receiveChoices);
+          root.addEventListener('choice-picker:loaded', receive);
           return () => {
-            component.$el.removeEventListener('choice-picker:loaded', receiveChoices);
+            root.removeEventListener('choice-picker:loaded', receive);
           };
         },
       });

@@ -75,6 +75,7 @@ The component declares its local state with Vue Options:
 ```js
 $component({
   data() {
+    // Nothing is accepted until Python answers.
     return { acceptedEmail: '' };
   },
 });
@@ -85,11 +86,17 @@ cleanup:
 
 ```js
 onServerRender({ component }) {
-  const receiveSignup = (event) => {
+  // Keep the element the listener was added to, so cleanup
+  // removes it from that same element.
+  const root = component.$el;
+  const receive = (event) => {
+    // Show the email that Python sent with the event.
     component.acceptedEmail = event.detail.email;
   };
-  component.$el.addEventListener('signup:sent', receiveSignup);
-  return () => component.$el.removeEventListener('signup:sent', receiveSignup);
+  root.addEventListener('signup:sent', receive);
+  return () => {
+    root.removeEventListener('signup:sent', receive);
+  };
 }
 ```
 

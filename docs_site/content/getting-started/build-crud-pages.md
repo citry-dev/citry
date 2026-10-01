@@ -69,13 +69,21 @@ $component({
   },
   methods: {
     showSaved(detail) {
-      this.saveStatus = `Saved task ${detail.taskId}: ${detail.title}`;
+      this.saveStatus =
+        `Saved task ${detail.taskId}: ${detail.title}`;
     },
   },
   onServerRender({ component }) {
-    const receiveSaved = (event) => component.showSaved(event.detail);
-    component.$el.addEventListener('task-row:saved', receiveSaved);
-    return () => component.$el.removeEventListener('task-row:saved', receiveSaved);
+    // Keep the element the listener was added to, so cleanup
+    // removes it from that same element.
+    const root = component.$el;
+    const receive = (event) => {
+      component.showSaved(event.detail);
+    };
+    root.addEventListener('task-row:saved', receive);
+    return () => {
+      root.removeEventListener('task-row:saved', receive);
+    };
   },
 });
 ```
@@ -103,7 +111,9 @@ and handler:
 <c-TaskFilterToggle
   :hideCompleted="hideCompleted"
   :loading="$loading('filter_tasks')"
-  @select="$sendEvent('filter_tasks', { hide_completed: !hideCompleted })"
+  @select="$sendEvent('filter_tasks', {
+    hide_completed: !hideCompleted,
+  })"
 />
 ```
 
@@ -116,6 +126,7 @@ from the same parent value. `$sendEvent` calls the parent component's Python
 The handler loads the requested rows and returns a new `TaskList`:
 
 ```python
+# TaskList.Events.filter_tasks
 def filter_tasks(self, data: FilterTasksIn):
     visible_tasks = load_tasks(
         hide_completed=data.hide_completed,

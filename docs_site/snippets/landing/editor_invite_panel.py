@@ -44,7 +44,9 @@ class InvitePanel(Component):
         },
         computed: {
           visibleMembers() {
-            return this.compact ? this.members.slice(0, 3) : this.members;
+            return this.compact
+              ? this.members.slice(0, 3)
+              : this.members;
           },
         },
       });
