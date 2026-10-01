@@ -19,6 +19,7 @@ from pytest_lsp import ClientServerConfig, LanguageClient
 
 from citry._checker import CheckReport
 from citry.commands.check import _with_type_findings
+from citry_lsp import project as project_module
 from citry_lsp.engine import (
     DocumentState,
     ProjectionSourceMapping,
@@ -746,6 +747,26 @@ def test_check_types_stops_when_ty_cannot_run(tmp_path, monkeypatch, capsys):
 
     assert exited.value.code == 2
     assert "--types cannot run ty: Python expression analysis is unavailable" in capsys.readouterr().err
+
+
+def test_check_types_waits_longer_than_the_editor_for_the_app_to_load(tmp_path, monkeypatch, capsys):
+    # A large library can take longer than the editor's startup limit to
+    # import on a busy machine, and a one-off command has no reason to give up early.
+    timeouts: list[float] = []
+
+    def record_timeout(_cwd, _app, *, timeout):
+        timeouts.append(timeout)
+        return project_module._syntax_only_project(tmp_path, None)
+
+    monkeypatch.setattr("citry_lsp.typescript.find_typescript_compiler", lambda _cwd: ("tsc",))
+    monkeypatch.setattr("citry_lsp.project.load_project", record_timeout)
+
+    with pytest.raises(SystemExit):
+        _with_type_findings(CheckReport((), None, ()), "app:engine", tmp_path)
+
+    capsys.readouterr()
+    assert timeouts
+    assert timeouts[0] > project_module.WORKER_TIMEOUT_SECONDS
 
 
 _INLINE_FILES = {

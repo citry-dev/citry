@@ -178,6 +178,8 @@ TYPESCRIPT_CODE_PREFIX = "citry.typescript."
 # The code prefix of a ty finding; the rest is ty's rule name, such as `invalid-argument-type`.
 PYTHON_CODE_PREFIX = "citry.python."
 TYPES_SKIPPED_NOTE = "--types did not run TypeScript or ty; it needs an app loaded from 'citry --app module:engine'"
+# How long `citry check --types` waits for the app's components to load.
+_TYPE_CHECK_APP_LOAD_TIMEOUT_SECONDS = 300.0
 
 
 def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckReport:
@@ -205,7 +207,10 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
     except TypeScriptUnavailableError as exc:
         _type_check_error(str(exc))
     # The language server's project loader reads the same registry facts the editor uses.
-    project = load_project(cwd, app_spec)
+    # The editor gives up on a slow app after a short limit so typing stays
+    # responsive; a one-off command has no such need, and a large library on a
+    # busy CI machine can take longer than that limit to import.
+    project = load_project(cwd, app_spec, timeout=_TYPE_CHECK_APP_LOAD_TIMEOUT_SECONDS)
     if not project.status.registry_ready:
         _type_check_error(project.status.message or "the app's component registry is unavailable")
     # Both checkers read the same component files, so they are read once.

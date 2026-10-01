@@ -8,8 +8,6 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 C
 from examples._internal.catalog import EXAMPLES_ROOT, load_catalog
 from examples._internal.qualify import interpolate, project_environment
 
-from citry._embedded_provider import _remove_jsonc_trailing_commas, _strip_jsonc_comments
-
 EXPECTED_CITRY_APPS = {
     "demo-htmx": "app.citry_app:citry_app",
     "demo-project-board": "app.citry_app:citry_app",
@@ -36,6 +34,48 @@ def project_python(project) -> str:
         for path in sorted(project.source.rglob("*.py"))
         if ".venv" not in path.parts and "__pycache__" not in path.parts
     )
+
+
+def _strip_jsonc(source: str) -> str:
+    """
+    Turn VS Code's JSON-with-comments text into plain JSON.
+
+    These tests also run from a clean copy without Citry installed, so they
+    cannot borrow Citry's own JSONC reader. Comments and the commas before a
+    closing bracket are dropped outside strings; everything else is kept.
+    """
+    result: list[str] = []
+    index = 0
+    in_string = False
+    while index < len(source):
+        char = source[index]
+        if in_string:
+            result.append(char)
+            if char == "\\":
+                # Keep the escaped character so an escaped quote does not end the string.
+                result.append(source[index + 1 : index + 2])
+                index += 2
+                continue
+            in_string = char != '"'
+        elif char == '"':
+            in_string = True
+            result.append(char)
+        elif source.startswith("//", index):
+            # Skip to the end of the line; the newline itself is kept.
+            index = source.find("\n", index)
+            if index == -1:
+                break
+            continue
+        elif source.startswith("/*", index):
+            end = source.find("*/", index + 2)
+            index = len(source) if end == -1 else end + 2
+            continue
+        elif char == "," and source[index + 1 :].lstrip().startswith(("}", "]")):
+            pass
+        else:
+            result.append(char)
+        index += 1
+    return "".join(result)
 
 
 def test_catalog_projects_have_complete_independent_inventory() -> None:
@@ -78,7 +118,7 @@ def test_catalog_projects_include_locked_citry_editor_setup() -> None:
         # VS Code reads settings.json as JSON with comments and trailing commas,
         # so the test accepts what the editor accepts.
         source = project.source.joinpath(".vscode/settings.json").read_text(encoding="utf-8")
-        settings = json.loads(_remove_jsonc_trailing_commas(_strip_jsonc_comments(source)))
+        settings = json.loads(_strip_jsonc(source))
         expected_settings = {
             "citry.python": "${workspaceFolder}/.venv/bin/python",
             "citry.app": EXPECTED_CITRY_APPS[project.id],
