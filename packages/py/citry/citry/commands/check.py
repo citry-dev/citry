@@ -46,13 +46,15 @@ class CheckCommand(ExtensionCommand):
     ``build_check_command`` binds the per-invocation app-selection state used by
     :meth:`handle`.
 
-    ``--types`` also runs TypeScript over every component's JavaScript and
-    Vue template expressions in the current directory, as the editor does,
-    and reports its errors as findings with ``citry.typescript.*`` codes. It
+    ``--types`` also type-checks the components whose source is in the
+    current directory, as the editor does. TypeScript checks their JavaScript
+    and Vue template expressions and reports ``citry.typescript.*`` errors,
+    and ty, the Python type checker that ``citry-lsp`` installs, checks their
+    Python template expressions and reports ``citry.python.*`` findings. It
     needs registry mode, the ``citry-lsp`` package, and Node.js with the
     ``tsc`` compiler in the project's ``node_modules`` or on ``PATH``. When
-    one of them is missing, the command says what to install and exits with
-    status 2.
+    one of them is missing, or ty cannot start, the command says what to
+    install or fix and exits with status 2.
     """
 
     name = "check"
@@ -66,7 +68,10 @@ class CheckCommand(ExtensionCommand):
         CommandArg(
             "--types",
             action="store_true",
-            help="Also type-check component JavaScript and Vue expressions with TypeScript (needs citry-lsp and tsc).",
+            help=(
+                "Also type-check component JavaScript and Vue expressions with TypeScript, "
+                "and Python template expressions with ty (needs citry-lsp and tsc)."
+            ),
         ),
         CommandArg(
             "--format",
@@ -122,12 +127,14 @@ class CheckCommand(ExtensionCommand):
             for note in report.notes:
                 sys.stderr.write(f"citry check: note: {note}\n")
             for finding in report.findings:
-                # TypeScript's own spelling of its code leads the message, as `tsc` prints it.
-                code = (
-                    f"{finding.code.removeprefix(TYPESCRIPT_CODE_PREFIX).upper()}: "
-                    if finding.code.startswith(TYPESCRIPT_CODE_PREFIX)
-                    else ""
-                )
+                # The checker's own spelling of its code leads the message, as
+                # `tsc` and `ty` print it.
+                if finding.code.startswith(TYPESCRIPT_CODE_PREFIX):
+                    code = f"{finding.code.removeprefix(TYPESCRIPT_CODE_PREFIX).upper()}: "
+                elif finding.code.startswith(PYTHON_CODE_PREFIX):
+                    code = f"{finding.code.removeprefix(PYTHON_CODE_PREFIX)}: "
+                else:
+                    code = ""
                 sys.stderr.write(f"{finding.origin}: {finding.severity}: {code}{finding.message}\n")
         if report.exit_code:
             raise SystemExit(report.exit_code)
@@ -168,15 +175,19 @@ def _json_report(report: CheckReport, *, static: bool, app_spec: str | None) -> 
 
 # The code prefix of a TypeScript finding; the rest is TypeScript's number, such as `ts2322`.
 TYPESCRIPT_CODE_PREFIX = "citry.typescript."
-TYPES_SKIPPED_NOTE = "--types did not run TypeScript; it needs an app loaded from 'citry --app module:engine'"
+# The code prefix of a ty finding; the rest is ty's rule name, such as `invalid-argument-type`.
+PYTHON_CODE_PREFIX = "citry.python."
+TYPES_SKIPPED_NOTE = "--types did not run TypeScript or ty; it needs an app loaded from 'citry --app module:engine'"
 
 
 def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckReport:
-    """Add TypeScript's findings for the components in `cwd` to `report`."""
+    """Add TypeScript's and ty's findings for the components in `cwd` to `report`."""
     # citry-lsp is an optional companion package that itself imports citry, so
     # it can only be imported here, once the command needs it.
     try:
         from citry_lsp.project import load_project  # noqa: PLC0415
+        from citry_lsp.project_check import check_project_python_types  # noqa: PLC0415
+        from citry_lsp.type_analysis import TyUnavailableError  # noqa: PLC0415
         from citry_lsp.typescript import (  # noqa: PLC0415
             TypeScriptUnavailableError,
             check_project_types,
@@ -199,8 +210,12 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
         found = check_project_types(project, cwd, command)
     except TypeScriptUnavailableError as exc:
         _type_check_error(str(exc))
+    try:
+        python_found = check_project_python_types(project, cwd)
+    except TyUnavailableError as exc:
+        _type_check_error(str(exc), checker="ty")
     findings = list(report.findings)
-    for item in found:
+    for item in (*found, *python_found):
         start = item.diagnostic.range.start
         code = str(item.diagnostic.code)
         coordinates = _lsp_range_coordinates(item.source, item.diagnostic.range)
@@ -209,16 +224,22 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
                 f"{item.path}:{start.line + 1}:{start.character + 1}",
                 item.diagnostic.message,
                 code,
-                "error",
+                # TypeScript findings are always errors; ty keeps its own
+                # severity, as the editor shows it.
+                "warning" if item.diagnostic.severity == _LSP_WARNING_SEVERITY else "error",
                 *(coordinates or ()),
             )
         )
     return CheckReport(tuple(findings), report.app_failure, report.notes)
 
 
-def _type_check_error(message: str) -> NoReturn:
+# The LSP `DiagnosticSeverity.Warning` value, so this module need not import lsprotocol.
+_LSP_WARNING_SEVERITY = 2
+
+
+def _type_check_error(message: str, *, checker: str = "TypeScript") -> NoReturn:
     """Stop `--types` with a message that says what to install or fix."""
-    sys.stderr.write(f"citry check: error: --types cannot run TypeScript: {message}\n")
+    sys.stderr.write(f"citry check: error: --types cannot run {checker}: {message}\n")
     raise SystemExit(2)
 
 

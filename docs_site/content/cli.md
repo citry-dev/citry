@@ -127,12 +127,14 @@ The exit status is:
 - `2` for a missing or conflicting mode, or when explicit app selection or
   discovery fails after syntax-only fallback finishes
 
-### Check types with TypeScript
+### Check types with TypeScript and ty
 
-Add `--types` to also run TypeScript over every component's JavaScript and
-Vue template expressions in the current directory, the same check the
+Add `--types` to also type-check every component in the current directory
+the way the editor does. TypeScript checks each component's JavaScript and
+Vue template expressions, the same check the
 [VS Code extension](/ide/vscode/#typescript-errors-in-component-javascript-and-templates)
-runs:
+runs, and ty, the Python type checker that `citry-lsp` installs, checks the
+Python expressions in its templates:
 
 ```bash
 citry --app myproject.engine:app check --types
@@ -147,21 +149,40 @@ and column, with TypeScript's code (wrapped here to fit):
 ```
 
 In `--format json`, its code is `citry.typescript.ts2322` and its message
-is TypeScript's text. An error makes the command exit with status 1, like
-any other error. When the app's registry does not load, `--types` does not
-run and the report notes that.
+is TypeScript's text.
+
+A ty finding in a template expression, such as adding a number to a
+string, keeps ty's severity and leads with ty's rule name:
+
+```text
+/srv/shop/app/components/card.py:56:16: error: unsupported-operator:
+Operator `+` is not supported between objects of type `str` and
+`Literal[1]`
+```
+
+In `--format json`, its code is `citry.python.unsupported-operator`. ty's
+findings are the ones the editor shows with the source `Citry (ty)`: an
+unknown name is left to Citry's own
+[`citry.template.unknown-variable`](/ide/diagnostics/#citry.template.unknown-variable)
+rule.
+
+An error makes the command exit with status 1, like any other error. When
+the app's registry does not load, `--types` does not run and the report
+notes that.
 
 `--types` needs three things, and the command exits with status 2 and says
 what to install when one is missing:
 
-- the `citry-lsp` package, which builds the files TypeScript checks;
+- the `citry-lsp` package, which builds the files TypeScript and ty check
+  and installs ty;
 - Node.js on `PATH`;
 - TypeScript's `tsc`, from the project's `node_modules` (the nearest one in
   the current directory or a parent) or from `PATH`. Install it with
   `npm install --save-dev typescript`.
 
 Components installed from another package are skipped. `--types` cannot be
-combined with `--static`, because it needs the registry.
+combined with `--static`, because it needs the registry. If ty cannot
+start, the command also exits with status 2 and prints ty's error.
 
 ## Format component assets
 

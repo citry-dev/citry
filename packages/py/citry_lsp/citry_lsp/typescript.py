@@ -41,13 +41,14 @@ from citry._diagnostic_catalog import (
     VUE_PYTHON_VARIABLE,
     VUE_UNKNOWN_VARIABLE,
 )
-from citry_lsp.engine import DocumentState, browser_diagnostics, type_check_projections
+from citry_lsp.engine import browser_diagnostics, type_check_projections
+from citry_lsp.project_check import ProjectTypeFinding, project_documents
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
-    from citry_lsp.engine import ProjectionSourceMapping, TypeCheckProjection
+    from citry_lsp.engine import DocumentState, ProjectionSourceMapping, TypeCheckProjection
     from citry_lsp.project import ProjectState
 
 # Shown as the diagnostic source, next to the "Citry (ty)" source of Python findings.
@@ -620,15 +621,6 @@ def check_document_types(
     return map_type_check_findings(projections, raw, citry_diagnostics)
 
 
-@dataclass(frozen=True, slots=True)
-class ProjectTypeFinding:
-    """One forwarded TypeScript finding in one authored file."""
-
-    path: Path
-    source: str
-    diagnostic: types.Diagnostic
-
-
 def check_project_types(
     project: ProjectState,
     workspace: Path,
@@ -646,7 +638,7 @@ def check_project_types(
         TypeScriptUnavailableError: When `tsc` cannot run.
 
     """
-    documents = _project_documents(project, workspace.resolve())
+    documents = project_documents(project, workspace.resolve())
     files: list[tuple[str, str]] = []
     owners: dict[str, tuple[DocumentState, tuple[TypeCheckProjection, ...]]] = {}
     for document in documents.values():
@@ -675,33 +667,6 @@ def check_project_types(
             )
         )
     return tuple(results)
-
-
-def _project_documents(project: ProjectState, workspace: Path) -> dict[str, DocumentState]:
-    """Read every authored file that holds a component's template or JavaScript."""
-    catalog = project.catalog
-    if catalog is None:
-        return {}
-    languages: dict[Path, str] = {}
-    for component in catalog.components:
-        for kind, language in (("template", "citry-html"), ("js", "javascript")):
-            asset = getattr(component.assets, kind)
-            if asset.kind == "inline" and asset.owner_file is not None:
-                languages.setdefault(asset.owner_file.resolve(), "python")
-            elif asset.resolved_path is not None:
-                languages.setdefault(asset.resolved_path.resolve(), language)
-    documents: dict[str, DocumentState] = {}
-    for path, language in sorted(languages.items()):
-        if not path.is_relative_to(workspace):
-            continue
-        try:
-            source = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            continue
-        document = DocumentState(path.as_uri(), language, source, 0)
-        document.update(source, 0, project)
-        documents[document.uri] = document
-    return documents
 
 
 def _token_end(source: str, start: types.Position) -> types.Position:

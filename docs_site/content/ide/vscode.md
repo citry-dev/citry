@@ -429,7 +429,7 @@ Some TypeScript errors are left out on purpose:
 Set `citry.typeCheck` to `false` to turn these errors off. The language
 server can also run the check for other editors; it then uses the `tsc` in
 your project's `node_modules` or on `PATH`. Run the same check in a terminal
-or CI with [`citry check --types`](/cli/#check-types-with-typescript).
+or CI with [`citry check --types`](/cli/#check-types-with-typescript-and-ty).
 
 ## Navigate i18n messages and profiles
 

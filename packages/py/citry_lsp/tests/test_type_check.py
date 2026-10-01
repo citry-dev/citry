@@ -17,6 +17,8 @@ from lsprotocol import types
 from pygls.exceptions import JsonRpcInvalidParams
 from pytest_lsp import ClientServerConfig, LanguageClient
 
+from citry._checker import CheckReport
+from citry.commands.check import _with_type_findings
 from citry_lsp.engine import (
     DocumentState,
     ProjectionSourceMapping,
@@ -25,8 +27,10 @@ from citry_lsp.engine import (
     type_check_projections,
 )
 from citry_lsp.project import load_project
+from citry_lsp.project_check import check_project_python_types
 from citry_lsp.protocol import PROTOCOL_VERSION, TYPE_CHECK_METHOD
 from citry_lsp.server import CitryLanguageServer
+from citry_lsp.type_analysis import TyUnavailableError
 from citry_lsp.typescript import (
     TypeScriptFinding,
     TypeScriptUnavailableError,
@@ -609,6 +613,88 @@ def test_check_types_says_what_to_install_without_node(tmp_path):
     assert result.returncode == 2
     assert "--types cannot run TypeScript: Node.js was not found on PATH" in result.stderr
     assert "npm install --save-dev typescript" in result.stderr
+
+
+_TY_APP = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Title(Component):
+    citry = engine
+    template_file = 'title.html'
+    class TemplateData:
+        title: str
+    def template_data(self, kwargs, slots):
+        return {"title": "Board"}
+"""
+
+# `title + 1` adds a number to a string; `missing` is Citry's own finding.
+_TITLE_HTML = "<h3>{{ title + 1 }}</h3><p>{{ missing }}</p>"
+
+
+def test_check_project_python_types_reports_ty_findings_like_the_editor(tmp_path):
+    (tmp_path / "app.py").write_text(_TY_APP, encoding="utf-8")
+    (tmp_path / "title.html").write_text(_TITLE_HTML, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready, project.status
+
+    found = check_project_python_types(project, tmp_path)
+
+    # ty's own unknown-name finding is dropped, as in the editor, because
+    # Citry's unknown-variable rule owns that mistake.
+    assert [
+        (item.path.name, item.diagnostic.code, item.diagnostic.range.start.character, item.diagnostic.severity)
+        for item in found
+    ] == [("title.html", "citry.python.unsupported-operator", 7, types.DiagnosticSeverity.Error)]
+    assert found[0].diagnostic.source == "Citry (ty)"
+
+
+def test_check_types_reports_ty_findings_in_both_formats(tmp_path):
+    tsc = Path(_command()[0])
+    (tmp_path / "app.py").write_text(_TY_APP, encoding="utf-8")
+    (tmp_path / "title.html").write_text(_TITLE_HTML, encoding="utf-8")
+    node = shutil.which("node")
+    assert node is not None
+    path_entries = [str(tsc.parent), str(Path(node).parent), "/usr/bin", "/bin"]
+
+    result = _run_check(tmp_path, path_entries)
+
+    assert result.returncode == 1, result.stderr
+    payload = json.loads(result.stdout)
+    typed = [item for item in payload["findings"] if item["code"].startswith("citry.python.")]
+    assert [(item["origin"], item["code"], item["severity"]) for item in typed] == [
+        (f"{(tmp_path / 'title.html').resolve()!s}:1:8", "citry.python.unsupported-operator", "error"),
+    ]
+    environment = {**os.environ, "PATH": os.pathsep.join(path_entries), "NO_COLOR": "1"}
+    environment.pop("FORCE_COLOR", None)
+    text = subprocess.run(
+        [sys.executable, "-m", "citry", "--app", "app:engine", "check", "--types"],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    # ty's rule name leads the message, as `ty check` prints it.
+    assert f"{(tmp_path / 'title.html').resolve()!s}:1:8: error: unsupported-operator: Operator `+`" in text.stderr
+
+
+def test_check_types_stops_when_ty_cannot_run(tmp_path, monkeypatch, capsys):
+    (tmp_path / "app.py").write_text(_TY_APP, encoding="utf-8")
+    (tmp_path / "title.html").write_text(_TITLE_HTML, encoding="utf-8")
+
+    def unavailable(*_args: object) -> None:
+        raise TyUnavailableError("Python expression analysis is unavailable: no ty")
+
+    monkeypatch.setattr("citry_lsp.typescript.find_typescript_compiler", lambda _cwd: ("tsc",))
+    monkeypatch.setattr("citry_lsp.typescript.check_project_types", lambda *_args: ())
+    monkeypatch.setattr("citry_lsp.project_check.check_project_python_types", unavailable)
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    with pytest.raises(SystemExit) as exited:
+        _with_type_findings(CheckReport((), None, ()), "app:engine", tmp_path)
+
+    assert exited.value.code == 2
+    assert "--types cannot run ty: Python expression analysis is unavailable: no ty" in capsys.readouterr().err
 
 
 def _server_with_documents(tmp_path: Path, options: dict[str, object]) -> tuple[CitryLanguageServer, DocumentState]:
