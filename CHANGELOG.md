@@ -70,7 +70,8 @@ walks through every step.
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-settings-and-extensions)).
 - **Extensions and Python tools:** dependency scripts on interactive pages
   must be classic JavaScript, `OnSerializeContext` and
-  `OnDependenciesContext` gain `selected_render`, `URLRoute` checks
+  `OnDependenciesContext` gain `selected_render`, `ctx.before_manifest`
+  becomes `ctx.early_scripts`, `URLRoute` checks
   `methods`, and `citry.analysis` results leave `self` out of
   `parameters`
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-settings-and-extensions)).

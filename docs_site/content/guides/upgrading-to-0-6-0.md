@@ -442,7 +442,7 @@ lists the rest.
 
 | Removed | What to use |
 | --- | --- |
-| `Citry.alpine.beforeStart(fn)` | [`Citry.vue.use(plugin)`](/reference/browser-apis/#citry-vue-use) called from a `defer` script in `<head>` or an extension's `before_manifest` script. An Alpine plugin has no direct replacement. |
+| `Citry.alpine.beforeStart(fn)` | [`Citry.vue.use(plugin)`](/reference/browser-apis/#citry-vue-use) called from a `defer` script in `<head>` or a script an extension adds to `ctx.early_scripts`. An Alpine plugin has no direct replacement. |
 | `Citry.manager.*` (`loadJs`, `loadCss`, `callComponent`, ...) | Declare assets on the component with `Component.js`, `Component.css`, or `Dependencies`. Interactive fragments load their own assets. |
 | `Citry.i18n.provider` | `component.$i18n` or `this.$i18n`; see [Browser i18n](/i18n/browser/). |
 | `window.Alpine`, `alpine:init` | The `citry:ready` event on `document`. |
@@ -496,10 +496,10 @@ Also check these settings and hooks:
   [Keep the CORS header when a proxy or CDN serves Citry's files](/security/#keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files).
 - **Scripts on an interactive page must be classic JavaScript.** This
   covers a component's `Dependencies` scripts and an extension's
-  `ctx.scripts` and `ctx.before_manifest`. A `type="module"` or JSON data
+  `ctx.scripts` and `ctx.early_scripts`. A `type="module"` or JSON data
   script, or a script marked `async`, `defer`, or `nomodule`, raises
   `ValueError` when the page or an Events response is serialized, because Citry loads these
-  scripts itself, one after another in list order. `before_manifest`
+  scripts itself, one after another in list order. `ctx.early_scripts`
   now works on interactive pages too, and its scripts load before
   `ctx.scripts`.
 - **`@event(methods=...)` and `Events._methods`** accept only GET, HEAD,
@@ -524,6 +524,11 @@ Also check these settings and hooks:
   these contexts with positional arguments, such as an extension test,
   now fails or passes values to the wrong fields. Build them with
   keyword arguments.
+- **`OnDependenciesContext.before_manifest` is now `early_scripts`.**
+  Rename `ctx.before_manifest` to `ctx.early_scripts` in your
+  `on_dependencies()` hooks; the scripts it holds still run before
+  `ctx.scripts`. The old name has no alias, so a hook that still uses it
+  raises `AttributeError` the first time a page is serialized.
 - **Ownership APIs** are removed: the `citry.ownership` and
   `citry.ownership_manifest` modules and the `ownership` parameters of
   `CitryContext` and `CitryElement`. Delete imports of these modules and
@@ -625,7 +630,8 @@ the limit or configure a cache. See
 18. Rename the Alpine lint settings and diagnostic codes.
 19. Check that dependency scripts on interactive pages are classic
     JavaScript, build `OnSerializeContext` and `OnDependenciesContext`
-    with keyword arguments, and remove `citry.ownership` imports and
+    with keyword arguments, rename `ctx.before_manifest` to
+    `ctx.early_scripts`, and remove `citry.ownership` imports and
     `ownership=` arguments.
 20. Pass `URLRoute(methods=...)` as a tuple of uppercase names, and read
     `parameters` from `citry.analysis` results starting at index 0.

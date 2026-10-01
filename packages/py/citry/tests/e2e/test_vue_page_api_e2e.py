@@ -190,14 +190,14 @@ def test_send_options_reject_wait_false_and_unknown_keys(page: Any, serve_live: 
 
 @pytest.mark.e2e
 def test_scripts_the_app_loads_before_it_starts_may_register_plugins(page: Any, serve_live: Any) -> None:
-    # An extension's before_manifest script and a component's own JavaScript run
+    # A script an extension adds to early_scripts and a component's own JavaScript run
     # while Citry prepares the app, before it creates the Vue app, so a plugin
     # they register still reaches that app.
     class PagePlugins(Extension):
         name = "page_plugins"
 
         def on_dependencies(self, ctx):
-            ctx.before_manifest.append(
+            ctx.early_scripts.append(
                 Script(
                     content=(
                         "Citry.vue.use({install(app) { app.config.globalProperties.$fromExtension = 'extension'; }});"

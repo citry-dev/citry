@@ -549,7 +549,7 @@ contract can firm up before it is promoted for third-party extensions.
 A render with no native Vue requirements emits dependencies as ordinary HTML
 tags. Under `document`, inline component CSS and declared dependency tags use
 the normal placeholder/default positions. Under `fragment`, stylesheet tags
-come after the fragment HTML, followed by `before_manifest` hook entries and
+come after the fragment HTML, followed by `early_scripts` hook entries and
 then dependency scripts. Static fragments carry no runtime or JSON dependency
 manifest. Repeated URL tags are allowed; the browser cache handles repeated
 fetches, and the integrating fragment library owns the inserted tags' lifetime.
@@ -642,7 +642,8 @@ assets use Citry routes. Static CSS-only and script-only fragments can emit
 ordinary external URLs without installing the Citry runtime. Component JavaScript
 that requires a browser app is rejected if no prepared Vue plan exists.
 
-The `before_manifest` name remains for extension compatibility. On an
+An `on_dependencies` hook adds scripts that must run before the other
+dependency scripts to `ctx.early_scripts`. On an
 interactive render its entries become the first scripts of the prepared Vue
 payload, in the order the extension added them, so the browser loads them
 before `ctx.scripts` and the other assets and only after the descriptor has

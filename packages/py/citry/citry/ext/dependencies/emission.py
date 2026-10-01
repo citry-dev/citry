@@ -94,12 +94,14 @@ class OnDependenciesContext:
     strategy: str
     """The ``serialize(deps_strategy=...)`` value this emission runs under
     (``"document"``, ``"simple"``, or ``"fragment"``)."""
-    before_manifest: list[Dependency]
+    early_scripts: list[Dependency]
     """Scripts that must run before the other dependency scripts (mutable).
     Static output writes them as tags ahead of the dependency scripts; under
     ``simple`` they are emitted with the other direct dependency tags. On an
-    interactive page the Vue app loads them first, in list order, ahead of
-    ``scripts``, under the same rules as any entry in ``scripts``."""
+    interactive page the Vue app loads them after the Vue runtime and before
+    ``scripts`` and any component's JavaScript, in list order, under the same
+    rules as any entry in ``scripts``. A script here can therefore call
+    ``Citry.vue.use()`` to install a Vue plugin that components rely on."""
     _security_csp: SecurityCspMode = "off"
     """The effective call-local CSP mode used by built-in dependency producers."""
     _security_javascript: SecurityJavascriptMode = "allow"
@@ -215,7 +217,7 @@ def emit_dependencies(
     # the hook runs, so the hook cannot move or drop it. A prepared Vue page
     # skips the hook here, because its assets are delivered by the Vue app.
     if ctx.context.extra.get(VUE_DEPENDENCIES_PREPARED_KEY) is True:
-        scripts, styles, before_manifest = [], [], []
+        scripts, styles, early_scripts = [], [], []
     else:
         hook_ctx = OnDependenciesContext(
             citry=citry,
@@ -224,13 +226,13 @@ def emit_dependencies(
             context=ctx.context,
             selected_render=ctx.selected_render,
             strategy=ctx.deps_strategy,
-            before_manifest=[],
+            early_scripts=[],
             _security_csp=security_csp,
             _security_javascript=security_javascript,
         )
         citry.extensions.emit("on_dependencies", hook_ctx)
-        scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
-        _validate_hook_nonces(script_security, scripts, styles, before_manifest)
+        scripts, styles, early_scripts = hook_ctx.scripts, hook_ctx.styles, hook_ctx.early_scripts
+        _validate_hook_nonces(script_security, scripts, styles, early_scripts)
 
     # An actual Vue serialization plan requests its runtime here so it appears
     # before component Options. Static dependency hooks remain direct tags,
@@ -244,7 +246,7 @@ def emit_dependencies(
         ctx.context.extra[VUE_RUNTIME_EMITTED_KEY] = True
     elif resolved.has_component_calls:
         raise RuntimeError("Component JavaScript calls require a native Vue serialization plan.")
-    core_scripts.extend(before_manifest)
+    core_scripts.extend(early_scripts)
 
     if javascript_policy is not None:
         core_scripts = javascript_policy.process_dependencies(core_scripts, position="managed runtime")
@@ -349,20 +351,20 @@ def _emit_without_javascript(
         context=ctx.context,
         selected_render=ctx.selected_render,
         strategy=ctx.deps_strategy,
-        before_manifest=[],
+        early_scripts=[],
         _security_csp=security_csp,
         _security_javascript=security_javascript,
     )
     citry.extensions.emit("on_dependencies", hook_ctx)
-    _validate_hook_nonces(script_security, hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest)
+    _validate_hook_nonces(script_security, hook_ctx.scripts, hook_ctx.styles, hook_ctx.early_scripts)
     scripts = javascript_policy.process_dependencies(hook_ctx.scripts, position="page")
-    before_manifest = javascript_policy.process_dependencies(
-        hook_ctx.before_manifest,
-        position="before-manifest",
+    early_scripts = javascript_policy.process_dependencies(
+        hook_ctx.early_scripts,
+        position="early-scripts",
     )
     styles = javascript_policy.process_dependencies(hook_ctx.styles, position="stylesheet")
 
-    retained = [*before_manifest, *scripts]
+    retained = [*early_scripts, *scripts]
     js_html = "".join(_render_dependency(dep, script_security) for dep in retained)
     css_html = "".join(_render_dependency(dep, script_security) for dep in styles)
     return _place_dependency_html(
@@ -791,7 +793,7 @@ def _emit_fragment(
     scripts, styles = resolved.scripts, resolved.styles
 
     if ctx.context.extra.get(VUE_DEPENDENCIES_PREPARED_KEY) is True:
-        scripts, styles, before_manifest = [], [], []
+        scripts, styles, early_scripts = [], [], []
     else:
         hook_ctx = OnDependenciesContext(
             citry=citry,
@@ -800,27 +802,26 @@ def _emit_fragment(
             context=ctx.context,
             selected_render=ctx.selected_render,
             strategy="fragment",
-            before_manifest=[],
+            early_scripts=[],
             _security_csp=security_csp,
             _security_javascript=security_javascript,
         )
         citry.extensions.emit("on_dependencies", hook_ctx)
-        scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
-        _validate_hook_nonces(script_security, scripts, styles, before_manifest)
+        scripts, styles, early_scripts = hook_ctx.scripts, hook_ctx.styles, hook_ctx.early_scripts
+        _validate_hook_nonces(script_security, scripts, styles, early_scripts)
     # An interactive fragment's dependencies are prepared by the code that
     # builds its Vue payload, which sets VUE_DEPENDENCIES_PREPARED_KEY and
-    # puts the before_manifest entries first in its script list, so the hook
+    # puts the early_scripts entries first in its script list, so the hook
     # above never ran for it.
-    if vue_mount is not None and before_manifest:
+    if vue_mount is not None and early_scripts:
         raise AssertionError("an interactive fragment ran the dependency hooks outside the Vue producer")
-    framework_manifests = before_manifest
 
     if javascript_policy is not None:
         scripts = javascript_policy.process_dependencies(scripts, position="fragment fetch")
         styles = javascript_policy.process_dependencies(styles, position="fragment stylesheet")
-        framework_manifests = javascript_policy.process_dependencies(
-            framework_manifests,
-            position="fragment framework",
+        early_scripts = javascript_policy.process_dependencies(
+            early_scripts,
+            position="fragment early-scripts",
         )
 
     # Static fragments have no Vue application. Emit their already-resolved
@@ -838,13 +839,13 @@ def _emit_fragment(
 
         html = _blank(ctx.html, placeholder_texts)
         css_html = "".join(render_dependency(dependency, style=True) for dependency in styles)
-        before_html = "".join(render_dependency(dependency) for dependency in framework_manifests)
+        early_html = "".join(render_dependency(dependency) for dependency in early_scripts)
         script_html = "".join(render_dependency(dependency) for dependency in scripts)
-        return html + css_html + before_html + script_html
+        return html + css_html + early_html + script_html
 
     # A fragment that carries nothing at all has nothing to load, so it needs
     # no runtime loader, no Vue descriptor, and no mounted integration.
-    if not scripts and not styles and not resolved.has_component_calls and not before_manifest and vue_mount is None:
+    if not scripts and not styles and not resolved.has_component_calls and not early_scripts and vue_mount is None:
         return _blank(ctx.html, placeholder_texts)
     if citry.mounted_prefix is None:
         raise RuntimeError(fragment_needs_mount_msg)
@@ -855,8 +856,8 @@ def _emit_fragment(
     # is parsed; the Vue runtime reads the descriptor and loads the assets.
     if script_security is None:
         manifest = _vue_fragment_manifest(vue_mount)
-        before_html = "".join(str(dep.render()) for dep in framework_manifests)
-        return html + str(_preloader_script(citry, None).render()) + before_html + str(manifest.render())
+        early_html = "".join(str(dep.render()) for dep in early_scripts)
+        return html + str(_preloader_script(citry, None).render()) + early_html + str(manifest.render())
     if security_csp == "strict":
         preloader_html = ""
     else:
@@ -873,7 +874,7 @@ def _emit_fragment(
         preloader_html = script_security.render(preloader)
         if script_security.integrity_enabled:
             script_security.record_owned_dynamic(runtime_resource)
-    before_html = "".join(script_security.render(dep) for dep in framework_manifests)
+    early_html = "".join(script_security.render(dep) for dep in early_scripts)
     manifest = _vue_fragment_manifest(vue_mount)
     if javascript_policy is not None:
         retained_manifest = javascript_policy.process_dependencies(
@@ -881,23 +882,23 @@ def _emit_fragment(
             position="fragment manifest",
         )
         if not retained_manifest:
-            return html + preloader_html + before_html
+            return html + preloader_html + early_html
         if not isinstance(retained_manifest[0], Script):
             raise RuntimeError("The JavaScript inventory changed the structured fragment manifest type.")
         manifest = retained_manifest[0]
-    return html + preloader_html + before_html + script_security.render(manifest)
+    return html + preloader_html + early_html + script_security.render(manifest)
 
 
 def _validate_hook_nonces(
     script_security: _ScriptSecurityMaterializer | None,
     scripts: list[Dependency],
     styles: list[Dependency],
-    before_manifest: list[Dependency],
+    early_scripts: list[Dependency],
 ) -> None:
     """Check every global-hook contribution before later equality deduplication."""
     if script_security is None or script_security.csp_nonce is None:
         return
-    for dependency in [*scripts, *styles, *before_manifest]:
+    for dependency in [*scripts, *styles, *early_scripts]:
         script_security.validate_declared_nonce(dependency)
 
 

@@ -25,7 +25,7 @@
   const pageVuePlugins = [];
   // Becomes true when Citry creates its first Vue app on this page. A plugin registered after that
   // would be missing from that app, so `Citry.vue.use()` refuses it from then on. Scripts the start
-  // loads before that moment (an extension's before_manifest scripts, component JavaScript) may
+  // loads before that moment (an extension's early_scripts, component JavaScript) may
   // still register one.
   let firstAppCreated = false;
   // A Vue object that cannot take a new property (a frozen copy) goes without `use` rather than
@@ -42,7 +42,7 @@
         if (firstAppCreated)
           throw new Error("Citry.vue.use() was called after Citry created a Vue app on this page, so that app " +
             "would run without the plugin. Call it from a script that runs before Citry creates its first app, " +
-            "such as a script loaded with `defer` in the page <head> or an extension's before_manifest script.");
+            "such as a script loaded with `defer` in the page <head> or a script an extension adds to early_scripts.");
         // As with `app.use`, registering the same plugin again does nothing, even with other options.
         if (pageVuePlugins.some(entry => entry.plugin === plugin)) return;
         pageVuePlugins.push(Object.freeze({plugin, options}));

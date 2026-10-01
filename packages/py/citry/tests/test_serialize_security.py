@@ -1620,7 +1620,7 @@ class TestJavascriptDeliveryPolicy:
             name = "add_browser_manifest"
 
             def on_dependencies(self, ctx):
-                ctx.before_manifest.append(
+                ctx.early_scripts.append(
                     Script(content="{}", attrs={"type": "application/json", "data-citry-custom": True})
                 )
 

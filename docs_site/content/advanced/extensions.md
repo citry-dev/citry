@@ -143,7 +143,7 @@ stylesheets. Its context holds three lists you can change in place:
 
 - `ctx.scripts`: the page's scripts, in the order they run.
 - `ctx.styles`: the page's stylesheets.
-- `ctx.before_manifest`: scripts that must run before everything in
+- `ctx.early_scripts`: scripts that must run before everything in
   `ctx.scripts`.
 
 ```python
@@ -155,7 +155,7 @@ class Analytics(Extension):
     name = "analytics"
 
     def on_dependencies(self, ctx):
-        ctx.before_manifest.append(
+        ctx.early_scripts.append(
             Script(url="https://cdn.example.com/consent.js"),
         )
         ctx.scripts.append(
@@ -163,20 +163,20 @@ class Analytics(Extension):
         )
 ```
 
-Where `before_manifest` entries end up depends on the page:
+Where `early_scripts` entries end up depends on the page:
 
 - **Static page:** Citry writes them as `<script>` tags ahead of the
   dependency scripts.
 - **Interactive page:** the page's Vue app loads its scripts itself, so
-  there are no tags to write first. Citry makes the `before_manifest`
+  there are no tags to write first. Citry makes the `early_scripts`
   entries the app's first scripts, in the order you added them, followed by
   `ctx.scripts`. They follow the same rules as any other script on an
   interactive page: classic JavaScript only. A `type="module"` or
   `type="application/json"` script, or a script with `async`, `defer`, or
   `nomodule`, makes serialization raise `ValueError`. An extension can
-  install a Vue plugin on the page's apps by adding a `before_manifest`
-  script that calls `Citry.vue.use(plugin)`; the page runs it before it
-  creates the Vue app.
+  install a Vue plugin on the page's apps by adding a script to
+  `ctx.early_scripts` that calls `Citry.vue.use(plugin)`; the page runs
+  it before it creates the Vue app.
 
 Citry adds its own browser runtime after the hook returns, so the hook
 cannot move or remove it. The runtime still loads before these scripts.

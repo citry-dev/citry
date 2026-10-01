@@ -854,7 +854,7 @@ class DirectVueEventsProducer:
             context=render.context,
             selected_render=render,
             strategy=options.get("strategy", "fragment" if base_revision is not None else "document"),
-            before_manifest=[],
+            early_scripts=[],
             _security_csp=options.get("security_csp", "off"),
             _security_javascript=options.get("security_javascript", "allow"),
         )
@@ -867,14 +867,14 @@ class DirectVueEventsProducer:
             script_security,
             dependency_ctx.scripts,
             dependency_ctx.styles,
-            dependency_ctx.before_manifest,
+            dependency_ctx.early_scripts,
         )
         # An interactive page has no static manifest to write tags ahead of.
         # The Vue app loads its scripts in list order, so loading these
         # entries first, in the order the hooks added them, keeps what static
         # output promises: they run before every other dependency script.
         # They are then ordinary scripts and follow the same loading rules.
-        dependency_scripts = [*dependency_ctx.before_manifest, *dependency_ctx.scripts]
+        dependency_scripts = [*dependency_ctx.early_scripts, *dependency_ctx.scripts]
         dependency_styles = dependency_ctx.styles
         if javascript_policy is not None:
             dependency_scripts = javascript_policy.process_dependencies(

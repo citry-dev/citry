@@ -94,7 +94,7 @@ def emit_i18n_dependencies(extension: I18nExtension, ctx: OnDependenciesContext)
         "requirements": requirements,
     }
     manifest_json = script_json(manifest, sort_keys=True, ensure_ascii=False)
-    ctx.before_manifest.append(
+    ctx.early_scripts.append(
         Script(
             kind="core",
             content=manifest_json,

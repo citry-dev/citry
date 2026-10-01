@@ -346,7 +346,7 @@ resolver and browser asset lifecycle, including final hook ordering, occurrence
 references, preflight checks and staged-style cleanup.
 
 Interactive fragment hook contributions must stay inert until the fragment
-descriptor has passed validation. `before_manifest` entries therefore become
+descriptor has passed validation. `early_scripts` entries therefore become
 the leading prepared scripts, which the browser loads through the same
 validated transaction as the other scripts, never as tags written ahead of
 the descriptor.

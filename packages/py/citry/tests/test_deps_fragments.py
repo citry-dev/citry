@@ -133,8 +133,8 @@ class TestFragmentStrategy:
         )
 
     @pytest.mark.parametrize("strategy", ["fragment", "document"])
-    def test_interactive_before_manifest_scripts_load_first(self, strategy):
-        # On an interactive page the before_manifest entries become the
+    def test_interactive_early_scripts_load_first(self, strategy):
+        # On an interactive page the early_scripts entries become the
         # leading prepared scripts, in the order the hook added them, ahead of
         # the hook's own scripts and the component's scripts.
         early_inline = "globalThis.hookOrder = ['early'];"
@@ -145,8 +145,8 @@ class TestFragmentStrategy:
 
             def on_dependencies(self, ctx):
                 ctx.scripts.append(Script(content=late_inline, wrap=False))
-                ctx.before_manifest.append(Script(content=early_inline, wrap=False))
-                ctx.before_manifest.append(Script(url="https://cdn.example.com/early.js"))
+                ctx.early_scripts.append(Script(content=early_inline, wrap=False))
+                ctx.early_scripts.append(Script(url="https://cdn.example.com/early.js"))
 
         c = Citry(extensions=[HookAssets])
         c.set_mounted_prefix("/citry")
@@ -173,7 +173,7 @@ class TestFragmentStrategy:
         # No tag for them is written outside the Vue app.
         assert 'src="https://cdn.example.com/early.js"' not in html
 
-    def test_interactive_before_manifest_follows_prepared_script_rules(self):
+    def test_interactive_early_scripts_follow_prepared_script_rules(self):
         # Entries become ordinary prepared scripts, so a data script that a
         # static page could carry is rejected on an interactive page, just
         # as it would be in ctx.scripts.
@@ -181,7 +181,7 @@ class TestFragmentStrategy:
             name = "hook_data"
 
             def on_dependencies(self, ctx):
-                ctx.before_manifest.append(Script(content="{}", attrs={"type": "application/json"}, wrap=False))
+                ctx.early_scripts.append(Script(content="{}", attrs={"type": "application/json"}, wrap=False))
 
         c = Citry(extensions=[HookData])
         c.set_mounted_prefix("/citry")
