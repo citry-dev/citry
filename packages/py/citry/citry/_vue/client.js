@@ -3087,7 +3087,14 @@
             });
           }
           const root = action.prepared?.occurrences?.find(item => item.id === action.prepared.rootId);
-          if (!root || root.typeKey !== target.typeKey) throw new Error("prepared Events Render target changed component type");
+          // The parent's compiled template still calls the target's component type, so a Render must keep that
+          // type. The message names both types and the two supported patterns, because the handler author sees
+          // only this error and not the Vue structure behind it.
+          if (!root) throw new Error("prepared Events Render has no root component occurrence");
+          if (root.typeKey !== target.typeKey)
+            throw new Error(`Citry Events Render cannot replace component ${target.typeKey} with a different ` +
+              `component, ${root.typeKey}. Render ${target.typeKey} again with new inputs, or place a ` +
+              "<c-mark name=\"...\"> region in the caller's template and Render into target=\"mark:<name>\".");
           const extensions = new Map(extensionEntries(action.prepared.extensions || {}));
           for (const name of plugins.keys()) if (!extensions.has(name)) throw new Error("prepared revision omitted installed browser plugin: " + name);
           for (const [name, incoming] of extensions) {

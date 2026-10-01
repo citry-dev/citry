@@ -24,6 +24,13 @@ known `render:<id>` address for another component occurrence or a caller-relativ
 supported. A component element returned directly is equivalent to
 `actions.Render(element)`.
 
+A Render into a component occurrence must render that same component again,
+with new inputs. Rendering a different component there fails in the browser
+with an error that names both components. To show a different component,
+render the calling component with an input that makes its template show the
+other one, or wrap that part of the template in a marker and Render the other
+component into `mark:<name>`.
+
 One response may update several independent targets when their Render actions
 form one contiguous group. Every action in that group must be immediate and
 blocking: omit `delay` or use `0`, and do not set `wait=False`. Interleaving

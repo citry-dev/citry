@@ -524,3 +524,47 @@ def test_unchanged_definition_renders_new_js_data_key(page: Any, serve_live: Any
 
     assert page.locator("#shape").text_content() == "ready"
     assert faults == []
+
+
+@pytest.mark.e2e
+def test_render_that_changes_the_component_type_names_both_types_and_the_fix(page: Any, serve_live: Any) -> None:
+    # A nested caller keeps its slot in the parent's compiled template, which
+    # calls the caller's own component type, so a Render must keep that type.
+    engine = Citry(secret="vue-type-change-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class Done(Component):
+        citry = engine
+        template = '<p id="done">done</p>'
+
+    class Form(Component):
+        citry = engine
+        template = '<button id="submit" @c-click="submit">submit</button>'
+
+        class Events:
+            def submit(self):
+                return actions.Render(Done())
+
+    class Page(Component):
+        citry = engine
+        template = "<main><c-Form /></main>"
+
+    dispatcher_for(engine)
+    _watch_citry_ready(page)
+    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    _wait_for_citry_ready(page)
+    form_type = page.evaluate(
+        """[...[...__citryRuntime._apps.values()][0].occurrences.values()]
+          .find(occurrence => occurrence.typeKey.startsWith('Form_')).typeKey"""
+    )
+
+    # A declarative `@c-click` call has no caller to reject to, so the error surfaces as a page error.
+    with page.expect_event("pageerror") as error_info:
+        page.locator("#submit").click()
+    fault = str(error_info.value)
+    assert f"cannot replace component {form_type} with a different component, Done_" in fault
+    assert f"Render {form_type} again with new inputs" in fault
+    assert 'target="mark:<name>"' in fault
+    # The rejected Render leaves the form on the page.
+    assert page.locator("#submit").count() == 1
+    assert page.locator("#done").count() == 0

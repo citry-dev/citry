@@ -1133,7 +1133,7 @@ Return-value rules, strict by design (ambiguity is refused, not guessed):
 | `None` | Acknowledged, no actions. If the handler mutated the state, the response still refreshes the client's token (the `state` action, 4.3). In debug mode the runtime logs a hint when state changed but nothing visible was returned. |
 | an action instance | That action. |
 | a `list` / `tuple` | Ordered actions; each element coerced by these same rules. Empty means acknowledged. |
-| a `CitryElement` / `CitryRender` | `Render` targeting the calling instance. The element can be any component; you are building a fresh tree, not resuming the old one. |
+| a `CitryElement` / `CitryRender` | `Render` targeting the calling instance. You are building a fresh tree, not resuming the old one, but its root must be the calling instance's own component class: the browser rejects a `vue-prepared/1` Render whose root changes the target's component type, because the parent's compiled template still calls the original type ([vue.md](vue.md), "Changing the target's component type"). To show another component, render it from the caller's template or into a `mark:<name>` region. |
 | a `dict` | `Data` (the one scalar convenience: a dict cannot be mistaken for an action or an element, and it is the overwhelmingly common typed-endpoint return). |
 | anything else (`str`, numbers, custom objects) | A pointed error naming the fix. A string is ambiguous (HTML or JSON?) so it is never guessed: use `actions.Data(s)`, and HTML only ever comes from rendering a component. Custom classes either wrap in `Data(...)` or register a **result resolver** once (6.2), after which returning them bare works. |
 
