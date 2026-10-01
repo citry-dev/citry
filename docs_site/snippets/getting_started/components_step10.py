@@ -92,9 +92,10 @@ class ChoicePicker(Component):
         <span v-show="$loading('load_choices')">Loading...</span>
 
         {# New in this step: show the counter from Python. #}
-        {# The server writes the first value into the tag. #}
+        {# Python renders the starting count inside <output>. #}
         {# `$state` is State in the browser; it updates after #}
-        {# each Python call, and Vue shows the new value. #}
+        {# each successful Python call, and Vue shows the new #}
+        {# value. #}
         <p>
           Sets loaded:
           <output v-text="$state.batches_loaded">
@@ -140,8 +141,8 @@ class ChoicePicker(Component):
           },
         },
         onServerRender({ component }) {
-          // Keep the element the listener was added to, so cleanup
-          // removes it from that same element.
+          // component.$el may point elsewhere by cleanup time, so
+          // remove the listener from the element that got it.
           const root = component.$el;
           const receive = (event) => {
             component.loadChoices(event.detail.choices);

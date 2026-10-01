@@ -114,9 +114,9 @@ class TutorialPage(Component):
         <body>
           <main>
             <h1>Join the reading room</h1>
-            {# New in this step: Confirmation replaces the form. #}
-            {# A live region that stays on the page lets screen #}
-            {# readers announce the new content. #}
+            {# New in this step: Confirmation replaces SignupForm, #}
+            {# so a live region outside it stays on the page and #}
+            {# screen readers announce the confirmation. #}
             <div aria-live="polite">
               <c-SignupForm />
             </div>

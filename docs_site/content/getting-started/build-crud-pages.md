@@ -74,8 +74,8 @@ $component({
     },
   },
   onServerRender({ component }) {
-    // Keep the element the listener was added to, so cleanup
-    // removes it from that same element.
+    // component.$el may point elsewhere by cleanup time, so
+    // remove the listener from the element that got it.
     const root = component.$el;
     const receive = (event) => {
       component.showSaved(event.detail);
