@@ -330,7 +330,7 @@ class CTree(LibraryComponent):
           // The tree keeps its browser-side choices on its root element, so a later
           // server render that reruns this callback on the same element restores them.
           /** @typedef {{serverFingerprint: string, expanded: string[], selected: string[],
-           *   activeValue: string | null}} TreeRuntime */
+           *   activeValue: string | null | undefined}} TreeRuntime */
           const root = /** @type {HTMLElement & {__citryUiTreeRuntime?: TreeRuntime}} */ (component.$el);
           const data = component.serverDefaults;
           const props = component.$props;

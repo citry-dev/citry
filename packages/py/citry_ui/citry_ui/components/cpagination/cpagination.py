@@ -468,7 +468,7 @@ class CPagination(LibraryComponent):
                 || (["first", "previous"].includes(kind) && current === 1)
                 || (["next", "last"].includes(kind) && current === data.pages);
               const href = data.href && !unavailable ? data.href.replace("{page}", String(page)) : null;
-              // A page with a URL is a link; any other page is a button that may be disabled.
+              // A control with a URL is a link; any other control is a button, disabled when its page is unavailable.
               let control;
               if (href) {
                 const link = document.createElement("a");

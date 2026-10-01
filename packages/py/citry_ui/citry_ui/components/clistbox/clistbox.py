@@ -480,7 +480,7 @@ class CListbox(LibraryComponent):
         onServerRender: ({component}) => {
           // The listbox keeps its browser-side choices on its root element, so a later
           // server render that reruns this callback on the same element restores them.
-          /** @typedef {{serverFingerprint: string, committed: string[], activeValue: string | null,
+          /** @typedef {{serverFingerprint: string, committed: string[], activeValue: string | null | undefined,
            *   order: string[], pendingStructural: string | null}} ListboxRuntime */
           const root = /** @type {HTMLElement & {__citryUiListboxRuntime?: ListboxRuntime}} */ (component.$el);
           const data = component;

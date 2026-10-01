@@ -362,9 +362,9 @@ class CTagGroup(LibraryComponent):
         onServerRender: ({component}) => {
           // The group keeps its browser-side selection on its root element, so a later
           // server render that reruns this callback on the same element restores it.
-          // Each CTag calls `__citryTagChanged` on this root to ask for a reconcile.
+          // Each CTag calls `__citryTagChanged` on this root to ask the group to check its tags again.
           /** @typedef {{selection: string | string[] | null, serverValueFingerprint: string | null,
-           *   focusedValue: string | null, order: string[]}} TagGroupRuntime */
+           *   focusedValue: string | null | undefined, order: string[]}} TagGroupRuntime */
           const root = /** @type {HTMLElement & {__citryUiTagRuntime?: TagGroupRuntime,
            *   __citryTagChanged?: () => void}} */ (component.$el);
           const data = {...component.serverDefaults,
@@ -715,7 +715,8 @@ class CTagGroup(LibraryComponent):
           }));
           const structureObserver = new MutationObserver((records) => {
             if (records.some((record) => record.type === "childList"
-              // Only attribute records reach this test, and their target is always an element.
+              // The observer watches child lists and attributes, and child-list records match
+              // earlier, so this target is an element whose attribute changed.
               || /** @type {Element} */ (record.target).closest?.(
                 '[data-citry-ui-part="tag-label"], [data-citry-ui-part="start"]',
               ))) {
@@ -882,7 +883,7 @@ class CTag(LibraryComponent):
       $component({
         props: {disabled: {}, textValue: {}},
         onServerRender: ({component}) => {
-          // The tag publishes its entry on its own root, where the group's callback reads it.
+          // The group's callback reads this tag's entry from the root, so the entry's fields are typed here.
           /** @typedef {{root: HTMLElement, label: Element | null, indicator: Element | null,
            *   remove: Element | null, value: string | undefined, localDisabled: boolean,
            *   disabled: boolean, textValue: string}} TagEntry */
