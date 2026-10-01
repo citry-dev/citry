@@ -29,6 +29,19 @@ def _sys_path_guard(monkeypatch):
     monkeypatch.setattr(sys, "path", list(sys.path))
 
 
+@pytest.fixture(autouse=True)
+def _plain_argparse_output(monkeypatch):
+    """
+    Keep argparse help and usage text free of ANSI color codes.
+
+    Python 3.14's argparse colors its output whenever ``FORCE_COLOR`` is set,
+    even off a terminal, so the text assertions below would fail in a shell
+    that exports it. ``PYTHON_COLORS=0`` takes precedence over ``FORCE_COLOR``
+    and leaves citry's own ``NO_COLOR`` handling untouched.
+    """
+    monkeypatch.setenv("PYTHON_COLORS", "0")
+
+
 def _engine_with_command(captured):
     """A Citry whose 'greeter' extension provides a 'greet' command that records its inputs."""
 

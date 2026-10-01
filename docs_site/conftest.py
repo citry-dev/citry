@@ -25,3 +25,23 @@ def _unmounted_default_citry(monkeypatch: pytest.MonkeyPatch) -> None:
     # The instance exposes no public way to forget a mount, so reset the
     # attribute that `set_mounted_prefix()` writes.
     monkeypatch.setattr(default_citry, "_mounted_prefix", None)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """
+    Refuse a pytest run that mixes the docs tests with the package tests.
+
+    Importing a component module registers its class by name on the shared
+    default Citry instance, and the docs examples and the package tests both
+    define common names such as `Card` and `Page`. In one process the second
+    definition fails to register, so the run breaks in ways unrelated to the
+    code under test. Each suite runs in its own pytest process; this turns an
+    accidental mix into one clear error.
+    """
+    del config
+    if any(item.nodeid.startswith("packages/") for item in items):
+        message = (
+            "docs_site tests share the default Citry registry with the package tests. "
+            "Run `pytest docs_site/tests docs_site/examples` in a separate pytest process."
+        )
+        raise pytest.UsageError(message)
