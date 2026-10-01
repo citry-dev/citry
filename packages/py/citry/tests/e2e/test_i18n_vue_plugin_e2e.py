@@ -925,3 +925,114 @@ def test_prepared_stylesheets_are_owned_per_app_and_never_adopt_authored_links(
         "apps": 1,
     }
     assert result["final"] == {"authored": True, "first": False, "second": False, "apps": 0}
+
+
+def test_i18n_service_is_ready_before_data_provide_and_immediate_watchers(page: Any, serve_live: Any) -> None:
+    # The docs promise `this.$i18n` in every option hook, so read it in the
+    # hooks Vue runs before `created()`, under two providers with different
+    # locales, and then switch one provider to prove the reads stay scoped.
+    engine = Citry(
+        autodiscover=False,
+        extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US", "cs")}},
+    )
+
+    class Reader(Component):
+        citry = engine
+        template = """
+<output class="injected" v-text="providedLocale"></output>
+"""
+        js = """
+$component({
+  inject: ['providedLocale'],
+});
+"""
+
+    class Probe(Component):
+        citry = engine
+        template = """
+<section class="probe">
+  <output class="before-create" v-text="earlyLocale"></output>
+  <output class="data" v-text="dataLocale"></output>
+  <output class="greeting" v-text="greeting"></output>
+  <output class="watched" v-text="watched.join(',')"></output>
+  <output class="live" v-text="$i18n.context.locale"></output>
+  <button
+    class="switch"
+    @click="$i18n.switchLocale('cs')"
+  >cs</button>
+  <c-reader />
+</section>
+"""
+        js = """
+$component({
+  beforeCreate() {
+    this._earlyLocale = this.$i18n.context.locale;
+  },
+  data() {
+    return {
+      earlyLocale: this._earlyLocale,
+      dataLocale: this.$i18n.context.locale,
+      greeting: this.$i18n.tr('probe-greeting'),
+      watched: [],
+    };
+  },
+  provide() {
+    return {providedLocale: this.$i18n.context.locale};
+  },
+  watch: {
+    '$i18n.context.locale': {
+      immediate: true,
+      handler(locale) {
+        this.watched.push(locale);
+      },
+    },
+  },
+});
+"""
+        messages = """
+probe-greeting = Hello
+"""
+
+    engine.register(Reader)
+    engine.register(Probe)
+
+    class Page(Component):
+        citry = engine
+        template = """
+<c-i18n c-client="True" locale="en-US" tag="div"><c-probe /></c-i18n>
+<c-i18n c-client="True" locale="cs" tag="div"><c-probe /></c-i18n>
+"""
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on("console", lambda message: faults.append(message.text) if message.type == "error" else None)
+    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    page.locator(".probe").nth(1).wait_for()
+
+    def read(index: int) -> dict[str, str | None]:
+        probe = page.locator(".probe").nth(index)
+        return {
+            name: probe.locator(f".{name}").text_content()
+            for name in ("before-create", "data", "greeting", "watched", "live", "injected")
+        }
+
+    assert read(0) == {
+        "before-create": "en-US",
+        "data": "en-US",
+        "greeting": "Hello",
+        "watched": "en-US",
+        "live": "en-US",
+        "injected": "en-US",
+    }, faults
+    assert read(1)["data"] == "cs", faults
+    assert read(1)["watched"] == "cs"
+
+    # Switching the first provider must reach its own watcher and template
+    # while the second provider keeps its locale.
+    page.locator(".probe").nth(0).locator(".switch").click()
+    page.wait_for_function("document.querySelector('.probe .live')?.textContent === 'cs'")
+    assert read(0)["watched"] == "en-US,cs"
+    assert read(1)["live"] == "cs"
+    assert read(1)["watched"] == "cs"
+    assert faults == []

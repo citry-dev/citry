@@ -728,7 +728,7 @@ interface PluginGlobal extends Window {
           )
             throw new Error("[Citry] i18n: $i18n collides with an existing Vue option.");
           const originalSetup = options.setup;
-          const originalCreated = options.created;
+          const originalBeforeCreate = options.beforeCreate;
           const originalBeforeUnmount = options.beforeUnmount;
           return {
             ...options,
@@ -747,7 +747,11 @@ interface PluginGlobal extends Window {
                 throw new Error("[Citry] i18n: template context collides with an existing setup binding.");
               return original;
             },
-            created() {
+            // Vue runs `beforeCreate` before it resolves inject, methods, data, computed, watch and provide,
+            // and `created` only after all of them. Installing `$i18n` here, ahead of the authored hook, lets
+            // every one of those options and the authored `beforeCreate` read the component's service. The
+            // cell it reads was already created by `setup()` above, which Vue runs before any option hook.
+            beforeCreate() {
               const id = typeof this.citryId === "string" ? this.citryId : host.occurrenceId(this);
               if (id !== null) {
                 if ("$i18n" in this || "$citryI18nBinding" in this)
@@ -763,7 +767,7 @@ interface PluginGlobal extends Window {
                   value: renderBinding,
                 });
               }
-              if (originalCreated) originalCreated.call(this);
+              if (originalBeforeCreate) originalBeforeCreate.call(this);
             },
             beforeUnmount() {
               try {
