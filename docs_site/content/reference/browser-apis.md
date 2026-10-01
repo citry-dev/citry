@@ -81,7 +81,7 @@ The component template declares the referenced element:
 | `sendEvent(name, args?, opts?)` | Calls [`component.$sendEvent`](#send-event). |
 | `loading(name?)` | Calls [`component.$loading`](#loading). |
 | `error(name?)` | Calls [`component.$error`](#error). |
-| `i18n` | The same service as [`component.$i18n`](#i18n), or `null` outside a client i18n provider. |
+| `i18n` | The same service as [`component.$i18n`](#i18n), or `null` outside a client i18n provider or when the app does not configure the i18n extension. |
 
 `state`, `sendEvent`, `loading`, `error`, and `i18n` repeat instance helpers,
 so code written either way reads the same values. On a component without
@@ -172,9 +172,10 @@ the component renders.
 <h3 class="doc-heading" id="i18n"><code>$i18n</code></h3>
 
 Read the browser translation service of the nearest client-enabled
-`<c-i18n>` provider. Templates use `$i18n`, component JavaScript uses
-`this.$i18n` or `component.$i18n`, and the value is `null` outside a client
-provider. The service has these members:
+`<c-i18n>` provider. Templates use `$i18n` inside a client provider.
+Component JavaScript uses `this.$i18n` or `component.$i18n`, which is
+`null` outside a client provider and `undefined` when the app does not
+configure the i18n extension. The service has these members:
 
 | Member | Meaning |
 | --- | --- |

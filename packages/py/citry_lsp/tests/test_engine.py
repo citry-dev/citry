@@ -2068,7 +2068,28 @@ def test_open_inject_projection_keeps_explicit_options_and_accepts_unknown_keys(
     assert checked.returncode == 0, checked.stdout + checked.stderr
 
 
-def test_callback_projection_exposes_i18n_as_a_nullable_service(tmp_path):
+@pytest.mark.parametrize(
+    ("i18n_settings", "declaration", "unsafe_call_message"),
+    [
+        pytest.param(
+            ', extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}}',
+            "@property {CitryI18nService | null} $i18n ",
+            "'component.$i18n' is possibly 'null'.",
+            id="i18n-configured",
+        ),
+        # Without i18n settings `$i18n` is undefined, so the member is optional;
+        # shared code such as Citry UI tests the value before use and still type-checks.
+        pytest.param(
+            "",
+            "@property {CitryI18nService | null} [$i18n] ",
+            "'component.$i18n' is possibly 'null' or 'undefined'.",
+            id="i18n-not-configured",
+        ),
+    ],
+)
+def test_callback_projection_exposes_i18n_as_a_nullable_service(
+    tmp_path, i18n_settings, declaration, unsafe_call_message
+):
     js_source = """$component({
       onServerRender({ component }) {
         component.$i18n?.tr("account-greeting", { name: "Ada" });
@@ -2081,20 +2102,15 @@ def test_callback_projection_exposes_i18n_as_a_nullable_service(tmp_path):
     app_source = """from pathlib import Path
 from citry import Citry, Component
 
-engine = Citry(
-    dirs=[Path(__file__).parent],
-    autodiscover=False,
-    extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
-)
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False{i18n_settings})
 
 class Card(Component):
     citry = engine
     js_file = "card.js"
 """
-    (tmp_path / "app.py").write_text(app_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(app_source.format(i18n_settings=i18n_settings), encoding="utf-8")
     project = load_project(tmp_path, "app:engine")
-    assert project.i18n is not None
-    assert project.i18n.configured
+    assert (project.i18n is not None and project.i18n.configured) is bool(i18n_settings)
     javascript = DocumentState(js_file.as_uri(), "javascript", js_source, 1)
     javascript.update(js_source, 1, project)
 
@@ -2106,7 +2122,7 @@ class Card(Component):
     )
 
     assert projection is not None
-    assert "@property {CitryI18nService | null} $i18n" in projection.source
+    assert declaration in projection.source
     projected = tmp_path / "callback-i18n.js"
     projected.write_text("// @ts-check\n" + projection.source, encoding="utf-8")
     tsc = _require_repository_tsc()
@@ -2139,7 +2155,7 @@ class Card(Component):
     unsafe_call_line = projection.source[: projection.source.index("component.$i18n.tr")].count("\n") + 2
     assert checked.returncode == 1
     assert f"callback-i18n.js({unsafe_call_line},9)" in diagnostics
-    assert "possibly 'null'" in diagnostics
+    assert unsafe_call_message in diagnostics
     assert "Property '$i18n' does not exist" not in diagnostics
     assert "Property 'tr' does not exist" not in diagnostics
     assert "Cannot find module" not in diagnostics

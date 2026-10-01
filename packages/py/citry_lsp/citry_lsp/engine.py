@@ -8950,10 +8950,18 @@ def _instance_helpers_typedef(i18n: Any | None, *, has_state: bool) -> tuple[str
         " * @property {Record<string, any>} $refs The elements and child components the template marks "
         "with `ref`, by name.",
     ]
+    i18n_text = "Translate and format inside the nearest client i18n provider, or null outside one."
     if i18n is not None and i18n.configured:
+        # The i18n Vue plugin defines `$i18n` on each Citry component in its `created()` hook.
+        lines.append(f" * @property {{CitryI18nService | null}} $i18n {i18n_text} {_BROWSER_I18N_URL}")
+    else:
+        # Without i18n settings Citry does not install the i18n Vue plugin, so
+        # `$i18n` is undefined. Shared code such as a component library still
+        # reads it and checks the value first, so the member is optional and
+        # that read type-checks.
         lines.append(
-            " * @property {CitryI18nService | null} $i18n Translate and format inside the nearest client i18n "
-            f"provider, or null outside one. {_BROWSER_I18N_URL}"
+            f" * @property {{CitryI18nService | null}} [$i18n] {i18n_text} It is undefined when the app "
+            f"does not configure the i18n extension. {_BROWSER_I18N_URL}"
         )
     lines.append(" */")
     return tuple(lines)
