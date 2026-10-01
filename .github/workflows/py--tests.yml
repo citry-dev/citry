@@ -458,10 +458,6 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/wheelhouse"
-          python -m pip download --dest "$RUNNER_TEMP/wheelhouse" dist/citry_ui-*.whl
-          # pip download may have selected the published Citry version while
-          # resolving citry-ui. Replace that candidate with the wheel built
-          # from this checkout before the wheelhouse is used offline.
           local_citry_wheels=(dist/citry-[0-9]*.whl)
           local_citry_core_wheels=(dist/citry_core-[0-9]*.whl)
           if [[ ${#local_citry_wheels[@]} -ne 1 || ! -f ${local_citry_wheels[0]} ]]; then
@@ -474,10 +470,19 @@ jobs:
           fi
           local_citry=${local_citry_wheels[0]}
           local_citry_core=${local_citry_core_wheels[0]}
-          find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry-[0-9]*.whl' -delete
-          find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry_core-[0-9]*.whl' -delete
-          cp "$local_citry" "$RUNNER_TEMP/wheelhouse/"
-          cp "$local_citry_core" "$RUNNER_TEMP/wheelhouse/"
+          # Citry and Citry Core are released together with citry-ui, so
+          # resolve them from the wheels built from this commit. Naming the
+          # files makes pip use exactly these bytes for those two names, even
+          # when PyPI has the same version; other dependencies still come
+          # from PyPI.
+          python -m pip download \
+            --dest "$RUNNER_TEMP/wheelhouse" \
+            dist/citry_ui-*.whl "$local_citry" "$local_citry_core"
+          # The offline installs below rely on the wheelhouse holding the
+          # local bytes, so fail here rather than test a published build.
+          for wheel in "$local_citry" "$local_citry_core"; do
+            cmp "$wheel" "$RUNNER_TEMP/wheelhouse/$(basename "$wheel")"
+          done
 
       - name: Install and exercise the wheel with pip outside the checkout
         shell: bash
@@ -570,7 +575,6 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/wheelhouse"
-          python -m pip download --dest "$RUNNER_TEMP/wheelhouse" dist/citry_ui-*.whl
           local_citry_wheels=(dist/citry-[0-9]*.whl)
           local_citry_core_wheels=(dist/citry_core-[0-9]*.whl)
           if [[ ${#local_citry_wheels[@]} -ne 1 || ! -f ${local_citry_wheels[0]} ]]; then
@@ -583,10 +587,19 @@ jobs:
           fi
           local_citry=${local_citry_wheels[0]}
           local_citry_core=${local_citry_core_wheels[0]}
-          find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry-[0-9]*.whl' -delete
-          find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry_core-[0-9]*.whl' -delete
-          cp "$local_citry" "$RUNNER_TEMP/wheelhouse/"
-          cp "$local_citry_core" "$RUNNER_TEMP/wheelhouse/"
+          # Citry and Citry Core are released together with citry-ui, so
+          # resolve them from the wheels built from this commit. Naming the
+          # files makes pip use exactly these bytes for those two names, even
+          # when PyPI has the same version; other dependencies still come
+          # from PyPI.
+          python -m pip download \
+            --dest "$RUNNER_TEMP/wheelhouse" \
+            dist/citry_ui-*.whl "$local_citry" "$local_citry_core"
+          # The offline installs below rely on the wheelhouse holding the
+          # local bytes, so fail here rather than test a published build.
+          for wheel in "$local_citry" "$local_citry_core"; do
+            cmp "$wheel" "$RUNNER_TEMP/wheelhouse/$(basename "$wheel")"
+          done
 
       - name: Install the exact wheel and matching local Citry
         shell: bash
