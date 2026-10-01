@@ -928,12 +928,13 @@ def test_prepared_stylesheets_are_owned_per_app_and_never_adopt_authored_links(
 
 
 def test_i18n_service_is_ready_before_data_provide_and_immediate_watchers(page: Any, serve_live: Any) -> None:
-    # The docs promise `this.$i18n` in every option hook, so read it in the
-    # hooks Vue runs before `created()`, under two providers with different
-    # locales, and then switch one provider to prove the reads stay scoped.
+    # The docs promise `this.$i18n` in `data()`, lifecycle hooks, `provide()`
+    # and watch handlers, so read it in each one Vue runs before `created()`,
+    # under two providers with different locales, and then switch one
+    # provider to a third locale to prove the reads stay scoped.
     engine = Citry(
         autodiscover=False,
-        extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US", "cs")}},
+        extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US", "cs", "de")}},
     )
 
     class Reader(Component):
@@ -958,8 +959,8 @@ $component({
   <output class="live" v-text="$i18n.context.locale"></output>
   <button
     class="switch"
-    @click="$i18n.switchLocale('cs')"
-  >cs</button>
+    @click="$i18n.switchLocale('de')"
+  >de</button>
   <c-reader />
 </section>
 """
@@ -1025,14 +1026,20 @@ probe-greeting = Hello
         "live": "en-US",
         "injected": "en-US",
     }, faults
-    assert read(1)["data"] == "cs", faults
-    assert read(1)["watched"] == "cs"
+    assert read(1) == {
+        "before-create": "cs",
+        "data": "cs",
+        "greeting": "Hello",
+        "watched": "cs",
+        "live": "cs",
+        "injected": "cs",
+    }, faults
 
     # Switching the first provider must reach its own watcher and template
-    # while the second provider keeps its locale.
+    # while the second provider keeps its locale and never notifies its watcher.
     page.locator(".probe").nth(0).locator(".switch").click()
-    page.wait_for_function("document.querySelector('.probe .live')?.textContent === 'cs'")
-    assert read(0)["watched"] == "en-US,cs"
+    page.wait_for_function("document.querySelector('.probe .live')?.textContent === 'de'")
+    assert read(0)["watched"] == "en-US,de"
     assert read(1)["live"] == "cs"
     assert read(1)["watched"] == "cs"
     assert faults == []
