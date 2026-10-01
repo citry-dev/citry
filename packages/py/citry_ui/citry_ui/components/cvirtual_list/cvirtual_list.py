@@ -83,6 +83,13 @@ class _VirtualListRegistry:
     items: list[_VirtualListDeclaration] = field(default_factory=list)
 
 
+class _VirtualListRow(TypedDict):
+    """One declared item and its absolute index in the full list."""
+
+    declaration: _VirtualListDeclaration
+    index: int
+
+
 def _plain(name: str, value: object, *, optional: bool = False) -> str | None:
     raw = const_value(value)
     if raw is None and optional:
@@ -322,6 +329,12 @@ class CInternalVirtualList(LibraryComponent):
         item_size = kwargs.item_size or kwargs.estimated_item_size
         end_index = kwargs.start_index + len(declarations)
         self.unprovide(_VIRTUAL_LIST_CONTEXT)
+        # A window renders a slice of the list, so each row's index is offset
+        # by where that slice starts.
+        items: list[_VirtualListRow] = [
+            {"declaration": declaration, "index": kwargs.start_index + offset}
+            for offset, declaration in enumerate(declarations)
+        ]
         return {
             "attrs": {
                 **kwargs.attrs,
@@ -333,13 +346,7 @@ class CInternalVirtualList(LibraryComponent):
                 "tabindex": 0 if kwargs.focusable else None,
             },
             "strategy": kwargs.strategy,
-            "items": [
-                {
-                    "declaration": declaration,
-                    "index": kwargs.start_index + offset,
-                }
-                for offset, declaration in enumerate(declarations)
-            ],
+            "items": items,
             "total_count": total_count,
             "before_size": kwargs.start_index * item_size if kwargs.strategy == "window" else 0,
             "after_size": max(0, total_count - end_index) * item_size if kwargs.strategy == "window" else 0,
@@ -375,7 +382,7 @@ class CInternalVirtualListStatic(LibraryComponent):
     @dataclass(slots=True)
     class Kwargs:
         attrs: dict[str, object]
-        items: list[dict[str, object]]
+        items: list[_VirtualListRow]
         total_count: int
 
     @dataclass(slots=True)
@@ -408,7 +415,7 @@ class CInternalVirtualListWindow(LibraryComponent):
     @dataclass(slots=True)
     class Kwargs:
         attrs: dict[str, object]
-        items: list[dict[str, object]]
+        items: list[_VirtualListRow]
         total_count: int
         before_size: int
         after_size: int
