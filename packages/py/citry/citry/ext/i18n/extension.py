@@ -813,7 +813,7 @@ class I18nService:
     Use messages, formatting, and parsing with one explicit locale context.
 
     Create this service with
-    [`I18nExtension.for_context`][citry.I18nExtension.for_context]. Components
+    [`I18nExtension.for_context`][citry.ext.i18n.I18nExtension.for_context]. Components
     receive the same operations through [`Component.i18n`][citry.Component.i18n].
 
     Attributes:
@@ -892,7 +892,7 @@ class I18nExtension(Extension):
     `app.extensions.get_extension("i18n")`. Create a context with
     [`make_context()`][citry.ext.i18n.make_context], pass it through root
     `render(provides={"citry_i18n": context})`, and use
-    [`for_context()`][citry.I18nExtension.for_context] outside components.
+    [`for_context()`][citry.ext.i18n.I18nExtension.for_context] outside components.
     Components receive the same operations through `self.i18n`.
     """
 

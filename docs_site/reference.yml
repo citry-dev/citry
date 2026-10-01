@@ -362,6 +362,11 @@ categories:
       - { key: "$onEvent", anchor: on-event, role: "js:function" }
       - { key: "$i18n", anchor: i18n, role: "js:data" }
       - { key: Citry.events, anchor: citry-events, role: "js:data" }
+      - { key: Citry.events.send, anchor: citry-events-send, role: "js:function" }
+      - { key: Citry.events.on, anchor: citry-events-on, role: "js:function" }
+      - { key: Citry.events.configure, anchor: citry-events-configure, role: "js:function" }
+      - { key: Citry.events.registerTransport, anchor: citry-events-register-transport, role: "js:function" }
+      - { key: Citry.events.applyActions, anchor: citry-events-apply-actions, role: "js:function" }
 
   - kind: generated_python
     slug: attributes

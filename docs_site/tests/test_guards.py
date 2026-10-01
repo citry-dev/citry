@@ -23,6 +23,7 @@ from docs_site._internal.guards import (
     blog_feed,
     builtin_tags,
     component_fence,
+    crossref,
     example_contract,
     fence_validator,
     format_report,
@@ -394,6 +395,36 @@ def test_authored_reference_guard_reports_an_unexpected_anchor(tmp_path: Path) -
     results = list(authored_reference.check(_content_ctx(tmp_path)))
 
     assert any("Unexpected authored Reference anchor: #unlisted" in result.message for result in results)
+
+
+def test_crossref_guard_reports_an_unknown_key_with_its_line(tmp_path: Path) -> None:
+    (tmp_path / "page.md").write_text(
+        "# Page\n\nUse [`Const`][citry.Const].\n\nSee [`send`][Citry.events.missing].\n",
+        encoding="utf-8",
+    )
+
+    results = [result for result in crossref.check(_content_ctx(tmp_path)) if result.source == "page.md"]
+
+    assert [(result.line, "'Citry.events.missing'" in result.message) for result in results] == [(5, True)]
+
+
+def test_crossref_scan_skips_code_and_markdown_link_labels() -> None:
+    text = """Known [`Thing`][pkg.Thing] and shortcut [`Thing`][].
+
+A pattern `[a-z][a-z0-9]` and a [guide][guide-link].
+
+```python
+rows[i][j]
+```
+
+Broken [`Gone`][pkg.Gone].
+
+[guide-link]: /guide/
+"""
+
+    assert list(crossref.unresolved_crossrefs(text, {"pkg.Thing": "/r/#thing", "Thing": "/r/#thing"})) == [
+        ("pkg.Gone", 9),
+    ]
 
 
 def test_internal_link_flags_broken_and_accepts_valid(tmp_path: Path) -> None:

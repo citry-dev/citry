@@ -512,6 +512,11 @@ That brings the suite to 16 guards; the only one still deferred is
 `anchor_alias`, which needs a legacy-anchor scheme citry has no use for yet (no
 symbol has been renamed). The suite passes clean, including under `--strict`.
 
+The `crossref` guard looks up every `[text][key]` cross-reference in the
+Markdown pages and in the docstrings the generated Reference pages render. The
+builder shows an unknown key as plain text without any warning, so the guard
+reports it as an error with the file and line to fix.
+
 Social-card images are now generated too (`social_cards.py` + the `OgCard`
 component): for each indexable page the card is rendered to standalone HTML,
 screenshotted to a 1200x630 PNG by a headless browser, content-addressed in a

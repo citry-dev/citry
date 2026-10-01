@@ -83,7 +83,7 @@ class TitledMessage(Message):
 
 Citry combines the same set of declarations across a component family:
 
-- [`Kwargs`][cotry.Component.Kwargs] and [`Slots`][citry.Component.Slots] describe inputs;
+- [`Kwargs`][citry.Component.Kwargs] and [`Slots`][citry.Component.Slots] describe inputs;
 - [`TemplateData`][citry.Component.TemplateData], [`JsData`][citry.Component.JsData], and [`CssData`][citry.Component.CssData] describe returned data;
 - the events extension adds [`State`][citry.Component.State] and [`Events`][citry.Component.Events].
 
