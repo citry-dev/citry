@@ -383,9 +383,9 @@ Citry.events.send(target, name, args?, opts?)
 The returned Promise has the same data and error behavior as
 [`$sendEvent`](#send-event), and `opts` takes the same
 [options](#send-event). The Promise rejects when no mounted component
-matches `target`, or when more than one does. Unlike `$sendEvent`, an
-unknown handler name, or `args` that is not a plain object, throws when you
-call `send` instead of rejecting the Promise.
+matches `target`, or when more than one does. As with `$sendEvent`, an
+unknown handler name, or `args` that is not a plain object, also rejects the
+Promise instead of throwing.
 
 <h4 class="doc-heading" id="citry-events-on"><code>Citry.events.on</code></h4>
 

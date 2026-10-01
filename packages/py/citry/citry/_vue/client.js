@@ -111,9 +111,19 @@
     }
     return applyPublicActionsWithoutApp(checked);
   };
+  // `send` and `applyActions` return Promises, and callers await them, so a check that fails partway down
+  // (an unknown handler, args that are not a plain object, a missing Events bridge) must arrive as a rejection
+  // the caller can catch, the same way `$sendEvent` reports it, rather than as an exception from the call.
+  const rejectOnThrow = call => {
+    try {
+      return Promise.resolve(call());
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  };
   const publicEvents = {
     send(target, name, args, opts) {
-      return publicSend(target, name, args, opts);
+      return rejectOnThrow(() => publicSend(target, name, args, opts));
     },
     on(name, callback) {
       if (typeof name !== "string" || name.length === 0) throw new TypeError("Citry.events.on needs a non-empty event name");
@@ -136,7 +146,7 @@
       publicEventTransports.set(name, implementation);
     },
     applyActions(actions) {
-      return publicApplyActions(actions);
+      return rejectOnThrow(() => publicApplyActions(actions));
     },
   };
   if (Object.prototype.hasOwnProperty.call(citryNamespace, "events") && citryNamespace.events !== undefined) {

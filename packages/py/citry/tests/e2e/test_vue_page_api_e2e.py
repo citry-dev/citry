@@ -5,7 +5,8 @@ Browser tests for the page-wide Vue APIs: `Citry.vue.use()` and the options of a
 page can add a store, a global property, or a global directive. The call must
 run before Citry starts its first app. The other tests check that
 `$sendEvent` and `Citry.events.send` accept only the options Citry
-implements and name the problem in the rejection.
+implements, and that both report every bad call as a rejection that names
+the problem.
 """
 
 from __future__ import annotations
@@ -163,6 +164,12 @@ def test_send_options_reject_wait_false_and_unknown_keys(page: Any, serve_live: 
             () => counter.$sendEvent('ping', {}, {timout: 100}),
             () => Citry.events.send(counter.$el, 'ping', {}, {wait: false}),
             () => counter.$sendEvent('ping', {}, {wait: true, timeout: 5000}),
+            // A bad handler name or non-object args rejects from both APIs, so
+            // `allSettled` collects them; a synchronous throw would stop it here.
+            () => counter.$sendEvent('missing'),
+            () => Citry.events.send(counter.$el, 'missing'),
+            () => counter.$sendEvent('ping', [1]),
+            () => Citry.events.send(counter.$el, 'ping', [1]),
           ];
           Promise.allSettled(attempts.map(attempt => attempt())).then(results => {
             window.__sendResults = results.map(result =>
@@ -174,7 +181,16 @@ def test_send_options_reject_wait_false_and_unknown_keys(page: Any, serve_live: 
     page.goto(serve_live(engine, counter().render().serialize(), "") + "/")
     page.wait_for_function("window.__sendResults !== undefined")
 
-    wait_false, unknown, public_wait_false, accepted = page.evaluate("window.__sendResults")
+    (
+        wait_false,
+        unknown,
+        public_wait_false,
+        accepted,
+        missing,
+        public_missing,
+        bad_args,
+        public_bad_args,
+    ) = page.evaluate("window.__sendResults")
     assert wait_false.startswith("TypeError: Citry Events option 'wait' accepts only true.")
     assert "one at a time" in wait_false
     assert "@event(latest_wins=True)" in wait_false
@@ -183,6 +199,10 @@ def test_send_options_reject_wait_false_and_unknown_keys(page: Any, serve_live: 
     )
     assert public_wait_false == wait_false
     assert accepted == "pong"
+    assert "missing" in missing
+    assert public_missing == missing
+    assert "Citry Events arguments" in bad_args
+    assert public_bad_args == bad_args
     # Only the accepted call reached the server.
     assert len(requests) == 1
     assert errors == []

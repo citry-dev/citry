@@ -94,6 +94,31 @@ test("public applyActions validates the complete list before any targetless acti
   assert.equal(fixture.document.dispatched.length, 0);
 });
 
+test("global send and applyActions reject, never throw, when a later check fails", async () => {
+  const fixture = runtime();
+  const source = { stableId: "a", generation: 1 };
+  // The app's own checks (handler name, plain-object args, the Events bridge) throw synchronously.
+  fixture.stable._apps.set("one", {
+    resolvePublicTarget(value) {
+      return value === "render:a" ? source : null;
+    },
+    publicSend(_source, handler) {
+      throw new Error(`unknown handler ${handler}`);
+    },
+    publicApplyActions() {
+      throw new Error("no Events bridge");
+    },
+  });
+
+  // Calling without await proves the call itself returns; a synchronous throw would fail the test here.
+  const sent = fixture.publicEvents.send("render:a", "missing");
+  const applied = fixture.publicEvents.applyActions(
+    fixture.realm([{ action: "event", eventName: "ready", target: "render:a" }]),
+  );
+  await assert.rejects(sent, /unknown handler missing/);
+  await assert.rejects(applied, /no Events bridge/);
+});
+
 test("global send and action targets reject zero or multiple mounted app matches", async () => {
   const fixture = runtime();
   const sourceA = { stableId: "a", generation: 1 };
