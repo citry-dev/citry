@@ -576,7 +576,12 @@ def _combined_diagnostic_document(
     if len(entries) < 2:
         position, shadow = entries[0]
         return _single_diagnostic_document(position, shadow, workspace)
-    bounds = [_generated_query_function_bounds(shadow.document.source) for _, shadow in entries]
+    # The shadow builder records where its function is; parsing each
+    # generated module again to find it cost most of a batch check's time.
+    bounds = [
+        shadow.document.query_function or _generated_query_function_bounds(shadow.document.source)
+        for _, shadow in entries
+    ]
     if any(bound is None for bound in bounds):
         return None
     valid_bounds = tuple(bound for bound in bounds if bound is not None)

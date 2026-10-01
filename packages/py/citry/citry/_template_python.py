@@ -183,12 +183,17 @@ class ShadowPythonDocument:
         source: Complete generated Python source.
         copies: Exact authored template expression copies.
         source_copies: Unchanged ranges copied from the Python source input.
+        query_function: Start and end string offsets of the generated
+            ``__citry_analyze_template`` function, from the start of its
+            ``def`` line to the end of its body, so a caller can cut it out
+            without parsing the source again; ``None`` when unknown.
 
     """
 
     source: str
     copies: tuple[ShadowPythonCopy, ...]
     source_copies: tuple[ShadowPythonSourceCopy, ...] = ()
+    query_function: tuple[int, int] | None = None
 
 
 def template_python_query_at(
@@ -275,24 +280,23 @@ def build_inferred_template_shadow(
         generated_inputs=(source_module or "", *(kwargs_type or ()), *_value_type_inputs(value_type)),
     )
     value_check = _value_check(value_type, module_source, roots, query, source_module=source_module)
-    duplicate = copy.deepcopy(methods[0])
-    if _return_affected_by_finally(duplicate):
-        # A finally return can replace an earlier value after that earlier
-        # return was evaluated. Querying both sites would create a false type
-        # result, so this uncommon control-flow shape deliberately degrades.
-        return None
-    _prune_unreachable_statements(duplicate)
     # The generated code binds template names inside this copied method, so a
     # method local with the same name, such as `resolved: list[Row]` next to a
     # template loop `c-for="resolved in items"`, would lend its declared type
     # to the template name. Renaming those locals gives each template name its
     # own type, while the copied method computes the same value.
-    _rename_conflicting_locals(
-        duplicate,
-        local_names=_method_local_names(module_source, class_qualname),
-        template_names=_template_bound_names(roots, query),
-        occupied=module_source,
+    conflicts = _method_local_names(module_source, class_qualname) & _template_bound_names(roots, query)
+    prepared = _prepared_template_data_method(
+        module_source,
+        class_qualname,
+        conflicts,
+        source_module,
+        source_is_package=source_is_package,
     )
+    if prepared is None:
+        return None
+    # The prepared method is shared by every query, so each query edits its own copy.
+    duplicate = copy.deepcopy(prepared)
     duplicate.name = "__citry_analyze_template"
     duplicate.returns = None
     import_source = ""
@@ -323,13 +327,8 @@ def build_inferred_template_shadow(
     if transformer.return_count == 0:
         return None
     rewritten_module = _rewritten_module(module_source, source_module, source_is_package=source_is_package)
-    if rewritten_module is None or not _rewrite_relative_imports(
-        duplicate,
-        source_module,
-        source_is_package=source_is_package,
-    ):
+    if rewritten_module is None:
         return None
-    ast.fix_missing_locations(duplicate)
     method_source = ast.unparse(duplicate)
 
     shadow_module_source, source_copies = rewritten_module
@@ -340,15 +339,27 @@ def build_inferred_template_shadow(
     indent = _line_indent(module_source, methods[0].lineno)
     if not indent:
         return None
-    indented_method = "\n".join(f"{indent}{line}" if line else "" for line in method_source.splitlines())
+    method_lines = method_source.splitlines()
+    indented_method = "\n".join(f"{indent}{line}" if line else "" for line in method_lines)
     indented_import = f"{indent}{import_source}" if import_source else ""
     inserted = f"\n{indented_import}{indented_method}\n"
     shadow = f"{shadow_module_source[:insertion]}{inserted}{shadow_module_source[insertion:]}"
+    # The function starts at its `def` line, after any decorator lines that
+    # ast.unparse writes one per line, and ends where the copied method ends.
+    method_start = insertion + 1 + len(indented_import)
+    decorator_count = len(duplicate.decorator_list)
+    query_function = None
+    if len(method_lines) > decorator_count and method_lines[decorator_count].startswith(
+        "def __citry_analyze_template("
+    ):
+        def_start = method_start + sum(len(indent) + len(line) + 1 for line in method_lines[:decorator_count])
+        query_function = (def_start, method_start + len(indented_method))
     return _replace_query_placeholders(
         shadow,
         query,
         placeholder=placeholder,
         source_copies=_source_copies_after_insertion(source_copies, insertion, len(inserted)),
+        query_function=query_function,
     )
 
 
@@ -399,11 +410,15 @@ def build_schema_template_shadow(
     lines.extend(_query_lines(query, indent="    ", placeholder=placeholder, value_check=value_check))
     generated = "\n".join(lines)
     shadow = f"{shadow_module_source}\n\n{generated}\n"
+    # The generated function follows its import lines and ends the source.
+    generated_start = len(shadow_module_source) + 2
+    function_start = generated_start + sum(len(line) + 1 for line in type_imports)
     return _replace_query_placeholders(
         shadow,
         query,
         placeholder=placeholder,
         source_copies=source_copies,
+        query_function=(function_start, generated_start + len(generated)),
     )
 
 
@@ -484,7 +499,11 @@ class _ReturnQueryTransformer(ast.NodeTransformer):
                 ]
             )
         ).body
-        replacement_return = ast.Return(value=ast.Name(id="__citry_data", ctx=ast.Load()))
+        returned_name = ast.copy_location(ast.Name(id="__citry_data", ctx=ast.Load()), node)
+        replacement_return = ast.copy_location(ast.Return(value=returned_name), node)
+        # ast.unparse reads statement positions, so the new statements borrow
+        # the position of the return they replace.
+        ast.copy_location(assignment, node)
         return [assignment, *generated, replacement_return]
 
 
@@ -567,6 +586,54 @@ def _prune_unreachable_statements(node: ast.AST) -> None:
             setattr(node, field, retained)
         elif isinstance(value, ast.AST):
             _prune_unreachable_statements(value)
+
+
+@lru_cache(maxsize=64)
+def _prepared_template_data_method(
+    module_source: str,
+    class_qualname: str,
+    conflicts: frozenset[str],
+    source_module: str | None,
+    *,
+    source_is_package: bool,
+) -> ast.FunctionDef | None:
+    """
+    Copy one ``template_data`` method and apply every change that does not depend on the query.
+
+    Every expression of a template builds its shadow from the same method, so
+    the unreachable-code pruning, the local renames, and the relative-import
+    rewrite are done once per module text and set of renamed names. The
+    returned tree is shared: callers copy it before changing it.
+    """
+    tree = _parsed_module(module_source)
+    class_node = _class_for_qualname(tree, class_qualname) if tree is not None else None
+    if class_node is None:
+        return None
+    methods = [
+        statement
+        for statement in class_node.body
+        if isinstance(statement, ast.FunctionDef) and statement.name == "template_data"
+    ]
+    if len(methods) != 1:
+        return None
+    duplicate = copy.deepcopy(methods[0])
+    if _return_affected_by_finally(duplicate):
+        # A finally return can replace an earlier value after that earlier
+        # return was evaluated. Querying both sites would create a false type
+        # result, so this uncommon control-flow shape deliberately degrades.
+        return None
+    _prune_unreachable_statements(duplicate)
+    _rename_conflicting_locals(
+        duplicate,
+        local_names=conflicts,
+        template_names=conflicts,
+        occupied=module_source,
+    )
+    # The generated statements added later hold no relative imports, so the
+    # method's own imports can be made absolute before they are added.
+    if not _rewrite_relative_imports(duplicate, source_module, source_is_package=source_is_package):
+        return None
+    return duplicate
 
 
 @lru_cache(maxsize=32)
@@ -1030,6 +1097,7 @@ def _replace_query_placeholders(
     *,
     placeholder: str,
     source_copies: tuple[ShadowPythonSourceCopy, ...],
+    query_function: tuple[int, int] | None = None,
 ) -> ShadowPythonDocument | None:
     if placeholder not in source:
         return None
@@ -1066,7 +1134,17 @@ def _replace_query_placeholders(
         )
         for item in source_copies
     )
-    return ShadowPythonDocument("".join(retained), tuple(copies), adjusted_source_copies)
+    # Every placeholder sits inside the generated function, so its start stays
+    # put and its end moves by the length each replacement adds.
+    adjusted_function = (
+        (
+            _offset_after_replacements(query_function[0], matches, len(replacement), len(placeholder)),
+            _offset_after_replacements(query_function[1], matches, len(replacement), len(placeholder)),
+        )
+        if query_function is not None
+        else None
+    )
+    return ShadowPythonDocument("".join(retained), tuple(copies), adjusted_source_copies, adjusted_function)
 
 
 def _offset_after_replacements(

@@ -9,6 +9,7 @@ import re
 import tokenize
 import unicodedata
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -4748,15 +4749,18 @@ class {formatter_type}:
     return rewritten, preamble
 
 
-def _insert_shadow_preamble(document: ShadowPythonDocument, preamble: str) -> ShadowPythonDocument:
-    """Place analysis declarations before queries and shift exact source maps."""
-    if not preamble:
-        return document
-    try:
-        module = ast.parse(document.source)
-    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
-        return replace(document, source=f"{document.source}\n{preamble.rstrip()}\n")
+@lru_cache(maxsize=32)
+def _module_prefix_end_line(module_source: str) -> int | None:
+    """
+    Return the last line of a module's docstring and `__future__` imports, or 0 without them.
 
+    Every shadow built from one module starts with these unchanged lines, so
+    the module is parsed once here rather than once per generated shadow.
+    """
+    try:
+        module = ast.parse(module_source)
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return None
     prefix_end_line = 0
     for index, statement in enumerate(module.body):
         is_docstring = (
@@ -4769,7 +4773,26 @@ def _insert_shadow_preamble(document: ShadowPythonDocument, preamble: str) -> Sh
             prefix_end_line = statement.end_lineno or statement.lineno
             continue
         break
-    insertion = sum(len(line) for line in document.source.splitlines(keepends=True)[:prefix_end_line])
+    return prefix_end_line
+
+
+def _insert_shadow_preamble(
+    document: ShadowPythonDocument,
+    preamble: str,
+    module_source: str,
+) -> ShadowPythonDocument:
+    """Place analysis declarations before queries and shift exact source maps."""
+    if not preamble:
+        return document
+    prefix_end_line = _module_prefix_end_line(module_source)
+    module_lines = module_source.splitlines(keepends=True)
+    shadow_lines = document.source.splitlines(keepends=True)
+    # The shadow is a copy of `module_source` whose import rewrites all come
+    # after this prefix, so the prefix lines must match; anything else gets
+    # the preamble at the end, where it is always valid.
+    if prefix_end_line is None or shadow_lines[:prefix_end_line] != module_lines[:prefix_end_line]:
+        return replace(document, source=f"{document.source}\n{preamble.rstrip()}\n")
+    insertion = sum(len(line) for line in shadow_lines[:prefix_end_line])
     if any(copied.shadow_start < insertion for copied in document.copies):
         return replace(document, source=f"{document.source}\n{preamble.rstrip()}\n")
 
@@ -4808,11 +4831,18 @@ def _insert_shadow_preamble(document: ShadowPythonDocument, preamble: str) -> Sh
                     ),
                 )
             )
+    # The preamble goes before the generated function, which moves with it.
+    shifted_function = (
+        (document.query_function[0] + width, document.query_function[1] + width)
+        if document.query_function is not None and document.query_function[0] >= insertion
+        else None
+    )
     return replace(
         document,
         source=f"{document.source[:insertion]}{inserted}{document.source[insertion:]}",
         copies=shifted_copies,
         source_copies=tuple(shifted_source_copies),
+        query_function=shifted_function,
     )
 
 
@@ -4849,7 +4879,7 @@ def _build_expression_shadows(
             )
         if shadow is None:
             return ()
-        shadow = _insert_shadow_preamble(shadow, consumer.analysis_preamble)
+        shadow = _insert_shadow_preamble(shadow, consumer.analysis_preamble, consumer.source)
         shadows.append(
             ExpressionShadow(
                 identity=consumer.identity,

@@ -10,9 +10,23 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from lsprotocol import types
 
-from citry_lsp.engine import DocumentState, expression_shadows, i18n_diagnostics, template_variable_hover
+from citry.analysis import (
+    TemplatePythonQuery,
+    TemplatePythonRoot,
+    TemplatePythonValueType,
+    build_inferred_template_shadow,
+    build_schema_template_shadow,
+)
+from citry_lsp.engine import (
+    DocumentState,
+    _insert_shadow_preamble,
+    expression_shadows,
+    i18n_diagnostics,
+    template_variable_hover,
+)
 from citry_lsp.project import load_project
 from citry_lsp.semantic import (
+    _generated_query_function_bounds,
     semantic_completions,
     semantic_definition,
     semantic_diagnostics,
@@ -2332,3 +2346,57 @@ async def test_c_value_check_keeps_key_types_of_a_returned_variable_and_an_optio
     assert [(code, text) for code, text, _message in findings] == [
         ("citry.python.invalid-assignment", "extra"),
     ]
+
+
+_RECORDED_BOUNDS_MODULE = (
+    '"""Cards."""\n'
+    "from __future__ import annotations\n"
+    "from . import helpers\n"
+    "class Card:\n"
+    "    class Kwargs:\n"
+    "        title: str\n"
+    "    @staticmethod\n"
+    "    def template_data(kwargs, slots):\n"
+    "        if kwargs:\n"
+    "            return {'title': kwargs.title}\n"
+    "        return {'title': helpers.TITLE}\n"
+    "class Board:\n"
+    "    class TemplateData:\n"
+    "        title: str\n"
+)
+
+
+@pytest.mark.parametrize("preamble", ["", "class Formatter:\n    pass\n"])
+@pytest.mark.parametrize(
+    "build",
+    [
+        # A decorated method with a relative import, a kwargs class from
+        # another module, a value check, and two returns.
+        lambda query: build_inferred_template_shadow(
+            _RECORDED_BOUNDS_MODULE,
+            "Card",
+            (TemplatePythonRoot("title", "always"),),
+            query,
+            source_module="app.cards",
+            kwargs_type=("app.schemas", "Kwargs"),
+            value_type=TemplatePythonValueType("app.store.Title | None"),
+        ),
+        # A schema function after its own type imports.
+        lambda query: build_schema_template_shadow(
+            _RECORDED_BOUNDS_MODULE,
+            "Board.TemplateData",
+            (TemplatePythonRoot("title", "always", "attribute", "app.cards", "Board.TemplateData"),),
+            query,
+            source_module="app.cards",
+        ),
+    ],
+)
+def test_recorded_query_function_bounds_match_a_parse_of_the_shadow(build, preamble: str) -> None:
+    query = TemplatePythonQuery("title.upper()", 0, 13, "interpolation", free_names=("title",))
+    document = build(query)
+    assert document is not None
+    document = _insert_shadow_preamble(document, preamble, _RECORDED_BOUNDS_MODULE)
+
+    # The batch check cuts the function out by these bounds instead of parsing.
+    assert document.query_function is not None
+    assert document.query_function == _generated_query_function_bounds(document.source)
