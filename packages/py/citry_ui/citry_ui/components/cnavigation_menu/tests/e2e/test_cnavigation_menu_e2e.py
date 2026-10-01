@@ -42,20 +42,18 @@ def _page(*, include_about: bool = True) -> str:
 
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8"><title>NavigationMenu evidence</title><c-css /></head>
-          <body x-data>
+          <body>
             <c-CNavigationMenu
               label="Main navigation" id="main-nav" c-delay="40" c-close_delay="80"
-              $c-props="{
-                value:$store.navigation.controlled ? $store.navigation.value : undefined,
-                disabled:$store.navigation.disabled,
-                orientation:$store.navigation.orientation,
-                loop:$store.navigation.loop,
-                variant:$store.navigation.variant,
-                size:$store.navigation.size,
-                onValueChange:(next, detail) => {
-                  $store.navigation.requests.push([next, detail.reason, detail.controlled, detail.forced]);
-                  if ($store.navigation.accept) $store.navigation.value = next;
-                },
+              :value="navigation.controlled ? navigation.value : undefined"
+              :disabled="navigation.disabled"
+              :orientation="navigation.orientation"
+              :loop="navigation.loop"
+              :variant="navigation.variant"
+              :size="navigation.size"
+              :on-value-change="(next, detail) => {
+                navigation.requests.push([next, detail.reason, detail.controlled, detail.forced]);
+                if (navigation.accept) navigation.value = next;
               }"
             >
               <c-CNavigationMenuLink href="#home" c-current="True">Home</c-CNavigationMenuLink>
@@ -74,9 +72,12 @@ def _page(*, include_about: bool = True) -> str:
           </body></html>
         """
         js = """
-          Alpine.store('navigation', {
-            controlled:false, value:null, accept:false, disabled:false,
-            orientation:'horizontal', loop:false, variant:'plain', size:'md', requests:[],
+          $component({
+            data() { return {navigation: {
+              controlled:false, value:null, accept:false, disabled:false,
+              orientation:'horizontal', loop:false, variant:'plain', size:'md', requests:[],
+            }}; },
+            mounted() { window.__navigationState = this.navigation; },
           });
         """
 
@@ -138,24 +139,24 @@ def test_arrow_navigation_rtl_loop_hover_and_touch_policy(page: Any) -> None:
 def test_controlled_reject_accept_release_and_disabled_force(page: Any) -> None:
     errors = _load(page)
     products = page.get_by_role("button", name="Products")
-    page.evaluate("Alpine.store('navigation').controlled = true")
+    page.evaluate("window.__navigationState.controlled = true")
     products.click()
     assert products.get_attribute("aria-expanded") == "false"
-    assert page.evaluate("Alpine.store('navigation').requests.at(-1)") == ["products", "trigger", True, False]
-    page.evaluate("Object.assign(Alpine.store('navigation'), {accept:true, value:'products'})")
+    assert page.evaluate("window.__navigationState.requests.at(-1)") == ["products", "trigger", True, False]
+    page.evaluate("Object.assign(window.__navigationState, {accept:true, value:'products'})")
     page.wait_for_function(
         "document.querySelector('[data-value=products][data-citry-navigation-menu-trigger]').getAttribute('aria-expanded') === 'true'"
     )
-    page.evaluate("Alpine.store('navigation').controlled = false")
+    page.evaluate("window.__navigationState.controlled = false")
     page.wait_for_function(
         "document.querySelector('[data-value=products][data-citry-navigation-menu-trigger]').getAttribute('aria-expanded') === 'true'"
     )
-    page.evaluate("Alpine.store('navigation').controlled = true")
-    page.evaluate("Alpine.store('navigation').disabled = true")
+    page.evaluate("window.__navigationState.controlled = true")
+    page.evaluate("window.__navigationState.disabled = true")
     page.wait_for_function(
         "document.querySelector('[data-value=products][data-citry-navigation-menu-trigger]').getAttribute('aria-expanded') === 'false'"
     )
-    assert page.evaluate("Alpine.store('navigation').requests.at(-1).slice(1)") == ["disabled", True, True]
+    assert page.evaluate("window.__navigationState.requests.at(-1).slice(1)") == ["disabled", True, True]
     assert errors == []
 
 
@@ -179,7 +180,7 @@ def test_horizontal_panel_clamps_to_the_visual_viewport(page: Any) -> None:
 
 def test_theme_size_environment_and_axe(page: Any) -> None:
     errors = _load(page)
-    page.evaluate("Object.assign(Alpine.store('navigation'), {variant:'surface', size:'lg', orientation:'vertical'})")
+    page.evaluate("Object.assign(window.__navigationState, {variant:'surface', size:'lg', orientation:'vertical'})")
     nav = page.locator("#main-nav")
     page.wait_for_function("document.querySelector('#main-nav').dataset.size === 'lg'")
     assert nav.get_attribute("data-variant") == "surface"

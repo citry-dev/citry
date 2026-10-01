@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 import citry_ui
 from citry import Component, citry
 
@@ -8,7 +10,7 @@ class ProgressIntents(Component):
     template = """
       <c-CCol class_="progress-intents" gap="sm">
         <c-for each="item in items">
-          <div><span>{{ item[1] }}</span><c-CProgress c-label="item[1]" c-value="62" c-intent="item[0]" /></div>
+          <div><span>{{ item[1] }}</span><c-CProgress #c-key="item[0]" c-label="item[1]" c-value="62" c-intent="item[0]" /></div>
         </c-for>
       </c-CCol>
     """

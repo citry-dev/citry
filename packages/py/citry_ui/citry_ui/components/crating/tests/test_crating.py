@@ -119,7 +119,7 @@ def test_readonly_submits_hidden_value_and_disabled_submits_nothing() -> None:
     readonly = _render('<c-CRating id="score" name="score" label="Score" value="2.5" precision="0.5" readonly />')
     root = _tag(readonly, r'<div class="cui-rating"[^>]*>')
     radios = re.findall(r'<input[^>]+type="radio"[^>]*>', readonly)
-    transport = _tag(readonly, r'<input id="score-transport"[^>]*>')
+    transport = _tag(readonly, r'<input(?=[^>]*\bid="score-transport")[^>]*>')
     assert 'aria-readonly="true"' in root
     assert 'tabindex="0"' in root
     assert all(" disabled" in radio for radio in radios)
@@ -129,7 +129,7 @@ def test_readonly_submits_hidden_value_and_disabled_submits_nothing() -> None:
     assert 'data-citry-ui-part="readonly-value"' in readonly
 
     disabled = _render('<c-CRating id="score" name="score" label="Score" value="2" disabled />')
-    transport = _tag(disabled, r'<input id="score-transport"[^>]*>')
+    transport = _tag(disabled, r'<input(?=[^>]*\bid="score-transport")[^>]*>')
     assert "disabled" in transport
     assert all(" disabled" in radio for radio in re.findall(r'<input[^>]+type="radio"[^>]*>', disabled))
 
@@ -186,7 +186,6 @@ def test_invalid_inputs_fail_deterministically(kwargs, error, match) -> None:
         ("attrs", "data-disabled"),
         ("input_attrs", "name"),
         ("input_attrs", "aria-label"),
-        ("input_attrs", "x-model"),
     ],
 )
 def test_owned_attributes_are_rejected(destination, attribute) -> None:
@@ -195,6 +194,34 @@ def test_owned_attributes_are_rejected(destination, attribute) -> None:
             '<c-CRating label="Rating" c-bind="kwargs" />',
             {"kwargs": {destination: {attribute: "override"}}},
         )
+
+
+@pytest.mark.parametrize(
+    ("destination", "attribute", "owner"),
+    [
+        ("attrs", ":role", "CRating attrs"),
+        ("attrs", "V-IF", "CRating attrs"),
+        ("attrs", "#default", "CRating attrs"),
+        ("input_attrs", "v-model", "CRating input attrs"),
+        ("input_attrs", "v-bind:checked", "CRating input attrs"),
+        ("input_attrs", "@change", "CRating input attrs"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(destination, attribute, owner) -> None:
+    with pytest.raises(ValueError, match=re.escape(f"{owner} cannot contain the Vue directive {attribute!r}")):
+        _render(
+            '<c-CRating label="Rating" c-bind="kwargs" />',
+            {"kwargs": {destination: {attribute: "override"}}},
+        )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(
+        '<c-CRating label="Rating" c-bind="kwargs" />',
+        {"kwargs": {"attrs": {"x-data": "root"}, "input_attrs": {"x-init": "star"}}},
+    )
+    assert 'x-data="root"' in html
+    assert 'x-init="star"' in html
 
 
 def test_explicit_value_pattern_removes_catalog_lookup() -> None:

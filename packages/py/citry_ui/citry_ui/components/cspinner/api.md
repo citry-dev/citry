@@ -47,7 +47,7 @@ focus stop or changes surrounding controls.
 
 ## Control presentation in the browser
 
-Client inputs are passed through `$c-props="{...}"`. They can update `label`,
+Client inputs are passed with native Vue `:` bindings and callback props. They can update `label`,
 `intent`, and `size`; omission returns to the server fallback.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cspinner/snippets/controlled.py" title="Control Spinner in the browser" />
@@ -72,6 +72,12 @@ Override public color, track, diameter, thickness, and duration variables on an
 ancestor or one Spinner root.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cspinner/snippets/customization.py" title="Customize Spinner with public CSS" />
+
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes the component sets itself (such as `role` and `aria-label`), Citry
+runtime attributes, and any Vue directive syntax: names starting with `v-`,
+`:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component tag
+in your template instead, for example `<c-CSpinner :title="hint">`.
 
 ## Choose the right indicator
 

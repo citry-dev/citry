@@ -301,7 +301,6 @@ def test_root_and_image_attribute_destinations_are_distinct_and_copied() -> None
         "title": "Long exposure",
         "aria-describedby": "plate-note",
         "class": "archive-pixels",
-        "@load": "$dispatch('plate-ready')",
     }
     html = _render(
         CImage(
@@ -323,7 +322,6 @@ def test_root_and_image_attribute_destinations_are_distinct_and_copied() -> None
         "title": "Long exposure",
         "aria-describedby": "plate-note",
         "class": "archive-pixels",
-        "@load": "$dispatch('plate-ready')",
     }
     root = _tag(html, "image-root")
     image = _tag(html, "image")
@@ -335,7 +333,7 @@ def test_root_and_image_attribute_destinations_are_distinct_and_copied() -> None
     assert 'title="Long exposure"' in image
     assert 'aria-describedby="plate-note"' in image
     assert "archive-pixels" in image
-    assert "@load=" in image
+    assert "@load" not in image
 
 
 @pytest.mark.parametrize(
@@ -434,11 +432,15 @@ def test_lazy_auto_sizes_is_valid_only_across_the_whole_picture() -> None:
         ("attrs", "data-status"),
         ("attrs", ":data-fit"),
         ("attrs", "data-citry-hostile"),
-        ("attrs", "data-has-alpine-state"),
-        ("attrs", "X-Citry-Fill-Source"),
-        ("attrs", "x-citry-boundary.modifier"),
-        ("attrs", "x-data"),
-        ("attrs", "x-bind"),
+        ("attrs", "v-bind"),
+        ("attrs", "v-bind:data-fit"),
+        ("attrs", ".data-status"),
+        ("attrs", "v-if"),
+        ("attrs", "V-IF"),
+        ("attrs", "v-for"),
+        ("attrs", "v-html"),
+        ("attrs", "#default"),
+        ("attrs", "@click"),
         ("attrs", "onclick"),
         ("img_attrs", "src"),
         ("img_attrs", "srcset"),
@@ -448,11 +450,13 @@ def test_lazy_auto_sizes_is_valid_only_across_the_whole_picture() -> None:
         ("img_attrs", "aria-hidden"),
         ("img_attrs", "tabindex"),
         ("img_attrs", "onload"),
-        ("img_attrs", "data-has-alpine-state"),
-        ("img_attrs", "X-Citry-Fill-Source"),
-        ("img_attrs", "x-citry-boundary.modifier"),
-        ("img_attrs", "x-bind:src"),
-        ("img_attrs", "x-bind"),
+        ("img_attrs", "@load"),
+        ("img_attrs", "@error"),
+        ("img_attrs", "v-on:load"),
+        ("img_attrs", "v-bind:src"),
+        ("img_attrs", "V-BIND:alt"),
+        ("img_attrs", "v-bind"),
+        ("img_attrs", "v-show"),
     ],
 )
 def test_owned_attributes_and_runtime_paths_are_rejected(destination, attribute) -> None:
@@ -466,6 +470,17 @@ def test_owned_attributes_and_runtime_paths_are_rejected(destination, attribute)
                 **{destination: {attribute: "consumer"}},
             )
         )
+
+
+def test_python_attrs_reject_vue_directives_before_rendering() -> None:
+    message = "CImage img_attrs cannot contain the Vue directive ':src'"
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _render(CImage(src="/image.jpg", alt="Image", width=20, height=10, img_attrs={":src": "other"}))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(CImage(src="/image.jpg", alt="Image", width=20, height=10, attrs={"x-data": "{}"}))
+    assert 'x-data="{}"' in html
 
 
 def test_assets_expose_only_the_ratified_image_surface() -> None:

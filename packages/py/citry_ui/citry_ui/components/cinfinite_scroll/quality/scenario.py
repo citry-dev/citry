@@ -9,11 +9,11 @@ def infinite_scroll_states_component(app: Citry) -> type[Component]:
     class CitryUiInfiniteScrollStates(Component):
         citry = app
         template = """
-          <section class="citry-ui-quality-stack" data-quality-infinite-scroll-ready x-data="{loading:false,error:false,hasMore:true}">
+          <section class="citry-ui-quality-stack" data-quality-infinite-scroll-ready >
             <h1>Infinite Scroll states</h1>
             <form>
               <c-CInfiniteScroll aria_label="Localized activity" action_name="activity_action"
-                $c-props="{loading,error,hasMore,onLoadMore:()=>{loading=true}}" c-attrs="quality_attrs">
+                :loading="loading" :error="error" :hasMore="hasMore" :onLoadMore="()=>{loading=true}" c-attrs="quality_attrs">
                 <ol><li>A long server result that wraps at narrow widths without changing request behavior</li><li dir="rtl">نتيجة متاحة</li></ol>
               </c-CInfiniteScroll>
             </form>
@@ -25,6 +25,15 @@ def infinite_scroll_states_component(app: Citry) -> type[Component]:
             </c-CInfiniteScroll>
             <c-CInfiniteScroll aria_label="Completed results" c-has_more="False"><p>Final result</p></c-CInfiniteScroll>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                loading:false,error:false,hasMore:true
+              };
+            },
+          });
         """
 
         def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:

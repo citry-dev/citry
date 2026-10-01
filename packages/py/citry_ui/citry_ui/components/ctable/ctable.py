@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, merge_attrs
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -303,7 +303,18 @@ class CTable(LibraryComponent):
         if value is not None and not isinstance(value, Mapping):
             msg = f"{location} must be a mapping or None, got {value!r}."
             raise TypeError(msg)
-        return dict(value or {})
+        # Copy once so the checks below and the render see the same keys.
+        copied = dict(value or {})
+        # A Vue directive could rebind an owned attribute or add a listener, so
+        # none may arrive through Python data.
+        for key in copied:
+            if isinstance(key, str) and is_vue_directive_attribute(key):
+                msg = (
+                    f"{location} cannot contain the Vue directive {key!r}; "
+                    "author Vue bindings and listeners in a template instead."
+                )
+                raise ValueError(msg)
+        return copied
 
     @classmethod
     def _normalize_columns(
@@ -459,10 +470,10 @@ class CTable(LibraryComponent):
         c-data-state="state"
         c-data-variant="variant"
         c-data-density="density"
-        c-data-striped="striped"
-        c-data-hover="hover"
-        c-data-sticky-header="sticky_header"
-        c-data-column-borders="column_borders"
+        c-data-striped="'' if striped else None"
+        c-data-hover="'' if hover else None"
+        c-data-sticky-header="'' if sticky_header else None"
+        c-data-column-borders="'' if column_borders else None"
         c-data-layout="layout"
         c-data-overflow="overflow"
         c-data-caption-side="caption_side"

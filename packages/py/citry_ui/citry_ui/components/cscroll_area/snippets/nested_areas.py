@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class ScrollAreaNestedAreas(Component):
     template = """
-      <section class="scroll-area-nested" x-data="{direction:'ltr'}">
+      <section class="scroll-area-nested" >
         <h2>Operations document</h2>
         <p>
           The outer document and inner inspector are separate native scroll
@@ -70,6 +70,15 @@ class ScrollAreaNestedAreas(Component):
           </c-CScrollArea>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            direction:'ltr'
+          };
+        },
+      });
     """
 
     css = """

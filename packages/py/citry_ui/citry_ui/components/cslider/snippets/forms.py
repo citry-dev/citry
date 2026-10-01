@@ -4,8 +4,8 @@ from citry import Component
 class SliderForm(Component):
     template = """
       <form
-        x-data="{result:'Submit to inspect values'}"
-        @submit.prevent="result=JSON.stringify(Array.from(new FormData($event.target).entries()))"
+
+        @submit.prevent="result=JSON.stringify(Array.from(new window.FormData($event.target).entries()))"
         class="slider-example-stack"
       >
         <c-CField>
@@ -15,8 +15,17 @@ class SliderForm(Component):
           </c-fill>
         </c-CField>
         <div><button type="submit">Submit</button> <button type="reset">Reset</button></div>
-        <output x-text="result">Submit to inspect values</output>
+        <output v-text="result">Submit to inspect values</output>
       </form>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            result:'Submit to inspect values'
+          };
+        },
+      });
     """
     css = ":where(.slider-example-stack){display:grid;gap:1rem;max-inline-size:32rem}"
 

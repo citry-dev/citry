@@ -11,7 +11,7 @@ from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
     merge_root_attrs,
-    reject_html_attr_bindings,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
@@ -101,6 +101,9 @@ class CDrawer(LibraryComponent):
         validate_choice("CDrawer", "scroll", kwargs.scroll, ("body", "drawer"))
         close_label = kwargs.close_label if "close_label" in self.raw_kwargs else self.i18n.tr("citry-ui-drawer-close")
         validate_non_empty_string("CDrawer", "close_label", close_label)
+        # A Vue directive could rebind the dialog's owned state, change its
+        # structure, or attach a listener, so none may arrive through Python data.
+        reject_vue_directive_attrs(kwargs.attrs, "CDrawer")
         reject_owned_attrs(
             kwargs.attrs,
             {
@@ -115,38 +118,6 @@ class CDrawer(LibraryComponent):
                 "data-citry-drawer-host",
                 "data-citry-drawer-initialized",
                 "data-citry-drawer-trigger",
-                "data-citry-ui-part",
-                "data-open",
-                "data-placement",
-                "data-scroll",
-                "data-size",
-                "hidden",
-                "id",
-                "inert",
-                "open",
-                "popover",
-                "role",
-                "tabindex",
-                "x-for",
-                "x-html",
-                "x-if",
-                "x-ignore",
-                "x-model",
-                "x-modelable",
-                "x-teleport",
-                "x-text",
-            },
-            "CDrawer",
-        )
-        reject_html_attr_bindings(
-            kwargs.attrs,
-            {
-                "aria-describedby",
-                "aria-hidden",
-                "aria-label",
-                "aria-labelledby",
-                "aria-modal",
-                "closedby",
                 "data-citry-ui-part",
                 "data-open",
                 "data-placement",
@@ -197,15 +168,17 @@ class CDrawer(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         return {
-            "open": kwargs.open,
-            "dismissible": kwargs.dismissible,
-            "closeOnEscape": kwargs.close_on_escape,
-            "closeOnOutside": kwargs.close_on_outside,
-            "initialFocus": kwargs.initial_focus,
-            "placement": kwargs.placement,
-            "size": kwargs.size,
-            "scroll": kwargs.scroll,
             "hasActivator": "activator" in self.raw_slots,
+            "serverDefaults": {
+                "open": kwargs.open,
+                "dismissible": kwargs.dismissible,
+                "closeOnEscape": kwargs.close_on_escape,
+                "closeOnOutside": kwargs.close_on_outside,
+                "initialFocus": kwargs.initial_focus,
+                "placement": kwargs.placement,
+                "size": kwargs.size,
+                "scroll": kwargs.scroll,
+            },
         }
 
     template = """
@@ -220,7 +193,7 @@ class CDrawer(LibraryComponent):
           c-aria-labelledby="title_id"
           c-aria-describedby="described_by"
           aria-modal="true"
-          c-data-open="open"
+          c-data-open="'' if open else None"
           c-data-placement="placement"
           c-data-size="size"
           c-data-scroll="scroll"
@@ -286,8 +259,12 @@ class CDrawer(LibraryComponent):
           open: {}, dismissible: {}, closeOnEscape: {}, closeOnOutside: {},
           initialFocus: {}, placement: {}, size: {}, scroll: {}, onOpenChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const host = els[0];
+        onServerRender: ({component}) => {
+          const host = component.$el;
+          const data = component;
+          const defaults = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const nearestHost = (element) => element?.closest?.("[data-citry-drawer-host]") ?? null;
           const drawer = [...host.querySelectorAll('[data-citry-ui-part="drawer"]')]
             .find((candidate) => nearestHost(candidate) === host);
@@ -306,7 +283,7 @@ class CDrawer(LibraryComponent):
             scroll: ["body", "drawer"],
           };
           const invalidEpisodes = new Set();
-          let internalOpen = data.open;
+          let internalOpen = defaults.open;
           let controlled = false;
           let appliedOpen = false;
           let suppressedControlledOpen = false;
@@ -323,13 +300,13 @@ class CDrawer(LibraryComponent):
           let generation = 0;
           let eligibilitySource = null;
           let configuration = {
-            dismissible: data.dismissible,
-            closeOnEscape: data.closeOnEscape,
-            closeOnOutside: data.closeOnOutside,
-            initialFocus: data.initialFocus,
-            placement: data.placement,
-            size: data.size,
-            scroll: data.scroll,
+            dismissible: defaults.dismissible,
+            closeOnEscape: defaults.closeOnEscape,
+            closeOnOutside: defaults.closeOnOutside,
+            initialFocus: defaults.initialFocus,
+            placement: defaults.placement,
+            size: defaults.size,
+            scroll: defaults.scroll,
           };
 
           const deepActiveElement = () => {
@@ -422,16 +399,16 @@ class CDrawer(LibraryComponent):
             );
           };
           const resolveBoolean = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const value = props[name] === undefined ? defaults[name] : props[name];
             if (typeof value === "boolean") { invalidEpisodes.delete(name); return value; }
             reportInvalid(name, value);
-            return data[name];
+            return defaults[name];
           };
           const resolveEnum = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const value = props[name] === undefined ? defaults[name] : props[name];
             if (allowed[name].includes(value)) { invalidEpisodes.delete(name); return value; }
             reportInvalid(name, value);
-            return data[name];
+            return defaults[name];
           };
           const resolveCallback = () => {
             const value = props.onOpenChange;

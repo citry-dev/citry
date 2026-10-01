@@ -21,18 +21,15 @@ def dialog_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack"
             aria-labelledby="dialog-states-title"
-            x-data="{ controlledOpen: false }"
           >
             <h1 id="dialog-states-title">
               Dialog states
             </h1>
             <c-CDialog
               id="quality-dialog"
-              $c-props="{
-                onOpenChange: (open, detail) => {
+              :onOpenChange="(open, detail) => {
                   window.__qualityDialogChange = { open, reason: detail.reason };
-                },
-              }"
+                }"
             >
               <c-fill
                 name="activator"
@@ -97,10 +94,7 @@ def dialog_states_component(app: Citry) -> type[Component]:
               id="quality-persistent-dialog"
               c-dismissible="False"
               size="lg"
-              $c-props="{
-                open: controlledOpen,
-                onOpenChange: (open) => controlledOpen = open,
-              }"
+              :open="controlledOpen" :onOpenChange="(open) => controlledOpen = open"
             >
               <c-fill
                 name="activator"
@@ -130,6 +124,15 @@ def dialog_states_component(app: Citry) -> type[Component]:
               </c-fill>
             </c-CDialog>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlledOpen: false
+              };
+            },
+          });
         """
 
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002

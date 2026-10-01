@@ -91,7 +91,10 @@ def test_progressive_native_proxy_and_custom_combobox_share_exact_value() -> Non
     assert 'role="listbox"' in listbox
     assert 'aria-label="Planet"' in listbox
     assert re.search(r'<select[^>]+name="planet"[^>]*>', html)
-    assert re.search(r'<option value="earth" selected>Earth</option>', html)
+    assert re.search(
+        r'<option(?=[^>]*\bvalue="earth")(?=[^>]*\bselected(?:\s|=|>))[^>]*>Earth</option>',
+        html,
+    )
     assert "tabindex" not in re.search(r"<select[^>]+data-cui-select-native[^>]*>", html).group(0)
 
 
@@ -117,7 +120,10 @@ def test_empty_required_readonly_and_form_proxy_states_are_coherent() -> None:
     native = re.search(r"<select[^>]+data-cui-select-native[^>]*>", html).group(0)
     assert " disabled" in native
     assert " required" not in native
-    assert re.search(r'<input name="planet" value="" type="hidden"', html)
+    assert re.search(
+        r'<input\b(?=[^>]*\bname="planet")(?=[^>]*\bvalue="")(?=[^>]*\btype="hidden")[^>]*>',
+        html,
+    )
 
 
 def test_field_owns_state_and_accessible_relationships() -> None:
@@ -187,11 +193,30 @@ def test_invalid_server_contracts_fail(
     "extra",
     [
         "c-attrs=\"{'role': 'application'}\"",
-        "c-listbox_attrs=\"{'x-show':'open'}\"",
+        "c-listbox_attrs=\"{'data-citry-root': 'x'}\"",
     ],
 )
-def test_owned_attrs_and_runtime_directives_are_rejected(extra: str) -> None:
+def test_owned_and_runtime_attrs_are_rejected(extra: str) -> None:
     with pytest.raises(ValueError, match="cannot"):
+        _render(_select(extra), data={"options": _options()})
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        ("c-attrs=\"{':role': 'kind'}\"", "CSelect attrs cannot contain the Vue directive ':role'"),
+        ("c-attrs=\"{'V-IF': 'shown'}\"", "CSelect attrs cannot contain the Vue directive 'V-IF'"),
+        ("c-attrs=\"{'#default': 'props'}\"", "CSelect attrs cannot contain the Vue directive '#default'"),
+        ("c-listbox_attrs=\"{'v-show':'open'}\"", "CSelect listbox attrs cannot contain the Vue directive 'v-show'"),
+        ("c-listbox_attrs=\"{'v-for':'item'}\"", "CSelect listbox attrs cannot contain the Vue directive 'v-for'"),
+        (
+            "c-listbox_attrs=\"{'@keydown':'move'}\"",
+            "CSelect listbox attrs cannot contain the Vue directive '@keydown'",
+        ),
+    ],
+)
+def test_python_attrs_reject_vue_directives(extra: str, message: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(message)):
         _render(_select(extra), data={"options": _options()})
 
 
@@ -199,6 +224,9 @@ def test_owned_attrs_and_runtime_directives_are_rejected(extra: str) -> None:
     "attrs",
     [
         "{'aria-label':'Planet', ':aria-describedby':'ids'}",
+        "{'aria-label':'Planet', 'v-bind:aria-errormessage':'id'}",
+        "{'aria-label':'Planet', 'v-model':'choice'}",
+        "{'aria-label':'Planet', '@click':'open'}",
         "{'aria-label':'Planet', 'type':'submit'}",
     ],
 )
@@ -206,6 +234,15 @@ def test_owned_trigger_attrs_are_rejected(attrs: str) -> None:
     template = f'<c-CSelect placeholder="Choose" c-options="options" c-trigger_attrs="{attrs}" />'
     with pytest.raises(ValueError, match="cannot"):
         _render(template, data={"options": _options()})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(
+        _select("c-attrs=\"{'x-data': 'root'}\" c-listbox_attrs=\"{'x-init': 'list'}\""),
+        data={"options": _options()},
+    )
+    assert 'x-data="root"' in html
+    assert 'x-init="list"' in html
 
 
 def test_direct_strings_are_canonicalized_and_nul_is_rejected() -> None:

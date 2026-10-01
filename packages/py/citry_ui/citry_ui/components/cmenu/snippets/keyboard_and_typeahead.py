@@ -8,12 +8,10 @@ class MenuKeyboard(Component):
     template = """
       <section
         class="archive-keyboard-demo"
-        x-data="{loop: true, close: false}"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <c-CMenu
           c-close_on_select="False"
-          $c-props="{loop, closeOnSelect: close}"
+          v-bind="{loop, closeOnSelect: close}"
         >
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
             <c-CButton c-disabled="activator_disabled" c-attrs="activator_attrs">Browse spell index</c-CButton>
@@ -33,6 +31,23 @@ class MenuKeyboard(Component):
           </c-fill>
         </c-CMenu>
       </section>
+    """
+
+    js = r"""
+      $component({
+        data(){return {loop: true, close: false};},
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

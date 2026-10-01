@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from pathlib import Path
 from typing import get_type_hints
 
 import pytest
@@ -250,14 +251,22 @@ def test_invalid_structural_inputs_fail_synchronously(inputs: str, error: str) -
         ("attrs", {"id": "hostile"}, "owned attribute"),
         ("attrs", {"data-citry-hostile": "x"}, "owned attribute"),
         ("attrs", {"aria-description": "Hostile"}, "owned attribute"),
-        ("attrs", {":aria-description": "description"}, "dynamically bind"),
-        ("attrs", {"@contextmenu": "x"}, "owned event"),
+        ("attrs", {":aria-description": "description"}, "Vue directive"),
+        ("attrs", {"@contextmenu": "x"}, "Vue directive"),
+        ("attrs", {"@click": "x"}, "Vue directive"),
+        ("attrs", {"V-IF": "x"}, "Vue directive"),
+        ("attrs", {"onclick": "x"}, "raw event attribute"),
         ("target_attrs", {"id": "hostile"}, "owned attribute"),
         ("target_attrs", {"role": "button"}, "owned attribute"),
         ("target_attrs", {"disabled": True}, "owned attribute"),
-        ("target_attrs", {"@pointerdown": "x"}, "owned event"),
-        ("target_attrs", {"x-data": "{}"}, "ownership directive"),
         ("target_attrs", {"is": "fancy-button"}, "owned attribute"),
+        ("target_attrs", {"c-bind": "{}"}, "ownership directive"),
+        ("target_attrs", {"v-bind:role": "button"}, "Vue directive"),
+        ("target_attrs", {".disabled": "x"}, "Vue directive"),
+        ("target_attrs", {"v-if": "x"}, "Vue directive"),
+        ("target_attrs", {"@pointerdown": "x"}, "Vue directive"),
+        ("target_attrs", {"v-on:focus": "x"}, "Vue directive"),
+        ("target_attrs", {"#default": "x"}, "Vue directive"),
     ],
 )
 def test_owned_and_unsafe_attribute_targets_are_rejected(
@@ -277,8 +286,26 @@ def test_owned_and_unsafe_attribute_targets_are_rejected(
         },
         **kwargs,
     )
-    with pytest.raises(ValueError, match=error):
+    with pytest.raises(ValueError, match=f"CContextMenu {input_name} .*{error}"):
         component.render(citry=_app())
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    component = CContextMenu(
+        aria_label="Actions",
+        attrs={"data-note": "host"},
+        target_attrs={"x-data": "plain"},
+        slots={
+            "target": lambda data: CButton(
+                attrs=data.target_attrs,
+                slots={"default": "Target"},
+            ),
+            "menu": (CMenuItem(value="go", slots={"default": "Go"}),),
+        },
+    )
+    html = str(component.render(citry=_app()))
+    # The target renders in the browser, so its attributes travel in the prepared data.
+    assert '"x-data":"plain"' in html
 
 
 def test_missing_slots_and_empty_collection_fail_through_shared_menu_validation() -> None:
@@ -308,10 +335,17 @@ def test_context_menu_depends_on_one_shared_menu_runtime_and_style() -> None:
     assert html.count(".cui-context-menu-host") == 1
 
 
-def test_js_and_css_assets_are_direct_multiline_literals() -> None:
-    assert CContextMenu.js.startswith("\n")
+def test_javascript_asset_is_file_backed_and_css_is_a_multiline_literal() -> None:
+    component_dir = Path(__file__).parents[1]
+    javascript_source = (component_dir / "runtime.source.js").read_text(encoding="utf-8")
+    javascript_bundle = (component_dir / "runtime.min.js").read_text(encoding="utf-8")
+
+    assert CContextMenu.js_file == "runtime.min.js"
+    assert getattr(CContextMenu, "js", None) is None
+    assert javascript_bundle
+    assert javascript_source.startswith("\n")
+    assert "$component({" in javascript_source
     assert CContextMenu.css.startswith("\n")
-    assert "$component({" in CContextMenu.js
     assert "display: contents" in CContextMenu.css
     assert "pointer-events: none" in CContextMenu.css
     assert "user-select" not in CContextMenu.css

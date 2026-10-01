@@ -15,7 +15,15 @@ from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._aria import merge_idrefs
-from citry_ui.components._attrs import CClassValue, CStyleValue, get_html_form_owner, merge_root_attrs, pop_html_attr
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    get_html_form_owner,
+    is_executable_event_attribute,
+    is_vue_directive_attribute,
+    merge_root_attrs,
+    pop_html_attr,
+)
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import FORM_CONTROL_RUNTIME_DEPENDENCY, FORM_CONTROL_STYLE_DEPENDENCY
 from citry_ui.components._validation import (
@@ -48,9 +56,6 @@ _PLACEMENTS = ("bottom-start", "bottom-end", "top-start", "top-end")
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -186,14 +191,6 @@ def _plain(owner: str, name: str, value: object, *, optional: bool = False) -> s
     return plain
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     input_name: str,
@@ -201,7 +198,6 @@ def _attrs(
     owned: frozenset[str],
     class_: CClassValue | None = None,
     style: CStyleValue | None = None,
-    dynamic_only: frozenset[str] = frozenset(),
 ) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         raise TypeError(f"{owner} {input_name} must be a mapping or None, got {attrs!r}.")
@@ -213,10 +209,21 @@ def _attrs(
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} {input_name} cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"{owner} {input_name} cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned | dynamic_only:
-            raise ValueError(f"{owner} {input_name} cannot dynamically bind owned attribute {key!r}.")
+        # A Vue directive could rebind an owned attribute (including the
+        # description links the component merges), change the structure, or
+        # attach a listener, so none may arrive through Python data.
+        if is_vue_directive_attribute(normalized):
+            raise ValueError(
+                f"{owner} {input_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
+        # An inline `on*` handler would install browser code from Python
+        # data, bypassing the template compiler just like a Vue listener.
+        if is_executable_event_attribute(normalized):
+            raise ValueError(
+                f"{owner} {input_name} cannot use executable listener attribute {key!r}; "
+                "use onValueChange or author a Vue listener in the template."
+            )
     return merge_root_attrs(copied, class_, style)
 
 
@@ -397,7 +404,6 @@ class CMultiSelect(LibraryComponent):
             "trigger_attrs",
             kwargs.trigger_attrs,
             _TRIGGER_OWNED,
-            dynamic_only=frozenset({"aria-describedby", "aria-errormessage"}),
         )
         aria_label = pop_html_attr(trigger_attrs, "aria-label", component_name="CMultiSelect trigger_attrs")
         aria_labelledby = pop_html_attr(
@@ -511,19 +517,37 @@ class CMultiSelect(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         self._snapshot(kwargs)
-        return self._cui_multi_select_data
+        prop_names = {
+            "value",
+            "open",
+            "required",
+            "disabled",
+            "readonly",
+            "invalid",
+            "loop",
+            "closeOnSelect",
+            "placement",
+            "matchWidth",
+            "variant",
+            "size",
+        }
+        return {
+            "serverDefaults": {key: value for key, value in self._cui_multi_select_data.items() if key in prop_names},
+            **{key: value for key, value in self._cui_multi_select_data.items() if key not in prop_names},
+        }
 
     template = """
       <div
+        ref="root"
         class="cui-multi-select"
-        c-data-open="open"
-        c-data-empty="empty"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-close-on-select="closeOnSelect"
-        c-data-match-width="matchWidth"
+        c-data-open="'' if open else None"
+        c-data-empty="'' if empty else None"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-close-on-select="'' if closeOnSelect else None"
+        c-data-match-width="'' if matchWidth else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="attrs"
@@ -625,8 +649,8 @@ class CMultiSelect(LibraryComponent):
                   c-aria-selected="'true' if option.selected else 'false'"
                   c-aria-disabled="'true' if option.disabled else 'false'"
                   c-data-value="option.value"
-                  c-data-selected="option.selected"
-                  c-data-disabled="option.disabled"
+                  c-data-selected="'' if option.selected else None"
+                  c-data-disabled="'' if option.disabled else None"
                   data-citry-ui-part="option"
                 >
                   <span class="cui-multi-select__check" aria-hidden="true"></span>
@@ -649,8 +673,8 @@ class CMultiSelect(LibraryComponent):
                     c-aria-selected="'true' if option.selected else 'false'"
                     c-aria-disabled="'true' if option.disabled else 'false'"
                     c-data-value="option.value"
-                    c-data-selected="option.selected"
-                    c-data-disabled="option.disabled"
+                    c-data-selected="'' if option.selected else None"
+                    c-data-disabled="'' if option.disabled else None"
                     data-citry-ui-part="option"
                   >
                     <span class="cui-multi-select__check" aria-hidden="true"></span>
@@ -677,8 +701,15 @@ class CMultiSelect(LibraryComponent):
           closeOnSelect:{}, placement:{}, matchWidth:{}, variant:{}, size:{},
           onValueChange:{}, onOpenChange:{},
         },
-        init: ({els, data, props, effect, inject}) => {
-          const root=els[0];
+        inject: {
+          fieldService:{from:Symbol.for('citry-ui:field'),default:null},
+          formService:{from:Symbol.for('citry-ui:form'),default:null},
+        },
+        onServerRender: ({component}) => {
+          if (!anchoredLayerRuntimeCompatible) return;
+          const root=component.$refs.root;
+          const data=new Proxy(component.serverDefaults,{get(target,key){return key in target?target[key]:component[key];}});
+          const props=component.$props;
           const trigger=root.querySelector(':scope > [data-citry-ui-part="control"]');
           const nativeSelect=root.querySelector(':scope > [data-cui-multi-select-native]');
           const readonlyValues=root.querySelector(':scope > [data-cui-multi-select-readonly-values]');
@@ -690,8 +721,8 @@ class CMultiSelect(LibraryComponent):
             || !(listbox instanceof HTMLElement) || !(valuesSurface instanceof HTMLElement)) {
             throw new Error('[citry-ui] CMultiSelect settled anatomy is invalid.');
           }
-          const field=inject(Symbol.for('citry-ui:field'),null);
-          const form=inject(Symbol.for('citry-ui:form'),null);
+          const field=component.fieldService;
+          const form=component.formService;
           const formRuntime=globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if(formRuntime?.generation!==1)throw new Error('[citry-ui] CMultiSelect form-control runtime dependency did not load.');
           const listeners=formRuntime.listeners();
@@ -764,7 +795,7 @@ class CMultiSelect(LibraryComponent):
           listeners.add(root,'click',onClick,true);listeners.add(root,'pointerover',onPointer,true);listeners.add(trigger,'keydown',onKey,true);listeners.add(popup,'toggle',onToggle);listeners.add(nativeSelect,'invalid',onInvalid);listeners.add(nativeSelect,'focus',onProxyFocus);
           const unregisterReset=formRuntime.registerReset(root,nativeSelect,{invalidate:()=>generation+=1,reset:onReset});
           const stopFieldsets=formRuntime.watchFieldset(root,trigger,reconcile);
-          const stop=effect(()=>{clientValue=props.value;clientOpen=props.open;onValueChange=typeof props.onValueChange==='function'?props.onValueChange:null;onOpenChange=typeof props.onOpenChange==='function'?props.onOpenChange:null;if(props.onValueChange!=null&&onValueChange===null)report('onValueChange',props.onValueChange);else invalidEpisodes.delete('onValueChange');if(props.onOpenChange!=null&&onOpenChange===null)report('onOpenChange',props.onOpenChange);else invalidEpisodes.delete('onOpenChange');configuration={required:field?field.required:boolean('required',data.required),disabled:field?field.disabled:(form?.disabled||boolean('disabled',data.disabled)),readonly:field?field.readonly:(form?.readonly||boolean('readonly',data.readonly)),invalid:field?field.invalid:boolean('invalid',data.invalid),loop:boolean('loop',data.loop),closeOnSelect:boolean('closeOnSelect',data.closeOnSelect),placement:choice('placement',data.placement,['bottom-start','bottom-end','top-start','top-end']),matchWidth:boolean('matchWidth',data.matchWidth),variant:choice('variant',data.variant,['outline','filled','plain']),size:choice('size',data.size,['sm','md','lg'])};reconcile();});
+          const stop=Citry.vue.watchEffect(()=>{clientValue=props.value;clientOpen=props.open;onValueChange=typeof props.onValueChange==='function'?props.onValueChange:null;onOpenChange=typeof props.onOpenChange==='function'?props.onOpenChange:null;if(props.onValueChange!=null&&onValueChange===null)report('onValueChange',props.onValueChange);else invalidEpisodes.delete('onValueChange');if(props.onOpenChange!=null&&onOpenChange===null)report('onOpenChange',props.onOpenChange);else invalidEpisodes.delete('onOpenChange');configuration={required:field?field.required:boolean('required',data.required),disabled:field?field.disabled:(form?.disabled||boolean('disabled',data.disabled)),readonly:field?field.readonly:(form?.readonly||boolean('readonly',data.readonly)),invalid:field?field.invalid:boolean('invalid',data.invalid),loop:boolean('loop',data.loop),closeOnSelect:boolean('closeOnSelect',data.closeOnSelect),placement:choice('placement',data.placement,['bottom-start','bottom-end','top-start','top-end']),matchWidth:boolean('matchWidth',data.matchWidth),variant:choice('variant',data.variant,['outline','filled','plain']),size:choice('size',data.size,['sm','md','lg'])};reconcile();});
           const nativeMode={className:'cui-form-control__native--enhanced'};
           root.setAttribute('data-citry-multi-select-initialized','');formRuntime.enhanceNative(nativeSelect,trigger,nativeMode);reconcile();
           return()=>{active=false;generation+=1;if(typeTimer!==null)clearTimeout(typeTimer);root[multiSelectHandoffKey]={serverFingerprint,committed:[...committed],internalOpen,highlightedValue};stop?.();stopFieldsets();unregisterReset();listeners.stop();coordinator.unregister(layer,{reason:'ancestor',source:root,cascade:true});field?.setNativeInvalid(false);root.removeAttribute('data-citry-multi-select-initialized');formRuntime.enhanceNative(nativeSelect,trigger,nativeMode,false);};

@@ -45,6 +45,12 @@ trackpad navigation work without an application-widget keyboard model.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ccarousel/snippets/customization.py" title="Customize Carousel" />
 
+`attrs` on Carousel and on each Slide accepts ordinary native, ARIA, and data
+attributes. It rejects the attributes each component sets itself (such as
+`role` and `hidden`), Citry runtime attributes, and any Vue directive syntax:
+names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and
+listeners on the component tag in your template instead.
+
 ## Accessibility and interaction
 
 Give the root a concise `label` and every Slide a content-specific `label`.

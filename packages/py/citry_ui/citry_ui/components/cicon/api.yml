@@ -35,7 +35,7 @@ inputs:
         name: attrs
         type: Mapping[str, object] | None
         default: {kind: literal, value: null}
-        effect: Adds inert root SVG metadata such as `id`, `lang`, `dir`, `hidden`, `aria-describedby`, `aria-details`, and consumer `data-*` attributes. Geometry, naming, focus, executable directives, event bindings, reserved Citry runtime attributes, and trusted HTML values at any supported nesting depth are rejected.
+        effect: Adds inert root SVG metadata such as `id`, `lang`, `dir`, `hidden`, `aria-describedby`, `aria-details`, and consumer `data-*` attributes. Geometry, naming, focus, Vue directive names, Citry `c-` attributes, event bindings, reserved Citry runtime attributes, and trusted HTML values at any supported nesting depth are rejected.
 
 slots: []
 events: []

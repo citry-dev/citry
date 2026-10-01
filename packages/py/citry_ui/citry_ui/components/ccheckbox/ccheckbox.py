@@ -13,6 +13,7 @@ from citry_ui.components._attrs import (
     CStyleValue,
     get_html_attr,
     get_html_form_owner,
+    is_vue_directive_attribute,
     merge_root_attrs,
     pop_html_attr,
 )
@@ -27,7 +28,6 @@ _VARIANTS = ("solid", "outline")
 _SIZES = ("sm", "md", "lg")
 _LABEL_POSITIONS = ("start", "end")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset({"x-bind", "x-html", "x-model", "x-modelable", "x-text"})
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -70,13 +70,6 @@ _INPUT_OWNED_ATTRS = frozenset(
         "value",
     }
 )
-_INPUT_DYNAMIC_OWNED_ATTRS = _INPUT_OWNED_ATTRS | {
-    "aria-describedby",
-    "aria-errormessage",
-    "aria-label",
-    "aria-labelledby",
-    "form",
-}
 
 
 class CCheckboxDefaultSlotData:
@@ -133,38 +126,25 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(
     input_name: str,
     attrs: dict[str, object],
     *,
     owned: frozenset[str],
-    dynamic_owned: frozenset[str] | None = None,
 ) -> None:
     component_name = f"CCheckbox {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
-    dynamic_targets = dynamic_owned or owned
     for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"{component_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in dynamic_targets:
-            msg = f"{component_name} cannot dynamically bind owned attribute {target!r}."
+        # A Vue directive could rebind the checked state, the form owner, or the
+        # naming attributes the component merges, so none may arrive through Python data.
+        if is_vue_directive_attribute(key):
+            msg = (
+                f"{component_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
 
 
@@ -230,12 +210,7 @@ class CCheckbox(LibraryComponent):
         attrs = _copy_attrs("attrs", kwargs.attrs)
         input_attrs = _copy_attrs("input_attrs", kwargs.input_attrs)
         _validate_attrs("attrs", attrs, owned=_ROOT_OWNED_ATTRS)
-        _validate_attrs(
-            "input_attrs",
-            input_attrs,
-            owned=_INPUT_OWNED_ATTRS,
-            dynamic_owned=_INPUT_DYNAMIC_OWNED_ATTRS,
-        )
+        _validate_attrs("input_attrs", input_attrs, owned=_INPUT_OWNED_ATTRS)
         for html_attribute in (
             "form",
             "aria-label",
@@ -359,7 +334,7 @@ class CCheckbox(LibraryComponent):
             "has_body": has_label or has_description,
             "label_attrs": {"for": input_id},
             "description_id": description_id,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "field_supports_required": "true" if field is not None else None,
             "field_supports_readonly": "false" if field is not None else None,
             "attrs": root_attrs,
@@ -373,27 +348,27 @@ class CCheckbox(LibraryComponent):
     ) -> dict[str, object]:
         field = self.inject(FIELD_CONTEXT_KEY, None)
         return {
-            "value": self._checkbox_value,
-            "checked": kwargs.checked,
-            "indeterminate": kwargs.indeterminate,
-            "required": bool(field.required)
+            "serverValue": self._checkbox_value,
+            "serverChecked": kwargs.checked,
+            "serverIndeterminate": kwargs.indeterminate,
+            "serverRequired": bool(field.required)
             if field is not None
             else kwargs.required
             if kwargs.required is not None
             else False,
-            "disabled": bool(field.disabled)
+            "serverDisabled": bool(field.disabled)
             if field is not None
             else kwargs.disabled
             if kwargs.disabled is not None
             else False,
-            "invalid": bool(field.invalid)
+            "serverInvalid": bool(field.invalid)
             if field is not None
             else kwargs.invalid
             if kwargs.invalid is not None
             else False,
-            "variant": _plain_choice("variant", kwargs.variant, _VARIANTS),
-            "size": _plain_choice("size", kwargs.size, _SIZES),
-            "labelPos": _plain_choice("label_pos", kwargs.label_pos, _LABEL_POSITIONS),
+            "serverVariant": _plain_choice("variant", kwargs.variant, _VARIANTS),
+            "serverSize": _plain_choice("size", kwargs.size, _SIZES),
+            "serverLabelPos": _plain_choice("label_pos", kwargs.label_pos, _LABEL_POSITIONS),
             "descriptionId": self._checkbox_description_id,
             "hasDescription": self._checkbox_has_description,
             "externalDescribedBy": self._checkbox_external_described_by,
@@ -403,9 +378,9 @@ class CCheckbox(LibraryComponent):
     template = """
       <span
         class="cui-checkbox"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-label-pos="label_pos"
@@ -466,14 +441,21 @@ class CCheckbox(LibraryComponent):
           size: {},
           label_pos: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for("citry-ui:field"), default: null},
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          if (!(root instanceof HTMLElement)) throw new Error("[citry-ui] CCheckbox settled anatomy is invalid.");
+          const data = component;
+          const props = component.$props;
           const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
           if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") {
             throw new Error("[citry-ui] CCheckbox requires one direct native checkbox input.");
           }
-          const field = inject(Symbol.for("citry-ui:field"), null);
-          const form = inject(Symbol.for("citry-ui:form"), null);
+          const field = component.fieldService;
+          const form = component.formService;
           const handoffKey = Symbol.for("citry-ui:checkbox-handoff");
           const allowedValues = {
             variant: ["solid", "outline"],
@@ -498,7 +480,7 @@ class CCheckbox(LibraryComponent):
             input.checked = Boolean(handoff.checked);
             input.indeterminate = Boolean(handoff.indeterminate);
           } else {
-            input.indeterminate = data.indeterminate;
+            input.indeterminate = data.serverIndeterminate;
           }
 
           const describeValue = (value) => {
@@ -561,12 +543,12 @@ class CCheckbox(LibraryComponent):
           const resolveValue = () => {
             if (props.value === undefined) {
               invalidEpisodes.delete("value");
-              return data.value;
+              return data.serverValue;
             }
             const canonical = canonicalizeValue(props.value);
             if (canonical === null) {
               reportInvalid("value", props.value);
-              return data.value;
+              return data.serverValue;
             }
             invalidEpisodes.delete("value");
             return canonical;
@@ -626,14 +608,14 @@ class CCheckbox(LibraryComponent):
               disabled = field.disabled;
               externalInvalid = field.invalid;
             } else {
-              required = resolveBoolean("required", data.required);
-              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
-              externalInvalid = resolveBoolean("invalid", data.invalid);
+              required = resolveBoolean("required", data.serverRequired);
+              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.serverDisabled);
+              externalInvalid = resolveBoolean("invalid", data.serverInvalid);
             }
             const invalid = externalInvalid || nativeInvalid;
-            const variant = resolveChoice("variant", data.variant);
-            const size = resolveChoice("size", data.size);
-            const labelPos = resolveChoice("label_pos", data.labelPos);
+            const variant = resolveChoice("variant", data.serverVariant);
+            const size = resolveChoice("size", data.serverSize);
+            const labelPos = resolveChoice("label_pos", data.serverLabelPos);
             const value = resolveValue();
 
             input.required = required;
@@ -782,7 +764,7 @@ class CCheckbox(LibraryComponent):
           input.addEventListener("input", onInput);
           input.addEventListener("change", onChange);
           nativeForm?.addEventListener("reset", onReset);
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             applyState();
             applyLatestControlled();
             if (!activationPending) {

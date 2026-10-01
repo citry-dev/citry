@@ -8,7 +8,6 @@ class MultipleSubmitters(Component):
     template = """
       <section
         class="observation-draft"
-        x-data="{ status: 'Choose how to save the observation.' }"
       >
         <header>
           <p>Observation log</p>
@@ -65,9 +64,18 @@ class MultipleSubmitters(Component):
         <p
           class="observation-draft__status"
           aria-live="polite"
-          x-text="status"
+          v-text="status"
         ></p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            status: 'Choose how to save the observation.'
+          };
+        },
+      });
     """
 
     css = """

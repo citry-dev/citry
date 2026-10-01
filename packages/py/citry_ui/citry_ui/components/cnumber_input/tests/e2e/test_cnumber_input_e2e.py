@@ -29,10 +29,10 @@ def _page_html() -> str:
               <script>window.__numberEvents=[];window.__numberSubmits=[];</script>
               <c-css />
             </head>
-            <body x-data="{ controlledValue: '2', accept: false, wheelEnabled: false }">
+            <body>
               <form
                 id="quantity-form"
-                @submit.prevent="window.__numberSubmits.push(new FormData($event.target).get('quantity'))"
+                @submit.prevent="window.__numberSubmits.push(new window.FormData($event.target).get('quantity'))"
               >
                 <c-CNumberInput
                   id="quantity"
@@ -44,11 +44,9 @@ def _page_html() -> str:
                   step="0.25"
                   required
                   c-input_attrs="quantity_label"
-                  $c-props="{
-                    wheel: wheelEnabled,
-                    onValueChange: (next, detail) => window.__numberEvents.push(['value', next, detail.source]),
-                    onInputValueChange: (next, detail) => window.__numberEvents.push(['input', next, detail.status]),
-                  }"
+                  :wheel="wheelEnabled"
+                  :onValueChange="(next, detail) => window.__numberEvents.push(['value', next, detail.source])"
+                  :onInputValueChange="(next, detail) => window.__numberEvents.push(['input', next, detail.status])"
                 />
                 <button id="submit" type="submit">Submit</button>
                 <button id="reset" type="reset">Reset</button>
@@ -58,13 +56,11 @@ def _page_html() -> str:
                 value="2"
                 step="0.5"
                 c-input_attrs="controlled_label"
-                $c-props="{
-                  value: controlledValue,
-                  onValueChange: (next, detail) => {
+                :value="controlledValue"
+                :onValueChange="(next, detail) => {
                     window.__numberEvents.push(['controlled', next, detail.source]);
                     if (accept) controlledValue = next;
-                  },
-                }"
+                  }"
               />
               <button id="accept" type="button" @click="accept=true">Accept</button>
               <button id="wheel" type="button" @click="wheelEnabled=true">Enable wheel</button>
@@ -72,6 +68,7 @@ def _page_html() -> str:
             </body>
           </html>
         """
+        js = "$component({data(){return {controlledValue:'2',accept:false,wheelEnabled:false};}});"
 
         def template_data(self, kwargs, slots):
             return {

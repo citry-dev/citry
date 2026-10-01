@@ -9,7 +9,7 @@ from html.parser import HTMLParser
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CTreeSelectionMode = Literal["none", "single", "multiple"]
@@ -22,9 +22,6 @@ _MODES = ("none", "single", "multiple")
 _VARIANTS = ("plain", "soft", "outline")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -155,14 +152,6 @@ def _values(owner: str, name: str, value: object) -> tuple[str, ...]:
     return result
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     attrs: Mapping[str, object] | None,
@@ -174,14 +163,13 @@ def _attrs(
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, owner)
     for key in copied:
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} attrs cannot dynamically bind owned attribute {key!r}.")
     return merge_root_attrs(copied, class_, style)
 
 
@@ -315,7 +303,7 @@ class CTree(LibraryComponent):
             raise ValueError(f"CTree selected contains unknown Items: {sorted(unknown_selected)!r}.")
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
-        return self._tree_data
+        return {"serverDefaults": self._tree_data}
 
     template = """
       <div
@@ -325,7 +313,7 @@ class CTree(LibraryComponent):
         role="tree"
         c-aria-label="label"
         c-data-selection-mode="selectionMode"
-        c-data-disabled="disabled"
+        c-data-disabled="'' if disabled else None"
         c-data-variant="variant"
         c-data-size="size"
         data-citry-ui-part="tree"
@@ -338,8 +326,15 @@ class CTree(LibraryComponent):
           expanded: {}, selected: {}, selectionMode: {}, disabled: {}, variant: {}, size: {},
           onExpandedChange: {}, onSelectionChange: {}, onAction: {},
         },
-        init: ({els, data, props, effect}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          // The tree keeps its browser-side choices on its root element, so a later
+          // server render that reruns this callback on the same element restores them.
+          /** @typedef {{serverFingerprint: string, expanded: string[], selected: string[],
+           *   activeValue: string | null | undefined}} TreeRuntime */
+          const root = /** @type {HTMLElement & {__citryUiTreeRuntime?: TreeRuntime}} */ (component.$el);
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const invalidEpisodes = new Set();
           const allItems = () => [...root.querySelectorAll('[role="treeitem"]')]
             .filter((item) => item.closest('[role="tree"]') === root);
@@ -735,10 +730,10 @@ class CTreeItem(LibraryComponent):
                 "aria-selected": ("true" if selected else "false") if context.selection_mode != "none" else None,
                 "data-value": value,
                 "data-level": context.level,
-                "data-expanded": expanded,
-                "data-selected": selected,
-                "data-disabled": context.root_disabled or bool(kwargs.disabled),
-                "data-cui-tree-item-disabled": bool(kwargs.disabled),
+                "data-expanded": "" if expanded else None,
+                "data-selected": "" if selected else None,
+                "data-disabled": "" if context.root_disabled or kwargs.disabled else None,
+                "data-cui-tree-item-disabled": "" if kwargs.disabled else None,
             }
         )
         child_context = _TreeContext(

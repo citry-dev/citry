@@ -16,6 +16,7 @@ def _form_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {disabled:false,readonly:false,submitting:false,cancelReset:false};}});"
         css = """
           :where(.form-theme) {
             --cui-form-gap: 24px;
@@ -32,20 +33,15 @@ def _form_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                disabled: false,
-                readonly: false,
-                submitting: false,
-                cancelReset: false,
-              }"
-            >
+            <body>
               <section class="form-theme">
                 <c-CForm
                   id="observation-form"
                   action="/observations"
                   method="post"
-                  $c-props="{ disabled, readonly, submitting }"
+                  :disabled="disabled"
+                  :readonly="readonly"
+                  :submitting="submitting"
                   @submit.prevent="window.__acceptedSubmits = (window.__acceptedSubmits || 0) + 1"
                   @reset="cancelReset && $event.preventDefault()"
                 >

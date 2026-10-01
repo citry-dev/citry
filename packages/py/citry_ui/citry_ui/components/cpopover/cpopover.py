@@ -11,7 +11,7 @@ from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
     ANCHORED_LAYER_RUNTIME_JS,
 )
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CPopoverPlacement = Literal[
@@ -69,20 +69,6 @@ _PLACEMENTS = (
     "bottom-end",
 )
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _SURFACE_OWNED_ATTRS = frozenset(
     {
         "aria-describedby",
@@ -154,30 +140,14 @@ def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(attrs: dict[str, object]) -> None:
     reject_owned_attrs(attrs, _SURFACE_OWNED_ATTRS, "CPopover")
+    # A Vue directive could rebind the surface's popover wiring, replace its
+    # listeners, or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(attrs, "CPopover")
     for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"CPopover attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"CPopover attrs cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in _SURFACE_OWNED_ATTRS:
-            msg = f"CPopover attrs cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
 
 
@@ -259,10 +229,12 @@ class CPopover(LibraryComponent):
     ) -> dict[str, object]:
         snapshot = self._snapshot(kwargs)
         return {
-            "open": snapshot["open"],
-            "dismissible": snapshot["dismissible"],
-            "placement": snapshot["placement"],
-            "matchWidth": snapshot["match_width"],
+            "serverDefaults": {
+                "open": snapshot["open"],
+                "dismissible": snapshot["dismissible"],
+                "placement": snapshot["placement"],
+                "matchWidth": snapshot["match_width"],
+            },
         }
 
     template = """
@@ -281,9 +253,9 @@ class CPopover(LibraryComponent):
           c-aria-labelledby="title_id"
           c-aria-describedby="described_by"
           c-inert="not open"
-          c-data-open="open"
+          c-data-open="'' if open else None"
           c-data-placement="placement"
-          c-data-match-width="match_width"
+          c-data-match-width="'' if match_width else None"
           c-bind="attrs"
           popover="manual"
           role="dialog"
@@ -345,8 +317,13 @@ class CPopover(LibraryComponent):
           matchWidth: {},
           onOpenChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const host = els[0];
+        onServerRender: ({component}) => {
+          if (!anchoredLayerRuntimeCompatible) return;
+          const host = component.$el;
+          const data = component;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
+          const defaults = data.serverDefaults;
           const nearestHost = (element) => (
             element?.closest?.("[data-citry-popover-host]") ?? null
           );
@@ -387,15 +364,15 @@ class CPopover(LibraryComponent):
           let active = true;
           let controlled = false;
           let logicalOpen = false;
-          let internalOpen = initialHandoff?.open ?? data.open;
+          let internalOpen = initialHandoff?.open ?? defaults.open;
           let onOpenChange = null;
           let animation = null;
           let generation = 0;
           let pendingRequest = null;
           let configuration = {
-            dismissible: data.dismissible,
-            placement: data.placement,
-            matchWidth: data.matchWidth,
+            dismissible: defaults.dismissible,
+            placement: defaults.placement,
+            matchWidth: defaults.matchWidth,
           };
 
           const describeValue = (value) => {
@@ -417,22 +394,22 @@ class CPopover(LibraryComponent):
             );
           };
           const resolveBoolean = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const value = props[name] === undefined ? defaults[name] : props[name];
             if (typeof value === "boolean") {
               invalidEpisodes.delete(name);
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return defaults[name];
           };
           const resolvePlacement = () => {
-            const value = props.placement === undefined ? data.placement : props.placement;
+            const value = props.placement === undefined ? defaults.placement : props.placement;
             if (allowedPlacements.includes(value)) {
               invalidEpisodes.delete("placement");
               return value;
             }
             reportInvalid("placement", value);
-            return data.placement;
+            return defaults.placement;
           };
           const resolveCallback = () => {
             const value = props.onOpenChange;

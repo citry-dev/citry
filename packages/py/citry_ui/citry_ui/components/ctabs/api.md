@@ -69,10 +69,34 @@ whitespace, control flow, and transparent components, but no other rendered
 HTML. This lets `CTabs` generate one correct semantic list without asking you
 to maintain a structural-only list component.
 
+### Keep Vue-bound Tab content in the component that calls CTabs
+
+Tab and Panel content can use your component's Vue data, handlers,
+`v-model`, and `@c-*` Events bindings, because Citry treats it as part of
+the component that contains `CTabs`:
+
+```citry-html
+<c-CTabs default_value="inbox" aria_label="Mail">
+  <c-CTab value="inbox">
+    Inbox <span v-text="unreadCount"></span>
+  </c-CTab>
+  <c-CTabPanel value="inbox">
+    <button @click="refresh()">Refresh</button>
+  </c-CTabPanel>
+</c-CTabs>
+```
+
+To move the declarations into a component of their own, make that component
+transparent. Declarations in an ordinary component that you pass into
+`CTabs` can show Python values such as `{{ title }}`, but a Vue binding
+there stops the render with an error that names the content. The tab list
+is not inside that component, so Vue cannot give the content its data.
+
 ## Try the configuration
 
 Change accent, variant, density, orientation, alignment, growth, focus looping,
-and disabled state. The controls use public CSS variables and `$c-props`.
+and disabled state. The controls use public CSS variables and native Vue
+bindings.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/ctabs/snippets/configuration.py"
@@ -123,12 +147,10 @@ Supplying client `value` makes selection controlled. A user request calls
 <c-CTabs
   default_value="planets"
   aria_label="Night sky topics"
-  $c-props="{
-    value: currentTopic,
-    onValueChange: (value, detail) => {
-      currentTopic = value;
-      observationLog.record(detail);
-    },
+  :value="currentTopic"
+  :onValueChange="(value, detail) => {
+    currentTopic = value;
+    observationLog.record(detail);
   }"
 >
   ...

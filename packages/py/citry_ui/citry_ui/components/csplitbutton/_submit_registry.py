@@ -21,6 +21,9 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
         }
 
         const managers = new WeakMap();
+        const shadowManagers = new Set();
+        let documentObserver = null;
+        let documentRefreshScheduled = false;
         const stats = {
           scopes: 0,
           registrations: 0,
@@ -29,8 +32,29 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
           value instanceof ShadowRoot && value.host.shadowRoot === value
         );
         const actualRoot = (element) => {
+          if (!element?.isConnected) return null;
           const root = element?.getRootNode?.() ?? null;
           return root instanceof Document || isOpenShadowRoot(root) ? root : null;
+        };
+        const refreshShadowManagers = () => {
+          if (documentRefreshScheduled) return;
+          documentRefreshScheduled = true;
+          queueMicrotask(() => {
+            documentRefreshScheduled = false;
+            for (const manager of shadowManagers) {
+              for (const entry of [...manager.entries.values()]) entry.refresh();
+            }
+          });
+        };
+        const retainDocumentObserver = () => {
+          if (documentObserver) return;
+          documentObserver = new MutationObserver(refreshShadowManagers);
+          documentObserver.observe(document.documentElement, {subtree: true, childList: true});
+        };
+        const releaseDocumentObserver = () => {
+          if (shadowManagers.size > 0 || !documentObserver) return;
+          documentObserver.disconnect();
+          documentObserver = null;
         };
         const releaseManager = (root, manager) => {
           if (manager.entries.size > 0) {
@@ -39,6 +63,10 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
           root.removeEventListener("submit", manager.onSubmit, true);
           root.removeEventListener("invalid", manager.onInvalid, true);
           manager.observer.disconnect();
+          if (root instanceof ShadowRoot) {
+            shadowManagers.delete(manager);
+            releaseDocumentObserver();
+          }
           managers.delete(root);
           stats.scopes -= 1;
         };
@@ -86,6 +114,10 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
           root.addEventListener("submit", onSubmit, true);
           root.addEventListener("invalid", onInvalid, true);
           manager = { entries, observer, onInvalid, onSubmit };
+          if (root instanceof ShadowRoot) {
+            shadowManagers.add(manager);
+            retainDocumentObserver();
+          }
           managers.set(root, manager);
           stats.scopes += 1;
           return manager;
@@ -130,7 +162,11 @@ _SPLIT_BUTTON_SUBMIT_RUNTIME_SOURCE = r"""
               return;
             }
             const nextRoot = actualRoot(primary);
-            if (!nextRoot || nextRoot === root) {
+            if (!nextRoot) {
+              detach();
+              return;
+            }
+            if (nextRoot === root) {
               return;
             }
             detach();

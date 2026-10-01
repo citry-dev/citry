@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 from citry import LibraryComponent, SlotInput
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._shared_component_assets import build_shared_component_assets
 from citry_ui.components._validation import (
@@ -126,6 +126,9 @@ def _build_button_snapshot(component: Any, kwargs: Any) -> dict[str, Any]:
         },
         "CButton",
     )
+    # A Vue directive could rebind an owned attribute or add a listener, so
+    # none may arrive through Python data.
+    reject_vue_directive_attrs(kwargs.attrs, "CButton")
     if kwargs.href is not None:
         _reject_link_form_attrs(kwargs.attrs)
 
@@ -202,13 +205,15 @@ class CButton(LibraryComponent):
         return {
             "href": kwargs.href,
             "tabIndex": _get_case_insensitive(kwargs.attrs, "tabindex"),
-            "disabled": kwargs.disabled,
-            "loading": kwargs.loading,
-            "variant": kwargs.variant,
-            "intent": kwargs.intent,
-            "size": kwargs.size,
-            "block": kwargs.block,
-            "loadingPosition": kwargs.loading_pos,
+            "serverDefaults": {
+                "disabled": kwargs.disabled,
+                "loading": kwargs.loading,
+                "variant": kwargs.variant,
+                "intent": kwargs.intent,
+                "size": kwargs.size,
+                "block": kwargs.block,
+                "loadingPosition": kwargs.loading_pos,
+            },
         }
 
     template = """
@@ -221,15 +226,15 @@ class CButton(LibraryComponent):
         c-tabindex="tabindex_without_js"
         c-aria-busy="aria_busy"
         c-aria-disabled="aria_disabled"
-        c-data-loading="loading"
-        c-data-disabled="disabled"
+        c-data-loading="'' if loading else None"
+        c-data-disabled="'' if disabled else None"
         c-data-variant="variant"
         c-data-intent="intent"
         c-data-size="size"
-        c-data-block="block"
+        c-data-block="'' if block else None"
         c-data-loading-position="loading_pos"
-        c-data-citry-button-has-start="has_start"
-        c-data-citry-button-has-end="has_end"
+        c-data-citry-button-has-start="'' if has_start else None"
+        c-data-citry-button-has-end="'' if has_end else None"
         c-bind="attrs"
         data-citry-ui-part="button"
       >
@@ -427,10 +432,17 @@ class CButton(LibraryComponent):
           block: {},
           loadingPosition: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const root = els[0];
+        inject: {formService: {from: Symbol.for("citry-ui:form"), default: null}},
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const server = {
+            ...component.serverDefaults,
+            href: component.href,
+            tabIndex: component.tabIndex,
+          };
+          const props = component.$props;
           const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
-          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const formContext = component.formService;
           const isLink = root.localName === "a";
           const allowedValues = {
             variant: ["solid", "outline", "ghost"],
@@ -438,20 +450,20 @@ class CButton(LibraryComponent):
             size: ["sm", "md", "lg"],
             loadingPosition: ["start", "center", "end"],
           };
-          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          const resolver = createButtonResolver("CButton", root, server, props, allowedValues);
           let configuration = {
-            disabled: data.disabled,
-            loading: data.loading,
-            variant: data.variant,
-            intent: data.intent,
-            size: data.size,
-            block: data.block,
-            loadingPosition: data.loadingPosition,
+            disabled: server.disabled,
+            loading: server.loading,
+            variant: server.variant,
+            intent: server.intent,
+            size: server.size,
+            block: server.block,
+            loadingPosition: server.loadingPosition,
           };
 
           const applyConfiguration = (next) => {
             configuration = next;
-            applyButtonConfiguration(root, indicator, data, next);
+            applyButtonConfiguration(root, indicator, server, next);
           };
           const blockUnavailableActivation = (event) => {
             guardButtonActivation(root, configuration, event);
@@ -467,7 +479,7 @@ class CButton(LibraryComponent):
 
           root.addEventListener("click", blockUnavailableActivation, true);
           nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             const localDisabled = resolver.boolean("disabled");
             applyConfiguration({
               disabled: Boolean(formContext?.disabled) || localDisabled,

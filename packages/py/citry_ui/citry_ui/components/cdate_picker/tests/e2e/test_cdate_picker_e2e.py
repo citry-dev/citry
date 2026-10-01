@@ -38,8 +38,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
             </head>
             <body>
               {provider_open}
-              <section x-data="{{selected:'2026-08-19',controlledOpen:false,acceptValue:false,acceptOpen:false}}">
-                <form id="booking" @submit.prevent="window.__datePickerSubmits.push(Array.from(new FormData($event.target).entries()))">
+              <section>
+                <form id="booking" @submit.prevent="window.__datePickerSubmits.push(Array.from(new window.FormData($event.target).entries()))">
                   <c-CField control_id="arrival" required>
                     <c-fill name="label">Arrival date</c-fill>
                     <c-fill name="description">Choose an available August day.</c-fill>
@@ -51,7 +51,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                         min="2026-08-10"
                         max="2026-09-15"
                         c-unavailable_dates="('2026-08-20',)"
-                        $c-props="{{onValueChange:(value,detail)=>window.__datePickerEvents.push(['value',value,detail.source]),onOpenChange:(open,detail)=>window.__datePickerEvents.push(['open',open,detail.reason])}}"
+                        :onValueChange="(value,detail)=>window.__datePickerEvents.push(['value',value,detail.source])"
+                        :onOpenChange="(open,detail)=>window.__datePickerEvents.push(['open',open,detail.reason])"
                         @input="window.__datePickerEvents.push(['input',$event.target.value])"
                         @change="window.__datePickerEvents.push(['change',$event.target.value])"
                       />
@@ -65,14 +66,16 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                 <c-CDatePicker
                   id="optional"
                   value="2026-08-19"
-                  $c-props="{{value:selected,onValueChange:(value,detail)=>{{window.__datePickerEvents.push(['controlled-value',value,detail.controlled]);if(acceptValue)selected=value}}}}"
+                  :value="selected"
+                  :onValueChange="(value,detail)=>{{window.__datePickerEvents.push(['controlled-value',value,detail.controlled]);if(acceptValue)selected=value}}"
                 />
                 <button id="accept-value" type="button" @click="acceptValue=true">Accept value</button>
                 <button id="set-value" type="button" @click="selected='2026-08-25'">Set value</button>
 
                 <c-CDatePicker
                   id="controlled-open"
-                  $c-props="{{open:controlledOpen,onOpenChange:(open,detail)=>{{window.__datePickerEvents.push(['controlled-open',open,detail.controlled]);if(acceptOpen)controlledOpen=open}}}}"
+                  :open="controlledOpen"
+                  :onOpenChange="(open,detail)=>{{window.__datePickerEvents.push(['controlled-open',open,detail.controlled]);if(acceptOpen)controlledOpen=open}}"
                 />
                 <button id="accept-open" type="button" @click="acceptOpen=true">Accept open</button>
 
@@ -92,6 +95,7 @@ def _page(app: Citry, *, localized: bool = False) -> str:
             </body>
           </html>
         """
+        js = "$component({data(){return {selected:'2026-08-19',controlledOpen:false,acceptValue:false,acceptOpen:false};}});"
 
     if localized:
         context = app.extensions.get_extension("i18n").make_context(locale="en-US")
@@ -254,7 +258,9 @@ def test_client_locale_switch_updates_display_trigger_title_clear_and_calendar(
     assert "August 19, 2026" in trigger.text_content()
     trigger.click()
     assert page.locator("#arrival-popover-title").text_content().strip() == "Choose date"
-    page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-cs'), '$i18n').switchLocale('cs-CZ')")
+    trigger.click()
+    page.wait_for_function("document.querySelector('#arrival').getAttribute('aria-expanded') === 'false'")
+    page.locator("#switch-cs").click()
     page.wait_for_function("document.querySelector('main')?.lang === 'cs-CZ'")
     page.wait_for_function("document.querySelector('#arrival').textContent.includes('19. srpna 2026')")
     assert trigger.get_attribute("aria-label") == "Změnit datum, \u206819. srpna 2026\u2069"

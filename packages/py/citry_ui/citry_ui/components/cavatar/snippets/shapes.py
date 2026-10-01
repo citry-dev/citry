@@ -15,7 +15,7 @@ class AvatarShapes(Component):
       <div class="avatar-shapes">
         <c-for each="shape in shapes">
           <div>
-            <c-CAvatar c-shape="shape" c-alt="f'{shape} spirit guide'" variant="soft">SG</c-CAvatar>
+            <c-CAvatar #c-key="shape" c-shape="shape" c-alt="f'{shape} spirit guide'" variant="soft">SG</c-CAvatar>
             <span>{{ shape }}</span>
           </div>
         </c-for>

@@ -21,7 +21,6 @@ def tooltip_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack tooltip-quality"
             aria-labelledby="tooltip-states-title"
-            x-data="{ controlledOpen: false, liveText: 'Ocean world' }"
           >
             <h1 id="tooltip-states-title">Tooltip states</h1>
             <div class="tooltip-quality__grid">
@@ -34,11 +33,7 @@ def tooltip_states_component(app: Citry) -> type[Component]:
                 id="quality-controlled-tooltip"
                 text="Controlled visibility"
                 placement="bottom-start"
-                $c-props="{
-                  open: controlledOpen,
-                  text: liveText,
-                  onOpenChange: (open) => controlledOpen = open,
-                }"
+                :open="controlledOpen" :text="liveText" :onOpenChange="(open) => controlledOpen = open"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
                   <c-CButton variant="outline" c-attrs="activator_attrs">Ganymede</c-CButton>
@@ -66,6 +61,15 @@ def tooltip_states_component(app: Citry) -> type[Component]:
               </c-CTooltip>
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlledOpen: false, liveText: 'Ocean world'
+              };
+            },
+          });
         """
 
         css = """

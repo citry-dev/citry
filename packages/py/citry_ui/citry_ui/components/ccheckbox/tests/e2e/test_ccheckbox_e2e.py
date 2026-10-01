@@ -16,12 +16,61 @@ from citry import Citry, Component
 pytestmark = pytest.mark.e2e
 
 
+def _vue_checkbox_page() -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class Page(Component):
+        citry = app
+        template = """
+          <main>
+            <c-CForm id="vue-checkbox-form" :disabled="formDisabled">
+              <c-CCheckbox
+                id="vue-checkbox"
+                :checked="checked"
+                :indeterminate="indeterminate"
+                @input="checked = $event.target.checked; indeterminate = false"
+                c-input_attrs="{'aria-label': 'Subscribe'}"
+              />
+            </c-CForm>
+            <button id="checkbox-disabled" @click="formDisabled = !formDisabled">disabled</button>
+          </main>
+        """
+        js = """$component({data(){return {checked:false,indeterminate:true,formDisabled:false};}});"""
+
+    return Page().render().serialize()
+
+
+def test_vue_checkbox_controlled_activation_and_form_provider(page: Any) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(_vue_checkbox_page(), wait_until="load")
+    root = page.locator(".cui-checkbox")
+    control = page.locator("#vue-checkbox")
+    page.wait_for_selector(".cui-checkbox[data-citry-checkbox-initialized]")
+    assert root.get_attribute("data-indeterminate") == ""
+    control.focus()
+    control.press("Space")
+    page.wait_for_function("document.querySelector('#vue-checkbox').checked")
+    assert root.get_attribute("data-checked") == ""
+    assert root.get_attribute("data-indeterminate") is None
+    page.locator("#checkbox-disabled").click()
+    assert control.is_disabled()
+    assert errors == []
+
+
 def _checkbox_page() -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const checkboxTest=Citry.vue.reactive({
+            checked:false, mixed:true, immutable:false, immutableMixed:true,
+            requiredChecked:false, formDisabled:true, events:[], clicks:[], focuses:[],
+          }); window.__checkboxTest=checkboxTest; return {state:{checkboxTest}};}});
+        """
         css = """
           :where(.checkbox-brand) {
             --cui-checkbox-active-color: rgb(18 112 72);
@@ -47,29 +96,14 @@ def _checkbox_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('checkboxTest', {
-                checked: false,
-                mixed: true,
-                immutable: false,
-                immutableMixed: true,
-                requiredChecked: false,
-                formDisabled: true,
-                events: [],
-                clicks: [],
-                focuses: [],
-              })"
-            >
+            <body>
               <c-CCheckbox
                 id="controlled-checkbox"
                 class_="checkbox-brand checkbox-part"
                 indeterminate
-                $c-props="{
-                  checked: $store.checkboxTest.checked,
-                  indeterminate: $store.checkboxTest.mixed,
-                }"
-                @input="$store.checkboxTest.checked = $event.target.checked; $store.checkboxTest.mixed = false"
+                :checked="state.checkboxTest.checked"
+                :indeterminate="state.checkboxTest.mixed"
+                @input="state.checkboxTest.checked = $event.target.checked; state.checkboxTest.mixed = false"
               >
                 <c-fill name="default">Track fern spores</c-fill>
                 <c-fill name="description">Include greenhouse germination notes.</c-fill>
@@ -78,31 +112,29 @@ def _checkbox_page() -> str:
               <c-CCheckbox
                 id="immutable-checkbox"
                 indeterminate
-                $c-props="{
-                  checked: $store.checkboxTest.immutable,
-                  indeterminate: $store.checkboxTest.immutableMixed,
-                }"
-                @input="$store.checkboxTest.events.push({
+                :checked="state.checkboxTest.immutable"
+                :indeterminate="state.checkboxTest.immutableMixed"
+                @input="state.checkboxTest.events.push({
                   type: 'input',
                   checked: $event.target.checked,
                   mixed: $event.target.indeterminate,
                   current: $event.currentTarget.dataset.citryUiPart,
                 })"
-                @change="$store.checkboxTest.events.push({
+                @change="state.checkboxTest.events.push({
                   type: 'change',
                   checked: $event.target.checked,
                   mixed: $event.target.indeterminate,
                   current: $event.currentTarget.dataset.citryUiPart,
                 })"
-                @click="$store.checkboxTest.clicks.push($event.target.tagName)"
-                @focusin="$store.checkboxTest.focuses.push($event.target.tagName)"
+                @click="state.checkboxTest.clicks.push($event.target.tagName)"
+                @focusin="state.checkboxTest.focuses.push($event.target.tagName)"
               >
                 Preserve the immutable specimen
               </c-CCheckbox>
 
               <c-CForm
                 id="garden-form"
-                $c-props="{disabled: $store.checkboxTest.formDisabled}"
+                :disabled="state.checkboxTest.formDisabled"
               >
                 <c-CCheckbox
                   id="form-checkbox"
@@ -129,7 +161,7 @@ def _checkbox_page() -> str:
                 <c-fill name="default">
                   <c-CCheckbox
                     name="rules"
-                    $c-props="{checked: $store.checkboxTest.requiredChecked}"
+                    :checked="state.checkboxTest.requiredChecked"
                   />
                 </c-fill>
                 <c-fill name="description">Required before handling preserved plants.</c-fill>
@@ -306,8 +338,8 @@ def test_native_handlers_see_browser_state_before_controlled_restoration(checkbo
 
     label.click()
     page.wait_for_timeout(30)
-    events: list[dict[str, Any]] = page.evaluate("Alpine.store('checkboxTest').events")
-    clicks: list[str] = page.evaluate("Alpine.store('checkboxTest').clicks")
+    events: list[dict[str, Any]] = page.evaluate("window.__checkboxTest.events")
+    clicks: list[str] = page.evaluate("window.__checkboxTest.clicks")
 
     assert events == [
         {"type": "input", "checked": True, "mixed": False, "current": "checkbox"},
@@ -328,8 +360,8 @@ def test_controlled_mirroring_accepts_native_state_without_redundant_reversal(ch
 
     assert native_input.is_checked() is True
     assert native_input.evaluate("input => input.indeterminate") is False
-    assert page.evaluate("Alpine.store('checkboxTest').checked") is True
-    assert page.evaluate("Alpine.store('checkboxTest').mixed") is False
+    assert page.evaluate("window.__checkboxTest.checked") is True
+    assert page.evaluate("window.__checkboxTest.mixed") is False
     assert native_input.locator("xpath=..").get_attribute("data-checked") == ""
     assert native_input.locator("xpath=..").get_attribute("data-indeterminate") is None
     assert errors == []
@@ -346,7 +378,7 @@ def test_form_disabled_dominates_local_false_and_reset_restores_checkedness(chec
         page.get_by_text("Bog habitat", exact=True).evaluate("element => getComputedStyle(element).cursor")
         == "not-allowed"
     )
-    page.evaluate("Alpine.store('checkboxTest').formDisabled = false")
+    page.evaluate("window.__checkboxTest.formDisabled = false")
     page.wait_for_timeout(0)
     assert first.is_enabled()
     first.uncheck()
@@ -374,7 +406,7 @@ def test_controlled_required_invalid_episode_uses_final_reconciled_state(checkbo
     assert native_input.is_checked() is False
     assert field.get_attribute("data-invalid") == ""
 
-    page.evaluate("Alpine.store('checkboxTest').requiredChecked = true")
+    page.evaluate("window.__checkboxTest.requiredChecked = true")
     page.wait_for_timeout(0)
     assert native_input.is_checked()
     assert field.get_attribute("data-invalid") is None
@@ -478,7 +510,7 @@ def test_label_free_name_and_focus_boundary(checkbox_page):
     assert page.get_by_role("checkbox", name="Select herbarium row").count() == 1
 
     page.locator("#immutable-checkbox").focus()
-    assert page.evaluate("Alpine.store('checkboxTest').focuses") == ["INPUT"]
+    assert page.evaluate("window.__checkboxTest.focuses") == ["INPUT"]
     assert errors == []
 
 

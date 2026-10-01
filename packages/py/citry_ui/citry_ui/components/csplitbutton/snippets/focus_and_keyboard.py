@@ -8,7 +8,7 @@ class SplitButtonFocusAndKeyboard(Component):
     template = """
       <section
         class="split-button-keyboard-demo"
-        x-data="{trace:[], loading:false, primaryDisabled:false, menuDisabled:false}"
+
       >
         <h2>Keyboard specimen workflow</h2>
         <p>
@@ -16,19 +16,18 @@ class SplitButtonFocusAndKeyboard(Component):
           focused Button. In the Menu, use arrows, Home, End, typeahead, and Escape.
         </p>
         <div class="split-button-keyboard-demo__controls">
-          <label><input type="checkbox" x-model="loading" /> Primary loading</label>
-          <label><input type="checkbox" x-model="primaryDisabled" /> Primary disabled</label>
-          <label><input type="checkbox" x-model="menuDisabled" /> Menu disabled</label>
+          <label><input type="checkbox" v-model="loading" /> Primary loading</label>
+          <label><input type="checkbox" v-model="primaryDisabled" /> Primary disabled</label>
+          <label><input type="checkbox" v-model="menuDisabled" /> Menu disabled</label>
         </div>
 
         <div class="split-button-keyboard-demo__row" dir="ltr">
           <span>LTR</span>
           <c-CSplitButton
+            ref="ltrSplit"
             label="Keyboard save actions"
             menu_label="More keyboard save actions"
-            c-primary_attrs="{'@focus':'trace.push(`LTR primary`)'}"
-            c-trigger_attrs="{'@focus':'trace.push(`LTR menu`)'}"
-            $c-props="{loading, primaryDisabled, menuDisabled}"
+            v-bind="{loading, primaryDisabled, menuDisabled}"
           >
             <c-fill name="default">Save field note</c-fill>
             <c-fill name="menu">
@@ -42,10 +41,9 @@ class SplitButtonFocusAndKeyboard(Component):
         <div class="split-button-keyboard-demo__row" dir="rtl">
           <span>RTL</span>
           <c-CSplitButton
+            ref="rtlSplit"
             label="إجراءات حفظ العينة"
             menu_label="المزيد من إجراءات حفظ العينة"
-            c-primary_attrs="{'@focus':'trace.push(`RTL primary`)'}"
-            c-trigger_attrs="{'@focus':'trace.push(`RTL menu`)'}"
           >
             <c-fill name="default">حفظ ملاحظة العينة</c-fill>
             <c-fill name="menu">
@@ -55,11 +53,33 @@ class SplitButtonFocusAndKeyboard(Component):
           </c-CSplitButton>
         </div>
 
-        <output aria-live="polite" x-text="trace.length ? trace.join(' → ') : 'Focus trace is empty'">
+        <output aria-live="polite" v-text="trace.length ? trace.join(' → ') : 'Focus trace is empty'">
           Focus trace is empty
         </output>
         <button type="button" @click="trace=[]">Clear focus trace</button>
       </section>
+    """
+
+    js = r"""
+      $component({
+        data(){return {trace:[], loading:false, primaryDisabled:false, menuDisabled:false};},
+        onServerRender({component}) {
+          const removers=[];
+          for (const [name,label] of [['ltrSplit','LTR'],['rtlSplit','RTL']]) {
+            const host=component.$refs[name].$el;
+            for (const [selector,part] of [
+              ['[data-citry-ui-part="split-button-primary"]','primary'],
+              ['[data-citry-ui-part="split-button-menu-trigger"]','menu'],
+            ]) {
+              const element=host.querySelector(selector);
+              const listener=()=>component.trace.push(`${label} ${part}`);
+              element.addEventListener('focus',listener);
+              removers.push(()=>element.removeEventListener('focus',listener));
+            }
+          }
+          return ()=>removers.forEach((remove)=>remove());
+        },
+      });
     """
 
     css = """

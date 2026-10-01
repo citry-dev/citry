@@ -24,6 +24,7 @@ EXPECTED_RUNTIME_FILES = {
     "citry_ui/components/_aria.py",
     "citry_ui/components/_attrs.py",
     "citry_ui/components/_context.py",
+    "citry_ui/components/_direct_output.py",
     "citry_ui/components/_date.py",
     "citry_ui/components/_dialog_controller.py",
     "citry_ui/components/_form_control_runtime.py",
@@ -56,6 +57,7 @@ EXPECTED_RUNTIME_FILES = {
     "citry_ui/components/ccheckbox/ccheckbox.py",
     "citry_ui/components/ccombobox/__init__.py",
     "citry_ui/components/ccombobox/ccombobox.py",
+    "citry_ui/components/ccombobox/runtime.min.js",
     "citry_ui/components/ccommand_palette/__init__.py",
     "citry_ui/components/ccommand_palette/ccommand_palette.py",
     "citry_ui/components/ccontext_menu/__init__.py",
@@ -170,6 +172,7 @@ EXPECTED_RUNTIME_FILES |= {
     "citry_ui/components/ccascader/ccascader.py",
     "citry_ui/components/ccascader/runtime.min.css",
     "citry_ui/components/ccascader/runtime.min.js",
+    "citry_ui/components/ccontext_menu/runtime.min.js",
     "citry_ui/components/ccolor_picker/__init__.py",
     "citry_ui/components/ccolor_picker/ccolor_picker.py",
     "citry_ui/components/ccolor_picker/runtime.min.css",
@@ -251,6 +254,7 @@ EXPECTED_RUNTIME_FILES |= {
     "citry_ui/components/csortable/runtime.min.js",
     "citry_ui/components/cskeleton/runtime.min.css",
     "citry_ui/components/cslider/runtime.min.css",
+    "citry_ui/components/csplitbutton/runtime.min.js",
     "citry_ui/components/cspinner/runtime.min.css",
     "citry_ui/components/csplitter/runtime.min.css",
     "citry_ui/components/cstepper/runtime.min.css",
@@ -419,7 +423,7 @@ def qualify_wheel(path: Path) -> WheelReport:
         raise WheelQualificationError("Wheel METADATA version does not match its filename.")
     if metadata.get("Requires-Python") not in {">=3.10, <4.0", "<4.0,>=3.10"}:
         raise WheelQualificationError("Wheel METADATA has an unexpected Python requirement.")
-    if metadata.get_all("Requires-Dist", []) != ["citry>=0.4.2"]:
+    if metadata.get_all("Requires-Dist", []) != ["citry>=0.6.0"]:
         raise WheelQualificationError("Wheel METADATA has unexpected runtime dependencies.")
     if metadata.get_all("Provides-Extra", []):
         raise WheelQualificationError("Wheel METADATA has unexpected optional extras.")

@@ -36,105 +36,108 @@ def _dialog_page(*, controlled: bool = False) -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body c-bind="body_attrs">
+            <body>
               <section
                 class="dialog-brand"
                 style="color-scheme: dark"
               >
-                <c-CDialog
-                  id="profile-dialog"
-                  c-attrs="dialog_attrs"
-                  $c-props="{
-                    open: controlled ? open : undefined,
-                    dismissible: dialogDismissible,
-                    closeOnEscape: dialogCloseOnEscape,
-                    closeOnOutside: dialogCloseOnOutside,
-                    initialFocus: dialogInitialFocus,
-                    size: dialogSize,
-                    scroll: dialogScroll,
-                    onOpenChange: (nextOpen, detail) => {
-                      window.__dialogRequest = {
-                        nextOpen,
-                        reason: detail.reason,
-                        controlled: detail.controlled,
-                        returnValue: detail.returnValue,
-                      };
-                      window.__dialogRequests = (window.__dialogRequests || 0) + 1;
-                      if (acceptRequests) {
-                        open = nextOpen;
-                      }
-                    },
-                  }"
-                >
-                  <c-fill
-                    name="activator"
-                    data="{ activator_attrs }"
+                <template v-if="showProfile">
+                  <c-CDialog
+                    id="profile-dialog"
+                    c-attrs="dialog_attrs"
+                    :open="controlled ? open : undefined"
+                    :dismissible="dialogDismissible"
+                    :closeOnEscape="dialogCloseOnEscape"
+                    :closeOnOutside="dialogCloseOnOutside"
+                    :initialFocus="dialogInitialFocus"
+                    :size="dialogSize"
+                    :scroll="dialogScroll"
+                    :onOpenChange="(nextOpen, detail) => {
+                        window.__dialogRequest = {
+                          nextOpen,
+                          reason: detail.reason,
+                          controlled: detail.controlled,
+                          returnValue: detail.returnValue,
+                        };
+                        window.__dialogRequests = (window.__dialogRequests || 0) + 1;
+                        if (acceptRequests) {
+                          open = nextOpen;
+                        }
+                      }"
                   >
-                    <c-CButton c-attrs="activator_attrs">
-                      Edit profile
-                    </c-CButton>
-                  </c-fill>
-                  <c-fill name="title">
-                    Edit profile
-                  </c-fill>
-                  <c-fill name="description">
-                    Update the public details shown to your team.
-                  </c-fill>
-                  <c-fill name="default">
-                    <label for="profile-name">
-                      Display name
-                    </label>
-                    <input id="profile-name" value="Ada" autofocus />
-                    <c-CDialog id="nested-dialog">
-                      <c-fill
-                        name="activator"
-                        data="{ activator_attrs }"
-                      >
-                        <c-CButton c-attrs="activator_attrs">
-                          Review access
-                        </c-CButton>
-                      </c-fill>
-                      <c-fill name="title">
-                        Review access
-                      </c-fill>
-                      <c-fill name="default">
-                        Nested dialog content
-                      </c-fill>
-                      <c-fill
-                        name="actions"
-                        data="{ close_attrs }"
-                      >
-                        <c-CButton c-attrs="close_attrs">
-                          Done
-                        </c-CButton>
-                      </c-fill>
-                    </c-CDialog>
-                    <form method="dialog">
-                      <button
-                        id="native-result"
-                        type="submit"
-                        value="charted"
-                      >
-                        Chart observation
-                      </button>
-                    </form>
-                  </c-fill>
-                  <c-fill
-                    name="actions"
-                    data="{ close_attrs }"
-                  >
-                    <c-CButton
-                      variant="outline"
-                      c-attrs="close_attrs"
+                    <c-fill
+                      name="activator"
+                      data="{ activator_attrs }"
                     >
-                      Cancel
-                    </c-CButton>
-                    <c-CButton c-attrs="save_attrs">
-                      Save
-                    </c-CButton>
-                  </c-fill>
-                </c-CDialog>
+                      <c-CButton c-attrs="activator_attrs">
+                        Edit profile
+                      </c-CButton>
+                    </c-fill>
+                    <c-fill name="title">
+                      Edit profile
+                    </c-fill>
+                    <c-fill name="description">
+                      Update the public details shown to your team.
+                    </c-fill>
+                    <c-fill name="default">
+                      <label for="profile-name">
+                        Display name
+                      </label>
+                      <input id="profile-name" value="Ada" autofocus />
+                      <c-CDialog id="nested-dialog">
+                        <c-fill
+                          name="activator"
+                          data="{ activator_attrs }"
+                        >
+                          <c-CButton c-attrs="activator_attrs">
+                            Review access
+                          </c-CButton>
+                        </c-fill>
+                        <c-fill name="title">
+                          Review access
+                        </c-fill>
+                        <c-fill name="default">
+                          Nested dialog content
+                        </c-fill>
+                        <c-fill
+                          name="actions"
+                          data="{ close_attrs }"
+                        >
+                          <c-CButton c-attrs="close_attrs">
+                            Done
+                          </c-CButton>
+                        </c-fill>
+                      </c-CDialog>
+                      <form method="dialog">
+                        <button
+                          id="native-result"
+                          type="submit"
+                          value="charted"
+                        >
+                          Chart observation
+                        </button>
+                      </form>
+                    </c-fill>
+                    <c-fill
+                      name="actions"
+                      data="{ close_attrs }"
+                    >
+                      <c-CButton
+                        variant="outline"
+                        c-attrs="close_attrs"
+                      >
+                        Cancel
+                      </c-CButton>
+                      <c-CButton c-attrs="save_attrs">
+                        Save
+                      </c-CButton>
+                    </c-fill>
+                  </c-CDialog>
+                </template>
               </section>
+              <button id="remove-dialog" type="button" @click="showProfile = false">
+                Remove dialog
+              </button>
               <button id="accept-requests" type="button" @click="acceptRequests = true">
                 Accept requests
               </button>
@@ -168,18 +171,32 @@ def _dialog_page(*, controlled: bool = False) -> str:
 
         def template_data(self, kwargs, slots):
             return {
-                "body_attrs": {
-                    "x-data": (
-                        "{ controlled: "
-                        + str(controlled).lower()
-                        + ", open: false, acceptRequests: false, dialogDismissible: true, "
-                        + "dialogCloseOnEscape: true, dialogCloseOnOutside: true, "
-                        + "dialogInitialFocus: 'auto', dialogSize: 'md', dialogScroll: 'body' }"
-                    ),
-                },
                 "dialog_attrs": {"data-workflow": "profile"},
                 "save_attrs": {"id": "save-profile"},
             }
+
+        def js_data(self, kwargs, slots):
+            # The page owner decides once, on the server, whether it controls the dialog.
+            return {"controlled": controlled}
+
+        js = """
+          $component({
+            data() {
+              // The buttons below edit this owner state, and the dialog reads it through Vue props.
+              return {
+                open: false,
+                showProfile: true,
+                acceptRequests: false,
+                dialogDismissible: true,
+                dialogCloseOnEscape: true,
+                dialogCloseOnOutside: true,
+                dialogInitialFocus: "auto",
+                dialogSize: "md",
+                dialogScroll: "body",
+              };
+            },
+          });
+        """
 
     return str(Page())
 
@@ -540,27 +557,11 @@ def test_removal_while_open_releases_document_state_and_component_resources(page
     _load(page)
     _outer_trigger(page).click()
     page.wait_for_function("document.querySelector('#profile-dialog').open")
-    page.evaluate(
-        """() => {
-          const host = document.querySelector('#profile-dialog').closest('[data-citry-dialog-host]');
-          let start = host.previousSibling;
-          while (start && !(start.nodeType === Node.COMMENT_NODE && start.data.endsWith(':s'))) {
-            start = start.previousSibling;
-          }
-          let end = host.nextSibling;
-          while (end && !(end.nodeType === Node.COMMENT_NODE && end.data.endsWith(':e'))) {
-            end = end.nextSibling;
-          }
-          if (!start || !end) {
-            throw new Error('Could not locate the dialog invocation range.');
-          }
-          const range = document.createRange();
-          range.setStartBefore(start);
-          range.setEndAfter(end);
-          range.deleteContents();
-        }"""
-    )
+    # The page owner unmounts the open dialog through its own Vue state, the
+    # way an application removes a component.
+    page.locator("#remove-dialog").evaluate("element => element.click()")
     page.wait_for_function("window[Symbol.for('citry-ui:dialog-runtime')].dialogs.length === 0")
+    page.wait_for_function("document.documentElement.style.overflow === ''", timeout=2_500)
 
     assert page.evaluate("document.documentElement.style.overflow") == ""
     assert page.locator("#profile-dialog").count() == 0

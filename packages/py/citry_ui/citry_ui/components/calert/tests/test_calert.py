@@ -221,33 +221,32 @@ def test_alert_merges_root_class_style_and_trusted_unrelated_attrs():
 
 
 @pytest.mark.parametrize(
-    ("destination", "attribute"),
+    ("destination", "attribute", "message"),
     [
-        ("attrs", "role"),
-        ("attrs", "ARIA-LIVE"),
-        ("attrs", "tabindex"),
-        ("attrs", ":contenteditable"),
-        ("attrs", "data-intent"),
-        ("attrs", "x-bind"),
-        ("attrs", "x-for"),
-        ("attrs", "x-html"),
-        ("attrs", "x-if"),
-        ("attrs", "x-ignore.self"),
-        ("attrs", "x-teleport"),
-        ("attrs", "data-citry-root"),
-        ("actions_attrs", "role"),
-        ("actions_attrs", "aria-label"),
-        ("actions_attrs", "aria-labelledby"),
-        ("actions_attrs", "aria-hidden"),
-        ("actions_attrs", "x-bind:aria-live"),
-        ("actions_attrs", ".tabindex"),
-        ("actions_attrs", "x-text"),
-        ("actions_attrs", "x-ignore"),
-        ("actions_attrs", "x-teleport"),
+        ("attrs", "role", "cannot override owned attribute"),
+        ("attrs", "ARIA-LIVE", "cannot override owned attribute"),
+        ("attrs", "tabindex", "cannot override owned attribute"),
+        ("attrs", "data-intent", "cannot override owned attribute"),
+        ("attrs", "data-citry-root", "reserved Citry runtime attribute"),
+        ("attrs", ":contenteditable", "Vue directive"),
+        ("attrs", "v-bind:data-intent", "Vue directive"),
+        ("attrs", "v-bind", "Vue directive"),
+        ("attrs", "v-for", "Vue directive"),
+        ("attrs", "v-html", "Vue directive"),
+        ("attrs", "V-IF", "Vue directive"),
+        ("attrs", "@click", "Vue directive"),
+        ("attrs", "#default", "Vue directive"),
+        ("actions_attrs", "role", "cannot override owned attribute"),
+        ("actions_attrs", "aria-label", "cannot override owned attribute"),
+        ("actions_attrs", "aria-labelledby", "cannot override owned attribute"),
+        ("actions_attrs", "aria-hidden", "cannot override owned attribute"),
+        ("actions_attrs", "v-bind:aria-live", "Vue directive"),
+        ("actions_attrs", ".tabindex", "Vue directive"),
+        ("actions_attrs", "v-text", "Vue directive"),
     ],
 )
-def test_alert_rejects_owned_static_dynamic_and_structural_attrs(destination, attribute):
-    with pytest.raises(ValueError, match="CAlert"):
+def test_alert_rejects_owned_static_dynamic_and_structural_attrs(destination, attribute, message):
+    with pytest.raises(ValueError, match=f"CAlert {destination} .*{message}"):
         _render(
             CAlert(
                 **{destination: {attribute: "value"}},

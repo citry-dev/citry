@@ -48,12 +48,10 @@ use `reason="action"`; inspect `detail.returnValue` for `"cancel"` or
 
 ```citry-html
 <c-CAlertDialog
-  $c-props="{
-    open: confirming,
-    onOpenChange: (open, detail) => {
-      if (detail.returnValue === 'action') archiveThenClose()
-      else confirming = open
-    }
+  :open="confirming"
+  :onOpenChange="(open, detail) => {
+    if (detail.returnValue === 'action') archiveThenClose()
+    else confirming = open
   }"
 >
   ...
@@ -105,6 +103,12 @@ family-specific variables.
   --cui-alert-dialog-border-color: #8b5cf6;
 }
 ```
+
+`attrs` accepts ordinary native, ARIA, and data attributes for the dialog
+element. It rejects the attributes AlertDialog sets itself (such as `role` and
+`aria-describedby`), Citry runtime attributes, and any Vue directive syntax:
+names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and
+listeners on the component tag in your template instead.
 
 See [`api.yml`](api.yml) for the exhaustive inputs, callbacks, variables,
 attributes, selectors, slots, and public interfaces.

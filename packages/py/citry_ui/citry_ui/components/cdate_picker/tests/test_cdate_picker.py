@@ -190,6 +190,36 @@ def test_attrs_reject_owned_root_attributes(attribute: str) -> None:
         _render('<c-CDatePicker c-attrs="attrs" />', {"attrs": {attribute: "hostile"}})
 
 
+@pytest.mark.parametrize(
+    "attribute",
+    [
+        "v-bind:id",
+        ":role",
+        ".data-open",
+        "v-if",
+        "V-IF",
+        "v-for",
+        "v-html",
+        "v-model",
+        "@click",
+        "v-on:click",
+        "#default",
+    ],
+)
+def test_attrs_reject_vue_directives(attribute: str) -> None:
+    # Python attrs are data, so any directive spelling is refused with the
+    # component's name before it can rebind owned state or add a listener.
+    message = f"CDatePicker attrs cannot contain the Vue directive {attribute!r}"
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _render('<c-CDatePicker c-attrs="attrs" />', {"attrs": {attribute: "hostile"}})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render('<c-CDatePicker c-attrs="attrs" />', {"attrs": {"x-data": "{}", "hx-get": "/dates"}})
+    assert 'x-data="{}"' in html
+    assert 'hx-get="/dates"' in html
+
+
 def test_explicit_message_overrides_render_without_default_text() -> None:
     html = _render(
         '<c-CDatePicker value="2026-08-19" placeholder="Pick day" picker_label="Pick date" '
@@ -222,7 +252,10 @@ def test_field_and_form_have_one_control_while_calendar_is_context_isolated() ->
     assert "data-citry-field-control" in control
     assert html.count("data-citry-field-control") == 1
     assert 'id="arrival-calendar-calendar"' in html
-    assert 'id="arrival-calendar" type="date"' in html
+    assert re.search(
+        r'<input\b(?=[^>]*\btype="date")(?=[^>]*\bid="arrival-calendar")[^>]*>',
+        html,
+    )
     assert 'name="arrival"' not in html.split('id="arrival-calendar"', 1)[1].split("/>", 1)[0]
 
 

@@ -19,7 +19,7 @@ inputs:
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CMenuSize]}, default: {kind: literal, value: md}, effect: Selects existing CMenu item geometry.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds host classes and merges them with attrs.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds host styles; inherited Menu variables reach the inline surface.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed host attributes and isolated-scope unrelated native listeners.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed host attributes. Rejects inline handlers and Vue directive syntax.}
       - {id: target-attrs, name: target_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed attributes to the exact bound target mapping without replacing owned identity or invocation behavior.}
 
   - id: ccontext-menu-client-inputs

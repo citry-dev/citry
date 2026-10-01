@@ -106,22 +106,45 @@ def test_breadcrumbs_validate_records_and_exact_strings():
 
 
 @pytest.mark.parametrize(
-    ("input_name", "attribute"),
+    ("input_name", "attribute", "message"),
     [
-        ("attrs", "role"),
-        ("attrs", "aria-label"),
-        ("attrs", "x-if"),
-        ("attrs", "data-citry-morph"),
-        ("list_attrs", "role"),
-        ("list_attrs", "aria-hidden"),
+        ("attrs", "role", "cannot override owned attribute"),
+        ("attrs", "aria-label", "cannot override owned attribute"),
+        ("attrs", "data-citry-morph", "reserved Citry runtime attribute"),
+        ("attrs", ":data-size", "Vue directive"),
+        ("attrs", "v-if", "Vue directive"),
+        ("attrs", "V-IF", "Vue directive"),
+        ("attrs", "@click", "Vue directive"),
+        ("list_attrs", "role", "cannot override owned attribute"),
+        ("list_attrs", "aria-hidden", "cannot override owned attribute"),
+        ("list_attrs", "v-for", "Vue directive"),
+        ("list_attrs", "#default", "Vue directive"),
     ],
 )
-def test_breadcrumbs_reject_competing_root_and_list_ownership(input_name, attribute):
-    with pytest.raises(ValueError, match=r"owned|ownership|reserved"):
+def test_breadcrumbs_reject_competing_root_and_list_ownership(input_name, attribute, message):
+    with pytest.raises(ValueError, match=f"CBreadcrumbs {input_name} .*{message}"):
         _render(
             f"<c-CBreadcrumbs c-items=\"items\" c-{input_name}=\"{{'{attribute}': 'x'}}\" />",
             {"items": _items()},
         )
+
+
+@pytest.mark.parametrize("attribute", ["v-bind:href", ".href", "V-HTML"])
+def test_item_attrs_reject_vue_directives(attribute):
+    with pytest.raises(ValueError, match=r"CBreadcrumbs items\[0\]\.attrs cannot contain the Vue directive"):
+        _render(
+            '<c-CBreadcrumbs c-items="items" />',
+            {"items": (CBreadcrumbItem("Home", "/", {attribute: "x"}),)},
+        )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(
+        "<c-CBreadcrumbs c-items=\"items\" c-attrs=\"{'x-if': 'plain'}\" />",
+        {"items": (CBreadcrumbItem("Home", "/", {"x-bind": "plain"}),)},
+    )
+    assert 'x-if="plain"' in html
+    assert 'x-bind="plain"' in html
 
 
 def test_item_attrs_are_snapshotted_and_cannot_replace_navigation_semantics():

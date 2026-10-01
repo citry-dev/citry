@@ -130,19 +130,19 @@ their exact markers divide shared runtime ownership. A component-owned
 `messages` declaration still comes after `js_file` and `css_file` as the final
 class member.
 
-## Keep every production component compatible with Alpine CSP
+## Keep every production component within Citry's Vue template contract
 
 Every production `LibraryComponent`, including private renderers registered
-for use by another component, must keep its template expressions inside the
-subset supported by Citry's pinned Alpine CSP runtime. Move complex browser
-logic into `Component.js` and call a scope method from the template.
+for use by another component, must keep its template expressions within the
+prepared Vue template contract. Move complex browser logic into
+`Component.js` and call a component method from the template.
 
 The package CI discovers production component modules, requires every public
 and internal definition to appear in `COMPONENTS`, and runs the same pinned
 compatibility analysis used by `citry check` over that complete registry.
 Documentation snippets are teaching material and are intentionally outside
-this library-runtime guarantee; applications should check example expressions
-against their selected CSP mode before copying them.
+this library-runtime guarantee; applications should still validate example
+expressions under their selected security mode before copying them.
 
 ## Choose one owner for compound state
 
@@ -363,7 +363,7 @@ For record-driven native output:
 - document when overflow can clip inline overlays and identify the visible,
   top-layer, or portal escape path; and
 - keep live announcements outside a subtree marked `aria-busy`, preserve the
-  live-region node across server morphs, and treat exact assistive-technology
+  live-region node across server revisions, and treat exact assistive-technology
   timing as manual evidence.
 
 Server-only components do not need a documentation configurator. Use
@@ -527,10 +527,11 @@ i18n section to the design package and complete this audit before runtime work:
    </span>
    ```
 
-   `$c-tr` has the same three server-authoring forms as `$c-props`. Prefer the
+   `$c-tr` has the same three server-authoring forms as other dynamic
+   attributes. Prefer the
    direct form above when the binding is fixed in the template. Use
    `c-$c-tr:<message>[<attribute>]="browser_values_expression"` when Python
-   supplies the raw Alpine named-values expression. A `c-bind` mapping may
+   supplies the raw Vue named-values expression. A `c-bind` mapping may
    supply the complete key and value when server logic chooses or omits the
    binding:
 
@@ -575,12 +576,12 @@ i18n section to the design package and complete this audit before runtime work:
    reactive effect. Add the named-values expression only when browser state may
    change them.
 
-   `$c-tr` evaluates its values expression when Alpine registers the directive,
+   `$c-tr` evaluates its values expression when Vue registers the binding,
    so reactive reads such as `toast.title` update the translation even before
    the first locale switch. A locale change also updates it. `i18n.bind()` uses
    the same reactive rule, calls `onChange` immediately for its custom
    destination, returns `dispose()` for cleanup, and provides `refresh()` only
-   for values stored outside Alpine reactivity. Bindings resolve their provider
+   for values stored outside Vue reactivity. Bindings resolve their provider
    through Citry's logical ownership graph, including slots and teleports; never
    use DOM `closest()` for i18n ownership.
 
@@ -625,7 +626,7 @@ Every migrated family proves at least:
   explicitly bound visible and accessibility output;
 - imperative `refresh()` and `dispose()` behavior when the family uses
    `i18n.bind()`;
-- fragment insertion, morph, retained ownership, and cleanup when applicable;
+- fragment insertion, server revisions, and cleanup when applicable;
 - no stale request-locale string recreated after a browser switch; and
 - installed-wheel discovery of every catalog artifact the family needs.
 
@@ -651,11 +652,37 @@ and isolation from nested component roots.
 Follow the repository-wide
 [`component callback and native event rules`](../../../../docs/best-practices/component-authoring.md#separate-component-callbacks-from-native-browser-events).
 Citry UI components expose their own semantic notifications as optional
-callback inputs such as `onValueChange` supplied through `$c-props`. Consumer
-templates use Alpine `@...` listeners for native events from the rendered HTML.
+callback inputs such as `onValueChange` supplied through native Vue `:`
+bindings. Consumer templates use Vue `@...` listeners for native events from
+the rendered HTML.
 Do not add a custom DOM event as a second spelling of either surface.
 
 Each component design must compare relevant libraries' notification APIs and
 then define the chosen callback's trigger conditions, controlled-state
 semantics, ordering, cancellation behavior, and exact arguments. A custom DOM
 event requires a separately documented DOM interop or lifecycle need.
+
+## Mark client initialization for browser tests
+
+Each interactive family sets `data-citry-<family>-initialized` on its root
+element once its client initializer has wired listeners, focus, and native
+state. The initializer's cleanup removes the attribute, unless the component
+hands its open state to the next run after a server revision. Browser tests
+and quality scenarios wait for that attribute before they interact with the
+component. It shows tests that the component started; it is not a styling or
+state hook for consumers.
+
+A test that needs the whole page, for example before it calls
+`Citry.events`, waits for the runtime's `citry:ready` event instead. The
+package `conftest.py` provides `wait_for_citry_ready` for that wait, and
+`open_scenario` for quality scenarios. A scenario page loads the runtime,
+component definitions, and stylesheets from `/citry/...` URLs, so it must be
+served over HTTP. `page.set_content()` loads the page at `about:blank`, where
+those URLs cannot load, so the components never start.
+
+With Citry's default settings the server writes every page's component HTML
+into the response, so a no-JavaScript test can inspect a page built with
+`Citry()` or `render_scenario(...)` directly. Parts that depend on
+browser-only state, and finished HTML blocks such as `<c-raw>`, are sent
+empty and built by Vue. A page built with `ssr=False` or
+a raised `ssr_element_threshold` is sent with an empty Vue host instead.

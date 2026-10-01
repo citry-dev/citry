@@ -24,13 +24,13 @@ def _toggle_page() -> str:
         template = "<div data-test-form-context><c-slot /></div>"
         js = """
           $component({
-            init: ({reactive, provide, effect}) => {
-              const context = reactive({disabled: true, readonly: false});
-              provide(Symbol.for("citry-ui:form"), context);
-              const stop = effect(() => {
-                context.disabled = Alpine.store("toggleTest").formContextDisabled;
+            data() { return {context: Citry.vue.reactive({disabled: true, readonly: false})}; },
+            provide() { return {[Symbol.for("citry-ui:form")]: this.context}; },
+            onServerRender: ({component}) => {
+              const stop = Citry.vue.watchEffect(() => {
+                component.context.disabled = window.__toggleTest.formContextDisabled;
               });
-              return () => stop?.();
+              return () => stop();
             },
           })
         """
@@ -55,40 +55,26 @@ def _toggle_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('toggleTest', {
-                single: 'sky',
-                changes: [],
-                itemClicked: false,
-                itemDisabled: false,
-                groupVariant: 'outline',
-                groupSize: 'md',
-                formLocalDisabled: false,
-                formContextDisabled: true
-              })"
-            >
+            <body>
               <c-CToggle c-attrs="{'id': 'standalone'}">Grid</c-CToggle>
               <c-CToggleGroup
                 label="View"
                 value="sky"
                 c-mandatory="True"
                 c-attrs="{'id': 'single'}"
-                $c-props="{
-                  value: $store.toggleTest.single,
-                  variant: $store.toggleTest.groupVariant,
-                  size: $store.toggleTest.groupSize,
-                  onValueChange: (value, detail) => {
-                    $store.toggleTest.changes.push(detail);
-                    $store.toggleTest.single = value;
-                  }
+                :value="state.single"
+                :variant="state.groupVariant"
+                :size="state.groupSize"
+                :onValueChange="(value, detail) => {
+                  state.changes.push(detail);
+                  state.single = value;
                 }"
               >
                 <c-CToggle value="sky">Sky</c-CToggle>
                 <c-CToggle
                   value="map"
-                  @click.stop="$store.toggleTest.itemClicked = true"
-                  $c-props="{disabled: $store.toggleTest.itemDisabled}"
+                  @click.stop="state.itemClicked = true"
+                  :disabled="state.itemDisabled"
                 >Map</c-CToggle>
               </c-CToggleGroup>
               <c-CToggleGroup
@@ -103,18 +89,25 @@ def _toggle_page() -> str:
               <c-DisabledFormContext>
                 <c-CToggle
                   c-attrs="{'id': 'form-standalone'}"
-                  $c-props="{disabled: $store.toggleTest.formLocalDisabled}"
+                  :disabled="state.formLocalDisabled"
                 >Form-owned standalone</c-CToggle>
                 <c-CToggleGroup
                   label="Form-owned group"
                   c-attrs="{'id': 'form-group'}"
-                  $c-props="{disabled: $store.toggleTest.formLocalDisabled}"
+                  :disabled="state.formLocalDisabled"
                 >
                   <c-CToggle value="form-item">Form item</c-CToggle>
                 </c-CToggleGroup>
               </c-DisabledFormContext>
             </body>
           </html>
+        """
+        js = """
+          $component({data(){const state=Citry.vue.reactive({
+            single:'sky',changes:[],itemClicked:false,itemDisabled:false,
+            groupVariant:'outline',groupSize:'md',formLocalDisabled:false,
+            formContextDisabled:true,
+          });window.__toggleTest=state;return {state};}});
         """
 
     return str(Page())
@@ -129,11 +122,11 @@ def test_standalone_and_grouped_activation_follow_pressed_ownership(page: Any) -
     assert standalone.get_attribute("aria-pressed") == "true"
 
     page.locator("#single").get_by_role("button", name="Map").click()
-    page.wait_for_function("Alpine.store('toggleTest').single === 'map'")
+    page.wait_for_function("window.__toggleTest.single === 'map'")
     assert page.locator("#single").get_by_role("button", name="Sky").get_attribute("aria-pressed") == "false"
     assert page.locator("#single").get_by_role("button", name="Map").get_attribute("aria-pressed") == "true"
-    assert page.evaluate("Alpine.store('toggleTest').itemClicked") is True
-    assert page.evaluate("Alpine.store('toggleTest').changes.at(-1).previousValue") == "sky"
+    assert page.evaluate("window.__toggleTest.itemClicked") is True
+    assert page.evaluate("window.__toggleTest.changes.at(-1).previousValue") == "sky"
 
     labels = page.locator("#multiple").get_by_role("button", name="Labels")
     labels.click()
@@ -145,15 +138,15 @@ def test_group_and_item_disabled_state_stay_synchronized(page: Any) -> None:
     page.wait_for_selector("#single[data-citry-toggle-group-initialized]")
     item = page.locator("#single").get_by_role("button", name="Map")
 
-    page.evaluate("Alpine.store('toggleTest').itemDisabled = true")
+    page.evaluate("window.__toggleTest.itemDisabled = true")
     page.wait_for_function("document.querySelector('#single button[data-value=map]').disabled")
     assert item.get_attribute("data-disabled") is not None
 
-    page.evaluate("Alpine.store('toggleTest').itemDisabled = false")
+    page.evaluate("window.__toggleTest.itemDisabled = false")
     page.wait_for_function("!document.querySelector('#single button[data-value=map]').disabled")
     assert item.get_attribute("data-disabled") is None
 
-    page.evaluate("Object.assign(Alpine.store('toggleTest'), {groupVariant: 'soft', groupSize: 'lg'})")
+    page.evaluate("Object.assign(window.__toggleTest, {groupVariant: 'soft', groupSize: 'lg'})")
     page.wait_for_function("document.querySelector('#single button[data-value=map]').dataset.variant === 'soft'")
     assert page.locator("#single [data-citry-ui-part='toggle'][data-size='lg']").count() == 2
 
@@ -169,14 +162,14 @@ def test_enclosing_form_disabled_context_cannot_be_cleared_by_client_props(page:
     assert item.is_disabled()
     assert group.get_attribute("data-disabled") is not None
 
-    page.evaluate("Alpine.store('toggleTest').formLocalDisabled = true")
-    page.evaluate("Alpine.store('toggleTest').formLocalDisabled = false")
+    page.evaluate("window.__toggleTest.formLocalDisabled = true")
+    page.evaluate("window.__toggleTest.formLocalDisabled = false")
     page.wait_for_timeout(50)
     assert standalone.is_disabled()
     assert item.is_disabled()
     assert group.get_attribute("data-disabled") is not None
 
-    page.evaluate("Alpine.store('toggleTest').formContextDisabled = false")
+    page.evaluate("window.__toggleTest.formContextDisabled = false")
     page.wait_for_function("!document.querySelector('#form-standalone').disabled")
     assert item.is_enabled()
     assert group.get_attribute("data-disabled") is None

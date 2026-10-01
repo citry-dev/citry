@@ -8,10 +8,6 @@ class ImagePlaceholderAndError(Component):
     template = """
       <section
         class="image-feedback"
-        x-data="{
-          source:'/static/img/ui/image/horsehead-nebula-1280.jpg?generation=1',
-          status:'waiting',
-        }"
       >
         <div class="image-feedback__controls">
           <button
@@ -36,10 +32,7 @@ class ImagePlaceholderAndError(Component):
               alt="Horsehead Nebula behind a dark dust cloud"
               c-width="1280"
               c-height="720"
-              $c-props="{
-                src:source,
-                onStatusChange:(detail)=>status=detail.status,
-              }"
+              :src="source" :onStatusChange="(detail)=>status=detail.status"
             >
               <c-fill name="placeholder">
                 <div class="image-feedback__placeholder">
@@ -50,7 +43,7 @@ class ImagePlaceholderAndError(Component):
                 <span class="image-feedback__fallback">Plate unavailable</span>
               </c-fill>
             </c-CImage>
-            <output x-text="`Normalized status: ${status}`">Normalized status: waiting</output>
+            <output v-text="`Normalized status: ${status}`">Normalized status: waiting</output>
           </article>
 
           <article>
@@ -65,6 +58,16 @@ class ImagePlaceholderAndError(Component):
           </article>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            source:'/static/img/ui/image/horsehead-nebula-1280.jpg?generation=1',
+            status:'waiting',
+          };
+        },
+      });
     """
 
     css = """

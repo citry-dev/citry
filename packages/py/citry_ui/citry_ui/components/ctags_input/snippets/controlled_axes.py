@@ -7,86 +7,79 @@ citry.register_library(citry_ui)
 class ControlledTagsInputAxes(Component):
     template = """
       <section class="tags-input-controlled">
-        <article x-data="{last:'Uncontrolled'}">
+        <article >
           <h3>Uncontrolled tags and draft</h3>
           <c-CTagsInput
             c-value="['alpine']"
             c-input_attrs="{'aria-label':'Uncontrolled labels'}"
-            $c-props="{
-              onValueChange:(next)=>last=JSON.stringify(next),
-            }"
+            :onValueChange="(next)=>uncontrolledLast=JSON.stringify(next)"
           />
-          <output x-text="last">Uncontrolled</output>
+          <output v-text="uncontrolledLast">Uncontrolled</output>
         </article>
 
-        <article x-data="{draft:'coastal',last:'Draft owned'}">
+        <article >
           <h3>Controlled draft</h3>
           <c-CTagsInput
             c-value="['alpine']"
             c-input_attrs="{'aria-label':'Draft-owned labels'}"
-            $c-props="{
-              inputValue:draft,
-              onInputValueChange:(next)=>{
+            :inputValue="draft" :onInputValueChange="(next)=>{
                 draft=next;
-                last=`Draft: ${next}`;
-              },
-            }"
+                draftLast=`Draft: ${next}`;
+              }"
           />
-          <output x-text="last">Draft owned</output>
+          <output v-text="draftLast">Draft owned</output>
         </article>
 
         <article
-          x-data="{
-            tags:['alpine'],
-            accept:false,
-            last:'Value request not sent',
-          }"
         >
           <h3>Controlled tags, uncontrolled draft</h3>
           <c-CTagsInput
             c-input_attrs="{'aria-label':'Value-owned labels'}"
-            $c-props="{
-              value:tags,
-              onValueChange:(next,detail)=>{
-                last=`Requested ${JSON.stringify(next)}`;
-                if (accept) tags=next;
-              },
-            }"
+            :value="valueTags" :onValueChange="(next,detail)=>{
+                valueLast=`Requested ${JSON.stringify(next)}`;
+                if (accept) valueTags=next;
+              }"
           />
           <label>
-            <input type="checkbox" x-model="accept" />
+            <input type="checkbox" v-model="accept" />
             Accept the next value request
           </label>
-          <output x-text="last">Value request not sent</output>
+          <output v-text="valueLast">Value request not sent</output>
         </article>
 
         <article
-          x-data="{
-            tags:['alpine'],
-            draft:'harbor',
-            last:'Both axes owned',
-          }"
         >
           <h3>Controlled tags and draft</h3>
           <c-CTagsInput
             c-input_attrs="{'aria-label':'Fully controlled labels'}"
-            $c-props="{
-              value:tags,
-              inputValue:draft,
-              onValueChange:(next,detail)=>{
-                tags=next;
-                draft=detail.nextInputValue || 'owner note';
-                last=`Accepted ${JSON.stringify(next)}`;
-              },
-              onInputValueChange:(next)=>draft=next,
-            }"
+            :value="fullyControlledTags" :inputValue="fullyControlledDraft" :onValueChange="(next,detail)=>{
+                fullyControlledTags=next;
+                fullyControlledDraft=detail.nextInputValue || 'owner note';
+                fullyControlledLast=`Accepted ${JSON.stringify(next)}`;
+              }" :onInputValueChange="(next)=>fullyControlledDraft=next"
           />
-          <button type="button" @click="tags=['owner','ordered']">
+          <button type="button" @click="fullyControlledTags=['owner','ordered']">
             Replace tags from the owner
           </button>
-          <output x-text="last">Both axes owned</output>
+          <output v-text="fullyControlledLast">Both axes owned</output>
         </article>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            uncontrolledLast:'Uncontrolled',
+            draft:'coastal',draftLast:'Draft owned',
+            accept:false,
+            valueTags:['alpine'],
+            valueLast:'Value request not sent',
+            fullyControlledTags:['alpine'],
+            fullyControlledDraft:'harbor',
+            fullyControlledLast:'Both axes owned',
+          };
+        },
+      });
     """
 
     css = """

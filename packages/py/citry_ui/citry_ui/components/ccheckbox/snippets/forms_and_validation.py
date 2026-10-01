@@ -8,12 +8,11 @@ class CheckboxForms(Component):
     template = """
       <section
         class="checkbox-form-demo"
-        x-data="{result: 'Submit the form to inspect its native values.'}"
       >
         <c-CForm
           id="botanical-survey"
           @submit.prevent="result = JSON.stringify(
-            Array.from(new FormData($event.target).entries())
+            Array.from(new window.FormData($event.target).entries())
           )"
           @reset="result = 'The browser restored the server defaults.'"
         >
@@ -37,8 +36,17 @@ class CheckboxForms(Component):
             <c-CButton type="reset" variant="outline" intent="neutral">Reset</c-CButton>
           </div>
         </c-CForm>
-        <output x-text="result" aria-live="polite"></output>
+        <output v-text="result" aria-live="polite"></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            result: 'Submit the form to inspect its native values.'
+          };
+        },
+      });
     """
 
     css = """

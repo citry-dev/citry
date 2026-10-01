@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CVirtualListStrategy = Literal["content-visibility", "window"]
@@ -16,9 +16,6 @@ CVirtualListRangeReason = Literal["initial", "scroll", "resize", "configuration"
 _VIRTUAL_LIST_CONTEXT = "citry_ui_virtual_list"
 _MAX_EXTENT = 16_000_000
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-busy",
@@ -86,6 +83,13 @@ class _VirtualListRegistry:
     items: list[_VirtualListDeclaration] = field(default_factory=list)
 
 
+class _VirtualListRow(TypedDict):
+    """One declared item and its absolute index in the full list."""
+
+    declaration: _VirtualListDeclaration
+    index: int
+
+
 def _plain(name: str, value: object, *, optional: bool = False) -> str | None:
     raw = const_value(value)
     if raw is None and optional:
@@ -108,14 +112,6 @@ def _integer(name: str, value: object, *, minimum: int, maximum: int | None = No
     return raw
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     attrs: Mapping[str, object] | None,
@@ -129,16 +125,15 @@ def _attrs(
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, owner)
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"{owner} attrs require string keys, got {key!r}.")
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} attrs cannot dynamically bind owned attribute {key!r}.")
     merged_style = style if owned_style is None else (style, owned_style) if style is not None else owned_style
     return merge_root_attrs(copied, class_, merged_style)
 
@@ -224,6 +219,7 @@ class CVirtualList(LibraryComponent):
     template = """
       <c-CInternalVirtualListDeclarations><c-slot /></c-CInternalVirtualListDeclarations>
       <c-CInternalVirtualList
+        ref="root"
         strategy="content-visibility"
         c-aria_label="aria_label"
         c-estimated_item_size="estimated_item_size"
@@ -295,7 +291,8 @@ class CInternalVirtualListDeclarations(LibraryComponent):
 
 
 class CInternalVirtualList(LibraryComponent):
-    transparent = True
+    # The outer runtime uses this component as its stable DOM ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -332,6 +329,12 @@ class CInternalVirtualList(LibraryComponent):
         item_size = kwargs.item_size or kwargs.estimated_item_size
         end_index = kwargs.start_index + len(declarations)
         self.unprovide(_VIRTUAL_LIST_CONTEXT)
+        # A window renders a slice of the list, so each row's index is offset
+        # by where that slice starts.
+        items: list[_VirtualListRow] = [
+            {"declaration": declaration, "index": kwargs.start_index + offset}
+            for offset, declaration in enumerate(declarations)
+        ]
         return {
             "attrs": {
                 **kwargs.attrs,
@@ -343,13 +346,7 @@ class CInternalVirtualList(LibraryComponent):
                 "tabindex": 0 if kwargs.focusable else None,
             },
             "strategy": kwargs.strategy,
-            "items": [
-                {
-                    "declaration": declaration,
-                    "index": kwargs.start_index + offset,
-                }
-                for offset, declaration in enumerate(declarations)
-            ],
+            "items": items,
             "total_count": total_count,
             "before_size": kwargs.start_index * item_size if kwargs.strategy == "window" else 0,
             "after_size": max(0, total_count - end_index) * item_size if kwargs.strategy == "window" else 0,
@@ -385,7 +382,7 @@ class CInternalVirtualListStatic(LibraryComponent):
     @dataclass(slots=True)
     class Kwargs:
         attrs: dict[str, object]
-        items: list[dict[str, object]]
+        items: list[_VirtualListRow]
         total_count: int
 
     @dataclass(slots=True)
@@ -400,6 +397,7 @@ class CInternalVirtualListStatic(LibraryComponent):
         <div class="cui-virtual-list__track" data-citry-ui-part="track">
           <c-for each="item in items">
             <c-CInternalVirtualListItem
+              #c-key="item['declaration'].item_key"
               c-declaration="item['declaration']"
               c-index="item['index']"
               c-total_count="total_count"
@@ -417,7 +415,7 @@ class CInternalVirtualListWindow(LibraryComponent):
     @dataclass(slots=True)
     class Kwargs:
         attrs: dict[str, object]
-        items: list[dict[str, object]]
+        items: list[_VirtualListRow]
         total_count: int
         before_size: int
         after_size: int
@@ -451,6 +449,7 @@ class CInternalVirtualListWindow(LibraryComponent):
           ></div>
           <c-for each="item in items">
             <c-CInternalVirtualListItem
+              #c-key="item['declaration'].item_key"
               c-declaration="item['declaration']"
               c-index="item['index']"
               c-total_count="total_count"
@@ -544,16 +543,19 @@ class CVirtualWindow(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "totalCount": snapshot["total_count"],
-            "startIndex": snapshot["start_index"],
-            "itemSize": snapshot["item_size"],
-            "initialIndex": snapshot["initial_index"],
-            "overscan": snapshot["overscan"],
+            "serverDefaults": {
+                "totalCount": snapshot["total_count"],
+                "startIndex": snapshot["start_index"],
+                "itemSize": snapshot["item_size"],
+                "initialIndex": snapshot["initial_index"],
+                "overscan": snapshot["overscan"],
+            }
         }
 
     template = """
       <c-CInternalVirtualListDeclarations><c-slot /></c-CInternalVirtualListDeclarations>
       <c-CInternalVirtualList
+        ref="root"
         strategy="window"
         c-aria_label="aria_label"
         c-estimated_item_size="estimated_item_size"

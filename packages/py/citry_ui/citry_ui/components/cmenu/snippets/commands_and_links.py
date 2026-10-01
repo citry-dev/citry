@@ -8,10 +8,10 @@ class MenuCommandsAndLinks(Component):
     template = """
       <section
         class="archive-command-demo"
-        x-data="{lastAction: 'none'}"
+
       >
         <c-CMenu
-          $c-props="{
+          v-bind="{
             onAction: (value) => lastAction = value,
           }"
         >
@@ -24,8 +24,12 @@ class MenuCommandsAndLinks(Component):
             <c-CMenuItem href="#restricted-shelf">Visit restricted shelf</c-CMenuItem>
           </c-fill>
         </c-CMenu>
-        <output x-text="`Last command: ${lastAction}`">Last command: none</output>
+        <output v-text="`Last command: ${lastAction}`">Last command: none</output>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {lastAction: 'none'};}});
     """
 
     css = """

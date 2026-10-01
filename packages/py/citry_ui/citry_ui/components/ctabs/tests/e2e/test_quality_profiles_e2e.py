@@ -9,8 +9,6 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
-from citry_ui.quality.routes import render_scenario
-
 pytestmark = pytest.mark.e2e
 
 
@@ -22,26 +20,15 @@ def _repository_root() -> Path:
     raise RuntimeError(msg)
 
 
-def _load_tabs(page: Any, html: str) -> None:
-    page.set_content(html, wait_until="load")
+def _wait_for_tabs(page: Any) -> None:
     page.wait_for_function(
         "document.querySelector('[data-citry-tabs-root]')?.hasAttribute('data-citry-tabs-initialized')"
     )
 
 
-def _with_external_css(html: str, css: str, *, after_citry: bool) -> str:
-    stylesheet = f'<style data-quality-external-css="">{css}</style>'
-    if after_citry:
-        return html.replace("</head>", stylesheet + "</head>", 1)
-    first_citry_style = html.find('<style data-citry-css-class="')
-    if first_citry_style < 0:
-        msg = "Rendered scenario did not contain a Citry stylesheet."
-        raise RuntimeError(msg)
-    return html[:first_citry_style] + stylesheet + html[first_citry_style:]
-
-
-def test_tabs_overview_accessibility_and_keyboard_contract(page: Any) -> None:
-    _load_tabs(page, render_scenario("tabs.overview"))
+def test_tabs_overview_accessibility_and_keyboard_contract(page: Any, open_scenario: Any) -> None:
+    open_scenario("tabs.overview")
+    _wait_for_tabs(page)
 
     tab_list = page.get_by_role("tablist", name="Account settings")
     tabs = tab_list.get_by_role("tab")
@@ -82,6 +69,7 @@ def test_tabs_overview_accessibility_and_keyboard_contract(page: Any) -> None:
 )
 def test_tabs_remains_operable_with_real_framework_css(
     page: Any,
+    open_scenario: Any,
     framework: str,
     after_citry: bool,
 ) -> None:
@@ -92,12 +80,14 @@ def test_tabs_remains_operable_with_real_framework_css(
         else root / "packages" / "py" / "citry_ui" / "citry_ui" / "quality" / "css" / ".generated" / "tailwind.css"
     )
     assert css_path.is_file(), "run `pnpm install` and `pnpm run citry-ui:quality-css` before CSS coexistence tests"
-    html = _with_external_css(
-        render_scenario("tabs.overview"),
-        css_path.read_text(encoding="utf-8"),
-        after_citry=after_citry,
+    # The fixture places the framework stylesheet and fails unless it lands
+    # on the requested side of every Citry stylesheet.
+    open_scenario(
+        "tabs.overview",
+        framework_css=css_path.read_text(encoding="utf-8"),
+        framework_css_after_citry=after_citry,
     )
-    _load_tabs(page, html)
+    _wait_for_tabs(page)
 
     tab_list = page.get_by_role("tablist", name="Account settings")
     root_part = tab_list.locator("xpath=..")

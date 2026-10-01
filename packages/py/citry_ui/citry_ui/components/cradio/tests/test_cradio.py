@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from html.parser import HTMLParser
 
 import pytest
 from markupsafe import Markup
@@ -12,7 +13,13 @@ from citry_ui import CRadio, CRadioGroup
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(template: str, data: dict[str, object] | None = None, *, include_css: bool = False) -> str:
+def _render(
+    template: str,
+    data: dict[str, object] | None = None,
+    *,
+    include_css: bool = False,
+    static_fallback: bool = False,
+) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     page_template = template
@@ -24,8 +31,18 @@ def _render(template: str, data: dict[str, object] | None = None, *, include_css
         def template_data(self, kwargs, slots):
             return dict(data or {})
 
-    html = str(Page())
+    page = Page()
+    html = page.render().serialize(security_javascript="omit") if static_fallback else str(page)
     return html + (str(app.get("css")()) if include_css else "")
+
+
+class _TagAttributes(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tags: list[tuple[str, dict[str, str | None]]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.tags.append((tag, dict(attrs)))
 
 
 def test_radio_schemas_keep_group_and_item_ownership_separate():
@@ -70,7 +87,8 @@ def test_standalone_group_renders_native_fieldset_legend_and_radios():
               </c-CRadio>
             </c-fill>
           </c-CRadioGroup>
-        """
+        """,
+        static_fallback=True,
     )
 
     assert '<fieldset class="cui-radio-group"' in html
@@ -98,7 +116,8 @@ def test_field_label_targets_the_first_radio_instead_of_the_group_fieldset():
               </c-CRadioGroup>
             </c-fill>
           </c-CField>
-        """
+        """,
+        static_fallback=True,
     )
 
     assert '<label id="signal-band-label" for="signal-band"' in html
@@ -127,7 +146,8 @@ def test_group_and_item_root_styling_and_form_owner_reach_exact_destinations():
               >Wide</c-CRadio>
             </c-fill>
           </c-CRadioGroup>
-        """
+        """,
+        static_fallback=True,
     )
 
     assert 'class="cui-radio-group group-class"' in html
@@ -147,8 +167,9 @@ def test_radio_requires_group_and_group_requires_label_and_items():
             """
               <c-CRadioGroup name="destination">
                 <c-CRadio value="moon">Moon</c-CRadio>
-              </c-CRadioGroup>
-            """
+          </c-CRadioGroup>
+        """,
+            static_fallback=True,
         )
     with pytest.raises(ValueError, match="at least one descendant"):
         _render(
@@ -193,8 +214,6 @@ def test_group_rejects_duplicate_and_unknown_values():
         ("aria-hidden", "group"),
         ("disabled", "group"),
         ("data-value", "group"),
-        ("x-bind", "group"),
-        ("x-if", "group"),
         ("data-citry-morph", "group"),
         ("role", "item"),
         ("for", "item"),
@@ -203,7 +222,6 @@ def test_group_rejects_duplicate_and_unknown_values():
         ("name", "input"),
         ("checked", "input"),
         ("aria-label", "input"),
-        (":disabled", "input"),
     ],
 )
 def test_owned_runtime_and_semantic_attributes_are_rejected(attribute, destination):
@@ -222,6 +240,59 @@ def test_owned_runtime_and_semantic_attributes_are_rejected(attribute, destinati
             """,
             {"group_attrs": group_attrs, "item_attrs": item_attrs, "input_attrs": input_attrs},
         )
+
+
+@pytest.mark.parametrize(
+    ("attribute", "destination", "owner"),
+    [
+        ("v-bind", "group", "CRadioGroup attrs"),
+        ("v-if", "group", "CRadioGroup attrs"),
+        ("V-IF", "group", "CRadioGroup attrs"),
+        (":role", "group", "CRadioGroup attrs"),
+        ("#default", "group", "CRadioGroup attrs"),
+        ("v-for", "item", "CRadio attrs"),
+        ("@click", "item", "CRadio attrs"),
+        (":disabled", "input", "CRadio input attrs"),
+        ("v-bind:checked", "input", "CRadio input attrs"),
+        (".name", "input", "CRadio input attrs"),
+        ("v-model", "input", "CRadio input attrs"),
+        ("@change", "input", "CRadio input attrs"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(attribute, destination, owner):
+    group_attrs = {attribute: "consumer"} if destination == "group" else {}
+    item_attrs = {attribute: "consumer"} if destination == "item" else {}
+    input_attrs = {attribute: "consumer"} if destination == "input" else {}
+    with pytest.raises(ValueError, match=re.escape(f"{owner} cannot contain the Vue directive {attribute!r}")):
+        _render(
+            """
+              <c-CRadioGroup name="destination" c-attrs="group_attrs">
+                <c-fill name="label">Destination</c-fill>
+                <c-fill name="default">
+                  <c-CRadio value="moon" c-attrs="item_attrs" c-input_attrs="input_attrs">Moon</c-CRadio>
+                </c-fill>
+              </c-CRadioGroup>
+            """,
+            {"group_attrs": group_attrs, "item_attrs": item_attrs, "input_attrs": input_attrs},
+        )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(
+        """
+          <c-CRadioGroup name="destination" c-attrs="group_attrs">
+            <c-fill name="label">Destination</c-fill>
+            <c-fill name="default">
+              <c-CRadio value="moon" c-attrs="item_attrs" c-input_attrs="input_attrs">Moon</c-CRadio>
+            </c-fill>
+          </c-CRadioGroup>
+        """,
+        {"group_attrs": {"x-data": "group"}, "item_attrs": {"x-init": "item"}, "input_attrs": {"x-ref": "input"}},
+        static_fallback=True,
+    )
+    assert 'x-data="group"' in html
+    assert 'x-init="item"' in html
+    assert 'x-ref="input"' in html
 
 
 @pytest.mark.parametrize(
@@ -251,9 +322,14 @@ def test_safe_string_values_are_detrusted_and_canonicalized():
           </c-CRadioGroup>
         """,
         {"name": Markup('orbit" data-evil="x'), "value": Markup("moon\r\nbase")},
+        static_fallback=True,
     )
-    assert 'name="orbit&#34; data-evil=&#34;x"' in html
-    assert 'value="moon\nbase"' in html
+    parser = _TagAttributes()
+    parser.feed(html)
+    radio_input = next(attrs for tag, attrs in parser.tags if tag == "input")
+    assert radio_input["name"] == 'orbit" data-evil="x'
+    assert radio_input["value"] == "moon\nbase"
+    assert "data-evil" not in radio_input
 
 
 def test_css_exposes_group_item_and_environment_contract():

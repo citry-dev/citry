@@ -141,18 +141,22 @@ def test_group_wrap_requires_a_boolean(bad_value):
         "data-gap",
         "DATA-ALIGN",
         ":data-justify",
-        "x-bind:data-reverse",
+        "v-bind:data-reverse",
+        "V-BIND:data-gap",
+        ".data-align",
         "data-citry-morph",
         "data-cev-action",
         "data-cid",
-        "x-bind",
-        "x-if",
-        "x-for",
-        "x-teleport",
-        "x-ignore",
-        "x-html",
-        "x-text",
-        "x-model",
+        "v-bind",
+        "v-if",
+        "V-IF",
+        "v-for",
+        "v-html",
+        "v-text",
+        "v-model",
+        "v-show",
+        "#default",
+        "v-on:click",
     ],
 )
 def test_stack_rejects_owned_runtime_and_structural_attributes(attribute):
@@ -160,22 +164,20 @@ def test_stack_rejects_owned_runtime_and_structural_attributes(attribute):
         _render(CCol(attrs={attribute: "consumer"}))
 
 
-def test_group_also_owns_wrap_but_allows_unrelated_bindings_and_listeners():
+def test_group_owns_wrap_and_python_attrs_reject_vue_directives():
     with pytest.raises(ValueError, match="owned attribute"):
         _render(CRow(attrs={"data-wrap": False}))
 
-    html = _render(
-        CRow(
-            attrs={
-                "x-data": "{active: false}",
-                ":class": "{active}",
-                "@click": "active = true",
-            }
-        )
-    )
-    assert 'x-data="{active: false}"' in html
-    assert ':class="{active}"' in html
-    assert '@click="active = true"' in html
+    # The component names itself and points at the template, rather than
+    # leaving a generic compiler error to surface later.
+    with pytest.raises(ValueError, match="CRow attrs cannot contain the Vue directive '@click'"):
+        _render(CRow(attrs={"@click": "active = true"}))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(CCol(attrs={"x-data": "{}", "hx-get": "/rows"}))
+    assert 'x-data="{}"' in html
+    assert 'hx-get="/rows"' in html
 
 
 def test_css_uses_public_gap_inputs_and_no_component_javascript():

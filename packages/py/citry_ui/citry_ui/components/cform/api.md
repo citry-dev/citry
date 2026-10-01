@@ -67,7 +67,7 @@ Use `method="post"` and `enctype="multipart/form-data"` for file uploads.
 `target`, `autocomplete`, and `novalidate` map directly to their native Form
 attributes. `method="dialog"` retains native Dialog submission behavior.
 
-Less-common native, ARIA, `data-*`, and Alpine attributes go through `attrs`.
+Less-common native, ARIA, and `data-*` attributes go through `attrs`.
 Common native attributes have direct inputs and cannot also be supplied through
 `attrs`. Prefer top-level `class_` and `style`; class and style values retained
 in `attrs` merge with them.
@@ -75,8 +75,7 @@ in `attrs` merge with them.
 ## Configure shared behavior
 
 Server inputs are passed in Python through `<c-CForm ... />` attributes or a
-`CForm(...)` composition call. Client inputs are passed in the browser through
-the `$c-props="{...}"` attribute.
+`CForm(...)` composition call. Client inputs use native Vue `:prop` bindings.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cform/snippets/configuration.py"
@@ -85,11 +84,9 @@ the `$c-props="{...}"` attribute.
 
 ```citry-html
 <c-CForm
-  $c-props="{
-    disabled: accessClosed,
-    readonly: reviewMode,
-    submitting: requestPending,
-  }"
+  :disabled="accessClosed"
+  :readonly="reviewMode"
+  :submitting="requestPending"
 >
   ...
 </c-CForm>

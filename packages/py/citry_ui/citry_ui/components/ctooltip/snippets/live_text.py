@@ -6,14 +6,12 @@ citry.register_library(citry_ui)
 
 class LiveTooltipText(Component):
     template = """
-      <section class="live-tooltip" x-data="{ unit: 'kilometres' }">
+      <section class="live-tooltip" >
         <c-CTooltip
           text="Europa is 3,122 kilometres wide"
-          $c-props="{
-            text: unit === 'kilometres'
+          :text="unit === 'kilometres'
               ? 'Europa is 3,122 kilometres wide'
-              : 'Europa is 1,940 miles wide',
-          }"
+              : 'Europa is 1,940 miles wide'"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Europa diameter</c-CButton>
@@ -21,12 +19,21 @@ class LiveTooltipText(Component):
         </c-CTooltip>
         <label>
           Units
-          <select x-model="unit">
+          <select v-model="unit">
             <option value="kilometres">Kilometres</option>
             <option value="miles">Miles</option>
           </select>
         </label>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            unit: 'kilometres'
+          };
+        },
+      });
     """
 
     css = """

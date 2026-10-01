@@ -9,7 +9,7 @@ from citry import Citry, Component
 from citry_ui.components._context import FORM_CONTEXT_KEY
 
 
-def _render(source: str) -> str:
+def _render(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -17,11 +17,12 @@ def _render(source: str) -> str:
         citry = app
         template = source
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def test_standalone_toggle_uses_native_pressed_button():
-    html = _render('<c-CToggle c-pressed="True">Pin</c-CToggle>')
+    html = _render('<c-CToggle c-pressed="True">Pin</c-CToggle>', static_fallback=True)
     root = re.search(r'<button[^>]+data-citry-ui-part="toggle"[^>]*>', html)
     assert root is not None
     assert 'type="button"' in root.group(0)
@@ -34,7 +35,8 @@ def test_group_provides_initial_single_selection_and_name():
         '<c-CToggleGroup label="View" value="sky">'
         '<c-CToggle value="sky">Sky</c-CToggle>'
         '<c-CToggle value="map">Map</c-CToggle>'
-        "</c-CToggleGroup>"
+        "</c-CToggleGroup>",
+        static_fallback=True,
     )
     assert 'role="group"' in html
     assert 'aria-label="View"' in html
@@ -72,7 +74,7 @@ def test_enclosing_form_disabled_context_dominates_local_toggle_configuration():
           </c-DisabledFormContext>
         """
 
-    html = str(Page())
+    html = Page().render().serialize(security_javascript="omit")
     buttons = re.findall(r"<button[^>]+>", html)
     assert len(buttons) == 2
     assert all(" disabled" in button for button in buttons)
@@ -84,7 +86,8 @@ def test_multiple_values_and_group_fallback_presentation():
         '<c-CToggleGroup label="Layers" c-value="[\'stars\', \'grid\']" c-multiple="True" variant="soft" size="lg">'
         '<c-CToggle value="stars">Stars</c-CToggle>'
         '<c-CToggle value="grid">Grid</c-CToggle>'
-        "</c-CToggleGroup>"
+        "</c-CToggleGroup>",
+        static_fallback=True,
     )
     assert html.count('aria-pressed="true"') == 2
     assert html.count('data-variant="soft"') >= 3
@@ -109,7 +112,7 @@ def test_invalid_group_contracts_fail(source):
 
 @pytest.mark.parametrize(
     "attribute",
-    ["role", "aria-label", "aria-pressed", "type", "tabindex", "x-if", "data-citry-morph"],
+    ["role", "aria-label", "aria-pressed", "type", "tabindex", "data-citry-morph"],
 )
 def test_toggle_owned_attributes_fail(attribute):
     source = '<c-CToggle c-attrs="attrs">Pin</c-CToggle>'
@@ -125,3 +128,40 @@ def test_toggle_owned_attributes_fail(attribute):
 
     with pytest.raises(ValueError, match="cannot"):
         str(Page())
+
+
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CToggle", ":aria-pressed"),
+        ("CToggle", "v-bind:type"),
+        ("CToggle", "v-if"),
+        ("CToggle", "V-IF"),
+        ("CToggle", "@click"),
+        ("CToggleGroup", ".aria-orientation"),
+        ("CToggleGroup", "v-for"),
+        ("CToggleGroup", "#default"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(owner, attribute):
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    source = (
+        f"<c-CToggle {attrs}>Pin</c-CToggle>"
+        if owner == "CToggle"
+        else f'<c-CToggleGroup label="View" {attrs}><c-CToggle value="sky">Sky</c-CToggle></c-CToggleGroup>'
+    )
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        _render(source)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render("<c-CToggle c-attrs=\"{'x-data': '{}', 'hx-get': '/pin'}\">Pin</c-CToggle>", static_fallback=True)
+
+    root = re.search(r"<button[^>]*>", html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/pin"' in root.group(0)

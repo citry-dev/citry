@@ -179,16 +179,14 @@ initialization closes the enhanced Menu before removing its point.
 
 ## Distinguish callbacks from native events
 
-`onOpenChange` and `onAction` are component callbacks supplied through
-`$c-props`. `onOpenChange` describes requests and forced closes;
+`onOpenChange` and `onAction` are component callbacks supplied with native Vue
+bindings such as `:onAction="handleAction"`. `onOpenChange` describes requests and forced closes;
 `onAction` uses the existing `CMenuActionDetail`. ContextMenu dispatches no
 custom DOM event.
 
-Native events remain Alpine listeners in allowed `attrs` or target content.
-The ContextMenu root has Citry's isolated expression scope, so an attrs listener
-cannot read ancestor-local `x-data` identifiers directly. Use `$event`,
-`$dispatch`, `$store`, or an explicit global bridge. Use component callbacks
-for owner-local state.
+Author native events in the target fill with Vue `@event` bindings. Attribute
+mappings carry data, ARIA, language, and presentation values; they do not carry
+executable listener strings. Use component callbacks for owner-local state.
 
 The component owns `contextmenu`, ContextMenu/Shift+F10 keydown, and its
 touch/pen pointer sequence. It does not stop propagation on those paths. Only
@@ -199,15 +197,18 @@ run.
 ## Keep target and host attributes separate
 
 `target_attrs` is copied, validated, and included in the target slot data. It
-may carry ordinary classes, styles, safe ARIA, semantic native attributes,
-nonreserved data, and unrelated native listeners. It cannot author the target
-ID, ContextMenu marker, owned invocation events, `role`, native `disabled`,
-Popover/anchor state, or Menu Button ARIA.
+may carry ordinary classes, styles, safe ARIA, semantic native attributes, and
+nonreserved data. It cannot author the target ID, ContextMenu marker, `role`,
+native `disabled`, Popover/anchor state, or Menu Button ARIA.
 
-Host `attrs` accepts ordinary descriptive attributes, `dir`, `lang`,
-nonreserved data, and unrelated native listeners. It cannot replace owned
-identity, roles, ARIA, parts, reflections, lifecycle, Popover/anchor state, or
-Citry runtime namespaces. Mappings are copied once. ContextMenu trusts ordinary
+Host `attrs` accepts ordinary descriptive attributes, `dir`, `lang`, and
+nonreserved data. It cannot replace owned identity, roles, ARIA, parts,
+reflections, lifecycle, Popover/anchor state, or Citry runtime namespaces.
+
+Both mappings reject inline `on*` handlers and any Vue directive syntax: names
+starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write listeners with Vue `@event`
+bindings on the target Element in the target fill, and bind other Vue values on
+the component tag in your template. Mappings are copied once. ContextMenu trusts ordinary
 slot content as application content; it is not an HTML or URL sanitizer.
 
 CContextMenu is not Form-associated. It emits no name/value pair and does not

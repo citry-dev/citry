@@ -1,5 +1,7 @@
 """Browser evidence for the production Spinner contract."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 from typing import Any
@@ -20,6 +22,7 @@ def _spinner_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){const spinnerTest=Citry.vue.reactive({label:'Loading star catalog',intent:'primary',size:'md'});window.__spinnerTest=spinnerTest;return {state:{spinnerTest}};}});"
         css = """
           :where(.spinner-brand) {
             --cui-spinner-color: rgb(88 28 135);
@@ -40,22 +43,13 @@ def _spinner_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('spinnerTest', {
-                label: 'Loading star catalog',
-                intent: 'primary',
-                size: 'md',
-              })"
-            >
+            <body>
               <c-CSpinner
                 class_="spinner-brand spinner-part"
                 label="Loading star catalog"
-                $c-props="{
-                  label: $store.spinnerTest.label,
-                  intent: $store.spinnerTest.intent,
-                  size: $store.spinnerTest.size,
-                }"
+                :label="state.spinnerTest.label"
+                :intent="state.spinnerTest.intent"
+                :size="state.spinnerTest.size"
               />
               <c-CSpinner label="Aligning telescope" size="sm" intent="success" />
               <div dir="rtl"><c-CSpinner label="تحديث فهرس النجوم" size="lg" /></div>
@@ -104,7 +98,7 @@ def test_client_inputs_update_and_invalid_episodes_fall_back(spinner_page):
     root = page.locator(".cui-spinner").first
 
     page.evaluate(
-        """() => Object.assign(Alpine.store('spinnerTest'), {
+        """() => Object.assign(window.__spinnerTest, {
           label: 'Calibrating spectrograph',
           intent: 'warn',
           size: 'lg',
@@ -115,16 +109,16 @@ def test_client_inputs_update_and_invalid_episodes_fall_back(spinner_page):
     assert root.get_attribute("data-intent") == "warn"
     assert root.get_attribute("data-size") == "lg"
 
-    page.evaluate("Alpine.store('spinnerTest').intent = 'info'")
+    page.evaluate("window.__spinnerTest.intent = 'info'")
     page.wait_for_timeout(0)
-    page.evaluate("Alpine.store('spinnerTest').intent = 42")
+    page.evaluate("window.__spinnerTest.intent = 42")
     page.wait_for_timeout(0)
     assert root.get_attribute("data-intent") == "primary"
     assert sum("CSpinner intent received invalid client value" in error for error in errors) == 1
 
-    page.evaluate("Alpine.store('spinnerTest').intent = 'success'")
+    page.evaluate("window.__spinnerTest.intent = 'success'")
     page.wait_for_timeout(0)
-    page.evaluate("Alpine.store('spinnerTest').intent = null")
+    page.evaluate("window.__spinnerTest.intent = null")
     page.wait_for_timeout(0)
     assert sum("CSpinner intent received invalid client value" in error for error in errors) == 2
 

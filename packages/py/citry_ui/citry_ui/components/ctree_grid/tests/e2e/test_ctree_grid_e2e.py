@@ -48,8 +48,8 @@ def _page() -> str:
                 ],
             }
 
-        template = """<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Tree Grid evidence</title><c-css /></head><body x-data><form><c-CTreeGrid id="grid" c-columns="columns" c-rows="rows" label="Work" c-expanded="['root']" selection="multiple" c-selected="['first']" name="chosen" $c-props="{onExpandedChange:(value,detail)=>$store.t.expanded.push([value,detail.source]),onSelectionChange:(value,detail)=>$store.t.selected.push([value,detail.rowSelected]),onCellActivate:detail=>$store.t.activated.push(detail.columnKey)}" /></form></body></html>"""
-        js = "Alpine.store('t',{expanded:[],selected:[],activated:[]});"
+        template = """<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Tree Grid evidence</title><c-css /></head><body><form><c-CTreeGrid id="grid" c-columns="columns" c-rows="rows" label="Work" c-expanded="['root']" selection="multiple" c-selected="['first']" name="chosen" :onExpandedChange="(value,detail)=>state.t.expanded.push([value,detail.source])" :onSelectionChange="(value,detail)=>state.t.selected.push([value,detail.rowSelected])" :onCellActivate="detail=>state.t.activated.push(detail.columnKey)" /></form></body></html>"""
+        js = "$component({data(){const state=Citry.vue.reactive({expanded:[],selected:[],activated:[]});window.__t=state;return {state:{t:state}};}});"
 
     return str(Page())
 
@@ -72,10 +72,10 @@ def test_expand_select_unselect_and_form_output(page: Any) -> None:
     cell = root.locator('[data-citry-tree-grid-row][data-row-key="first"] [data-citry-ui-part="cell"]').first
     cell.focus()
     cell.press("Shift+Space")
-    assert page.evaluate("Alpine.store('t').selected.at(-1)") == [[], False]
+    assert page.evaluate("window.__t.selected.at(-1)") == [[], False]
     assert root.locator('input[name="chosen"]').count() == 0
     cell.press("Shift+Space")
-    assert page.evaluate("Alpine.store('t').selected.at(-1)") == [["first"], True]
+    assert page.evaluate("window.__t.selected.at(-1)") == [["first"], True]
     assert root.locator('input[name="chosen"]').get_attribute("value") == "first"
     assert errors == []
 
@@ -90,7 +90,7 @@ def test_cell_navigation_activation_environment_axe_and_cleanup(page: Any) -> No
     page.keyboard.press("ArrowRight")
     assert page.evaluate("document.activeElement.dataset.columnKey") == "owner"
     page.keyboard.press("Enter")
-    assert page.evaluate("Alpine.store('t').activated") == ["owner"]
+    assert page.evaluate("window.__t.activated") == ["owner"]
     page.emulate_media(forced_colors="active", reduced_motion="reduce")
     page.add_script_tag(path=str(_root() / "node_modules" / "axe-core" / "axe.min.js"))
     violations = page.evaluate(

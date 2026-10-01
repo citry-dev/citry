@@ -16,7 +16,7 @@ inputs:
       - {id: shape, name: shape, type: {display: '"rounded" | "pill"', interfaces: [CBadgeShape]}, default: {kind: literal, value: rounded}, effect: Selects compact rounded or fully pill-shaped geometry.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted native, data, and targeted Alpine root attributes without replacing Badge anatomy, semantics, or Citry runtime fields.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied static native and data attributes without replacing Badge anatomy, semantics, or Citry runtime fields; author Vue bindings and listeners directly on the component call.'}
 
 slots:
   - id: cbadge-slots

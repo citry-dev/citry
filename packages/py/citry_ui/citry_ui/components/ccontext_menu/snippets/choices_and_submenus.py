@@ -9,16 +9,12 @@ class ContextMenuChoicesAndSubmenus(Component):
       <section
         class="context-menu-choices"
         dir="rtl"
-        x-init="Alpine.store('contextMenuChoices', {showGrid:true, sort:'updated'})"
-        x-data="{
-          last:'No Menu action yet',
-        }"
       >
         <h3>Canvas card</h3>
         <c-CContextMenu
           aria_label="Canvas card actions"
           c-close_on_select="False"
-          $c-props="{
+          v-bind="{
             onAction:(value,detail)=>
               last=`${detail.path.join(' / ') || 'root'}: ${value}`,
           }"
@@ -38,9 +34,9 @@ class ContextMenuChoicesAndSubmenus(Component):
             <c-CMenuCheckboxItem
               value="show-grid"
               c-checked="True"
-              $c-props="{
-                checked:$store.contextMenuChoices.showGrid,
-                onCheckedChange:(next)=>$store.contextMenuChoices.showGrid=next,
+              v-bind="{
+                checked:showGrid,
+                onCheckedChange:(next)=>showGrid=next,
               }"
             >
               Show grid
@@ -48,9 +44,9 @@ class ContextMenuChoicesAndSubmenus(Component):
             <c-CMenuSeparator />
             <c-CMenuRadioGroup
               value="updated"
-              $c-props="{
-                value:$store.contextMenuChoices.sort,
-                onValueChange:(next)=>$store.contextMenuChoices.sort=next,
+              v-bind="{
+                value:sort,
+                onValueChange:(next)=>sort=next,
               }"
             >
               <c-fill name="label">Sort cards</c-fill>
@@ -78,7 +74,7 @@ class ContextMenuChoicesAndSubmenus(Component):
         <div class="context-menu-choices__peer" dir="ltr">
           <c-CContextMenu
             aria_label="Canvas peer actions"
-            $c-props="{
+            v-bind="{
               onAction:(value,detail)=>
                 last=`LTR ${detail.path.join(' / ') || 'root'}: ${value}`,
             }"
@@ -93,9 +89,15 @@ class ContextMenuChoicesAndSubmenus(Component):
         </div>
         <output
           aria-live="polite"
-          x-text="`${last}; grid ${$store.contextMenuChoices.showGrid}; sort ${$store.contextMenuChoices.sort}`"
+          v-text="`${last}; grid ${showGrid}; sort ${sort}`"
         >No Menu action yet; grid true; sort updated</output>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {
+          last:'No Menu action yet', showGrid:true, sort:'updated',
+        };}});
     """
 
     css = """

@@ -172,29 +172,45 @@ def test_checkbox_detrusts_safe_string_identity_before_label_association():
 
 
 @pytest.mark.parametrize(
-    ("destination", "attribute"),
+    ("destination", "attribute", "message"),
     [
-        ("attrs", "for"),
-        ("attrs", "aria-hidden"),
-        ("attrs", "role"),
-        ("attrs", "tabindex"),
-        ("attrs", ":contenteditable"),
-        ("attrs", "x-bind"),
-        ("attrs", "x-html"),
-        ("input_attrs", "role"),
-        ("input_attrs", "aria-hidden"),
-        ("input_attrs", "aria-checked"),
-        ("input_attrs", "readonly"),
-        ("input_attrs", "x-model"),
-        ("input_attrs", ":form"),
-        ("input_attrs", "x-bind:aria-describedby"),
-        ("input_attrs", ".checked"),
+        ("attrs", "for", "cannot override owned attribute"),
+        ("attrs", "aria-hidden", "cannot override owned attribute"),
+        ("attrs", "role", "cannot override owned attribute"),
+        ("attrs", "tabindex", "cannot override owned attribute"),
+        ("attrs", "data-citry-morph", "reserved Citry runtime attribute"),
+        ("attrs", ":contenteditable", "Vue directive"),
+        ("attrs", "v-bind", "Vue directive"),
+        ("attrs", "v-html", "Vue directive"),
+        ("attrs", "V-IF", "Vue directive"),
+        ("attrs", "#default", "Vue directive"),
+        ("input_attrs", "role", "cannot override owned attribute"),
+        ("input_attrs", "aria-hidden", "cannot override owned attribute"),
+        ("input_attrs", "aria-checked", "cannot override owned attribute"),
+        ("input_attrs", "readonly", "cannot override owned attribute"),
+        ("input_attrs", "v-model", "Vue directive"),
+        ("input_attrs", ":form", "Vue directive"),
+        ("input_attrs", "v-bind:aria-describedby", "Vue directive"),
+        ("input_attrs", ".checked", "Vue directive"),
+        ("input_attrs", "@change", "Vue directive"),
     ],
 )
-def test_checkbox_rejects_owned_and_dynamic_attribute_paths(destination, attribute):
+def test_checkbox_rejects_owned_and_dynamic_attribute_paths(destination, attribute, message):
     kwargs = {destination: {attribute: "value"}, "slots": {"default": "Choice"}}
-    with pytest.raises(ValueError, match="CCheckbox"):
+    with pytest.raises(ValueError, match=f"CCheckbox {destination} .*{message}"):
         _render(CCheckbox(**kwargs))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(
+        CCheckbox(
+            attrs={"x-html": "root"},
+            input_attrs={"x-model": "input"},
+            slots={"default": "Choice"},
+        )
+    )
+    assert 'x-html="root"' in html
+    assert 'x-model="input"' in html
 
 
 def test_checkbox_rejects_duplicate_case_variants_for_singleton_attributes():
@@ -286,7 +302,7 @@ def test_checkbox_rejects_inherited_field_readonly_but_allows_explicit_opt_out()
 
     with pytest.raises(ValueError, match="readonly=True is not supported"):
         str(Rejected())
-    assert 'type="checkbox"' in str(Allowed())
+    assert 'type="checkbox"' in Allowed().render().serialize(security_javascript="omit")
 
 
 @pytest.mark.parametrize("omitted_value", [None, False])
@@ -306,7 +322,7 @@ def test_uppercase_omitted_form_attr_keeps_enclosing_form_owner(omitted_value):
           </c-CForm>
         """
 
-    assert 'type="checkbox"' in str(Page())
+    assert 'type="checkbox"' in Page().render().serialize(security_javascript="omit")
 
 
 def test_checkbox_rejects_conflicting_cform_owner_case_insensitively():

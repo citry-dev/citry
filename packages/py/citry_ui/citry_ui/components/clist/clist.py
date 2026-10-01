@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CListMarker = Literal["none", "disc", "decimal"]
@@ -19,9 +19,6 @@ _MARKERS = ("none", "disc", "decimal")
 _DENSITIES = ("comfortable", "compact")
 _VARIANTS = ("plain", "surface")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-teleport", "x-text"}
-)
 _LIST_OWNED = frozenset(
     {
         "aria-label",
@@ -122,27 +119,17 @@ def _choice(component: str, name: str, value: object, allowed: tuple[str, ...]) 
     return plain
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(component: str, value: Mapping[str, object] | None, owned: frozenset[str]) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"{component} attrs must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, owned, f"{component} attrs")
+    # A Vue directive could rebind an owned attribute, change the list's
+    # structure, or attach a listener, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, component)
     for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{component} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{component} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{component} attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 
@@ -212,7 +199,7 @@ class CList(LibraryComponent):
           c-data-marker="marker"
           c-data-density="density"
           c-data-variant="variant"
-          c-data-divided="divided"
+          c-data-divided="'' if divided else None"
           c-start="start"
           c-reversed="reversed"
           c-aria-label="label"
@@ -226,7 +213,7 @@ class CList(LibraryComponent):
           c-data-marker="marker"
           c-data-density="density"
           c-data-variant="variant"
-          c-data-divided="divided"
+          c-data-divided="'' if divided else None"
           c-aria-label="label"
         ><c-slot required /></ul>
       </c-else>
@@ -287,16 +274,16 @@ class CListItem(LibraryComponent):
         class="cui-list-item"
         c-bind="attrs"
         data-citry-ui-part="list-item"
-        c-data-current="current"
-        c-data-disabled="disabled"
-        c-data-interactive="interactive"
+        c-data-current="'' if current else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-interactive="'' if interactive else None"
       >
         <c-if cond="href is not None and not disabled">
           <a
             c-bind="surface_attrs"
             data-citry-ui-part="surface"
-            c-data-cui-list-has-start="has_start"
-            c-data-cui-list-has-end="has_end"
+            c-data-cui-list-has-start="'' if has_start else None"
+            c-data-cui-list-has-end="'' if has_end else None"
             c-href="href"
             c-aria-current="'page' if current else None"
           >
@@ -318,8 +305,8 @@ class CListItem(LibraryComponent):
           <button
             c-bind="surface_attrs"
             data-citry-ui-part="surface"
-            c-data-cui-list-has-start="has_start"
-            c-data-cui-list-has-end="has_end"
+            c-data-cui-list-has-start="'' if has_start else None"
+            c-data-cui-list-has-end="'' if has_end else None"
             type="button"
             c-disabled="disabled"
           >
@@ -341,8 +328,8 @@ class CListItem(LibraryComponent):
           <div
             c-bind="surface_attrs"
             data-citry-ui-part="surface"
-            c-data-cui-list-has-start="has_start"
-            c-data-cui-list-has-end="has_end"
+            c-data-cui-list-has-start="'' if has_start else None"
+            c-data-cui-list-has-end="'' if has_end else None"
           >
             <c-if cond="has_start">
               <span data-citry-ui-part="start"><c-slot name="start" /></span>

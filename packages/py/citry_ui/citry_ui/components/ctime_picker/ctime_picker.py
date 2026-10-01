@@ -17,7 +17,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
-    reject_html_attr_bindings,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import (
@@ -83,9 +83,6 @@ _DISPLAY_PROFILE = "citry-ui-time-picker-display"
 _SECONDS_PROFILE = "citry-ui-time-picker-display-seconds"
 _MAX_OPTIONS = 288
 _RUNTIME_PREFIXES = ("data-citry-", "data-ctime-picker", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -109,31 +106,20 @@ _ROOT_OWNED = frozenset(
 )
 
 
-def _dynamic_target(key: str) -> str | None:
-    normalized = key.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"CTimePicker attrs must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, _ROOT_OWNED, "CTimePicker")
-    reject_html_attr_bindings(copied, _ROOT_OWNED, "CTimePicker")
+    # A Vue directive could rebind an owned attribute, add a listener, or
+    # change the structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CTimePicker")
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CTimePicker attrs require string keys, got {key!r}.")
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CTimePicker attrs cannot contain reserved runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"CTimePicker attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(key) in _ROOT_OWNED:
-            raise ValueError(f"CTimePicker attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 
@@ -423,7 +409,7 @@ class CTimePicker(LibraryComponent):
             "display_value": display_value,
             "described_by": described_by,
             "error_message": error_message,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "variant": kwargs.variant,
             "size": kwargs.size,
             "attrs": merge_root_attrs(caller_attrs, kwargs.class_, kwargs.style),
@@ -460,7 +446,23 @@ class CTimePicker(LibraryComponent):
             "describedby": cast("str | None", external_described_by),
             "errormessage": cast("str | None", external_error_message),
         }
-        self._cui_time_picker_data = client_data
+        prop_names = {
+            "value",
+            "required",
+            "disabled",
+            "readonly",
+            "invalid",
+            "clearable",
+            "dismissible",
+            "placement",
+            "matchWidth",
+            "variant",
+            "size",
+        }
+        self._cui_time_picker_data = {
+            "serverDefaults": {key: value for key, value in client_data.items() if key in prop_names},
+            **{key: value for key, value in client_data.items() if key not in prop_names},
+        }
         self._cui_time_picker_snapshot = snapshot
         return snapshot
 
@@ -475,11 +477,11 @@ class CTimePicker(LibraryComponent):
       <div
         class="cui-time-picker"
         c-id="root_id"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-empty="not value"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-empty="'' if not value else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="attrs"
@@ -511,7 +513,11 @@ class CTimePicker(LibraryComponent):
             c-placement="placement"
             c-match_width="match_width"
             class_="cui-time-picker__popover"
-            $c-props="{open:timePickerOpen,dismissible:timePickerDismissible,placement:timePickerPlacement,matchWidth:timePickerMatchWidth,onOpenChange:timePickerOnPopoverOpenChange}"
+            :open="timePickerOpen"
+            :dismissible="timePickerDismissible"
+            :placement="timePickerPlacement"
+            :matchWidth="timePickerMatchWidth"
+            :onOpenChange="timePickerOnPopoverOpenChange"
           >
             <c-fill name="activator" data="{ activator_attrs }">
               <button
@@ -538,10 +544,12 @@ class CTimePicker(LibraryComponent):
                 loop
                 variant="plain"
                 class_="cui-time-picker__listbox"
-                $c-props="{value:timePickerListValue,disabled:timePickerListDisabled,onValueChange:timePickerOnListValueChange}"
+                :value="timePickerListValue"
+                :disabled="timePickerListDisabled"
+                :onValueChange="timePickerOnListValueChange"
               >
                 <c-for each="option in options">
-                  <c-CListboxOption c-value="option.value" c-text_value="option.label">{{ option.label }}</c-CListboxOption>
+                  <c-CListboxOption #c-key="option.value" c-value="option.value" c-text_value="option.label">{{ option.label }}</c-CListboxOption>
                 </c-for>
               </c-CListbox>
             </c-fill>
@@ -565,8 +573,28 @@ class CTimePicker(LibraryComponent):
           value: {}, open: {}, required: {}, disabled: {}, readonly: {}, invalid: {}, clearable: {},
           dismissible: {}, placement: {}, matchWidth: {}, variant: {}, size: {}, onValueChange: {}, onOpenChange: {},
         },
-        init: ({ els, data, props, scope, effect, inject, unprovide, i18n }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+          formService: {from: Symbol.for('citry-ui:form'), default: null},
+        },
+        provide() {
+          return {[Symbol.for('citry-ui:field')]: null, [Symbol.for('citry-ui:form')]: null};
+        },
+        data() {
+          return {
+            timePickerOpen: false, timePickerListValue: null, timePickerListDisabled: false,
+            timePickerDismissible: true, timePickerPlacement: 'bottom-start', timePickerMatchWidth: true,
+            timePickerOnPopoverOpenChange: null, timePickerOnListValueChange: null,
+          };
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const defaults = data.serverDefaults;
+          const props = component.$props;
+          const scope = component;
+          const effect = Citry.vue.watchEffect;
+          const i18n = component.$i18n;
           const input = root.querySelector(':scope > [data-citry-ui-part="fallback-input"]');
           const enhanced = root.querySelector(':scope > [data-citry-ui-part="enhanced-control"]');
           const trigger = root.querySelector('[data-citry-time-picker-trigger]');
@@ -574,12 +602,8 @@ class CTimePicker(LibraryComponent):
           const clear = enhanced?.querySelector(':scope > [data-citry-ui-part="clear"]');
           if (!(root instanceof HTMLElement) || !(input instanceof HTMLInputElement) || input.type !== 'time' || !(enhanced instanceof HTMLElement) || !(trigger instanceof HTMLButtonElement) || !(valueText instanceof HTMLElement) || !(clear instanceof HTMLButtonElement)) throw new Error('[citry-ui] CTimePicker settled anatomy is invalid.');
 
-          const fieldKey = Symbol.for('citry-ui:field');
-          const formKey = Symbol.for('citry-ui:form');
-          const field = inject(fieldKey, null);
-          const form = inject(formKey, null);
-          unprovide(fieldKey);
-          unprovide(formKey);
+          const field = component.fieldService;
+          const form = component.formService;
           const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if (runtime?.generation !== 1) throw new Error('[citry-ui] CTimePicker form-control runtime is unavailable.');
           const resolver = runtime.resolver(root, props, 'CTimePicker');
@@ -589,8 +613,8 @@ class CTimePicker(LibraryComponent):
           const optionSet = new Set(data.optionValues);
           const allowedPlacements = ['top-start','top','top-end','bottom-start','bottom','bottom-end'];
           const profile = data.showSeconds ? 'citry-ui-time-picker-display-seconds' : 'citry-ui-time-picker-display';
-          let current = input.value || data.value || null;
-          let initialValue = data.value || null;
+          let current = input.value || defaults.value || null;
+          let initialValue = defaults.value || null;
           let internalOpen = false;
           let controlledValue = false;
           let controlledOpen = false;
@@ -623,16 +647,16 @@ class CTimePicker(LibraryComponent):
               : data.changeLabel.replaceAll('{time}', formatted);
           };
           const resolveConfiguration = () => ({
-            required: field ? field.required : resolver.boolean('required', data.required),
-            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(input),
-            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-            invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
-            clearable: resolver.boolean('clearable', data.clearable),
-            dismissible: resolver.boolean('dismissible', data.dismissible),
-            placement: resolver.choice('placement', data.placement, allowedPlacements),
-            matchWidth: resolver.boolean('matchWidth', data.matchWidth),
-            variant: resolver.choice('variant', data.variant, ['outline','filled','plain']),
-            size: resolver.choice('size', data.size, ['sm','md','lg']),
+            required: field ? field.required : resolver.boolean('required', defaults.required),
+            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', defaults.disabled) || runtime.fieldsetDisabled(input),
+            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : defaults.readonly),
+            invalid: field ? field.invalid : resolver.boolean('invalid', defaults.invalid),
+            clearable: resolver.boolean('clearable', defaults.clearable),
+            dismissible: resolver.boolean('dismissible', defaults.dismissible),
+            placement: resolver.choice('placement', defaults.placement, allowedPlacements),
+            matchWidth: resolver.boolean('matchWidth', defaults.matchWidth),
+            variant: resolver.choice('variant', defaults.variant, ['outline','filled','plain']),
+            size: resolver.choice('size', defaults.size, ['sm','md','lg']),
           });
           const reportFieldOwned = () => {
             if (!field) return;

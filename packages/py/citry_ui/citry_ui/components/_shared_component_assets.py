@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 
 from citry.ext.dependencies import Script, Style
@@ -23,6 +24,7 @@ def build_shared_component_assets(
     generation: int,
     component_source: str,
     style_source: str,
+    controller_factory: str | None = None,
 ) -> SharedComponentAssets:
     """Extract one ``$component`` definition into a deduplicated dependency."""
     marker = "$component("
@@ -41,13 +43,15 @@ def build_shared_component_assets(
 
     prelude = component_source[:marker_index]
     definition = source_without_trailing_space[marker_index + len(marker) : -2]
+    fingerprint = hashlib.sha256(component_source.encode()).hexdigest()
+    factory_entry = f"factory: definition.helpers?.{controller_factory}," if controller_factory is not None else ""
     runtime_source = (
         prelude
         + f"""\n      (() => {{
         const runtimeKey = Symbol.for({runtime_key!r});
         const installed = globalThis[runtimeKey];
         if (installed !== undefined) {{
-          if (installed.generation !== {generation}) {{
+          if (installed.generation !== {generation} || installed.fingerprint !== {fingerprint!r}) {{
             throw new Error(
               "[citry-ui] cannot replace an incompatible {component_name} runtime; "
                 + "a full page reload is required.",
@@ -58,8 +62,9 @@ def build_shared_component_assets(
         const definition = {definition};
         globalThis[runtimeKey] = {{
           generation: {generation},
+          fingerprint: {fingerprint!r},
           definition,
-          mount: definition.init,
+          {factory_entry}
           helpers: definition.helpers ?? {{}},
         }};
       }})();
@@ -67,7 +72,7 @@ def build_shared_component_assets(
     )
     component_js = f"""
       const runtime = globalThis[Symbol.for({runtime_key!r})];
-      if (runtime?.generation !== {generation}) {{
+      if (runtime?.generation !== {generation} || runtime?.fingerprint !== {fingerprint!r}) {{
         throw new Error("[citry-ui] {component_name} runtime dependency did not load.");
       }}
       $component(runtime.definition);

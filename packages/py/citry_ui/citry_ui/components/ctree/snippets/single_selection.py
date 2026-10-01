@@ -6,18 +6,27 @@ citry.register_library(citry_ui)
 
 class TreeSingleSelection(Component):
     template = """
-      <section x-data="{ selected: ['mercury'] }">
+      <section >
         <c-CTree
           label="Planets"
           c-selected="['mercury']"
-          $c-props="{ selected, onSelectionChange: (next) => selected = next }"
+          :selected="selected" :onSelectionChange="(next) => selected = next"
         >
           <c-CTreeItem value="mercury" label="Mercury" />
           <c-CTreeItem value="venus" label="Venus" />
           <c-CTreeItem value="earth" label="Earth" />
         </c-CTree>
-        <output x-text="selected[0] ?? 'No selection'"></output>
+        <output v-text="selected[0] ?? 'No selection'"></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            selected: ['mercury']
+          };
+        },
+      });
     """
 
 

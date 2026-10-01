@@ -15,7 +15,7 @@ arbitrary server-rendered content.
 
 `CVirtualList` preserves every Item in the DOM and accessibility tree. It uses
 `content-visibility: auto` plus an intrinsic-size estimate, so it reduces
-rendering cost without reducing HTML transfer, DOM nodes, memory, Alpine roots,
+rendering cost without reducing HTML transfer, DOM nodes, memory, Vue roots,
 or Citry initialization.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cvirtual_list/snippets/at_a_glance.py" title="Keep a complete virtualized list" />
@@ -33,7 +33,7 @@ range beginning at `start_index`.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cvirtual_list/snippets/windowed.py" title="Supply a fixed server window" />
 
-Pass `onRangeChange` through `$c-props`. The callback receives the desired
+Pass `onRangeChange` with native Vue bindings. The callback receives the desired
 overscanned half-open range, visible range, request ID, reason, and source
 event. It requests state; it never mutates or renders Item HTML. Fetch or
 render the new range, cancel superseded work in the application, and replace
@@ -59,7 +59,7 @@ window for variable-height articles. The total scroll extent is limited to
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cvirtual_list/snippets/controlled.py" title="Tune range geometry" />
 
-`overscan` and `itemSize` are reactive client inputs. A valid Alpine change
+`overscan` and `itemSize` are reactive client inputs. A valid Vue change
 recomputes the requested range immediately. Invalid values log one diagnostic
 per episode and retain the previous valid value. Use a server render when the
 committed range or total count changes.

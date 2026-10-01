@@ -76,8 +76,8 @@ Install the Chromium binary once with
 not already present. This check covers the standalone reactive probe, adapter
 mounting, client asset readiness, browser-local state, a Controls replacement,
 delayed and failed readiness, stale-response rejection, last-good-generation
-preservation, exact component and Alpine cleanup, basic story-navigation
-cleanup, active CSS, stale physical listeners, hostile-Host rejection, and
+preservation, exact Vue callback cleanup, basic story-navigation cleanup,
+active CSS, disconnected retired controls, hostile-Host rejection, and
 visible backend failure. It does not author or execute journeys through
 Storybook.
 
@@ -87,10 +87,12 @@ Button, Field/Input, and Table remain server-static. Tabs now has its first
 production browser interaction, although this spike's Tabs story still authors
 only a server-selected initial scenario and no Storybook journey. A private reactive counter is a
 disposable framework probe, not a proposed public component. It proves Citry
-fragment activation, CSS and JS readiness, component-local Alpine state,
+fragment activation, CSS and JS readiness, component-local Vue state,
 browser-local events, hidden candidate staging, failed-candidate recovery,
-Controls replacement, returned component cleanup, Alpine tree disposal, one
-owned window listener, and both adapter lifecycles.
+Controls replacement, returned component cleanup, Vue app disposal, one owned
+window listener, and both adapter lifecycles. A retained reference to a detached
+Vue DOM node may still hold Vue's native invoker; cleanup evidence therefore
+uses host disconnection plus callback and global-listener retirement.
 
 It does not prove Events transport, morph focus preservation, ambient context
 inside a production compound component, teleports, remote requests, form
@@ -99,7 +101,7 @@ scenarios. Those remain required before Storybook adapter selection. Citry UI
 production specifications proceed independently through their direct quality
 cases.
 
-The hidden connected candidate is not a transaction boundary. Citry and Alpine
+The hidden connected candidate is not a transaction boundary. Citry and Vue
 initialize it before promotion, so a real component could affect global
 listeners, Events, focus, teleports, or global CSS while the current preview is
 still visible. The private counter delays its window listener until readiness.

@@ -57,7 +57,6 @@ class ResponsiveImageSources(Component):
     template = """
       <section
         class="image-responsive"
-        x-data="{selected:'Waiting for native selection'}"
       >
         <p>
           Resize across 48rem and 64rem. The browser selects the first matching
@@ -74,12 +73,10 @@ class ResponsiveImageSources(Component):
               c-srcset="responsive_srcset"
               sizes="(max-width: 48rem) 100vw, 48rem"
               c-sources="sources"
-              $c-props="{
-                onStatusChange:(detail)=>{
+              :onStatusChange="(detail)=>{
                   const value=detail.current_src || detail.src;
                   selected=value.split('/').pop().split('?')[0];
-                },
-              }"
+                }"
             />
           </article>
           <article>
@@ -87,10 +84,19 @@ class ResponsiveImageSources(Component):
             {{ python_image }}
           </article>
         </div>
-        <output x-text="`Selected local fixture: ${selected}`">
+        <output v-text="`Selected local fixture: ${selected}`">
           Selected local fixture: Waiting for native selection
         </output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            selected:'Waiting for native selection'
+          };
+        },
+      });
     """
 
     css = """

@@ -41,7 +41,7 @@ inputs:
       - {id: size, name: size, type: {display: CDateRangeSize, interfaces: [CDateRangeSize]}, default: {kind: literal, value: md}, effect: Selects coordinated control and text sizing.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the root and merges with attrs.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the root and merges with attrs.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes without replacing owned state identity or runtime markers.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed root attributes without replacing owned state identity or runtime markers; Vue directive names are rejected.'}
 
   - id: cdate-range-client-inputs
     component: CDateRange

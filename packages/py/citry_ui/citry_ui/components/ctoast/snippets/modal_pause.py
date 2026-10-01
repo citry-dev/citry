@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class ToastModalPause(Component):
     template = """
-      <section class="toast-example" x-data="{items: [{id:'global', title:'Global queue waits', durationMs:0}]}">
+      <section class="toast-example" >
         <c-CDialog>
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Open modal task</c-CButton>
@@ -16,8 +16,17 @@ class ToastModalPause(Component):
             <c-CAlert intent="info">Use Alert for immediate feedback inside this task.</c-CAlert>
           </c-fill>
         </c-CDialog>
-        <c-CToastRegion $c-props="{items}" />
+        <c-CToastRegion :items="items" />
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            items: [{id:'global', title:'Global queue waits', durationMs:0}]
+          };
+        },
+      });
     """
     css = ":where(.toast-example) { min-block-size:16rem; padding:1rem; }"
 
