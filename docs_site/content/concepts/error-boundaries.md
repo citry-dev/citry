@@ -122,7 +122,7 @@ A boundary does not catch an error raised by its own fallback. That error
 moves outward to the next boundary. Keep the outer fallback small and
 dependable when it serves as a final safety net.
 
-## Things to know
+## Fallback inputs, uncaught errors, and the reserved name
 
 - The only accepted component kwarg is `fallback`; `c-fallback` is its dynamic
   expression form.

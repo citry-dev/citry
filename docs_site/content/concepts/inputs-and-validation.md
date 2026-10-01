@@ -224,8 +224,8 @@ When you use `JsData`, the returned names and values become a strict-JSON
 payload for that rendered component. Citry exposes its top-level keys as
 reactive members of the component's Vue instance and template scope. A
 component does not need [`$component()`][$component] only to expose that data;
-register Options when it also needs local state, methods, computed values, or
-lifecycle work.
+call it with Vue options when the component also needs local state, methods,
+computed values, or lifecycle work.
 
 ```citry
 from citry import Component

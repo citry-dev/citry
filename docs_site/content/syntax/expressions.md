@@ -29,23 +29,25 @@ but without the braces:
 
 ## Placement
 
-The `{{ ... }}` Python expressions are allowed only outside of tags:
+Citry evaluates `{{ ... }}` only in the content between tags, never inside
+a tag. Use a [dynamic attribute](/syntax/dynamic-attributes/) to set an
+attribute from Python:
 
 ```citry-html
-{# ✅ Valid #}
+{# ✅ Evaluated #}
 <p title="Some title">
   {{ content }}
 </p>
 
-{# ❌ Invalid #}
+{# ❌ Not evaluated: the title is the literal text #}
 <p title="{{ content }}">
 </p>
 
-{# ❌ Invalid #}
+{# ❌ Not evaluated: the braces stay in the tag #}
 <p title="Some title" {{ content }}>
 </p>
 
-{# ❌ Invalid #}
+{# ❌ Parse error: a closing tag name cannot be an expression #}
 <{{ tag }} title="Some title">
 </{{ tag }}>
 ```
@@ -62,7 +64,9 @@ class Greeting(Component):
     class Kwargs:
         name: str
 
-    template = "<p>Hello, {{ name }}</p>"
+    template = """
+      <p>Hello, {{ name }}</p>
+    """
 ```
 
 Use [`template_data`][citry.Component.template_data] when the template needs a
@@ -80,7 +84,9 @@ class Cart(Component):
     def template_data(self, kwargs: Kwargs, slots):
         return {"count": len(kwargs.items)}
 
-    template = "<p>{{ count }} items</p>"
+    template = """
+      <p>{{ count }} items</p>
+    """
 ```
 
 Overriding `template_data()` replaces the default mapping. In this example,
@@ -158,7 +164,10 @@ return {
 ```
 
 The template can then call `len(items)`, because both names are
-available to it.
+available to it. To give every template the same helper, add it to the
+`template_globals` of your [`Citry`][citry.Citry] instance once. See
+[Add values for one whole render](/concepts/rendering/#add-values-for-one-whole-render)
+for how template globals work.
 
 ## Expression results
 
@@ -185,7 +194,9 @@ class Page(Component):
     def template_data(self, kwargs, slots):
         return {"table": table}
 
-    template = "{{ table }}"
+    template = """
+      {{ table }}
+    """
 
 page = str(Page())
 print(page)
@@ -275,9 +286,9 @@ See [Comments and literal text](/syntax/comments/).
 
 ## Sandbox
 
-All Python expressions run in a security sandbox, whether it's  `{{ ... }}` or `c-` attributes.
+All Python expressions run in a security sandbox, whether it's `{{ ... }}` or `c-` attributes.
 
-The sandbox blocks following:
+The sandbox blocks the following:
 
 What | How
 --|--
