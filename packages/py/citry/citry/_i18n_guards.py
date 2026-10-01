@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import ast
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def i18n_configured_guarded_calls(tree: ast.AST) -> frozenset[int]:
@@ -33,8 +37,8 @@ def i18n_configured_guarded_calls(tree: ast.AST) -> frozenset[int]:
 def _visit(node: ast.AST, guarded: set[int]) -> None:
     if isinstance(node, (ast.If, ast.IfExp)):
         polarity = _guard_polarity(node.test)
-        body = node.body if isinstance(node.body, list) else [node.body]
-        orelse = node.orelse if isinstance(node.orelse, list) else [node.orelse]
+        body: list[ast.AST] = list(node.body) if isinstance(node.body, list) else [node.body]
+        orelse: list[ast.AST] = list(node.orelse) if isinstance(node.orelse, list) else [node.orelse]
         if polarity is True:
             _mark(body, guarded)
         elif polarity is False:
@@ -67,7 +71,7 @@ def _mark_after_early_exit(statements: list[ast.stmt], guarded: set[int]) -> Non
             return
 
 
-def _mark(nodes: list[ast.stmt] | list[ast.expr], guarded: set[int]) -> None:
+def _mark(nodes: Sequence[ast.AST], guarded: set[int]) -> None:
     for node in nodes:
         guarded.update(id(call) for call in ast.walk(node) if isinstance(call, ast.Call))
 
