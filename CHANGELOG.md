@@ -286,6 +286,10 @@ Upgrading from 0.5.x? Follow
 - `$emit`, `$attrs`, `$slots`, `$props`, `$parent`, `$options`, and
   `$forceUpdate` in a Vue expression are no longer reported as unknown Vue
   variables.
+- In an app without i18n settings, `citry check` no longer reports
+  "Unknown i18n format profile" for a formatter call that the component
+  guards, such as `i18n ? i18n.format.number(...) : value`. It checks
+  profile names only when the app configures i18n, as the editor does.
 
 
 ## v0.5.1

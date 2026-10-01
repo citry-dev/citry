@@ -1215,6 +1215,40 @@ def component_js_i18n_owners(source: str) -> tuple[frozenset[str], frozenset[tup
     return names, spans
 
 
+def browser_i18n_calls_checkable(
+    expression: BrowserExpression,
+    owners: frozenset[str] = frozenset({"$i18n"}),
+    *,
+    i18n_configured: bool,
+    proven_owner_spans: frozenset[tuple[int, int]] | None = None,
+) -> bool:
+    """
+    Return whether browser i18n calls in one expression are checked against the app's catalog.
+
+    The browser receives `$i18n` only when the app configures i18n, so code
+    that reads it behind a guard is not checked in an app without i18n. A
+    template expression can also read `$i18n` only below a provider that
+    enables it in the browser. Component JavaScript passes the spans from
+    `component_js_i18n_owners()` as ``proven_owner_spans`` instead, and those
+    already prove which reads are i18n calls. The language server and
+    ``citry check`` both ask this function, so they check the same calls.
+
+    Args:
+        expression: One browser expression or component JavaScript source.
+        owners: The identifiers a call may be written against.
+        i18n_configured: Whether the app configured i18n.
+        proven_owner_spans: The exact owner spans proven by source analysis.
+
+    Returns:
+        ``True`` when the expression's i18n calls should be checked.
+
+    """
+    if not i18n_configured:
+        return False
+    # Without proven spans, a template's `$i18n` exists only where a provider binds it.
+    return not ("$i18n" in owners and "$i18n" not in expression.bindings and proven_owner_spans is None)
+
+
 def browser_i18n_profile_calls(
     expression: BrowserExpression,
     owners: frozenset[str] = frozenset({"$i18n"}),
@@ -2938,6 +2972,7 @@ __all__ = [
     "browser_expressions",
     "browser_i18n_bind_calls",
     "browser_i18n_binding_directives",
+    "browser_i18n_calls_checkable",
     "browser_i18n_message_calls",
     "browser_i18n_profile_calls",
     "browser_identifier_at",

@@ -66,6 +66,7 @@ from citry.analysis import (
     browser_expressions,
     browser_i18n_bind_calls,
     browser_i18n_binding_directives,
+    browser_i18n_calls_checkable,
     browser_i18n_message_calls,
     browser_i18n_profile_calls,
     browser_identifier_at,
@@ -889,6 +890,11 @@ def _i18n_call_findings(
         profile = next((keyword.value for keyword in call.keywords if keyword.arg == "format"), None)
         if not isinstance(profile, ast.Constant) or type(profile.value) is not str:
             continue
+        # Profile names exist only in a configured app, and a component that
+        # calls a formatter guards it with `configured` otherwise. `citry check`
+        # applies the same rule.
+        if not index.configured:
+            continue
         profile_operation = _I18N_PROFILE_OPERATION_NAMES.get(operation, operation)
         known = index.profile_names(namespace, profile_operation)
         if cast("str", profile.value) not in known:
@@ -1505,9 +1511,12 @@ def _browser_i18n_profile_diagnostics(
     proven_owner_spans: frozenset[tuple[int, int]] | None = None,
 ) -> list[types.Diagnostic]:
     index = project.i18n
-    if index is None or not index.configured:
-        return []
-    if "$i18n" in owners and "$i18n" not in expression.bindings and proven_owner_spans is None:
+    if index is None or not browser_i18n_calls_checkable(
+        expression,
+        owners,
+        i18n_configured=index.configured,
+        proven_owner_spans=proven_owner_spans,
+    ):
         return []
     operation_names = {"relativeTime": "relative_time"}
     diagnostics: list[types.Diagnostic] = []

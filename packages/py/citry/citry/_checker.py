@@ -64,6 +64,7 @@ from citry.analysis import (
     browser_declarative_events,
     browser_expressions,
     browser_i18n_binding_directives,
+    browser_i18n_calls_checkable,
     browser_i18n_profile_calls,
     browser_literal_calls,
     browser_literal_wire_type,
@@ -218,10 +219,15 @@ def _check_registry(
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None
 
     i18n = engine.extensions._extensions_by_name.get("i18n")
+    # The browser receives `$i18n` only when the app configures i18n, so its
+    # calls are checked only then, even when component messages make i18n available.
+    i18n_configured = i18n is not None and getattr(i18n, "configured", False) is True
     if i18n is not None and getattr(i18n, "available", False):
         try:
             i18n_extension = cast("I18nExtension", i18n)
-            i18n_profiles = _i18n_profile_inventory(i18n_extension)
+            # Profile names exist only in a configured app, and a component
+            # that calls a formatter guards it with `configured` otherwise.
+            i18n_profiles = _i18n_profile_inventory(i18n_extension) if i18n_configured else {}
             i18n_extension._load_project_sources()
             compiled_catalog = i18n_extension._compiled_catalog
             if compiled_catalog is None:
@@ -411,13 +417,16 @@ def _check_registry(
                 alpine_lint_consumers=alpine_lint_consumers,
                 i18n_manifest=i18n_manifest,
                 i18n_profiles=i18n_profiles,
+                i18n_configured=i18n_configured,
                 foreign_options=foreign_options,
                 nested_foreign_options=nested_foreign_options,
                 component_props=component_props,
             )
         )
     for browser_source in browser_sources.values():
-        findings.extend(_check_browser_source(engine, browser_source, i18n_profiles or {}))
+        findings.extend(
+            _check_browser_source(engine, browser_source, i18n_profiles or {}, i18n_configured=i18n_configured)
+        )
     return findings
 
 
@@ -519,6 +528,7 @@ def _check_template(
     alpine_lint_consumers: tuple[AlpineAttributeLintConsumer, ...] = (),
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None,
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None,
+    i18n_configured: bool = False,
     foreign_options: ParseOptions | None = None,
     nested_foreign_options: Callable[[str], ParseOptions | None] | None = None,
     component_props: Mapping[type[Component], tuple[BrowserProp, ...] | None] | None = None,
@@ -673,7 +683,15 @@ def _check_template(
                 )
             )
     for expression in browser_hosts:
-        findings.extend(_browser_i18n_profile_findings(source.origin, source.content, expression, i18n_profiles or {}))
+        findings.extend(
+            _browser_i18n_profile_findings(
+                source.origin,
+                source.content,
+                expression,
+                i18n_profiles or {},
+                i18n_configured=i18n_configured,
+            )
+        )
     for finding in (
         *lint_unknown_vue_variables(browser_hosts, vue_lint_consumers),
         *lint_vue_python_variables(browser_hosts, vue_lint_consumers),
@@ -845,9 +863,18 @@ def _browser_i18n_profile_findings(
     expression: BrowserExpression,
     profiles: dict[str, dict[str, frozenset[str]]],
     *,
+    i18n_configured: bool,
     owners: frozenset[str] = frozenset({"$i18n"}),
     proven_owner_spans: frozenset[tuple[int, int]] | None = None,
 ) -> list[CheckFinding]:
+    # The editor applies the same rule, so both report the same browser calls.
+    if not browser_i18n_calls_checkable(
+        expression,
+        owners,
+        i18n_configured=i18n_configured,
+        proven_owner_spans=proven_owner_spans,
+    ):
+        return []
     findings: list[CheckFinding] = []
     operation_names = {"relativeTime": "relative_time"}
     for call in browser_i18n_profile_calls(expression, owners, proven_owner_spans=proven_owner_spans):
@@ -1794,6 +1821,8 @@ def _check_browser_source(
     engine: Citry,
     source: _BrowserSource,
     profiles: dict[str, dict[str, frozenset[str]]],
+    *,
+    i18n_configured: bool,
 ) -> list[CheckFinding]:
     """Check component initializer variables and literal server calls."""
     consumers: list[ComponentJsLintConsumer] = []
@@ -1864,6 +1893,7 @@ def _check_browser_source(
             source.content,
             expression,
             profiles,
+            i18n_configured=i18n_configured,
             owners=i18n_owners,
             proven_owner_spans=i18n_owner_spans,
         )

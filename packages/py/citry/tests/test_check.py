@@ -712,6 +712,32 @@ class TestRegistryMode:
         assert len(profile_findings) == 1
         assert "Unknown i18n format profile 'missing' for number" in profile_findings[0].message
 
+    def test_guarded_formatter_profiles_are_unchecked_without_i18n_settings(self, tmp_path):
+        # Component messages make i18n available, but only configured i18n
+        # has profiles and gives the browser `$i18n`, so guarded calls pass.
+        engine = Citry(autodiscover=False)
+
+        class Host(Component):
+            citry = engine
+
+            class I18n:
+                messages_locale = "en-US"
+
+            def label(self) -> str:
+                return self.i18n.format.number(3, format="missing") if self.i18n.configured else "3"
+
+            js = """
+            const i18n = component.$i18n;
+            const label = i18n ? i18n.format.number(3, { format: 'missing' }) : '3';
+            """
+            messages = """
+            unused = Present
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding for finding in report.findings if finding.code.startswith("citry.i18n.")] == []
+
     @pytest.mark.parametrize("attr", ["which", "None"])
     def test_literal_missing_id_is_checked_when_attr_is_not_a_string(self, tmp_path, attr):
         engine = Citry(

@@ -761,6 +761,49 @@ def test_i18n_diagnostics_validate_trans_values_and_fills(tmp_path):
     assert "value 'name' must be str, not int" in argument.message
 
 
+def test_guarded_formatter_profiles_are_unchecked_without_i18n_settings(tmp_path):
+    # Component messages make i18n available, but only configured i18n has
+    # profiles and gives the browser `$i18n`; `citry check` agrees.
+    app_file = tmp_path / "plain_app.py"
+    source = '''\
+from citry import Citry, Component
+
+engine = Citry(autodiscover=False)
+
+
+class Page(Component):
+    citry = engine
+
+    class I18n:
+        messages_locale = "en-US"
+
+    def js_data(self, kwargs, slots):
+        label = self.i18n.format.number(3, format="missing") if self.i18n.configured else "3"
+        return {"label": label}
+
+    js = """
+    const i18n = component.$i18n;
+    const label = i18n ? i18n.format.number(3, { format: "missing" }) : "3";
+    """
+
+    messages = """
+    unused = Present
+    """
+'''
+    app_file.write_text(source, encoding="utf-8")
+    project = load_project(tmp_path, "plain_app:engine")
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+    documents = {document.uri: document}
+
+    findings = [*i18n_diagnostics(document, project, documents), *browser_diagnostics(document, project, documents)]
+
+    assert project.i18n is not None
+    assert project.i18n.available
+    assert not project.i18n.configured
+    assert [item for item in findings if str(item.code).startswith("citry.i18n.")] == []
+
+
 def test_i18n_diagnostics_validate_python_and_browser_profile_names(tmp_path):
     project, app_file, source = _i18n_project(tmp_path)
     invalid_python = source.replace(
