@@ -39,10 +39,9 @@ pub(super) fn is_function_shape(expr: &Expression<'_>) -> bool {
 
 /// Node-aware [`is_event_handler_reference_expression`] (P1-7): reads the
 /// retained AST when it still describes the node's bytes and the dialect
-/// gate holds; falls back to the legacy string parse otherwise. The legacy
-/// entry is a prefix parse (no completeness check), but a retained AST is
-/// complete by construction, so on gated nodes both parses see the whole
-/// text and the shape decision is the same decision.
+/// gate holds; falls back to the legacy string parse otherwise. Both the
+/// string entry and a retained AST cover the whole text, so the shape
+/// decision is the same decision.
 pub fn is_event_handler_reference_node(node: &SimpleExpressionNode<'_>) -> bool {
     match crate::retained::retained_whole_expression(node) {
         Some(js) if crate::retained::js_module_compatible(js) => {

@@ -1,5 +1,5 @@
 use oxc_ast::ast::{ChainElement, Expression};
-use vize_s0::Span;
+use vize_s0::{Span, String};
 use vize_s2::expr::{ExprRef, JsExpr, OpaqueReason};
 use vize_s2::op::OnOp;
 
@@ -53,23 +53,31 @@ pub(in crate::emit) fn emit_wrapped_handler(
         (None, Some(ExprRef::Js(js))) => emit_handler(cx, on, js, is_plain_element, cached),
         (None, Some(ExprRef::Opaque(opaque))) if opaque.reason == OpaqueReason::MultiStatement => {
             let padding = authored_handler_padding(cx.source, on, opaque.source, opaque.span);
+            // The two branches below write the text on one line among the
+            // other props, where a trailing `// note` would comment out the
+            // `)` or `,` after it, so they write line comments as block
+            // comments, as `vize_atelier_core`'s codegen does.
+            let written = if opaque.source.contains("//") {
+                super::super::js_comment::convert_line_comments_to_block(opaque.source)
+            } else {
+                String::from(opaque.source)
+            };
             // A handler that is exactly one reference is pushed raw; `a; b`
             // is two statements and takes the block form below.
             if super::super::prefix::handler_source_is_reference(opaque.source) {
                 let (leading, trailing) = padding.unwrap_or(("", ""));
                 cx.buf.push(leading);
-                cx.buf.push(opaque.source);
+                cx.buf.push(written.as_str());
                 cx.buf.push(trailing);
             } else if !opaque.source.contains(';')
                 && super::super::prefix::handler_source_is_expression(opaque.source)
             {
-                // An expression the prefix parse admits with no `;` is
-                // paren-wrapped by the shipped codegen, trailing line
-                // comment and all; statement bodies keep the block form.
+                // One whole expression with no `;` is paren-wrapped, as the
+                // shipped codegen does; statement bodies keep the block form.
                 let (leading, trailing) = padding.unwrap_or(("", ""));
                 cx.buf.push("$event => (");
                 cx.buf.push(leading);
-                cx.buf.push(opaque.source);
+                cx.buf.push(written.as_str());
                 cx.buf.push(trailing);
                 cx.buf.push(")");
             } else {

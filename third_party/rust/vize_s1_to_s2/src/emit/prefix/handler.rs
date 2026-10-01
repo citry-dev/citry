@@ -38,9 +38,14 @@ pub(super) fn process_inline_handler(
     if is_function {
         return process(content, retained, scope);
     }
-    // Only the function check reads the stripped text; the reference check
-    // is the shipped lane's, over the node's own bytes.
-    if is_simple_identifier(content) || is_event_handler_reference_node(content, retained) {
+    // The reference check reads the stripped text too: it needs the whole
+    // text to be one expression, and `foo!` is one only once the `!` is gone.
+    let is_reference = if shape_source == content {
+        is_event_handler_reference_node(content, retained)
+    } else {
+        is_event_handler_reference_expression(shape_source)
+    };
+    if is_simple_identifier(content) || is_reference {
         if is_simple_identifier(content) {
             let code = match scope.identifier_prefix(content) {
                 Some(prefix) => {

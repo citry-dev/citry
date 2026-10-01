@@ -10,7 +10,7 @@
 //! shipped file it names, with binding metadata, `inline` and `is_ts`
 //! left out until their installments; byte-identical output against the
 //! shipped lane is the bar, so the ports keep the shipped quirks (the
-//! second `$event =>` wrap, the two different strips, the prefix parse).
+//! second `$event =>` wrap, the two different strips).
 
 mod aliases;
 mod codegen_visitor;
@@ -48,10 +48,10 @@ pub(super) fn handler_source_is_reference(source: &str) -> bool {
     shape::is_event_handler_reference_expression(source)
 }
 
-/// Whether the shipped codegen's prefix parse admits the text as an
-/// expression at all (`foo() // c` does, `return false` does not).
+/// Whether the whole text parses as one expression, trailing comments
+/// allowed (`foo() // c` does, `return false` does not).
 pub(super) fn handler_source_is_expression(source: &str) -> bool {
-    rewrite::with_prefix_parse(source, |_| true).unwrap_or(false)
+    rewrite::with_whole_expression_parse(source, |_| true).unwrap_or(false)
 }
 
 use vize_s0::{Span, String};

@@ -8,7 +8,8 @@ use vize_s0::{Box, String};
 use crate::{ConstantType, ExpressionNode, SimpleExpressionNode, lane::TransformContext};
 
 use super::{
-    clone_expression, is_function_expression, normalize_expression,
+    clone_expression, is_event_handler_reference_expression, is_function_expression,
+    normalize_expression,
     prefix::{get_identifier_prefix, is_simple_identifier},
     rewrite::{report_invalid_expression, rewrite_expression, rewrite_props_aliases},
     shape_checks::{is_event_handler_reference_node, is_function_expression_node},
@@ -107,7 +108,15 @@ pub fn process_inline_handler<'a>(
 
     // Check if it's an identifier/member-expression handler reference.
     // Vue passes these directly without wrapping them in `$event => (...)`.
-    if is_simple_identifier(content) || is_event_handler_reference_node(&normalized) {
+    // Like the function check, this reads the TS-stripped text: the check
+    // needs the whole text to be one expression, and `foo!` is one only once
+    // the `!` is gone.
+    let is_reference = if function_check_source == *content {
+        is_event_handler_reference_node(&normalized)
+    } else {
+        is_event_handler_reference_expression(function_check_source)
+    };
+    if is_simple_identifier(content) || is_reference {
         let new_content: String = if ctx.options.prefix_identifiers {
             if is_simple_identifier(content) {
                 if let Some(prefix) = get_identifier_prefix(content, ctx) {

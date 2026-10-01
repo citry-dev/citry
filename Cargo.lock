@@ -3710,7 +3710,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4182,7 +4182,7 @@ dependencies = [
 
 [[package]]
 name = "vize_atelier_core"
-version = "0.420.0+citry.1"
+version = "0.420.0+citry.2"
 dependencies = [
  "compact_str",
  "memoffset",
@@ -4312,7 +4312,7 @@ dependencies = [
 
 [[package]]
 name = "vize_s1_to_s2"
-version = "0.420.0+citry.1"
+version = "0.420.0+citry.2"
 dependencies = [
  "htmlize",
  "oxc_ast 0.142.0",

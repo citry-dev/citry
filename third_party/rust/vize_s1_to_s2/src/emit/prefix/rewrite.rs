@@ -51,7 +51,7 @@ fn ts_module() -> SourceType {
 /// `as_raw_statements` mirrors the fourth argument of `@vue/compiler-core`'s
 /// `processExpression`: only an event handler whose text contains `;` may be
 /// read as a list of statements. Everywhere else a statement is a parse
-/// error, so the emit refuses it and the `vize_atelier_core` fallback reports
+/// error, so the emitter refuses it and the `vize_atelier_core` fallback reports
 /// the diagnostic instead of writing the statement into a position that only
 /// accepts an expression.
 pub(super) fn rewrite_expression(
@@ -281,9 +281,9 @@ fn parses_as_typescript(content: &str, as_raw_statements: bool) -> bool {
 }
 
 /// `Parser::parse_expression` over the bare text, admitted only when that
-/// one expression is the whole text (trailing comments aside), as Vue's
-/// shape checks require.
-pub(super) fn with_prefix_parse<T>(
+/// one expression is the whole text (trailing comments aside), so `a; b()`
+/// is not read as the reference `a` or `() => a(); b()` as a function.
+pub(super) fn with_whole_expression_parse<T>(
     content: &str,
     decide: impl FnOnce(&Expression<'_>) -> T,
 ) -> Option<T> {
@@ -307,7 +307,10 @@ fn only_trailing_trivia(rest: &str) -> bool {
     let mut rest = rest.trim_start();
     while !rest.is_empty() {
         if let Some(line) = rest.strip_prefix("//") {
-            rest = line.find(['\n', '\r']).map_or("", |end| &line[end..]);
+            // JavaScript ends a line comment at any of its four line terminators.
+            rest = line
+                .find(['\n', '\r', '\u{2028}', '\u{2029}'])
+                .map_or("", |end| &line[end..]);
         } else if let Some(block) = rest.strip_prefix("/*") {
             let Some(end) = block.find("*/") else {
                 return false;

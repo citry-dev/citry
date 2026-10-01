@@ -1,6 +1,6 @@
 # Third-party dependencies
 
-This directory contains upstream git submodules and vendored dependencies that are not part of our core codebase.
+This directory contains upstream git submodules and local copies of dependencies that are not part of our core codebase.
 
 ## Structure
 
@@ -28,7 +28,7 @@ Third-party dependencies are organized by language:
 
 ### Patched Vize compiler crates
 
-Citry vendors two patched Vize 0.420.0 compiler crates under `rust/`:
+Citry keeps local, patched copies of two Vize 0.420.0 compiler crates under `rust/`:
 
 - **`vize_atelier_core`** (`rust/vize_atelier_core/`) comes from the crates.io
   source archive `vize_atelier_core-0.420.0.crate`, whose SHA-256 is
@@ -40,14 +40,14 @@ Citry vendors two patched Vize 0.420.0 compiler crates under `rust/`:
 Both archives come from the upstream Vize repository at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`
 ([`ubugeeei-prod/vize`](https://github.com/ubugeeei-prod/vize/commit/b7b308966c9baf4aa32d053448dc6d5ace6359c2)).
-Citry identifies the patched packages as version `0.420.0+citry.1`. They are
+Citry identifies the patched packages as version `0.420.0+citry.2`. They are
 MIT-licensed; the exact Citry patch inventory is recorded in each crate's
 [`README.citry.md`](rust/vize_atelier_core/README.citry.md) and
 [`README.citry.md`](rust/vize_s1_to_s2/README.citry.md).
 
 When `citry_vue_compiler` consumes these source dependencies, Cargo compiles
 them into `citry_core`. They have no separate publication or deployment. The
-vendored copies are updated intentionally and should be removed when the fixes
+local copies are updated intentionally and should be removed when the fixes
 ship in a compatible released Vize version and the Citry regression tests pass.
 
 ## Adding a new submodule

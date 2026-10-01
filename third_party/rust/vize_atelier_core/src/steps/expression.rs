@@ -55,7 +55,9 @@ pub fn is_function_expression(content: &str) -> bool {
     let Ok(expr) = parser.parse_expression() else {
         return false;
     };
-    // The whole text must be this one expression, as in Vue's check.
+    // The whole text must be this one expression. Vue's own check reads only
+    // the first statement, so it writes `() => a(); b()` unwrapped, which
+    // does not parse; requiring the whole text sends it to the block form.
     only_trailing_trivia(&content[expr.span().end as usize..]) && is_function_shape(&expr)
 }
 
@@ -68,7 +70,10 @@ fn only_trailing_trivia(rest: &str) -> bool {
     let mut rest = rest.trim_start();
     while !rest.is_empty() {
         if let Some(line) = rest.strip_prefix("//") {
-            rest = line.find(['\n', '\r']).map_or("", |end| &line[end..]);
+            // JavaScript ends a line comment at any of its four line terminators.
+            rest = line
+                .find(['\n', '\r', '\u{2028}', '\u{2029}'])
+                .map_or("", |end| &line[end..]);
         } else if let Some(block) = rest.strip_prefix("/*") {
             let Some(end) = block.find("*/") else {
                 return false;

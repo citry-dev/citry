@@ -2455,7 +2455,7 @@ must use the patched source and ship its attribution. Compiler and browser
 checks alone do not qualify packaging.
 
 The source patch and packaging changes are implemented and independently
-reviewed. The compiler and patched crate report `0.420.0+citry.1`. The wheel
+reviewed. The compiler and patched crate report `0.420.0+citry.2`. The wheel
 verifier requires both exact license payloads and metadata entries; the sdist
 verifier checks the complete vendored source inventory, patch path and package
 identity. Nineteen focused distribution tests pass. They do not prove

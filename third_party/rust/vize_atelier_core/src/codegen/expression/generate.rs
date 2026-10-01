@@ -113,7 +113,8 @@ pub fn generate_event_handler(
             };
             // The handler is written on one line among the other props, so a
             // trailing `// note` would comment out the `,` or `}` after it.
-            // Shape checks read `processed`; only the written text converts.
+            // The shape checks read `processed`; only the text that is written gets
+            // the comment conversion.
             let written = if processed.contains("//") {
                 super::convert_line_comments_to_block(&processed)
             } else {
