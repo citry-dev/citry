@@ -64,6 +64,14 @@ class _Mapping:
     def copy(self) -> _Mapping:
         return _Mapping(dict(self.roots), set(self.open_reasons), self.tainted, self.kind)
 
+    def flow_key(self) -> tuple[object, ...]:
+        """Return a hashable value that is equal only for mappings with the same content."""
+        # Each root carries its own definitions, so two mappings that set the
+        # same key from different source lines stay distinct. Frozen sets
+        # ignore the order keys were added in, which is safe because no reader
+        # depends on that order: `_merge_returns` sorts root names itself.
+        return (self.kind, self.tainted, frozenset(self.open_reasons), frozenset(self.roots.items()))
+
 
 @dataclass(slots=True)
 class _State:
@@ -73,6 +81,28 @@ class _State:
 
     def copy(self) -> _State:
         return _State(dict(self.names), {key: value.copy() for key, value in self.heap.items()}, self.next_id)
+
+    def flow_key(self) -> tuple[object, ...]:
+        """Return a hashable value that is equal only for states the rest of the method cannot tell apart."""
+        # Every later read reaches a mapping through a local name, so the key
+        # covers each tracked name and the mapping it points to. Mappings no
+        # name reaches, and the counter that numbers new ones, cannot change
+        # any result and stay out of the key.
+        # Mappings are numbered in the order the sorted names reach them, so
+        # two branches that created their mappings in a different order still
+        # match. Two names that share one mapping get the same number, which
+        # keeps aliasing in the key: a write through one name must show
+        # through the other only when they really share it.
+        positions: dict[int, int] = {}
+        bindings: list[tuple[str, int]] = []
+        mappings: list[tuple[object, ...]] = []
+        for name in sorted(self.names):
+            identity = self.names[name]
+            if identity not in positions:
+                positions[identity] = len(positions)
+                mappings.append(self.heap[identity].flow_key())
+            bindings.append((name, positions[identity]))
+        return tuple(bindings), tuple(mappings)
 
     def store(self, value: _Mapping) -> int:
         identity = self.next_id
@@ -598,12 +628,36 @@ def _analyze_block(
                 kwargs_fields=kwargs_fields,
             )
             next_states.append(state)
+        # Each `if` can double the states, so a run of checks that never touch
+        # a tracked mapping (validation, local arithmetic) would hit the limit
+        # below and lose a result that is fully known. Merging states the
+        # rest of the method cannot tell apart keeps only real differences.
+        # Only an `if` adds states, and a later `if` still merges states that
+        # became equal on a plain statement, so other statements skip the work.
+        if isinstance(statement, ast.If):
+            next_states = _distinct_states(next_states)
         if len(next_states) > _MAX_FLOW_STATES:
             return [
                 _Mapping(open_reasons={"analysis branch limit exceeded"}, tainted=True),
             ], []
         active = next_states
     return returns, active
+
+
+def _distinct_states(states: list[_State]) -> list[_State]:
+    """Drop states equal to an earlier one, keeping first-seen order."""
+    # A dropped state would only add return values identical to ones the
+    # kept state adds, and `_merge_returns` gives the same answer without
+    # them. Keeping the first-seen order keeps the analysis deterministic.
+    seen: set[tuple[object, ...]] = set()
+    distinct: list[_State] = []
+    for state in states:
+        key = state.flow_key()
+        if key in seen:
+            continue
+        seen.add(key)
+        distinct.append(state)
+    return distinct
 
 
 def _apply_statement(

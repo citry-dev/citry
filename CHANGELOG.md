@@ -304,6 +304,10 @@ Upgrading from 0.5.x? Follow
 - `$emit`, `$attrs`, `$slots`, `$props`, `$parent`, `$options`, and
   `$forceUpdate` in a Vue expression are no longer reported as unknown Vue
   variables.
+- `citry check` and the editor no longer report every template variable
+  as not declared when `template_data()` runs several `if` checks before
+  it returns a dict, as in Citry UI's `CSkeleton` and `CTable`. The same
+  holds for `js_data()` and `css_data()`.
 - In an app without i18n settings, `citry check` no longer reports
   "Unknown i18n format profile" for a formatter call in component
   JavaScript, or for a Python call guarded by `self.i18n.configured`, as

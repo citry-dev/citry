@@ -568,6 +568,87 @@ def test_literal_boolean_branches_exclude_unreachable_returns():
     assert true_branch.roots[0].presence == "always"
 
 
+def test_many_checks_that_leave_mappings_alone_keep_the_returned_literal_known():
+    # Eight `if` statements give 256 paths, far past the branch limit, but
+    # none of them changes a tracked mapping, so every path ends the same.
+    checks = "".join(f"if check_{index}:\n    count += {index}\n" for index in range(8))
+    _source, shape = _shape(checks + 'return {"a": one, "b": two}\n')
+
+    assert shape.completeness == "closed"
+    assert shape.open_reasons == ()
+    assert [(root.name, root.presence) for root in shape.roots] == [("a", "always"), ("b", "always")]
+
+
+def test_branch_limit_still_applies_when_paths_build_different_mappings():
+    # Each `if` may add its own key, so the paths build 2**n different
+    # mappings: 32 fit the limit, 64 do not.
+    def writes(count: int) -> str:
+        flags = "".join(f"if flag_{index}:\n    data['k{index}'] = {index}\n" for index in range(count))
+        return "data = {}\n" + flags + "return data\n"
+
+    _source, within = _shape(writes(5))
+    _source, beyond = _shape(writes(6))
+
+    assert within.completeness == "closed"
+    assert [(root.name, root.presence) for root in within.roots] == [
+        (f"k{index}", "conditional") for index in range(5)
+    ]
+    assert beyond.completeness == "open"
+    assert beyond.open_reasons == ("analysis branch limit exceeded",)
+    assert beyond.roots == ()
+
+
+def test_paths_that_differ_only_in_mapping_sharing_stay_separate():
+    # Both paths hold two empty mappings, but only the first makes `b` the
+    # same mapping as `a`, so the write through `b` reaches `a` on one path.
+    _source, shape = _shape(
+        """
+        a = {}
+        if condition:
+            b = a
+        else:
+            b = {}
+        b["x"] = 1
+        return a
+        """,
+    )
+
+    assert shape.completeness == "closed"
+    assert [(root.name, root.presence) for root in shape.roots] == [("x", "conditional")]
+
+
+def test_paths_that_differ_only_in_open_reasons_or_definitions_stay_separate():
+    # One path leaves `data` empty and fully known, the other updates it from
+    # an unknown value. Merging them would claim the result is fully known.
+    _source, unknown_update = _shape(
+        """
+        data = {}
+        if condition:
+            pass
+        else:
+            data.update(other)
+        return data
+        """,
+    )
+    # Both paths set the same key, but from different lines, and the editor
+    # offers both lines as definitions.
+    _source, two_definitions = _shape(
+        """
+        if condition:
+            data = {"a": 1}
+        else:
+            data = {"a": 2}
+        return data
+        """,
+    )
+
+    assert unknown_update.completeness == "open"
+    assert unknown_update.open_reasons == ("unknown mapping update",)
+    assert two_definitions.completeness == "closed"
+    assert [root.name for root in two_definitions.roots] == ["a"]
+    assert [definition.key_range.start.line for definition in two_definitions.roots[0].definitions] == [4, 6]
+
+
 def test_generator_method_never_claims_return_statement_mappings():
     _source, shape = _shape(
         """
