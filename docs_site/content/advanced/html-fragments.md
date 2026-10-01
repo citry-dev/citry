@@ -36,21 +36,23 @@ The calls produce three different values:
 2. `.render()` creates a [`CitryRender`][citry.CitryRender].
 3. `.serialize(...)` returns the HTML string sent to the browser.
 
-The fragment contains the component markup plus the manifests needed for its
-browser behavior and dependencies. If the component is entirely server-side,
-Citry can return plain HTML without those additions.
+The fragment contains the component markup plus the tags or data needed for
+its browser behavior and dependencies. If the rendered components have no
+JavaScript, CSS, or browser behavior, Citry returns plain HTML without those
+additions.
 
 ## Make asset routes available
 
-A client-active fragment refers to Citry's runtime and generated assets by
-URL. Mount one of Citry's [web framework integrations](/web-frameworks/) so
-those URLs can be served.
+A fragment refers to its components' JavaScript and CSS by URL, and an
+interactive fragment also loads Citry's runtime by URL. Mount one of Citry's [web framework integrations](/web-frameworks/)
+so those URLs can be served.
 
-Client-active output includes components that use native Vue bindings,
-[`$component`][$component], browser or server event handlers, Events state or
-per-render browser data. If such a fragment has no mounted integration or
-recorded route prefix, serialization raises `RuntimeError` instead of returning
-broken URLs.
+This applies to every fragment that carries any JavaScript or CSS, including
+`Dependencies` entries, or browser behavior: native Vue bindings, [`$component`][$component], browser or
+server event handlers, Events state, or per-render browser data. If such a
+fragment has no mounted integration or recorded route prefix, serialization
+raises `RuntimeError` instead of returning broken URLs. A fragment with none of
+these is returned as plain HTML and needs no mount.
 
 A worker that only renders fragments can record the prefix used by the
 serving process with

@@ -48,7 +48,12 @@ class Chart(Component):
         return self.CssData(chart_height=kwargs.height)
 
     template = """
-      <canvas ref="chart" class="chart" width="480" height="240"></canvas>
+      <canvas
+        ref="chart"
+        class="chart"
+        width="480"
+        height="240"
+      ></canvas>
     """
 
     js = """

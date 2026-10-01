@@ -106,6 +106,12 @@ class UppercaseOutput(Extension):
 When several extensions transform the same value, Citry passes each result to
 the next extension in installation order.
 
+On an interactive page (one where a component uses Citry's browser runtime),
+this example fails with `ValueError`. Citry writes one element that the
+browser mounts the Vue app into, and rejects an `on_serialize()` result that
+changes, removes, or repeats that element, or that drops Citry's runtime
+script. Leave both in place and edit only the rest of the HTML.
+
 `on_component_rendered` also runs when rendering fails. In that case
 `ctx.render` is `None` and `ctx.error` holds the exception. Returning a render
 recovers from the error; raising replaces it. Returning `None` lets the current

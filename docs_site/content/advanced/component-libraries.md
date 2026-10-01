@@ -48,7 +48,7 @@ class AcmeBadge(LibraryComponent):
         tone: str = "neutral"
 
     template = """
-      <span class="badge badge--{{ tone }}">
+      <span c-class="['badge', 'badge--' + tone]">
         {{ label }}
       </span>
     """

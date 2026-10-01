@@ -193,8 +193,11 @@ class ConfirmDialog(BaseDialog):
 
 `ConfirmDialog` receives `dialog.js`, `dialog.css`, and then
 `confirm-dialog.css`. Duplicate URLs and duplicate inline content keep their
-first position. The first entry wins completely, including its tag
-attributes; a later duplicate cannot add another attribute.
+first position. For scripts, the first entry wins completely, including its tag
+attributes; a later duplicate cannot add another attribute. The same holds for
+a stylesheet the child lists again under the same `media` key. Listing one
+stylesheet under two different `media` keys makes serialization raise
+`ValueError`.
 
 The `extend` setting chooses which branches contribute:
 
