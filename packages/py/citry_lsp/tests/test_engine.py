@@ -2375,9 +2375,14 @@ def test_inferred_js_data_follows_attribute_chains_through_kwargs_classes(tmp_pa
         "class Base:\n"
         "    id: int\n"
         "@dataclass\n"
+        "class Person:\n"
+        "    email: str\n"
+        "@dataclass\n"
         "class Task(Base):\n"
         "    lane: str\n"
         "    owner: Owner\n"
+        "    person: Person\n"
+        "    meta: Meta\n"
         "    state: Lane\n"
         "    reviewer: Owner | None = None\n",
         encoding="utf-8",
@@ -2385,6 +2390,7 @@ def test_inferred_js_data_follows_attribute_chains_through_kwargs_classes(tmp_pa
     template_source = (
         '<p v-text="laneKey"></p><p v-text="ownerName"></p><p v-text="taskId"></p>'
         '<p v-text="stateValue"></p><p v-text="reviewerName"></p><p v-text="owner"></p>'
+        '<p v-text="meta"></p><p v-text="person"></p>'
     )
     template_file = tmp_path / "card.html"
     template_file.write_text(template_source, encoding="utf-8")
@@ -2408,6 +2414,8 @@ def test_inferred_js_data_follows_attribute_chains_through_kwargs_classes(tmp_pa
         "            'stateValue': kwargs.task.state.value,\n"
         "            'reviewerName': kwargs.task.reviewer.name,\n"
         "            'owner': kwargs.task.owner,\n"
+        "            'meta': kwargs.task.meta,\n"
+        "            'person': kwargs.task.person,\n"
         "        }\n"
     )
     app_file.write_text(app_source, encoding="utf-8")
@@ -2422,19 +2430,22 @@ def test_inferred_js_data_follows_attribute_chains_through_kwargs_classes(tmp_pa
 
     assert projection is not None
     # A chain through `Owner | None` proves nothing, so `reviewerName` is any.
-    # The editor widens js_data() literals, so the Enum value is a string.
+    # The editor widens js_data() literals, so the Enum value is a string. The
+    # wire sends a NamedTuple as an array and a TypedDict as an object.
     for name, rendered in (
         ("laneKey", "string"),
         ("ownerName", "string"),
         ("taskId", "number"),
         ("stateValue", "string"),
         ("reviewerName", "any"),
-        ("owner", "any"),
+        ("owner", "Array<string>"),
+        ("meta", "{rank: number}"),
+        ("person", "any"),
     ):
         assert f"/** @type {{{rendered}}} */\nvar {name};" in projection.source
-    # A whole class instance cannot cross the JSON wire.
+    # A dataclass instance cannot be proven to cross the JSON wire.
     diagnostics = browser_diagnostics(python, project, documents)
-    assert [(diagnostic.code, "'owner'" in diagnostic.message) for diagnostic in diagnostics] == [
+    assert [(diagnostic.code, "'person'" in diagnostic.message) for diagnostic in diagnostics] == [
         ("citry.js-data.unsupported-type", True),
     ]
 

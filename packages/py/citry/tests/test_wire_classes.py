@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
-from typing import ClassVar, NamedTuple, TypedDict
+from enum import Enum, EnumMeta, Flag
+from typing import TYPE_CHECKING, ClassVar, Generic, NamedTuple, TypeVar
 
 import pydantic
 import pytest
+from typing_extensions import NotRequired, TypedDict
 
 from citry import Citry, Component
 from citry._app_selection import CheckAppSelection
@@ -15,6 +16,11 @@ from citry._checker import check_project
 from citry._json_wire import WireClass
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import json_wire_type_from_expression
+
+if TYPE_CHECKING:
+    from decimal import Decimal
+
+T = TypeVar("T")
 
 
 class Lane(Enum):
@@ -26,16 +32,36 @@ class Shape(Enum):
     BOX = (1, 2)
 
 
+class Limit(Enum):
+    NONE = float("inf")
+
+
+class Perm(Flag):
+    READ = 1
+    WRITE = 2
+
+
 class Owner(NamedTuple):
     name: str
 
 
 class Meta(TypedDict):
     rank: int
+    tag: NotRequired[str]
 
 
 class Audit(pydantic.BaseModel):
     note: str
+
+
+@dataclass
+class Person:
+    email: str
+
+
+@dataclass
+class Box(Generic[T]):
+    item: T
 
 
 class Base:
@@ -46,18 +72,31 @@ class Base:
 class Task(Base):
     lane: str
     owner: Owner
+    person: Person
     state: Lane
     shape: Shape
+    limit: Limit
+    perm: Perm
     meta: Meta
     audit: Audit
+    box: Box[int]
     reviewer: Owner | None = None
     _private: int = 0
     kind: ClassVar[str] = "task"
 
 
+class Unresolved:
+    # `Decimal` is imported only for type checkers, so it cannot be resolved here.
+    price: Decimal
+    label: str
+
+
 class Card(Component):
     class Kwargs:
         task: Task
+        owner: Owner
+        meta: Meta
+        unresolved: Unresolved
         count: int = 0
 
     template = """
@@ -81,18 +120,31 @@ def _type(expression: str) -> str:
 @pytest.mark.parametrize(
     ("expression", "expected"),
     [
-        # Each supported kind of class: dataclass with an inherited plain
-        # annotation, NamedTuple, TypedDict, and a Pydantic model.
+        # Attributes of a dataclass with an inherited plain annotation, a
+        # NamedTuple, and a Pydantic model.
         ("kwargs.task.lane", "string"),
         ("kwargs.task.id", "number"),
         ("kwargs.task.owner.name", "string"),
-        ("kwargs.task.meta.rank", "number"),
         ("kwargs.task.audit.note", "string"),
+        ("kwargs.task.person.email", "string"),
+        # The wire sends a NamedTuple as an array and a TypedDict as an object.
+        ("kwargs.task.owner", "Array<string>"),
+        ("kwargs.owner", "Array<string>"),
+        ("kwargs.meta", "{rank: number, tag?: string}"),
+        # A TypedDict value is a plain dict, so it has no attributes to read.
+        ("kwargs.task.meta.rank", "unknown"),
         # An Enum member carries its value and name.
         ("kwargs.task.state.value", '"todo" | "done"'),
         ("kwargs.task.state.name", '"TODO" | "DONE"'),
-        # A tuple value is not a JSON scalar, so it is not claimed.
+        # A tuple or infinite value is not a JSON scalar, and a combined flag
+        # is not one of the listed members, so none of them is claimed.
         ("kwargs.task.shape.value", "unknown"),
+        ("kwargs.task.limit.value", "unknown"),
+        ("kwargs.task.perm.value", "unknown"),
+        # A type variable or an unresolved annotation names no concrete type.
+        ("kwargs.task.box.item", "unknown"),
+        ("kwargs.unresolved.price", "unknown"),
+        ("kwargs.unresolved.label", "string"),
         # An optional value may be None, and private or unknown names prove nothing.
         ("kwargs.task.reviewer.name", "unknown"),
         ("kwargs.task._private", "unknown"),
@@ -105,26 +157,29 @@ def test_attribute_chains_follow_class_annotations(expression, expected):
     assert _type(expression) == expected
 
 
-def test_a_whole_class_instance_is_unsupported_on_the_wire():
+def test_a_whole_dataclass_instance_is_unsupported_on_the_wire():
     classes = kwargs_wire_classes(Card)
     value = json_wire_type_from_expression(
-        "kwargs.task.owner",
+        "kwargs.task.person",
         member_annotations={"kwargs": classes.members},
         classes=classes.classes,
     )
 
     assert value.kind == "unknown"
-    assert value.unsupported == (f"{_PREFIX}Owner cannot be proven to cross Citry's strict JSON wire",)
+    assert value.unsupported == (f"{_PREFIX}Person cannot be proven to cross Citry's strict JSON wire",)
 
 
 def test_kwargs_wire_classes_records_reachable_classes_by_import_path():
     classes = kwargs_wire_classes(Card)
 
-    assert classes.members == {"task": f"{_PREFIX}Task", "count": "int"}
+    assert classes.members["task"] == f"{_PREFIX}Task"
+    assert classes.members["count"] == "int"
     assert classes.classes[f"{_PREFIX}Task"].attributes["reviewer"] == f"{_PREFIX}Owner | None"
     assert "_private" not in classes.classes[f"{_PREFIX}Task"].attributes
-    assert classes.classes[f"{_PREFIX}Lane"] == WireClass({}, ("todo", "done"), ("TODO", "DONE"))
-    assert classes.classes[f"{_PREFIX}Shape"].enum_values is None
+    assert classes.classes[f"{_PREFIX}Lane"] == WireClass({}, "enum", None, ("todo", "done"), ("TODO", "DONE"))
+    assert classes.classes[f"{_PREFIX}Meta"].required == ("rank",)
+    assert classes.classes[f"{_PREFIX}Limit"].enum_values is None
+    assert f"{_PREFIX}Perm" not in classes.classes
     # The record survives the copy to the language server unchanged.
     assert KwargsWireClasses.from_dict(classes.to_dict()) == classes
 
@@ -138,12 +193,51 @@ def test_kwargs_wire_classes_is_empty_without_a_kwargs_class():
     assert kwargs_wire_classes(Bare) == KwargsWireClasses()
 
 
+class _HostileEnumType(EnumMeta):
+    def __iter__(cls):
+        raise RuntimeError
+
+
+class Hostile(Enum, metaclass=_HostileEnumType):
+    ONE = 1
+
+
+class Holder(Component):
+    # Module level, so the postponed annotations resolve.
+    class Kwargs:
+        hostile: Hostile
+        lane: Lane
+
+    template = """
+      <p></p>
+    """
+
+
+def test_kwargs_wire_classes_leaves_out_a_class_whose_metadata_raises():
+    # Listing the hostile Enum's members raises, so only that class is left out.
+    classes = kwargs_wire_classes(Holder)
+    assert classes.members["hostile"] == f"{_PREFIX}Hostile"
+    assert f"{_PREFIX}Lane" in classes.classes
+    assert f"{_PREFIX}Hostile" not in classes.classes
+
+
 @pytest.mark.parametrize(
     "payload",
     [
         {"members": {}},
         {"members": {"task": 1}, "classes": {}},
-        {"members": {}, "classes": {"x": {"attributes": {}, "enum_values": [[1]], "enum_names": None}}},
+        {
+            "members": {},
+            "classes": {
+                "x": {"attributes": {}, "kind": "enum", "required": None, "enum_values": [[1]], "enum_names": None}
+            },
+        },
+        {
+            "members": {},
+            "classes": {
+                "x": {"attributes": {}, "kind": "mystery", "required": None, "enum_values": None, "enum_names": None}
+            },
+        },
     ],
 )
 def test_kwargs_wire_classes_rejects_a_malformed_copy(payload):
@@ -163,7 +257,7 @@ class Board(Component):
         task: Task
 
     def js_data(self, kwargs, slots):
-        return {"lane": kwargs.task.lane, "owner": kwargs.task.owner}
+        return {"lane": kwargs.task.lane, "owner": kwargs.task.owner, "person": kwargs.task.person}
 
     template = """
       <p></p>
@@ -174,7 +268,8 @@ def test_check_reports_a_class_instance_reached_through_kwargs(tmp_path):
     report = check_project(CheckAppSelection(spec="app:engine", engine=_ENGINE), tmp_path)
     findings = [item for item in report.findings if item.code == "citry.js-data.unsupported-type"]
 
-    # `lane` is a string; `owner` is a NamedTuple instance the wire rejects.
+    # `lane` is a string and the NamedTuple `owner` is sent as an array,
+    # but the dataclass `person` cannot be proven to cross the wire.
     assert len(findings) == 1
-    assert "'owner'" in findings[0].message
-    assert f"{_PREFIX}Owner cannot be proven" in findings[0].message
+    assert "'person'" in findings[0].message
+    assert f"{_PREFIX}Person cannot be proven" in findings[0].message

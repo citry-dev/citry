@@ -46,7 +46,7 @@ from citry._i18n_guards import i18n_configured_guarded_calls
 from citry._inline_assets import normalize_inline_asset
 from citry._linting import _component_lint_info
 from citry._template_data_source import TemplateDataSourceShape, analyze_template_data_source
-from citry._wire_classes import kwargs_wire_classes
+from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
     AlpineAttributeFinding,
@@ -1758,7 +1758,7 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
         }
     # The language server's app worker copies the same class facts, so both
     # type a value such as `kwargs.task.lane` from `Task.lane`.
-    wire_classes = kwargs_wire_classes(component)
+    wire_classes = kwargs_wire_classes(component) if member_types else KwargsWireClasses()
     member_annotations = {name: wire_classes.members for name in member_types}
     for root in shape.roots:
         wire_types = [

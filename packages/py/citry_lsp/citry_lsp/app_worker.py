@@ -182,7 +182,8 @@ def _source_analysis(
                     if selected_class
                     else {"handlers": None, "state": None, "state_resolution": {"resolution_chain": None}}
                 ),
-                "kwargs_classes": _kwargs_classes(selected_class),
+                # Only a js_data() method reads through Kwargs classes.
+                "kwargs_classes": _kwargs_classes(selected_class if js_data_chain else None),
                 "template_lint": {
                     "variables": _component_lint_sources(
                         selected_class,
@@ -200,10 +201,7 @@ def _kwargs_classes(component_class: type | None) -> dict[str, object]:
     """Copy the classes `js_data()` can read through from the component's Kwargs fields."""
     if component_class is None:
         return KwargsWireClasses().to_dict()
-    try:
-        return kwargs_wire_classes(component_class).to_dict()
-    except Exception:  # noqa: BLE001 - project classes may raise anywhere; their chains then stay unknown
-        return KwargsWireClasses().to_dict()
+    return kwargs_wire_classes(component_class).to_dict()
 
 
 def _schema_resolution_chain(

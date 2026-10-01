@@ -142,6 +142,28 @@ Declaration**, and **Find All References** connect them to the exact Python
 field or a conservatively inferred `js_data()` dict key. Public Events
 `State` fields receive the same navigation through `$state`.
 
+A `js_data()` value that reads attributes of a Kwargs field takes its type
+from the annotations of the classes it passes through:
+
+```citry
+class TaskCard(Component):
+    class Kwargs:
+        task: Task  # a dataclass with `lane: str`
+
+    def js_data(self, kwargs, slots):
+        return {"laneKey": kwargs.task.lane}
+```
+
+Here `this.laneKey` is a `string`. Dataclasses, NamedTuples, Pydantic
+models, and plain annotated classes can be read this way, and an `Enum`
+member's `.value` takes the type of its values, such as `string`. A
+NamedTuple is sent as an array and a TypedDict as an object. A chain
+through an optional value, such as `reviewer: Owner | None`, is untyped.
+Returning a whole dataclass or other class instance, such as
+`kwargs.task`, is reported as
+[`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type),
+because Citry cannot prove it crosses the JSON wire.
+
 ### Work with component members in `this` and the template
 
 Inside `$component({ ... })`, `this` has the type of the live component, and
@@ -403,15 +425,6 @@ Some TypeScript errors are left out on purpose:
 - A minified file such as `runtime.min.js` is not checked.
 - A `js_data()` value types its key as the value's general type, such as
   `boolean` for `False`, because Vue code may change it later.
-- A `js_data()` value that reads attributes of a Kwargs field, such as
-  `kwargs.task.lane`, takes its type from the annotation on each class it
-  passes through, so `lane: str` makes the key a `string`. Dataclasses,
-  NamedTuples, TypedDicts, Pydantic models, and plain annotated classes
-  work, and `.value` of an `Enum` member is one of the member values. A
-  chain through an optional value, such as `reviewer: Owner | None`, is
-  `any`, and passing a whole class instance, such as `kwargs.task`, is
-  reported as [`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type)
-  because it cannot cross the JSON wire.
 
 Set `citry.typeCheck` to `false` to turn these errors off. The language
 server can also run the check for other editors; it then uses the `tsc` in

@@ -70,8 +70,8 @@ Upgrading from 0.5.x? Follow
   `LintSettings.rule_invalid_attribute_value`, or the same name in a
   component's `Lint` class, to change the severity.
 - `citry check` warns when `js_data()` returns a class instance read
-  through a Kwargs field, such as `kwargs.task.owner`, because it cannot
-  cross the JSON wire.
+  through a Kwargs field, such as `kwargs.task.owner`, when Citry cannot
+  prove it crosses the JSON wire.
 - Without a configured cache, cap how much memory a process spends on
   compiled component code and stylesheets for interactive pages with
   `Citry(vue_asset_max_bytes=...)` (default 64 MiB).

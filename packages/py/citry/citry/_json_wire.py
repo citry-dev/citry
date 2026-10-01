@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -78,6 +79,14 @@ UNKNOWN_JSON_TYPE = JsonWireType("unknown")
 # A JSON scalar an Enum member value may be, so `.value` can type as its literals.
 _ENUM_VALUE_TYPES = (bool, int, float, str)
 
+# How a class's instances behave once they reach a data method:
+# "object" instances are read by attribute and rejected by the JSON wire;
+# "named-tuple" instances are read by attribute and sent as arrays;
+# "typed-dict" values are plain dicts, so they are sent as objects but have
+# no attributes to read; "enum" members carry only `.value` and `.name`.
+WireClassKind = Literal["object", "named-tuple", "typed-dict", "enum"]
+_WIRE_CLASS_KINDS = frozenset({"object", "named-tuple", "typed-dict", "enum"})
+
 
 @dataclass(frozen=True, slots=True)
 class WireClass:
@@ -91,7 +100,9 @@ class WireClass:
 
     Attributes:
         attributes: Each public attribute's annotation, or ``None`` when it
-            could not be formatted.
+            could not be resolved to a type.
+        kind: How the class's instances are read and sent; see ``WireClassKind``.
+        required: The keys a TypedDict always has, else ``None``.
         enum_values: Every member's value when the class is an ``Enum`` whose
             values are all JSON scalars, else ``None``.
         enum_names: Every member's name when the class is an ``Enum``, else ``None``.
@@ -99,6 +110,8 @@ class WireClass:
     """
 
     attributes: Mapping[str, str | None]
+    kind: WireClassKind = "object"
+    required: tuple[str, ...] | None = None
     enum_values: tuple[bool | int | float | str | None, ...] | None = None
     enum_names: tuple[str, ...] | None = None
 
@@ -106,6 +119,8 @@ class WireClass:
         """Return a JSON-ready copy for the language server's worker payload."""
         return {
             "attributes": dict(self.attributes),
+            "kind": self.kind,
+            "required": None if self.required is None else list(self.required),
             "enum_values": None if self.enum_values is None else list(self.enum_values),
             "enum_names": None if self.enum_names is None else list(self.enum_names),
         }
@@ -113,7 +128,7 @@ class WireClass:
     @classmethod
     def from_dict(cls, value: object) -> WireClass:
         """Validate and restore one copied class record."""
-        if type(value) is not dict or set(value) != {"attributes", "enum_values", "enum_names"}:
+        if type(value) is not dict or set(value) != {"attributes", "kind", "required", "enum_values", "enum_names"}:
             msg = "wire class data must contain the exact supported fields"
             raise ValueError(msg)
         attributes = value["attributes"]
@@ -123,10 +138,19 @@ class WireClass:
         ):
             msg = "wire class attributes must map names to annotations"
             raise ValueError(msg)
+        kind = value["kind"]
+        if type(kind) is not str or kind not in _WIRE_CLASS_KINDS:
+            msg = "wire class kind is not supported"
+            raise ValueError(msg)
+        required = value["required"]
+        if required is not None and (type(required) is not list or any(type(item) is not str for item in required)):
+            msg = "wire class required keys must be strings"
+            raise ValueError(msg)
         enum_values = value["enum_values"]
         if enum_values is not None and (
             type(enum_values) is not list
             or any(item is not None and type(item) not in _ENUM_VALUE_TYPES for item in enum_values)
+            or any(type(item) is float and not math.isfinite(item) for item in enum_values)
         ):
             msg = "wire class enum values must be JSON scalars"
             raise ValueError(msg)
@@ -138,6 +162,8 @@ class WireClass:
             raise ValueError(msg)
         return cls(
             attributes=dict(attributes),
+            kind=cast("WireClassKind", kind),
+            required=None if required is None else tuple(required),
             enum_values=None if enum_values is None else tuple(enum_values),
             enum_names=None if enum_names is None else tuple(enum_names),
         )
@@ -334,27 +360,59 @@ def _attribute_chain(node: ast.Attribute) -> tuple[str, ...] | None:
 def _attribute_chain_type(chain: tuple[str, ...], context: _ExpressionContext) -> JsonWireType:
     """Follow ``root.member.attr...`` through the class table to the last attribute's type."""
     root, member, *attributes = chain
-    if not attributes:
-        return context.member_types.get(root, {}).get(member, UNKNOWN_JSON_TYPE)
     annotation = context.member_annotations.get(root, {}).get(member)
+    if not attributes:
+        # A NamedTuple or TypedDict member is sent as an array or object.
+        owner = context.classes.get(annotation) if annotation is not None else None
+        if annotation is not None and owner is not None and owner.kind in {"named-tuple", "typed-dict"}:
+            return _class_value_type(annotation, context)
+        return context.member_types.get(root, {}).get(member, UNKNOWN_JSON_TYPE)
     for attribute in attributes[:-1]:
         # Only a plain class annotation is followed; `Owner | None` could be
         # None at run time, so reading through it proves nothing.
-        owner = context.classes.get(annotation) if annotation is not None else None
+        owner = _readable_class(annotation, context)
         annotation = owner.attributes.get(attribute) if owner is not None else None
-    owner = context.classes.get(annotation) if annotation is not None else None
-    if owner is None:
-        return UNKNOWN_JSON_TYPE
     last = attributes[-1]
-    # An Enum member's `.value` and `.name` are the only JSON values it carries.
-    if last == "value" and owner.enum_values is not None:
-        return merge_json_wire_types(tuple(_literal_value_type(value) for value in owner.enum_values))
-    if last == "name" and owner.enum_names is not None:
-        return merge_json_wire_types(tuple(JsonWireType("string", literal=name) for name in owner.enum_names))
-    field_annotation = owner.attributes.get(last)
+    owner = context.classes.get(annotation) if annotation is not None else None
+    if owner is not None and owner.kind == "enum":
+        # An Enum member's `.value` and `.name` are the only JSON values it carries.
+        if last == "value" and owner.enum_values is not None:
+            return merge_json_wire_types(tuple(_literal_value_type(value) for value in owner.enum_values))
+        if last == "name" and owner.enum_names is not None:
+            return merge_json_wire_types(tuple(JsonWireType("string", literal=name) for name in owner.enum_names))
+        return UNKNOWN_JSON_TYPE
+    owner = _readable_class(annotation, context)
+    field_annotation = owner.attributes.get(last) if owner is not None else None
     if field_annotation is None:
         return UNKNOWN_JSON_TYPE
-    return json_wire_type_from_annotation(field_annotation)
+    return _class_value_type(field_annotation, context)
+
+
+def _readable_class(annotation: str | None, context: _ExpressionContext) -> WireClass | None:
+    """Return the class whose attributes a value of this annotation has, or ``None``."""
+    owner = context.classes.get(annotation) if annotation is not None else None
+    # A TypedDict value is a plain dict, and an Enum member has no fields.
+    return owner if owner is not None and owner.kind in {"object", "named-tuple"} else None
+
+
+def _class_value_type(annotation: str, context: _ExpressionContext) -> JsonWireType:
+    """Type a whole value of ``annotation``, as the JSON wire sends it."""
+    owner = context.classes.get(annotation)
+    if owner is not None and owner.kind in {"named-tuple", "typed-dict"}:
+        # Each field is typed from its own annotation; an unresolved one stays unknown.
+        values = {
+            name: (json_wire_type_from_annotation(field) if field is not None else UNKNOWN_JSON_TYPE)
+            for name, field in owner.attributes.items()
+        }
+        if owner.kind == "named-tuple":
+            # The wire sends a NamedTuple as an array of its fields.
+            item = merge_json_wire_types(tuple(values.values())) if values else UNKNOWN_JSON_TYPE
+            return JsonWireType("array", (item,), unsupported=item.unsupported)
+        required = set(owner.required or ())
+        fields = tuple(JsonWireField(name, value, name in required) for name, value in values.items())
+        issues = tuple(dict.fromkeys(issue for value in values.values() for issue in value.unsupported))
+        return JsonWireType("object", fields=fields, unsupported=issues)
+    return json_wire_type_from_annotation(annotation)
 
 
 def _literal_value_type(value: str | float | None) -> JsonWireType:
@@ -459,6 +517,7 @@ __all__ = [
     "JsonWireKind",
     "JsonWireType",
     "WireClass",
+    "WireClassKind",
     "json_wire_type_from_annotation",
     "json_wire_type_from_expression",
     "merge_json_wire_types",
