@@ -8231,10 +8231,19 @@ def _component_js_data_roots(
     if shape is None:
         return _JsDataNamespace((), "unavailable")
     member_types = _js_data_member_types(component, shape)
+    # The app worker resolved the classes behind the Kwargs annotations, so a
+    # value such as `kwargs.task.lane` types from `Task.lane`.
+    wire_classes = project.source_analysis.kwargs_wire_classes(component)
+    member_annotations = {name: wire_classes.members for name in member_types}
     roots: list[_JsDataRoot] = []
     for root in shape.roots:
         value_types = tuple(
-            json_wire_type_from_expression(value_source, member_types=member_types)
+            json_wire_type_from_expression(
+                value_source,
+                member_types=member_types,
+                member_annotations=member_annotations,
+                classes=wire_classes.classes,
+            )
             for definition in root.definitions
             if (value_source := _source_range_text(source, definition.value_range)) is not None
         )
@@ -8972,7 +8981,8 @@ def _instance_helpers_typedef(i18n: Any | None, *, has_state: bool) -> tuple[str
     ]
     i18n_text = "Translate and format inside the nearest client i18n provider, or null outside one."
     if i18n is not None and i18n.configured:
-        # The i18n Vue plugin defines `$i18n` on each Citry component in its `created()` hook.
+        # The i18n Vue plugin defines `$i18n` on each Citry component in its `beforeCreate()` hook,
+        # before Vue reads data, provide and watchers.
         lines.append(f" * @property {{CitryI18nService | null}} $i18n {i18n_text} {_BROWSER_I18N_URL}")
     else:
         # Without i18n settings Citry does not install the i18n Vue plugin, so

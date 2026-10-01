@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Literal, cast
 from packaging.version import InvalidVersion, Version
 
 from citry import TemplateAnalysis
+from citry._wire_classes import KwargsWireClasses
 from citry_lsp.catalog import CatalogIndex
 from citry_lsp.environment import EnvironmentFileError, worker_environment
 from citry_lsp.protocol import (
@@ -378,6 +379,7 @@ class SourceAnalysisIndex:
         "_js_asset",
         "_js_data",
         "_js_schema",
+        "_kwargs_classes",
         "_state",
         "_state_resolution",
         "_template_asset",
@@ -404,6 +406,7 @@ class SourceAnalysisIndex:
         state_resolution: dict[str, tuple[SourceClassRecord, ...] | None] = {}
         js_schema: dict[str, tuple[SourceClassRecord, ...] | None] = {}
         template_lint: dict[str, dict[str, SourceLintRecord]] = {}
+        kwargs_classes: dict[str, KwargsWireClasses] = {}
         for raw_component in raw_components:
             (
                 definition_id,
@@ -418,6 +421,7 @@ class SourceAnalysisIndex:
                 state_chain,
                 js_schema_chain,
                 lint_variables,
+                wire_classes,
             ) = _source_component(raw_component)
             if definition_id in template_data:
                 raise ValueError(f"duplicate source analysis definition id {definition_id!r}")
@@ -432,6 +436,7 @@ class SourceAnalysisIndex:
             state_resolution[definition_id] = state_chain
             js_schema[definition_id] = js_schema_chain
             template_lint[definition_id] = lint_variables
+            kwargs_classes[definition_id] = wire_classes
         expected = {component.definition_id for component in catalog.components}
         if set(template_data) != expected:
             raise ValueError("source analysis definition ids do not match the component catalog")
@@ -446,6 +451,7 @@ class SourceAnalysisIndex:
         self._state_resolution = state_resolution
         self._js_schema = js_schema
         self._template_lint = template_lint
+        self._kwargs_classes = kwargs_classes
 
     def template_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return copied provenance for one exact catalog component."""
@@ -466,6 +472,10 @@ class SourceAnalysisIndex:
     def js_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return copied provenance for the effective ``js_data`` method."""
         return self._js_data.get(component.definition_id)
+
+    def kwargs_wire_classes(self, component: ComponentRecord) -> KwargsWireClasses:
+        """Return the classes ``js_data()`` can read through from the component's Kwargs fields."""
+        return self._kwargs_classes.get(component.definition_id, KwargsWireClasses())
 
     def js_asset_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return concrete-to-owner provenance for the effective JS asset."""
@@ -507,8 +517,9 @@ def _source_component(
     tuple[SourceClassRecord, ...] | None,
     tuple[SourceClassRecord, ...] | None,
     dict[str, SourceLintRecord],
+    KwargsWireClasses,
 ]:
-    if type(value) is not dict or set(value) - {"js_schema"} != {
+    if type(value) is not dict or set(value) - {"js_schema", "kwargs_classes"} != {
         "definition_id",
         "css_data",
         "css_asset",
@@ -534,6 +545,7 @@ def _source_component(
         *_source_event_info(value.get("events"), definition_id),
         _source_resolution_chain(value["js_schema"], definition_id, "js_schema") if "js_schema" in value else None,
         _source_lint_variables(value.get("template_lint"), definition_id),
+        KwargsWireClasses.from_dict(value["kwargs_classes"]) if "kwargs_classes" in value else KwargsWireClasses(),
     )
 
 

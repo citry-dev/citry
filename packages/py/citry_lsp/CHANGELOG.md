@@ -24,6 +24,10 @@ All notable changes to `citry-lsp` are documented here.
   result, is `any` in completion and hover.
 - A `js_data()` value types its key by the value's general type, such as
   `boolean` for `False`.
+- A `js_data()` value that reads attributes of a Kwargs field, such as
+  `kwargs.task.lane`, types its key from the annotations of the classes
+  it passes through, so `lane: str` makes `this.laneKey` a `string`
+  instead of `any`.
 - `$event` on an HTML element is the DOM event of that name, such as
   `KeyboardEvent` for `@keydown`, and a name the DOM does not define is a
   `CustomEvent`.

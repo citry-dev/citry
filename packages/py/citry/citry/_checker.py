@@ -45,6 +45,7 @@ from citry._diagnostics import render_diagnostic
 from citry._inline_assets import normalize_inline_asset
 from citry._linting import _component_lint_info
 from citry._template_data_source import TemplateDataSourceShape, analyze_template_data_source
+from citry._wire_classes import kwargs_wire_classes
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
     AlpineAttributeFinding,
@@ -1741,9 +1742,18 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
             )
             for field in kwargs_schema.fields
         }
+    # The language server's app worker copies the same class facts, so both
+    # type a value such as `kwargs.task.lane` from `Task.lane`.
+    wire_classes = kwargs_wire_classes(component)
+    member_annotations = {name: wire_classes.members for name in member_types}
     for root in shape.roots:
         wire_types = [
-            json_wire_type_from_expression(value, member_types=member_types)
+            json_wire_type_from_expression(
+                value,
+                member_types=member_types,
+                member_annotations=member_annotations,
+                classes=wire_classes.classes,
+            )
             for definition in root.definitions
             if (value := _range_source(source, definition.value_range)) is not None
         ]

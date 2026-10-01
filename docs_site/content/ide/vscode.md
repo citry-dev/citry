@@ -403,6 +403,15 @@ Some TypeScript errors are left out on purpose:
 - A minified file such as `runtime.min.js` is not checked.
 - A `js_data()` value types its key as the value's general type, such as
   `boolean` for `False`, because Vue code may change it later.
+- A `js_data()` value that reads attributes of a Kwargs field, such as
+  `kwargs.task.lane`, takes its type from the annotation on each class it
+  passes through, so `lane: str` makes the key a `string`. Dataclasses,
+  NamedTuples, TypedDicts, Pydantic models, and plain annotated classes
+  work, and `.value` of an `Enum` member is one of the member values. A
+  chain through an optional value, such as `reviewer: Owner | None`, is
+  `any`, and passing a whole class instance, such as `kwargs.task`, is
+  reported as [`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type)
+  because it cannot cross the JSON wire.
 
 Set `citry.typeCheck` to `false` to turn these errors off. The language
 server can also run the check for other editors; it then uses the `tsc` in

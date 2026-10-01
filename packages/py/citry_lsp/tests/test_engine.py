@@ -2351,6 +2351,88 @@ def test_inferred_js_data_tracks_kwargs_types_synchronized_source_and_invalid_li
     assert definition(template, _position(template_source, "title", 2), project, edited_documents) is None
 
 
+def test_inferred_js_data_follows_attribute_chains_through_kwargs_classes(tmp_path):
+    # The classes live in another module that postpones its annotations, so
+    # the worker must resolve each annotation in the class's own module.
+    (tmp_path / "models.py").write_text(
+        "from __future__ import annotations\n"
+        "from dataclasses import dataclass\n"
+        "from enum import Enum\n"
+        "from typing import NamedTuple, TypedDict\n"
+        "class Lane(Enum):\n"
+        "    TODO = 'todo'\n"
+        "    DONE = 'done'\n"
+        "class Owner(NamedTuple):\n"
+        "    name: str\n"
+        "class Meta(TypedDict):\n"
+        "    rank: int\n"
+        "class Base:\n"
+        "    id: int\n"
+        "@dataclass\n"
+        "class Task(Base):\n"
+        "    lane: str\n"
+        "    owner: Owner\n"
+        "    state: Lane\n"
+        "    reviewer: Owner | None = None\n",
+        encoding="utf-8",
+    )
+    template_source = (
+        '<p v-text="laneKey"></p><p v-text="ownerName"></p><p v-text="taskId"></p>'
+        '<p v-text="stateValue"></p><p v-text="reviewerName"></p><p v-text="owner"></p>'
+    )
+    template_file = tmp_path / "card.html"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from __future__ import annotations\n"
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "from models import Task\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class Kwargs:\n"
+        "        task: Task\n"
+        "    def js_data(self, kwargs: Kwargs, slots):\n"
+        "        return {\n"
+        "            'laneKey': kwargs.task.lane,\n"
+        "            'ownerName': kwargs.task.owner.name,\n"
+        "            'taskId': kwargs.task.id,\n"
+        "            'stateValue': kwargs.task.state.value,\n"
+        "            'reviewerName': kwargs.task.reviewer.name,\n"
+        "            'owner': kwargs.task.owner,\n"
+        "        }\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    template = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    python = DocumentState(app_file.as_uri(), "python", app_source, 1)
+    for document in (template, python):
+        document.update(document.source, document.version, project)
+    documents = {template.uri: template, python.uri: python}
+
+    projection = browser_projection(template, _position(template_source, "laneKey", 2), project, documents)
+
+    assert projection is not None
+    # A chain through `Owner | None` proves nothing, so `reviewerName` is any.
+    # The editor widens js_data() literals, so the Enum value is a string.
+    for name, rendered in (
+        ("laneKey", "string"),
+        ("ownerName", "string"),
+        ("taskId", "number"),
+        ("stateValue", "string"),
+        ("reviewerName", "any"),
+        ("owner", "any"),
+    ):
+        assert f"/** @type {{{rendered}}} */\nvar {name};" in projection.source
+    # A whole class instance cannot cross the JSON wire.
+    diagnostics = browser_diagnostics(python, project, documents)
+    assert [(diagnostic.code, "'owner'" in diagnostic.message) for diagnostic in diagnostics] == [
+        ("citry.js-data.unsupported-type", True),
+    ]
+
+
 def test_js_data_namespace_joins_optional_roots_across_shared_template_owners(tmp_path):
     template_source = '<output v-text="shared"></output><output v-text="optional"></output>'
     template_file = tmp_path / "card.html"

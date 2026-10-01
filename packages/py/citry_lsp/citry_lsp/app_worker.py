@@ -21,6 +21,7 @@ from citry._component_introspection import _loaded_python_file
 from citry._linting import _component_lint_variable_owners
 from citry._nested_declarations import _active_nested_class_declarations
 from citry._schema_introspection import _inspect_schema_class
+from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
     python_application_lint_variable_range,
     python_class_asset_resolution_signature,
@@ -181,6 +182,7 @@ def _source_analysis(
                     if selected_class
                     else {"handlers": None, "state": None, "state_resolution": {"resolution_chain": None}}
                 ),
+                "kwargs_classes": _kwargs_classes(selected_class),
                 "template_lint": {
                     "variables": _component_lint_sources(
                         selected_class,
@@ -192,6 +194,16 @@ def _source_analysis(
             }
         )
     return {"version": _SOURCE_ANALYSIS_VERSION, "components": components}
+
+
+def _kwargs_classes(component_class: type | None) -> dict[str, object]:
+    """Copy the classes `js_data()` can read through from the component's Kwargs fields."""
+    if component_class is None:
+        return KwargsWireClasses().to_dict()
+    try:
+        return kwargs_wire_classes(component_class).to_dict()
+    except Exception:  # noqa: BLE001 - project classes may raise anywhere; their chains then stay unknown
+        return KwargsWireClasses().to_dict()
 
 
 def _schema_resolution_chain(

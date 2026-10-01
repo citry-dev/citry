@@ -117,7 +117,7 @@ from citry._html_attribute_values import (
     NAVIGABLE_TARGET_KEYWORDS as _NAVIGABLE_TARGET_KEYWORDS,
 )
 from citry._inline_assets import normalize_inline_asset
-from citry._json_wire import JsonWireField, JsonWireKind, JsonWireType, merge_json_wire_types
+from citry._json_wire import JsonWireField, JsonWireKind, JsonWireType, WireClass, merge_json_wire_types
 from citry._json_wire import json_wire_type_from_annotation as _json_wire_type_from_annotation
 from citry._json_wire import json_wire_type_from_expression as _json_wire_type_from_expression
 from citry._linting import TemplateLintInfo
@@ -4463,12 +4463,25 @@ def json_wire_type_from_expression(
     source: str,
     *,
     member_types: Mapping[str, Mapping[str, JsonWireType]] | None = None,
+    member_annotations: Mapping[str, Mapping[str, str | None]] | None = None,
+    classes: Mapping[str, WireClass] | None = None,
 ) -> JsonWireType:
-    """Infer portable JSON-wire metadata using optional proven members."""
+    """
+    Infer portable JSON-wire metadata using optional proven members.
+
+    ``member_types`` types ``name.attr``. ``member_annotations`` and
+    ``classes`` let a longer chain such as ``kwargs.task.lane`` follow the
+    attribute annotations of the classes it passes through.
+    """
     if type(source) is not str:
         msg = "source must be a str"
         raise TypeError(msg)
-    return _json_wire_type_from_expression(source, member_types=member_types)
+    return _json_wire_type_from_expression(
+        source,
+        member_types=member_types,
+        member_annotations=member_annotations,
+        classes=classes,
+    )
 
 
 def css_data_references(source: str) -> tuple[CssDataReference, ...]:
@@ -4859,6 +4872,7 @@ __all__ = [
     "UnknownComponentUse",
     "VueLintConsumer",
     "VueLintFinding",
+    "WireClass",
     "analyze_browser_component_source",
     "analyze_browser_expression",
     "analyze_css_data_source",
