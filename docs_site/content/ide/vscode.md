@@ -373,8 +373,8 @@ reports these kinds of TypeScript errors:
 
 VS Code's own TypeScript runs the check, so you need no Node.js install, but
 the built-in TypeScript and JavaScript Language Features extension must be
-enabled. When it does not answer, the Citry Formatter output channel says
-so once. The check uses the same types that completion and hover show, and
+enabled. When it does not answer, the workspace folder's Citry output
+channel says so once. The check uses the same types that completion and hover show, and
 it runs after Citry's own diagnostics, so its errors can appear a moment
 later.
 

@@ -147,6 +147,8 @@ _CITRY_OWNED_CODES = frozenset(
 
 # How long one `tsc` run may take before Citry gives up on it.
 _TSC_TIMEOUT_SECONDS = 300.0
+# How long a stopped `tsc` may take to exit.
+_TSC_STOP_SECONDS = 2.0
 
 # One `tsc --pretty false` finding: `file(line,column): error TS1234: message`.
 # A chained message continues on the following lines, indented.
@@ -415,7 +417,10 @@ async def run_typescript_compiler_async(
             # Cancelled or too slow: stop `tsc` before the folder it reads is removed.
             with contextlib.suppress(ProcessLookupError):
                 process.kill()
-            await process.wait()
+            # A child that `tsc` started may keep the output pipes open, so
+            # waiting for them is bounded.
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(process.wait(), timeout=_TSC_STOP_SECONDS)
             if isinstance(exc, asyncio.TimeoutError):
                 msg = f"TypeScript took longer than {timeout:g} seconds ({' '.join(command)})"
                 raise TypeScriptUnavailableError(msg) from exc

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from contextlib import suppress
@@ -148,9 +149,11 @@ class CitryLanguageServer(LanguageServer):
         # The latest TypeScript findings per document and the text they were computed on.
         self.type_findings: dict[str, tuple[types.Diagnostic, ...]] = {}
         self._type_findings_source: dict[str, str] = {}
-        # What each document's findings were checked from, so an unchanged
-        # document is not checked again after every hover.
-        self._type_check_keys: dict[str, tuple[int | None, tuple[str, ...]]] = {}
+        # TypeScript's last raw answer per document and the generated files it
+        # checked, so unchanged files are not checked again after every hover.
+        # The answer is mapped again each time, because Citry's own findings
+        # decide which TypeScript findings are dropped as duplicates.
+        self._type_check_cache: dict[str, tuple[tuple[str, ...], tuple[TypeScriptFinding, ...]]] = {}
 
     def configure(self, params: types.InitializeParams) -> None:
         """Validate initialization options before asynchronous project loading."""
@@ -331,9 +334,10 @@ class CitryLanguageServer(LanguageServer):
         projections = type_check_projections(document, self.project, self.documents)
         if not projections:
             return ()
-        key = (document.version, tuple(projection.source for projection in projections))
-        if self._type_check_keys.get(document.uri) == key and document.uri in self.type_findings:
-            return self.type_findings[document.uri]
+        sources = tuple(projection.source for projection in projections)
+        cached = self._type_check_cache.get(document.uri)
+        if cached is not None and cached[0] == sources:
+            return map_type_check_findings(projections, cached[1], citry_findings)
         if self.type_check_client:
             raw = await self._client_type_check(document, projections)
         else:
@@ -351,7 +355,7 @@ class CitryLanguageServer(LanguageServer):
                 return None
         if raw is None:
             return None
-        self._type_check_keys[document.uri] = key
+        self._type_check_cache[document.uri] = (sources, raw)
         return map_type_check_findings(projections, raw, citry_findings)
 
     def _previous_type_findings(self, document: DocumentState) -> tuple[types.Diagnostic, ...]:
@@ -366,8 +370,9 @@ class CitryLanguageServer(LanguageServer):
         checked = self._type_findings_source.get(document.uri)
         if not findings or checked is None:
             return ()
-        before = checked.splitlines()
-        after = document.source.splitlines()
+        # Split lines as LSP counts them.
+        before = re.split(r"\r\n|\r|\n", checked)
+        after = re.split(r"\r\n|\r|\n", document.source)
         if len(before) != len(after):
             return ()
         return tuple(
@@ -855,7 +860,14 @@ def _type_check_client_capability(options: dict[str, object]) -> bool:
         raise JsonRpcInvalidParams(msg)
     # A newer client may offer a request shape this server does not know; it
     # then runs TypeScript itself rather than refusing to start.
-    return raw["version"] == TYPE_CHECK_CLIENT_VERSION
+    if raw["version"] != TYPE_CHECK_CLIENT_VERSION:
+        logger.warning(
+            "The client offers citry/typeCheck version %s; this server knows version %s, so it runs tsc itself.",
+            raw["version"],
+            TYPE_CHECK_CLIENT_VERSION,
+        )
+        return False
+    return True
 
 
 def _project_with_embedded_capability(
@@ -894,7 +906,7 @@ async def did_close(ls: CitryLanguageServer, params: types.DidCloseTextDocumentP
     closed = ls.documents.pop(params.text_document.uri, None)
     ls.type_findings.pop(params.text_document.uri, None)
     ls._type_findings_source.pop(params.text_document.uri, None)
-    ls._type_check_keys.pop(params.text_document.uri, None)
+    ls._type_check_cache.pop(params.text_document.uri, None)
     await ls.type_analyzer.close_document(params.text_document.uri)
     ls.text_document_publish_diagnostics(types.PublishDiagnosticsParams(params.text_document.uri, ()))
     if closed is not None and closed.language_id == "python":

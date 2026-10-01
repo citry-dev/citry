@@ -503,7 +503,7 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 	clients.set(key, entry);
 	entry.disposables.push(
 		client.onRequest(formatEmbeddedMethod, (params, token) => handleEmbeddedFormatting(params, token)),
-		client.onRequest(typeCheckMethod, (params, token) => handleTypeCheck(params, token)),
+		client.onRequest(typeCheckMethod, (params, token) => handleTypeCheck(params, token, client.outputChannel)),
 	);
 	client.onNotification(statusMethod, (status: ProjectStatus) => {
 		entry.status = status;
@@ -966,7 +966,11 @@ async function handleEmbeddedFormatting(
  * so these never appear in the Problems panel. `null` tells the server that
  * TypeScript could not answer this time, for example while it is starting.
  */
-async function handleTypeCheck(params: unknown, token: vscode.CancellationToken): Promise<TypeCheckResponse | null> {
+async function handleTypeCheck(
+	params: unknown,
+	token: vscode.CancellationToken,
+	output: vscode.OutputChannel,
+): Promise<TypeCheckResponse | null> {
 	if (!validTypeCheckParams(params)) {
 		throw new Error("citry/typeCheck request has an unsupported shape; update the Citry extension.");
 	}
@@ -993,7 +997,7 @@ async function handleTypeCheck(params: unknown, token: vscode.CancellationToken)
 			// once, because otherwise the missing errors would look like clean code.
 			if (!reportedTypeCheckFailure) {
 				reportedTypeCheckFailure = true;
-				formatterOutput.appendLine(
+				output.appendLine(
 					`TypeScript errors are unavailable: VS Code's TypeScript and JavaScript Language Features extension did not answer (${errorMessage(error)}).`,
 				);
 			}

@@ -36,6 +36,7 @@ from citry_lsp.typescript import (
     parse_tsc_output,
     parse_type_check_response,
     run_typescript_compiler,
+    run_typescript_compiler_async,
 )
 
 # The Node workspace installs TypeScript here; the checks that run it skip without it.
@@ -650,6 +651,32 @@ async def test_the_server_runs_tsc_for_an_editor_without_a_typescript_client(tmp
 
     monkeypatch.setattr("citry_lsp.server.run_typescript_compiler_async", forbidden)
     assert await language_server.typescript_diagnostics(document, citry) == found
+    # The reused answer is filtered against Citry's current findings: a Citry
+    # finding on the `'x'` payload now owns that mistake.
+    owner = types.Diagnostic(
+        types.Range(types.Position(10, 30), types.Position(10, 33)), "m", code="citry.browser.undeclared-emit"
+    )
+    again = await language_server.typescript_diagnostics(document, (*citry, owner))
+    assert again is not None
+    assert len(again) == len(found) - 1
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_or_slow_tsc_is_stopped(tmp_path):
+    started = tmp_path / "started"
+    # Stands in for a slow `tsc`; the extra arguments the runner adds are ignored.
+    command = ("/bin/sh", "-c", f"touch {started}; exec sleep 30")
+    task = asyncio.create_task(run_typescript_compiler_async(command, [("js:0", "")], timeout=30))
+    for _attempt in range(100):
+        if started.exists():
+            break
+        await asyncio.sleep(0.02)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=5)
+
+    with pytest.raises(TypeScriptUnavailableError, match="longer than"):
+        await run_typescript_compiler_async(command, [("js:0", "")], timeout=0.2)
 
 
 @pytest.mark.asyncio

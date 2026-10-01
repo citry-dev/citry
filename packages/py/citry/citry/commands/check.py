@@ -168,7 +168,7 @@ def _json_report(report: CheckReport, *, static: bool, app_spec: str | None) -> 
 
 # The code prefix of a TypeScript finding; the rest is TypeScript's number, such as `ts2322`.
 TYPESCRIPT_CODE_PREFIX = "citry.typescript."
-TYPES_SKIPPED_NOTE = "--types did not run TypeScript because the app's registry is unavailable"
+TYPES_SKIPPED_NOTE = "--types did not run TypeScript; it needs an app loaded from 'citry --app module:engine'"
 
 
 def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckReport:
