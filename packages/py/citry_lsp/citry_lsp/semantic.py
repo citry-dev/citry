@@ -672,10 +672,23 @@ def _map_diagnostic_range(
     finding_range: types.Range,
 ) -> types.Range | None:
     """Map a diagnostic only through one exact copied expression."""
-    start = offset_at_position(diagnostic_document.virtual.source, finding_range.start)
-    end = offset_at_position(diagnostic_document.virtual.source, finding_range.end)
+    source = diagnostic_document.virtual.source
+    start = offset_at_position(source, finding_range.start)
+    end = offset_at_position(source, finding_range.end)
     if start is None or end is None or end < start:
         return None
+    for copied in diagnostic_document.copies:
+        # Each copy sits inside generated `(\n...\n)`. A finding over exactly
+        # those parentheses, such as a value that fails its annotated
+        # assignment, covers the authored expression and nothing else.
+        if (
+            start == copied.combined_start - 2
+            and end == copied.combined_end + 2
+            and source[start : copied.combined_start] == "(\n"
+            and source[copied.combined_end : end] == "\n)"
+        ):
+            start, end = copied.combined_start, copied.combined_end
+            break
     for copied in diagnostic_document.copies:
         if copied.combined_start <= start <= end <= copied.combined_end:
             original_start = copied.original_start + start - copied.combined_start

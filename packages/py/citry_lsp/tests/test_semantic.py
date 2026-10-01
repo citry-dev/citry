@@ -2096,3 +2096,70 @@ async def test_nested_expression_uses_the_registry_parser_recursively(
         _position(template_source, "item.up", len("item.")),
         _position(template_source, "item.up", len("item.up")),
     )
+
+
+@pytest.mark.asyncio
+async def test_semantic_diagnostics_check_c_values_against_their_target_types(tmp_path: Path) -> None:
+    # The child's annotation is postponed and names a class from another
+    # module, so the check must read it where the child declares it.
+    (tmp_path / "models.py").write_text(
+        "from dataclasses import dataclass\n@dataclass\nclass Task:\n    lane: str\n",
+        encoding="utf-8",
+    )
+    template_file = tmp_path / "board.html"
+    template_source = (
+        '<c-TaskCard c-task="1" />'
+        '<c-TaskCard c-task="task" c-title="task.lane" />'
+        '<c-TaskCard c-task="task" c-title="task" />'
+        "<div c-class=\"1\" c-style=\"{'color': 'red'}\"></div>"
+        "<div c-class=\"['a', {'b': task}]\"></div>"
+    )
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from __future__ import annotations\n"
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "from models import Task\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class TaskCard(Component):\n"
+        "    citry = engine\n"
+        "    template = '<p></p>'\n"
+        "    class Kwargs:\n"
+        "        task: Task\n"
+        "        title: str = ''\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    class TemplateData:\n"
+        "        task: Task\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    analyzer = TyAnalyzer(tmp_path)
+    try:
+        findings = await semantic_diagnostics(analyzer, document, project, {document.uri: document})
+    finally:
+        await analyzer.close()
+
+    # Each mismatch marks the authored value; the omitted `title` on the first
+    # tag is not reported here, because it has a default.
+    assert [(item.code, item.range) for item in findings] == [
+        (
+            "citry.python.invalid-assignment",
+            types.Range(_position(template_source, 'c-task="1"', 8), _position(template_source, 'c-task="1"', 9)),
+        ),
+        (
+            "citry.python.invalid-assignment",
+            types.Range(
+                _position(template_source, 'c-title="task"', 9),
+                _position(template_source, 'c-title="task"', 13),
+            ),
+        ),
+        (
+            "citry.python.invalid-assignment",
+            types.Range(_position(template_source, 'c-class="1"', 9), _position(template_source, 'c-class="1"', 10)),
+        ),
+    ]
+    assert findings[0].message == "Object of type `Literal[1]` is not assignable to `Task`"

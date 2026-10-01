@@ -54,6 +54,7 @@ from citry.analysis import (
     TemplatePythonControl,
     TemplatePythonQuery,
     TemplatePythonRoot,
+    TemplatePythonValueType,
     VueLintConsumer,
     analyze_browser_component_source,
     analyze_browser_expression,
@@ -4755,6 +4756,8 @@ def _build_expression_shadows(
     consumers: tuple[_ExpressionShadowConsumer, ...],
     query: TemplatePythonQuery,
     cursor_offset: int,
+    *,
+    value_type: TemplatePythonValueType | None = None,
 ) -> tuple[ExpressionShadow, ...]:
     """Build one query from source facts already proven for every consumer."""
     shadows: list[ExpressionShadow] = []
@@ -4767,6 +4770,7 @@ def _build_expression_shadows(
                 query,
                 source_module=consumer.source_module,
                 source_is_package=consumer.source_file.name == "__init__.py",
+                value_type=value_type,
             )
         else:
             shadow = build_inferred_template_shadow(
@@ -4777,6 +4781,7 @@ def _build_expression_shadows(
                 source_module=consumer.source_module,
                 source_is_package=consumer.source_file.name == "__init__.py",
                 kwargs_type=consumer.kwargs_type,
+                value_type=value_type,
             )
         if shadow is None:
             return ()
@@ -4792,6 +4797,40 @@ def _build_expression_shadows(
             )
         )
     return tuple(shadows)
+
+
+# What `c-class` and `c-style` accept on an HTML element: a string, a mapping,
+# or a list of those, nested, or None to leave the attribute out. Mapping
+# values are read for truth or as CSS values, so any value type is accepted.
+_CLASS_OR_STYLE_VALUE_TYPE = TemplatePythonValueType(
+    "str | collections.abc.Mapping[str, object] | collections.abc.Sequence[object] | None"
+)
+
+
+def _query_value_type(query: TemplatePythonQuery, project: ProjectState) -> TemplatePythonValueType | None:
+    """
+    Return the type a `c-*` attribute value must have, or `None` when nothing is proven.
+
+    On a component tag, the value is a keyword argument, so it must match the
+    child's `Kwargs` field annotation. A missing or unknown input is reported
+    by the template's own input rules instead. On an HTML element, `c-class`
+    and `c-style` take the structured values Citry renders.
+    """
+    if query.attribute_target is None:
+        return None
+    tag, name = query.attribute_target
+    lowered = tag.lower()
+    if not lowered.startswith("c-") or lowered == "c-element":
+        return _CLASS_OR_STYLE_VALUE_TYPE if name in {"class", "style"} else None
+    catalog = project.catalog
+    component = catalog.get_tag(tag) if catalog is not None else None
+    # A built-in tag such as `<c-trans>` reads its attributes itself.
+    if component is None or component.builtin or component.schemas.kwargs.kind != "fields":
+        return None
+    field = next((item for item in component.schemas.kwargs.fields if item.name == name), None)
+    if field is None or field.type_display is None or field.type_fidelity != "normalized":
+        return None
+    return TemplatePythonValueType(field.type_display, field.source_module)
 
 
 def _query_contains_named_expression(query: TemplatePythonQuery) -> bool:
@@ -4985,7 +5024,8 @@ def all_expression_shadows(
                 continue
             mapped = parsed.region.source_map.map_range(query.start_index, query.start_index)
             position = types.Position(mapped.start.line, mapped.start.character)
-            shadows = _build_expression_shadows(consumers, query, 0)
+            # Diagnostics also check a `c-*` value against the type its target takes.
+            shadows = _build_expression_shadows(consumers, query, 0, value_type=_query_value_type(query, project))
             if shadows:
                 groups.append(ExpressionShadowGroup(position, shadows))
             if has_walrus:

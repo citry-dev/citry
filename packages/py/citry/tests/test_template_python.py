@@ -9,6 +9,7 @@ from citry.analysis import (
     TemplatePythonControl,
     TemplatePythonQuery,
     TemplatePythonRoot,
+    TemplatePythonValueType,
     build_inferred_template_shadow,
     build_schema_template_shadow,
     template_python_queries,
@@ -663,3 +664,72 @@ def test_shadow_declines_ambiguous_or_decorated_source_owners() -> None:
         is None
     )
     assert build_schema_template_shadow("class Card:\n    pass\n", "Card[TemplateData]", roots, query) is None
+
+
+def test_c_attribute_queries_name_their_target() -> None:
+    source = '<c-TaskCard c-task="task" c-if="show" /><div c-class="classes" title="x">{{ label }}</div>'
+
+    assert _query(source, 'c-task="ta').attribute_target == ("c-TaskCard", "task")
+    assert _query(source, 'c-class="cla').attribute_target == ("div", "class")
+    # Control attributes and interpolations have no attribute to type.
+    assert _query(source, 'c-if="sh').attribute_target is None
+    assert _query(source, "{{ lab").attribute_target is None
+
+
+def _checked_shadow(value_type: TemplatePythonValueType, *, source_module: str = "app.board") -> str:
+    source = '<c-TaskCard c-task="task" />'
+    shadow = build_schema_template_shadow(
+        "class Board:\n    class TemplateData:\n        task: int\n",
+        "Board.TemplateData",
+        (TemplatePythonRoot("task", "always", "attribute"),),
+        _query(source, 'c-task="ta'),
+        source_module=source_module,
+        value_type=value_type,
+    )
+    assert shadow is not None
+    # The authored value is still copied exactly once, inside the assignment.
+    assert [shadow.source[copy.shadow_start : copy.shadow_end] for copy in shadow.copies] == ["task"]
+    return shadow.source
+
+
+def test_value_check_assigns_the_value_to_an_annotated_name() -> None:
+    source = _checked_shadow(TemplatePythonValueType("app.store.Task | None", "app.cards"))
+
+    assert "    import app.store as __citry_checked_type_0\n" in source
+    assert "    __citry_checked_value: __citry_checked_type_0.Task | None = (\ntask\n)" in source
+    ast.parse(source)
+
+
+def test_value_check_reads_bare_names_from_their_module_and_typing() -> None:
+    source = _checked_shadow(TemplatePythonValueType("Literal['sm', 'md'] | Sequence[Task]", "app.cards"))
+
+    assert "import typing as __citry_checked_type_0" in source
+    assert "import app.cards as __citry_checked_type_1" in source
+    assert (
+        "__citry_checked_value: __citry_checked_type_0.Literal['sm', 'md'] | "
+        "__citry_checked_type_0.Sequence[__citry_checked_type_1.Task] = (\ntask\n)"
+    ) in source
+
+
+def test_value_check_keeps_names_from_the_copied_module_bare() -> None:
+    # The generated code is a copy of `app.board`, so importing the real
+    # module would name a different class than the copied value has.
+    source = _checked_shadow(TemplatePythonValueType("app.board._Registry", "app.cards"))
+
+    assert "__citry_checked_value: _Registry = (\ntask\n)" in source
+    assert "import app.board" not in source
+
+
+@pytest.mark.parametrize(
+    "value_type",
+    [
+        # A bare name with no module to read it from proves nothing.
+        TemplatePythonValueType("Task", None),
+        # A call is not an annotation.
+        TemplatePythonValueType("make_type()", "app.cards"),
+    ],
+)
+def test_value_check_is_skipped_when_the_annotation_cannot_be_resolved(value_type) -> None:
+    source = _checked_shadow(value_type)
+
+    assert "__citry_checked_value" not in source

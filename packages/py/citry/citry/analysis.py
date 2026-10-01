@@ -139,6 +139,7 @@ from citry._template_python import ShadowPythonSourceCopy as _ShadowPythonSource
 from citry._template_python import TemplatePythonControl as _TemplatePythonControl
 from citry._template_python import TemplatePythonQuery as _TemplatePythonQuery
 from citry._template_python import TemplatePythonRoot as _TemplatePythonRoot
+from citry._template_python import TemplatePythonValueType as _TemplatePythonValueType
 from citry._template_python import build_inferred_template_shadow as _build_inferred_template_shadow
 from citry._template_python import build_schema_template_shadow as _build_schema_template_shadow
 from citry._template_python import template_python_queries as _template_python_queries
@@ -181,6 +182,7 @@ UNKNOWN_TEMPLATE_VARIABLE_CODE = TEMPLATE_UNKNOWN_VARIABLE
 TemplatePythonControl = _TemplatePythonControl
 TemplatePythonQuery = _TemplatePythonQuery
 TemplatePythonRoot = _TemplatePythonRoot
+TemplatePythonValueType = _TemplatePythonValueType
 ShadowPythonCopy = _ShadowPythonCopy
 ShadowPythonDocument = _ShadowPythonDocument
 ShadowPythonSourceCopy = _ShadowPythonSourceCopy
@@ -1707,6 +1709,7 @@ def build_inferred_template_shadow(
     source_module: str | None = None,
     source_is_package: bool = False,
     kwargs_type: tuple[str, str] | None = None,
+    value_type: TemplatePythonValueType | None = None,
 ) -> ShadowPythonDocument | None:
     """
     Build analyzer input from one statically accepted ``template_data`` method.
@@ -1719,6 +1722,8 @@ def build_inferred_template_shadow(
         source_module: Importable module name used to mirror relative imports.
         source_is_package: Whether that module is implemented by ``__init__.py``.
         kwargs_type: Optional module and qualified name for typed ``Kwargs``.
+        value_type: Optional type the query's value must have, such as the
+            child component input a ``c-*`` value sets.
 
     Returns:
         Generated Python plus exact source mappings, or ``None`` when the
@@ -1733,6 +1738,7 @@ def build_inferred_template_shadow(
         source_module=source_module,
         source_is_package=source_is_package,
         kwargs_type=kwargs_type,
+        value_type=value_type,
     )
 
 
@@ -1744,6 +1750,7 @@ def build_schema_template_shadow(
     *,
     source_module: str | None = None,
     source_is_package: bool = False,
+    value_type: TemplatePythonValueType | None = None,
 ) -> ShadowPythonDocument | None:
     """
     Build analyzer input from one statically resolved ``TemplateData`` schema.
@@ -1755,6 +1762,8 @@ def build_schema_template_shadow(
         query: Authored expression and its lexical template controls.
         source_module: Importable module name used to mirror relative imports.
         source_is_package: Whether that module is implemented by ``__init__.py``.
+        value_type: Optional type the query's value must have, such as the
+            child component input a ``c-*`` value sets.
 
     Returns:
         Generated Python plus exact source mappings, or ``None`` when the
@@ -1768,6 +1777,7 @@ def build_schema_template_shadow(
         query,
         source_module=source_module,
         source_is_package=source_is_package,
+        value_type=value_type,
     )
 
 
@@ -4900,6 +4910,7 @@ __all__ = [
     "TemplatePythonControl",
     "TemplatePythonQuery",
     "TemplatePythonRoot",
+    "TemplatePythonValueType",
     "TemplateTagUse",
     "UnknownComponentUse",
     "VueLintConsumer",

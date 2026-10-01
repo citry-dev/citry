@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import builtins
 import copy
 import re
 from dataclasses import dataclass
@@ -13,6 +14,9 @@ from citry_core.template_parser import HtmlAttrKind, TemplateElement, parse_temp
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+# A type display may use these names without importing them.
+_BUILTIN_NAMES = frozenset(dir(builtins))
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +50,9 @@ class TemplatePythonQuery:
         host_kind: Template construct that owns the expression.
         controls: Enclosing template controls in lexical order.
         free_names: Parser-proven free root names used by the expression.
+        attribute_target: For a ``c-*`` attribute value, the tag as written
+            and the attribute name without its ``c-`` prefix, such as
+            ``("c-TaskCard", "task")``; otherwise ``None``.
 
     """
 
@@ -55,6 +62,7 @@ class TemplatePythonQuery:
     host_kind: Literal["interpolation", "attribute", "loop"]
     controls: tuple[TemplatePythonControl, ...] = ()
     free_names: tuple[str, ...] = ()
+    attribute_target: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +111,28 @@ class TemplatePythonRoot:
                 msg = f"Invalid template Python root type display: {self.type_display!r}"
                 raise ValueError(msg)
             object.__setattr__(self, "type_display", display)
+
+
+@dataclass(frozen=True, slots=True)
+class TemplatePythonValueType:
+    """
+    The type an attribute value must have, so the analyzer checks the value against it.
+
+    A ``c-task="..."`` value on ``<c-TaskCard>`` must match the child's
+    ``Kwargs.task`` annotation. The generated Python assigns the authored
+    value to a variable annotated with this type, so ty reports a mismatch
+    on the value itself.
+
+    Attributes:
+        annotation: A Python annotation written the way Citry formats schema
+            types, such as ``app.store.Task | None`` or ``Task``.
+        module: The module whose names an unqualified annotation uses, such
+            as the module that declares the child's ``Kwargs``.
+
+    """
+
+    annotation: str
+    module: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,8 +231,14 @@ def build_inferred_template_shadow(
     source_module: str | None = None,
     source_is_package: bool = False,
     kwargs_type: tuple[str, str] | None = None,
+    value_type: TemplatePythonValueType | None = None,
 ) -> ShadowPythonDocument | None:
-    """Copy one proven ``template_data`` method and evaluate the query at each return."""
+    """
+    Copy one proven ``template_data`` method and evaluate the query at each return.
+
+    With ``value_type``, the query's value is also assigned to a name with
+    that annotation, so ty checks it, such as a component input's type.
+    """
     tree = _parsed_module(module_source)
     if tree is None:
         return None
@@ -234,8 +270,9 @@ def build_inferred_template_shadow(
         module_source,
         roots,
         query,
-        generated_inputs=(source_module or "", *(kwargs_type or ())),
+        generated_inputs=(source_module or "", *(kwargs_type or ()), *_value_type_inputs(value_type)),
     )
+    value_check = _value_check(value_type, module_source, roots, query, source_module=source_module)
     duplicate = copy.deepcopy(methods[0])
     if _return_affected_by_finally(duplicate):
         # A finally return can replace an earlier value after that earlier
@@ -267,6 +304,7 @@ def build_inferred_template_shadow(
         type_references,
         placeholder,
         direct_attribute_owner=kwargs_type,
+        value_check=value_check,
     )
     duplicate.body = transformer.transform_body(duplicate.body)
     if transformer.return_count == 0:
@@ -309,8 +347,14 @@ def build_schema_template_shadow(
     *,
     source_module: str | None = None,
     source_is_package: bool = False,
+    value_type: TemplatePythonValueType | None = None,
 ) -> ShadowPythonDocument | None:
-    """Evaluate a query against fields on one exact authored schema class."""
+    """
+    Evaluate a query against fields on one exact authored schema class.
+
+    With ``value_type``, the query's value is also assigned to a name with
+    that annotation, so ty checks it, such as a component input's type.
+    """
     if not _qualified_identifier(schema_qualname):
         return None
     rewritten_module = _rewritten_module(module_source, source_module, source_is_package=source_is_package)
@@ -321,8 +365,9 @@ def build_schema_template_shadow(
         module_source,
         roots,
         query,
-        generated_inputs=(source_module or "", schema_qualname),
+        generated_inputs=(source_module or "", schema_qualname, *_value_type_inputs(value_type)),
     )
+    value_check = _value_check(value_type, module_source, roots, query, source_module=source_module)
     type_imports, type_references = _root_type_imports(roots, source_module=source_module)
     lines = [
         *type_imports,
@@ -337,7 +382,7 @@ def build_schema_template_shadow(
         )
     )
     lines.extend(_unknown_binding_lines(roots, query, indent="    "))
-    lines.extend(_query_lines(query, indent="    ", placeholder=placeholder))
+    lines.extend(_query_lines(query, indent="    ", placeholder=placeholder, value_check=value_check))
     generated = "\n".join(lines)
     shadow = f"{shadow_module_source}\n\n{generated}\n"
     return _replace_query_placeholders(
@@ -360,8 +405,10 @@ class _ReturnQueryTransformer(ast.NodeTransformer):
         placeholder: str,
         *,
         direct_attribute_owner: tuple[str, str] | None,
+        value_check: tuple[list[str], str] | None = None,
     ) -> None:
         self.roots = roots
+        self.value_check = value_check
         self.query = query
         self.type_imports = type_imports
         self.type_references = type_references
@@ -408,7 +455,12 @@ class _ReturnQueryTransformer(ast.NodeTransformer):
                         direct_attribute_owner=self.direct_attribute_owner,
                     ),
                     *_unknown_binding_lines(self.roots, self.query, indent=""),
-                    *_query_lines(self.query, indent="", placeholder=self.placeholder),
+                    *_query_lines(
+                        self.query,
+                        indent="",
+                        placeholder=self.placeholder,
+                        value_check=self.value_check,
+                    ),
                 ]
             )
         ).body
@@ -660,7 +712,13 @@ def _unknown_binding_lines(
     ]
 
 
-def _query_lines(query: TemplatePythonQuery, *, indent: str, placeholder: str) -> list[str]:
+def _query_lines(
+    query: TemplatePythonQuery,
+    *,
+    indent: str,
+    placeholder: str,
+    value_check: tuple[list[str], str] | None = None,
+) -> list[str]:
     lines: list[str] = []
     current = indent
     for control in query.controls:
@@ -689,8 +747,117 @@ def _query_lines(query: TemplatePythonQuery, *, indent: str, placeholder: str) -
             for name in control.names:
                 lines.append(f"{current}from typing import Any as __citry_Any")
                 lines.append(f"{current}{name}: __citry_Any = None")
-    lines.append(f"{current}{placeholder}")
+    if value_check is None:
+        lines.append(f"{current}{placeholder}")
+        return lines
+    # Assigning the value to an annotated name makes ty report a mismatch
+    # over the parenthesized value, which maps back to the authored text.
+    imports, annotation = value_check
+    lines.extend(f"{current}{line}" for line in imports)
+    lines.append(f"{current}{_VALUE_CHECK_PREFIX}_value: {annotation} = {placeholder}")
     return lines
+
+
+# Generated names for a value check. They must not contain the query
+# placeholder, which is replaced by text everywhere it appears.
+_VALUE_CHECK_PREFIX = "__citry_checked"
+
+
+def _value_check(
+    value_type: TemplatePythonValueType | None,
+    module_source: str,
+    roots: tuple[TemplatePythonRoot, ...],
+    query: TemplatePythonQuery,
+    *,
+    source_module: str | None,
+) -> tuple[list[str], str] | None:
+    """Return the imports and annotation for a value check, or ``None`` to check nothing."""
+    if value_type is None:
+        return None
+    occupied = (
+        module_source,
+        query.source,
+        *(control.source for control in query.controls),
+        *(root.name for root in roots),
+        value_type.annotation,
+        value_type.module or "",
+    )
+    # A user name that starts the same way could be shadowed, so skip the check.
+    if any(_VALUE_CHECK_PREFIX in value for value in occupied):
+        return None
+    return _value_check_source(value_type, alias_prefix=f"{_VALUE_CHECK_PREFIX}_type", source_module=source_module)
+
+
+# Names Citry's schema type display takes from `typing` or `collections.abc`.
+_TYPING_DISPLAY_NAMES = frozenset({"Any", "Callable", "Literal", "Mapping", "Optional", "Sequence", "Union"})
+
+
+def _value_check_source(
+    value_type: TemplatePythonValueType,
+    *,
+    alias_prefix: str,
+    source_module: str | None,
+) -> tuple[list[str], str] | None:
+    """
+    Rewrite a type display into an annotation that resolves inside generated code.
+
+    A dotted name such as ``app.store.Task`` imports its module under a private
+    alias, and a bare name such as ``Task`` is read from ``value_type.module``,
+    where the annotation was written. Builtins stay as they are. A name from
+    ``source_module`` stays bare: the generated code is a copy of that module,
+    and importing the real module would name a different class.
+    """
+    display = _canonical_type_display(value_type.annotation)
+    if display is None:
+        return None
+    expression = ast.parse(display, mode="eval")
+    aliases: dict[str, str] = {}
+    unresolved = False
+
+    def alias(module: str) -> str:
+        return aliases.setdefault(module, f"{alias_prefix}_{len(aliases)}")
+
+    class Qualifier(ast.NodeTransformer):
+        def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+            parts: list[str] = [node.attr]
+            owner: ast.expr = node.value
+            while isinstance(owner, ast.Attribute):
+                parts.append(owner.attr)
+                owner = owner.value
+            if not isinstance(owner, ast.Name):
+                return self.generic_visit(node)
+            parts.append(owner.id)
+            parts.reverse()
+            module = ".".join(parts[:-1])
+            if module == source_module:
+                return ast.Name(parts[-1], ast.Load())
+            return ast.Attribute(ast.Name(alias(module), ast.Load()), parts[-1], ast.Load())
+
+        def visit_Name(self, node: ast.Name) -> ast.AST:
+            nonlocal unresolved
+            if node.id in _BUILTIN_NAMES:
+                return node
+            if node.id in _TYPING_DISPLAY_NAMES:
+                return ast.Attribute(ast.Name(alias("typing"), ast.Load()), node.id, ast.Load())
+            if value_type.module is None or not _qualified_identifier(value_type.module):
+                unresolved = True
+                return node
+            if value_type.module == source_module:
+                return node
+            return ast.Attribute(ast.Name(alias(value_type.module), ast.Load()), node.id, ast.Load())
+
+    rewritten = Qualifier().visit(expression)
+    if unresolved or not all(_qualified_identifier(module) for module in aliases):
+        return None
+    imports = [f"import {module} as {name}" for module, name in aliases.items()]
+    return imports, ast.unparse(rewritten)
+
+
+def _value_type_inputs(value_type: TemplatePythonValueType | None) -> tuple[str, ...]:
+    """Return the value type's text, so the generated names avoid it too."""
+    if value_type is None:
+        return ()
+    return (value_type.annotation, value_type.module or "")
 
 
 def _query_placeholder(
@@ -1180,6 +1347,16 @@ def _query_in_node(
             host_kind = "loop"
         elif not _is_condition_attribute(node, name):
             attr_controls = body_controls
+        # A `c-*` value that sets an attribute or a component input can be
+        # checked against that target's type; control attributes cannot.
+        target = (
+            (node.start_tag.name.content, name.removeprefix("c-"))
+            if attr.kind == HtmlAttrKind.Expression
+            and host_kind == "attribute"
+            and name.startswith("c-")
+            and _attribute_sees_loop(name)
+            else None
+        )
         return TemplatePythonQuery(
             inner.content,
             start,
@@ -1187,6 +1364,7 @@ def _query_in_node(
             host_kind,
             attr_controls,
             _used_names(attr),
+            target,
         )
 
     body = getattr(node, "body", None)

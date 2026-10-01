@@ -46,6 +46,11 @@ Upgrading from 0.5.x? Follow
   (`citry.browser.undeclared-emit`), and warn about a listener such as
   `@drop-tsak` on a child component tag when the child does not declare
   that event (`citry.browser.undeclared-component-event`).
+- `citry check --types` and the editor check each `c-*` value on a
+  component tag against the child's `Kwargs` annotation, so
+  `<c-TaskCard c-task="1">` is an error when `task` is a `Task`. They also
+  check that `c-class` and `c-style` on an HTML element get a string, a
+  dict, a list of those, or `None`.
 - `citry --app module:engine check --types` type-checks component
   JavaScript and Vue template expressions with TypeScript, and Python
   template expressions with ty, and reports each finding at its file,
