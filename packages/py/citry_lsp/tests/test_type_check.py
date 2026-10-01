@@ -867,13 +867,19 @@ async def test_the_server_runs_tsc_for_an_editor_without_a_typescript_client(tmp
 @pytest.mark.asyncio
 async def test_a_cancelled_or_slow_tsc_is_stopped(tmp_path):
     started = tmp_path / "started"
-    # Stands in for a slow `tsc`; the extra arguments the runner adds are ignored.
-    command = ("/bin/sh", "-c", f"touch {started}; exec sleep 30")
+    # Stands in for a slow `tsc`. A Python child runs on every platform the
+    # tests do, and it reads only its first argument, so the arguments the
+    # runner adds after it are ignored.
+    slow_tsc = "import pathlib, sys, time; pathlib.Path(sys.argv[1]).touch(); time.sleep(30)"
+    command = (sys.executable, "-c", slow_tsc, str(started))
     task = asyncio.create_task(run_typescript_compiler_async(command, [("js:0", "")], timeout=30))
-    for _attempt in range(100):
+    # A cold Python start can be slow on a CI runner, so allow it a while;
+    # the test is about stopping a running child, so it must have started.
+    for _attempt in range(750):
         if started.exists():
             break
         await asyncio.sleep(0.02)
+    assert started.exists()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(task, timeout=5)
