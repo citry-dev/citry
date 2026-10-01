@@ -67,9 +67,9 @@ As such, the Rust crates are ideal for:
 - **UV**: Fast Python package installer (recommended)
 - **Node.js and [pnpm](https://pnpm.io/)**: needed for the gate's Node-based
   phases: the pinned `pyright`, the `citry-client` TypeScript package, the docs
-  playground bundle, and the VS Code language extension. A current LTS Node is
-  fine; run `pnpm install` once after cloning. pnpm is the repo's Node package
-  manager: the committed lockfile is `pnpm-lock.yaml`, CI installs from it with
+  playground bundle, the VS Code language extension, and the Citry UI asset
+  check. A current LTS Node is fine; run `pnpm install` once after cloning.
+  pnpm is the repo's Node package manager: the committed lockfile is `pnpm-lock.yaml`, CI installs from it with
   `pnpm install --frozen-lockfile`, and one root install covers every member in
   `pnpm-workspace.yaml`, including `docs_site/_internal/frontend`, `packages/editors/*`,
   and `packages/js/*`. npm is not a substitute here because it does not read
@@ -495,7 +495,10 @@ ratchet immediately below the current measured runtime coverage; raise it as
 focused tests recover headroom.
 The `pyright` phase runs the pinned pyright from `node_modules` alongside mypy.
 The package-local Node phases run `pnpm run check` for `citry-client`, the docs
-playground, and the VS Code language extension. The `vue render parity` phase
+playground, and the VS Code language extension. The `citry-ui assets` phase
+fails when a committed, minified Citry UI file (a `runtime.min.js` or
+production CSS) does not match the readable source it is built from. The
+`vue render parity` phase
 runs Node with the Vue that `citry-client` pins. One root `pnpm install` covers
 all of them, the same way `uv sync` installs the Python tools.
 

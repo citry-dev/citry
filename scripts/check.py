@@ -215,6 +215,12 @@ def _phases(profile: CheckProfile = "full", *, parity_corpus: Path) -> list[tupl
             "vscode-extension",
             ["pnpm", "--dir", "packages/editors/vscode", "run", "check"],
         ),
+        # Citry UI commits minified `*.min.js` and CSS files built from
+        # readable `*.source.*` files, and an edit or merge that changes a
+        # source without rebuilding ships a stale file. The check takes about
+        # a second, so it runs with the other Node phases and catches this
+        # before the browser CI lane.
+        ("citry-ui assets", ["pnpm", "run", "citry-ui:check-assets"]),
         # Real development-server supervisors are sensitive to CPU starvation,
         # so exercise them before the four-worker portable suite starts.
         ("pytest reload servers", _reload_server_pytest_command()),
