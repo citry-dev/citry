@@ -29,13 +29,13 @@ def switch_states_component(app: Citry) -> type[Component]:
               <c-CSwitch checked disabled>Locked ventilation</c-CSwitch>
               <c-CSwitch invalid>Faulted irrigation</c-CSwitch>
               <c-for each="size in sizes">
-                <c-CSwitch c-size="size" checked>{{ size }} size</c-CSwitch>
+                <c-CSwitch #c-key="size" c-size="size" checked>{{ size }} size</c-CSwitch>
               </c-for>
               <c-CSwitch label_pos="start" checked>Label first</c-CSwitch>
             </div>
-            <div x-data="{checked: true}" data-quality-state="controlled">
+            <div data-quality-state="controlled">
               <c-CSwitch
-                $c-props="{checked}"
+                :checked="checked"
                 @input="checked = $event.target.checked"
               >Controlled lighting</c-CSwitch>
               <button type="button" @click="checked = !checked">Change setting</button>
@@ -61,6 +61,15 @@ def switch_states_component(app: Citry) -> type[Component]:
               <c-CSwitch checked>Linen brand</c-CSwitch>
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                checked: true
+              };
+            },
+          });
         """
 
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002

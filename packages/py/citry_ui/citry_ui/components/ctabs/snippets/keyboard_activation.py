@@ -8,24 +8,21 @@ class TabsKeyboardActivation(Component):
     template = """
       <section
         class="tabs-activation"
-        x-data="{ automaticValue: 'orbit', manualValue: 'orbit' }"
       >
         <article class="tabs-activation__card">
           <header>
             <p class="tabs-eyebrow">Arrow keys select immediately</p>
             <h2>Automatic</h2>
-            <output x-text="automaticValue">orbit</output>
+            <output v-text="automaticValue">orbit</output>
           </header>
 
           <c-CTabs
             default_value="orbit"
             aria_label="Automatic probe data"
             activation="automatic"
-            $c-props="{
-              onValueChange: (value) => {
+            :onValueChange="(value) => {
                 automaticValue = value;
-              },
-            }"
+              }"
           >
             <c-CTab value="orbit">
               Orbit
@@ -53,18 +50,16 @@ class TabsKeyboardActivation(Component):
           <header>
             <p class="tabs-eyebrow">Arrow keys move focus; Enter or Space selects</p>
             <h2>Manual</h2>
-            <output x-text="manualValue">orbit</output>
+            <output v-text="manualValue">orbit</output>
           </header>
 
           <c-CTabs
             default_value="orbit"
             aria_label="Manual probe data"
             activation="manual"
-            $c-props="{
-              onValueChange: (value) => {
+            :onValueChange="(value) => {
                 manualValue = value;
-              },
-            }"
+              }"
           >
             <c-CTab value="orbit">
               Orbit
@@ -88,6 +83,15 @@ class TabsKeyboardActivation(Component):
           </c-CTabs>
         </article>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            automaticValue: 'orbit', manualValue: 'orbit'
+          };
+        },
+      });
     """
 
     css = """

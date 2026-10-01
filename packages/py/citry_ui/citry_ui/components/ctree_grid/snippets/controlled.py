@@ -18,7 +18,16 @@ class TreeGridControlled(Component):
             ],
         }
 
-    template = """<div x-data="{open:[],chosen:[]}"><c-CTreeGrid c-columns="columns" c-rows="rows" label="Controlled tree" selection="multiple" $c-props="{expanded:open,selected:chosen,onExpandedChange:value=>open=value,onSelectionChange:value=>chosen=value}" /></div>"""
+    template = """<div ><c-CTreeGrid c-columns="columns" c-rows="rows" label="Controlled tree" selection="multiple" :expanded="open" :selected="chosen" :onExpandedChange="value=>open=value" :onSelectionChange="value=>chosen=value" /></div>"""
+    js = """
+      $component({
+        data() {
+          return {
+            open:[],chosen:[]
+          };
+        },
+      });
+    """
 
 
 preview = TreeGridControlled()

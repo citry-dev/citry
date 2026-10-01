@@ -51,10 +51,10 @@ For example, `remove_value="delete:member-17"` makes the Remove button submit
 whole string is simply the application-defined value of the activated submit
 button.
 
-## Handle requests in Alpine
+## Handle requests in Vue
 
-Without `action_name`, controls use `type=button`. Pass `onAction` through
-`$c-props` to receive `{action, value, index, toIndex, sourceEvent}` and update
+Without `action_name`, controls use `type=button`. Pass `onAction` with a
+native Vue callback prop to receive `{action, value, index, toIndex, sourceEvent}` and update
 application state or send a Citry Event.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cform_collection/snippets/client_actions.py" title="Apply client collection requests" />

@@ -16,6 +16,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._validation import reject_owned_attrs, validate_optional_boolean
@@ -51,10 +52,8 @@ _ROOT_OWNED_ATTRS = frozenset(
         "value",
     }
 )
-_ROOT_DYNAMIC_OWNED_ATTRS = _ROOT_OWNED_ATTRS | {"aria-describedby", "aria-errormessage", "form"}
 _OPTION_OWNED_ATTRS = frozenset({"data-citry-key", "disabled", "label", "selected", "value"})
 _GROUP_OWNED_ATTRS = frozenset({"disabled", "label"})
-_OWNERSHIP_DIRECTIVES = frozenset({"x-bind", "x-html", "x-model", "x-modelable", "x-text"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,38 +164,20 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.lower()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(
     input_name: str,
     attrs: dict[str, object],
     *,
     owned: frozenset[str],
-    dynamic_owned: frozenset[str] | None = None,
 ) -> None:
     component_name = f"CNativeSelect {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
-    dynamic_targets = dynamic_owned or owned
+    # A Vue directive could rebind the value, options, or Form wiring this
+    # component renders itself, so none may arrive through Python data.
+    reject_vue_directive_attrs(attrs, component_name.removesuffix(" attrs"))
     for key in attrs:
-        normalized = key.lower()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.lower().startswith(_RUNTIME_PREFIXES):
             msg = f"{component_name} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"{component_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in dynamic_targets:
-            msg = f"{component_name} cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
 
 
@@ -327,12 +308,7 @@ class CNativeSelect(LibraryComponent):
                 msg = f"CNativeSelect value {value!r} identifies a disabled option."
                 raise ValueError(msg)
         attrs = _copy_attrs("attrs", kwargs.attrs)
-        _validate_attrs(
-            "attrs",
-            attrs,
-            owned=_ROOT_OWNED_ATTRS,
-            dynamic_owned=_ROOT_DYNAMIC_OWNED_ATTRS,
-        )
+        _validate_attrs("attrs", attrs, owned=_ROOT_OWNED_ATTRS)
         self._native_select_name = name
         self._native_select_id = element_id
         return _NormalizedSelect(
@@ -458,7 +434,7 @@ class CNativeSelect(LibraryComponent):
             "variant": variant,
             "size": size,
             "empty": empty,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "field_supports_required": ("true" if supports_required else "false") if field is not None else None,
             "field_supports_readonly": "false" if field is not None else None,
             "attrs": caller_attrs,
@@ -472,25 +448,25 @@ class CNativeSelect(LibraryComponent):
         normalized = self._native_select_snapshot
         field = self.inject(FIELD_CONTEXT_KEY, None)
         return {
-            "value": normalized.value,
+            "serverValue": normalized.value,
             "hasPlaceholder": normalized.placeholder is not None,
-            "required": bool(field.required)
+            "serverRequired": bool(field.required)
             if field is not None
             else kwargs.required
             if kwargs.required is not None
             else False,
-            "disabled": bool(field.disabled)
+            "serverDisabled": bool(field.disabled)
             if field is not None
             else kwargs.disabled
             if kwargs.disabled is not None
             else False,
-            "invalid": bool(field.invalid)
+            "serverInvalid": bool(field.invalid)
             if field is not None
             else kwargs.invalid
             if kwargs.invalid is not None
             else False,
-            "variant": _plain_choice("variant", kwargs.variant, _VARIANTS),
-            "size": _plain_choice("size", kwargs.size, _SIZES),
+            "serverVariant": _plain_choice("variant", kwargs.variant, _VARIANTS),
+            "serverSize": _plain_choice("size", kwargs.size, _SIZES),
             "externalDescribedBy": self._native_select_external_described_by,
             "externalErrorMessage": self._native_select_external_error_message,
         }
@@ -506,10 +482,10 @@ class CNativeSelect(LibraryComponent):
         c-aria-describedby="aria_describedby"
         c-aria-errormessage="aria_errormessage"
         c-autocomplete="autocomplete"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
-        c-data-empty="empty"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-empty="'' if empty else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-citry-field-control="field_control"
@@ -566,10 +542,19 @@ class CNativeSelect(LibraryComponent):
           variant: {},
           size: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const select = els[0];
-          const field = inject(Symbol.for("citry-ui:field"), null);
-          const form = inject(Symbol.for("citry-ui:form"), null);
+        inject: {
+          fieldService: {from: Symbol.for("citry-ui:field"), default: null},
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const select = component.$el;
+          if (!(select instanceof HTMLSelectElement)) {
+            throw new Error("[citry-ui] CNativeSelect settled anatomy is invalid.");
+          }
+          const data = component;
+          const props = component.$props;
+          const field = component.fieldService;
+          const form = component.formService;
           const handoffKey = Symbol.for("citry-ui:native-select-handoff");
           const placeholder = data.hasPlaceholder ? select.options[0] : null;
           const allowedValues = {
@@ -702,8 +687,8 @@ class CNativeSelect(LibraryComponent):
             }
           };
           const structuralFallback = () => {
-            if (data.value !== null) {
-              const incoming = valueTarget(data.value);
+            if (data.serverValue !== null) {
+              const incoming = valueTarget(data.serverValue);
               if (incoming && targetAvailable(incoming)) {
                 return incoming;
               }
@@ -733,13 +718,14 @@ class CNativeSelect(LibraryComponent):
             return fallback;
           };
           const resolveChoice = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const serverName = `server${name[0].toUpperCase()}${name.slice(1)}`;
+            const value = props[name] === undefined ? data[serverName] : props[name];
             if (allowedValues[name].includes(value)) {
               invalidEpisodes.delete(name);
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return data[serverName];
           };
           const idrefs = (...values) => {
             const result = [];
@@ -794,7 +780,7 @@ class CNativeSelect(LibraryComponent):
               disabled = field.disabled;
               externalInvalid = field.invalid;
             } else {
-              const requestedRequired = resolveBoolean("required", data.required);
+              const requestedRequired = resolveBoolean("required", data.serverRequired);
               if (requestedRequired && !data.hasPlaceholder) {
                 reportUnsupportedRequired();
                 required = false;
@@ -802,8 +788,8 @@ class CNativeSelect(LibraryComponent):
                 invalidEpisodes.delete("required:placeholder");
                 required = requestedRequired;
               }
-              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
-              externalInvalid = resolveBoolean("invalid", data.invalid);
+              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.serverDisabled);
+              externalInvalid = resolveBoolean("invalid", data.serverInvalid);
             }
             const invalid = externalInvalid || nativeInvalid;
             select.required = required;
@@ -910,11 +896,11 @@ class CNativeSelect(LibraryComponent):
           select.addEventListener("input", onInput);
           select.addEventListener("change", onChange);
           nativeForm?.addEventListener("reset", onReset);
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             applyState();
             clearNativeInvalidWhenValid();
           });
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             applyLatestValueProp();
           });
           select.setAttribute("data-citry-native-select-initialized", "");

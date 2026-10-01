@@ -92,18 +92,22 @@ def _page() -> str:
         citry = app
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Infinite Scroll evidence</title><c-css /></head>
-          <body x-data>
-            <form @submit.prevent="$store.more.submits.push($event.submitter.value)">
+          <body>
+            <form @submit.prevent="state.more.submits.push($event.submitter.value)">
               <c-CInfiniteScroll id="native" aria_label="Feed" action_name="feed_action" c-auto="False"
-                $c-props="{loading:$store.more.loading,error:$store.more.error,hasMore:$store.more.hasMore,onLoadMore:(detail)=>$store.more.requests.push(detail.reason)}">
+                :loading="state.more.loading"
+                :error="state.more.error"
+                :hasMore="state.more.hasMore"
+                :onLoadMore="(detail)=>state.more.requests.push(detail.reason)">
                 <ol><li>Result one</li></ol>
               </c-CInfiniteScroll>
             </form>
             <c-CInfiniteScroll id="automatic" aria_label="Automatic feed"
-              $c-props="{error:$store.more.automaticError,onLoadMore:(detail)=>$store.more.automatic.push(detail.reason)}"><p>Visible result</p></c-CInfiniteScroll>
+              :error="state.more.automaticError"
+              :onLoadMore="(detail)=>state.more.automatic.push(detail.reason)"><p>Visible result</p></c-CInfiniteScroll>
           </body></html>
         """
-        js = "Alpine.store('more',{loading:false,error:false,hasMore:true,requests:[],automatic:[],automaticError:false,submits:[]});"
+        js = "$component({data(){const state=Citry.vue.reactive({loading:false,error:false,hasMore:true,requests:[],automatic:[],automaticError:false,submits:[]});window.__more=state;return {state:{more:state}};}});"
 
     return str(Page())
 
@@ -122,23 +126,23 @@ def test_button_reactive_states_native_submit_and_cleanup(page: Any) -> None:
     errors = _load(page)
     root = page.locator("#native")
     root.locator('[data-citry-ui-part="action"]').click()
-    assert page.evaluate("Alpine.store('more').requests") == ["button"]
-    assert page.evaluate("Alpine.store('more').submits") == ["load-more"]
+    assert page.evaluate("window.__more.requests") == ["button"]
+    assert page.evaluate("window.__more.submits") == ["load-more"]
     root.locator("ol").evaluate("list => list.append(document.createElement('li'))")
     page.wait_for_timeout(0)
     root.locator('[data-citry-ui-part="action"]').click()
-    assert page.evaluate("Alpine.store('more').requests") == ["button", "button"]
-    assert page.evaluate("Alpine.store('more').submits") == ["load-more", "load-more"]
-    page.evaluate("Alpine.store('more').error=true")
+    assert page.evaluate("window.__more.requests") == ["button", "button"]
+    assert page.evaluate("window.__more.submits") == ["load-more", "load-more"]
+    page.evaluate("window.__more.error=true")
     page.wait_for_function("document.querySelector('#native').hasAttribute('data-error')")
     root.locator('[data-citry-ui-part="action"]').click()
-    assert page.evaluate("Alpine.store('more').requests") == ["button", "button", "retry"]
-    page.evaluate("Alpine.store('more').loading=true")
+    assert page.evaluate("window.__more.requests") == ["button", "button", "retry"]
+    page.evaluate("window.__more.loading=true")
     page.wait_for_function(
         "document.querySelector('#native [data-citry-ui-part=content]').getAttribute('aria-busy')==='true'"
     )
     assert root.locator('[data-citry-ui-part="action"]').is_hidden()
-    page.evaluate("Object.assign(Alpine.store('more'),{loading:false,error:false,hasMore:false})")
+    page.evaluate("Object.assign(window.__more,{loading:false,error:false,hasMore:false})")
     page.wait_for_function("document.querySelector('#native').hasAttribute('data-end')")
     root.evaluate("element => element.remove()")
     page.wait_for_timeout(30)
@@ -147,14 +151,14 @@ def test_button_reactive_states_native_submit_and_cleanup(page: Any) -> None:
 
 def test_intersection_environment_and_axe(page: Any) -> None:
     errors = _load(page)
-    page.wait_for_function("Alpine.store('more').automatic.length > 0")
-    assert page.evaluate("Alpine.store('more').automatic") == ["intersection"]
-    page.evaluate("Alpine.store('more').automaticError=true")
+    page.wait_for_function("window.__more.automatic.length > 0")
+    assert page.evaluate("window.__more.automatic") == ["intersection"]
+    page.evaluate("window.__more.automaticError=true")
     page.wait_for_function("document.querySelector('#automatic').hasAttribute('data-error')")
     page.wait_for_timeout(100)
-    assert page.evaluate("Alpine.store('more').automatic") == ["intersection"]
+    assert page.evaluate("window.__more.automatic") == ["intersection"]
     page.locator("#automatic [data-citry-ui-part=action]").click()
-    assert page.evaluate("Alpine.store('more').automatic") == ["intersection", "retry"]
+    assert page.evaluate("window.__more.automatic") == ["intersection", "retry"]
     page.emulate_media(forced_colors="active", reduced_motion="reduce")
     axe = _root() / "node_modules" / "axe-core" / "axe.min.js"
     page.add_script_tag(path=str(axe))

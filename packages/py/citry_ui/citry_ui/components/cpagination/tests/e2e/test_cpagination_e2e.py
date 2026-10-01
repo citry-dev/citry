@@ -25,14 +25,9 @@ def _pagination_page() -> str:
           <html lang="en">
             <head>
               <meta charset="utf-8" />
-              <script>
-                document.addEventListener("alpine:init", () => {
-                  Alpine.store("paginationTest", {page: 5, details: []});
-                });
-              </script>
               <c-css />
             </head>
-            <body x-data>
+            <body>
               <c-CPagination
                 c-pages="20"
                 c-page="10"
@@ -44,17 +39,21 @@ def _pagination_page() -> str:
                 c-pages="12"
                 c-page="4"
                 c-attrs="{'id': 'controlled'}"
-                $c-props="{
-                  page: $store.paginationTest.page,
-                  onPageChange: (value, detail) => {
-                    $store.paginationTest.details.push(detail);
-                    $store.paginationTest.page = value;
-                  }
+                :page="paginationTest.page"
+                :on-page-change="(value, detail) => {
+                  paginationTest.details.push(detail);
+                  paginationTest.page = value;
                 }"
               />
               <c-CPagination c-pages="8" c-page="3" c-attrs="{'id': 'uncontrolled'}" />
             </body>
           </html>
+        """
+        js = """
+          $component({
+            data() { return {paginationTest: {page: 5, details: []}}; },
+            mounted() { window.__paginationState = this.paginationTest; },
+          });
         """
 
     return str(Page())
@@ -80,10 +79,10 @@ def test_controlled_and_uncontrolled_buttons_update_the_visible_range(page: Any)
     page.wait_for_function("document.querySelector('#controlled [aria-current=page]').dataset.page === '5'")
     assert controlled.locator('[aria-current="page"]').get_attribute("data-page") == "5"
     controlled.get_by_role("button", name="Next page").click()
-    page.wait_for_function("Alpine.store('paginationTest').page === 6")
+    page.wait_for_function("window.__paginationState.page === 6")
     assert controlled.locator('button[data-kind="page"][data-page="6"]').get_attribute("aria-current") == "page"
-    assert page.evaluate("Alpine.store('paginationTest').details.at(-1).previousPage") == 5
-    assert page.evaluate("Alpine.store('paginationTest').details.at(-1).kind") == "next"
+    assert page.evaluate("window.__paginationState.details.at(-1).previousPage") == 5
+    assert page.evaluate("window.__paginationState.details.at(-1).kind") == "next"
 
     uncontrolled = page.locator("#uncontrolled")
     uncontrolled.locator('button[data-kind="page"][data-page="4"]').click()
@@ -98,14 +97,14 @@ def test_invalid_client_page_reports_once_per_episode_and_retains_the_last_valid
     controlled = page.locator("#controlled")
     page.wait_for_function("document.querySelector('#controlled [aria-current=page]').dataset.page === '5'")
 
-    page.evaluate("Alpine.store('paginationTest').page = 0")
-    page.evaluate("Alpine.store('paginationTest').page = 99")
+    page.evaluate("window.__paginationState.page = 0")
+    page.evaluate("window.__paginationState.page = 99")
     page.wait_for_timeout(0)
     assert controlled.locator('[aria-current="page"]').get_attribute("data-page") == "5"
     assert len([error for error in errors if "CPagination page" in error]) == 1
 
-    page.evaluate("Alpine.store('paginationTest').page = 6")
+    page.evaluate("window.__paginationState.page = 6")
     page.wait_for_function("document.querySelector('#controlled [aria-current=page]').dataset.page === '6'")
-    page.evaluate("Alpine.store('paginationTest').page = 0")
+    page.evaluate("window.__paginationState.page = 0")
     page.wait_for_timeout(0)
     assert len([error for error in errors if "CPagination page" in error]) == 2

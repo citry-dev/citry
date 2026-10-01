@@ -13,7 +13,13 @@ from typing import Any, ClassVar, Literal, TypedDict, cast
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._aria import merge_idrefs
-from citry_ui.components._attrs import CClassValue, CStyleValue, get_html_form_owner, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    get_html_form_owner,
+    merge_root_attrs,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import (
     FORM_CONTROL_RUNTIME_DEPENDENCY,
@@ -37,9 +43,6 @@ CRatingChangeSource = Literal["pointer", "keyboard", "reset"]
 
 _PLAIN_DECIMAL = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _RUNTIME_PREFIXES = ("data-citry-", "data-crating", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -149,15 +152,6 @@ def _message_pattern(value: object) -> str:
     return pattern
 
 
-def _dynamic_target(key: str) -> str | None:
-    normalized = key.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(destination: str, value: Mapping[str, object] | None, owned: frozenset[str]) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"CRating {destination} must be a mapping or None, got {value!r}.")
@@ -166,13 +160,11 @@ def _attrs(destination: str, value: Mapping[str, object] | None, owned: frozense
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CRating {destination} requires string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CRating {destination} cannot contain runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"CRating {destination} cannot use ownership directive {key!r}.")
-        if _dynamic_target(key) in owned:
-            raise ValueError(f"CRating {destination} cannot dynamically bind owned attribute {key!r}.")
+    # A Vue directive could rebind the checked state, listeners, or Form wiring
+    # this component owns, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, f"CRating {destination.removesuffix('attrs').rstrip('_')}".rstrip())
     return copied
 
 
@@ -388,6 +380,8 @@ class CRating(LibraryComponent):
                 described_by, readonly_value_id if readonly and value is not None else None
             ),
             "error_message": error_message,
+            # Keep the boolean for the per-choice condition; the template
+            # converts the matching marker to an empty presence value.
             "field_control": field is not None,
             "readonly_value_label": readonly_value_label,
         }
@@ -398,21 +392,21 @@ class CRating(LibraryComponent):
             "readonlyValueId": readonly_value_id,
             "name": name,
             "form": form_owner,
-            "value": value,
+            "serverValue": value,
             "initialValue": value,
             "max": str(maximum),
             "precision": precision,
             "values": [choice["value"] for choice in choices],
             "catalogValueLabel": catalog_value_label,
             "valueLabel": value_label_pattern,
-            "disabled": disabled,
-            "readonly": readonly,
+            "serverDisabled": disabled,
+            "serverReadonly": readonly,
             "inheritsReadonly": field is None and kwargs.readonly is None,
-            "required": required,
-            "invalid": invalid,
-            "allowClear": kwargs.allow_clear,
-            "variant": kwargs.variant,
-            "size": kwargs.size,
+            "serverRequired": required,
+            "serverInvalid": invalid,
+            "serverAllowClear": kwargs.allow_clear,
+            "serverVariant": kwargs.variant,
+            "serverSize": kwargs.size,
             "groupLabel": group_label,
             "groupLabelledby": group_labelledby,
             "describedby": described_by,
@@ -442,10 +436,10 @@ class CRating(LibraryComponent):
         c-aria-disabled="'true' if disabled else None"
         c-aria-readonly="'true' if readonly else None"
         c-tabindex="0 if readonly and not disabled else None"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-required="required"
-        c-data-invalid="invalid"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-required="'' if required else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-style="ratio_style"
@@ -476,7 +470,7 @@ class CRating(LibraryComponent):
               c-aria-describedby="described_by"
               c-aria-errormessage="error_message"
               c-aria-invalid="'true' if invalid else None"
-              c-data-citry-field-control="field_control and choice['id'] == public_id"
+              c-data-citry-field-control="'' if field_control and choice['id'] == public_id else None"
               c-bind="input_attrs"
               data-citry-ui-part="input"
             />
@@ -499,8 +493,15 @@ class CRating(LibraryComponent):
     js = r"""
       $component({
         props: { value: {}, required: {}, disabled: {}, readonly: {}, invalid: {}, allowClear: {}, variant: {}, size: {}, onValueChange: {}, onHoverChange: {} },
-        init: ({ els, data, props, effect, inject, i18n }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+          formService: {from: Symbol.for('citry-ui:form'), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const props = component.$props;
+          const i18n = component.$i18n;
           const choices = root.querySelector(':scope > [data-citry-ui-part="choices"]');
           const inputs = Array.from(choices?.querySelectorAll(':scope > [data-citry-ui-part="choice"] > [data-citry-ui-part="input"]') ?? []);
           const labels = Array.from(choices?.querySelectorAll(':scope > [data-citry-ui-part="choice"]') ?? []);
@@ -508,15 +509,15 @@ class CRating(LibraryComponent):
           const transport = root.querySelector(':scope > [data-citry-ui-part="readonly-transport"]');
           const readonlyValue = root.querySelector(':scope > [data-citry-ui-part="readonly-value"]');
           if (!(choices instanceof HTMLElement) || !(transport instanceof HTMLInputElement) || inputs.length !== data.values.length || inputs.some(input => !(input instanceof HTMLInputElement)) || labels.length !== inputs.length || choiceLabels.length !== inputs.length) throw new Error('[citry-ui] CRating settled anatomy is invalid.');
-          const field = inject(Symbol.for('citry-ui:field'), null);
-          const form = inject(Symbol.for('citry-ui:form'), null);
+          const field = component.fieldService;
+          const form = component.formService;
           const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if (runtime?.generation !== 1) throw new Error('[citry-ui] CRating form-control runtime is unavailable.');
           const resolver = runtime.resolver(root, props, 'CRating');
           const listeners = runtime.listeners();
           const mutations = runtime.mutations(root);
           const owned = mutations.owned;
-          let current = data.value;
+          let current = data.serverValue;
           let committed = current;
           let initialValue = data.initialValue;
           let controlled = false;
@@ -531,13 +532,13 @@ class CRating(LibraryComponent):
             return raw;
           };
           const resolveConfiguration = () => ({
-            required: field ? field.required : resolver.boolean('required', data.required),
-            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(inputs[0]),
-            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-            invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
-            allowClear: resolver.boolean('allowClear', data.allowClear),
-            variant: resolver.choice('variant', data.variant, ['solid', 'subtle']),
-            size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
+            required: field ? field.required : resolver.boolean('required', data.serverRequired),
+            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.serverDisabled) || runtime.fieldsetDisabled(inputs[0]),
+            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.serverReadonly),
+            invalid: field ? field.invalid : resolver.boolean('invalid', data.serverInvalid),
+            allowClear: resolver.boolean('allowClear', data.serverAllowClear),
+            variant: resolver.choice('variant', data.serverVariant, ['solid', 'subtle']),
+            size: resolver.choice('size', data.serverSize, ['sm', 'md', 'lg']),
           });
           const ratio = value => `${value === null ? 0 : Number(value) / Number(data.max) * 100}%`;
           const formatLabel = value => {
@@ -653,7 +654,7 @@ class CRating(LibraryComponent):
             invalidate: () => {},
           });
           const stopFieldset = runtime.watchFieldset(root, inputs[0], () => { configuration = resolveConfiguration(); apply(); });
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             configuration = resolveConfiguration();
             const requested = props.value;
             if (requested === undefined) {

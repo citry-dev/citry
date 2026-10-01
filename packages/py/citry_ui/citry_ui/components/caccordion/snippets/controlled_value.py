@@ -8,17 +8,13 @@ class ControlledAccordion(Component):
     template = """
       <section
         class="controlled-accordion"
-        x-data="{selected: 'lichen'}"
       >
         <p aria-live="polite">
-          Open section: <strong x-text="selected ?? 'none'">lichen</strong>
+          Open section: <strong v-text="selected ?? 'none'">lichen</strong>
         </p>
         <c-CAccordion
           value="lichen"
-          $c-props="{
-            value: selected,
-            onValueChange: (value) => selected = value,
-          }"
+          :value="selected" :onValueChange="(value) => selected = value"
         >
           <c-CAccordionItem value="lichen">
             <c-fill name="title">Lichen</c-fill>
@@ -34,6 +30,15 @@ class ControlledAccordion(Component):
           </c-CAccordionItem>
         </c-CAccordion>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            selected: 'lichen'
+          };
+        },
+      });
     """
 
     css = """

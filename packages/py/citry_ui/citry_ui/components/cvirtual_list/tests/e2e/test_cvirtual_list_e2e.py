@@ -22,7 +22,7 @@ def _root() -> Path:
     raise RuntimeError("Could not locate repository root for Virtual List browser tests.")
 
 
-def _page() -> str:
+def _page() -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -31,14 +31,17 @@ def _page() -> str:
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8">
           <title>Virtual List evidence</title><c-css /></head>
-          <body x-data>
+          <body>
             <c-CVirtualList
               aria_label="Complete activity"
               c-viewport_size="160"
               c-attrs="{'id':'complete'}"
             >
               <c-for each="index in complete_indexes">
-                <c-CVirtualListItem c-item_key="f'complete-{index}'">Activity {{ index + 1 }}</c-CVirtualListItem>
+                <c-CVirtualListItem
+                  #c-key="f'complete-{index}'"
+                  c-item_key="f'complete-{index}'"
+                >Activity {{ index + 1 }}</c-CVirtualListItem>
               </c-for>
             </c-CVirtualList>
 
@@ -51,27 +54,29 @@ def _page() -> str:
               c-overscan="2"
               c-initial_index="40"
               c-attrs="{'id':'window'}"
-              $c-props="{
-                itemSize:$store.virtual.itemSize,
-                overscan:$store.virtual.overscan,
-                onRangeChange:(detail)=>$store.virtual.events.push({
+              :itemSize="state.virtual.itemSize"
+              :overscan="state.virtual.overscan"
+              :onRangeChange="(detail)=>state.virtual.events.push({
                   startIndex:detail.startIndex,
                   endIndex:detail.endIndex,
                   visibleStartIndex:detail.visibleStartIndex,
                   visibleEndIndex:detail.visibleEndIndex,
                   requestId:detail.requestId,
                   reason:detail.reason,
-                }),
-              }"
+                })"
             >
               <c-for each="index in window_indexes">
-                <c-CVirtualListItem c-item_key="f'window-{index}'">Record {{ index + 1 }}</c-CVirtualListItem>
+                <c-CVirtualListItem
+                  #c-key="f'window-{index}'"
+                  c-item_key="f'window-{index}'"
+                >Record {{ index + 1 }}</c-CVirtualListItem>
               </c-for>
             </c-CVirtualWindow>
           </body></html>
         """
         js = """
-          Alpine.store('virtual', {itemSize:40,overscan:2,events:[]});
+          $component({data(){const virtual=Citry.vue.reactive({itemSize:40,overscan:2,events:[]});
+            window.__virtual=virtual; return {state:{virtual}};}});
         """
 
         def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:
@@ -80,21 +85,22 @@ def _page() -> str:
                 "window_indexes": list(range(36, 50)),
             }
 
-    return str(Page())
+    return app, str(Page())
 
 
-def _load(page: Any) -> list[str]:
+def _load(page: Any, serve_citry_ui_live: Any) -> list[str]:
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.set_content(_page(), wait_until="load")
+    app, html = _page()
+    page.goto(serve_citry_ui_live(app, html) + "/", wait_until="networkidle")
     page.wait_for_selector("#window[data-citry-virtual-window-initialized]")
     page.wait_for_function("document.querySelector('#window').scrollTop === 1600")
     return errors
 
 
-def test_complete_dom_keeps_all_items_and_uses_browser_containment(page: Any) -> None:
-    errors = _load(page)
+def test_complete_dom_keeps_all_items_and_uses_browser_containment(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#complete")
     items = root.locator(':scope > [data-citry-ui-part="track"] > [data-citry-ui-part="item"]')
 
@@ -106,8 +112,8 @@ def test_complete_dom_keeps_all_items_and_uses_browser_containment(page: Any) ->
     assert errors == []
 
 
-def test_window_geometry_scroll_requests_and_reactive_inputs(page: Any) -> None:
-    errors = _load(page)
+def test_window_geometry_scroll_requests_and_reactive_inputs(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#window")
     items = root.locator(':scope > [data-citry-ui-part="track"] > [data-citry-ui-part="item"]')
     before = root.locator('[data-citry-virtual-list-spacer="before"]')
@@ -122,8 +128,8 @@ def test_window_geometry_scroll_requests_and_reactive_inputs(page: Any) -> None:
     assert root.get_attribute("data-pending") is None
 
     root.evaluate("element => { element.scrollTop = 4000; element.dispatchEvent(new Event('scroll')); }")
-    page.wait_for_function("Alpine.store('virtual').events.length > 0")
-    event = page.evaluate("Alpine.store('virtual').events.at(-1)")
+    page.wait_for_function("window.__virtual.events.length > 0")
+    event = page.evaluate("window.__virtual.events.at(-1)")
     assert event["startIndex"] == 98
     assert event["endIndex"] == 107
     assert event["visibleStartIndex"] == 100
@@ -133,7 +139,7 @@ def test_window_geometry_scroll_requests_and_reactive_inputs(page: Any) -> None:
     assert root.get_attribute("data-pending") == ""
     assert root.get_attribute("aria-busy") == "true"
 
-    page.evaluate("Alpine.store('virtual').itemSize = 50; Alpine.store('virtual').overscan = 4")
+    page.evaluate("window.__virtual.itemSize = 50; window.__virtual.overscan = 4")
     page.wait_for_function(
         "document.querySelector('#window').style.getPropertyValue('--cui-virtual-list-item-size') === '50px'"
     )
@@ -142,8 +148,8 @@ def test_window_geometry_scroll_requests_and_reactive_inputs(page: Any) -> None:
     assert errors == []
 
 
-def test_keyboard_scroll_surface_environment_axe_and_cleanup(page: Any) -> None:
-    errors = _load(page)
+def test_keyboard_scroll_surface_environment_axe_and_cleanup(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     complete = page.locator("#complete")
     complete.focus()
     page.keyboard.press("PageDown")

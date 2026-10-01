@@ -39,7 +39,7 @@ def _production_component_definitions() -> frozenset[type[LibraryComponent]]:
     return frozenset(definitions)
 
 
-def test_every_production_component_template_is_alpine_csp_compatible() -> None:
+def test_every_production_component_template_is_vue_strict_csp_compatible() -> None:
     """Keep public and internally registered UI components safe for strict CSP."""
     discovered = _production_component_definitions()
     declared = frozenset(COMPONENTS)
@@ -63,4 +63,4 @@ def test_every_production_component_template_is_alpine_csp_compatible() -> None:
     findings = [finding for finding in report.findings if finding.code == CSP_INCOMPATIBLE_BROWSER_CODE]
     details = "\n".join(f"- {finding.origin}: {finding.message}" for finding in findings)
 
-    assert findings == [], f"Citry UI production templates must support Alpine's CSP build:\n{details}"
+    assert findings == [], f"Citry UI production Vue templates must support strict CSP:\n{details}"

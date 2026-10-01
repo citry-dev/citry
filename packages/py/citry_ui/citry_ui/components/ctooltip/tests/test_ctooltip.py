@@ -15,7 +15,7 @@ from citry import Citry, Component
 from citry_ui import CButton, CTooltip
 
 
-def _page_html(value: object) -> str:
+def _page_html(value: object, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -26,7 +26,8 @@ def _page_html(value: object) -> str:
         def template_data(self, kwargs, slots):
             return {"value": value}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _tooltip(**kwargs: object) -> CTooltip:
@@ -60,7 +61,8 @@ def test_tooltip_renders_semantic_top_layer_anatomy_and_typed_slot_data():
             style={"--cui-tooltip-max-inline-size": "24rem"},
             attrs={"data-mission": "europa"},
             slots={"activator": activator},
-        )
+        ),
+        static_fallback=True,
     )
     surface = re.search(r'<div class="cui-tooltip(?:\s|\")[^>]*>', html)
 
@@ -93,7 +95,8 @@ def test_tooltip_accepts_exclusive_static_default_fill():
                 ),
                 "default": "A sulfur-stained surface",
             },
-        )
+        ),
+        static_fallback=True,
     )
 
     assert "A sulfur-stained surface" in html
@@ -143,9 +146,12 @@ def test_tooltip_public_schema_is_nested_slotted_and_runtime_introspectable():
         ({"attrs": []}, TypeError, "CTooltip attrs must be a mapping"),
         ({"attrs": {"popover": "auto"}}, ValueError, "owned attribute"),
         ({"attrs": {"ROLE": "alert"}}, ValueError, "owned attribute"),
-        ({"attrs": {":aria-label": "other"}}, ValueError, "dynamically bind"),
-        ({"attrs": {"x-bind": "surfaceAttrs"}}, ValueError, "ownership directive"),
-        ({"attrs": {"x-show": "visible"}}, ValueError, "ownership directive"),
+        ({"attrs": {":aria-label": "other"}}, ValueError, "attrs cannot contain the Vue directive ':aria-label'"),
+        ({"attrs": {"v-bind": "surfaceAttrs"}}, ValueError, "attrs cannot contain the Vue directive 'v-bind'"),
+        ({"attrs": {"v-show": "visible"}}, ValueError, "attrs cannot contain the Vue directive 'v-show'"),
+        ({"attrs": {"V-IF": "visible"}}, ValueError, "attrs cannot contain the Vue directive 'V-IF'"),
+        ({"attrs": {"@mouseenter": "show"}}, ValueError, "attrs cannot contain the Vue directive '@mouseenter'"),
+        ({"attrs": {"#default": ""}}, ValueError, "attrs cannot contain the Vue directive '#default'"),
         ({"attrs": {"data-citry-root": ""}}, ValueError, "runtime attribute"),
     ],
 )
@@ -153,6 +159,17 @@ def test_tooltip_rejects_invalid_or_ambiguous_inputs(kwargs, exception, message)
     inputs = {"text": "Europa", **kwargs}
     with pytest.raises(exception, match=message):
         _page_html(_tooltip(**inputs))
+
+
+def test_tooltip_attrs_without_vue_syntax_stay_ordinary_attributes():
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _page_html(_tooltip(text="Europa", attrs={"x-data": "{}", "hx-get": "/hint"}), static_fallback=True)
+
+    root = re.search(r'<[^>]+data-citry-ui-part="tooltip"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/hint"' in root.group(0)
 
 
 def test_tooltip_requires_activator_and_exactly_one_content_source():
@@ -180,7 +197,8 @@ def test_tooltip_detrusts_safe_strings_before_rendering():
         _tooltip(
             id=Markup('moon"data-unsafe="yes'),
             text=Markup("</span><script>window.__pwned=true</script>"),
-        )
+        ),
+        static_fallback=True,
     )
 
     assert 'id="moon&#34;data-unsafe=&#34;yes"' in html
@@ -210,7 +228,7 @@ class _SideEffectMapping(Mapping[str, object]):
 
 def test_tooltip_snapshots_caller_owned_attrs_once_per_render():
     attrs = _SideEffectMapping()
-    html = _page_html(_tooltip(text="Europa", attrs=attrs))
+    html = _page_html(_tooltip(text="Europa", attrs=attrs), static_fallback=True)
 
     assert 'data-snapshot="first"' in html
     assert attrs.iterations == 1

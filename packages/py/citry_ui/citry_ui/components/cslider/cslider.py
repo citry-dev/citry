@@ -12,7 +12,13 @@ from typing import Any, ClassVar, Literal, TypedDict, cast
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._aria import merge_idrefs
-from citry_ui.components._attrs import CClassValue, CStyleValue, get_html_form_owner, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    get_html_form_owner,
+    merge_root_attrs,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import (
     FORM_CONTROL_RUNTIME_DEPENDENCY,
@@ -39,9 +45,6 @@ CRangeSliderThumb = Literal["lower", "upper"]
 
 _PLAIN_DECIMAL = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _RUNTIME_PREFIXES = ("data-citry-", "data-csl", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "data-active",
@@ -148,15 +151,6 @@ def _plain(component: str, name: str, value: object) -> str:
     return normalized
 
 
-def _dynamic_target(key: str) -> str | None:
-    normalized = key.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     component: str, destination: str, value: Mapping[str, object] | None, owned: frozenset[str]
 ) -> dict[str, object]:
@@ -167,13 +161,11 @@ def _attrs(
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"{component} {destination} requires string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{component} {destination} cannot contain runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"{component} {destination} cannot use ownership directive {key!r}.")
-        if _dynamic_target(key) in owned:
-            raise ValueError(f"{component} {destination} cannot dynamically bind owned attribute {key!r}.")
+    # A Vue directive could rebind the value, listeners, or Form wiring this
+    # component owns, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, f"{component} {destination.removesuffix('attrs').replace('_', ' ')}".rstrip())
     return copied
 
 
@@ -449,7 +441,7 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
         "disabled": disabled,
         "readonly": readonly,
         "invalid": invalid,
-        "field_control": field is not None,
+        "field_control": "" if field is not None else None,
         "aria_describedby": described_by,
         "aria_errormessage": error_message,
         "upper_aria_describedby": upper_described_by,
@@ -476,21 +468,21 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
         "transportIds": [f"{lower_id}-readonly", f"{upper_id}-readonly"] if is_range else [f"{lower_id}-readonly"],
         "names": list(effective_names),
         "form": form_owner,
-        "value": list(values) if is_range else values[0],
-        "min": minimum,
-        "max": maximum,
-        "step": step,
-        "largeStep": large_step,
-        "minStepsBetweenThumbs": gap,
-        "disabled": disabled,
-        "readonly": readonly,
+        "serverValue": list(values) if is_range else values[0],
+        "serverMin": minimum,
+        "serverMax": maximum,
+        "serverStep": step,
+        "serverLargeStep": large_step,
+        "serverMinStepsBetweenThumbs": gap,
+        "serverDisabled": disabled,
+        "serverReadonly": readonly,
         "inheritsReadonly": field is None and kwargs.readonly is None,
-        "invalid": invalid,
-        "orientation": kwargs.orientation,
-        "variant": kwargs.variant,
-        "size": kwargs.size,
-        "showValue": kwargs.show_value,
-        "format": profile,
+        "serverInvalid": invalid,
+        "serverOrientation": kwargs.orientation,
+        "serverVariant": kwargs.variant,
+        "serverSize": kwargs.size,
+        "serverShowValue": kwargs.show_value,
+        "serverFormat": profile,
         "describedby": [described_by, upper_described_by] if is_range else [described_by],
         "errormessage": [error_message, upper_error_message] if is_range else [error_message],
         "ariaLabel": single_aria_label,
@@ -510,9 +502,9 @@ _SLIDER_TEMPLATE = """
     c-data-variant="variant"
     c-data-size="size"
     c-data-show-value="show_value"
-    c-data-disabled="disabled"
-    c-data-readonly="readonly"
-    c-data-invalid="invalid"
+    c-data-disabled="'' if disabled else None"
+    c-data-readonly="'' if readonly else None"
+    c-data-invalid="'' if invalid else None"
     c-bind="root_attrs"
     c-data-citry-ui-part="part"
   >
@@ -649,8 +641,15 @@ _SLIDER_JS = r"""
       disabled: {}, readonly: {}, invalid: {}, orientation: {}, variant: {}, size: {},
       showValue: {}, format: {}, onValueChange: {}, onValueChangeEnd: {},
     },
-    init: ({ els, data, props, effect, inject, i18n }) => {
-      const root = els[0];
+    inject: {
+      fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+      formService: {from: Symbol.for('citry-ui:form'), default: null},
+    },
+    onServerRender: ({component}) => {
+      const root = component.$el;
+      const data = component;
+      const props = component.$props;
+      const i18n = component.$i18n;
       const nativeInputs = Array.from(root.querySelectorAll(':scope > [data-citry-ui-part="native-input"]'));
       const transports = Array.from(root.querySelectorAll(':scope > [data-citry-ui-part="readonly-transport"]'));
       const control = root.querySelector(':scope > [data-citry-ui-part="control"]');
@@ -661,15 +660,15 @@ _SLIDER_JS = r"""
       if (nativeInputs.length !== expected || transports.length !== expected || thumbs.length !== expected || !(control instanceof HTMLElement && track instanceof HTMLElement && fill instanceof HTMLElement) || nativeInputs.some(input => !(input instanceof HTMLInputElement)) || transports.some(input => !(input instanceof HTMLInputElement)) || thumbs.some(thumb => !(thumb instanceof HTMLButtonElement))) {
         throw new Error('[citry-ui] Slider settled anatomy is invalid.');
       }
-      const field = inject(Symbol.for('citry-ui:field'), null);
-      const form = inject(Symbol.for('citry-ui:form'), null);
+      const field = component.fieldService;
+      const form = component.formService;
       const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
       if (runtime?.generation !== 1) throw new Error('[citry-ui] Slider form-control runtime is unavailable.');
       const resolver = runtime.resolver(root, props, data.kind === 'range' ? 'CRangeSlider' : 'CSlider');
       const listeners = runtime.listeners();
       const mutations = runtime.mutations(root);
       const owned = mutations.owned;
-      let current = data.kind === 'range' ? [...data.value] : [data.value];
+      let current = data.kind === 'range' ? [...data.serverValue] : [data.serverValue];
       let committed = [...current];
       let lastRequested = [...current];
       let initialValue = [...current];
@@ -941,40 +940,40 @@ _SLIDER_JS = r"""
         resolver.clear(name); return value;
       };
       const resolveConfiguration = () => {
-        let min = configValue('min', data.min), max = configValue('max', data.max), step = configValue('step', data.step);
+        let min = configValue('min', data.serverMin), max = configValue('max', data.serverMax), step = configValue('step', data.serverStep);
         let exactGrid = grid(min, max, step);
-        if (!exactGrid) { resolver.report('min', min, 'min/max/step must form a finite whole-step grid'); min = data.min; max = data.max; step = data.step; exactGrid = grid(min, max, step); }
-        const largeStep = configValue('largeStep', data.largeStep);
+        if (!exactGrid) { resolver.report('min', min, 'min/max/step must form a finite whole-step grid'); min = data.serverMin; max = data.serverMax; step = data.serverStep; exactGrid = grid(min, max, step); }
+        const largeStep = configValue('largeStep', data.serverLargeStep);
         const largeIndex = (() => { const result = aligned([largeStep, step]); return result && result.values[0] > BigInt(0) && result.values[0] % result.values[1] === BigInt(0) ? Number(result.values[0] / result.values[1]) : null; })();
         let gap = 0;
         if (data.kind === 'range') {
           const requestedGap = props.minStepsBetweenThumbs;
           if (requestedGap === undefined) {
-            gap = data.minStepsBetweenThumbs;
+            gap = data.serverMinStepsBetweenThumbs;
             resolver.clear('minStepsBetweenThumbs');
           } else if (Number.isInteger(requestedGap) && requestedGap >= 0 && requestedGap <= exactGrid.count) {
             gap = requestedGap;
             resolver.clear('minStepsBetweenThumbs');
           } else {
-            gap = data.minStepsBetweenThumbs;
+            gap = data.serverMinStepsBetweenThumbs;
             resolver.report('minStepsBetweenThumbs', requestedGap);
           }
         }
         return {
           min, max, step, count: exactGrid.count, gridMin: exactGrid.min, gridStep: exactGrid.step, scale: exactGrid.scale,
           largeSteps: largeIndex ?? Math.min(10, exactGrid.count), gap,
-          disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled),
-          readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-          invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
-          orientation: resolver.choice('orientation', data.orientation, ['horizontal', 'vertical']),
-          variant: resolver.choice('variant', data.variant, ['solid', 'subtle']),
-          size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
-          showValue: resolver.choice('showValue', data.showValue, ['never', 'interaction', 'always']),
-          format: resolver.string('format', data.format) || data.format,
+          disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.serverDisabled),
+          readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.serverReadonly),
+          invalid: field ? field.invalid : resolver.boolean('invalid', data.serverInvalid),
+          orientation: resolver.choice('orientation', data.serverOrientation, ['horizontal', 'vertical']),
+          variant: resolver.choice('variant', data.serverVariant, ['solid', 'subtle']),
+          size: resolver.choice('size', data.serverSize, ['sm', 'md', 'lg']),
+          showValue: resolver.choice('showValue', data.serverShowValue, ['never', 'interaction', 'always']),
+          format: resolver.string('format', data.serverFormat) || data.serverFormat,
         };
       };
       let unsubscribe = null;
-      effect(() => {
+      Citry.vue.watchEffect(() => {
         const previousConfiguration = configuration;
         configuration = resolveConfiguration();
         if (previousConfiguration && dragging && (configuration.min !== previousConfiguration.min || configuration.max !== previousConfiguration.max || configuration.step !== previousConfiguration.step || configuration.orientation !== previousConfiguration.orientation || configuration.disabled || configuration.readonly)) {

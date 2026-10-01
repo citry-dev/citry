@@ -8,12 +8,6 @@ class TabsControlledSelection(Component):
     template = """
       <section
         class="tabs-controlled"
-        x-data="{
-          current: 'mercury',
-          requested: 'none',
-          requestSource: 'none',
-          applyRequests: true,
-        }"
       >
         <header>
           <p>Owner-controlled selection</p>
@@ -37,21 +31,21 @@ class TabsControlledSelection(Component):
         </div>
 
         <label class="tabs-controlled__commit">
-          <input type="checkbox" x-model="applyRequests" />
+          <input type="checkbox" v-model="applyRequests" />
           <span>Apply requests from Tabs</span>
         </label>
 
         <dl class="tabs-controlled__status" aria-live="polite">
           <div>
             <dt>Selected</dt>
-            <dd x-text="current">mercury</dd>
+            <dd v-text="current">mercury</dd>
           </div>
           <div>
             <dt>Last request</dt>
             <dd>
-              <span x-text="requested">none</span>
-              <span x-show="requestSource !== 'none'">
-                via <span x-text="requestSource"></span>
+              <span v-text="requested">none</span>
+              <span v-show="requestSource !== 'none'">
+                via <span v-text="requestSource"></span>
               </span>
             </dd>
           </div>
@@ -60,16 +54,13 @@ class TabsControlledSelection(Component):
         <c-CTabs
           default_value="mercury"
           aria_label="Planetary briefing topics"
-          $c-props="{
-            value: current,
-            onValueChange: (value, detail) => {
+          :value="current" :onValueChange="(value, detail) => {
               requested = value;
               requestSource = detail.source;
               if (applyRequests) {
                 current = value;
               }
-            },
-          }"
+            }"
         >
           <c-CTab value="mercury">
             Mercury
@@ -92,6 +83,18 @@ class TabsControlledSelection(Component):
           </c-CTabPanel>
         </c-CTabs>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            current: 'mercury',
+            requested: 'none',
+            requestSource: 'none',
+            applyRequests: true,
+          };
+        },
+      });
     """
 
     css = """

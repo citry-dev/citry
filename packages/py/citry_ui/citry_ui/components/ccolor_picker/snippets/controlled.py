@@ -1,14 +1,23 @@
-# ruff: noqa: E501 - Alpine expression remains readable in the public example
+# ruff: noqa: E501 - Vue expression remains readable in the public example
 
 from citry import Component
 
 
 class ControlledColorPicker(Component):
     template = """
-      <section x-data="{color:'#7f56d9',open:false}">
-        <c-CColorPicker label="Controlled accent" $c-props="{value:color,open,onValueChange:(next)=>color=next,onOpenChange:(next)=>open=next}" />
-        <output x-text="color">#7f56d9</output>
+      <section >
+        <c-CColorPicker label="Controlled accent" :value="color" :open="open" :onValueChange="(next)=>color=next" :onOpenChange="(next)=>open=next" />
+        <output v-text="color">#7f56d9</output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            color:'#7f56d9',open:false
+          };
+        },
+      });
     """
 
 

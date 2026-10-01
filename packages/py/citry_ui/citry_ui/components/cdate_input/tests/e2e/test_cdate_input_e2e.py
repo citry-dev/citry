@@ -32,8 +32,8 @@ def _page_html() -> str:
               <c-css />
               <style>.date-brand { --cui-date-input-focus-color: rgb(124 58 237); }</style>
             </head>
-            <body x-data="{day:'2026-08-19',accept:false,min:'2026-08-01',variant:'outline'}">
-              <form id="booking" @submit.prevent="window.__dateSubmits.push(Array.from(new FormData($event.target).entries()))">
+            <body>
+              <form id="booking" @submit.prevent="window.__dateSubmits.push(Array.from(new window.FormData($event.target).entries()))">
                 <c-CField control_id="arrival" required>
                   <c-fill name="label">Arrival date</c-fill>
                   <c-fill name="description">Choose an alternating August day.</c-fill>
@@ -42,9 +42,9 @@ def _page_html() -> str:
                 </c-CField>
                 <button id="submit" type="submit">Submit</button><button id="reset" type="reset">Reset</button>
               </form>
-              <c-CDateInput id="controlled" value="2026-08-19" c-attrs="{'aria-label':'Controlled date'}" $c-props="{value:day,min:min,variant:variant}" @input="window.__dateEvents.push(['controlled',$event.currentTarget.value]);if(accept)day=$event.currentTarget.value" />
+              <c-CDateInput id="controlled" value="2026-08-19" c-attrs="{'aria-label':'Controlled date'}" :value="day" :min="minimum" :variant="variant" @input="window.__dateEvents.push(['controlled',$event.currentTarget.value]);if(accept)day=$event.currentTarget.value" />
               <button id="accept" type="button" @click="accept=true">Accept</button>
-              <button id="configure" type="button" @click="min='2026-08-15';variant='filled'">Configure</button>
+              <button id="configure" type="button" @click="minimum='2026-08-15';variant='filled'">Configure</button>
               <form id="states">
                 <c-CDateInput id="readonly" name="readonly" value="2026-08-20" readonly c-attrs="{'aria-label':'Readonly date'}" />
                 <c-CDateInput id="disabled" name="disabled" value="2026-08-21" disabled c-attrs="{'aria-label':'Disabled date'}" />
@@ -53,6 +53,7 @@ def _page_html() -> str:
             </body>
           </html>
         """
+        js = "$component({data(){return {day:'2026-08-19',accept:false,minimum:'2026-08-01',variant:'outline'};}});"
 
     return str(Page())
 

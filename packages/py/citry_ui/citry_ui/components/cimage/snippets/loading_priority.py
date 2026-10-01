@@ -24,12 +24,12 @@ class ImageLoadingPriority(Component):
 
         <button
           type="button"
-          @click="document.querySelector('#image-priority-archive').scrollIntoView({behavior:'auto'})"
+          @click="$refs.archive.scrollIntoView({behavior:'auto'})"
         >Scroll to the archive image</button>
 
         <div class="image-priority__spacer" aria-hidden="true"></div>
 
-        <article id="image-priority-archive">
+        <article ref="archive" id="image-priority-archive">
           <p class="image-priority__eyebrow">Below the fold</p>
           <h3>Archive plate</h3>
           <c-CImage

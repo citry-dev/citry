@@ -25,7 +25,7 @@ inputs:
       - {id: move-down-label, name: move_down_label, type: str, default: {kind: literal, value: 'Move {item} down'}, effect: Overrides localized Move down names and must retain item.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the fieldset.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the fieldset.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed fieldset attributes.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed fieldset attributes; Vue directive names are rejected.'}
   - id: cform-collection-client-inputs
     component: CFormCollection
     channel: client
@@ -46,7 +46,7 @@ inputs:
       - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables this Item's collection actions only.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the Item group.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the Item group.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed Item-group attributes.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed Item-group attributes; Vue directive names are rejected.'}
 
 slots:
   - id: cform-collection-slots

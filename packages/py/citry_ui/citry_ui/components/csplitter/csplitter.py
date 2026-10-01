@@ -8,7 +8,7 @@ from hashlib import sha256
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CSplitterOrientation = Literal["horizontal", "vertical"]
@@ -21,9 +21,6 @@ _VARIANTS = ("plain", "soft", "outline")
 _SIZES = ("sm", "md", "lg")
 _CONTEXT = "citry_ui_splitter"
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -95,6 +92,26 @@ class _SplitterRegistry:
     panels: list[_PanelDeclaration] = field(default_factory=list)
 
 
+# CInternalSplitter renders panels and the handles between them from one list.
+# The `kind` key tells the two row shapes apart, so the type checker knows
+# which keys exist inside the template's `item['kind'] == 'panel'` branch and
+# its `c-else` branch.
+class _PanelRow(TypedDict):
+    kind: Literal["panel"]
+    panel: _PanelDeclaration
+    index: int
+    size: float
+
+
+class _HandleRow(TypedDict):
+    kind: Literal["handle"]
+    index: int
+    before: _PanelDeclaration
+    after: _PanelDeclaration
+    before_size: float
+    pair_total: float
+
+
 def _plain(owner: str, name: str, value: object) -> str:
     raw = const_value(value)
     if not isinstance(raw, str):
@@ -144,14 +161,6 @@ def _sizes(value: object) -> tuple[float, ...] | None:
     return values
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     attrs: Mapping[str, object] | None,
@@ -163,14 +172,13 @@ def _attrs(
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, owner)
     for key in copied:
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} attrs cannot dynamically bind owned attribute {key!r}.")
     return merge_root_attrs(copied, class_, style)
 
 
@@ -247,11 +255,12 @@ class CSplitter(LibraryComponent):
         }
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
-        return self._splitter_data
+        return {"serverDefaults": self._splitter_data}
 
     template = """
       <c-CInternalSplitterDeclarations><c-slot required /></c-CInternalSplitterDeclarations>
       <c-CInternalSplitter
+        ref="splitterRoot"
         c-group_id="group_id"
         c-sizes="sizes"
         c-orientation="orientation"
@@ -270,8 +279,11 @@ class CSplitter(LibraryComponent):
           sizes: {}, orientation: {}, disabled: {}, keyboardStep: {}, variant: {}, size: {},
           onResizeStart: {}, onResize: {}, onResizeEnd: {},
         },
-        init: ({els, data, props, effect}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$refs.splitterRoot.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const invalidEpisodes = new Set();
           const panels = () => [...root.querySelectorAll(':scope > [data-citry-ui-part="panel"]')];
           const handles = () => [...root.querySelectorAll(':scope > [data-citry-ui-part="handle"]')];
@@ -634,7 +646,8 @@ class CInternalSplitterDeclarations(LibraryComponent):
 
 
 class CInternalSplitter(LibraryComponent):
-    transparent = True
+    # This component owns the physical splitter root and is the runtime ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -673,7 +686,7 @@ class CInternalSplitter(LibraryComponent):
                     f"its {panel.min_size:g} to {panel.max_size:g} constraint."
                 )
         self.unprovide(_CONTEXT)
-        items: list[dict[str, object]] = []
+        items: list[_PanelRow | _HandleRow] = []
         for index, panel in enumerate(panels):
             items.append({"kind": "panel", "panel": panel, "index": index, "size": sizes[index]})
             if index < len(panels) - 1:
@@ -693,7 +706,7 @@ class CInternalSplitter(LibraryComponent):
             "attrs": {
                 **kwargs.attrs,
                 "data-orientation": kwargs.orientation,
-                "data-disabled": kwargs.disabled,
+                "data-disabled": "" if kwargs.disabled else None,
                 "data-variant": kwargs.variant,
                 "data-size": kwargs.size,
             },
@@ -706,6 +719,7 @@ class CInternalSplitter(LibraryComponent):
         <c-for each="item in items">
           <c-if cond="item['kind'] == 'panel'">
             <c-CInternalSplitterPanel
+              #c-key="item['panel'].id"
               c-group_id="group_id"
               c-declaration="item['panel']"
               c-index="item['index']"
@@ -715,6 +729,7 @@ class CInternalSplitter(LibraryComponent):
           </c-if>
           <c-else>
             <c-CInternalSplitterHandle
+              #c-key="item['before'].id + ':' + item['after'].id"
               c-group_id="group_id"
               c-index="item['index']"
               c-before="item['before']"

@@ -8,11 +8,9 @@ class PopoverPlacements(Component):
     template = """
       <section
         class="placement-preview"
-        x-data="{ placement: 'bottom-start', match_width: false }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <c-CPopover
-          $c-props="{ placement, matchWidth: match_width }"
+          :placement="placement" :matchWidth="match_width"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">
@@ -25,6 +23,26 @@ class PopoverPlacements(Component):
           </c-fill>
         </c-CPopover>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            placement: 'bottom-start', match_width: false
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

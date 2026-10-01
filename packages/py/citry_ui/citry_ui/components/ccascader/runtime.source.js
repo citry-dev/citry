@@ -1,7 +1,11 @@
 $component({
   props: {value:{}, open:{}, disabled:{}, onValueChange:{}, onOpenChange:{}},
-  init: ({els, data, props, effect, i18n}) => {
-    const root = els[0];
+  onServerRender: ({component}) => {
+    const root = component.$refs.root.$el;
+    const data = component.serverDefaults;
+    const props = component.$props;
+    const effect = Citry.vue.watchEffect;
+    const i18n = component.$i18n;
     const trigger = root?.querySelector(':scope > [data-citry-ui-part="trigger"]');
     const valueText = trigger?.querySelector('[data-citry-ui-part="value"]');
     const popup = root?.querySelector(':scope > [data-citry-ui-part="popup"]');

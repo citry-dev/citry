@@ -15,7 +15,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
-    reject_html_attr_bindings,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._date import canonical_date
@@ -63,9 +63,6 @@ _CALENDAR_DATE_FORMATS = (
     "citry-ui-calendar-date-label",
 )
 _RUNTIME_PREFIXES = ("data-citry-", "data-ccalendar", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -88,31 +85,19 @@ _ROOT_OWNED = frozenset(
 )
 
 
-def _dynamic_target(key: str) -> str | None:
-    normalized = key.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"CCalendar attrs must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, _ROOT_OWNED, "CCalendar")
-    reject_html_attr_bindings(copied, _ROOT_OWNED, "CCalendar")
+    # A Vue directive could rebind an owned attribute, add listeners, or
+    # change the grid's structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CCalendar")
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CCalendar attrs require string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CCalendar attrs cannot contain reserved runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"CCalendar attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(key) in _ROOT_OWNED:
-            raise ValueError(f"CCalendar attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 
@@ -142,6 +127,7 @@ def _first_day(value: object) -> int | None:
 class CCalendar(LibraryComponent):
     class I18n:
         messages_locale = "en-US"
+        client_messages = ("citry-ui-calendar-unavailable",)
 
     class Dependencies:
         js: ClassVar = (FORM_CONTROL_RUNTIME_DEPENDENCY,)
@@ -334,7 +320,7 @@ class CCalendar(LibraryComponent):
             and catalog["label"],
             "catalog_previous_label": catalog["previous_label"],
             "catalog_next_label": catalog["next_label"],
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "variant": kwargs.variant,
             "size": kwargs.size,
             "attrs": merge_root_attrs(caller_attrs, kwargs.class_, kwargs.style),
@@ -363,7 +349,26 @@ class CCalendar(LibraryComponent):
             "describedby": cast("str | None", external_described_by),
             "errormessage": cast("str | None", external_error_message),
         }
-        self._cui_calendar_data = client_data
+        prop_names = {
+            "value",
+            "visibleDate",
+            "min",
+            "max",
+            "unavailableDates",
+            "required",
+            "disabled",
+            "readonly",
+            "invalid",
+            "firstDayOfWeek",
+            "showAdjacentDays",
+            "fixedWeeks",
+            "variant",
+            "size",
+        }
+        self._cui_calendar_data = {
+            "serverDefaults": {key: value for key, value in client_data.items() if key in prop_names},
+            **{key: value for key, value in client_data.items() if key not in prop_names},
+        }
         self._cui_calendar_snapshot = snapshot
         return snapshot
 
@@ -385,11 +390,11 @@ class CCalendar(LibraryComponent):
         c-aria-errormessage="error_message"
         c-aria-invalid="'true' if invalid else None"
         c-aria-disabled="'true' if disabled else None"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-empty="not value"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-empty="'' if not value else None"
         c-data-variant="variant"
         c-data-size="size"
         c-$c-tr:citry-ui-calendar-label[aria-label]="True if catalog_label else None"

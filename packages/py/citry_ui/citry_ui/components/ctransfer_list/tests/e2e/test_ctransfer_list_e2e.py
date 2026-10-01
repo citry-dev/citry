@@ -22,7 +22,7 @@ def _root() -> Path:
     raise RuntimeError("Could not locate repository root for Transfer List browser tests.")
 
 
-def _page() -> str:
+def _page() -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -31,7 +31,7 @@ def _page() -> str:
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8">
           <title>Transfer List evidence</title><c-css /></head>
-          <body x-data>
+          <body>
             <form id="assignment">
               <c-CTransferList
                 id="people"
@@ -55,13 +55,11 @@ def _page() -> str:
 
             <c-CTransferList
               id="controlled"
-              $c-props="{
-                value:$store.transfer.value,
-                onValueChange:(next,detail)=>{
-                  $store.transfer.events.push({next:[...next],source:detail.source,controlled:detail.controlled});
-                  if($store.transfer.accept)$store.transfer.value=[...next];
-                },
-              }"
+              :value="state.transfer.value"
+              :onValueChange="(next,detail)=>{
+                  state.transfer.events.push({next:[...next],source:detail.source,controlled:detail.controlled});
+                  if(state.transfer.accept)state.transfer.value=[...next];
+                }"
             >
               <c-CTransferListItem value="alpha" label="Alpha" />
               <c-CTransferListItem value="beta" label="Beta" />
@@ -70,17 +68,19 @@ def _page() -> str:
           </body></html>
         """
         js = """
-          Alpine.store('transfer', {value:['beta'],accept:false,events:[]});
+          $component({data(){const transfer=Citry.vue.reactive({value:['beta'],accept:false,events:[]});
+            window.__transfer=transfer; return {state:{transfer}};}});
         """
 
-    return str(Page())
+    return app, str(Page())
 
 
-def _load(page: Any) -> list[str]:
+def _load(page: Any, serve_citry_ui_live: Any) -> list[str]:
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.set_content(_page(), wait_until="load")
+    app, html = _page()
+    page.goto(serve_citry_ui_live(app, html) + "/", wait_until="networkidle")
     for selector in ("#people", "#required-empty", "#controlled"):
         page.wait_for_selector(f"{selector}[data-citry-transfer-list-initialized]")
     return errors
@@ -98,8 +98,8 @@ def _values(root: Any, name: str) -> list[str]:
     )
 
 
-def test_uncontrolled_transfer_reorder_form_order_and_reset(page: Any) -> None:
-    errors = _load(page)
+def test_uncontrolled_transfer_reorder_form_order_and_reset(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#people")
     available = _pane(root, "available")
     chosen = _pane(root, "chosen")
@@ -137,8 +137,8 @@ def test_uncontrolled_transfer_reorder_form_order_and_reset(page: Any) -> None:
     assert errors == []
 
 
-def test_keyboard_selection_typeahead_and_disabled_item(page: Any) -> None:
-    errors = _load(page)
+def test_keyboard_selection_typeahead_and_disabled_item(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#people")
     available_list = _pane(root, "available").locator('[data-citry-ui-part="listbox"]')
     chosen = _pane(root, "chosen")
@@ -159,22 +159,21 @@ def test_keyboard_selection_typeahead_and_disabled_item(page: Any) -> None:
     assert errors == []
 
 
-def test_controlled_requests_wait_for_acceptance_and_required_focuses_chosen(page: Any) -> None:
-    errors = _load(page)
+def test_controlled_requests_wait_for_acceptance_and_required_focuses_chosen(
+    page: Any, serve_citry_ui_live: Any
+) -> None:
+    errors = _load(page, serve_citry_ui_live)
     controlled = page.locator("#controlled")
     available = _pane(controlled, "available")
 
     available.locator('[data-value="alpha"]').click()
     controlled.locator('[data-citry-transfer-action="add"]').click()
     assert _values(controlled, "chosen") == ["beta"]
-    assert page.evaluate("Alpine.store('transfer').events") == [
+    assert page.evaluate("window.__transfer.events") == [
         {"next": ["beta", "alpha"], "source": "add", "controlled": True}
     ]
 
-    page.evaluate(
-        "Alpine.store('transfer').accept=true;"
-        "Alpine.store('transfer').value=[...Alpine.store('transfer').events[0].next]"
-    )
+    page.evaluate("window.__transfer.accept=true;window.__transfer.value=[...window.__transfer.events[0].next]")
     page.wait_for_function(
         "[...document.querySelector('#controlled').querySelectorAll('[data-citry-transfer-pane=chosen] [data-value]')]"
         ".map(element=>element.dataset.value).join(',') === 'beta,alpha'"
@@ -192,8 +191,8 @@ def test_controlled_requests_wait_for_acceptance_and_required_focuses_chosen(pag
     assert errors == []
 
 
-def test_environment_axe_and_cleanup(page: Any) -> None:
-    errors = _load(page)
+def test_environment_axe_and_cleanup(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#people")
     axe = _root() / "node_modules" / "axe-core" / "axe.min.js"
     page.add_script_tag(path=str(axe))

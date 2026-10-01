@@ -13,8 +13,6 @@ from citry import Citry, Component
 
 pytestmark = pytest.mark.e2e
 
-READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
-
 
 def _workflow_page() -> tuple[Citry, str]:
     app = Citry(secret="citry-ui-repeatable-form-e2e", autodiscover=False)  # noqa: S106
@@ -28,6 +26,9 @@ def _workflow_page() -> tuple[Citry, str]:
             order: str = "primary,secondary"
             next_id: int = 3
             focus_id: str = ""
+            # The test closes the form through a server update so Vue unmounts
+            # the whole form subtree and runs each control's teardown.
+            is_open: bool = True
 
         class State(Kwargs):
             pass
@@ -45,6 +46,7 @@ def _workflow_page() -> tuple[Citry, str]:
                     order=state.order,
                     next_id=state.next_id,
                     focus_id=state.focus_id,
+                    is_open=state.is_open,
                 )
 
             def reverse(self, state):
@@ -54,6 +56,17 @@ def _workflow_page() -> tuple[Citry, str]:
                     order=state.order,
                     next_id=state.next_id,
                     focus_id=state.focus_id,
+                    is_open=state.is_open,
+                )
+
+            def close(self, state):
+                state.is_open = False
+                state.focus_id = ""
+                return EscalationTeam(
+                    order=state.order,
+                    next_id=state.next_id,
+                    focus_id=state.focus_id,
+                    is_open=state.is_open,
                 )
 
             def remove(self, data: RowActionIn, state):  # noqa: F821
@@ -71,6 +84,7 @@ def _workflow_page() -> tuple[Citry, str]:
                     order=state.order,
                     next_id=state.next_id,
                     focus_id=state.focus_id,
+                    is_open=state.is_open,
                 )
 
         def template_data(self, kwargs, slots):
@@ -102,6 +116,7 @@ def _workflow_page() -> tuple[Citry, str]:
                 for row_id in order
             )
             return {
+                "is_open": kwargs.is_open,
                 "rows": rows,
                 "roles": (
                     citry_ui.CComboboxOption("owner", "Owner"),
@@ -117,123 +132,125 @@ def _workflow_page() -> tuple[Citry, str]:
             return {"focusId": kwargs.focus_id}
 
         template = """
-          <section data-escalation-team>
+          <section ref="root" data-escalation-team>
             <h1>Escalation team</h1>
             <p>Contacts are notified in the order shown.</p>
-            <c-CForm
-              #c-key="'escalation-team-form'"
-              id="escalation-team-form"
-              action="/escalation-team"
-              method="post"
-              c-attrs="form_attrs"
-            >
-              <c-for each="row in rows">
-                <section
-                  #c-key="row['id']"
-                  c-data-contact-id="row['id']"
-                >
-                  <h2>{{ row["label"] }}</h2>
-                  <c-CField
-                    #c-key="row['id'] + '-email-field'"
-                    c-control_id="row['id'] + '-email'"
-                    required
+            <c-if cond="is_open">
+              <c-CForm
+                #c-key="'escalation-team-form'"
+                id="escalation-team-form"
+                action="/escalation-team"
+                method="post"
+                c-attrs="form_attrs"
+              >
+                <c-for each="row in rows">
+                  <section
+                    #c-key="row['id']"
+                    c-data-contact-id="row['id']"
                   >
-                    <c-fill name="label">
-                      Work email
-                    </c-fill>
-                    <c-fill name="default">
-                      <c-CInput
-                        #c-key="row['id'] + '-email-input'"
-                        c-name="'contacts[' + row['id'] + '][email]'"
-                        type="email"
-                        c-value="row['email']"
-                        autocomplete="email"
-                        c-attrs="{'data-contact-email': row['id']}"
-                      />
-                    </c-fill>
-                    <c-fill name="description">
-                      Receives alerts for this escalation position.
-                    </c-fill>
-                    <c-fill name="error">
-                      Enter a valid work email.
-                    </c-fill>
-                  </c-CField>
-                  <c-CField
-                    #c-key="row['id'] + '-role-field'"
-                    c-control_id="row['id'] + '-role'"
-                    required
-                  >
-                    <c-fill name="label">
-                      Access role
-                    </c-fill>
-                    <c-fill name="default">
-                      <c-CCombobox
-                        #c-key="row['id'] + '-role-combobox'"
-                        c-name="'contacts[' + row['id'] + '][role]'"
-                        c-options="roles"
-                        c-value="row['role']"
-                        c-input_attrs="{'data-contact-role': row['id']}"
-                      />
-                    </c-fill>
-                  </c-CField>
+                    <h2>{{ row["label"] }}</h2>
+                    <c-CField
+                      #c-key="row['id'] + '-email-field'"
+                      c-control_id="row['id'] + '-email'"
+                      required
+                    >
+                      <c-fill name="label">
+                        Work email
+                      </c-fill>
+                      <c-fill name="default">
+                        <c-CInput
+                          #c-key="row['id'] + '-email-input'"
+                          c-name="'contacts[' + row['id'] + '][email]'"
+                          type="email"
+                          c-value="row['email']"
+                          autocomplete="email"
+                          c-attrs="{'data-contact-email': row['id']}"
+                        />
+                      </c-fill>
+                      <c-fill name="description">
+                        Receives alerts for this escalation position.
+                      </c-fill>
+                      <c-fill name="error">
+                        Enter a valid work email.
+                      </c-fill>
+                    </c-CField>
+                    <c-CField
+                      #c-key="row['id'] + '-role-field'"
+                      c-control_id="row['id'] + '-role'"
+                      required
+                    >
+                      <c-fill name="label">
+                        Access role
+                      </c-fill>
+                      <c-fill name="default">
+                        <c-CCombobox
+                          #c-key="row['id'] + '-role-combobox'"
+                          c-name="'contacts[' + row['id'] + '][role]'"
+                          c-options="roles"
+                          c-value="row['role']"
+                          c-input_attrs="{'data-contact-role': row['id']}"
+                        />
+                      </c-fill>
+                    </c-CField>
+                    <c-CButton
+                      #c-key="row['id'] + '-remove-button'"
+                      type="button"
+                      variant="ghost"
+                      intent="danger"
+                      c-attrs="{
+                        'aria-label': 'Remove ' + row['label'],
+                        'data-remove-contact': row['id'],
+                      }"
+                      @c-click="remove({row_id: $event.currentTarget.dataset.removeContact})"
+                    >
+                      Remove
+                    </c-CButton>
+                  </section>
+                </c-for>
+                <div>
                   <c-CButton
-                    #c-key="row['id'] + '-remove-button'"
+                    type="button"
+                    variant="outline"
+                    c-attrs="{'data-add-contact': ''}"
+                    @c-click="add"
+                  >
+                    Add contact
+                  </c-CButton>
+                  <c-CButton
                     type="button"
                     variant="ghost"
-                    intent="danger"
-                    c-attrs="{
-                      'aria-label': 'Remove ' + row['label'],
-                      'data-remove-contact': row['id'],
-                    }"
-                    @c-click="remove({row_id: $el.dataset.removeContact})"
+                    c-attrs="{'data-reverse-contacts': ''}"
+                    @c-click="reverse"
                   >
-                    Remove
+                    Reverse order
                   </c-CButton>
-                </section>
-              </c-for>
-              <div>
-                <c-CButton
-                  type="button"
-                  variant="outline"
-                  c-attrs="{'data-add-contact': ''}"
-                  @c-click="add"
-                >
-                  Add contact
-                </c-CButton>
-                <c-CButton
-                  type="button"
-                  variant="ghost"
-                  c-attrs="{'data-reverse-contacts': ''}"
-                  @c-click="reverse"
-                >
-                  Reverse order
-                </c-CButton>
-                <c-CButton
-                  type="submit"
-                  c-attrs="{'data-save-team': ''}"
-                >
-                  Save escalation team
-                </c-CButton>
-              </div>
-            </c-CForm>
+                  <c-CButton
+                    type="submit"
+                    c-attrs="{'data-save-team': ''}"
+                  >
+                    Save escalation team
+                  </c-CButton>
+                </div>
+              </c-CForm>
+            </c-if>
           </section>
         """
 
         js = """
           $component({
-            init: ({ els, data }) => {
-              const root = els[0];
-              if (!data.focusId) {
+            onServerRender: ({ component }) => {
+              const root = component.$refs.root;
+              if (!component.focusId) {
                 return;
               }
-              // A replacement component initializes before its new root is
-              // necessarily connected. Wait for the browser commit before
-              // focusing a newly added descendant.
+              // A server revision patches the DOM before the browser commits
+              // layout. Wait for that commit before focusing a newly added or
+              // surviving descendant.
               requestAnimationFrame(() => {
-                const target = data.focusId === "__add__"
+                const target = component.focusId === "__add__"
                   ? root.querySelector("[data-add-contact]")
                   : [...root.querySelectorAll("[data-contact-email]")]
-                    .find((input) => input.dataset.contactEmail === data.focusId);
+                    .find((input) => input.dataset.contactEmail === component.focusId);
                 target?.focus({ preventScroll: true });
               });
             },
@@ -269,11 +286,12 @@ def _send(page: Any, event: str) -> None:
 def test_repeatable_workflow_preserves_edits_identity_validation_and_submission(
     page: Any,
     serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
 ) -> None:
     app, html = _workflow_page()
     base = serve_citry_ui_live(app, html)
     page.goto(base + "/")
-    page.wait_for_function(READY)
+    wait_for_citry_ready()
 
     form = page.locator("#escalation-team-form")
     secondary_email = page.locator('[data-contact-email="secondary"]')
@@ -346,16 +364,19 @@ def test_repeatable_workflow_preserves_edits_identity_validation_and_submission(
     ]
     assert form.evaluate("element => element.matches(':valid')") is True
 
-    page.evaluate(
-        """() => {
-          window.__removedTeam = document.querySelector('[data-escalation-team]');
-          window.__removedTeam.remove();
-        }"""
-    )
-    page.wait_for_function(
-        """() => (
-          !window.__removedTeam.querySelector('[data-citry-form-initialized]')
-          && !window.__removedTeam.querySelector('[data-citry-input-initialized]')
-          && !window.__removedTeam.querySelector('[data-citry-combobox-initialized]')
+    # Vue owns this DOM, so the form must leave through a server update that
+    # Vue applies; detaching the element by hand would skip every teardown.
+    page.evaluate("window.__removedForm = document.querySelector('#escalation-team-form')")
+    _send(page, "close")
+    page.wait_for_function("!document.querySelector('#escalation-team-form')")
+    assert (
+        page.evaluate(
+            """() => (
+          !window.__removedForm.isConnected
+          && !window.__removedForm.hasAttribute('data-citry-form-initialized')
+          && !window.__removedForm.querySelector('[data-citry-input-initialized]')
+          && !window.__removedForm.querySelector('[data-citry-combobox-initialized]')
         )"""
+        )
+        is True
     )

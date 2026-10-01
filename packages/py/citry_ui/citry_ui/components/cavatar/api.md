@@ -63,7 +63,7 @@ Variants style the fallback. Sizes and shapes control the fixed visual frame.
 
 ## Update the image in the browser
 
-Client inputs are passed through `$c-props="{...}"`. `src` accepts a URL or
+Client inputs are passed with native Vue `:` bindings and callback props. `src` accepts a URL or
 `null`; `onStatusChange` reports fallback, loading, loaded, and error states.
 
 <c-ui-demo
@@ -90,6 +90,13 @@ root, fallback, and image without relying on private classes.
   path="packages/py/citry_ui/citry_ui/components/cavatar/snippets/customization.py"
   title="Customize Avatar with public CSS"
 />
+
+`attrs` targets the root and `img_attrs` targets the image. Both accept
+ordinary native, ARIA, and data attributes. They reject the attributes Avatar
+sets itself (such as `role` on the root and `src` on the image), Citry runtime
+attributes, and any Vue directive syntax: names starting with `v-`, `:`, `.`,
+`^`, `@`, or `#`. `img_attrs` also rejects inline `on*` handlers. Write Vue bindings
+and listeners on the component tag in your template instead.
 
 ## Accessibility and loading behavior
 

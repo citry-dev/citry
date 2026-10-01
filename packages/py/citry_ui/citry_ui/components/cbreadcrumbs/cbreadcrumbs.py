@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
@@ -15,9 +15,6 @@ CBreadcrumbsSize = Literal["sm", "md", "lg"]
 
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-teleport", "x-text"}
-)
 _ROOT_OWNED_ATTRS = frozenset({"aria-hidden", "aria-label", "data-citry-ui-part", "data-size", "data-wrap", "role"})
 _LIST_OWNED_ATTRS = frozenset({"aria-hidden", "data-citry-ui-part", "role"})
 _ITEM_OWNED_ATTRS = frozenset({"aria-current", "aria-hidden", "data-citry-ui-part", "href", "role"})
@@ -81,26 +78,19 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
     return dict(attrs)
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    if attribute.startswith("x-bind:"):
-        return attribute.removeprefix("x-bind:").split(".", 1)[0]
-    if attribute.startswith((":", ".")):
-        return attribute[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(input_name: str, attrs: dict[str, object], owned: frozenset[str]) -> None:
     component_name = f"CBreadcrumbs {input_name}"
     reject_owned_attrs(attrs, owned, component_name)
     for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{component_name} cannot contain reserved Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
-            raise ValueError(f"{component_name} cannot use ownership directive {key!r}.")
-        target = _dynamic_target(normalized)
-        if target in owned:
-            raise ValueError(f"{component_name} cannot dynamically bind owned attribute {target!r}.")
+        # A Vue directive could rebind an owned attribute such as `href`, add
+        # listeners, or change the trail's structure, so none may arrive through Python data.
+        if is_vue_directive_attribute(key):
+            raise ValueError(
+                f"{component_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
 
 
 def _plain_choice(input_name: str, value: object, allowed: tuple[str, ...]) -> str:
@@ -192,7 +182,7 @@ class CBreadcrumbs(LibraryComponent):
         c-aria-label="tr('citry-ui-breadcrumbs-label') if catalog_label else label"
         c-$c-tr:citry-ui-breadcrumbs-label[aria-label]="True if catalog_label else None"
         c-data-size="size"
-        c-data-wrap="wrap"
+        c-data-wrap="'' if wrap else None"
         c-bind="attrs"
         data-citry-ui-part="breadcrumbs"
       >

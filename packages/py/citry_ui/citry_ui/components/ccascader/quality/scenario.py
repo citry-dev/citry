@@ -9,7 +9,7 @@ def cascader_states_component(app: Citry) -> type[Component]:
     class CitryUiCascaderStates(Component):
         citry = app
         template = """
-          <section class="citry-ui-quality-stack" data-quality-cascader-ready x-data="{path:['world','europe','prague'],open:true}">
+          <section class="citry-ui-quality-stack" data-quality-cascader-ready >
             <h1>Cascader states</h1>
             <form>
               <c-CCascader id="quality-cascader" name="place" c-open="True" c-value="['world','europe','prague']" c-attrs="quality_attrs">
@@ -21,6 +21,15 @@ def cascader_states_component(app: Citry) -> type[Component]:
               </c-CCascader>
             </form>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                path:['world','europe','prague'],open:true
+              };
+            },
+          });
         """
 
         def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:

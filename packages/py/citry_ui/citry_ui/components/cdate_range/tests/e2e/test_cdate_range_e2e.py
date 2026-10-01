@@ -38,8 +38,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
             </head>
             <body>
               {provider_open}
-              <section x-data="{{value:{{start:'2026-08-19',end:'2026-08-24'}},controlledOpen:false,acceptValue:false,acceptOpen:false}}">
-                <form id="booking" @submit.prevent="window.__rangeSubmits.push(Array.from(new FormData($event.target).entries()))">
+              <section>
+                <form id="booking" @submit.prevent="window.__rangeSubmits.push(Array.from(new window.FormData($event.target).entries()))">
                   <fieldset>
                     <legend>Stay dates</legend>
                     <c-CDateRange
@@ -51,7 +51,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                       min="2026-08-10"
                       max="2026-09-15"
                       required
-                      $c-props="{{onValueChange:(value,detail)=>window.__rangeEvents.push(['value',value,detail.source]),onOpenChange:(open,detail)=>window.__rangeEvents.push(['open',open,detail.reason])}}"
+                      :onValueChange="(value,detail)=>window.__rangeEvents.push(['value',value,detail.source])"
+                      :onOpenChange="(open,detail)=>window.__rangeEvents.push(['open',open,detail.reason])"
                       @input="window.__rangeEvents.push(['input',$event.target.dataset.citryUiPart,$event.target.value])"
                       @change="window.__rangeEvents.push(['change',$event.target.dataset.citryUiPart,$event.target.value])"
                     />
@@ -66,7 +67,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                   end="2026-08-24"
                   min="2026-08-10"
                   max="2026-09-15"
-                  $c-props="{{value,onValueChange:(next,detail)=>{{window.__rangeEvents.push(['controlled-value',next,detail.controlled]);if(acceptValue)value=next}}}}"
+                  :value="value"
+                  :onValueChange="(next,detail)=>{{window.__rangeEvents.push(['controlled-value',next,detail.controlled]);if(acceptValue)value=next}}"
                 />
                 <button id="accept-value" type="button" @click="acceptValue=true">Accept value</button>
                 <button id="set-value" type="button" @click="value={{start:'2026-08-25',end:'2026-08-27'}}">Set value</button>
@@ -75,7 +77,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                   id="controlled-open"
                   min="2026-08-10"
                   max="2026-09-15"
-                  $c-props="{{open:controlledOpen,onOpenChange:(open,detail)=>{{window.__rangeEvents.push(['controlled-open',open,detail.controlled]);if(acceptOpen)controlledOpen=open}}}}"
+                  :open="controlledOpen"
+                  :onOpenChange="(open,detail)=>{{window.__rangeEvents.push(['controlled-open',open,detail.controlled]);if(acceptOpen)controlledOpen=open}}"
                 />
                 <button id="accept-open" type="button" @click="acceptOpen=true">Accept open</button>
 
@@ -99,6 +102,7 @@ def _page(app: Citry, *, localized: bool = False) -> str:
             </body>
           </html>
         """
+        js = "$component({data(){return {value:{start:'2026-08-19',end:'2026-08-24'},controlledOpen:false,acceptValue:false,acceptOpen:false};}});"
 
     if localized:
         context = app.extensions.get_extension("i18n").make_context(locale="en-US")
@@ -270,7 +274,9 @@ def test_client_locale_switch_updates_summary_labels_title_clear_and_endpoints(
     assert "August 19, 2026" in trigger.text_content()
     trigger.click()
     assert page.locator("#stay-popover-title").text_content().strip() == "Choose date range"
-    page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-cs'), '$i18n').switchLocale('cs-CZ')")
+    trigger.click()
+    page.wait_for_function("document.querySelector('#stay').getAttribute('aria-expanded') === 'false'")
+    page.locator("#switch-cs").click()
     page.wait_for_function("document.querySelector('main')?.lang === 'cs-CZ'")
     page.wait_for_function("document.querySelector('#stay').textContent.includes('19. srpna 2026')")
     assert (

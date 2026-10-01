@@ -8,8 +8,8 @@ class RadioForm(Component):
     template = """
       <form
         class="radio-form"
-        x-data="{result: ''}"
-        @submit.prevent="result = new FormData($event.target).get('plot') || 'Choose a plot'"
+
+        @submit.prevent="result = new window.FormData($event.target).get('plot') || 'Choose a plot'"
       >
         <c-CRadioGroup name="plot" required>
           <c-fill name="label">Planting plot</c-fill>
@@ -20,8 +20,17 @@ class RadioForm(Component):
           </c-fill>
         </c-CRadioGroup>
         <c-CRow><c-CButton type="submit">Reserve plot</c-CButton><button type="reset">Reset</button></c-CRow>
-        <output x-text="result"></output>
+        <output v-text="result"></output>
       </form>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            result: ''
+          };
+        },
+      });
     """
     css = """
       :where(.radio-form) {

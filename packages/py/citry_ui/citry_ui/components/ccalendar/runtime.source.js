@@ -7,8 +7,17 @@ $component({
     rangeStart: {}, rangeEnd: {}, rangePreview: {}, rangeStartLabel: {}, rangeEndLabel: {},
     accessibleLabel: {},
   },
-  init: ({ els, data, props, effect, inject, i18n }) => {
-    const root = els[0];
+  inject: {
+    fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+    formService: {from: Symbol.for('citry-ui:form'), default: null},
+  },
+  onServerRender: ({component}) => {
+    const root = component.$el;
+    const data = component;
+    const defaults = data.serverDefaults;
+    const props = component.$props;
+    const effect = Citry.vue.watchEffect;
+    const i18n = component.$i18n;
     const header = root.querySelector(':scope > [data-citry-ui-part="header"]');
     const previous = header?.querySelector(':scope > [data-citry-ui-part="previous"]');
     const heading = header?.querySelector(':scope > [data-citry-ui-part="heading"]');
@@ -19,8 +28,8 @@ $component({
     const input = root.querySelector(':scope > [data-citry-ui-part="fallback-input"]');
     if (!(root instanceof HTMLElement) || !(header instanceof HTMLElement) || !(previous instanceof HTMLButtonElement) || !(heading instanceof HTMLElement) || !(next instanceof HTMLButtonElement) || !(grid instanceof HTMLTableElement) || !(weekdayRow instanceof HTMLTableRowElement) || !(body instanceof HTMLTableSectionElement) || !(input instanceof HTMLInputElement) || input.type !== 'date') throw new Error('[citry-ui] CCalendar settled anatomy is invalid.');
 
-    const field = inject(Symbol.for('citry-ui:field'), null);
-    const form = inject(Symbol.for('citry-ui:form'), null);
+    const field = component.fieldService;
+    const form = component.formService;
     const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
     if (runtime?.generation !== 1) throw new Error('[citry-ui] CCalendar form-control runtime is unavailable.');
     const resolver = runtime.resolver(root, props, 'CCalendar');
@@ -44,16 +53,16 @@ $component({
       [PROFILE.day]: { day: 'numeric' },
       [PROFILE.label]: { day: 'numeric', month: 'long', weekday: 'long', year: 'numeric' },
     });
-    let current = input.value || data.value;
-    let visible = data.visibleDate || current || null;
+    let current = input.value || defaults.value;
+    let visible = defaults.visibleDate || current || null;
     let focused = current;
     let pendingFocus = null;
     let controlledValue = false;
     let controlledVisible = false;
     let configuration = null;
-    let previousConstraints = { min: data.min, max: data.max, unavailableDates: [...data.unavailableDates] };
-    let initialValue = data.value;
-    let initialVisible = data.visibleDate;
+    let previousConstraints = { min: defaults.min, max: defaults.max, unavailableDates: [...defaults.unavailableDates] };
+    let initialValue = defaults.value;
+    let initialVisible = defaults.visibleDate;
     let nativeInvalid = false;
     let invalidGeneration = 0;
     let unavailableMessage = data.unavailableMessage;
@@ -190,7 +199,7 @@ $component({
     };
     const resolveUnavailable = () => {
       const requested = props.unavailableDates;
-      if (requested === undefined) { resolver.clear('unavailableDates'); return [...data.unavailableDates]; }
+      if (requested === undefined) { resolver.clear('unavailableDates'); return [...defaults.unavailableDates]; }
       if (!Array.isArray(requested) || requested.length > 4096) { resolver.report('unavailableDates', requested); return previousConstraints.unavailableDates; }
       const normalized = requested.map(canonicalDate);
       if (normalized.some(value => value === null) || new Set(normalized).size !== normalized.length) { resolver.report('unavailableDates', requested); return previousConstraints.unavailableDates; }
@@ -198,8 +207,8 @@ $component({
       return normalized;
     };
     const resolveConstraints = () => {
-      const min = optionalDate('min', data.min);
-      const max = optionalDate('max', data.max);
+      const min = optionalDate('min', defaults.min);
+      const max = optionalDate('max', defaults.max);
       const unavailableDates = resolveUnavailable();
       if (min !== null && max !== null && min > max) {
         resolver.report('min/max', { min, max });
@@ -211,11 +220,11 @@ $component({
     };
     const resolveFirstDay = () => {
       const requested = props.firstDayOfWeek;
-      if (requested === undefined) return data.firstDayOfWeek;
+      if (requested === undefined) return defaults.firstDayOfWeek;
       if (requested === null) { resolver.clear('firstDayOfWeek'); return null; }
       if (Number.isInteger(requested) && requested >= 1 && requested <= 7) { resolver.clear('firstDayOfWeek'); return requested; }
       resolver.report('firstDayOfWeek', requested);
-      return data.firstDayOfWeek;
+      return defaults.firstDayOfWeek;
     };
     const resolveConfiguration = () => {
       const constraints = resolveConstraints();
@@ -223,15 +232,15 @@ $component({
         min: constraints.min,
         max: constraints.max,
         unavailable: new Set(constraints.unavailableDates),
-        required: field ? field.required : resolver.boolean('required', data.required),
-        disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(input),
-        readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-        invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
+        required: field ? field.required : resolver.boolean('required', defaults.required),
+        disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', defaults.disabled) || runtime.fieldsetDisabled(input),
+        readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : defaults.readonly),
+        invalid: field ? field.invalid : resolver.boolean('invalid', defaults.invalid),
         firstDay: resolveFirstDay(),
-        showAdjacentDays: resolver.boolean('showAdjacentDays', data.showAdjacentDays),
-        fixedWeeks: resolver.boolean('fixedWeeks', data.fixedWeeks),
-        variant: resolver.choice('variant', data.variant, ['outline', 'plain']),
-        size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
+        showAdjacentDays: resolver.boolean('showAdjacentDays', defaults.showAdjacentDays),
+        fixedWeeks: resolver.boolean('fixedWeeks', defaults.fixedWeeks),
+        variant: resolver.choice('variant', defaults.variant, ['outline', 'plain']),
+        size: resolver.choice('size', defaults.size, ['sm', 'md', 'lg']),
       };
     };
     const reportFieldOwned = () => {

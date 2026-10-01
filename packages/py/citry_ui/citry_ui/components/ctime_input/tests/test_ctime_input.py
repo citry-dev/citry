@@ -153,10 +153,30 @@ def test_invalid_server_inputs_fail_deterministically(kwargs, error, match) -> N
         _render('<c-CTimeInput c-bind="kwargs" />', {"kwargs": kwargs})
 
 
-@pytest.mark.parametrize("attribute", ["type", "value", "data-empty", ":min", "x-model", "data-citry-hostile"])
-def test_owned_runtime_and_dynamic_attributes_are_rejected(attribute: str) -> None:
+@pytest.mark.parametrize("attribute", ["type", "value", "data-empty", "data-citry-hostile"])
+def test_owned_and_runtime_attributes_are_rejected(attribute: str) -> None:
     with pytest.raises(ValueError, match="cannot"):
         _render('<c-CTimeInput c-attrs="attrs" />', {"attrs": {attribute: "hostile"}})
+
+
+@pytest.mark.parametrize("attribute", [":min", "v-bind:value", "v-model", "v-if", "V-IF", "@change", "#default"])
+def test_python_attrs_reject_vue_directives(attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    message = re.escape(f"CTimeInput attrs cannot contain the Vue directive {attribute!r}")
+    with pytest.raises(ValueError, match=message):
+        _render('<c-CTimeInput c-attrs="attrs" />', {"attrs": {attribute: "hostile"}})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render('<c-CTimeInput c-attrs="attrs" />', {"attrs": {"x-data": "{}", "hx-get": "/slots"}})
+
+    root = re.search(r'<[^>]+data-citry-ui-part="time-input"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/slots"' in root.group(0)
 
 
 def test_field_owned_state_and_cross_form_owner_conflicts_fail() -> None:

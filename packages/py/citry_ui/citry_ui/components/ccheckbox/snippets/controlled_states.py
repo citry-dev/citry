@@ -8,21 +8,17 @@ class ControlledCheckbox(Component):
     template = """
       <section
         class="checkbox-control-demo"
-        x-data
-        x-init="Alpine.store('checkboxOwnership', {controlled: true, checked: false})"
       >
         <c-CCheckbox
-          $c-props="{
-            checked: $store.checkboxOwnership.controlled
-              ? $store.checkboxOwnership.checked
-              : undefined,
-          }"
-          @input="$store.checkboxOwnership.checked = $event.target.checked"
+          :checked="controlled
+              ? checked
+              : undefined"
+          @input="checked = $event.target.checked"
         >
           <c-fill name="default">Press this leaf in the field journal</c-fill>
           <c-fill name="description">
             <span
-              x-text="$store.checkboxOwnership.controlled
+              v-text="controlled
                 ? 'Application controlled'
                 : 'Browser controlled'"
             ></span>
@@ -31,14 +27,14 @@ class ControlledCheckbox(Component):
         <div class="checkbox-control-demo__actions">
           <c-CButton
             size="sm"
-            @click="$store.checkboxOwnership.controlled = false"
+            @click="controlled = false"
           >
             Release
           </c-CButton>
           <c-CButton
             size="sm"
             variant="outline"
-            @click="$store.checkboxOwnership.checked = true; $store.checkboxOwnership.controlled = true"
+            @click="checked = true; controlled = true"
           >
             Check and reacquire
           </c-CButton>
@@ -46,12 +42,21 @@ class ControlledCheckbox(Component):
             size="sm"
             variant="ghost"
             intent="neutral"
-            @click="$store.checkboxOwnership.checked = false; $store.checkboxOwnership.controlled = true"
+            @click="checked = false; controlled = true"
           >
             Clear and reacquire
           </c-CButton>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            controlled: true, checked: false
+          };
+        },
+      });
     """
 
     css = """

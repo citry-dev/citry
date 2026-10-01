@@ -8,7 +8,7 @@ class VirtualListAtAGlance(Component):
     template = """
       <c-CVirtualList aria_label="Build activity" c-estimated_item_size="64">
         <c-for each="entry in entries">
-          <c-CVirtualListItem c-item_key="entry['key']">
+          <c-CVirtualListItem #c-key="entry['key']" c-item_key="entry['key']">
             <article>
               <strong>{{ entry['title'] }}</strong><br />
               <small>{{ entry['detail'] }}</small>

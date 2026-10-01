@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
 from citry import LibraryComponent, SlotInput
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_html_attr_bindings
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -68,34 +68,7 @@ _ROOT_OWNED = frozenset(
         "id",
         "inert",
         "role",
-        "tabindex",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
-_BOUND_OWNED = frozenset(
-    {
-        "aria-hidden",
-        "aria-label",
-        "aria-labelledby",
-        "data-citry-ui-part",
-        "data-collapsed",
-        "data-collapsible",
-        "data-side",
-        "data-size",
-        "data-sticky",
-        "data-variant",
-        "hidden",
-        "id",
-        "inert",
-        "role",
+        "ref",
         "tabindex",
     }
 )
@@ -151,7 +124,9 @@ class CSidebar(LibraryComponent):
         validate_non_empty_string("CSidebar", "expand_label", expand_label)
         validate_non_empty_string("CSidebar", "collapse_label", collapse_label)
         reject_owned_attrs(kwargs.attrs, _ROOT_OWNED, "CSidebar")
-        reject_html_attr_bindings(kwargs.attrs, _BOUND_OWNED, "CSidebar")
+        # A Vue directive could rebind the collapsed state, landmark naming,
+        # or panel wiring this component owns, so none may arrive through Python data.
+        reject_vue_directive_attrs(kwargs.attrs, "CSidebar")
 
         root_id = kwargs.id or f"cui-sidebar-{self.id}"
         panel_id = f"{root_id}-panel"
@@ -181,28 +156,31 @@ class CSidebar(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         return {
-            "collapsed": kwargs.collapsed,
-            "collapsible": kwargs.collapsible,
-            "side": kwargs.side,
-            "variant": kwargs.variant,
-            "size": kwargs.size,
-            "sticky": kwargs.sticky,
+            "serverDefaults": {
+                "collapsed": kwargs.collapsed,
+                "collapsible": kwargs.collapsible,
+                "side": kwargs.side,
+                "variant": kwargs.variant,
+                "size": kwargs.size,
+                "sticky": kwargs.sticky,
+            },
         }
 
     template = """
       <c-element
         c-is="tag"
+        ref="root"
         class="cui-sidebar"
         c-id="root_id"
         c-aria-label="label"
         c-bind="attrs"
-        c-data-collapsed="collapsed"
+        c-data-collapsed="'' if collapsed else None"
         c-data-collapsible="collapsible"
-        c-data-has-header="has_header"
+        c-data-has-header="'' if has_header else None"
         c-data-side="side"
         c-data-variant="variant"
         c-data-size="size"
-        c-data-sticky="sticky"
+        c-data-sticky="'' if sticky else None"
         data-citry-ui-part="sidebar"
       >
         <button

@@ -37,8 +37,8 @@ control.
 
 ## Control open and active state
 
-`open` and `active` are independent `$c-props` controls. In controlled mode,
-`onOpenChange` and `onActiveChange` report requests; update your Alpine state
+`open` and `active` are independent native Vue prop bindings. In controlled mode,
+`onOpenChange` and `onActiveChange` report requests; update your Vue state
 to accept them. Each detail includes a reason and the stable step value.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ctour/snippets/controlled.py" title="Control a Tour" />

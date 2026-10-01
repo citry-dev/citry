@@ -10,7 +10,7 @@ from citry import Citry, Component
 from citry_ui import CColorPicker, CColorSwatch
 
 
-def _render(attrs: str = "", *, swatches: object = ()) -> str:
+def _render(attrs: str = "", *, swatches: object = (), static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -22,7 +22,8 @@ def _render(attrs: str = "", *, swatches: object = ()) -> str:
 
         template = f'<c-CColorPicker label="Brand color" {attrs} c-swatches="swatches" />'
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def test_schema_registration_normalization_native_fallback_and_swatches() -> None:
@@ -36,7 +37,11 @@ def test_schema_registration_normalization_native_fallback_and_swatches() -> Non
         "swatches",
     ]
     assert CColorPicker in citry_ui.COMPONENTS
-    html = _render('value="#AbC" name="brand" form="profile" c-open="True"', swatches=[CColorSwatch("#fff", "White")])
+    html = _render(
+        'value="#AbC" name="brand" form="profile" c-open="True"',
+        swatches=[CColorSwatch("#fff", "White")],
+        static_fallback=True,
+    )
     assert 'type="color"' in html
     assert 'value="#aabbcc"' in html
     assert 'name="brand"' in html
@@ -61,6 +66,29 @@ def test_schema_registration_normalization_native_fallback_and_swatches() -> Non
 def test_invalid_values_fail(attrs: str, swatches: object, match: str) -> None:
     with pytest.raises((TypeError, ValueError), match=match):
         _render(attrs, swatches=swatches)
+
+
+@pytest.mark.parametrize(
+    ("attribute", "match"),
+    [
+        ("role", "cannot override owned attribute"),
+        ("data-citry-morph", "Citry runtime attribute"),
+        (":role", "CColorPicker attrs cannot contain the Vue directive"),
+        ("v-bind:data-open", "Vue directive"),
+        ("v-if", "Vue directive"),
+        ("V-IF", "Vue directive"),
+        ("@input", "Vue directive"),
+        ("#default", "Vue directive"),
+    ],
+)
+def test_attrs_reject_owned_runtime_and_vue_directive_names(attribute: str, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        _render(f"c-attrs=\"{{'{attribute}': 'x'}}\"")
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render("c-attrs=\"{'x-model': 'plain'}\"", static_fallback=True)
+    assert 'x-model="plain"' in html
 
 
 def test_assets_docs_and_translations_cover_contract() -> None:

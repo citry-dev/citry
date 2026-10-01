@@ -48,10 +48,10 @@ def radio_states_component(app: Citry) -> type[Component]:
                 <c-fill name="default"><c-CRadio value="rest">Winter rest</c-CRadio></c-fill>
               </c-CRadioGroup>
             </div>
-            <div x-data="{value: 'moss'}" data-quality-state="controlled">
+            <div data-quality-state="controlled">
               <c-CRadioGroup
                 name="quality-controlled"
-                $c-props="{value}"
+                :value="value"
                 @input="value = $event.target.value"
                 orientation="horizontal"
               >
@@ -112,6 +112,15 @@ def radio_states_component(app: Citry) -> type[Component]:
               </c-CRadioGroup>
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                value: 'moss'
+              };
+            },
+          });
         """
 
         css = """

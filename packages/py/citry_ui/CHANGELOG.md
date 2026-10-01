@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Citry UI now requires `citry` 0.6.0 or newer, whose Vue runtime its
+  components use.
+- **Breaking:** pass client inputs and callbacks to a component with Vue
+  prop bindings on its tag instead of `$c-props`.
+
+  ```citry-html
+  <!-- 0.2.2 -->
+  <c-CDialog $c-props="{ open }" />
+
+  <!-- 0.3.0 -->
+  <c-CDialog :open="open" />
+  ```
+
+- **Breaking:** component `attrs` mappings, and part mappings such as
+  `input_attrs` or `trigger_attrs`, reject Vue directive names (those
+  starting with `v-`, `:`, `.`, `^`, `@`, or `#`) with an error that names
+  the component. Write Vue bindings and listeners on the component tag in
+  your template instead, for example `<c-CSplitButton @click="...">`.
+- **Breaking:** `CMultiSelect` rejects inline event handler attributes
+  such as `onclick` in `attrs`, `trigger_attrs`, and `listbox_attrs` with
+  an error that names the input. Use the `onValueChange` callback or a Vue
+  listener in your template instead.
+- **Breaking:** content with Vue bindings that you write in a separate
+  component and pass into Tabs, Repeatable Form Collection, Sortable,
+  Splitter, Stepper, Tour, Transfer List, or Virtual List stops the render
+  with an error that names the content. Write such content inside the
+  group's tag or in a transparent component; there, `v-text`, `@click`,
+  `v-model`, and `@c-*` bindings read your component's data.
+
+### Fixed
+
+- `CMenuSubmenu` closes its submenu again when page code or a stray
+  `popovertarget` opens it while the submenu is closed. It previously threw
+  `hideNativePopover is not defined` and left the submenu open.
+- `CScrollArea` no longer calls `onScrollChange` for the scroll event its own
+  offset restore causes when the area is moved to another place in the page
+  before the next frame; the callback previously received that event with a
+  `null` source target.
+
 ## [0.2.2] - 2026-09-11
 
 ### Fixed

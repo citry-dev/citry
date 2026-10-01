@@ -42,7 +42,7 @@ Invalid characters are discarded and reported through `onValueInvalid`.
 ## Control the value
 
 Client `value` controls the exact string. An edit is a request: the displayed
-cells and Form value remain owner-controlled until the Alpine expression
+cells and Form value remain owner-controlled until the Vue expression
 returns the requested value.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cpin_input/snippets/controlled.py" title="Control a PinInput" />
@@ -62,6 +62,13 @@ disabled values do not submit.
 `one_time_code=True` emits `autocomplete="one-time-code"`. Set an explicit
 `input_attrs={"autocomplete": "..."}` when another autocomplete policy is
 required. Citry never invokes WebOTP or reads SMS messages.
+
+`attrs` and `input_attrs` accept ordinary native, ARIA, and data attributes.
+They reject the attributes the component sets itself (such as the input's
+`name` and `pattern`), Citry runtime attributes, and any Vue directive syntax:
+names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and
+listeners on the component tag in your template instead, for example
+`<c-CPinInput :title="hint" :onValueChange="save">`.
 
 ## Mask or group the visual cells
 

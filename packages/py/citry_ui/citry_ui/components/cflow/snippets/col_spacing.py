@@ -14,7 +14,7 @@ class StackSpacing(Component):
     template = """
       <section class="flow-spacing" aria-label="Col gap presets">
         <c-for each="gap in gaps">
-          <c-CCol c-gap="gap" class_="flow-spacing__stack">
+          <c-CCol #c-key="gap" c-gap="gap" class_="flow-spacing__stack">
             <strong>{{ gap }}</strong>
             <span>Clay body</span>
             <span>Glaze test</span>

@@ -30,7 +30,7 @@ def _page() -> str:
         citry = app
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Sidebar evidence</title><c-css /></head>
-          <body x-data>
+          <body>
             <form>
               <c-CSidebar id="rail" tag="nav" label="Rail navigation" class_="brand-sidebar">
                 <c-fill name="header"><strong>Northstar</strong></c-fill>
@@ -42,7 +42,8 @@ def _page() -> str:
               <button id="form-submit" type="submit">Submit</button>
             </form>
             <c-CSidebar id="offcanvas" label="Tools" collapsible="offcanvas"
-              $c-props="{collapsed:$store.sidebar.collapsed,onCollapsedChange:(next,detail)=>{$store.sidebar.events.push([next,detail.previousCollapsed,detail.controlled]);if($store.sidebar.accept)$store.sidebar.collapsed=next}}">
+              :collapsed="collapsed"
+              :on-collapsed-change="(next,detail)=>{events.push([next,detail.previousCollapsed,detail.controlled]);if(accept)collapsed=next}">
               <a id="tool-link" href="#tool">Tool</a>
             </c-CSidebar>
             <div dir="rtl">
@@ -53,11 +54,61 @@ def _page() -> str:
           </body></html>
         """
         css = ".brand-sidebar { --cui-sidebar-width: 18rem; --cui-sidebar-radius: 19px; }"
-        js = """
-          Alpine.store('sidebar', {collapsed:false,accept:false,events:[]});
-        """
+        js = """$component({
+          data(){return {collapsed:false,accept:false,events:[]}},
+          mounted(){globalThis.sidebarEvidence=this},
+          unmounted(){if(globalThis.sidebarEvidence===this)delete globalThis.sidebarEvidence},
+        })"""
 
     return str(Page())
+
+
+def _revision_page() -> tuple[Citry, str]:
+    app = Citry(secret="citry-ui-sidebar-e2e", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(citry_ui)
+
+    class RevisionSidebar(Component):
+        citry = app
+
+        class Kwargs:
+            step: int = 0
+
+        class State(Kwargs):
+            pass
+
+        class Slots:
+            pass
+
+        class Events:
+            def advance(self, state):
+                state.step += 1
+                return RevisionSidebar(step=state.step)
+
+        template = """
+          <section>
+            <button id="advance-sidebar" type="button" @c-click="advance">Advance</button>
+            <output id="sidebar-step">{{ step }}</output>
+            <c-CSidebar
+              #c-key="'revision-sidebar'"
+              id="revision-sidebar"
+              label="Revision navigation"
+              c-collapsed="server_collapsed"
+            >Revision content</c-CSidebar>
+          </section>
+        """
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:
+            return {"step": kwargs.step, "server_collapsed": kwargs.step >= 2}
+
+    class Page(Component):
+        citry = app
+        template = """
+          <!doctype html><html lang="en"><head><meta charset="utf-8"><c-css /></head>
+          <body><c-revision-sidebar /><c-js /></body></html>
+        """
+
+    return app, str(Page())
 
 
 def _load(page: Any) -> list[str]:
@@ -108,16 +159,23 @@ def test_controlled_offcanvas_request_acceptance_and_focus_repair(page: Any) -> 
 
     toggle.click()
     assert root.get_attribute("data-collapsed") is None
-    assert page.evaluate("Alpine.store('sidebar').events") == [[True, False, True]]
+    assert page.evaluate("sidebarEvidence.events") == [[True, False, True]]
 
-    page.evaluate("Alpine.store('sidebar').accept = true")
+    page.evaluate("sidebarEvidence.accept = true")
     link.focus()
     toggle.evaluate("element => element.click()")
     page.wait_for_function("document.querySelector('#offcanvas').hasAttribute('data-collapsed')")
     assert root.locator('[data-citry-ui-part="panel"]').is_hidden()
     assert toggle.get_attribute("aria-expanded") == "false"
     assert toggle.evaluate("element => document.activeElement === element")
-    assert page.evaluate("Alpine.store('sidebar').events")[-1] == [True, False, True]
+    assert page.evaluate("sidebarEvidence.events")[-1] == [True, False, True]
+
+    page.evaluate("sidebarEvidence.collapsed = false")
+    page.wait_for_function("!document.querySelector('#offcanvas').hasAttribute('data-collapsed')")
+    page.evaluate("sidebarEvidence.collapsed = undefined")
+    toggle.click()
+    assert root.get_attribute("data-collapsed") == ""
+    assert page.evaluate("sidebarEvidence.events.at(-1)") == [True, False, False]
     assert errors == []
 
 
@@ -140,3 +198,34 @@ def test_landmarks_logical_side_environment_and_axe(page: Any) -> None:
     )
     assert violations == []
     assert errors == []
+
+
+def test_correlated_revision_preserves_local_state_until_server_baseline_changes(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    app, html = _revision_page()
+    base = serve_citry_ui_live(app, html)
+    page.goto(base + "/")
+    root = page.locator("#revision-sidebar")
+    toggle = root.locator('[data-citry-ui-part="toggle"]')
+    page.wait_for_function(
+        "document.querySelector('#revision-sidebar')?.hasAttribute('data-citry-sidebar-initialized')"
+    )
+
+    toggle.click()
+    assert root.get_attribute("data-collapsed") == ""
+    page.evaluate("window.__sidebarRevisionRoot = document.querySelector('#revision-sidebar')")
+
+    page.locator("#advance-sidebar").click()
+    page.wait_for_function("document.querySelector('#sidebar-step')?.textContent.trim() === '1'")
+    assert page.evaluate("document.querySelector('#revision-sidebar') === window.__sidebarRevisionRoot") is True
+    assert root.get_attribute("data-collapsed") == ""
+
+    toggle.click()
+    assert root.get_attribute("data-collapsed") is None
+    page.locator("#advance-sidebar").click()
+    page.wait_for_function("document.querySelector('#sidebar-step')?.textContent.trim() === '2'")
+    page.wait_for_function("document.querySelector('#revision-sidebar')?.getAttribute('data-collapsed') === ''")
+    assert root.get_attribute("data-collapsed") == ""
+    assert root.get_attribute("data-collapsed") == ""

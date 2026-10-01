@@ -48,6 +48,12 @@ Public variables control spacing, outer radius, and border overlap.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cbutton_group/snippets/customization.py" title="Customize Button Group" />
 
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes Button Group sets itself (such as `role` and `aria-label`), Citry
+runtime attributes, and any Vue directive syntax: names starting with `v-`,
+`:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component tag in
+your template instead.
+
 ## Accessibility and behavior
 
 The root is a named `group`. Tab order, activation, Form behavior, loading, and disabled state belong to each Button. Button Group adds no JavaScript or roving focus.

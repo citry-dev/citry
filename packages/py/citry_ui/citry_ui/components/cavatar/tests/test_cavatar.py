@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from html.parser import HTMLParser
 from typing import get_type_hints
 
 import pytest
@@ -13,7 +14,7 @@ from citry_ui import CAvatar
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(avatar: object, *, include_css: bool = False) -> str:
+def _render(avatar: object, *, include_css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -24,13 +25,23 @@ def _render(avatar: object, *, include_css: bool = False) -> str:
         def template_data(self, kwargs, slots):
             return {"avatar": avatar, "css": app.get("css")() if include_css else ""}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _root(html: str) -> str:
     match = re.search(r'<span[^>]+data-citry-ui-part="avatar"[^>]*>', html)
     assert match is not None
     return match.group(0)
+
+
+class _ElementParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.elements: list[tuple[str, dict[str, str | None]]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.elements.append((tag, dict(attrs)))
 
 
 def test_avatar_schema_and_type_hints_are_public():
@@ -50,7 +61,7 @@ def test_avatar_schema_and_type_hints_are_public():
 
 
 def test_default_avatar_is_decorative_fallback_with_exact_anatomy():
-    html = _render(CAvatar())
+    html = _render(CAvatar(), static_fallback=True)
     root = _root(html)
     assert 'data-status="fallback"' in root
     assert 'data-variant="soft"' in root
@@ -63,7 +74,7 @@ def test_default_avatar_is_decorative_fallback_with_exact_anatomy():
 
 
 def test_named_image_uses_one_root_semantic_and_decorative_internal_image():
-    html = _render(CAvatar(src="/mira.jpg", alt="Mira Vale", slots={"default": "MV"}))
+    html = _render(CAvatar(src="/mira.jpg", alt="Mira Vale", slots={"default": "MV"}), static_fallback=True)
     root = _root(html)
     assert 'role="img"' in root
     assert 'aria-label="Mira Vale"' in root
@@ -82,7 +93,8 @@ def test_root_and_image_attributes_have_distinct_destinations():
             style={"--cui-avatar-size": "4rem"},
             attrs={"data-guide": "fern"},
             img_attrs={"loading": "lazy", "decoding": "async", "class": "portrait"},
-        )
+        ),
+        static_fallback=True,
     )
     root = _root(html)
     assert "expedition-avatar" in root
@@ -123,33 +135,61 @@ def test_fallback_image_attributes_require_valid_html_names(attribute):
 
 
 @pytest.mark.parametrize(
-    ("destination", "attribute"),
+    ("destination", "attribute", "message"),
     [
-        ("attrs", "role"),
-        ("attrs", "ARIA-LABEL"),
-        ("attrs", "tabindex"),
-        ("attrs", "data-status"),
-        ("attrs", ":data-shape"),
-        ("attrs", "x-if"),
-        ("attrs", "data-citry-morph"),
-        ("img_attrs", "src"),
-        ("img_attrs", "srcset"),
-        ("img_attrs", "alt"),
-        ("img_attrs", "onload"),
-        ("img_attrs", "@error"),
-        ("img_attrs", "x-bind:src"),
+        ("attrs", "role", "cannot override owned attribute"),
+        ("attrs", "ARIA-LABEL", "cannot override owned attribute"),
+        ("attrs", "tabindex", "cannot override owned attribute"),
+        ("attrs", "data-status", "cannot override owned attribute"),
+        ("attrs", "data-citry-morph", "reserved Citry runtime attribute"),
+        ("attrs", ":data-shape", "Vue directive"),
+        ("attrs", "v-if", "Vue directive"),
+        ("attrs", "V-IF", "Vue directive"),
+        ("attrs", "#default", "Vue directive"),
+        ("img_attrs", "src", "cannot override owned attribute"),
+        ("img_attrs", "srcset", "cannot override owned attribute"),
+        ("img_attrs", "alt", "cannot override owned attribute"),
+        ("img_attrs", "onload", "cannot override owned attribute"),
+        ("img_attrs", "onclick", "inert image attributes only"),
+        ("img_attrs", "@error", "Vue directive"),
+        ("img_attrs", "v-bind:src", "Vue directive"),
+        ("img_attrs", "V-ON:load", "Vue directive"),
     ],
 )
-def test_owned_attributes_and_runtime_paths_are_rejected(destination, attribute):
-    with pytest.raises(ValueError, match=r"cannot|inert"):
+def test_owned_attributes_and_runtime_paths_are_rejected(destination, attribute, message):
+    with pytest.raises(ValueError, match=f"CAvatar {destination} .*{message}"):
         _render(CAvatar(**{destination: {attribute: "consumer"}}))
 
 
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(
+        CAvatar(
+            attrs={"x-data": "plain"},
+            img_attrs={"x-bind": "plain", "loading": "lazy"},
+            src="/a.png",
+        ),
+        static_fallback=True,
+    )
+    assert 'x-data="plain"' in html
+    assert 'x-bind="plain"' in html
+    assert 'loading="lazy"' in html
+
+
 def test_direct_strings_are_detrusted_and_escaped():
-    html = _render(CAvatar(src=Markup('/a" onload="evil'), alt=Markup('Mira" aria-hidden="true')))
+    html = _render(
+        CAvatar(src=Markup('/a" onload="evil'), alt=Markup('Mira" aria-hidden="true')),
+        static_fallback=True,
+    )
     assert 'onload="evil"' not in html
     assert 'aria-hidden="true"' not in _root(html)
-    assert "&quot;" in html
+    parser = _ElementParser()
+    parser.feed(html)
+    root_attrs = next(attrs for tag, attrs in parser.elements if attrs.get("data-citry-ui-part") == "avatar")
+    image_attrs = next(attrs for tag, attrs in parser.elements if tag == "img")
+    assert root_attrs["aria-label"] == 'Mira" aria-hidden="true'
+    assert image_attrs["src"] == '/a" onload="evil'
+    assert "aria-hidden" not in root_attrs
+    assert "onload" not in image_attrs
     with pytest.raises(ValueError, match=r"U\+0000"):
         _render(CAvatar(alt="bad\x00name"))
 

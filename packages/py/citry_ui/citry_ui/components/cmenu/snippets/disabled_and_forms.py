@@ -8,7 +8,7 @@ class MenuDisabledAndForms(Component):
     template = """
       <section
         class="archive-disabled-demo"
-        x-data="{locked: true, submits: 0}"
+
       >
         <c-CButton size="sm" @click="locked = !locked">
           Toggle archive seal
@@ -28,8 +28,12 @@ class MenuDisabledAndForms(Component):
             <button type="submit">Submit native form</button>
           </fieldset>
         </form>
-        <output x-text="`Form submits: ${submits}`">Form submits: 0</output>
+        <output v-text="`Form submits: ${submits}`">Form submits: 0</output>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {locked: true, submits: 0};}});
     """
 
     css = """

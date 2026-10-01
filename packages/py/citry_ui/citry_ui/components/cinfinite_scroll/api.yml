@@ -25,7 +25,7 @@ inputs:
       - {id: end-label, name: end_label, type: str, default: {kind: literal, value: No more results}, effect: Overrides end status text.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed root attributes; Vue directive names are rejected.'}
   - id: cinfinite-scroll-client-inputs
     component: CInfiniteScroll
     channel: client

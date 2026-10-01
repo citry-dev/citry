@@ -38,23 +38,21 @@ def _page() -> str:
         template = """
           <!doctype html>
           <html lang="en"><head><meta charset="utf-8"><title>Listbox evidence</title><c-css /></head>
-          <body x-data>
+          <body>
             <c-CListbox
               label="People"
               value="ada"
               class_="brand-listbox"
               variant="outline"
-              $c-props="{
-                value: $store.listbox.value,
-                mandatory: $store.listbox.mandatory,
-                disabled: $store.listbox.disabled,
-                loop: $store.listbox.loop,
-                variant: $store.listbox.variant,
-                size: $store.listbox.size,
-                onValueChange: (next, detail) => {
-                  $store.listbox.events.push([next, detail.previousValue, detail.source, detail.controlled]);
-                  if ($store.listbox.accept) $store.listbox.value = next;
-                },
+              :value="listbox.value"
+              :mandatory="listbox.mandatory"
+              :disabled="listbox.disabled"
+              :loop="listbox.loop"
+              :variant="listbox.variant"
+              :size="listbox.size"
+              :on-value-change="(next, detail) => {
+                listbox.events.push([next, detail.previousValue, detail.source, detail.controlled]);
+                if (listbox.accept) listbox.value = next;
               }"
             >
               <c-CListboxOption value="ada" text_value="Ada Lovelace">
@@ -77,12 +75,10 @@ def _page() -> str:
               mandatory
               c-value="['accessibility']"
               class_="multiple-listbox"
-              $c-props="{
-                value: $store.listbox.multiple,
-                onValueChange: (next, detail) => {
-                  $store.listbox.multipleEvents.push([next, detail.selected, detail.source]);
-                  $store.listbox.multiple = next;
-                },
+              :value="listbox.multiple"
+              :on-value-change="(next, detail) => {
+                listbox.multipleEvents.push([next, detail.selected, detail.source]);
+                listbox.multiple = next;
               }"
             >
               <c-CListboxOption value="accessibility">Accessibility</c-CListboxOption>
@@ -107,10 +103,13 @@ def _page() -> str:
           </body></html>
         """
         js = """
-          Alpine.store('listbox', {
-            value: 'ada', accept: false, mandatory: false, disabled: false, loop: false,
-            variant: 'outline', size: 'md', events: [],
-            multiple: ['accessibility'], multipleEvents: [],
+          $component({
+            data() { return {listbox: {
+              value: 'ada', accept: false, mandatory: false, disabled: false, loop: false,
+              variant: 'outline', size: 'md', events: [],
+              multiple: ['accessibility'], multipleEvents: [],
+            }}; },
+            mounted() { window.__listboxState = this.listbox; },
           });
         """
 
@@ -136,20 +135,20 @@ def test_controlled_single_rejection_acceptance_release_and_configuration(page: 
     grace = _option(page, ".brand-listbox", "grace")
     grace.click()
     assert grace.get_attribute("aria-selected") == "false"
-    assert page.evaluate("Alpine.store('listbox').events")[-1] == ["grace", "ada", "pointer", True]
+    assert page.evaluate("window.__listboxState.events")[-1] == ["grace", "ada", "pointer", True]
 
-    page.evaluate("Alpine.store('listbox').accept = true")
+    page.evaluate("window.__listboxState.accept = true")
     grace.click()
     page.wait_for_function(
         "document.querySelector('.brand-listbox [data-value=grace]').getAttribute('aria-selected') === 'true'"
     )
-    page.evaluate("Alpine.store('listbox').value = undefined")
+    page.evaluate("window.__listboxState.value = undefined")
     page.wait_for_timeout(20)
     _option(page, ".brand-listbox", "margaret").click()
     assert _option(page, ".brand-listbox", "margaret").get_attribute("aria-selected") == "true"
 
     page.evaluate(
-        """Object.assign(Alpine.store('listbox'), {
+        """Object.assign(window.__listboxState, {
           disabled: true, variant: 'soft', size: 'lg', loop: true
         })"""
     )
@@ -181,7 +180,7 @@ def test_keyboard_typeahead_multiple_mandatory_and_disabled_options(page: Any) -
     selected = _option(page, ".multiple-listbox", "accessibility")
     selected.click()
     assert selected.get_attribute("aria-selected") == "true"
-    assert page.evaluate("Alpine.store('listbox').multipleEvents") == []
+    assert page.evaluate("window.__listboxState.multipleEvents") == []
     performance = _option(page, ".multiple-listbox", "performance")
     performance.press(" ")
     page.wait_for_function(
@@ -192,7 +191,7 @@ def test_keyboard_typeahead_multiple_mandatory_and_disabled_options(page: Any) -
         """document.querySelector('.multiple-listbox [data-value=accessibility]')
           .getAttribute('aria-selected') === 'false'"""
     )
-    assert page.evaluate("Alpine.store('listbox').multiple") == ["performance"]
+    assert page.evaluate("window.__listboxState.multiple") == ["performance"]
     assert errors == []
 
 

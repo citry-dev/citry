@@ -1,9 +1,13 @@
 $component({
   props: {
-    collapsed: {}, collapsible: {}, side: {}, variant: {}, size: {}, sticky: {}, onCollapsedChange: {},
+    collapsed: {default: undefined}, collapsible: {default: undefined}, side: {default: undefined},
+    variant: {default: undefined}, size: {default: undefined}, sticky: {default: undefined},
+    onCollapsedChange: {default: undefined},
   },
-  init: ({els, data, props, effect}) => {
-    const root = els[0];
+  data() { return {internalCollapsed: undefined, collapsedBaseline: undefined}; },
+  onServerRender: ({component}) => {
+    const root = component.$refs.root;
+    const defaults = component.serverDefaults;
     const toggle = root?.querySelector(':scope > [data-citry-ui-part="toggle"]');
     const panel = root?.querySelector(':scope > [data-citry-ui-part="panel"]');
     if (!(toggle instanceof HTMLButtonElement) || !(panel instanceof HTMLElement)) {
@@ -11,18 +15,18 @@ $component({
       return;
     }
     const invalid = new Set();
-    let internalCollapsed = Boolean(data.collapsed);
-    let collapsed = internalCollapsed;
+    if (component.internalCollapsed === undefined) component.internalCollapsed = Boolean(defaults.collapsed);
+    let collapsed = component.internalCollapsed;
     let initialized = false;
     let transitionTimer = 0;
     let controlled = false;
     let callback = null;
     let configuration = {
-      collapsible: data.collapsible,
-      side: data.side,
-      variant: data.variant,
-      size: data.size,
-      sticky: data.sticky,
+      collapsible: defaults.collapsible,
+      side: defaults.side,
+      variant: defaults.variant,
+      size: defaults.size,
+      sticky: defaults.sticky,
     };
     const report = (name, value) => {
       if (invalid.has(name)) return;
@@ -30,7 +34,7 @@ $component({
       console.error(`[citry-ui] CSidebar ${name} received invalid client value`, value);
     };
     const choice = (name, fallback, allowed) => {
-      const supplied = props[name];
+      const supplied = component[name];
       if (supplied === undefined) { invalid.delete(name); return fallback; }
       if (typeof supplied === "string" && allowed.includes(supplied)) {
         invalid.delete(name); return supplied;
@@ -59,7 +63,8 @@ $component({
       if (offcanvasHidden && panel.contains(root.ownerDocument.activeElement)) {
         toggle.focus({preventScroll: true});
       }
-      root.toggleAttribute("data-collapsed", collapsed);
+      if (collapsed) root.setAttribute("data-collapsed", "");
+      else root.removeAttribute("data-collapsed");
       root.dataset.collapsible = configuration.collapsible;
       root.dataset.side = configuration.side;
       root.dataset.variant = configuration.variant;
@@ -76,35 +81,41 @@ $component({
       panel.inert = offcanvasHidden;
     };
     const reconcile = () => {
-      configuration.collapsible = choice("collapsible", data.collapsible, ["rail", "offcanvas", "none"]);
-      configuration.side = choice("side", data.side, ["inline-start", "inline-end"]);
-      configuration.variant = choice("variant", data.variant, ["plain", "floating"]);
-      configuration.size = choice("size", data.size, ["sm", "md", "lg"]);
-      if (props.sticky === undefined) {
-        invalid.delete("sticky"); configuration.sticky = data.sticky;
-      } else if (typeof props.sticky === "boolean") {
-        invalid.delete("sticky"); configuration.sticky = props.sticky;
-      } else report("sticky", props.sticky);
-      if (props.collapsed === undefined || props.collapsed === null) {
-        invalid.delete("collapsed"); controlled = false;
-      } else if (typeof props.collapsed === "boolean") {
-        invalid.delete("collapsed"); controlled = true;
-      } else {
-        report("collapsed", props.collapsed); controlled = false;
+      const serverCollapsed = Boolean(defaults.collapsed);
+      if (component.collapsedBaseline === undefined || component.collapsedBaseline !== serverCollapsed) {
+        component.internalCollapsed = serverCollapsed;
+        component.collapsedBaseline = serverCollapsed;
       }
-      if (props.onCollapsedChange === undefined || props.onCollapsedChange === null) {
+      configuration.collapsible = choice("collapsible", defaults.collapsible, ["rail", "offcanvas", "none"]);
+      configuration.side = choice("side", defaults.side, ["inline-start", "inline-end"]);
+      configuration.variant = choice("variant", defaults.variant, ["plain", "floating"]);
+      configuration.size = choice("size", defaults.size, ["sm", "md", "lg"]);
+      if (component.sticky === undefined) {
+        invalid.delete("sticky"); configuration.sticky = defaults.sticky;
+      } else if (typeof component.sticky === "boolean") {
+        invalid.delete("sticky"); configuration.sticky = component.sticky;
+      } else report("sticky", component.sticky);
+      if (component.collapsed === undefined || component.collapsed === null) {
+        invalid.delete("collapsed"); controlled = false;
+      } else if (typeof component.collapsed === "boolean") {
+        invalid.delete("collapsed"); controlled = true;
+        component.internalCollapsed = component.collapsed;
+      } else {
+        report("collapsed", component.collapsed); controlled = false;
+      }
+      if (component.onCollapsedChange === undefined || component.onCollapsedChange === null) {
         invalid.delete("onCollapsedChange"); callback = null;
-      } else if (typeof props.onCollapsedChange === "function") {
-        invalid.delete("onCollapsedChange"); callback = props.onCollapsedChange;
-      } else report("onCollapsedChange", props.onCollapsedChange);
-      apply(controlled ? props.collapsed : internalCollapsed);
+      } else if (typeof component.onCollapsedChange === "function") {
+        invalid.delete("onCollapsedChange"); callback = component.onCollapsedChange;
+      } else report("onCollapsedChange", component.onCollapsedChange);
+      apply(controlled ? component.collapsed : component.internalCollapsed);
     };
     const onClick = (event) => {
       if (configuration.collapsible === "none") return;
       const previousCollapsed = collapsed;
       const next = !collapsed;
       if (!controlled) {
-        internalCollapsed = next;
+        component.internalCollapsed = next;
         apply(next);
       }
       callback?.(next, {
@@ -118,7 +129,7 @@ $component({
     };
     toggle.addEventListener("click", onClick);
     root.addEventListener("transitionend", onTransitionEnd);
-    const stop = effect(reconcile);
+    const stop = Citry.vue.watchEffect(reconcile);
     initialized = true;
     root.setAttribute("data-citry-sidebar-initialized", "");
     return () => {

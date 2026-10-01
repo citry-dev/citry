@@ -9,13 +9,7 @@ class ContextMenuPositioningAndRtl(Component):
       <section
         class="context-menu-positioning"
         style="--cui-menu-inline-size:18rem"
-        x-data="{
-          surfaceDir:'ltr',
-          targetDir:'rtl',
-          externalOpen:false,
-          lastPoint:'none',
-          lastInvocation:'none',
-        }"
+
         :dir="surfaceDir"
       >
         <div class="context-menu-positioning__controls">
@@ -29,47 +23,30 @@ class ContextMenuPositioningAndRtl(Component):
           >Toggle target-only direction</button>
           <button
             type="button"
-            @click="
-              externalOpen=true;
-              lastInvocation='external';
-              $nextTick(()=>setTimeout(()=>{
-                const point=document.querySelector('#context-position-external-point');
-                const box=point?.getBoundingClientRect();
-                if (box) lastPoint=`${Math.round(box.x)}, ${Math.round(box.y)}`;
-              }))
-            "
+            @click="openFromOwnerState()"
           >Open from owner state</button>
           <button type="button" @click="$refs.repairScroller.scrollTop += 32">
             Scroll repair fixture
           </button>
-          <button type="button" @click="window.dispatchEvent(new Event('resize'))">
+          <button type="button" @click="resizeRepairFixture()">
             Resize repair fixture
           </button>
           <button
             type="button"
-            @click="
-              const target=document.querySelector('[data-context-menu-offscreen-target]');
-              target.focus();
-              target.dispatchEvent(new KeyboardEvent('keydown', {
-                bubbles:true,
-                key:'F10',
-                shiftKey:true,
-              }))
-            "
+            @click="testOffscreenRejection()"
           >Test fully offscreen rejection</button>
-          <output x-text="`Accepted point: ${lastPoint}; invocation: ${lastInvocation}`">
+          <output v-text="`Accepted point: ${lastPoint}; invocation: ${lastInvocation}`">
             Accepted point: none; invocation: none
           </output>
           <output
-            x-text="`Visual viewport: ${Math.round(visualViewport?.width ?? innerWidth)} x
-              ${Math.round(visualViewport?.height ?? innerHeight)} CSS px`"
+            v-text="viewportSummary()"
           >Visual viewport diagnostic</output>
         </div>
 
         <div class="context-menu-positioning__board">
           <c-CContextMenu
             aria_label="Top start actions"
-            $c-props="{
+            v-bind="{
               onOpenChange:(next,detail)=>{
                 if (next) {
                   lastPoint=`${Math.round(detail.clientX)}, ${Math.round(detail.clientY)}`;
@@ -123,7 +100,7 @@ class ContextMenuPositioningAndRtl(Component):
           <c-CContextMenu
             id="context-position-external"
             aria_label="Bottom end actions"
-            $c-props="{
+            v-bind="{
               open:externalOpen,
               onOpenChange:(next,detail)=>{
                 externalOpen=next;
@@ -166,7 +143,7 @@ class ContextMenuPositioningAndRtl(Component):
 
         <div
           class="context-menu-positioning__repair-scroller"
-          x-ref="repairScroller"
+          ref="repairScroller"
         >
           <div class="context-menu-positioning__repair-spacer">Scrollable repair boundary</div>
           <div class="context-menu-positioning__transformed">
@@ -191,6 +168,48 @@ class ContextMenuPositioningAndRtl(Component):
           verify the same collision-safe 18 rem surface.
         </p>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {
+          surfaceDir:'ltr',
+          targetDir:'rtl',
+          externalOpen:false,
+          lastPoint:'none',
+          lastInvocation:'none',
+        };},
+        // Template expressions cannot reach window or document, so the
+        // fixture controls that need them live here.
+        methods: {
+          openFromOwnerState() {
+            this.externalOpen=true;
+            this.lastInvocation='external';
+            // Read the point after the open state has rendered and positioned.
+            this.$nextTick(()=>setTimeout(()=>{
+              const point=document.querySelector('#context-position-external-point');
+              const box=point?.getBoundingClientRect();
+              if (box) this.lastPoint=`${Math.round(box.x)}, ${Math.round(box.y)}`;
+            }));
+          },
+          resizeRepairFixture() {
+            window.dispatchEvent(new Event('resize'));
+          },
+          testOffscreenRejection() {
+            const target=this.$el.querySelector('[data-context-menu-offscreen-target]');
+            target.focus();
+            target.dispatchEvent(new KeyboardEvent('keydown', {
+              bubbles:true,
+              key:'F10',
+              shiftKey:true,
+            }));
+          },
+          viewportSummary() {
+            const width=Math.round(visualViewport?.width ?? innerWidth);
+            const height=Math.round(visualViewport?.height ?? innerHeight);
+            return `Visual viewport: ${width} x ${height} CSS px`;
+          },
+        },
+      });
     """
 
     css = """

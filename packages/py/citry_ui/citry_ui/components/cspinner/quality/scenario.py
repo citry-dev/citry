@@ -22,29 +22,29 @@ def spinner_states_component(app: Citry) -> type[Component]:
             <h1 id="spinner-states-title">Spinner states</h1>
             <div class="citry-ui-quality-grid">
               <c-for each="intent in intents">
-                <c-CRow>
-                  <c-CSpinner c-label="f'{intent} observatory task'" c-intent="intent" />
+                <c-CRow #c-key="intent">
+                  <c-CSpinner #c-key="intent" c-label="f'{intent} observatory task'" c-intent="intent" />
                   <span>{{ intent }}</span>
                 </c-CRow>
               </c-for>
             </div>
             <c-CRow align="center">
               <c-for each="size in sizes">
-                <c-CSpinner c-label="f'{size} catalog task'" c-size="size" />
+                  <c-CSpinner #c-key="size" c-label="f'{size} catalog task'" c-size="size" />
               </c-for>
             </c-CRow>
             <div
-              x-init="Alpine.store('spinnerQuality', {size: 'md'})"
+
               data-quality-state="controlled"
             >
               <c-CRow>
                 <c-CSpinner
                   label="Controlled sky survey"
-                  $c-props="{size: $store.spinnerQuality.size}"
+                  :size="size"
                 />
                 <button
                   type="button"
-                  @click="$store.spinnerQuality.size = $store.spinnerQuality.size === 'md' ? 'lg' : 'md'"
+                  @click="size = size === 'md' ? 'lg' : 'md'"
                 >
                   Change size
                 </button>
@@ -65,6 +65,15 @@ def spinner_states_component(app: Citry) -> type[Component]:
               <c-CSpinner label="Solar brand" size="lg" />
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                size: 'md'
+              };
+            },
+          });
         """
 
         def template_data(

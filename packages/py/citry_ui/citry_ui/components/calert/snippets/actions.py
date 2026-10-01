@@ -8,12 +8,10 @@ class AlertActions(Component):
     template = """
       <section
         class="alert-actions-demo"
-        x-data
-        x-init="Alpine.store('alertActions', {visible: true})"
       >
         <div
-          x-show="$store.alertActions.visible"
-          x-bind:inert="!$store.alertActions.visible"
+          v-show="visible"
+          :inert="!visible"
         >
           <c-CAlert
             intent="warn"
@@ -34,8 +32,8 @@ class AlertActions(Component):
               <c-CButton
                 size="sm"
                 intent="neutral"
-                @click="$store.alertActions.visible = false;
-                  Alpine.nextTick(() => document
+                @click="visible = false;
+                  $nextTick(() => document
                     .getElementById('restore-observatory-notice')
                     .focus())"
               >
@@ -46,13 +44,22 @@ class AlertActions(Component):
         </div>
         <button
           id="restore-observatory-notice"
-          x-show="!$store.alertActions.visible"
+          v-show="!visible"
           type="button"
-          @click="$store.alertActions.visible = true"
+          @click="visible = true"
         >
           Restore observatory notice
         </button>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            visible: true
+          };
+        },
+      });
     """
 
     css = """

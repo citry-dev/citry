@@ -8,9 +8,9 @@ class TogglePresentation(Component):
     template = """
       <c-CCol gap="md">
         <c-for each="variant in variants">
-          <c-CToggleGroup c-label="variant + ' display'" value="one" c-variant="variant">
-            <c-CToggle value="one">One</c-CToggle>
-            <c-CToggle value="two">Two</c-CToggle>
+          <c-CToggleGroup #c-key="variant" c-label="variant + ' display'" value="one" c-variant="variant">
+            <c-CToggle #c-key="f'{variant}-one'" value="one">One</c-CToggle>
+            <c-CToggle #c-key="f'{variant}-two'" value="two">Two</c-CToggle>
           </c-CToggleGroup>
         </c-for>
       </c-CCol>

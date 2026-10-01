@@ -1,7 +1,10 @@
 $component({
-  props: {hasMore: {}, loading: {}, error: {}, disabled: {}, auto: {}, onLoadMore: {}},
-  init: ({els, data, props, effect}) => {
-    const root = els[0];
+  props: {
+    hasMore: {default: undefined}, loading: {default: undefined}, error: {default: undefined},
+    disabled: {default: undefined}, auto: {default: undefined}, onLoadMore: {default: undefined},
+  },
+  onServerRender: ({component}) => {
+    const root = component.$refs.root;
     if (!(root instanceof HTMLElement)) throw new Error('[citry-ui] CInfiniteScroll settled anatomy is invalid.');
     const content = root.querySelector(':scope > [data-citry-ui-part="content"]');
     const status = root.querySelector(':scope > [data-citry-ui-part="status"]');
@@ -14,7 +17,13 @@ $component({
     const loadLabel = action.children[0];
     const retryLabel = action.children[1];
     const invalid = new Set();
-    let state = {hasMore:data.has_more, loading:data.loading, error:data.error, disabled:data.disabled, auto:data.auto};
+    let state = {
+      hasMore: component.serverDefaults.hasMore,
+      loading: component.serverDefaults.loading,
+      error: component.serverDefaults.error,
+      disabled: component.serverDefaults.disabled,
+      auto: component.serverDefaults.auto,
+    };
     let callback = null;
     let requested = false;
     let observer = null;
@@ -43,7 +52,7 @@ $component({
       if (!state.auto || !callback || state.disabled || state.loading || state.error || !state.hasMore || !('IntersectionObserver' in window)) return;
       observer = new IntersectionObserver(entries => {
         if (entries.some(entry => entry.isIntersecting)) request('intersection', null);
-      }, {root:null, rootMargin:data.root_margin, threshold:data.threshold});
+      }, {root:null, rootMargin:component.serverDefaults.rootMargin, threshold:component.serverDefaults.threshold});
       observer.observe(sentinel);
     };
     const sync = () => {
@@ -69,14 +78,17 @@ $component({
     const mutations = new MutationObserver(release);
     mutations.observe(content, {childList:true, subtree:true});
     root.setAttribute('data-citry-infinite-scroll-initialized', '');
-    effect(() => {
+    Citry.vue.watchEffect(() => {
       const next = {
-        hasMore: props.hasMore, loading: props.loading, error: props.error,
-        disabled: props.disabled, auto: props.auto, onLoadMore: props.onLoadMore,
+        hasMore: component.hasMore, loading: component.loading, error: component.error,
+        disabled: component.disabled, auto: component.auto, onLoadMore: component.onLoadMore,
       };
       for (const name of ['hasMore','loading','error','disabled','auto']) {
         if (next[name] !== undefined && typeof next[name] !== 'boolean') report(name, next[name]);
-        else { invalid.delete(name); state[name] = typeof next[name] === 'boolean' ? next[name] : data[{hasMore:'has_more',loading:'loading',error:'error',disabled:'disabled',auto:'auto'}[name]]; }
+        else {
+          invalid.delete(name);
+          state[name] = typeof next[name] === 'boolean' ? next[name] : component.serverDefaults[name];
+        }
       }
       if (next.onLoadMore === undefined || next.onLoadMore === null) { callback = null; invalid.delete('onLoadMore'); }
       else if (typeof next.onLoadMore === 'function') { callback = next.onLoadMore; invalid.delete('onLoadMore'); }

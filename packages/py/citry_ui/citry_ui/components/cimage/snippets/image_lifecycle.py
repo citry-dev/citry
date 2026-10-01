@@ -50,7 +50,6 @@ class ImageLifecycle(Component):
     template = """
       <section
         class="image-lifecycle"
-        x-data="{status:'waiting',selected:'none'}"
       >
         <div class="image-lifecycle__controls">
           <button type="button" @c-click="retain">Retain equal server output</button>
@@ -91,23 +90,30 @@ class ImageLifecycle(Component):
                 'lifecycle retained-root replacement-root morph-target removal restore '
                 + 'cleanup owner-token shadow-root clone hostile-fail-closed',
             }"
-            $c-props="{
-              onStatusChange:(detail)=>{
+            :onStatusChange="(detail)=>{
                 status=detail.status;
                 selected=(detail.current_src || detail.src).split('/').pop().split('?')[0];
-              },
-            }"
+              }"
           >
             <c-fill name="placeholder">Loading calibration plate</c-fill>
             <c-fill name="fallback">Calibration plate unavailable</c-fill>
           </c-CImage>
         </c-if>
 
-        <output x-text="`Status ${status}; selected ${selected}`">
+        <output v-text="`Status ${status}; selected ${selected}`">
           Status waiting; selected none
         </output>
         <div id="image-lifecycle-shadow-host" aria-label="Open ShadowRoot move fixture"></div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            status:'waiting',selected:'none'
+          };
+        },
+      });
     """
 
     css = """

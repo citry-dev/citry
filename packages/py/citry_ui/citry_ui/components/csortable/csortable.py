@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
@@ -21,9 +21,6 @@ _CONTEXT = "citry_ui_sortable"
 _LAYOUTS = ("vertical", "horizontal", "grid")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -128,14 +125,6 @@ def _order(value: object, *, optional: bool = False) -> tuple[str, ...] | None:
     return result
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     attrs: Mapping[str, object] | None,
@@ -150,13 +139,11 @@ def _attrs(
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"{owner} attrs require string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} attrs cannot dynamically bind owned attribute {key!r}.")
+    # A Vue directive could rebind the order, drag handles, or ARIA state this
+    # component owns, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, owner)
     return merge_root_attrs(copied, class_, style)
 
 
@@ -178,6 +165,15 @@ def _validate_declaration_output(result: CitryRender) -> None:
 class CSortable(LibraryComponent):
     class I18n:
         messages_locale = "en-US"
+        # The browser code builds these IDs from a variable
+        # (`citry-ui-sortable-${kind}`), so Citry cannot find them as literal
+        # calls; listing them sends them to the browser.
+        client_messages = (
+            "citry-ui-sortable-picked-up",
+            "citry-ui-sortable-moved",
+            "citry-ui-sortable-dropped",
+            "citry-ui-sortable-cancelled",
+        )
 
     @dataclass(slots=True)
     class Kwargs:
@@ -272,11 +268,16 @@ class CSortable(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
-        return {key: snapshot[key] for key in ("order", "name", "form", "layout", "disabled", "catalog", "labels")}
+        return {
+            "serverDefaults": {
+                key: snapshot[key] for key in ("order", "name", "form", "layout", "disabled", "catalog", "labels")
+            }
+        }
 
     template = """
       <c-CInternalSortableDeclarations><c-slot required /></c-CInternalSortableDeclarations>
       <c-CInternalSortable
+        ref="root"
         c-root_id="root_id" c-order="order" c-name="name" c-form="form"
         c-layout="layout" c-disabled="disabled" c-size="size"
         c-catalog="catalog" c-labels="labels" c-attrs="attrs" c-registry="registry"
@@ -371,7 +372,8 @@ class CInternalSortableDeclarations(LibraryComponent):
 
 
 class CInternalSortable(LibraryComponent):
-    transparent = True
+    # This component owns the physical sortable root and is the runtime ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -444,7 +446,7 @@ class CInternalSortable(LibraryComponent):
             "attrs": {
                 **kwargs.attrs,
                 "aria-disabled": "true" if kwargs.disabled else "false",
-                "data-disabled": True if kwargs.disabled else None,
+                "data-disabled": "" if kwargs.disabled else None,
                 "data-layout": kwargs.layout,
                 "data-size": kwargs.size,
             },
@@ -501,7 +503,7 @@ class CInternalSortableItem(LibraryComponent):
             "attrs": {
                 **declaration.attrs,
                 "aria-disabled": "true" if declaration.disabled else None,
-                "data-disabled": True if declaration.disabled else None,
+                "data-disabled": "" if declaration.disabled else None,
                 "data-value": declaration.value,
                 "role": "listitem",
             },

@@ -166,7 +166,10 @@ def test_menu_renders_complete_native_anatomy_and_typed_activator_data():
     assert 'aria-haspopup="menu"' in html
     assert 'aria-controls="archive-menu"' in html
     assert 'aria-expanded="true"' in html
-    surface = re.search(r'<div class="cui-menu archive" id="archive-menu"[^>]*>', html)
+    surface = re.search(
+        r'<div(?=[^>]*class="cui-menu archive")(?=[^>]*id="archive-menu")[^>]*>',
+        html,
+    )
     assert surface is not None
     assert 'role="menu"' in surface.group(0)
     assert 'popover="manual"' in surface.group(0)
@@ -421,12 +424,20 @@ def test_groups_submenus_and_radio_items_enforce_their_nesting_contracts():
     [
         ("CMenu", "attrs", "role"),
         ("CMenu", "attrs", ":aria-labelledby"),
+        ("CMenu", "attrs", "v-bind:role"),
+        ("CMenu", "attrs", "V-IF"),
         ("CMenuItem", "attrs", "tabindex"),
-        ("CMenuItem", "attrs", "x-show"),
+        ("CMenuItem", "attrs", "v-show"),
+        ("CMenuItem", "attrs", "@click"),
+        ("CMenuItem", "attrs", ".tabindex"),
         ("CMenuGroup", "attrs", "aria-label"),
+        ("CMenuGroup", "attrs", "v-for"),
         ("CMenuSeparator", "attrs", "aria-orientation"),
+        ("CMenuSeparator", "attrs", "#default"),
         ("CMenuSubmenu", "trigger_attrs", "aria-expanded"),
+        ("CMenuSubmenu", "trigger_attrs", "v-on:keydown"),
         ("CMenuSubmenu", "menu_attrs", "popover"),
+        ("CMenuSubmenu", "menu_attrs", "v-html"),
     ],
 )
 def test_owned_attributes_and_directives_are_rejected(
@@ -451,6 +462,19 @@ def test_owned_attributes_and_directives_are_rejected(
 
     with pytest.raises(ValueError, match="cannot"):
         _render(_menu(declaration, root_inputs), {"attrs": {attribute: "x"}})
+
+
+def test_python_attrs_reject_vue_directives_before_rendering():
+    message = "CMenu attrs cannot contain the Vue directive ':class'"
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _render(_menu('<c-CMenuItem value="read">Read</c-CMenuItem>', 'c-attrs="attrs"'), {"attrs": {":class": "x"}})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render(
+        _menu('<c-CMenuItem value="read">Read</c-CMenuItem>', 'c-attrs="attrs"'), {"attrs": {"x-data": "{}"}}
+    )
+    assert "x-data" in html
 
 
 def test_attributes_are_snapshotted_and_root_shortcuts_land_on_documented_roots():

@@ -12,7 +12,13 @@ from citry_ui import CToolbar
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(template: str, *, include_css: bool = False, data: dict[str, object] | None = None) -> str:
+def _render(
+    template: str,
+    *,
+    include_css: bool = False,
+    data: dict[str, object] | None = None,
+    static_fallback: bool = False,
+) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     source = template + ("{{ css }}" if include_css else "")
@@ -24,7 +30,8 @@ def _render(template: str, *, include_css: bool = False, data: dict[str, object]
         def template_data(self, kwargs, slots):
             return {"css": app.get("css")(), **(data or {})}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _root(html: str) -> str:
@@ -57,7 +64,7 @@ def test_schema_defaults_and_public_types_are_exact() -> None:
 
 
 def test_default_toolbar_renders_named_horizontal_composite() -> None:
-    root = _root(_render(_toolbar()))
+    root = _root(_render(_toolbar(), static_fallback=True))
     assert 'role="toolbar"' in root
     assert 'aria-label="Editor tools"' in root
     assert 'aria-orientation="horizontal"' in root
@@ -73,7 +80,8 @@ def test_configuration_and_root_customization_are_exact() -> None:
             '<c-CToolbar label="Map tools" orientation="vertical" c-loop="False" '
             'variant="outline" size="lg" class_="custom" '
             "style=\"inline-size:20rem\" c-attrs=\"{'data-test': 'toolbar'}\">"
-            "<button>A</button><button>B</button><button>C</button></c-CToolbar>"
+            "<button>A</button><button>B</button><button>C</button></c-CToolbar>",
+            static_fallback=True,
         )
     )
     assert 'class="cui-toolbar custom"' in root
@@ -111,9 +119,6 @@ def test_invalid_server_inputs_fail(template: str, error: type[Exception]) -> No
         "tabindex",
         "hidden",
         "inert",
-        ":data-size",
-        "x-show",
-        "x-ignore.self",
         "data-citry-toolbar-initialized",
     ],
 )
@@ -124,6 +129,32 @@ def test_owned_runtime_and_visibility_attributes_are_rejected(attribute: str) ->
             "<button>A</button><button>B</button><button>C</button></c-CToolbar>",
             data={"attrs": {attribute: "consumer"}},
         )
+
+
+@pytest.mark.parametrize("attribute", [":data-size", "v-bind:role", "v-show", "v-if", "V-IF", "@keydown", "#default"])
+def test_python_attrs_reject_vue_directives(attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    with pytest.raises(ValueError, match=re.escape(f"CToolbar attrs cannot contain the Vue directive {attribute!r}")):
+        _render(
+            '<c-CToolbar label="Editor" c-attrs="attrs">'
+            "<button>A</button><button>B</button><button>C</button></c-CToolbar>",
+            data={"attrs": {attribute: "consumer"}},
+        )
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(
+        '<c-CToolbar label="Editor" c-attrs="attrs"><button>A</button></c-CToolbar>',
+        data={"attrs": {"x-data": "{}", "hx-get": "/tools"}},
+        static_fallback=True,
+    )
+
+    root = _root(html)
+    assert 'x-data="{}"' in root
+    assert 'hx-get="/tools"' in root
 
 
 def test_css_contract_uses_public_inputs_through_private_fallbacks() -> None:

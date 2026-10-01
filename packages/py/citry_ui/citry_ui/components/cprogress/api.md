@@ -55,7 +55,7 @@ Sizes set track thickness. Shape selects square, rounded, or pill geometry.
 
 ## Control progress in the browser
 
-Client inputs are passed through `$c-props="{...}"`. A number controls
+Client inputs are passed with native Vue `:` bindings and callback props. A number controls
 determinate completion; `null` switches to indeterminate; omission returns to
 the server fallback.
 
@@ -75,6 +75,13 @@ Override public track, range, height, and radius variables on an ancestor or
 one native Progress root.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cprogress/snippets/customization.py" title="Customize Progress with public CSS" />
+
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes the component sets itself (such as `value`, `max`, and
+`aria-label`), Citry runtime attributes, and any Vue directive syntax: names
+starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on
+the component tag in your template instead, for example
+`<c-CProgress :title="hint">`.
 
 ## Choose the right indicator
 

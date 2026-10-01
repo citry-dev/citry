@@ -27,6 +27,11 @@ def _page(app: Citry, *, localized: bool = False) -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data() { return {
+            selected: '09:30', controlledOpen: false, acceptValue: false, acceptOpen: false,
+          }; }});
+        """
         template = f"""
           <!doctype html>
           <html lang="en-US">
@@ -38,8 +43,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
             </head>
             <body>
               {provider_open}
-              <section x-data="{{selected:'09:30',controlledOpen:false,acceptValue:false,acceptOpen:false}}">
-                <form id="schedule" @submit.prevent="window.__timeSubmits.push(Array.from(new FormData($event.target).entries()))">
+              <section>
+                <form id="schedule" @submit.prevent="window.__timeSubmits.push(Array.from(new window.FormData($event.target).entries()))">
                   <c-CField control_id="arrival" required>
                     <c-fill name="label">Arrival time</c-fill>
                     <c-fill name="description">Choose an available morning time.</c-fill>
@@ -51,7 +56,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                         min="09:00"
                         max="11:00"
                         c-step="1800"
-                        $c-props="{{onValueChange:(value,detail)=>window.__timeEvents.push(['value',value,detail.source]),onOpenChange:(open,detail)=>window.__timeEvents.push(['open',open,detail.reason])}}"
+                        :onValueChange="(value,detail)=>window.__timeEvents.push(['value',value,detail.source])"
+                        :onOpenChange="(open,detail)=>window.__timeEvents.push(['open',open,detail.reason])"
                         @input="window.__timeEvents.push(['input',$event.target.value])"
                         @change="window.__timeEvents.push(['change',$event.target.value])"
                       />
@@ -70,7 +76,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                   min="09:00"
                   max="11:00"
                   c-step="1800"
-                  $c-props="{{value:selected,onValueChange:(value,detail)=>{{window.__timeEvents.push(['controlled-value',value,detail.controlled]);if(acceptValue)selected=value}}}}"
+                  :value="selected"
+                  :onValueChange="(value,detail)=>{{window.__timeEvents.push(['controlled-value',value,detail.controlled]);if(acceptValue)selected=value}}"
                 />
                 <button id="accept-value" type="button" @click="acceptValue=true">Accept value</button>
                 <button id="set-value" type="button" @click="selected='10:30'">Set value</button>
@@ -80,7 +87,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                   min="09:00"
                   max="11:00"
                   c-step="1800"
-                  $c-props="{{open:controlledOpen,onOpenChange:(open,detail)=>{{window.__timeEvents.push(['controlled-open',open,detail.controlled]);if(acceptOpen)controlledOpen=open}}}}"
+                  :open="controlledOpen"
+                  :onOpenChange="(open,detail)=>{{window.__timeEvents.push(['controlled-open',open,detail.controlled]);if(acceptOpen)controlledOpen=open}}"
                 />
                 <button id="accept-open" type="button" @click="acceptOpen=true">Accept open</button>
 
@@ -248,7 +256,7 @@ def test_client_locale_switch_updates_display_trigger_title_clear_and_options(
     assert "9:30:00 AM" in trigger.text_content()
     trigger.click()
     assert page.locator("#arrival-popover-title").text_content().strip() == "Choose time"
-    page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-cs'), '$i18n').switchLocale('cs-CZ')")
+    page.locator("#switch-cs").click()
     page.wait_for_function("document.querySelector('main')?.lang === 'cs-CZ'")
     page.wait_for_function("document.querySelector('#arrival').textContent.includes('9:30:00')")
     assert trigger.get_attribute("aria-label") == "Změnit čas, \u20689:30:00\u2069"

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CFlowTag = Literal["div", "section", "nav", "ul", "ol"]
@@ -20,19 +20,6 @@ _GAPS = ("0", "xs", "sm", "md", "lg", "xl")
 _ALIGNS = ("start", "center", "end", "stretch", "baseline")
 _JUSTIFIES = ("start", "center", "end", "between", "around", "evenly")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-teleport",
-        "x-text",
-    }
-)
 _COL_OWNED_ATTRS = frozenset(
     {
         "data-align",
@@ -74,15 +61,6 @@ def _plain_choice(
     return plain
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(
     component_name: str,
     attrs: Mapping[str, object] | None,
@@ -93,19 +71,12 @@ def _copy_attrs(
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{component_name} attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, component_name)
     for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"{component_name} attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"{component_name} attrs cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in owned:
-            msg = f"{component_name} attrs cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
     return copied
 
@@ -155,7 +126,7 @@ class CCol(LibraryComponent):
         c-data-gap="gap"
         c-data-align="align"
         c-data-justify="justify"
-        c-data-reverse="reverse"
+        c-data-reverse="'' if reverse else None"
       >
         <c-slot />
       </c-element>
@@ -212,8 +183,8 @@ class CRow(LibraryComponent):
         c-data-gap="gap"
         c-data-align="align"
         c-data-justify="justify"
-        c-data-reverse="reverse"
-        c-data-wrap="wrap"
+        c-data-reverse="'' if reverse else None"
+        c-data-wrap="'' if wrap else None"
       >
         <c-slot />
       </c-element>

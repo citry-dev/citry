@@ -14,7 +14,7 @@ class SwitchPresentation(Component):
     template = """
       <c-CCol>
         <c-for each="size in sizes">
-          <c-CSwitch c-size="size" checked>{{ size }} switch</c-CSwitch>
+          <c-CSwitch #c-key="size" c-size="size" checked>{{ size }} switch</c-CSwitch>
         </c-for>
         <c-CSwitch label_pos="start" checked>Label before track</c-CSwitch>
       </c-CCol>

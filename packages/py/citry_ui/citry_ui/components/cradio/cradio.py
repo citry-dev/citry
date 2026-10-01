@@ -8,7 +8,13 @@ from typing import Any, Literal, cast
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._aria import merge_idrefs
-from citry_ui.components._attrs import CClassValue, CStyleValue, get_html_form_owner, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    get_html_form_owner,
+    merge_root_attrs,
+    reject_vue_directive_attrs,
+)
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_optional_boolean
 
@@ -23,9 +29,6 @@ _VARIANTS = ("solid", "outline")
 _SIZES = ("sm", "md", "lg")
 _LABEL_POSITIONS = ("start", "end")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-teleport", "x-text"}
-)
 _GROUP_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -189,28 +192,14 @@ def _copy_attrs(component: str, input_name: str, attrs: Mapping[str, object] | N
     return dict(attrs or {})
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    if attribute.startswith("x-bind:"):
-        return attribute.removeprefix("x-bind:").split(".", 1)[0]
-    if attribute.startswith((":", ".")):
-        return attribute[1:].split(".", 1)[0]
-    return None
-
-
 def _validate_attrs(component: str, attrs: dict[str, object], owned: frozenset[str]) -> None:
     reject_owned_attrs(attrs, owned, component)
+    # A Vue directive could rebind the checked state, name, or Form wiring this
+    # component owns, so none may arrive through Python data.
+    reject_vue_directive_attrs(attrs, component.removesuffix("attrs").rstrip(" _"))
     for key in attrs:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"{component} cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            msg = f"{component} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in owned:
-            msg = f"{component} cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
 
 
@@ -339,7 +328,7 @@ class CRadioGroup(LibraryComponent):
             "has_label": has_label,
             "labelledby": labelledby,
             "describedby": describedby,
-            "field_control": field_context is not None,
+            "field_control": "" if field_context is not None else None,
             "field_supports_required": "true" if field_context is not None else None,
             "field_supports_readonly": "false" if field_context is not None else None,
             "attrs": merge_root_attrs(attrs, kwargs.class_, kwargs.style),
@@ -371,14 +360,14 @@ class CRadioGroup(LibraryComponent):
     ) -> dict[str, object]:
         field_context = self.inject(FIELD_CONTEXT_KEY, None)
         return {
-            "value": self._radio_selected,
-            "required": bool(field_context.required) if field_context is not None else bool(kwargs.required),
-            "disabled": bool(field_context.disabled) if field_context is not None else bool(kwargs.disabled),
-            "invalid": bool(field_context.invalid) if field_context is not None else bool(kwargs.invalid),
-            "orientation": _plain_choice("CRadioGroup", "orientation", kwargs.orientation, _ORIENTATIONS),
-            "variant": _plain_choice("CRadioGroup", "variant", kwargs.variant, _VARIANTS),
-            "size": _plain_choice("CRadioGroup", "size", kwargs.size, _SIZES),
-            "labelPos": _plain_choice("CRadioGroup", "label_pos", kwargs.label_pos, _LABEL_POSITIONS),
+            "serverValue": self._radio_selected,
+            "serverRequired": bool(field_context.required) if field_context is not None else bool(kwargs.required),
+            "serverDisabled": bool(field_context.disabled) if field_context is not None else bool(kwargs.disabled),
+            "serverInvalid": bool(field_context.invalid) if field_context is not None else bool(kwargs.invalid),
+            "serverOrientation": _plain_choice("CRadioGroup", "orientation", kwargs.orientation, _ORIENTATIONS),
+            "serverVariant": _plain_choice("CRadioGroup", "variant", kwargs.variant, _VARIANTS),
+            "serverSize": _plain_choice("CRadioGroup", "size", kwargs.size, _SIZES),
+            "serverLabelPos": _plain_choice("CRadioGroup", "label_pos", kwargs.label_pos, _LABEL_POSITIONS),
         }
 
     template = """
@@ -389,9 +378,9 @@ class CRadioGroup(LibraryComponent):
         c-aria-invalid="'true' if invalid else None"
         c-aria-labelledby="labelledby"
         c-aria-describedby="describedby"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
         c-data-orientation="orientation"
         c-data-variant="variant"
         c-data-size="size"
@@ -424,15 +413,24 @@ class CRadioGroup(LibraryComponent):
           size: {},
           label_pos: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for("citry-ui:field"), default: null},
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          if (!(root instanceof HTMLFieldSetElement)) {
+            throw new Error("[citry-ui] CRadioGroup settled anatomy is invalid.");
+          }
+          const data = component;
+          const props = component.$props;
           const radios = [...root.querySelectorAll('[data-citry-ui-part="input"][type="radio"]')]
             .filter((input) => input.closest('[data-citry-ui-part="radio-group"]') === root);
           if (!radios.length) {
             throw new Error("[citry-ui] CRadioGroup requires at least one owned native radio input.");
           }
-          const field = inject(Symbol.for("citry-ui:field"), null);
-          const form = inject(Symbol.for("citry-ui:form"), null);
+          const field = component.fieldService;
+          const form = component.formService;
           const unregisterCapabilities = field?.registerCapabilities({required: true, readonly: false});
           const allowed = {
             orientation: ["vertical", "horizontal"],
@@ -551,17 +549,17 @@ class CRadioGroup(LibraryComponent):
               disabled = field.disabled;
               externalInvalid = field.invalid;
             } else {
-              required = resolveBoolean("required", data.required);
-              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
-              externalInvalid = resolveBoolean("invalid", data.invalid);
+              required = resolveBoolean("required", data.serverRequired);
+              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.serverDisabled);
+              externalInvalid = resolveBoolean("invalid", data.serverInvalid);
             }
             root.disabled = disabled;
             root.toggleAttribute("data-required", required);
             root.toggleAttribute("data-disabled", root.matches(":disabled"));
-            root.dataset.orientation = resolveChoice("orientation", data.orientation);
-            root.dataset.variant = resolveChoice("variant", data.variant);
-            root.dataset.size = resolveChoice("size", data.size);
-            root.dataset.labelPos = resolveChoice("label_pos", data.labelPos);
+            root.dataset.orientation = resolveChoice("orientation", data.serverOrientation);
+            root.dataset.variant = resolveChoice("variant", data.serverVariant);
+            root.dataset.size = resolveChoice("size", data.serverSize);
+            root.dataset.labelPos = resolveChoice("label_pos", data.serverLabelPos);
             radios.forEach((input) => {
               input.required = required;
               input.closest('[data-citry-ui-part="radio"]')?.toggleAttribute(
@@ -597,7 +595,7 @@ class CRadioGroup(LibraryComponent):
             if (value === undefined || !knownValues.has(value)) {
               reportInvalid("value", supplied);
               if (!controlled) {
-                setCheckedValue(data.value);
+                setCheckedValue(data.serverValue);
               }
               return;
             }
@@ -669,7 +667,7 @@ class CRadioGroup(LibraryComponent):
           root.addEventListener("change", onChange);
           root.addEventListener("invalid", onInvalid, true);
           nativeForm?.addEventListener("reset", onReset);
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             applyState();
             if (!activationPending) {
               applyControlled();
@@ -757,8 +755,8 @@ class CRadio(LibraryComponent):
     template = """
       <span
         class="cui-radio"
-        c-data-checked="checked"
-        c-data-disabled="effective_disabled"
+        c-data-checked="'' if checked else None"
+        c-data-disabled="'' if effective_disabled else None"
         c-data-value="value"
         c-bind="attrs"
         data-citry-ui-part="radio"

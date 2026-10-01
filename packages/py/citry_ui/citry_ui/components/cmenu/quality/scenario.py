@@ -21,7 +21,7 @@ def menu_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack menu-quality"
             aria-labelledby="menu-states-title"
-            x-data="{controlledOpen: false, formSubmits: 0}"
+
           >
             <h1 id="menu-states-title">Menu states</h1>
             <div class="menu-quality__grid">
@@ -73,7 +73,7 @@ def menu_states_component(app: Citry) -> type[Component]:
                   </c-fill>
                 </c-CMenu>
                 <button type="submit">Submit native Form</button>
-                <output x-text="`Submits: ${formSubmits}`">Submits: 0</output>
+                <output v-text="`Submits: ${formSubmits}`">Submits: 0</output>
               </form>
 
               <c-CMenu
@@ -81,10 +81,7 @@ def menu_states_component(app: Citry) -> type[Component]:
                 c-loop="False"
                 match_width
                 size="sm"
-                $c-props="{
-                  open: controlledOpen,
-                  onOpenChange: (open) => controlledOpen = open,
-                }"
+                :open="controlledOpen" :onOpenChange="(open) => controlledOpen = open"
                 c-attrs="{'data-quality-states': 'controlled loop-false match-width sm'}"
               >
                 <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
@@ -153,6 +150,7 @@ def menu_states_component(app: Citry) -> type[Component]:
             </div>
           </section>
         """
+        js = "$component({data(){return {controlledOpen: false, formSubmits: 0};}});"
 
         css = """
           :where(.menu-quality__grid) {
