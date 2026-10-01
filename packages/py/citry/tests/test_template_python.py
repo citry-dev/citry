@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import sys
 import textwrap
 
 import pytest
@@ -829,7 +830,7 @@ def test_inferred_shadow_keeps_locals_that_cannot_be_renamed_safely() -> None:
 
     assert shadow is not None
     # Renaming would point the nested `global` at a different name, and an
-    # alias on `import os.path` would bind the submodule instead of `os`.
+    # alias on `import os.path` binds the submodule, not `os`.
     assert "__citry_local_item" not in shadow.source
     assert "__citry_local_os" not in shadow.source
 
@@ -857,3 +858,110 @@ def test_inferred_shadow_reads_present_optional_keys_by_subscript() -> None:
     # used only at the return that may lack the key.
     assert "extra = __citry_data['extra']" in shadow.source
     assert "extra = __citry_data.get('extra')" in shadow.source
+
+
+@pytest.mark.parametrize(
+    ("method_body", "kept"),
+    [
+        # A nested function's parameter of the same name, called by keyword.
+        ("item = 1\n        def helper(item):\n            return item\n        helper(item=item)\n", "item"),
+        # A nested class attribute of the same name.
+        ("item = 1\n        class Inner:\n            item = 2\n        Inner.item\n", "item"),
+        # A nested function that reads the module's `item`, while a
+        # comprehension variable makes `item` a method local on Python 3.12+.
+        ("[item for item in [1]]\n        def read():\n            return item\n", "item"),
+    ],
+)
+def test_inferred_shadow_keeps_a_local_that_nested_code_binds_or_reads_globally(method_body: str, kept: str) -> None:
+    module_source = (
+        "item = 0\n"
+        "class Board:\n"
+        "    def template_data(self, kwargs, slots):\n"
+        f"        {method_body}"
+        "        return {'items': [1]}\n"
+    )
+    source = '<c-for each="item in items"><p c-title="item"></p></c-for>'
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("items", "always"),),
+        _query(source, 'c-title="it'),
+        source_module="app.board",
+    )
+
+    assert shadow is not None
+    # Renaming every occurrence would change what the nested code means.
+    assert f"__citry_local_{kept}" not in shadow.source
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="generic class syntax needs Python 3.12")
+def test_inferred_shadow_renames_locals_in_a_generic_class() -> None:
+    module_source = (
+        "class Board[T]:\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        item: list[int] = [1]\n"
+        "        return {'items': item}\n"
+    )
+    source = '<c-for each="item in items"><p c-title="item"></p></c-for>'
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("items", "always"),),
+        _query(source, 'c-title="it'),
+        source_module="app.board",
+    )
+
+    assert shadow is not None
+    assert "__citry_local_item: list[int] = [1]" in shadow.source
+
+
+def test_inferred_shadow_reads_a_returned_root_through_the_copy() -> None:
+    # `data` is both the returned variable and a template root, and a nested
+    # `nonlocal` keeps it from being renamed, so reading the other roots from
+    # `data` would read the value the generated code just assigned to it.
+    module_source = textwrap.dedent(
+        """
+        class Board:
+            def template_data(self, kwargs, slots):
+                data = {"data": 1, "other": "s"}
+                def touch():
+                    nonlocal data
+                return data
+        """
+    )
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("data", "always"), TemplatePythonRoot("other", "always")),
+        TemplatePythonQuery("other", 0, 5, "interpolation", free_names=("other",)),
+    )
+
+    assert shadow is not None
+    assert "other = __citry_data['other']" in shadow.source
+
+
+def test_inferred_shadow_reads_keys_before_a_spread_as_optional() -> None:
+    module_source = textwrap.dedent(
+        """
+        class Board:
+            def template_data(self, kwargs, slots):
+                if kwargs:
+                    return {"extra": 1, **kwargs, "after": 2}
+                return {}
+        """
+    )
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("extra", "conditional"), TemplatePythonRoot("after", "conditional")),
+        TemplatePythonQuery("(extra, after)", 0, 14, "interpolation", free_names=("extra", "after")),
+    )
+
+    assert shadow is not None
+    # The spread may replace `extra`, so only `after` is read by subscript.
+    assert "extra = __citry_data.get('extra')" in shadow.source
+    assert "after = __citry_data['after']" in shadow.source

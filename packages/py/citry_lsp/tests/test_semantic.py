@@ -2325,27 +2325,48 @@ async def test_c_value_check_keeps_each_returned_key_type(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
-async def test_c_value_check_keeps_key_types_of_a_returned_variable_and_an_optional_key(tmp_path: Path) -> None:
+async def test_c_value_check_keeps_key_types_of_a_returned_variable(tmp_path: Path) -> None:
     module_source = (
         f"{_SIZED_CARD}"
         "class Board(Component):\n"
         "    citry = engine\n"
         "    template_file = 'board.html'\n"
         "    def template_data(self, kwargs, slots):\n"
-        "        if kwargs:\n"
-        "            return {'size': 'sm', 'extra': 'md', 'count': 1}\n"
         "        data = {'size': 'lg', 'count': 2}\n"
         "        return data\n"
     )
-    # `extra` is missing from one return, so it is optional.
-    template_source = '<c-Card c-size="size" />\n<c-Card c-size="extra" />\n'
 
-    findings = await _python_findings_in(tmp_path, template_source, module_source)
+    findings = await _python_findings_in(tmp_path, '<c-Card c-size="size" />\n<c-Card c-size="1" />\n', module_source)
 
-    # Where a return lacks `extra`, ty sees `dict.get()` and its `None`.
-    assert [(code, text) for code, text, _message in findings] == [
-        ("citry.python.invalid-assignment", "extra"),
-    ]
+    # Read through a second name, `size` would be `str | int`; read from
+    # `data` itself it is `Literal["lg"]`. The second tag proves ty ran.
+    assert [(code, text) for code, text, _message in findings] == [("citry.python.invalid-assignment", "1")]
+
+
+@pytest.mark.asyncio
+async def test_c_value_check_keeps_the_type_of_a_key_only_some_returns_have(tmp_path: Path) -> None:
+    module_source = (
+        f"{_SIZED_CARD}"
+        "class Wide(Component):\n"
+        "    citry = engine\n"
+        "    template = '<p></p>'\n"
+        "    class Kwargs:\n"
+        "        size: Size | int | None\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        if kwargs:\n"
+        "            return {'size': 'sm', 'extra': 'md', 'count': 1}\n"
+        "        return {'count': 2}\n"
+    )
+
+    findings = await _python_findings_in(tmp_path, '<c-Wide c-size="extra" />\n<c-Card c-size="1" />\n', module_source)
+
+    # Where `extra` is returned it is `Literal["md"]`; `dict.get()` would
+    # have merged it with `count` into `str | int | None`. Where it is
+    # missing, the value is `int | None`, which `Wide` also accepts.
+    assert [(code, text) for code, text, _message in findings] == [("citry.python.invalid-assignment", "1")]
 
 
 _RECORDED_BOUNDS_MODULE = (
@@ -2397,6 +2418,7 @@ def test_recorded_query_function_bounds_match_a_parse_of_the_shadow(build, pream
     assert document is not None
     document = _insert_shadow_preamble(document, preamble, _RECORDED_BOUNDS_MODULE)
 
-    # The batch check cuts the function out by these bounds instead of parsing.
+    # The batch check cuts the function out by these bounds, so they must
+    # match a parse of the shadow.
     assert document.query_function is not None
     assert document.query_function == _generated_query_function_bounds(document.source)

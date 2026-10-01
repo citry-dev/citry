@@ -80,9 +80,10 @@ All notable changes to `citry-lsp` are documented here.
   when `template_data()` has a local of the same name. Before, `c-for="row
   in rows"` next to a local `row: list[Row]` typed the loop variable as
   the list.
-- Each key of the dict `template_data()` returns keeps its own type when
-  the method returns a variable, such as `return data`, or when only some
-  returns include the key.
+- Hover and type checks keep each key's own type in the dict
+  `template_data()` returns, also when the method ends with `return data`
+  or when only some returns include the key. Before, such a key could show
+  the union of every value in the dict.
 
 ## [0.1.7] - 2026-09-11
 

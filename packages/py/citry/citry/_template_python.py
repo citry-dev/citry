@@ -285,7 +285,7 @@ def build_inferred_template_shadow(
     # template loop `c-for="resolved in items"`, would lend its declared type
     # to the template name. Renaming those locals gives each template name its
     # own type, while the copied method computes the same value.
-    conflicts = _method_local_names(module_source, class_qualname) & _template_bound_names(roots, query)
+    conflicts = _renamable_method_locals(module_source, class_qualname) & _template_bound_names(roots, query)
     prepared = _prepared_template_data_method(
         module_source,
         class_qualname,
@@ -443,6 +443,7 @@ class _ReturnQueryTransformer(ast.NodeTransformer):
         self.type_references = type_references
         self.placeholder = placeholder
         self.direct_attribute_owner = direct_attribute_owner
+        self.bound_names = _template_bound_names(roots, query)
         self.return_count = 0
 
     def transform_body(self, statements: list[ast.stmt]) -> list[ast.stmt]:
@@ -475,8 +476,14 @@ class _ReturnQueryTransformer(ast.NodeTransformer):
         # ty remembers the type of each literal key read from the variable a
         # dict was assigned to, but not from a second name that variable is
         # copied into. Reading roots from the returned variable itself keeps
-        # `ctx["size"]` as precise as the value the method stored there.
-        data_name = node.value.id if isinstance(node.value, ast.Name) else "__citry_data"
+        # `data["size"]` as precise as the value the method stored there. A
+        # variable that the generated code itself assigns, such as a root of
+        # the same name that could not be renamed, is read through the copy.
+        data_name = (
+            node.value.id
+            if isinstance(node.value, ast.Name) and node.value.id not in self.bound_names
+            else "__citry_data"
+        )
         generated = ast.parse(
             "\n".join(
                 [
@@ -637,31 +644,57 @@ def _prepared_template_data_method(
 
 
 @lru_cache(maxsize=32)
-def _method_local_names(module_source: str, class_qualname: str) -> frozenset[str]:
+def _renamable_method_locals(module_source: str, class_qualname: str) -> frozenset[str]:
     """
-    Return the names local to one class's ``template_data`` method, parameters included.
+    Return the names local to one class's ``template_data`` method that can be renamed safely.
 
-    Python's own symbol table answers this, so a name the method declares
-    ``global`` or only reads stays out, and a name bound in a nested
-    function or comprehension does not count as the method's own.
+    Python's own symbol table answers this, parameters included. A name
+    the method declares ``global`` or only reads is not local. A local is
+    left out when a function, class, or lambda nested in the method binds
+    the same name itself or reads a global of that name, because renaming
+    every occurrence would then change what that nested code means, such as
+    a nested function called by keyword or a nested class's attribute. On
+    Python 3.12 and later the table also lists a comprehension's loop
+    variable as a method local, and the same rule covers it.
     """
     try:
         table = symtable.symtable(module_source, "<citry-template-data>", "exec")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return frozenset()
     for part in class_qualname.split("."):
-        classes = [child for child in table.get_children() if child.get_type() == "class" and child.get_name() == part]
-        if len(classes) != 1:
+        found = _named_child_table(table, part, "class")
+        if found is None:
             return frozenset()
-        table = classes[0]
-    methods = [
-        child
-        for child in table.get_children()
-        if child.get_type() == "function" and child.get_name() == "template_data"
-    ]
-    if len(methods) != 1 or not isinstance(methods[0], symtable.Function):
+        table = found
+    method = _named_child_table(table, "template_data", "function")
+    if not isinstance(method, symtable.Function):
         return frozenset()
-    return frozenset(methods[0].get_locals())
+    kept: set[str] = set()
+    pending = list(method.get_children())
+    while pending:
+        nested = pending.pop()
+        pending.extend(nested.get_children())
+        kept.update(
+            symbol.get_name()
+            for symbol in nested.get_symbols()
+            if symbol.is_local() or symbol.is_parameter() or symbol.is_global() or symbol.is_nonlocal()
+        )
+    return frozenset(method.get_locals()) - kept
+
+
+def _named_child_table(table: symtable.SymbolTable, name: str, kind: str) -> symtable.SymbolTable | None:
+    """Return the one child scope of this kind and name, looking through a generic's type-parameter scope."""
+    matches: list[symtable.SymbolTable] = []
+    for child in table.get_children():
+        if child.get_name() != name:
+            continue
+        if child.get_type() == kind:
+            matches.append(child)
+        elif child.get_type() == "type parameters":
+            # `class Board[T]:` (Python 3.12+) wraps the class in a scope
+            # that holds the type parameters.
+            matches.extend(inner for inner in child.get_children() if inner.get_type() == kind)
+    return matches[0] if len(matches) == 1 else None
 
 
 def _template_bound_names(roots: tuple[TemplatePythonRoot, ...], query: TemplatePythonQuery) -> frozenset[str]:
@@ -684,28 +717,30 @@ def _rename_conflicting_locals(
     """
     Rename the method locals that a template name would otherwise reuse.
 
-    The method is a private copy, so every occurrence of the name inside it,
-    nested functions included, can be renamed together. Python resolves a
-    name that the method binds to the method's local everywhere inside it,
-    so the renamed copy computes the same values. Only a nested ``global`` or
-    ``nonlocal`` statement could point the name somewhere else, and such a
-    name is left alone.
+    The method is a private copy, and ``local_names`` holds only locals that
+    no nested scope binds or reads as a global, so every occurrence of such
+    a name in the method body, nested functions included, means the
+    method's local and can be renamed together. The renamed copy computes
+    the same values. The method's decorators, defaults, and annotations run
+    in the class body, so they keep their names.
     """
     conflicts = local_names & template_names
     if not conflicts:
         return
     redirected = {
         name
-        for node in ast.walk(method)
+        for statement in method.body
+        for node in ast.walk(statement)
         if isinstance(node, (ast.Global, ast.Nonlocal))
         for name in node.names
         if name in conflicts
     }
     # `import a.b` binds `a` to the top package, and an alias would bind the
-    # submodule instead, so a name bound that way cannot be renamed either.
+    # submodule, so a name bound that way cannot be renamed either.
     redirected.update(
         alias.name.split(".", 1)[0]
-        for node in ast.walk(method)
+        for statement in method.body
+        for node in ast.walk(statement)
         if isinstance(node, ast.Import)
         for alias in node.names
         if alias.asname is None and "." in alias.name
@@ -723,29 +758,44 @@ def _rename_conflicting_locals(
     if not renames:
         return
 
-    for node in ast.walk(method):
-        if isinstance(node, ast.Name) and node.id in renames:
-            node.id = renames[node.id]
-        elif isinstance(node, ast.arg) and node.arg in renames:
-            node.arg = renames[node.arg]
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node is not method:
-            node.name = renames.get(node.name, node.name)
-        elif isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) and node.name in renames:
-            node.name = renames[node.name]
-        elif isinstance(node, ast.MatchMapping) and node.rest in renames:
-            node.rest = renames[node.rest]
-        elif isinstance(node, (ast.Import, ast.ImportFrom)):
-            for alias in node.names:
-                bound = alias.asname or alias.name
-                if bound in renames:
-                    alias.asname = renames[bound]
+    arguments = method.args
+    starred = tuple(item for item in (arguments.vararg, arguments.kwarg) if item is not None)
+    for parameter in (*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs, *starred):
+        parameter.arg = renames.get(parameter.arg, parameter.arg)
+    for statement in method.body:
+        for node in ast.walk(statement):
+            if isinstance(node, ast.Name) and node.id in renames:
+                node.id = renames[node.id]
+            elif isinstance(node, ast.arg) and node.arg in renames:
+                node.arg = renames[node.arg]
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                node.name = renames.get(node.name, node.name)
+            elif isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) and node.name in renames:
+                node.name = renames[node.name]
+            elif isinstance(node, ast.MatchMapping) and node.rest in renames:
+                node.rest = renames[node.rest]
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    bound = alias.asname or alias.name
+                    if bound in renames:
+                        alias.asname = renames[bound]
 
 
 def _literal_dict_keys(value: ast.expr) -> frozenset[str]:
-    """Return the string keys a returned dict display always contains."""
+    """
+    Return the string keys that a returned dict literal always sets itself.
+
+    A `**other` spread may replace the keys written before it, so only the
+    keys after the last spread count.
+    """
     if not isinstance(value, ast.Dict):
         return frozenset()
-    return frozenset(key.value for key in value.keys if isinstance(key, ast.Constant) and isinstance(key.value, str))
+    last_spread = max((index for index, key in enumerate(value.keys) if key is None), default=-1)
+    return frozenset(
+        key.value
+        for key in value.keys[last_spread + 1 :]
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    )
 
 
 _QUERY_PLACEHOLDER_BASE = "__citry_template_expression_query__"
