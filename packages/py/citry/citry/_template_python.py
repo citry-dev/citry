@@ -6,6 +6,7 @@ import ast
 import copy
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry_core.template_parser import HtmlAttrKind, TemplateElement, parse_template
@@ -202,9 +203,8 @@ def build_inferred_template_shadow(
     kwargs_type: tuple[str, str] | None = None,
 ) -> ShadowPythonDocument | None:
     """Copy one proven ``template_data`` method and evaluate the query at each return."""
-    try:
-        tree = ast.parse(module_source)
-    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+    tree = _parsed_module(module_source)
+    if tree is None:
         return None
     class_node = _class_for_qualname(tree, class_qualname)
     if class_node is None or class_node.decorator_list:
@@ -271,12 +271,7 @@ def build_inferred_template_shadow(
     duplicate.body = transformer.transform_body(duplicate.body)
     if transformer.return_count == 0:
         return None
-    rewritten_module = _rewrite_module_relative_imports(
-        module_source,
-        tree,
-        source_module,
-        source_is_package=source_is_package,
-    )
+    rewritten_module = _rewritten_module(module_source, source_module, source_is_package=source_is_package)
     if rewritten_module is None or not _rewrite_relative_imports(
         duplicate,
         source_module,
@@ -318,16 +313,7 @@ def build_schema_template_shadow(
     """Evaluate a query against fields on one exact authored schema class."""
     if not _qualified_identifier(schema_qualname):
         return None
-    try:
-        module_tree = ast.parse(module_source)
-    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
-        return None
-    rewritten_module = _rewrite_module_relative_imports(
-        module_source,
-        module_tree,
-        source_module,
-        source_is_package=source_is_package,
-    )
+    rewritten_module = _rewritten_module(module_source, source_module, source_is_package=source_is_package)
     if rewritten_module is None:
         return None
     shadow_module_source, source_copies = rewritten_module
@@ -803,6 +789,32 @@ def _class_for_qualname(module: ast.Module, qualname: str) -> ast.ClassDef | Non
         matched = candidates[0]
         body = matched.body
     return matched
+
+
+# Every expression in a template builds its own shadow from the same owner
+# module, so the parsed tree and its import rewrite are computed once per
+# module text and reused. A few entries cover the files one check visits in turn.
+@lru_cache(maxsize=8)
+def _parsed_module(source: str) -> ast.Module | None:
+    """Parse one module; callers must copy any part they change, because the tree is shared."""
+    try:
+        return ast.parse(source)
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return None
+
+
+@lru_cache(maxsize=8)
+def _rewritten_module(
+    source: str,
+    source_module: str | None,
+    *,
+    source_is_package: bool,
+) -> tuple[str, tuple[ShadowPythonSourceCopy, ...]] | None:
+    """Return the module with relative imports made absolute, computed once per module text."""
+    tree = _parsed_module(source)
+    if tree is None:
+        return None
+    return _rewrite_module_relative_imports(source, tree, source_module, source_is_package=source_is_package)
 
 
 def _rewrite_module_relative_imports(

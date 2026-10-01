@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import io
+import tokenize
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -19,9 +21,14 @@ if TYPE_CHECKING:
     from citry_lsp.project import ProjectState
 
 
+# A batch check waits this long for one ty answer. A cold start on a busy CI
+# machine is far slower than the editor's interactive bound.
+_BATCH_REQUEST_TIMEOUT_SECONDS = 60.0
+
+
 @dataclass(frozen=True, slots=True)
 class ProjectTypeFinding:
-    """One forwarded type-checker finding in one authored file."""
+    """One TypeScript or ty finding, mapped back to the authored file it belongs to."""
 
     path: Path
     source: str
@@ -52,8 +59,13 @@ def project_documents(project: ProjectState, workspace: Path) -> dict[str, Docum
         if not path.is_relative_to(workspace):
             continue
         try:
-            source = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
+            raw = path.read_bytes()
+            # Decode as Python and the editor do, keeping CRLF line endings
+            # and dropping a byte order mark, so the text matches the file
+            # that ty reads from disk.
+            encoding, _ = tokenize.detect_encoding(io.BytesIO(raw).readline) if language == "python" else ("utf-8", [])
+            source = raw.decode(encoding)
+        except (OSError, SyntaxError, UnicodeError, LookupError):
             continue
         document = DocumentState(path.as_uri(), language, source, 0)
         document.update(source, 0, project)
@@ -61,7 +73,11 @@ def project_documents(project: ProjectState, workspace: Path) -> dict[str, Docum
     return documents
 
 
-def check_project_python_types(project: ProjectState, workspace: Path) -> tuple[ProjectTypeFinding, ...]:
+def check_project_python_types(
+    project: ProjectState,
+    workspace: Path,
+    documents: dict[str, DocumentState] | None = None,
+) -> tuple[ProjectTypeFinding, ...]:
     """
     Run ty over the Python expressions of every component template in `workspace`.
 
@@ -69,16 +85,25 @@ def check_project_python_types(project: ProjectState, workspace: Path) -> tuple[
     editor gives ty, and the findings pass the same filter, so `citry check
     --types` reports a `citry.python.*` finding exactly when the editor would.
 
+    Pass the ``documents`` that ``project_documents()`` returned to reuse
+    them; otherwise the files are read again.
+
     Raises:
         TyUnavailableError: When ty cannot start or stops answering.
 
     """
-    return asyncio.run(_check_project_python_types(project, workspace.resolve()))
+    workspace = workspace.resolve()
+    if documents is None:
+        documents = project_documents(project, workspace)
+    return asyncio.run(_check_project_python_types(project, workspace, documents))
 
 
-async def _check_project_python_types(project: ProjectState, workspace: Path) -> tuple[ProjectTypeFinding, ...]:
-    documents = project_documents(project, workspace)
-    analyzer = TyAnalyzer(workspace)
+async def _check_project_python_types(
+    project: ProjectState,
+    workspace: Path,
+    documents: dict[str, DocumentState],
+) -> tuple[ProjectTypeFinding, ...]:
+    analyzer = TyAnalyzer(workspace, request_timeout=_BATCH_REQUEST_TIMEOUT_SECONDS)
     results: list[ProjectTypeFinding] = []
     try:
         for uri, document in sorted(documents.items()):

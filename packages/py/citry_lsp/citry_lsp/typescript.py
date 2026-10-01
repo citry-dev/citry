@@ -625,6 +625,7 @@ def check_project_types(
     project: ProjectState,
     workspace: Path,
     command: Sequence[str],
+    documents: dict[str, DocumentState] | None = None,
 ) -> tuple[ProjectTypeFinding, ...]:
     """
     Type-check the browser code of every component whose source is in `workspace`.
@@ -638,7 +639,8 @@ def check_project_types(
         TypeScriptUnavailableError: When `tsc` cannot run.
 
     """
-    documents = project_documents(project, workspace.resolve())
+    if documents is None:
+        documents = project_documents(project, workspace.resolve())
     files: list[tuple[str, str]] = []
     owners: dict[str, tuple[DocumentState, tuple[TypeCheckProjection, ...]]] = {}
     for document in documents.values():

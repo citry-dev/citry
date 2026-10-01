@@ -83,9 +83,13 @@ class TyAnalyzer:
         *,
         executable: Path | None = None,
         python_prefix: Path | None = None,
+        request_timeout: float = _REQUEST_TIMEOUT_SECONDS,
     ) -> None:
         self.workspace = workspace.resolve()
         self._executable = executable
+        # The editor drops a slow answer to stay responsive; a batch check
+        # passes a longer bound, because there a timeout fails the command.
+        self._request_timeout = request_timeout
         # citry-lsp itself is launched by the selected interpreter. Passing
         # that interpreter's prefix explicitly keeps ty from rediscovering a
         # different ambient or workspace environment.
@@ -426,7 +430,7 @@ class TyAnalyzer:
             client = _configured_client(self._python_prefix)
             await client.start_io(str(executable), "server", cwd=self.workspace)
             params = _initialize_params(self.workspace, self._python_prefix)
-            await _bounded_client_request(client, types.INITIALIZE, params, _REQUEST_TIMEOUT_SECONDS)
+            await _bounded_client_request(client, types.INITIALIZE, params, self._request_timeout)
             client.protocol.notify(types.INITIALIZED, types.InitializedParams())
         except asyncio.CancelledError:
             if client is not None:
@@ -480,7 +484,7 @@ class TyAnalyzer:
         if operation is not None:
             self._active_requests.add(operation)
         try:
-            return await _bounded_client_request(client, method, params, _REQUEST_TIMEOUT_SECONDS)
+            return await _bounded_client_request(client, method, params, self._request_timeout)
         except asyncio.CancelledError:
             # Cancellation belongs to this editor request, not to the shared
             # analyzer generation. The bounded request leaves its pygls

@@ -20,3 +20,9 @@ and the server asks a client that offers it (`typeCheckClient`) through
 `citry/typeCheck`. Fix a false positive in the projection types or
 `citry_lsp/citry-dom.d.ts`, never by matching TypeScript's message text, which
 VS Code may show in another language.
+
+`citry check --types` reuses the editor's code through
+`citry_lsp/project_check.py`: `project_documents` reads the component files
+once, `typescript.check_project_types` runs `tsc`, and
+`check_project_python_types` runs the editor's `semantic.semantic_diagnostics`
+with one ty child. Change the shared functions, not a CLI-only copy.

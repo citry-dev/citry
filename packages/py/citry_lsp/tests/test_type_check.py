@@ -30,7 +30,6 @@ from citry_lsp.project import load_project
 from citry_lsp.project_check import check_project_python_types
 from citry_lsp.protocol import PROTOCOL_VERSION, TYPE_CHECK_METHOD
 from citry_lsp.server import CitryLanguageServer
-from citry_lsp.type_analysis import TyUnavailableError
 from citry_lsp.typescript import (
     TypeScriptFinding,
     TypeScriptUnavailableError,
@@ -681,20 +680,63 @@ def test_check_types_reports_ty_findings_in_both_formats(tmp_path):
 def test_check_types_stops_when_ty_cannot_run(tmp_path, monkeypatch, capsys):
     (tmp_path / "app.py").write_text(_TY_APP, encoding="utf-8")
     (tmp_path / "title.html").write_text(_TITLE_HTML, encoding="utf-8")
-
-    def unavailable(*_args: object) -> None:
-        raise TyUnavailableError("Python expression analysis is unavailable: no ty")
-
+    # TypeScript is not under test here; a missing ty executable makes the
+    # real analyzer fail to start.
     monkeypatch.setattr("citry_lsp.typescript.find_typescript_compiler", lambda _cwd: ("tsc",))
     monkeypatch.setattr("citry_lsp.typescript.check_project_types", lambda *_args: ())
-    monkeypatch.setattr("citry_lsp.project_check.check_project_python_types", unavailable)
+    monkeypatch.setattr("citry_lsp.type_analysis._installed_ty_executable", lambda: tmp_path / "missing-ty")
     monkeypatch.syspath_prepend(str(tmp_path))
 
     with pytest.raises(SystemExit) as exited:
         _with_type_findings(CheckReport((), None, ()), "app:engine", tmp_path)
 
     assert exited.value.code == 2
-    assert "--types cannot run ty: Python expression analysis is unavailable: no ty" in capsys.readouterr().err
+    assert "--types cannot run ty: Python expression analysis is unavailable" in capsys.readouterr().err
+
+
+_INLINE_FILES = {
+    "engine_setup.py": "from citry import Citry\nengine = Citry(autodiscover=False)\n",
+    "app.py": """from citry import Component
+from engine_setup import engine
+import cards
+class First(Component):
+    citry = engine
+    template = "<p>{{ title + 1 }}</p>"
+    class TemplateData:
+        title: str
+    def template_data(self, kwargs, slots):
+        return {"title": "First"}
+""",
+    "cards.py": """from citry import Component
+from engine_setup import engine
+class Second(Component):
+    citry = engine
+    template = "<p>{{ count + 'x' }}</p>"
+    class TemplateData:
+        count: int
+    def template_data(self, kwargs, slots):
+        return {"count": 1}
+""",
+}
+
+
+@pytest.mark.parametrize("line_end", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_check_project_python_types_reads_inline_templates_with_any_line_ending(tmp_path, line_end):
+    # Two Python files with inline templates are both passed to ty as open
+    # files, so their text must match what ty reads from disk, even with
+    # CRLF line endings and a byte order mark.
+    for name, source in _INLINE_FILES.items():
+        prefix = "\ufeff" if name == "cards.py" else ""
+        (tmp_path / name).write_bytes((prefix + source).replace("\n", line_end).encode("utf-8"))
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready, project.status
+
+    found = check_project_python_types(project, tmp_path)
+
+    assert sorted((item.path.name, item.diagnostic.code) for item in found) == [
+        ("app.py", "citry.python.unsupported-operator"),
+        ("cards.py", "citry.python.unsupported-operator"),
+    ]
 
 
 def _server_with_documents(tmp_path: Path, options: dict[str, object]) -> tuple[CitryLanguageServer, DocumentState]:

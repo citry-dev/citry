@@ -1,4 +1,4 @@
-"""Citry UI's component JavaScript and templates pass `citry check --types` in an app that registers the library."""
+"""Citry UI's component JavaScript and Vue templates have no TypeScript errors under `citry check --types`."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def test_citry_ui_component_javascript_has_no_typescript_errors(tmp_path):
     environment = {**os.environ, "PATH": os.pathsep.join(path_entries), "PYTHONPATH": python_path, "NO_COLOR": "1"}
     environment.pop("FORCE_COLOR", None)
 
-    # Each check spends most of its time in TypeScript, so both apps are checked at the same time.
+    # Each check spends most of its time in TypeScript and ty, so both apps are checked at the same time.
     runs = {
         module: subprocess.Popen(
             [sys.executable, "-m", "citry", "--app", f"{module}:engine", "check", "--types", "--format", "json"],
@@ -89,8 +89,10 @@ def test_citry_ui_component_javascript_has_no_typescript_errors(tmp_path):
                 process.wait()
     reports: dict[str, str] = {}
     for module, ((stdout, stderr), returncode) in results.items():
-        # Status 2 means TypeScript did not run. Status 1 is expected, because
-        # the report also carries Citry's own template findings.
+        # Status 2 means TypeScript or ty did not run. Status 1 is expected,
+        # because the report also carries Citry's own template findings and
+        # ty's findings in Citry UI's templates, which this test does not
+        # cover yet.
         assert returncode in {0, 1}, f"{module}: {stderr}"
         payload = json.loads(stdout)
         assert payload["mode"] == "registry", f"{module}: {payload.get('app_failure')}"

@@ -70,7 +70,7 @@ class CheckCommand(ExtensionCommand):
             action="store_true",
             help=(
                 "Also type-check component JavaScript and Vue expressions with TypeScript, "
-                "and Python template expressions with ty (needs citry-lsp and tsc)."
+                "and Python template expressions with ty (needs citry-lsp, Node.js, and tsc)."
             ),
         ),
         CommandArg(
@@ -185,8 +185,10 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
     # citry-lsp is an optional companion package that itself imports citry, so
     # it can only be imported here, once the command needs it.
     try:
+        from lsprotocol.types import DiagnosticSeverity  # noqa: PLC0415
+
         from citry_lsp.project import load_project  # noqa: PLC0415
-        from citry_lsp.project_check import check_project_python_types  # noqa: PLC0415
+        from citry_lsp.project_check import check_project_python_types, project_documents  # noqa: PLC0415
         from citry_lsp.type_analysis import TyUnavailableError  # noqa: PLC0415
         from citry_lsp.typescript import (  # noqa: PLC0415
             TypeScriptUnavailableError,
@@ -206,16 +208,24 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
     project = load_project(cwd, app_spec)
     if not project.status.registry_ready:
         _type_check_error(project.status.message or "the app's component registry is unavailable")
+    # Both checkers read the same component files, so they are read once.
+    documents = project_documents(project, cwd.resolve())
     try:
-        found = check_project_types(project, cwd, command)
+        found = check_project_types(project, cwd, command, documents)
     except TypeScriptUnavailableError as exc:
         _type_check_error(str(exc))
     try:
-        python_found = check_project_python_types(project, cwd)
+        python_found = check_project_python_types(project, cwd, documents)
     except TyUnavailableError as exc:
         _type_check_error(str(exc), checker="ty")
     findings = list(report.findings)
     for item in (*found, *python_found):
+        # TypeScript findings are errors. A ty warning stays a warning, and
+        # an information or hint finding, which the editor shows as a faint
+        # mark, is left out of the report.
+        severity = item.diagnostic.severity
+        if severity in {DiagnosticSeverity.Information, DiagnosticSeverity.Hint}:
+            continue
         start = item.diagnostic.range.start
         code = str(item.diagnostic.code)
         coordinates = _lsp_range_coordinates(item.source, item.diagnostic.range)
@@ -224,17 +234,11 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
                 f"{item.path}:{start.line + 1}:{start.character + 1}",
                 item.diagnostic.message,
                 code,
-                # TypeScript findings are always errors; ty keeps its own
-                # severity, as the editor shows it.
-                "warning" if item.diagnostic.severity == _LSP_WARNING_SEVERITY else "error",
+                "warning" if severity == DiagnosticSeverity.Warning else "error",
                 *(coordinates or ()),
             )
         )
     return CheckReport(tuple(findings), report.app_failure, report.notes)
-
-
-# The LSP `DiagnosticSeverity.Warning` value, so this module need not import lsprotocol.
-_LSP_WARNING_SEVERITY = 2
 
 
 def _type_check_error(message: str, *, checker: str = "TypeScript") -> NoReturn:
