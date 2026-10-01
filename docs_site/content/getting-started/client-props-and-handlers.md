@@ -66,7 +66,8 @@ $component({
   },
   methods: {
     toggleChoice() {
-      this.choice = this.choice === 'Ocean' ? 'Forest' : 'Ocean';
+      this.choice =
+        this.choice === 'Ocean' ? 'Forest' : 'Ocean';
     },
   },
 });

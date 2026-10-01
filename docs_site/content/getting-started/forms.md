@@ -67,8 +67,10 @@ A successful call clears that handler's retained error.
 The handler dispatches the accepted email:
 
 ```python
-return actions.Dispatch("signup:sent", {"email": email})
+return actions.Dispatch("SignupForm:sent", {"email": email})
 ```
+
+As in the earlier steps, the event name starts with the component's name.
 
 The component declares its local state with Vue Options:
 
@@ -81,28 +83,24 @@ $component({
 });
 ```
 
-`onServerRender` listens on the component root and returns the matching
-cleanup:
+The [`onServerRender`][onServerRender] option runs after the component
+mounts and again after each server render. It listens with
+[`onEvent`][onEvent], which hears the events that this component's own
+Python handlers dispatch:
 
 ```js
-onServerRender({ component }) {
-  // component.$el may point elsewhere by cleanup time, so
-  // remove the listener from the element that got it.
-  const root = component.$el;
-  const receive = (event) => {
+onServerRender({ component, onEvent }) {
+  // Citry removes this listener before onServerRender
+  // runs again and when the component unmounts.
+  onEvent('SignupForm:sent', (detail) => {
     // Show the email that Python sent with the event.
-    component.acceptedEmail = event.detail.email;
-  };
-  root.addEventListener('signup:sent', receive);
-  return () => {
-    root.removeEventListener('signup:sent', receive);
-  };
+    component.acceptedEmail = detail.email;
+  });
 }
 ```
 
-[`Dispatch`][citry.ext.events.actions.Dispatch] starts at the calling
-component's first live root. Cleanup prevents duplicate listeners after a
-server render and removes the listener on unmount.
+`onEvent` hears only events from this component's own Python handlers, so
+another form on the same page cannot change this one.
 
 ## Next steps
 

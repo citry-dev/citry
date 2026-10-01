@@ -85,7 +85,7 @@ tag when it renders the page.
 
 Larger projects can discover component modules automatically. For now, an
 ordinary import keeps the setup visible. Read
-[Registration](/concepts/registration/) for tag names and engine ownership,
+[Registration](/concepts/registration/) for tag names and Citry instances,
 then
 [Component discovery](/advanced/component-discovery/) for automatic imports
 and startup.

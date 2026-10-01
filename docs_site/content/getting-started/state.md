@@ -49,7 +49,7 @@ class Events:
         choices = load_choices_from_database(state.batches_loaded)
         state.batches_loaded += 1
         return actions.Dispatch(
-            "choice-picker:loaded",
+            "ChoicePicker:loaded",
             {"choices": choices},
         )
 ```

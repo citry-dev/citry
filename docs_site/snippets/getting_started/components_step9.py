@@ -59,7 +59,7 @@ class ChoicePicker(Component):
             # Tell the client to dispatch a custom browser event
             # with the loaded choices.
             return actions.Dispatch(
-                "choice-picker:loaded",
+                "ChoicePicker:loaded",
                 {"choices": choices},
             )
 
@@ -113,17 +113,12 @@ class ChoicePicker(Component):
             this.choice = newChoices[0];
           },
         },
-        onServerRender({ component }) {
-          // component.$el may point elsewhere by cleanup time, so
-          // remove the listener from the element that got it.
-          const root = component.$el;
-          const receive = (event) => {
-            component.loadChoices(event.detail.choices);
-          };
-          root.addEventListener('choice-picker:loaded', receive);
-          return () => {
-            root.removeEventListener('choice-picker:loaded', receive);
-          };
+        onServerRender({ component, onEvent }) {
+          // Citry removes this listener before onServerRender
+          // runs again and when the component unmounts.
+          onEvent('ChoicePicker:loaded', (detail) => {
+            component.loadChoices(detail.choices);
+          });
         },
       });
     """

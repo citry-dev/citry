@@ -67,7 +67,7 @@ class TaskRow(Component):
                     break
 
             return actions.Dispatch(
-                "task-row:saved",
+                "TaskRow:saved",
                 {"taskId": state.task_id, "title": title},
             )
 
@@ -114,17 +114,12 @@ class TaskRow(Component):
               `Saved task ${detail.taskId}: ${detail.title}`;
           },
         },
-        onServerRender({ component }) {
-          // component.$el may point elsewhere by cleanup time, so
-          // remove the listener from the element that got it.
-          const root = component.$el;
-          const receive = (event) => {
-            component.showSaved(event.detail);
-          };
-          root.addEventListener('task-row:saved', receive);
-          return () => {
-            root.removeEventListener('task-row:saved', receive);
-          };
+        onServerRender({ component, onEvent }) {
+          // Citry removes this listener before onServerRender
+          // runs again and when the component unmounts.
+          onEvent('TaskRow:saved', (detail) => {
+            component.showSaved(detail);
+          });
         },
       });
     """

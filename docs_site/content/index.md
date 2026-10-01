@@ -119,7 +119,7 @@ If a mistake stops being reported, or the report loses its detail, this page
 fails to build. -->
 
 <p class="landing-section__intro">
-Citry was born out of frustration with Django's silent coerctions and leaky
+Citry was born out of frustration with Django's silent coercions and leaky
 isolations.
 </p>
 
@@ -130,7 +130,7 @@ In Citry, what you see (in your component) is what you get:
 <ul class="landing-section__intro" style="margin: 1.4rem 0;">
   <li>Variables NEVER leak to other components.</li>
   <li>Data passing is ALWAYS explicit contracts.</li>
-  <li>Missing values are ALWAYS error in Citry.</li>
+  <li>Missing values are ALWAYS an error in Citry.</li>
 </ul>
 
 Read about [inputs and validation](/concepts/inputs-and-validation/),

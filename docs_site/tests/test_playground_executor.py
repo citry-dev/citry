@@ -377,7 +377,7 @@ def test_starter_state_and_dispatch_handler_round_trip() -> None:
     assert state["publicState"] == {"greetings": 1}
     assert dispatched == {
         "action": "event",
-        "eventName": "welcome-card:welcomed",
+        "eventName": "WelcomeCard:welcomed",
         "detail": {"greetings": 1},
         "target": f"render:{state['targetRenderId']}",
     }

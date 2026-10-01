@@ -18,7 +18,7 @@ class WelcomeCard(Component):
         def welcome(self, state):
             state.greetings += 1
             return actions.Dispatch(
-                "welcome-card:welcomed",
+                "WelcomeCard:welcomed",
                 {"greetings": state.greetings},
             )
 
@@ -40,7 +40,7 @@ class WelcomeCard(Component):
     template = """
       <article
         class="welcome-card"
-        @welcome-card:welcomed="greetings = $event.detail.greetings"
+        @WelcomeCard:welcomed="greetings = $event.detail.greetings"
       >
         <p>Welcome, <strong>{{ name }}</strong>.</p>
         <button

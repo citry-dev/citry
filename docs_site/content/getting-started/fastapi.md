@@ -40,7 +40,7 @@ python -m pip install fastapi uvicorn
 FastAPI provides the application and its routes. Uvicorn runs that application
 as a local web server.
 
-## Create Citry instance
+## Create the Citry instance
 
 Create a new folder for this small app. Inside it, save the following as
 `citry_setup.py`:
@@ -151,10 +151,10 @@ app = FastAPI(lifespan=lifespan)
 components before requests can arrive. The `yield` hands control back to
 FastAPI so it can run the application.
 
-## Define FastAPI endpoint
+## Define the FastAPI endpoint
 
-`home` is a regular FastAPI route. Inside it, we build `TutorialPage`, render it to a string, and returns that
-string as HTML:
+`home` is a regular FastAPI route. Inside it, we build `TutorialPage`,
+render it to a string, and return that string as HTML:
 
 ```python
 @app.get("/")
@@ -180,7 +180,8 @@ mount(app, citry_app)
 default. The rendered page uses those routes to load Citry's browser code. Passing the same
 `citry_app` keeps those routes connected to the components you initialized.
 
-In the next lessons will use these routes to reach components' server-side event handlers.
+In the next steps, the browser uses these routes to call the components'
+Python event handlers.
 
 ## Start the app
 

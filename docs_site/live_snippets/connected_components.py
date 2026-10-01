@@ -9,7 +9,11 @@ class ChoiceButton(Component):
         pass
 
     template = """
-      <button class="choice-button" type="button" @click="$emit('select')">
+      <button
+        class="choice-button"
+        type="button"
+        @click="$emit('select')"
+      >
         Choose
         <span
           class="choice-button__label"
@@ -59,7 +63,8 @@ class ChoicePicker(Component):
         },
         methods: {
           toggleChoice() {
-            this.choice = this.choice === 'Ocean' ? 'Forest' : 'Ocean';
+            this.choice =
+              this.choice === 'Ocean' ? 'Forest' : 'Ocean';
           },
         },
       });
