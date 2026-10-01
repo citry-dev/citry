@@ -428,6 +428,42 @@ def test_uncontrolled_activation_callback_focus_and_nested_isolation(accordion_p
     assert errors == []
 
 
+# A `<path>` parsed or created outside the SVG namespace is an unknown HTML
+# element, so `instanceof SVGPathElement` proves the browser can draw it.
+_INDICATOR_GLYPHS_JS = """() => [...document.querySelectorAll(
+  '[data-citry-ui-part="accordion-indicator"] > svg'
+)].map((svg) => ({
+  text: svg.textContent.trim(),
+  paths: [...svg.children].filter((child) => child instanceof SVGPathElement).length,
+}))"""
+
+
+def test_indicator_chevron_is_drawn_as_svg_after_hydration_and_server_update(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    app, html = _events_accordion_page()
+    base = serve_citry_ui_live(app, html)
+    page.goto(base + "/")
+    page.wait_for_function(
+        "document.querySelector('#events-accordion')?.hasAttribute('data-citry-accordion-initialized')"
+    )
+
+    # The chevron geometry must arrive as SVG elements; as text the trigger
+    # would show `<path ...>` instead of an icon.
+    glyphs = page.evaluate(_INDICATOR_GLYPHS_JS)
+    assert glyphs
+    assert glyphs == [{"text": "", "paths": 1}] * len(glyphs)
+
+    # A server event re-renders the items, and the re-rendered chevrons must
+    # still be SVG elements.
+    _advance_server_event(page)
+    page.wait_for_function("document.querySelector('#events-accordion > [data-value]').dataset.value === 'understory'")
+    updated = page.evaluate(_INDICATOR_GLYPHS_JS)
+    assert updated
+    assert updated == [{"text": "", "paths": 1}] * len(updated)
+
+
 def test_owned_capture_handlers_survive_trigger_stop_modifiers(accordion_page):
     page, errors = accordion_page
     root = page.locator("#guide")

@@ -3963,7 +3963,7 @@ class CMenuCheckboxItem(LibraryComponent):
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         snapshot = _item_snapshot(self, "CMenuCheckboxItem", kwargs, kind="checkbox")
-        snapshot["indicator"] = _resolve_registered_icon("check", "CMenuCheckboxItem indicator")
+        snapshot["indicator"] = _resolve_registered_icon(self.citry, "check", "CMenuCheckboxItem indicator")
         return snapshot
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
@@ -4014,7 +4014,7 @@ class CMenuCheckboxItem(LibraryComponent):
             focusable="false"
             aria-hidden="true"
           >
-            {{ indicator.markup }}
+            {{ indicator.content }}
           </svg>
         </span>
         <c-if cond="has_start">
@@ -4763,7 +4763,7 @@ class CMenuSubmenu(LibraryComponent):
             "has_start": "start" in self.raw_slots,
             "has_description": has_description,
             "has_end": "end" in self.raw_slots,
-            "indicator": _resolve_registered_icon("chevron-right", "CMenuSubmenu indicator"),
+            "indicator": _resolve_registered_icon(self.citry, "chevron-right", "CMenuSubmenu indicator"),
             "anchor_name": anchor_name,
             "registry": registry,
             "attrs": merge_root_attrs(attrs, kwargs.class_, kwargs.style),
@@ -4868,7 +4868,7 @@ class CMenuSubmenu(LibraryComponent):
                 focusable="false"
                 aria-hidden="true"
               >
-                {{ indicator.markup }}
+                {{ indicator.content }}
               </svg>
             </c-else>
           </span>

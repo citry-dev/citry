@@ -503,8 +503,8 @@ inputs are a supported family contract.
 Automatic intent rendering uses one nonfocusable, hidden-from-assistive-
 technology SVG shell with four allowlisted package glyph groups and hides
 three. A fixed `icon_name` emits one group. CIcon owns one private registered-
-name resolver over its generated catalog; it returns safe Markup plus audited
-metadata such as whether a logical direction alias mirrors in RTL. Both CIcon
+name resolver over its generated catalog; it returns the glyph rendered as
+Citry output, plus audited metadata such as whether a logical direction alias mirrors in RTL. Both CIcon
 and Alert must use that resolver. Alert applies the same logical-icon RTL
 transform to its fixed glyph. It does not read raw caller SVG, copy catalog
 validation, duplicate CIcon's component root, or expose its selector.

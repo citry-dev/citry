@@ -1,7 +1,9 @@
+import functools
 import json
 import re
 from collections import Counter
 from copy import deepcopy
+from html.parser import HTMLParser
 
 import pytest
 
@@ -31,6 +33,60 @@ _GENERATED_ID_PATTERNS = (
     ("cui-", re.compile(r"cui-[0-9A-Za-z-]+-[0-9A-Za-z]{8,}(?:-[0-9A-Za-z-]+)?")),
     ("quality-", re.compile(r"quality-[0-9A-Za-z-]+-[0-9A-Za-z]{8,}(?:-[0-9A-Za-z-]+)?")),
 )
+
+# SVG and MathML elements whose content is allowed to be text. Text anywhere
+# else inside `<svg>` or `<math>` is invalid HTML, and in practice it is
+# markup that was escaped by mistake, which the page shows as literal text.
+_FOREIGN_TEXT_ELEMENTS = frozenset(
+    {"text", "tspan", "textpath", "title", "desc", "style", "script", "mi", "mo", "mn", "ms", "mtext", "annotation"}
+)
+
+
+class _ForeignTextFinder(HTMLParser):
+    """Collect text that sits directly in SVG or MathML structure."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.open_tags: list[str] = []
+        self.found: list[tuple[str, str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.open_tags.append(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        # Pop up to the matching opening tag so an implicitly closed HTML
+        # element does not leave the stack thinking it is still inside SVG.
+        if tag in self.open_tags:
+            del self.open_tags[len(self.open_tags) - 1 - self.open_tags[::-1].index(tag) :]
+
+    def handle_data(self, data: str) -> None:
+        if not data.strip():
+            return
+        # Only the part of the stack below the nearest `<svg>`/`<math>`
+        # matters; `<foreignObject>` switches back to ordinary HTML content.
+        foreign_root = max(
+            (index for index, tag in enumerate(self.open_tags) if tag in {"svg", "math"}),
+            default=None,
+        )
+        if foreign_root is None:
+            return
+        inner = self.open_tags[foreign_root:]
+        if "foreignobject" in inner or inner[-1] in _FOREIGN_TEXT_ELEMENTS:
+            return
+        self.found.append((inner[-1], data.strip()[:80]))
+
+
+def _text_inside_foreign_content(html: str) -> list[tuple[str, str]]:
+    finder = _ForeignTextFinder()
+    finder.feed(html)
+    finder.close()
+    return finder.found
+
+
+# Two tests read the same standalone page; rendering each scenario once
+# saves a second full render per scenario.
+_standalone_page = functools.cache(render_scenario)
+
 
 _SPLIT_BUTTON_INSTANCE_ID = re.compile(r"cui-split-button-[0-9A-Za-z]{8,}")
 _SPLIT_BUTTON_GENERATED_ID = re.compile(r"quality-split-submit(?:-[0-9A-Za-z]+)*-[0-9A-Za-z]{8,}(?:-[0-9A-Za-z]+)*")
@@ -316,7 +372,7 @@ def _prepared_contract_pair(
 def test_scenario_preserves_the_same_render_contract_embedded_and_standalone(scenario):
     scenario_id = scenario.id
     embedded = render_scenario(scenario_id, embedded=True)
-    standalone = render_scenario(scenario_id)
+    standalone = _standalone_page(scenario_id)
 
     assert "<!doctype html>" in standalone
     assert '<meta name="viewport"' in standalone
@@ -335,6 +391,30 @@ def test_scenario_preserves_the_same_render_contract_embedded_and_standalone(sce
     assert standalone_prepared is not None
     embedded_contract, standalone_contract = _prepared_contract_pair(embedded_prepared, standalone_prepared)
     assert embedded_contract == standalone_contract
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda scenario: scenario.id)
+def test_scenario_page_has_no_text_inside_svg_or_math(scenario):
+    """
+    An icon's geometry must reach the page as SVG elements, not escaped text.
+
+    When a template writes a glyph string with `{{ }}`, both the server and
+    Vue escape it, so the first paint and the hydrated page both show
+    `<path ...>` as text. The renderers agree, so the Vue render parity check
+    cannot see it. This check parses the served HTML and reports text placed
+    directly inside SVG or MathML elements.
+    """
+    assert _text_inside_foreign_content(_standalone_page(scenario.id)) == []
+
+
+def test_foreign_text_finder_reports_escaped_markup_in_svg() -> None:
+    page = (
+        '<p>a &lt;b&gt; c</p><svg><g>&lt;path d="m6 9"&gt;&lt;/path&gt;</g>'
+        "<text>label</text><title>name</title>"
+        "<foreignObject><p>html text</p></foreignObject></svg><p>after</p>"
+    )
+
+    assert _text_inside_foreign_content(page) == [("g", '<path d="m6 9"></path>')]
 
 
 def test_standalone_scenario_declares_a_data_favicon() -> None:
@@ -412,11 +492,19 @@ def test_unknown_scenario_fails_instead_of_silently_skipping():
     ("scenario_id", "physical_type_prefix"),
     [("accordion.states", "CAccordionItem_"), ("disclosure.states", "CDisclosure_")],
 )
-def test_flattened_state_projection_keeps_lexical_and_physical_text_bindings_separate(
+def test_flattened_state_projection_binds_lexical_text_but_not_the_indicator_glyph(
     scenario_id: str,
     physical_type_prefix: str,
 ) -> None:
-    """Projected lexical text must not alias a physical component text key."""
+    """
+    The projected title is a text binding, and the indicator glyph is SVG markup, not text.
+
+    A glyph sent as a text binding is escaped by both the server and Vue, so
+    the page shows `<path ...>` where the chevron should be. The general rule
+    that projected text never reuses a physical text key is covered by
+    `test_flattened_projection_namespaces_lexical_text_after_physical_key` in
+    the citry package.
+    """
     prepared = _prepared_configuration(render_scenario(scenario_id))
     assert prepared is not None
     physical_occurrences = [
@@ -428,8 +516,9 @@ def test_flattened_state_projection_keeps_lexical_and_physical_text_bindings_sep
         occurrence for occurrence in physical_occurrences if "outline" in occurrence["preparedData"].values()
     ]
     assert projected_text_occurrences
-    assert any(
-        {key for key in occurrence["preparedData"] if key.startswith("citryText")} >= {"citryText0", "citryText1"}
-        and '<path d="m6 9 6 6 6-6"></path>' in occurrence["preparedData"].values()
-        for occurrence in projected_text_occurrences
-    )
+    for occurrence in projected_text_occurrences:
+        text_values = [value for key, value in occurrence["preparedData"].items() if key.startswith("citryText")]
+        assert "outline" in text_values
+        # The chevron must reach Vue as elements; as a text value it would
+        # be escaped into visible markup.
+        assert not any("<path" in str(value) for value in text_values)

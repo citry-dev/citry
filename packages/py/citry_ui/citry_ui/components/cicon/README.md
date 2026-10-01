@@ -16,7 +16,12 @@ The public guide is [`api.md`](api.md), and its structured reference is
 [`api.yml`](api.yml). The docs catalog validates and combines them directly;
 no synchronized copy is required.
 
-Components such as Alert that need one registered decorative glyph use the
-private `_resolve_registered_icon()` helper. It owns allowlist lookup,
-safe-Markup conversion, semantic aliases, and logical-direction metadata. Do
-not read `_catalog.py` directly or create a parallel resolver.
+Components such as Alert, Accordion, Disclosure, and Menu that need one
+registered decorative glyph use the private `_resolve_registered_icon()`
+helper. It owns allowlist lookup, semantic aliases, and logical-direction
+metadata, and it renders the glyph through `Citry.render_template()`. The
+template places the result with `{{ glyph.content }}` inside its `<svg>`, so
+both the server and Vue build real SVG elements. The helper never returns the
+catalog string, because `{{ }}` escapes a plain string and the page would
+show `<path ...>` as text. Do not read `_catalog.py` directly or create a
+parallel resolver.

@@ -575,7 +575,7 @@ class CDisclosure(LibraryComponent):
             "region": bool(kwargs.region),
             "actions_label": actions_label,
             "has_actions": has_actions,
-            "icon": _resolve_registered_icon("chevron-down", "CDisclosure indicator"),
+            "icon": _resolve_registered_icon(self.citry, "chevron-down", "CDisclosure indicator"),
             "attrs": merge_root_attrs(attrs, kwargs.class_, kwargs.style),
             "heading_attrs": heading_attrs,
             "trigger_attrs": trigger_attrs,
@@ -680,7 +680,7 @@ class CDisclosure(LibraryComponent):
                   focusable="false"
                   aria-hidden="true"
                 >
-                  {{ icon.markup }}
+                  {{ icon.content }}
                 </svg>
               </span>
             </button>

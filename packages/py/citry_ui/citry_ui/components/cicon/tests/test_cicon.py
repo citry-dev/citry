@@ -206,6 +206,85 @@ def test_plain_label_markup_is_escaped_as_attribute_text():
     assert ' onload="' not in html
 
 
+@pytest.mark.parametrize(
+    ("template", "geometry"),
+    [
+        (
+            """
+              <c-CAccordion>
+                <c-CAccordionItem value="canopy">
+                  <c-fill name="title">Canopy</c-fill>
+                  <c-fill name="default">High leaves</c-fill>
+                </c-CAccordionItem>
+              </c-CAccordion>
+            """,
+            ICON_GLYPHS["chevron-down"],
+        ),
+        (
+            """
+              <c-CDisclosure>
+                <c-fill name="title">Requirements</c-fill>
+                <c-fill name="default">Python</c-fill>
+              </c-CDisclosure>
+            """,
+            ICON_GLYPHS["chevron-down"],
+        ),
+        (
+            """
+              <c-CMenu id="archive-menu" open>
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <button
+                    type="button"
+                    c-bind="activator_attrs"
+                  >Open</button>
+                </c-fill>
+                <c-fill name="default">
+                  <c-CMenuCheckboxItem value="notes" checked>
+                    Notes
+                  </c-CMenuCheckboxItem>
+                  <c-CMenuSubmenu value="export">
+                    <c-fill name="label">Export</c-fill>
+                    <c-fill name="default">
+                      <c-CMenuItem value="pdf">PDF</c-CMenuItem>
+                    </c-fill>
+                  </c-CMenuSubmenu>
+                </c-fill>
+              </c-CMenu>
+            """,
+            ICON_GLYPHS["check"] + ICON_GLYPHS["chevron-right"],
+        ),
+        (
+            """
+              <c-CAlert intent="warn">Check the cable</c-CAlert>
+            """,
+            ICON_GLYPHS["triangle-alert"],
+        ),
+    ],
+    ids=["accordion", "disclosure", "menu", "alert"],
+)
+def test_components_with_a_built_in_glyph_render_it_as_svg_elements(template, geometry):
+    """
+    Every component that uses the shared resolver renders the glyph as SVG.
+
+    Writing the catalog string with `{{ }}` escapes it, and the page then
+    shows `<path ...>` as text inside the `<svg>` instead of the icon.
+    """
+    # Each case defines its own page class, so each needs its own registry.
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class GlyphPage(Component):
+        citry = app
+
+    GlyphPage.template = template
+    html = GlyphPage().render().serialize(deps_strategy="ignore")
+
+    for element in re.findall(r"<(?:path|circle|rect)\b[^>]*></(?:path|circle|rect)>", geometry):
+        assert element in html
+    assert "&lt;path" not in html
+    assert "&lt;circle" not in html
+
+
 def test_generated_catalog_contains_only_audited_geometry_and_is_immutable():
     assert ICON_GLYPHS.keys() == ICON_SOURCES.keys()
     for geometry in ICON_GLYPHS.values():

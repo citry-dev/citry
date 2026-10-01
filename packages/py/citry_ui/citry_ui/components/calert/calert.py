@@ -183,10 +183,10 @@ class CAlert(LibraryComponent):
         actions_label = _plain_actions_label(kwargs.actions_label)
 
         def render_glyph(intent_name: str, icon_name: object, component_name: str) -> _AlertGlyph:
-            registered = _resolve_registered_icon(icon_name, component_name)
+            registered = _resolve_registered_icon(self.citry, icon_name, component_name)
             return _AlertGlyph(
                 intent=intent_name,
-                content=self.citry.render_template(registered.markup),
+                content=registered.content,
                 logical=registered.logical,
             )
 

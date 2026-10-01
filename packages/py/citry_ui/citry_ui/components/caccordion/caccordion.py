@@ -1324,7 +1324,7 @@ class CAccordionItem(LibraryComponent):
         panel_id = f"{context.group_id}-panel-{token}"
         expanded = value in context.open_values
         disabled = context.group_disabled or bool(kwargs.disabled)
-        indicator = _resolve_registered_icon("chevron-down", "CAccordion indicator")
+        indicator = _resolve_registered_icon(self.citry, "chevron-down", "CAccordion indicator")
         self.unprovide(_ACCORDION_CONTEXT_KEY)
         self.provide(_ACCORDION_ITEM_CONTEXT_KEY, value=value)
         return {
@@ -1413,7 +1413,7 @@ class CAccordionItem(LibraryComponent):
                   focusable="false"
                   aria-hidden="true"
                 >
-                  {{ indicator.markup }}
+                  {{ indicator.content }}
                 </svg>
               </span>
             </button>

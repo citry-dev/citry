@@ -5,12 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Literal, get_args
+from typing import TYPE_CHECKING, Any, Literal, get_args
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_choice
 from citry_ui.components.cicon._catalog import ICON_GLYPHS
+
+if TYPE_CHECKING:
+    from citry import Citry, CitryRender
 
 CIconSize = Literal["sm", "md", "lg"]
 CIconName = Literal[
@@ -122,11 +125,16 @@ _OWNED_ATTRS = frozenset(
 @dataclass(frozen=True, slots=True)
 class _RegisteredIconGlyph:
     name: str
-    markup: str
+    # The glyph geometry already rendered as Citry output. A template places
+    # it with `{{ glyph.content }}` inside its `<svg>`. The resolver never
+    # hands out the catalog string itself, because `{{ }}` escapes a plain
+    # string, and the page would then show `<path ...>` as text where the
+    # icon should be.
+    content: CitryRender
     logical: bool
 
 
-def _resolve_registered_icon(name: object, component_name: str) -> _RegisteredIconGlyph:
+def _resolve_registered_icon(citry: Citry, name: object, component_name: str) -> _RegisteredIconGlyph:
     raw_name = const_value(name)
     _reject_trusted_html(raw_name, "name")
     if not isinstance(raw_name, str):
@@ -142,7 +150,9 @@ def _resolve_registered_icon(name: object, component_name: str) -> _RegisteredIc
     glyph_name = _SEMANTIC_ALIASES.get(plain_name, plain_name)
     return _RegisteredIconGlyph(
         name=plain_name,
-        markup=ICON_GLYPHS[glyph_name],
+        # The catalog string is rendered as a Citry template, so the server
+        # and the browser both build real SVG elements from it.
+        content=citry.render_template(ICON_GLYPHS[glyph_name]),
         logical=plain_name in _LOGICAL_DIRECTION_NAMES,
     )
 
@@ -222,7 +232,7 @@ class CIcon(LibraryComponent):
             ("attrs", kwargs.attrs),
         ):
             _reject_trusted_html(value, input_name)
-        resolved_icon = _resolve_registered_icon(kwargs.name, "CIcon")
+        resolved_icon = _resolve_registered_icon(self.citry, kwargs.name, "CIcon")
         if kwargs.label is not None and not isinstance(kwargs.label, str):
             msg = f"CIcon label must be a string or None, got {kwargs.label!r}."
             raise TypeError(msg)
@@ -234,10 +244,7 @@ class CIcon(LibraryComponent):
 
         return {
             "attrs": merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style),
-            # The generated allowlist is parsed through Citry's ordinary
-            # authenticated source pipeline; it never becomes a trusted-HTML
-            # data value in the surrounding Vue expression.
-            "glyph": self.citry.render_template(resolved_icon.markup),
+            "glyph": resolved_icon.content,
             "label": kwargs.label,
             "role": "img" if kwargs.label is not None else None,
             "aria_hidden": "true" if kwargs.label is None else None,
