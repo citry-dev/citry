@@ -842,6 +842,11 @@ def _renamable_method_locals(module_source: str, class_qualname: str) -> frozens
     return frozenset(method.get_locals()) - kept
 
 
+# What `SymbolTable.get_type()` calls the scope holding a generic's type
+# parameters: Python 3.12 says "type parameter", 3.13 and later "type parameters".
+_TYPE_PARAMETER_SCOPES = frozenset({"type parameter", "type parameters"})
+
+
 def _named_child_table(table: symtable.SymbolTable, name: str, kind: str) -> symtable.SymbolTable | None:
     """Return the one child scope of this kind and name, looking through a generic's type-parameter scope."""
     matches: list[symtable.SymbolTable] = []
@@ -850,7 +855,7 @@ def _named_child_table(table: symtable.SymbolTable, name: str, kind: str) -> sym
             continue
         if child.get_type() == kind:
             matches.append(child)
-        elif child.get_type() == "type parameters":
+        elif child.get_type() in _TYPE_PARAMETER_SCOPES:
             # `class Board[T]:` (Python 3.12+) wraps the class in a scope
             # that holds the type parameters.
             matches.extend(inner for inner in child.get_children() if inner.get_type() == kind)
