@@ -6,7 +6,11 @@ child, so a nested structure of any depth is drawn with one component.
 
 from __future__ import annotations
 
-from typing import Any, NotRequired, TypedDict
+from typing import Any
+
+# Both come from typing_extensions so a NotRequired key is optional
+# on Python 3.10 too.
+from typing_extensions import NotRequired, TypedDict
 
 from citry import Component
 

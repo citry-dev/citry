@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +30,7 @@ def _pause_clock_before_load(page: Any) -> None:
     # An installed clock follows real time until it is paused. Pausing after
     # navigation leaves a window where a slow page load or network round trip
     # fires a poll timer early, so pause before the page starts its timers.
-    start = datetime(2026, 1, 1, tzinfo=UTC)
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
     page.clock.install(time=start)
     page.clock.pause_at(start + timedelta(seconds=1))
 
