@@ -150,7 +150,8 @@ Citry evaluates Python in text interpolation, but ordinary HTML attribute
 values remain literal strings:
 
 ```citry-html
-<!-- Wrong in a Citry template: the browser receives {{ profile_url }}. -->
+<!-- Wrong in a Citry template: the browser receives
+     {{ profile_url }}. -->
 <a href="{{ profile_url }}">Profile</a>
 ```
 

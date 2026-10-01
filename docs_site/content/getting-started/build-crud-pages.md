@@ -140,9 +140,10 @@ def filter_tasks(self, data: FilterTasksIn):
 ```
 
 With no `target`, the Render action updates the calling `TaskList`.
-Passing `hide_completed` seeds the replacement's browser state, so both filter
-controls show the new mode. Stable row keys let the renderer match surviving
-rows while removing or adding the others.
+Passing `hide_completed` gives the new list's `js_data()` the chosen mode, so
+`hideCompleted` starts with that value and both filter controls show it.
+Stable row keys let the renderer match surviving rows while removing or
+adding the others.
 
 For larger pages, split the page into smaller components that each declare
 their own `Events` handlers. A Render with no `target` then updates only the component

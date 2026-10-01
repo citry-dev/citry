@@ -95,7 +95,9 @@ def save(self, call_context: CallContext[TaskState], task_id: int):
     save_task(task_id)
     return [
         ComponentDirty("task-summary"),
-        TriggerEvents([Event(name="task-saved", detail={"taskId": task_id})]),
+        TriggerEvents(
+            [Event(name="task-saved", detail={"taskId": task_id})],
+        ),
     ]
 ```
 

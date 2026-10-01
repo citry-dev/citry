@@ -39,8 +39,8 @@ app = Citry()
 assert isinstance(app.cache, InMemoryCache)
 ```
 
-The store is thread-safe and unbounded by default. Set `max_entries` to use
-least-recently-used eviction:
+The store is thread-safe and unbounded by default. Set `max_entries` to cap
+its size; when the store is full, it drops the least recently used entry:
 
 ```python
 backend = InMemoryCache(max_entries=1_000)

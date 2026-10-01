@@ -356,7 +356,7 @@ and cross-OS breadth on top of it.
 
 | Workflow | What it runs | When |
 | --- | --- | --- |
-| `repo--check.yml` | The full gate (`python scripts/check.py`) on Python 3.14 with the Rust nightly toolchain and Node for the TypeScript, browser-client, VS Code extension, and Vue render parity phases | Every pull request and every push to `main` or `dev`, no path filters |
+| `repo--check.yml` | The full gate (`python scripts/check.py`) on Python 3.14 with the Rust nightly toolchain and Node for the Node-based phases: pyright, the browser client, the CodeMirror Fluent language, the Events protocol JavaScript, the docs playground, the VS Code extension, the Citry UI asset check, and Vue render parity | Every pull request and every push to `main` or `dev`, no path filters |
 | `rust--tests.yml` | Rust crate tests (`cargo test -p ...`) on Ubuntu, Windows, and macOS | Changes under `crates/` or `third_party/`, to the Cargo files, or to `rust-toolchain.toml` or `.gitmodules` |
 | `py--tests.yml` | Python tests: `uv sync --locked --all-packages`, then `uv run --no-sync pytest`, across Python 3.10 to 3.14 on Ubuntu and Windows plus a macOS smoke pair | Changes under `packages/py/`, `packages/js/citry-client/`, `packages/protocol/`, `crates/`, or `third_party/`, and to the lockfiles and build scripts |
 | `repo--docs-check.yml` | The docs gate (`python -m docs_site build-check`) plus the docs-site unit tests | Changes under `docs_site/`, `packages/py/`, `crates/`, and related paths |

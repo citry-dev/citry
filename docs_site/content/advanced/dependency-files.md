@@ -92,9 +92,12 @@ runtime, for example because it has its own `js` or uses Vue syntax such as
 `@click`. Citry then loads every dependency script itself, one after another,
 so each script must be a classic script that runs in order.
 
-On an interactive page, serialization raises `ValueError` for a `Script` that
-has `async`, `defer`, or `nomodule`, or a `type` other than JavaScript (such
-as `type="module"`):
+Citry checks dependencies when it serializes the render, that is, when you
+call `serialize()` or `str()` on it. On an interactive page, serialization
+raises `ValueError` for a `Script` with `async`, `defer`, or `nomodule`,
+with a `type` other than JavaScript (such as `type="module"`), or with a
+`nonce` when you pass no `csp_nonce`. A subclass of `Script` or `Style`
+raises `TypeError` there; use the classes themselves:
 
 ```python
 # Breaks once any component on the page is interactive.
@@ -109,7 +112,9 @@ Script(url="https://cdn.example.com/editor.umd.js")
 
 Pages without the runtime, and the `"simple"` dependency strategy (see
 [Place JavaScript and CSS](/advanced/asset-placement/)), write these scripts as
-ordinary tags, so any attributes work there.
+ordinary tags, so these attributes work there. One check applies on every
+page: a `nonce` that differs from the `csp_nonce` you pass raises
+`ValueError`.
 
 ## Add a local file
 
@@ -167,7 +172,7 @@ serialization raises `ValueError`.
 
 Use a mapping when stylesheets need different `media` attributes:
 
-```citry
+```python
 class Dependencies:
     css = {
         "all": ["base.css"],
@@ -205,7 +210,8 @@ Citry considers two scripts or styles the same when they have the same URL or
 the same inline content. For scripts, the first entry wins completely,
 including its attributes. If a script needs different attributes, change the
 first declaration rather than adding a duplicate later. Within one
-component's merged declarations, the first stylesheet also wins. Two
+component, including what it inherits from base classes, the first
+stylesheet also wins. Two
 components that declare the same stylesheet with different attributes, or one
 stylesheet listed under two `media` keys, make serialization raise
 `ValueError`. Give the stylesheets distinct URLs instead.

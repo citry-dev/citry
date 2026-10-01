@@ -188,11 +188,12 @@ IANA time zone:
 
 ```python
 from citry import (
+    Citry,
     DateSegments,
     DateTimeFormat,
-    FormatRegistry,
     DateTimeInput,
     DateTimeSegments,
+    FormatRegistry,
     TimeSegments,
 )
 from citry.ext.i18n import make_context
@@ -203,6 +204,16 @@ formats = FormatRegistry(
             length="medium",
             input=DateTimeInput(mode="segments"),
         ),
+    },
+)
+
+app = Citry(
+    extensions_defaults={
+        "i18n": {
+            "source_locale": "en-US",
+            "locales": ("en-US",),
+            "formats": formats,
+        },
     },
 )
 

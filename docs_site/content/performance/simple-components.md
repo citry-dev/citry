@@ -75,7 +75,7 @@ and do not declare `transparent = True`. Its template may use text, `c-if`,
 bindings, and calls to child components, described below. Authored
 component JS/CSS and static `js_data`/`css_data` callbacks are supported.
 Slots, provide/inject, instance hooks, `Events`, `Cache`, `I18n`, and `State`
-configuration, component messages, and extra JS or CSS files listed in
+configuration, component messages, and any `js` or `css` entry in
 `Dependencies` are unsupported. Evaluated
 template values must be JSON-like values such as strings, numbers, booleans,
 lists and dictionaries. Citry calls the callback once per call. An unsupported

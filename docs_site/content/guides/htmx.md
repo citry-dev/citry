@@ -30,10 +30,14 @@ Render the component in a framework route and serialize it with
 from fastapi.responses import HTMLResponse
 
 
-@app.get("/fragments/contacts/{contact_id}", response_class=HTMLResponse)
+@app.get(
+    "/fragments/contacts/{contact_id}",
+    response_class=HTMLResponse,
+)
 def contact_detail(contact_id: int) -> HTMLResponse:
     component = ContactDetail(contact=get_contact(contact_id))
-    return HTMLResponse(component.render().serialize(deps_strategy="fragment"))
+    html = component.render().serialize(deps_strategy="fragment")
+    return HTMLResponse(html)
 ```
 
 The response contains the component's HTML plus the information Citry needs to

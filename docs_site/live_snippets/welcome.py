@@ -22,16 +22,28 @@ class WelcomeCard(Component):
                 {"greetings": state.greetings},
             )
 
-    def state_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, int]:
+    def state_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, int]:
         return {"greetings": kwargs.greetings}
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, str | int]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, str | int]:
         return {
             "greetings": kwargs.greetings,
             "name": kwargs.name.strip().title(),
         }
 
-    def css_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, str]:
+    def css_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, str]:
         return {"accent": kwargs.accent}
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, int]:

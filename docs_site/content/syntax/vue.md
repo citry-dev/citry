@@ -59,9 +59,9 @@ Vue modifiers stay in the attribute name. For example,
 browser's default action.
 
 Vue has no `.outside`, `.window`, `.document`, `.debounce`, or `.throttle`
-event modifier, although Alpine.js does. Vue would read one as a key name,
-and the listener would never run, so the template fails when it loads with
-a message that names the Vue way to do the same thing:
+event modifier. Vue would read one as a key name, and the listener would
+never run, so the template fails when it loads with a message that names
+the Vue way to do the same thing:
 
 ```citry-html
 {# Fails: Vue has no .outside modifier #}
@@ -79,8 +79,10 @@ target="_blank" rel="noopener"} for directive forms and modifiers.
 A few Vue features do not work in a `Component.template`:
 
 - Vue's built-in helper components `<Teleport>`, `<Transition>`,
-  `<Suspense>`, and `<KeepAlive>` make the render fail with an
-  "unsupported Vue helper" error.
+  `<Suspense>`, and `<KeepAlive>` are not supported. When the page
+  loads Vue, `serialize()` or `str()` on the render raises `ValueError`
+  with an "unsupported Vue helper" message. On a page without Vue, the tag
+  is written out as plain HTML and does nothing.
 - `v-once` and `v-memo` make the template fail when it loads. Keep a
   value fixed by not changing it, or compute it once in `data()`. To keep
   an element's contents as the server first rendered them, use

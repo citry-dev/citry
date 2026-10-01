@@ -730,8 +730,9 @@ key updates completion, hover, and navigation without saving or reloading the
 app. Citry shows no result, rather than a guess, for invalid source, a
 template whose component it cannot pin down, a `template_data()` value it
 cannot follow, or a variable that not every component using the same
-template file defines. The semantic analyzer is likewise limited to those mapped template
-expressions and does not replace the Python extension for ordinary `.py` code.
+template file defines. Citry's template analysis covers only expressions it
+can trace back to `template_data()`, and does not replace the Python
+extension for ordinary `.py` code.
 
 ### Check `c-*` values against their target's type
 

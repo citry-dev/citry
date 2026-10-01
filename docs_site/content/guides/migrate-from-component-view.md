@@ -35,7 +35,9 @@ class ContactForm(Component):
     class View:
         def post(self, request):
             name = request.POST.get("name", "stranger")
-            return ThankYouMessage.render_to_response(kwargs={"name": name})
+            return ThankYouMessage.render_to_response(
+                kwargs={"name": name},
+            )
 ```
 
 For the first port, subclass `ViewEvents`. The HTTP method still selects

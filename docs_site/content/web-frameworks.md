@@ -74,8 +74,9 @@ matches your stack.
 | Bare WSGI | `citry.contrib.wsgi.wsgi_app(citry)` |
 
 The `prefix` must start with `/` and is stored without a trailing slash (so
-`"/citry/"` becomes `"/citry"`). A prefix without the leading `/` raises
-`ValueError`.
+`"/citry/"` becomes `"/citry"`). A prefix without the leading `/` is
+rejected: Django, Flask, and `set_mounted_prefix()` raise `ValueError`, and
+FastAPI or Starlette raises its own `AssertionError` from `app.mount()`.
 
 If you would rather run and copy a complete application, the
 [starter project matrix]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}

@@ -17,9 +17,9 @@ class Events:
         return actions.Render(TaskList(tasks=load_tasks()))
 ```
 
-A Render action updates one component occurrence or an explicit marker in
-place. Omitting `target` selects the calling instance. Use a
-known `render:<id>` address for another component occurrence or a caller-relative
+A Render action updates one component on the page or an explicit marker in
+place. Omitting `target` selects the calling instance. Use a known
+`render:<id>` address for another component on the page or a caller-relative
 `mark:<name>` address for a marker. A component element returned directly is
 equivalent to `actions.Render(element)`.
 
@@ -28,10 +28,10 @@ form one contiguous group. Every action in that group must be immediate and
 blocking: omit `delay` or use `0`, and do not set `wait=False`. Otherwise
 the call fails and nothing on the page changes: the browser rejects a
 response that puts another action between two Renders, defers one of them,
-targets the same occurrence twice, or targets both a component and a
+targets the same component instance twice, or targets both a component and a
 component inside it. The handler has already run by then, so any database
-writes it made stay. The server does not check this shape, so assert the
-returned list in a test of the handler.
+writes it made stay. The server does not check the order or targets of
+these Render actions, so assert the returned list in a test of the handler.
 
 ## Dispatch a browser event
 
@@ -54,8 +54,8 @@ return actions.Dispatch("TaskRow:saved", {"title": title})
 
 Inside the component's own JavaScript, listen with the `onEvent` function
 that `onServerRender` receives. It hears the Dispatch actions that this
-component's own handlers return. Citry removes the listener before the next
-run and when the component unmounts:
+component's own handlers return. Citry removes the listener before
+`onServerRender` runs again and when the component unmounts:
 
 ```js
 $component({

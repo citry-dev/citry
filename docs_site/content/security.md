@@ -34,8 +34,11 @@ The modes have distinct rollout purposes:
 - `"warn"` keeps the same output and emits one `RuntimeWarning` containing
   incompatible rendered markup or dependency metadata.
 - `"strict"` raises a `ValueError` that lists the incompatible output
-  instead of returning HTML. A dependency that is not a structured `Script`
-  or `Style` raises `TypeError`.
+  instead of returning HTML. It also raises `ValueError` when the output
+  contains an executable script (inline or loaded by URL) or an inline
+  style and you did not pass `csp_nonce`.
+  A dependency that is not a structured `Script` or `Style` raises
+  `TypeError`.
 
 Any other value raises `ValueError`, both when you create `Citry` and when you
 pass it to `serialize()` for one render.

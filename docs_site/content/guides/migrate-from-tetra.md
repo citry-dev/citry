@@ -86,7 +86,9 @@ Citry supplies `$sendEvent` on the live Vue component instance:
 $component({
   methods: {
     async addOne() {
-      const result = await this.$sendEvent("increment", { amount: 1 });
+      const result = await this.$sendEvent("increment", {
+        amount: 1,
+      });
       return result.count;
     },
   },

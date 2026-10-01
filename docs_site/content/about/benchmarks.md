@@ -69,13 +69,13 @@ The warmed column is the median of each process's mean of 80 renders.
 A warmed average can be higher than one second-render observation because
 it includes a longer execution period and garbage collection.
 
-After timing, the runner checks every timed Citry output. It first removes
-the component markers and replaces generated IDs with stable ones, then
-compares the result with the expected page content, and it also validates
-the data Citry sends to the browser. Callback counts, and counts of the data
-that tells the browser which component rendered each part of the page, come
-from a separate observed render after each Citry process's timed loop. The other engines retain output
-hashes and sizes; their scenario content tests run separately.
+After timing, the runner checks every timed Citry output. It removes the
+markers Citry adds to show which component rendered each part of the page,
+replaces generated IDs with stable ones, and compares the result with the
+expected content. It also checks the data Citry sends to the browser. After
+each Citry process's timed loop, the runner renders once more to count
+callbacks and that component data. The other engines keep output hashes
+and sizes; their scenario content tests run separately.
 
 These results are relative to this workload and machine. Use them to compare
 rows within this run, then measure the components and data in your application.

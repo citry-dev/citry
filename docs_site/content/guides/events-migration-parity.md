@@ -6,9 +6,9 @@ description: Compare Component.View, django-unicorn, Tetra, and livecomponents c
 # Events migration parity
 
 Use this matrix before porting a component that depends on more than basic
-clicks, forms, State, and targeted renders. It distinguishes behavior that is
-available in current Events code from later candidates and features Citry
-intentionally leaves to explicit application code.
+clicks, forms, State, and targeted renders. It separates behavior that
+Events supports now from behavior that is not built in, including features
+Citry intentionally leaves to explicit application code.
 
 The source-specific walkthroughs are:
 
@@ -22,8 +22,8 @@ The source-specific walkthroughs are:
 | Label | Meaning |
 |---|---|
 | **v1** | Shipped and supported now. |
-| **v1.x** | A scoped follow-up to the first Events release; the Citry answer column says what works today. |
-| **v2** | A separate design decision, not a compatibility promise. |
+| **v1.x** | Not built in; the Citry answer column says what to do instead. |
+| **v2** | Not built in, and a larger design question than one missing feature; the Citry answer column says what happens today. |
 | **Dropped** | Intentionally represented another way or left to application code. |
 
 A dash in a source-framework column means that framework does not supply the
@@ -161,9 +161,9 @@ own Vue data.
 | Multipart upload | Raw request files | Limited | Shipped | Shipped | Built-in codecs do not parse multipart; a custom payload codec can pass `UploadedFile` values to the handler | **v1.x** |
 | Staged multi-request upload | Application code | - | Temporary files | Upload flow | Not built in; upload flows stay in application code | **Dropped** |
 | HTTP file response | Native response | - | `FileResponse` | Application response | `RouteResponse` from `@event(bundle=False)` on a per-event HTTP call | **v1** |
-| File download action | Handwritten client | - | Shipped | Header result | Shipped per-event `actions.Download` response; batches are rejected | **v1.x** |
+| File download action | Handwritten client | - | Shipped | Header result | Shipped per-event `actions.Download` response; batches are rejected | **v1** |
 | Redirect | Native response | Shipped | Shipped | `RedirectPage` | `actions.Redirect` | **v1** |
-| Push/replace history | Host response | Redirect metadata | Shipped | Shipped | Shipped `PushUrl` / `ReplaceUrl` actions | **v1.x** |
+| Push/replace history | Host response | Redirect metadata | Shipped | Shipped | Shipped `PushUrl` / `ReplaceUrl` actions | **v1** |
 | Automatic unchanged-HTML 304 | Host code | Shipped | - | - | Explicit no-action acknowledgement | **Dropped** |
 | Automatic dirty-tree deduplication | Host code | Partial logic | Self render | Ancestor dirty-set dedup | Explicit action order is authoritative | **Dropped** |
 

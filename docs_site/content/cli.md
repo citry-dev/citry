@@ -116,8 +116,11 @@ limit once and continues checking the base Citry syntax.
 
 Each parser failure includes the parser's annotated template excerpt and an
 origin naming the component, such as `myapp.card.Card.template`, or the
-template file. With `--static`, the origin reads `card.py (Card.template)`. The excerpt's line and column count from the start
-of the template body, not from the start of the Python file.
+template file. With `--static`, the origin is the file's full path
+followed by the attribute, such as
+`/home/me/proj/myapp/card.py (Card.template)`. The excerpt's line and
+column count from the start of the template body, not from the start of the
+Python file.
 
 Add `--format json` to print one JSON report instead of text lines. Each
 finding carries its `origin`, `code`, `severity`, `message`, and `range`

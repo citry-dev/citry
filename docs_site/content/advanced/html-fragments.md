@@ -43,13 +43,14 @@ additions.
 
 ## Make asset routes available
 
-A fragment refers to its components' JavaScript and CSS by URL, and an
-interactive fragment also loads Citry's runtime by URL. Mount one of Citry's [web framework integrations](/web-frameworks/)
-so those URLs can be served.
+Citry refers to component code and styles by URL, and an interactive
+fragment also loads Citry's runtime by URL. Mount one of Citry's
+[web framework integrations](/web-frameworks/) so those URLs can be served.
 
 This applies to every fragment that carries any JavaScript or CSS, including
-`Dependencies` entries, or browser behavior: native Vue bindings, [`$component`][$component], browser or
-server event handlers, Events state, or per-render browser data. If such a
+`Dependencies` entries (even an inline `Script`), or browser behavior: native
+Vue bindings, [`$component`][$component], browser or server event handlers,
+Events state, or per-render browser data. If such a
 fragment has no mounted integration or recorded route prefix, serialization
 raises `RuntimeError` instead of returning broken URLs. A fragment with none of
 these is returned as plain HTML and needs no mount.

@@ -124,9 +124,10 @@ Return only stable plain values:
 - exact built-in lists, tuples, or dictionaries containing those values.
 
 Dictionary keys must be exact strings. The complete value may be at most 32
-containers deep, contain at most 10,000 items in total (each dictionary key and value
-counts as one), and take at most
-64 KiB once Citry encodes it for the key. A value that breaks these rules
+containers deep, contain at most 10,000 items in total, and take at most
+64 KiB once Citry encodes it for the key. Every list, tuple, and dictionary
+counts as one item, and so does each value inside it and each dictionary
+key. A value that breaks these rules
 raises [`CacheKeyError`][citry.ext.cache.CacheKeyError] when the component
 renders.
 

@@ -80,8 +80,9 @@ $component({
 });
 ```
 
-The child receives the selected label through `:label` and emits
-`select` to ask the parent to advance it. No HTML replacement is needed.
+In the full template, the `<c-ChoiceButton>` child receives the selected
+choice through `:label` and emits `select` to ask the picker to advance it.
+Neither step needs Python to render new HTML.
 
 `@c-click` starts the call without exposing its Promise result. When component
 code needs a returned [`actions.Data`][citry.ext.events.actions.Data] value,

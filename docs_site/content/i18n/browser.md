@@ -51,11 +51,15 @@ so the complete form is
 one of `alt`, `aria-description`, `aria-label`, `aria-placeholder`,
 `aria-roledescription`, `aria-valuetext`, `placeholder`, or `title`.
 
-Python can also decide the binding during the server render: write
+Python can also decide during the server render whether to add the binding
+and which browser expression supplies its values: write
 `c-$c-tr:...="python_expression"`, or return a `$c-tr:...` key from `c-bind`.
-The binding is valid only on the final literal HTML element that owns the text
-or attribute. Citry checks the directive during the render, removes it from
-the HTML, and leaves a binding ID that points to the checked binding.
+The Python value must be a string (the browser expression for the message
+values), `True` (no values), or `None` or `False` (no binding). Any other
+value raises `TypeError`. The binding is valid only on the final literal HTML
+element that owns the text or attribute. Citry checks the directive during
+the render, removes it from the HTML, and leaves a binding ID that points to
+the checked binding.
 
 The directive name has one exact grammar:
 

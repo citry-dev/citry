@@ -66,7 +66,8 @@ through that prop. See
 [Client interactivity](/concepts/client-interactivity/#listen-to-child-events)
 for component-boundary isolation. Debounce and throttle work only on `@c-*`
 bindings attached to HTML elements. A component tag has no element to time
-the event on, so a timed binding on a child component tag is an error.
+the event on, so a timed binding on a child component tag makes
+`serialize()` or `str()` on the render raise `TypeError`.
 
 ## Bind controls to State
 
@@ -348,6 +349,7 @@ subtree does not reset the timer. A hidden page pauses polling; returning to it
 starts a fresh complete interval, without catch-up calls.
 
 Put `@c-poll` on an HTML element. A component tag has no element to poll
-from, so `@c-poll` on a child component tag is an error. A `c-bind` spread
+from, so `@c-poll` on a child component tag makes `serialize()` or `str()`
+on the render raise `TypeError`. A `c-bind` spread
 may add `@c-poll` to an element, but only with a bare handler name such as
 `"refresh"`; an argument expression there is an error.

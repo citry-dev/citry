@@ -174,17 +174,18 @@ trace logs, set the level to `5` (there is no named constant for it):
 ```python
 import logging
 
-logging.basicConfig(level=5, format="%(levelname)s %(name)s %(message)s")
+logging.basicConfig(
+    level=5,
+    format="%(levelname)s %(name)s %(message)s",
+)
 ```
 
 Rendering a small page (a `HomePage` that renders a `Hello` greeting) then logs
-each step of the walk:
+each step of the walk. An excerpt, with some `RENDER NODE` lines left out:
 
 ```text
 TRACE citry RENDER COMPONENT: 'HomePage' ID ck52imnvf PATH: HomePage
-TRACE citry RENDER NODE PreparedStaticRunNode
 TRACE citry RENDER NODE ComponentNode @7:18
-TRACE citry RENDER NODE PreparedStaticRunNode
 TRACE citry RENDER COMPONENT: 'Hello' ID ck52imnvg PATH: HomePage > Hello
 ```
 

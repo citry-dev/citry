@@ -27,8 +27,8 @@ Registration makes tags such as [`<c-CButton>`](/ui-library/components/button/) 
 every component that renders through that `Citry` instance. If your
 application creates its own instance, such as `app = Citry()`, call
 `app.register_library(citry_ui)` instead. A component that renders through
-an instance without the library fails with `NotRegistered: No component
-registered as 'cbutton'`.
+an instance without the library fails with a `NotRegistered` error that
+says `No component registered as 'cbutton'`.
 
 While working on Citry UI templates without a host application, select the
 library manifest directly in VS Code:
