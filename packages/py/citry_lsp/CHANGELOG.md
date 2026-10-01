@@ -65,9 +65,8 @@ All notable changes to `citry-lsp` are documented here.
   written as a `@staticmethod` or `@classmethod`, not only for instance
   methods.
 - In an app without i18n settings, the editor no longer reports "Unknown
-  i18n format profile" for `self.i18n.format.number(..., format=...)` in a
-  component's Python code. It checks profile names only when the app
-  configures i18n, as `citry check` does.
+  i18n format profile" for a `self.i18n.format.number(..., format=...)`
+  call guarded by `self.i18n.configured`, as `citry check` does.
 
 ## [0.1.7] - 2026-09-11
 

@@ -42,6 +42,7 @@ from citry._diagnostic_catalog import (
     TEMPLATE_UNKNOWN_COMPONENT,
 )
 from citry._diagnostics import render_diagnostic
+from citry._i18n_guards import i18n_configured_guarded_calls
 from citry._inline_assets import normalize_inline_asset
 from citry._linting import _component_lint_info
 from citry._template_data_source import TemplateDataSourceShape, analyze_template_data_source
@@ -224,15 +225,13 @@ def _check_registry(
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None
 
     i18n = engine.extensions._extensions_by_name.get("i18n")
-    # The browser receives `$i18n` only when the app configures i18n, so its
-    # calls are checked only then, even when component messages make i18n available.
+    # Component messages make i18n available without configuring it; only a
+    # configured app has format profiles and gives the browser `$i18n`.
     i18n_configured = i18n is not None and getattr(i18n, "configured", False) is True
     if i18n is not None and getattr(i18n, "available", False):
         try:
             i18n_extension = cast("I18nExtension", i18n)
-            # Profile names exist only in a configured app, and a component
-            # that calls a formatter guards it with `configured` otherwise.
-            i18n_profiles = _i18n_profile_inventory(i18n_extension) if i18n_configured else {}
+            i18n_profiles = _i18n_profile_inventory(i18n_extension)
             i18n_extension._load_project_sources()
             compiled_catalog = i18n_extension._compiled_catalog
             if compiled_catalog is None:
@@ -268,7 +267,14 @@ def _check_registry(
             continue
         if i18n_manifest is not None:
             findings.extend(_client_message_findings(comp_cls, i18n_manifest))
-            findings.extend(_i18n_python_findings(comp_cls, i18n_manifest, i18n_profiles or {}))
+            findings.extend(
+                _i18n_python_findings(
+                    comp_cls,
+                    i18n_manifest,
+                    i18n_profiles or {},
+                    i18n_configured=i18n_configured,
+                )
+            )
         findings.extend(_check_js_data_types(engine, comp_cls))
         _collect_browser_source(engine, comp_cls, browser_sources)
         class_label = _class_label(comp_cls)
@@ -1018,6 +1024,8 @@ def _i18n_python_findings(
     component: type[Component],
     manifest: dict[str, dict[str, dict[str, Any]]],
     profiles: dict[str, dict[str, frozenset[str]]],
+    *,
+    i18n_configured: bool,
 ) -> list[CheckFinding]:
     source_file = _loaded_python_file(component)
     qualname = _safe_class_text(component, "__qualname__")
@@ -1034,6 +1042,10 @@ def _i18n_python_findings(
         return []
     origin = f"{source_file} ({_class_label(component)})"
     findings: list[CheckFinding] = []
+    # Without i18n settings no profile exists, so a formatter call fails when
+    # it runs, unless the component only calls it when i18n is configured.
+    # The language server skips the same guarded calls.
+    guarded = frozenset() if i18n_configured else i18n_configured_guarded_calls(scope)
     for node in _component_i18n_calls(scope):
         start, end = _python_ast_byte_range(source, node)
         if _is_self_i18n_tr(node.func):
@@ -1048,6 +1060,8 @@ def _i18n_python_findings(
                     known_types={},
                 )
             )
+            continue
+        if id(node) in guarded:
             continue
         profile_finding = _literal_i18n_profile_finding(origin, source, node, profiles, start, end)
         if profile_finding is not None:

@@ -33,6 +33,7 @@ from citry._diagnostic_catalog import (
 )
 from citry._diagnostics import diagnostic_documentation_url, render_diagnostic
 from citry._i18n_directives import looks_like_i18n_binding
+from citry._i18n_guards import i18n_configured_guarded_calls
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
     AlpineAttributeFinding,
@@ -884,6 +885,10 @@ def _i18n_call_findings(
     except (SyntaxError, TypeError, ValueError):
         return []
     findings: list[tuple[int, int, str, str]] = []
+    # Without i18n settings no profile exists, so a formatter call fails when
+    # it runs, unless the component only calls it when i18n is configured.
+    # `citry check` skips the same guarded calls.
+    guarded = frozenset() if index.configured or template else i18n_configured_guarded_calls(tree)
     for call in (node for node in ast.walk(tree) if isinstance(node, ast.Call)):
         start, end = _python_ast_byte_range(source, call)
         if _python_message_call(call.func, template=template):
@@ -901,10 +906,7 @@ def _i18n_call_findings(
         profile = next((keyword.value for keyword in call.keywords if keyword.arg == "format"), None)
         if not isinstance(profile, ast.Constant) or type(profile.value) is not str:
             continue
-        # Profile names exist only in a configured app, and a component that
-        # calls a formatter guards it with `configured` otherwise. `citry check`
-        # applies the same rule.
-        if not index.configured:
+        if id(call) in guarded:
             continue
         profile_operation = _I18N_PROFILE_OPERATION_NAMES.get(operation, operation)
         known = index.profile_names(namespace, profile_operation)

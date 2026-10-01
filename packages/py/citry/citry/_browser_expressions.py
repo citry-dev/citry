@@ -1223,12 +1223,12 @@ def browser_i18n_calls_checkable(
     proven_owner_spans: frozenset[tuple[int, int]] | None = None,
 ) -> bool:
     """
-    Return whether browser i18n calls in one expression are checked against the app's catalog.
+    Return whether browser i18n calls in one expression are checked against the app's messages and format profiles.
 
-    The browser receives `$i18n` only when the app configures i18n, so code
-    that reads it behind a guard is not checked in an app without i18n. A
-    template expression can also read `$i18n` only below a provider that
-    enables it in the browser. Component JavaScript passes the spans from
+    The browser receives `$i18n` only when the app configures i18n, so no
+    browser i18n call is checked in an app without i18n settings. A template
+    expression can also read `$i18n` only below a provider that enables it
+    in the browser. Component JavaScript passes the spans from
     `component_js_i18n_owners()` as ``proven_owner_spans`` instead, and those
     already prove which reads are i18n calls. The language server and
     ``citry check`` both ask this function, so they check the same calls.
@@ -1237,7 +1237,8 @@ def browser_i18n_calls_checkable(
         expression: One browser expression or component JavaScript source.
         owners: The identifiers a call may be written against.
         i18n_configured: Whether the app configured i18n.
-        proven_owner_spans: The exact owner spans proven by source analysis.
+        proven_owner_spans: Spans where component JavaScript is known to read
+            the i18n object, from `component_js_i18n_owners()`.
 
     Returns:
         ``True`` when the expression's i18n calls should be checked.

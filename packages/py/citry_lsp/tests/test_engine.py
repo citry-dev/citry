@@ -781,6 +781,9 @@ class Page(Component):
         label = self.i18n.format.number(3, format="missing") if self.i18n.configured else "3"
         return {"label": label}
 
+    def unguarded(self):
+        return self.i18n.format.number(5, format="unguarded")
+
     js = """
     const i18n = component.$i18n;
     const label = i18n ? i18n.format.number(3, { format: "missing" }) : "3";
@@ -801,7 +804,10 @@ class Page(Component):
     assert project.i18n is not None
     assert project.i18n.available
     assert not project.i18n.configured
-    assert [item for item in findings if str(item.code).startswith("citry.i18n.")] == []
+    # An unguarded formatter call fails when it runs, so it is still reported.
+    assert [item.message for item in findings if str(item.code).startswith("citry.i18n.")] == [
+        "Unknown i18n format profile 'unguarded' for number; configured profiles: none.",
+    ]
 
 
 def test_i18n_diagnostics_validate_python_and_browser_profile_names(tmp_path):
