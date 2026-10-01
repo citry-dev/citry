@@ -100,9 +100,9 @@ class OnDependenciesContext:
     ``simple`` they are emitted with the other direct dependency tags. On an
     interactive page the Vue app loads them after the Vue runtime and ahead
     of ``scripts``, in list order, under the same rules as any entry in
-    ``scripts``. When the page loads, these scripts
-    run before Citry creates the page's first Vue app, so one of them can
-    call ``Citry.vue.use()`` to install a Vue plugin for that app."""
+    ``scripts``. When the page loads, these scripts run before Citry creates
+    the page's first Vue app, so one of them can call ``Citry.vue.use()`` to
+    install a Vue plugin for that app."""
     _security_csp: SecurityCspMode = "off"
     """The effective call-local CSP mode used by built-in dependency producers."""
     _security_javascript: SecurityJavascriptMode = "allow"
