@@ -4,7 +4,7 @@ from citry import Component
 from citry.ext.events import EventError, actions
 
 
-# New in this step: render this component after a valid form.
+# New in this step: show the accepted address.
 class Confirmation(Component):
     citry = citry_app
 
@@ -46,8 +46,10 @@ class SignupIn:
 class SignupForm(Component):
     citry = citry_app
 
+    # New in this step: Python passes the accepted address
+    # when it renders this form again.
     class Kwargs:
-        pass
+        email: str | None = None
 
     class Slots:
         pass
@@ -60,12 +62,18 @@ class SignupForm(Component):
                     "Please fix the email address.",
                     fields={"email": "Use an @example.com address."},
                 )
-            # New in this step: replace this calling component.
-            return actions.Render(Confirmation(email=email))
+            # New in this step: render this component again,
+            # now with the accepted address.
+            return actions.Render(SignupForm(email=email))
 
     template = """
       <section class="signup-form">
-        <form @c-submit.prevent="submit">
+        {# New in this step: show the form until Python #}
+        {# accepts an address. #}
+        <form
+          c-if="email is None"
+          @c-submit.prevent="submit"
+        >
           <label>
             Work email
             <input
@@ -89,6 +97,15 @@ class SignupForm(Component):
             Send request
           </button>
         </form>
+        {# New in this step: the live region stays on the page #}
+        {# in both renders, so screen readers announce the #}
+        {# confirmation that appears inside it. #}
+        <div aria-live="polite">
+          <c-Confirmation
+            c-if="email is not None"
+            c-email="email"
+          />
+        </div>
       </section>
     """
 
@@ -114,12 +131,7 @@ class TutorialPage(Component):
         <body>
           <main>
             <h1>Join the reading room</h1>
-            {# New in this step: Confirmation replaces SignupForm, #}
-            {# so a live region outside it stays on the page and #}
-            {# screen readers announce the confirmation. #}
-            <div aria-live="polite">
-              <c-SignupForm />
-            </div>
+            <c-SignupForm />
           </main>
           {# New in this step: place collected component JS. #}
           <c-js />
