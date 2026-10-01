@@ -8,10 +8,15 @@ import re
 # these three sequences. `str.splitlines()` also ends one at a form feed,
 # U+2028, and other separators, which shifts every later line number.
 _LINE_BREAK = re.compile(r"\r\n|\r|\n")
+# The other characters `str.splitlines()` ends a line at. Source rarely has
+# them, and without them the fast built-in split gives the same lines.
+_OTHER_SPLITLINES_BREAKS = re.compile("[\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]")
 
 
 def source_lines(source: str) -> list[str]:
     """Return the lines of `source`, each with its own line break, split only at CR LF, CR, and LF."""
+    if _OTHER_SPLITLINES_BREAKS.search(source) is None:
+        return source.splitlines(keepends=True)
     lines: list[str] = []
     start = 0
     for match in _LINE_BREAK.finditer(source):
