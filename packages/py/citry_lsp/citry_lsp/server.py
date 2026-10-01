@@ -61,6 +61,7 @@ from citry_lsp.protocol import (
     ProjectStatus,
 )
 from citry_lsp.semantic import (
+    infer_js_data_value_types,
     semantic_completions,
     semantic_definition,
     semantic_diagnostics,
@@ -274,6 +275,9 @@ class CitryLanguageServer(LanguageServer):
         if document is None:
             return None
         generation = self.analysis_generation
+        # ty types the js_data() values Citry's rules cannot, before anything
+        # below reads the js_data() keys' types.
+        await infer_js_data_value_types(self.type_analyzer, self.project, self.documents)
         findings = await semantic_diagnostics(
             self.type_analyzer,
             document,

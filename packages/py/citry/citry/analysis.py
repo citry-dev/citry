@@ -136,11 +136,13 @@ from citry._portable_ide import (
 from citry._template_python import ShadowPythonCopy as _ShadowPythonCopy
 from citry._template_python import ShadowPythonDocument as _ShadowPythonDocument
 from citry._template_python import ShadowPythonSourceCopy as _ShadowPythonSourceCopy
+from citry._template_python import ShadowRevealDocument as _ShadowRevealDocument
 from citry._template_python import TemplatePythonControl as _TemplatePythonControl
 from citry._template_python import TemplatePythonQuery as _TemplatePythonQuery
 from citry._template_python import TemplatePythonRoot as _TemplatePythonRoot
 from citry._template_python import TemplatePythonValueType as _TemplatePythonValueType
 from citry._template_python import build_inferred_template_shadow as _build_inferred_template_shadow
+from citry._template_python import build_reveal_shadow as _build_reveal_shadow
 from citry._template_python import build_schema_template_shadow as _build_schema_template_shadow
 from citry._template_python import template_python_queries as _template_python_queries
 from citry._template_python import template_python_query_at as _template_python_query_at
@@ -186,6 +188,7 @@ TemplatePythonValueType = _TemplatePythonValueType
 ShadowPythonCopy = _ShadowPythonCopy
 ShadowPythonDocument = _ShadowPythonDocument
 ShadowPythonSourceCopy = _ShadowPythonSourceCopy
+ShadowRevealDocument = _ShadowRevealDocument
 
 
 @dataclass(frozen=True, slots=True)
@@ -1778,6 +1781,37 @@ def build_schema_template_shadow(
         source_module=source_module,
         source_is_package=source_is_package,
         value_type=value_type,
+    )
+
+
+def build_reveal_shadow(
+    module_source: str,
+    spans: tuple[tuple[int, int], ...],
+    *,
+    source_module: str | None = None,
+    source_is_package: bool = False,
+) -> ShadowRevealDocument | None:
+    """
+    Copy one module so a type checker states the type of chosen expressions.
+
+    Args:
+        module_source: Current Python module source.
+        spans: Start and end string offsets of whole, non-overlapping
+            expressions in ``module_source``.
+        source_module: Importable module name used to mirror relative imports.
+        source_is_package: Whether that module is implemented by ``__init__.py``.
+
+    Returns:
+        The copy with each expression wrapped in ``reveal_type()`` and the
+        offsets of each wrapped expression, or ``None`` when the module
+        cannot be copied that way.
+
+    """
+    return _build_reveal_shadow(
+        module_source,
+        spans,
+        source_module=source_module,
+        source_is_package=source_is_package,
     )
 
 
@@ -4507,13 +4541,19 @@ def json_wire_type_from_expression(
     member_types: Mapping[str, Mapping[str, JsonWireType]] | None = None,
     member_annotations: Mapping[str, Mapping[str, str | None]] | None = None,
     classes: Mapping[str, WireClass] | None = None,
+    inferred: Mapping[tuple[int, int], JsonWireType] | None = None,
+    unproven: list[tuple[int, int]] | None = None,
+    widen_literals: bool = False,
 ) -> JsonWireType:
     """
     Infer portable JSON-wire metadata using optional proven members.
 
     ``member_types`` types ``name.attr``. ``member_annotations`` and
     ``classes`` let a longer chain such as ``kwargs.task.lane`` follow the
-    attribute annotations of the classes it passes through.
+    attribute annotations of the classes it passes through. ``inferred``
+    types a part the rules leave unknown, keyed by its start and end
+    offset in ``source``; ``unproven`` collects the offsets of the parts
+    still unknown. ``widen_literals`` types a constant by its kind only.
     """
     if type(source) is not str:
         msg = "source must be a str"
@@ -4523,6 +4563,9 @@ def json_wire_type_from_expression(
         member_types=member_types,
         member_annotations=member_annotations,
         classes=classes,
+        inferred=inferred,
+        unproven=unproven,
+        widen_literals=widen_literals,
     )
 
 
@@ -4904,6 +4947,7 @@ __all__ = [
     "ShadowPythonCopy",
     "ShadowPythonDocument",
     "ShadowPythonSourceCopy",
+    "ShadowRevealDocument",
     "TemplateAnalysis",
     "TemplateLintConsumer",
     "TemplateLintFinding",
@@ -4944,6 +4988,7 @@ __all__ = [
     "browser_state_binding_target_errors",
     "browser_state_bindings",
     "build_inferred_template_shadow",
+    "build_reveal_shadow",
     "build_schema_template_shadow",
     "component_js_i18n_owners",
     "component_name_match",

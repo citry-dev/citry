@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import builtins
 import copy
+import itertools
 import re
 import symtable
 from dataclasses import dataclass
@@ -420,6 +421,84 @@ def build_schema_template_shadow(
         source_copies=source_copies,
         query_function=(function_start, generated_start + len(generated)),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ShadowRevealDocument:
+    """
+    A copy of a module that asks ty for the type of chosen expressions.
+
+    Each chosen expression is wrapped in ``reveal_type(...)``, which returns
+    its argument unchanged, so ty reports the expression's type as a
+    ``revealed-type`` finding that starts at the expression.
+
+    Attributes:
+        source: Complete generated Python source.
+        reveals: Start and end string offsets of each wrapped expression in
+            ``source``, in the order the expressions were requested.
+
+    """
+
+    source: str
+    reveals: tuple[tuple[int, int], ...]
+
+
+def build_reveal_shadow(
+    module_source: str,
+    spans: tuple[tuple[int, int], ...],
+    *,
+    source_module: str | None = None,
+    source_is_package: bool = False,
+) -> ShadowRevealDocument | None:
+    """
+    Copy one module and wrap each expression span in ``reveal_type()``.
+
+    ``spans`` are start and end string offsets in ``module_source``, each
+    covering one whole expression; they must not overlap. Relative imports
+    are made absolute, as in the template shadows, because ty reads the copy
+    as a sibling file. Returns ``None`` when the module cannot be copied,
+    already uses the name ``reveal_type``, or a span is not a whole
+    expression of unchanged source.
+    """
+    if not spans or re.search(r"\breveal_type\b", module_source):
+        # A module's own `reveal_type` would replace the analyzer's built-in one.
+        return None
+    ordered = sorted(spans)
+    if any(start >= end for start, end in ordered) or any(
+        earlier[1] > later[0] for earlier, later in itertools.pairwise(ordered)
+    ):
+        return None
+    rewritten = _rewritten_module(module_source, source_module, source_is_package=source_is_package)
+    if rewritten is None:
+        return None
+    shadow, copies = rewritten
+    mapped: list[tuple[int, int]] = []
+    for start, end in spans:
+        shadow_start = _shadow_offset_for_source(copies, start)
+        shadow_end = _shadow_offset_for_source(copies, end)
+        # Both ends must come from one unchanged range, so the text between
+        # them is exactly the authored expression.
+        if shadow_start is None or shadow_end is None or shadow_end - shadow_start != end - start:
+            return None
+        if shadow[shadow_start:shadow_end] != module_source[start:end]:
+            return None
+        mapped.append((shadow_start, shadow_end))
+    opening, closing = "reveal_type((", "))"
+    # Splice from the last span backwards so earlier offsets stay valid, then
+    # shift each span by the text inserted before it.
+    for shadow_start, shadow_end in sorted(mapped, reverse=True):
+        shadow = f"{shadow[:shadow_start]}{opening}{shadow[shadow_start:shadow_end]}{closing}{shadow[shadow_end:]}"
+    reveals = []
+    for shadow_start, shadow_end in mapped:
+        inserted_before = sum(len(opening) + len(closing) for other_start, _ in mapped if other_start < shadow_start)
+        start = shadow_start + inserted_before + len(opening)
+        reveals.append((start, start + shadow_end - shadow_start))
+    try:
+        ast.parse(shadow)
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        # A span that was not a whole expression breaks the copy.
+        return None
+    return ShadowRevealDocument(shadow, tuple(reveals))
 
 
 class _ReturnQueryTransformer(ast.NodeTransformer):
@@ -1733,10 +1812,12 @@ __all__ = [
     "ShadowPythonCopy",
     "ShadowPythonDocument",
     "ShadowPythonSourceCopy",
+    "ShadowRevealDocument",
     "TemplatePythonControl",
     "TemplatePythonQuery",
     "TemplatePythonRoot",
     "build_inferred_template_shadow",
+    "build_reveal_shadow",
     "build_schema_template_shadow",
     "template_python_queries",
     "template_python_query_at",

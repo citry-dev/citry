@@ -210,14 +210,16 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
         _type_check_error(project.status.message or "the app's component registry is unavailable")
     # Both checkers read the same component files, so they are read once.
     documents = project_documents(project, cwd.resolve())
-    try:
-        found = check_project_types(project, cwd, command, documents)
-    except TypeScriptUnavailableError as exc:
-        _type_check_error(str(exc))
+    # ty runs first: it also types the js_data() values that the TypeScript
+    # check then reads.
     try:
         python_found = check_project_python_types(project, cwd, documents)
     except TyUnavailableError as exc:
         _type_check_error(str(exc), checker="ty")
+    try:
+        found = check_project_types(project, cwd, command, documents)
+    except TypeScriptUnavailableError as exc:
+        _type_check_error(str(exc))
     findings = list(report.findings)
     for item in (*found, *python_found):
         # TypeScript findings are errors. A ty warning stays a warning, and

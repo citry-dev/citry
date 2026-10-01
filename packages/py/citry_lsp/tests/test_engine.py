@@ -2430,13 +2430,13 @@ def test_inferred_js_data_follows_attribute_chains_through_kwargs_classes(tmp_pa
 
     assert projection is not None
     # A chain through `Owner | None` proves nothing, so `reviewerName` is any.
-    # The editor widens js_data() literals, so the Enum value is a string. The
-    # wire sends a NamedTuple as an array and a TypedDict as an object.
+    # An Enum value keeps the member values the server declared. The wire
+    # sends a NamedTuple as an array and a TypedDict as an object.
     for name, rendered in (
         ("laneKey", "string"),
         ("ownerName", "string"),
         ("taskId", "number"),
-        ("stateValue", "string"),
+        ("stateValue", '"todo" | "done"'),
         ("reviewerName", "any"),
         ("owner", "Array<string>"),
         ("meta", "{rank: number}"),

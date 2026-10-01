@@ -6,6 +6,7 @@ import ast
 import json
 import math
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, cast
 
 if TYPE_CHECKING:
@@ -184,6 +185,9 @@ def json_wire_type_from_expression(
     member_types: Mapping[str, Mapping[str, JsonWireType]] | None = None,
     member_annotations: Mapping[str, Mapping[str, str | None]] | None = None,
     classes: Mapping[str, WireClass] | None = None,
+    inferred: Mapping[tuple[int, int], JsonWireType] | None = None,
+    unproven: list[tuple[int, int]] | None = None,
+    widen_literals: bool = False,
 ) -> JsonWireType:
     """
     Infer JSON shape from a Python value expression and proven members.
@@ -194,12 +198,29 @@ def json_wire_type_from_expression(
     chain such as ``kwargs.task.lane`` follows each class's attribute
     annotations. A chain through a class the table does not describe, or
     through an optional value, stays unknown.
+
+    These rules leave a part such as a method call unknown. A caller that
+    asked a type checker about such parts passes the answers in
+    ``inferred``, keyed by each part's start and end offset in ``source``,
+    and ``unproven`` collects the offsets of the parts that are still
+    unknown, so the caller knows what to ask about. With
+    ``widen_literals``, a constant such as ``False`` types as ``boolean``
+    rather than ``false``, while a ``Literal`` annotation keeps its values.
     """
     try:
         expression = ast.parse(source, mode="eval").body
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return UNKNOWN_JSON_TYPE
-    context = _ExpressionContext(member_types or {}, member_annotations or {}, classes or {})
+    context = _ExpressionContext(
+        member_types or {},
+        member_annotations or {},
+        classes or {},
+        inferred=inferred or {},
+        unproven=unproven,
+        widen_literals=widen_literals,
+        line_starts=_line_starts(source),
+        lines=tuple(source.splitlines(keepends=True)),
+    )
     return _expression_type(expression, context)
 
 
@@ -342,6 +363,34 @@ class _ExpressionContext:
     member_types: Mapping[str, Mapping[str, JsonWireType]]
     member_annotations: Mapping[str, Mapping[str, str | None]]
     classes: Mapping[str, WireClass]
+    inferred: Mapping[tuple[int, int], JsonWireType] = MappingProxyType({})
+    unproven: list[tuple[int, int]] | None = None
+    widen_literals: bool = False
+    line_starts: tuple[int, ...] = ()
+    lines: tuple[str, ...] = ()
+
+    def span(self, node: ast.expr) -> tuple[int, int] | None:
+        """Return the node's start and end offsets in the expression source."""
+        start = self._offset(node.lineno, node.col_offset)
+        end = self._offset(node.end_lineno, node.end_col_offset)
+        return (start, end) if start is not None and end is not None else None
+
+    def _offset(self, lineno: int | None, byte_column: int | None) -> int | None:
+        # The parser counts columns in UTF-8 bytes; callers count characters.
+        if lineno is None or byte_column is None or not 1 <= lineno <= len(self.lines):
+            return None
+        prefix = self.lines[lineno - 1].encode()[:byte_column]
+        try:
+            return self.line_starts[lineno - 1] + len(prefix.decode())
+        except UnicodeDecodeError:
+            return None
+
+
+def _line_starts(source: str) -> tuple[int, ...]:
+    starts = [0]
+    for line in source.splitlines(keepends=True):
+        starts.append(starts[-1] + len(line))
+    return tuple(starts)
 
 
 def _attribute_chain(node: ast.Attribute) -> tuple[str, ...] | None:
@@ -366,7 +415,16 @@ def _attribute_chain_type(chain: tuple[str, ...], context: _ExpressionContext) -
         owner = context.classes.get(annotation) if annotation is not None else None
         if annotation is not None and owner is not None and owner.kind in {"named-tuple", "typed-dict"}:
             return _class_value_type(annotation, context)
-        return context.member_types.get(root, {}).get(member, UNKNOWN_JSON_TYPE)
+        declared = context.member_types.get(root, {}).get(member, UNKNOWN_JSON_TYPE)
+        # The schema writes a type alias such as `Size = Literal["sm", "md"]`
+        # by its name, which proves nothing, while the resolved annotation
+        # spells out its values. The resolved one is used only when it is a
+        # JSON type, so a class keeps the schema's shorter name in messages.
+        if annotation is not None and declared.unsupported:
+            resolved = json_wire_type_from_annotation(annotation)
+            if resolved.kind != "unknown" and not resolved.unsupported:
+                return resolved
+        return declared
     for attribute in attributes[:-1]:
         # Only a plain class annotation is followed; `Owner | None` could be
         # None at run time, so reading through it proves nothing.
@@ -429,18 +487,40 @@ def _expression_type(
     node: ast.expr,
     context: _ExpressionContext,
 ) -> JsonWireType:
+    value = _rule_expression_type(node, context)
+    # Only a part the rules leave unknown without a reason may be filled from
+    # a type checker's answer; a part with a reason is known not to fit.
+    if value.kind != "unknown" or value.unsupported:
+        return value
+    span = context.span(node)
+    if span is None:
+        return value
+    answer = context.inferred.get(span)
+    if answer is not None:
+        return answer
+    if context.unproven is not None:
+        context.unproven.append(span)
+    return value
+
+
+def _rule_expression_type(
+    node: ast.expr,
+    context: _ExpressionContext,
+) -> JsonWireType:
     if isinstance(node, ast.Attribute):
         chain = _attribute_chain(node)
         return _attribute_chain_type(chain, context) if chain is not None else UNKNOWN_JSON_TYPE
     if isinstance(node, ast.Constant):
         if node.value is None:
             return JsonWireType("null")
+        # A widened constant keeps only its kind, as TypeScript types a `let`.
+        literal = None if context.widen_literals else node.value
         if type(node.value) is bool:
-            return JsonWireType("boolean", literal=node.value)
+            return JsonWireType("boolean", literal=literal)
         if type(node.value) in {int, float}:
-            return JsonWireType("number", literal=node.value)
+            return JsonWireType("number", literal=literal)
         if type(node.value) is str:
-            return JsonWireType("string", literal=node.value)
+            return JsonWireType("string", literal=literal)
         if type(node.value) in {bytes, complex}:
             return _unsupported(f"{type(node.value).__name__} literals are not JSON-serializable")
         return UNKNOWN_JSON_TYPE

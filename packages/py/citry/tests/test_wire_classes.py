@@ -15,7 +15,7 @@ from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
 from citry._json_wire import WireClass
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
-from citry.analysis import json_wire_type_from_expression
+from citry.analysis import json_wire_type_from_annotation, json_wire_type_from_expression
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -273,3 +273,54 @@ def test_check_reports_a_class_instance_reached_through_kwargs(tmp_path):
     assert len(findings) == 1
     assert "'person'" in findings[0].message
     assert f"{_PREFIX}Person cannot be proven" in findings[0].message
+
+
+_SIZE_MEMBERS = {
+    # The schema names the alias; the resolved annotation spells out its values.
+    "member_types": {"kwargs": {"size": json_wire_type_from_annotation("Size")}},
+    "member_annotations": {"kwargs": {"size": 'Literal["sm", "md"]'}},
+}
+
+
+def test_a_type_alias_member_types_from_its_resolved_values():
+    value = json_wire_type_from_expression("kwargs.size", **_SIZE_MEMBERS)
+
+    assert value.javascript == '"sm" | "md"'
+    assert value.unsupported == ()
+
+
+def test_widened_literals_keep_the_values_an_annotation_declares():
+    value = json_wire_type_from_expression(
+        "{'flag': False, 'mode': 'a', 'size': kwargs.size, 'either': 'a' if kwargs else kwargs.size}",
+        widen_literals=True,
+        **_SIZE_MEMBERS,
+    )
+
+    # A constant may change in the browser, so it keeps only its kind; an
+    # annotated member keeps the values the server declared.
+    assert value.javascript == '{flag: boolean, mode: string, size: "sm" | "md", either: string | "sm" | "md"}'
+
+
+def test_unknown_parts_are_collected_and_filled_by_their_offsets():
+    source = "{'rows': self.rows(), 'count': len(items) + 1, 'tags': {1, 2}, 'plain': 1}"
+    unproven: list[tuple[int, int]] = []
+
+    value = json_wire_type_from_expression(source, unproven=unproven)
+
+    # Every unknown part is collected, so a caller can ask about the largest
+    # ones. A set has a known reason not to fit, so it is not collected.
+    assert [source[start:end] for start, end in unproven] == ["self.rows()", "len(items)", "len(items) + 1"]
+    assert value.javascript == "{rows: unknown, count: unknown, tags: unknown, plain: 1}"
+
+    rows = source.index("self.rows()")
+    count = source.index("len(items) + 1")
+    filled = json_wire_type_from_expression(
+        source,
+        inferred={
+            (rows, rows + len("self.rows()")): json_wire_type_from_annotation("list[str]"),
+            (count, count + len("len(items) + 1")): json_wire_type_from_annotation("int"),
+        },
+    )
+
+    assert filled.javascript == "{rows: Array<string>, count: number, tags: unknown, plain: 1}"
+    assert filled.unsupported == ("set literals are not JSON-serializable",)

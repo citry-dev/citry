@@ -4752,7 +4752,10 @@ class {formatter_type}:
 @lru_cache(maxsize=32)
 def _module_prefix_end_line(module_source: str) -> int | None:
     """
-    Return the last line of a module's docstring and `__future__` imports, or 0 without them.
+    Return the last line of a module's docstring and `__future__` imports.
+
+    The answer is 0 when the module has neither, and `None` when it does not
+    parse.
 
     Every shadow built from one module starts with these unchanged lines, so
     the module is parsed once here rather than once per generated shadow.
@@ -8370,26 +8373,16 @@ def _component_js_data_roots(
     shape = analyze_js_data_source(source, owner.qualname)
     if shape is None:
         return _JsDataNamespace((), "unavailable")
-    member_types = _js_data_member_types(component, shape)
-    # The app worker resolved the classes behind the Kwargs annotations, so a
-    # value such as `kwargs.task.lane` types from `Task.lane`.
-    wire_classes = project.source_analysis.kwargs_wire_classes(component)
-    member_annotations = {name: wire_classes.members for name in member_types}
+    # ty's answers for the values these rules cannot type, if a check has
+    # already asked ty about this exact source.
+    inferred = project.js_data_inferred_types(owner.source_file, source, owner.qualname)
     roots: list[_JsDataRoot] = []
     for root in shape.roots:
         value_types = tuple(
-            json_wire_type_from_expression(
-                value_source,
-                member_types=member_types,
-                member_annotations=member_annotations,
-                classes=wire_classes.classes,
-            )
+            _js_data_value_type(component, project, shape, source, definition.value_range, inferred)
             for definition in root.definitions
-            if (value_source := _source_range_text(source, definition.value_range)) is not None
         )
-        # A js_data() value is where browser data starts, and Vue code may
-        # change it, so `False` types the key as boolean rather than `false`.
-        wire_type = _widened_json_type(merge_json_wire_types(value_types))
+        wire_type = merge_json_wire_types(tuple(value for value in value_types if value is not None))
         roots.append(
             _JsDataRoot(
                 root.name,
@@ -8403,6 +8396,145 @@ def _component_js_data_roots(
             )
         )
     return _JsDataNamespace(tuple(roots), "open" if shape.completeness == "open" else "closed")
+
+
+def _js_data_value_type(
+    component: ComponentRecord,
+    project: ProjectState,
+    shape: TemplateDataSourceShape,
+    source: str,
+    value_range: LspRange | None,
+    inferred: Mapping[tuple[int, int], JsonWireType],
+    unproven: list[tuple[int, int]] | None = None,
+) -> JsonWireType | None:
+    """
+    Type one `js_data()` value by Citry's rules, filling the parts they leave unknown from ty.
+
+    `inferred` and `unproven` use offsets in the module `source`; the rules
+    count offsets in the value's own text, so this converts between them.
+    """
+    if value_range is None or project.source_analysis is None:
+        return None
+    start = _source_offset_at_position(source, types.Position(value_range.start.line, value_range.start.character))
+    end = _source_offset_at_position(source, types.Position(value_range.end.line, value_range.end.character))
+    if start is None or end is None or start > end:
+        return None
+    member_types = _js_data_member_types(component, shape)
+    # The app worker resolved the classes behind the Kwargs annotations, so a
+    # value such as `kwargs.task.lane` types from `Task.lane`.
+    wire_classes = project.source_analysis.kwargs_wire_classes(component)
+    member_annotations = {name: wire_classes.members for name in member_types}
+    value_unproven: list[tuple[int, int]] = []
+    value_type = json_wire_type_from_expression(
+        source[start:end],
+        member_types=member_types,
+        member_annotations=member_annotations,
+        classes=wire_classes.classes,
+        inferred={
+            (part_start - start, part_end - start): part_type
+            for (part_start, part_end), part_type in inferred.items()
+            if start <= part_start <= part_end <= end
+        },
+        unproven=value_unproven,
+        # A js_data() value is where browser data starts, and Vue code may
+        # change it, so `False` types the key as boolean rather than `false`.
+        # A `Literal` or Enum annotation keeps its values, because the
+        # server declared them.
+        widen_literals=True,
+    )
+    if unproven is not None:
+        unproven.extend((part_start + start, part_end + start) for part_start, part_end in value_unproven)
+    return value_type
+
+
+def js_data_inference_requests(
+    project: ProjectState,
+    workspace: Path,
+    open_documents: Mapping[str, DocumentState] | None = None,
+) -> tuple[JsDataInferenceRequest, ...]:
+    """
+    Return the `js_data()` methods in `workspace` whose values Citry's rules leave partly unknown.
+
+    Each request names the expressions to ask ty about: the largest parts of
+    each value that the rules could not type. A method whose current source
+    ty has already answered for is left out.
+    """
+    catalog = project.catalog
+    source_analysis = project.source_analysis
+    if catalog is None or source_analysis is None:
+        return ()
+    workspace = workspace.resolve()
+    requests: dict[tuple[Path, str], JsDataInferenceRequest] = {}
+    for component in catalog.components:
+        if component.schemas.js_data.kind in {"opaque", "fields"}:
+            continue
+        chain = source_analysis.js_data_chain(component)
+        if not chain:
+            continue
+        owner = chain[-1]
+        source_file = owner.source_file.resolve()
+        if not source_file.is_relative_to(workspace) or (source_file, owner.qualname) in requests:
+            continue
+        found, source = (
+            _synchronized_document_source(owner.source_file, open_documents)
+            if open_documents is not None
+            else (False, None)
+        )
+        if not found:
+            source = _disk_python_source(owner.source_file)
+        # A remembered answer is checked first, because it is the common case
+        # on every refresh and needs no parsing.
+        if source is None or project.has_js_data_inferred_types(owner.source_file, source, owner.qualname):
+            continue
+        if python_class_resolution_signature(source, owner.qualname) != owner.resolution:
+            continue
+        shape = analyze_js_data_source(source, owner.qualname)
+        if shape is None:
+            continue
+        unproven: list[tuple[int, int]] = []
+        for root in shape.roots:
+            for definition in root.definitions:
+                _js_data_value_type(component, project, shape, source, definition.value_range, {}, unproven)
+        # Ask only about the largest unknown parts; a part inside another is
+        # typed by the answer for the part around it.
+        spans = tuple(
+            sorted(
+                {
+                    span
+                    for span in unproven
+                    if not any(other != span and other[0] <= span[0] and span[1] <= other[1] for other in unproven)
+                }
+            )
+        )
+        requests[(source_file, owner.qualname)] = JsDataInferenceRequest(
+            source_file=owner.source_file,
+            source=source,
+            qualname=owner.qualname,
+            module=owner.module,
+            spans=spans,
+        )
+    return tuple(requests.values())
+
+
+@dataclass(frozen=True, slots=True)
+class JsDataInferenceRequest:
+    """
+    The `js_data()` value parts of one class that Citry asks ty to type.
+
+    Attributes:
+        source_file: The Python file that defines the method.
+        source: That file's text as Citry read it.
+        qualname: The qualified name of the class that defines the method.
+        module: The importable module name of the file.
+        spans: Start and end string offsets in `source` of each part to type.
+
+    """
+
+    source_file: Path
+    source: str
+    qualname: str
+    module: str
+    spans: tuple[tuple[int, int], ...]
 
 
 def _projected_type(value: JsonWireType | str) -> str:
@@ -11415,6 +11547,15 @@ def _inferred_template_root(
             else "mapping"
         ),
     )
+
+
+def _disk_python_source(source_file: Path) -> str | None:
+    """Read a Python file as Python decodes it, or return `None` when it cannot be read."""
+    try:
+        with tokenize.open(source_file) as source_stream:
+            return source_stream.read()
+    except (OSError, SyntaxError, UnicodeError, LookupError):
+        return None
 
 
 def _python_source(

@@ -26,3 +26,10 @@ VS Code may show in another language.
 once, `typescript.check_project_types` runs `tsc`, and
 `check_project_python_types` runs the editor's `semantic.semantic_diagnostics`
 with one ty child. Change the shared functions, not a CLI-only copy.
+
+`js_data()` values Citry's rules in `citry/_json_wire.py` cannot type are
+typed by ty: `semantic.infer_js_data_value_types` wraps each unknown part
+in `reveal_type()` in a copy of the module and stores the answers on the
+`ProjectState` for that exact source. The server runs it before each
+document's checks, and `check_project_python_types` runs it before the
+CLI's TypeScript check, so the TypeScript projections read the answers.

@@ -25,6 +25,9 @@ from citry_lsp.protocol import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from citry.analysis import JsonWireType
     from citry_lsp.catalog import ComponentRecord
 
 WORKER_TIMEOUT_SECONDS = 15.0
@@ -731,9 +734,14 @@ class ProjectState:
     i18n: I18nProjectIndex | None = None
     security_csp: Literal["off", "warn", "strict"] | None = None
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)
+    # ty's types for `js_data()` value parts, per file, source text, and class.
+    _js_data_inferred: dict[tuple[Path, str, str], Mapping[tuple[int, int], JsonWireType]] = field(
+        init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         """Index portable slot-data rules once for completion and hover."""
+        object.__setattr__(self, "_js_data_inferred", {})
         indexed: dict[str, dict[str, tuple[str, ...]]] = {}
         if self.analysis is not None:
             raw_rules = self.analysis.to_dict().get("tag_rules")
@@ -754,6 +762,39 @@ class ProjectState:
                             slots[slot_name] = tuple(raw_fields)
                     indexed[tag_name.lower()] = slots
         object.__setattr__(self, "_slot_data_fields", indexed)
+
+    def js_data_inferred_types(
+        self,
+        source_file: Path,
+        source: str,
+        qualname: str,
+    ) -> Mapping[tuple[int, int], JsonWireType]:
+        """
+        Return ty's types for the `js_data()` value parts of one class, keyed by their offsets in `source`.
+
+        The answer belongs to this exact source text, so an edit makes the
+        parts unknown again until ty is asked about the new text.
+        """
+        return self._js_data_inferred.get((source_file.resolve(), source, qualname), {})
+
+    def has_js_data_inferred_types(self, source_file: Path, source: str, qualname: str) -> bool:
+        """Return whether ty has already been asked about this exact source."""
+        return (source_file.resolve(), source, qualname) in self._js_data_inferred
+
+    def store_js_data_inferred_types(
+        self,
+        source_file: Path,
+        source: str,
+        qualname: str,
+        inferred: Mapping[tuple[int, int], JsonWireType],
+    ) -> None:
+        """Remember ty's answers for one source text, dropping answers for its older texts."""
+        key = (source_file.resolve(), source, qualname)
+        # Only the newest text of each class is useful, so an edited file
+        # does not keep every earlier version alive.
+        for stale in [item for item in self._js_data_inferred if item[0] == key[0] and item[2] == qualname]:
+            del self._js_data_inferred[stale]
+        self._js_data_inferred[key] = dict(inferred)
 
     def component_slot_data_fields(
         self,

@@ -60,7 +60,9 @@ Upgrading from 0.5.x? Follow
   JavaScript and Vue template expressions with TypeScript, and Python
   template expressions with ty, and reports each finding at its file,
   line, and column, as the editor shows it. It needs `citry-lsp`, Node.js,
-  and TypeScript's `tsc`.
+  and TypeScript's `tsc`. ty also types the `js_data()` values Citry has
+  no rule for, such as `self.labels()`, so TypeScript checks the browser
+  code that reads them.
 - Interactive pages served through Citry's routes link their component
   stylesheets in `<head>`, so they are styled from the first paint.
 - Install a Vue plugin, such as a store or a global directive, on every
@@ -291,6 +293,10 @@ Upgrading from 0.5.x? Follow
 
 ### Fixed
 
+- `citry check` and the editor no longer report
+  `citry.js-data.unsupported-type` for a `js_data()` value that reads a
+  `Kwargs` field annotated with a type alias of a `Literal`, such as
+  `variant: ButtonVariant`; the value is typed as the alias's values.
 - Events handlers declared with `PUT`, `DELETE`, or another method now
   work: the browser sends the handler's method, and the mounted per-event
   route accepts it while keeping each handler's 405 and CSRF checks.

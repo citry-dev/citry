@@ -30,7 +30,9 @@ from citry_lsp.engine import (
 from citry_lsp.project import load_project
 from citry_lsp.project_check import check_project_python_types
 from citry_lsp.protocol import PROTOCOL_VERSION, TYPE_CHECK_METHOD
+from citry_lsp.semantic import _json_type_from_ty_display, infer_js_data_value_types
 from citry_lsp.server import CitryLanguageServer
+from citry_lsp.type_analysis import TyAnalyzer
 from citry_lsp.typescript import (
     TypeScriptFinding,
     TypeScriptUnavailableError,
@@ -948,3 +950,124 @@ async def test_type_check_off_sends_no_request_and_publishes_only_citry_findings
     assert "citry.component-js.unknown-member" in codes
     assert not [code for code in codes if str(code).startswith("citry.typescript.")]
     assert type_check_off_client.type_check_requests == []
+
+
+_INFERRED_APP = """from __future__ import annotations
+from dataclasses import dataclass
+from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+
+@dataclass
+class Task:
+    title: str
+
+class Rows(Component):
+    citry = engine
+    template_file = 'rows.html'
+    js_file = 'rows.js'
+    class Kwargs:
+        names: list[str]
+        flag: bool = False
+    def labels(self) -> list[str]:
+        return []
+    def task(self) -> Task:
+        return Task("x")
+    def js_data(self, kwargs: Kwargs, slots):
+        return {
+            "labels": self.labels(),
+            "upper": [name.upper() for name in kwargs.names],
+            "joined": ", ".join(kwargs.names),
+            "mode": "a" if kwargs.flag else self.labels(),
+            "task": self.task(),
+        }
+"""
+
+# Each line before the last misuses one value that only ty can type. A
+# `Task` instance cannot cross the JSON wire, so it stays `any`.
+_INFERRED_JS = """$component({
+  methods: {
+    check() {
+      this.labels.toFixed();
+      this.upper.push(1);
+      this.joined.toFixed();
+      this.mode.toFixed();
+      this.task.anything;
+    },
+  },
+});
+"""
+
+
+async def _infer_js_data(tmp_path: Path, project, documents) -> None:
+    analyzer = TyAnalyzer(tmp_path)
+    try:
+        await infer_js_data_value_types(analyzer, project, documents)
+    finally:
+        await analyzer.close()
+
+
+def test_ty_types_the_js_data_values_citry_rules_leave_unknown(tmp_path):
+    _command()
+    project, documents = _documents(
+        tmp_path,
+        {"rows.html": ("citry-html", "<p></p>"), "rows.js": ("javascript", _INFERRED_JS)},
+        app=_INFERRED_APP,
+    )
+    # Before ty answers, every value Citry's rules cannot type is `any`.
+    assert _findings(tmp_path, "rows.js", project, documents) == []
+
+    asyncio.run(_infer_js_data(tmp_path, project, documents))
+
+    # A method's return type, a comprehension, a str method, and a
+    # conditional expression each reach TypeScript.
+    assert [(code, text) for code, text, _range in _findings(tmp_path, "rows.js", project, documents)] == [
+        ("citry.typescript.ts2339", "toFixed"),
+        ("citry.typescript.ts2345", "1"),
+        ("citry.typescript.ts2551", "toFixed"),
+        ("citry.typescript.ts2339", "toFixed"),
+    ]
+
+
+def test_check_types_reads_ty_js_data_types_before_typescript(tmp_path):
+    tsc = Path(_command()[0])
+    (tmp_path / "app.py").write_text(_INFERRED_APP, encoding="utf-8")
+    (tmp_path / "rows.html").write_text("<p></p>", encoding="utf-8")
+    (tmp_path / "rows.js").write_text(_INFERRED_JS, encoding="utf-8")
+    node = shutil.which("node")
+    assert node is not None
+
+    result = _run_check(tmp_path, [str(tsc.parent), str(Path(node).parent), "/usr/bin", "/bin"])
+
+    assert result.returncode == 1, result.stderr
+    payload = json.loads(result.stdout)
+    rows_js = str((tmp_path / "rows.js").resolve())
+    assert [item["origin"] for item in payload["findings"] if item["code"].startswith("citry.typescript.")] == [
+        f"{rows_js}:4:19",
+        f"{rows_js}:5:23",
+        f"{rows_js}:6:19",
+        f"{rows_js}:7:17",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("display", "expected"),
+    [
+        ("list[str]", "Array<string>"),
+        ('Literal["a", "b"] | None', "string | null"),
+        ("LiteralString", "string"),
+        ("dict[str, int]", "{[key: string]: number}"),
+        ("tuple[int, str]", "Array<number | string>"),
+        # A type ty could not infer, a class, `Any`, or a shortened display
+        # names no JSON value, so the part stays `any`.
+        ("Unknown", None),
+        ("list[Unknown]", None),
+        ("Task", None),
+        ("dict[str, Any]", None),
+        ("int | str | ... omitted 3 union elements", None),
+    ],
+)
+def test_ty_type_displays_become_json_types(display, expected):
+    value = _json_type_from_ty_display(display)
+
+    assert (value.javascript if value is not None else None) == expected

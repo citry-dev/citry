@@ -155,14 +155,39 @@ class TaskCard(Component):
 ```
 
 Here `this.laneKey` is a `string`. Dataclasses, NamedTuples, Pydantic
-models, and plain annotated classes can be read this way, and an `Enum`
-member's `.value` takes the type of its values, such as `string`. A
-NamedTuple is sent as an array and a TypedDict as an object. A chain
-through an optional value, such as `reviewer: Owner | None`, is untyped.
-Returning a whole dataclass or other class instance, such as
-`kwargs.task`, is reported as
+models, and plain annotated classes can be read this way. An annotation
+keeps the values it declares: a field `size: Literal["sm", "md"]`, or a
+type alias of it, is `"sm" | "md"`, and an `Enum` member's `.value` is
+the union of its values, such as `"todo" | "done"`. A constant you write
+in `js_data()` keeps only its kind, so `False` is a `boolean`, because
+browser code may change the value later. A NamedTuple is sent as an
+array and a TypedDict as an object. A chain through an optional value,
+such as `reviewer: Owner | None`, is untyped. Returning a whole
+dataclass or other class instance, such as `kwargs.task`, is reported as
 [`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type),
 because Citry cannot prove it crosses the JSON wire.
+
+Citry has no rule for a value such as a method call or a list
+comprehension, so the editor asks ty for its type:
+
+```citry
+class TaskList(Component):
+    def labels(self) -> list[str]:
+        return ["todo", "done"]
+
+    def js_data(self, kwargs, slots):
+        return {
+            "labels": self.labels(),
+            "upper": [label.upper() for label in self.labels()],
+        }
+```
+
+Both `this.labels` and `this.upper` are `string[]`. ty's answer arrives
+with the editor's next check of the file, and
+[`citry check --types`](/cli/#check-types-with-typescript-and-ty) asks
+ty before it runs TypeScript. A value ty types as a class, as `Any`, or
+as a type it could not infer stays `any`. When ty cannot run, these
+values stay `any`.
 
 ### Work with component members in `this` and the template
 

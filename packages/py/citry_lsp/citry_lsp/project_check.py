@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from citry_lsp.engine import DocumentState
-from citry_lsp.semantic import semantic_diagnostics
+from citry_lsp.semantic import infer_js_data_value_types, semantic_diagnostics
 from citry_lsp.type_analysis import TyAnalyzer, TyUnavailableError
 from citry_lsp.uri import file_uri_path
 
@@ -85,6 +85,10 @@ def check_project_python_types(
     editor gives ty, and the findings pass the same filter, so `citry check
     --types` reports a `citry.python.*` finding exactly when the editor would.
 
+    ty also types the `js_data()` values Citry's own rules leave unknown, and
+    `project` keeps those types, so run this before the TypeScript check that
+    reads them.
+
     Pass the ``documents`` that ``project_documents()`` returned to reuse
     them; otherwise the files are read again.
 
@@ -106,6 +110,9 @@ async def _check_project_python_types(
     analyzer = TyAnalyzer(workspace, request_timeout=_BATCH_REQUEST_TIMEOUT_SECONDS)
     results: list[ProjectTypeFinding] = []
     try:
+        await infer_js_data_value_types(analyzer, project, documents)
+        if analyzer.failure is not None:
+            raise TyUnavailableError(analyzer.failure)
         for uri, document in sorted(documents.items()):
             findings = await semantic_diagnostics(analyzer, document, project, documents)
             # The editor shows nothing when ty fails, but a command must say so.

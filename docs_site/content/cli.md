@@ -167,6 +167,11 @@ unknown-name finding is left out, because Citry's
 [`citry.template.unknown-variable`](/ide/diagnostics/#citry.template.unknown-variable)
 rule reports that mistake.
 
+ty also types the `js_data()` values Citry has no rule for, such as a
+method call, before TypeScript runs, so TypeScript checks the browser code
+that reads them, as in the
+[editor](/ide/vscode/#complete-vue-expressions-and-component-javascript).
+
 An error makes the command exit with status 1, like any other error. A ty
 warning is reported but does not change the exit status. When the app's
 registry does not load, `--types` does not run and the report notes that.

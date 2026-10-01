@@ -26,13 +26,18 @@ All notable changes to `citry-lsp` are documented here.
 - The editor warns about a static HTML attribute value that the attribute
   does not accept, such as `draggable="treu"` or `<input type="datetime">`,
   and suggests the closest valid keyword.
+- The editor asks ty for the type of a `js_data()` value Citry has no
+  rule for, such as `self.labels()` or a list comprehension, so
+  completion, hover, and TypeScript checks know `this.labels` is a
+  `string[]` instead of `any`.
 
 ### Changed
 
 - A value Citry cannot type, such as an injection or a server event's
   result, is `any` in completion and hover.
-- A `js_data()` value types its key by the value's general type, such as
-  `boolean` for `False`.
+- A `js_data()` constant types its key by the value's general type, such
+  as `boolean` for `False`, while a `Literal` or `Enum` annotation keeps
+  its values, such as `"sm" | "md"`.
 - A `js_data()` value that reads attributes of a Kwargs field, such as
   `kwargs.task.lane`, types its key from the annotations of the classes
   it passes through, so `lane: str` makes `this.laneKey` a `string`
