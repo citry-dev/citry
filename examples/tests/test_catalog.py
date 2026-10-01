@@ -8,6 +8,8 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 C
 from examples._internal.catalog import EXAMPLES_ROOT, load_catalog
 from examples._internal.qualify import interpolate, project_environment
 
+from citry._embedded_provider import _remove_jsonc_trailing_commas, _strip_jsonc_comments
+
 EXPECTED_CITRY_APPS = {
     "demo-htmx": "app.citry_app:citry_app",
     "demo-project-board": "app.citry_app:citry_app",
@@ -73,7 +75,10 @@ def test_catalog_projects_include_locked_citry_editor_setup() -> None:
     assert not (EXAMPLES_ROOT / "starters" / ".vscode").exists()
 
     for project in load_catalog():
-        settings = json.loads(project.source.joinpath(".vscode/settings.json").read_text(encoding="utf-8"))
+        # VS Code reads settings.json as JSON with comments and trailing commas,
+        # so the test accepts what the editor accepts.
+        source = project.source.joinpath(".vscode/settings.json").read_text(encoding="utf-8")
+        settings = json.loads(_remove_jsonc_trailing_commas(_strip_jsonc_comments(source)))
         expected_settings = {
             "citry.python": "${workspaceFolder}/.venv/bin/python",
             "citry.app": EXPECTED_CITRY_APPS[project.id],
