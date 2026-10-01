@@ -11,7 +11,7 @@ from citry import Citry, Component
 from citry_ui import CSplitter, CSplitterPanel
 
 
-def _render(template: str, *, include_css: bool = False) -> str:
+def _render(template: str, *, include_css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     source = template + ("<c-css />" if include_css else "")
@@ -20,7 +20,8 @@ def _render(template: str, *, include_css: bool = False) -> str:
         citry = app
         template = source
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _tag(html: str, part: str, index: int = 0) -> str:
@@ -68,7 +69,7 @@ def test_public_schemas_and_aliases_are_exact() -> None:
 
 
 def test_two_panel_server_anatomy_and_accessible_separator() -> None:
-    html = _render(_two_panels('c-sizes="[30, 70]" variant="outline"'))
+    html = _render(_two_panels('c-sizes="[30, 70]" variant="outline"'), static_fallback=True)
     root = _tag(html, "splitter")
     panels = [_tag(html, "panel", index) for index in range(2)]
     handle = _tag(html, "handle")
@@ -94,7 +95,8 @@ def test_three_panels_create_two_adjacent_handles() -> None:
         '<c-CSplitterPanel id="a" label="A">A</c-CSplitterPanel>'
         '<c-CSplitterPanel id="b" label="B">B</c-CSplitterPanel>'
         '<c-CSplitterPanel id="c" label="C">C</c-CSplitterPanel>'
-        "</c-CSplitter>"
+        "</c-CSplitter>",
+        static_fallback=True,
     )
     assert len(re.findall('data-citry-ui-part="panel"', html.split("<script", 1)[0])) == 3
     assert len(re.findall('data-citry-ui-part="handle"', html.split("<script", 1)[0])) == 2
@@ -103,13 +105,13 @@ def test_three_panels_create_two_adjacent_handles() -> None:
 
 
 def test_vertical_layout_uses_horizontal_separator() -> None:
-    html = _render(_two_panels('orientation="vertical"'))
+    html = _render(_two_panels('orientation="vertical"'), static_fallback=True)
     assert 'data-orientation="vertical"' in _tag(html, "splitter")
     assert 'aria-orientation="horizontal"' in _tag(html, "handle")
 
 
 def test_equal_sizes_are_stable_without_explicit_vector() -> None:
-    html = _render(_two_panels())
+    html = _render(_two_panels(), static_fallback=True)
     assert 'style="flex: 50 1 0px;"' in _tag(html, "panel", 0)
     assert 'style="flex: 50 1 0px;"' in _tag(html, "panel", 1)
 
@@ -121,7 +123,8 @@ def test_panel_content_can_nest_a_fresh_splitter() -> None:
         '<c-CSplitterPanel id="outer-b" label="Outer B"><c-CSplitter orientation="vertical">'
         '<c-CSplitterPanel id="inner-a" label="Inner A">IA</c-CSplitterPanel>'
         '<c-CSplitterPanel id="inner-b" label="Inner B">IB</c-CSplitterPanel>'
-        "</c-CSplitter></c-CSplitterPanel></c-CSplitter>"
+        "</c-CSplitter></c-CSplitterPanel></c-CSplitter>",
+        static_fallback=True,
     )
     assert len(re.findall('data-citry-ui-part="splitter"', html.split("<script", 1)[0])) == 2
     assert 'data-panel-id="inner-a"' in html
@@ -132,7 +135,8 @@ def test_root_and_panel_attrs_reach_concrete_elements() -> None:
         '<c-CSplitter class_="brand" style="block-size:20rem" c-attrs="{\'data-test\': \'root\'}">'
         '<c-CSplitterPanel id="a" label="A" class_="primary" style="color:red" '
         "c-attrs=\"{'data-test': 'panel'}\">A</c-CSplitterPanel>"
-        '<c-CSplitterPanel id="b" label="B">B</c-CSplitterPanel></c-CSplitter>'
+        '<c-CSplitterPanel id="b" label="B">B</c-CSplitterPanel></c-CSplitter>',
+        static_fallback=True,
     )
     root = _tag(html, "splitter")
     panel = _tag(html, "panel")
@@ -194,19 +198,55 @@ def test_panel_outside_splitter_and_unknown_direct_content_fail() -> None:
     "template",
     [
         _two_panels("c-attrs=\"{'role': 'group'}\""),
-        _two_panels("c-attrs=\"{':data-orientation': 'orientation'}\""),
-        _two_panels("c-attrs=\"{'x-html': 'content'}\""),
         '<c-CSplitter><c-CSplitterPanel id="a" label="A" c-attrs="{\'role\': \'region\'}">A</c-CSplitterPanel>'
         '<c-CSplitterPanel id="b" label="B">B</c-CSplitterPanel></c-CSplitter>',
     ],
 )
-def test_owned_attrs_and_directives_are_rejected(template: str) -> None:
-    with pytest.raises(ValueError, match="cannot"):
+def test_owned_attrs_are_rejected(template: str) -> None:
+    with pytest.raises(ValueError, match="cannot override owned attribute"):
         _render(template)
 
 
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CSplitter", ":data-orientation"),
+        ("CSplitter", "v-bind:data-orientation"),
+        ("CSplitter", "v-html"),
+        ("CSplitter", "V-IF"),
+        ("CSplitter", "@pointerdown"),
+        ("CSplitterPanel", "#default"),
+        ("CSplitterPanel", ".data-size"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(owner: str, attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    template = (
+        _two_panels(attrs)
+        if owner == "CSplitter"
+        else (
+            f'<c-CSplitter><c-CSplitterPanel id="a" label="A" {attrs}>A</c-CSplitterPanel>'
+            '<c-CSplitterPanel id="b" label="B">B</c-CSplitterPanel></c-CSplitter>'
+        )
+    )
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        _render(template)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(_two_panels("c-attrs=\"{'x-data': '{}', 'hx-get': '/panes'}\""), static_fallback=True)
+
+    root = _tag(html, "splitter")
+    assert 'x-data="{}"' in root
+    assert 'hx-get="/panes"' in root
+
+
 def test_css_exposes_public_variables_environment_rules_and_parts() -> None:
-    html = _render(_two_panels(), include_css=True)
+    html = _render(_two_panels(), include_css=True, static_fallback=True)
     for token in (
         "--cui-splitter-min-block-size",
         "--cui-splitter-handle-size",

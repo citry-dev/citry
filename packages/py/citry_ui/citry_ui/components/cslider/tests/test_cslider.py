@@ -233,17 +233,42 @@ def test_invalid_server_inputs_fail_deterministically(component, kwargs, error, 
     ("component", "destination", "attribute"),
     [
         ("CSlider", "attrs", "data-disabled"),
-        ("CSlider", "attrs", "x-model"),
         ("CSlider", "input_attrs", "aria-valuenow"),
-        ("CSlider", "input_attrs", ":min"),
         ("CRangeSlider", "attrs", "id"),
         ("CRangeSlider", "lower_input_attrs", "aria-label"),
         ("CRangeSlider", "upper_input_attrs", "data-citry-hostile"),
     ],
 )
-def test_owned_runtime_and_dynamic_attributes_are_rejected(component, destination, attribute) -> None:
+def test_owned_and_runtime_attributes_are_rejected(component, destination, attribute) -> None:
     with pytest.raises(ValueError, match="cannot"):
         _render(f'<c-{component} c-{destination}="attributes" />', {"attributes": {attribute: "hostile"}})
+
+
+@pytest.mark.parametrize(
+    ("component", "destination", "attribute", "owner"),
+    [
+        ("CSlider", "attrs", "v-model", "CSlider attrs"),
+        ("CSlider", "attrs", "V-IF", "CSlider attrs"),
+        ("CSlider", "attrs", "#default", "CSlider attrs"),
+        ("CSlider", "input_attrs", ":min", "CSlider input attrs"),
+        ("CSlider", "input_attrs", "@input", "CSlider input attrs"),
+        ("CRangeSlider", "attrs", "v-bind:id", "CRangeSlider attrs"),
+        ("CRangeSlider", "lower_input_attrs", ".value", "CRangeSlider lower input attrs"),
+        ("CRangeSlider", "upper_input_attrs", "v-for", "CRangeSlider upper input attrs"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(component, destination, attribute, owner) -> None:
+    with pytest.raises(ValueError, match=re.escape(f"{owner} cannot contain the Vue directive {attribute!r}")):
+        _render(f'<c-{component} c-{destination}="attributes" />', {"attributes": {attribute: "hostile"}})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(
+        '<c-CSlider c-attrs="root" c-input_attrs="field" />',
+        {"root": {"x-data": "root"}, "field": {"x-init": "field"}},
+    )
+    assert 'x-data="root"' in html
+    assert 'x-init="field"' in html
 
 
 def test_explicit_range_label_overrides_remove_catalog_bindings() -> None:

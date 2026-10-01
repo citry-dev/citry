@@ -67,20 +67,19 @@ form submission and reset.
 
 ## Controlled values and callbacks
 
-Omitting client `value` leaves the component uncontrolled. Supplying it through
-`$c-props` makes every interaction a request: the thumb moves only after the
-owner returns the requested value. `onValueChange` fires during each accepted
+Omitting client `value` leaves the component uncontrolled. Supply it with a
+native Vue `:value` binding to make every interaction a request: the thumb
+moves only after the owner returns the requested value. Pass callback props
+with native Vue bindings as well. `onValueChange` fires during each accepted
 pointer or keyboard step. `onValueChangeEnd` fires once at the end of a pointer
 gesture and once after a keyboard request.
 
 ```citry
-<div x-data="{ price: ['20', '80'] }">
+<div>
   <c-CRangeSlider
     c-value="(20, 80)"
-    $c-props="{
-      value: price,
-      onValueChange: (next) => price = next,
-    }"
+    :value="price"
+    :onValueChange="(next) => price = next"
   />
 </div>
 ```
@@ -110,6 +109,9 @@ Choose `solid` or `subtle`, three sizes, horizontal or vertical orientation,
 and `never`, `interaction`, or `always` value bubbles. Use the documented CSS
 variables and part selectors for styling; `attrs` and input-attribute mappings
 cannot replace state, form, identity, or accessibility attributes owned by the
-component.
+component. They also reject Citry runtime attributes and any Vue directive
+syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings
+and listeners on the component tag in your template instead, for example
+`<c-CSlider :title="hint" :onValueChange="save">`.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/states.py" title="Compare Slider states" />

@@ -29,10 +29,8 @@ Choose a selection mode and give every Tag a unique value.
   label="Amenities"
   selection_mode="multiple"
   c-value="['wifi']"
-  $c-props="{
-    value: selectedAmenities,
-    onValueChange: (value) => selectedAmenities = value
-  }"
+  :value="selectedAmenities"
+  :onValueChange="(value) => selectedAmenities = value"
 >
   <c-CTag value="wifi">Wi-Fi</c-CTag>
   <c-CTag value="parking">Parking</c-CTag>
@@ -59,9 +57,7 @@ Backspace. Removal is a request: update your collection to remove the values.
 <c-CTagGroup
   label="Saved filters"
   removable
-  $c-props="{
-    onRemove: (values) => removeSavedFilters(values)
-  }"
+  :onRemove="(values) => removeSavedFilters(values)"
 >
   <c-CTag value="open">Open</c-CTag>
   <c-CTag value="assigned">Assigned to me</c-CTag>

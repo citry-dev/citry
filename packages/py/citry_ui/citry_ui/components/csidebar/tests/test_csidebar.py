@@ -12,7 +12,7 @@ from citry import Citry, Component
 from citry_ui import CSidebar
 
 
-def _render(source: str, *, css: bool = False) -> str:
+def _render(source: str, *, css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -20,7 +20,8 @@ def _render(source: str, *, css: bool = False) -> str:
         citry = app
         template = f"<main>{source}</main>{'<c-css />' if css else ''}"
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _tag(html: str, part: str, index: int = 0) -> str:
@@ -57,7 +58,7 @@ def test_public_schema_aliases_and_registration_are_exact() -> None:
 
 
 def test_default_sidebar_is_a_named_complementary_landmark() -> None:
-    html = _render('<c-CSidebar id="workspace" label="Workspace">Navigation</c-CSidebar>')
+    html = _render('<c-CSidebar id="workspace" label="Workspace">Navigation</c-CSidebar>', static_fallback=True)
     root = _tag(html, "sidebar")
     toggle = _tag(html, "toggle")
     panel = _tag(html, "panel")
@@ -84,7 +85,8 @@ def test_nav_offcanvas_and_optional_regions_render_exactly() -> None:
         '<c-CSidebar id="project" tag="nav" label="Project" c-collapsed="True" '
         'collapsible="offcanvas" side="inline-end" variant="floating" size="lg" c-sticky="True">'
         '<c-fill name="header">Header</c-fill><c-fill name="default">Links</c-fill>'
-        '<c-fill name="footer">Footer</c-fill><c-fill name="toggle">T</c-fill></c-CSidebar>'
+        '<c-fill name="footer">Footer</c-fill><c-fill name="toggle">T</c-fill></c-CSidebar>',
+        static_fallback=True,
     )
     root = _tag(html, "sidebar")
     panel = _tag(html, "panel")
@@ -103,7 +105,7 @@ def test_nav_offcanvas_and_optional_regions_render_exactly() -> None:
     assert 'aria-expanded="false"' in _tag(html, "toggle")
     assert "hidden" in panel
     assert "inert" in panel
-    assert ">T<" in html
+    assert re.search(r">\s*T\s*<", html) is not None
     assert _tag(html, "header").startswith("<header")
     assert _tag(html, "footer").startswith("<footer")
 
@@ -122,7 +124,8 @@ def test_class_style_and_allowed_attrs_merge_on_landmark() -> None:
     html = _render(
         '<c-CSidebar label="Tools" c-class_="[\'brand\']" '
         "c-style=\"{'--cui-sidebar-width':'18rem'}\" "
-        "c-attrs=\"{'data-test':'root','class':'extra','style':'color:red'}\">Tools</c-CSidebar>"
+        "c-attrs=\"{'data-test':'root','class':'extra','style':'color:red'}\">Tools</c-CSidebar>",
+        static_fallback=True,
     )
     root = _tag(html, "sidebar")
     assert all(name in root for name in ("cui-sidebar", "brand", "extra"))
@@ -158,13 +161,31 @@ def test_invalid_inputs_fail_closed(source: str, message: str) -> None:
         "{'aria-label':'Shadow'}",
         "{'data-collapsed':'false'}",
         "{'hidden':True}",
-        "{':data-size':'size'}",
-        "{'x-html':'unsafe'}",
+        "{'ref':'other'}",
     ],
 )
-def test_owned_attrs_and_replacing_directives_are_rejected(attrs: str) -> None:
-    with pytest.raises(ValueError, match="cannot"):
+def test_owned_attrs_are_rejected(attrs: str) -> None:
+    with pytest.raises(ValueError, match="cannot override owned attribute"):
         _render(f'<c-CSidebar label="A" c-attrs="{attrs}">A</c-CSidebar>')
+
+
+@pytest.mark.parametrize(
+    "key",
+    [":data-size", "v-bind:ref", "v-bind:data-size", ".hidden", "v-html", "v-if", "V-IF", "@click", "#default"],
+)
+def test_python_attrs_reject_vue_directives(key: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(f"CSidebar attrs cannot contain the Vue directive {key!r}")):
+        _render(f"""<c-CSidebar label="A" c-attrs="{{'{key}':'value'}}">A</c-CSidebar>""")
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(
+        """<c-CSidebar label="A" c-attrs="{'x-html':'panel', 'title':'Tools'}">A</c-CSidebar>""",
+        static_fallback=True,
+    )
+    root = _tag(html, "sidebar")
+    assert 'x-html="panel"' in root
+    assert 'title="Tools"' in root
 
 
 def test_css_exposes_public_variables_parts_and_environment_rules() -> None:

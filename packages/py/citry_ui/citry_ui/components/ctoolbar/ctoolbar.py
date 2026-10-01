@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CToolbarOrientation = Literal["horizontal", "vertical"]
@@ -18,20 +18,6 @@ _ORIENTATIONS = ("horizontal", "vertical")
 _VARIANTS = ("plain", "soft", "outline")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -79,32 +65,19 @@ def _choice(input_name: str, value: object, allowed: tuple[str, ...]) -> str:
     return plain
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    if attribute.startswith("x-bind:"):
-        return attribute.removeprefix("x-bind:").split(".", 1)[0]
-    if attribute.startswith((":", ".")):
-        return attribute[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         msg = f"CToolbar attrs must be a mapping or None, got {attrs!r}."
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, _OWNED_ATTRS, "CToolbar attrs")
+    # A Vue directive could rebind an owned attribute, add a listener, or
+    # change the structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CToolbar")
     for key in copied:
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"CToolbar attrs cannot contain reserved Citry runtime attribute {key!r}."
-            raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"CToolbar attrs cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if _dynamic_target(normalized) in _OWNED_ATTRS:
-            msg = f"CToolbar attrs cannot dynamically bind owned attribute {key!r}."
             raise ValueError(msg)
     return copied
 
@@ -144,10 +117,12 @@ class CToolbar(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         return {
-            "orientation": _choice("orientation", kwargs.orientation, _ORIENTATIONS),
-            "loop": bool(kwargs.loop),
-            "variant": _choice("variant", kwargs.variant, _VARIANTS),
-            "size": _choice("size", kwargs.size, _SIZES),
+            "serverDefaults": {
+                "orientation": _choice("orientation", kwargs.orientation, _ORIENTATIONS),
+                "loop": bool(kwargs.loop),
+                "variant": _choice("variant", kwargs.variant, _VARIANTS),
+                "size": _choice("size", kwargs.size, _SIZES),
+            }
         }
 
     template = """
@@ -159,7 +134,7 @@ class CToolbar(LibraryComponent):
         c-aria-label="label"
         c-aria-orientation="orientation"
         c-data-orientation="orientation"
-        c-data-loop="loop"
+        c-data-loop="'' if loop else None"
         c-data-variant="variant"
         c-data-size="size"
       ><c-slot required /></div>
@@ -168,8 +143,11 @@ class CToolbar(LibraryComponent):
     js = r"""
       $component({
         props: {orientation: {}, loop: {}, variant: {}, size: {}},
-        init: ({els, data, props, effect}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const invalidEpisodes = new Set();
           const originalTabindex = new Map();
           const excludedComposite = '[role="menu"], [role="listbox"], [role="tree"], '
@@ -366,7 +344,8 @@ class CToolbar(LibraryComponent):
           const observer = new MutationObserver((records) => {
             const meaningful = records.some((record) => {
               if (record.attributeName !== "tabindex") return true;
-              const target = record.target;
+              // Only a `tabindex` attribute change gets here, and an attribute's target is always an element.
+              const target = /** @type {Element} */ (record.target);
               if (!controls.includes(target)) return true;
               const expected = target === current && !unavailable(target) ? "0" : "-1";
               return target.getAttribute("tabindex") !== expected;

@@ -8,9 +8,6 @@ class ServerErrors(Component):
     template = """
       <section
         class="account-request"
-        x-data="{
-          error: 'That observer handle is already registered.',
-        }"
       >
         <header>
           <p>Observer network</p>
@@ -19,11 +16,9 @@ class ServerErrors(Component):
 
         <c-CForm @submit.prevent="void 0">
           <c-CField
-            $c-props="{
-              invalid: Boolean(
-                Alpine.$data($root.closest('.account-request')).error
-              ),
-            }"
+            :invalid="Boolean(
+                error
+              )"
           >
             <c-fill name="label">
               Observer handle
@@ -32,12 +27,12 @@ class ServerErrors(Component):
               <c-CInput
                 name="handle"
                 value="night-heron"
-                @input="Alpine.$data($root.closest('.account-request')).error = ''"
+                @input="error = ''"
               />
             </c-fill>
             <c-fill name="error">
               <span
-                x-text="Alpine.$data($root.closest('.account-request')).error"
+                v-text="error"
               ></span>
             </c-fill>
           </c-CField>
@@ -50,6 +45,15 @@ class ServerErrors(Component):
           The application clears this server message when the rejected field changes.
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            error: 'That observer handle is already registered.',
+          };
+        },
+      });
     """
 
     css = """

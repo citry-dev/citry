@@ -14,7 +14,7 @@ class AlertVariants(Component):
     template = """
       <section class="alert-variants" aria-label="Alert variants">
         <c-for each="variant in variants">
-          <c-CAlert intent="warn" c-variant="variant[0]">
+          <c-CAlert #c-key="variant[0]" intent="warn" c-variant="variant[0]">
             <c-fill name="title">{{ variant[1] }} warning</c-fill>
             <c-fill name="default">
               High cirrus may reduce contrast on faint galaxies.

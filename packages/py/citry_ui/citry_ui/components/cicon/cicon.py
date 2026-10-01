@@ -5,12 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Literal, get_args
+from typing import TYPE_CHECKING, Any, Literal, get_args
 
-from citry import LibraryComponent, Markup, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry import LibraryComponent, const_value
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_choice
 from citry_ui.components.cicon._catalog import ICON_GLYPHS
+
+if TYPE_CHECKING:
+    from citry import Citry, CitryRender
 
 CIconSize = Literal["sm", "md", "lg"]
 CIconName = Literal[
@@ -122,11 +125,16 @@ _OWNED_ATTRS = frozenset(
 @dataclass(frozen=True, slots=True)
 class _RegisteredIconGlyph:
     name: str
-    markup: Markup
+    # The glyph geometry already rendered as Citry output. A template places
+    # it with `{{ glyph.content }}` inside its `<svg>`. The resolver never
+    # hands out the catalog string itself, because `{{ }}` escapes a plain
+    # string, and the page would then show `<path ...>` as text where the
+    # icon should be.
+    content: CitryRender
     logical: bool
 
 
-def _resolve_registered_icon(name: object, component_name: str) -> _RegisteredIconGlyph:
+def _resolve_registered_icon(citry: Citry, name: object, component_name: str) -> _RegisteredIconGlyph:
     raw_name = const_value(name)
     _reject_trusted_html(raw_name, "name")
     if not isinstance(raw_name, str):
@@ -142,7 +150,9 @@ def _resolve_registered_icon(name: object, component_name: str) -> _RegisteredIc
     glyph_name = _SEMANTIC_ALIASES.get(plain_name, plain_name)
     return _RegisteredIconGlyph(
         name=plain_name,
-        markup=Markup(ICON_GLYPHS[glyph_name]),  # noqa: S704 - generated package-owned allowlist
+        # The catalog string is rendered as a Citry template, so the server
+        # and the browser both build real SVG elements from it.
+        content=citry.render_template(ICON_GLYPHS[glyph_name]),
         logical=plain_name in _LOGICAL_DIRECTION_NAMES,
     )
 
@@ -176,6 +186,9 @@ def _validate_icon_attrs(attrs: Mapping[str, object] | None) -> None:
         msg = f"CIcon attrs must be a mapping or None, got {attrs!r}."
         raise TypeError(msg)
     reject_owned_attrs(attrs, _OWNED_ATTRS, "CIcon")
+    # The SVG must stay inert, and a Vue directive could bind geometry or the
+    # accessible name, change structure, or attach a listener.
+    reject_vue_directive_attrs(attrs, "CIcon")
     for key in attrs or {}:
         normalized = key.lower()
         if normalized.startswith("aria-") and normalized not in _ALLOWED_ARIA_ATTRS:
@@ -184,9 +197,9 @@ def _validate_icon_attrs(attrs: Mapping[str, object] | None) -> None:
         if normalized.startswith(("data-citry-", "data-cev", "data-cid")):
             msg = f"CIcon attrs cannot contain reserved Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        if normalized.startswith(("@", ":", ".", "$", "c-", "x-")) or (
-            normalized.startswith("on") and len(normalized) > 2
-        ):
+        # Citry `c-` attributes and inline `on*` handlers would also turn the
+        # SVG into something that runs code.
+        if normalized.startswith(("$", "c-")) or (normalized.startswith("on") and len(normalized) > 2):
             msg = f"CIcon attrs cannot contain executable browser attribute {key!r}."
             raise ValueError(msg)
 
@@ -219,7 +232,7 @@ class CIcon(LibraryComponent):
             ("attrs", kwargs.attrs),
         ):
             _reject_trusted_html(value, input_name)
-        resolved_icon = _resolve_registered_icon(kwargs.name, "CIcon")
+        resolved_icon = _resolve_registered_icon(self.citry, kwargs.name, "CIcon")
         if kwargs.label is not None and not isinstance(kwargs.label, str):
             msg = f"CIcon label must be a string or None, got {kwargs.label!r}."
             raise TypeError(msg)
@@ -231,7 +244,7 @@ class CIcon(LibraryComponent):
 
         return {
             "attrs": merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style),
-            "glyph": resolved_icon.markup,
+            "glyph": resolved_icon.content,
             "label": kwargs.label,
             "role": "img" if kwargs.label is not None else None,
             "aria_hidden": "true" if kwargs.label is None else None,

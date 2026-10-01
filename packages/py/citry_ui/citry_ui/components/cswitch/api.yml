@@ -20,8 +20,8 @@ inputs:
       - {id: label-pos, name: label_pos, type: {display: '"start" | "end"', interfaces: [CSwitchLabelPos]}, default: {kind: literal, value: end}, effect: Places the visible label before or after the track.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles and merges them with attrs.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting metadata and targeted Alpine attributes to the root.}
-      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting naming metadata and native listeners to the input.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting static metadata to the root.}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting static naming metadata to the input.}
   - id: cswitch-client-inputs
     component: CSwitch
     channel: client

@@ -8,11 +8,9 @@ class MenuPlacement(Component):
     template = """
       <section
         class="archive-placement-demo"
-        x-data="{placement: 'bottom-start', rtl: false, match: true}"
         :dir="rtl ? 'rtl' : 'ltr'"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
-        <c-CMenu $c-props="{placement, matchWidth: match}">
+        <c-CMenu v-bind="{placement, matchWidth: match}">
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
             <c-CButton
               class_="archive-placement-demo__wide"
@@ -34,6 +32,23 @@ class MenuPlacement(Component):
           </c-fill>
         </c-CMenu>
       </section>
+    """
+
+    js = r"""
+      $component({
+        data(){return {placement: 'bottom-start', rtl: false, match: true};},
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

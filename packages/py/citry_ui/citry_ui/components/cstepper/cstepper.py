@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CStepperOrientation = Literal["horizontal", "vertical"]
@@ -20,9 +20,6 @@ _VARIANTS = ("plain", "soft", "outline")
 _SIZES = ("sm", "md", "lg")
 _STEPPER_CONTEXT = "citry_ui_stepper"
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -109,6 +106,13 @@ class _StepperRegistry:
     steps: list[_StepDeclaration] = field(default_factory=list)
 
 
+class _StepRow(TypedDict):
+    """One declared step and its position, as CInternalStepper passes it to CInternalStep."""
+
+    declaration: _StepDeclaration
+    index: int
+
+
 def _plain(name: str, value: object) -> str:
     raw = const_value(value)
     if not isinstance(raw, str):
@@ -136,14 +140,6 @@ def _active(value: object) -> int:
     return raw
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     attrs: Mapping[str, object] | None,
@@ -155,14 +151,13 @@ def _attrs(
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, owner)
     for key in copied:
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} attrs cannot dynamically bind owned attribute {key!r}.")
     return merge_root_attrs(copied, class_, style)
 
 
@@ -234,11 +229,18 @@ class CStepper(LibraryComponent):
         }
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
-        return self._stepper_data
+        return {
+            "label": self._stepper_data["label"],
+            "interactive": self._stepper_data["interactive"],
+            "serverDefaults": {
+                key: value for key, value in self._stepper_data.items() if key not in {"label", "interactive"}
+            },
+        }
 
     template = """
       <c-CInternalStepperDeclarations><c-slot required /></c-CInternalStepperDeclarations>
       <c-CInternalStepper
+        ref="stepperRoot"
         c-label="label"
         c-active="active"
         c-interactive="interactive"
@@ -255,8 +257,11 @@ class CStepper(LibraryComponent):
     js = r"""
       $component({
         props: {active: {}, linear: {}, disabled: {}, orientation: {}, variant: {}, size: {}, onActiveChange: {}},
-        init: ({els, data, props, effect}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$refs.stepperRoot.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const stepSelector = ':scope > [data-citry-ui-part="list"] > [data-citry-ui-part="step"]';
           const invalidEpisodes = new Set();
           const prior = root.__citryUiStepperRuntime;
@@ -504,7 +509,8 @@ class CInternalStepperDeclarations(LibraryComponent):
 
 
 class CInternalStepper(LibraryComponent):
-    transparent = True
+    # This component owns the physical stepper root and is the runtime ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -533,13 +539,16 @@ class CInternalStepper(LibraryComponent):
         if kwargs.registry.steps[kwargs.active].disabled:
             raise ValueError(f"CStepper active index {kwargs.active} identifies a disabled Step.")
         self.unprovide(_STEPPER_CONTEXT)
+        steps: list[_StepRow] = [
+            {"declaration": declaration, "index": index} for index, declaration in enumerate(kwargs.registry.steps)
+        ]
         root_attrs = {
             **kwargs.attrs,
             "aria-label": kwargs.label,
             "data-active": kwargs.active,
-            "data-interactive": kwargs.interactive,
-            "data-linear": kwargs.linear,
-            "data-disabled": kwargs.disabled,
+            "data-interactive": "" if kwargs.interactive else None,
+            "data-linear": "" if kwargs.linear else None,
+            "data-disabled": "" if kwargs.disabled else None,
             "data-orientation": kwargs.orientation,
             "data-variant": kwargs.variant,
             "data-size": kwargs.size,
@@ -550,9 +559,7 @@ class CInternalStepper(LibraryComponent):
             "linear": kwargs.linear,
             "root_disabled": kwargs.disabled,
             "attrs": root_attrs,
-            "steps": [
-                {"declaration": declaration, "index": index} for index, declaration in enumerate(kwargs.registry.steps)
-            ],
+            "steps": steps,
             "count": len(kwargs.registry.steps),
         }
 
@@ -612,10 +619,10 @@ class CInternalStep(LibraryComponent):
                 **declaration.attrs,
                 "data-index": kwargs.index,
                 "data-state": state,
-                "data-own-disabled": declaration.disabled,
-                "data-disabled": unavailable,
-                "data-optional": declaration.optional,
-                "data-error": declaration.error,
+                "data-own-disabled": "" if declaration.disabled else None,
+                "data-disabled": "" if unavailable else None,
+                "data-optional": "" if declaration.optional else None,
+                "data-error": "" if declaration.error else None,
             },
             "interactive": kwargs.interactive,
             "unavailable": unavailable,

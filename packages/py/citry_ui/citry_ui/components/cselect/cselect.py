@@ -18,6 +18,7 @@ from citry_ui.components._attrs import (
     get_html_form_owner,
     merge_root_attrs,
     pop_html_attr,
+    reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._validation import (
@@ -50,20 +51,6 @@ _PLACEMENTS = ("bottom-start", "bottom-end", "top-start", "top-end")
 _VARIANTS = ("outline", "filled", "plain")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -200,12 +187,13 @@ def _plain(owner: str, name: str, value: object, *, optional: bool = False) -> s
     return plain
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
+def _plain_js_value(value: object) -> object:
+    value = const_value(value)
+    if isinstance(value, dict):
+        return {str(const_value(key)): _plain_js_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain_js_value(item) for item in value]
+    return value
 
 
 def _attrs(
@@ -215,7 +203,6 @@ def _attrs(
     owned: frozenset[str],
     class_: CClassValue | None = None,
     style: CStyleValue | None = None,
-    dynamic_only: frozenset[str] = frozenset(),
 ) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         msg = f"{owner} {input_name} must be a mapping or None, got {attrs!r}."
@@ -226,17 +213,12 @@ def _attrs(
         if not isinstance(key, str):
             msg = f"{owner} {input_name} requires string keys, got {key!r}."
             raise TypeError(msg)
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             msg = f"{owner} {input_name} cannot contain Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            msg = f"{owner} {input_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if _dynamic_target(normalized) in owned | dynamic_only:
-            msg = f"{owner} {input_name} cannot dynamically bind owned attribute {key!r}."
-            raise ValueError(msg)
+    # A Vue directive could rebind the selection, listbox wiring, or Form
+    # state this component owns, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, f"{owner} {input_name.removesuffix('attrs').rstrip('_')}".rstrip())
     return merge_root_attrs(copied, class_, style)
 
 
@@ -426,13 +408,7 @@ class CSelect(LibraryComponent):
             )
             invalid = kwargs.invalid if kwargs.invalid is not None else False
 
-        trigger_attrs = _attrs(
-            "CSelect",
-            "trigger_attrs",
-            kwargs.trigger_attrs,
-            _TRIGGER_OWNED,
-            dynamic_only=frozenset({"aria-describedby", "aria-errormessage"}),
-        )
+        trigger_attrs = _attrs("CSelect", "trigger_attrs", kwargs.trigger_attrs, _TRIGGER_OWNED)
         aria_label = pop_html_attr(trigger_attrs, "aria-label", component_name="CSelect trigger_attrs")
         aria_labelledby = pop_html_attr(trigger_attrs, "aria-labelledby", component_name="CSelect trigger_attrs")
         external_described_by = pop_html_attr(
@@ -478,6 +454,7 @@ class CSelect(LibraryComponent):
             "required": required,
             "disabled": disabled,
             "readonly": readonly,
+            "inheritsReadonly": field is None and kwargs.readonly is None,
             "invalid": invalid,
             "loop": bool(kwargs.loop),
             "placement": kwargs.placement,
@@ -533,7 +510,23 @@ class CSelect(LibraryComponent):
             "listbox_attrs": _attrs("CSelect", "listbox_attrs", kwargs.listbox_attrs, _LISTBOX_OWNED),
         }
         self._cui_select_snapshot = snapshot
-        self._cui_select_data = data
+        prop_names = {
+            "value",
+            "open",
+            "required",
+            "disabled",
+            "readonly",
+            "invalid",
+            "loop",
+            "placement",
+            "matchWidth",
+            "variant",
+            "size",
+        }
+        self._cui_select_data = {
+            (f"server{name[0].upper()}{name[1:]}" if name in prop_names else name): _plain_js_value(value)
+            for name, value in data.items()
+        }
         return snapshot
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
@@ -546,13 +539,13 @@ class CSelect(LibraryComponent):
     template = """
       <div
         class="cui-select"
-        c-data-open="open"
-        c-data-empty="empty"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-match-width="matchWidth"
+        c-data-open="'' if open else None"
+        c-data-empty="'' if empty else None"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-match-width="'' if matchWidth else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="attrs"
@@ -641,8 +634,8 @@ class CSelect(LibraryComponent):
                   c-aria-selected="'true' if option.selected else 'false'"
                   c-aria-disabled="'true' if option.disabled else 'false'"
                   c-data-value="option.value"
-                  c-data-selected="option.selected"
-                  c-data-disabled="option.disabled"
+                  c-data-selected="'' if option.selected else None"
+                  c-data-disabled="'' if option.disabled else None"
                   data-citry-ui-part="option"
                 >
                   <span c-id="option.label_id" data-citry-ui-part="option-label">{{ option.label }}</span>
@@ -676,8 +669,8 @@ class CSelect(LibraryComponent):
                     c-aria-selected="'true' if option.selected else 'false'"
                     c-aria-disabled="'true' if option.disabled else 'false'"
                     c-data-value="option.value"
-                    c-data-selected="option.selected"
-                    c-data-disabled="option.disabled"
+                    c-data-selected="'' if option.selected else None"
+                    c-data-disabled="'' if option.disabled else None"
                     data-citry-ui-part="option"
                   >
                     <span c-id="option.label_id" data-citry-ui-part="option-label">{{ option.label }}</span>

@@ -8,12 +8,10 @@ from typing import Any, ClassVar, cast
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._validation import validate_boolean
 from citry_ui.components.cbutton.cbutton import (
-    _CBUTTON_RUNTIME_GENERATION,
-    _CBUTTON_RUNTIME_KEY,
     _CBUTTON_SHARED_ASSETS,
     CButtonIntent,
     CButtonLoadingPos,
@@ -23,15 +21,11 @@ from citry_ui.components.cbutton.cbutton import (
     _build_button_snapshot,
 )
 from citry_ui.components.cmenu.cmenu import (
-    _CMENU_ROOT_RUNTIME_GENERATION,
-    _CMENU_ROOT_RUNTIME_KEY,
     _CMENU_SHARED_ASSETS,
     CMenuPlacement,
     _build_menu_root_snapshot,
 )
 from citry_ui.components.csplitbutton._submit_registry import (
-    _SPLIT_BUTTON_SUBMIT_RUNTIME_GENERATION,
-    _SPLIT_BUTTON_SUBMIT_RUNTIME_KEY,
     SPLIT_BUTTON_SUBMIT_RUNTIME_DEPENDENCY,
 )
 
@@ -98,25 +92,7 @@ _PRIMARY_EXTRA_ATTRS = {
 }
 _TRIGGER_EXTRA_ATTRS = {"aria-describedby", "aria-details", "aria-keyshortcuts"}
 _MENU_EXTRA_ATTRS = {"aria-describedby", "aria-details", "aria-keyshortcuts"}
-_OWNERSHIP_DIRECTIVES = {
-    "x-data",
-    "x-init",
-    "x-effect",
-    "x-if",
-    "x-for",
-    "x-teleport",
-    "x-ignore",
-    "x-id",
-    "x-show",
-    "x-html",
-    "x-text",
-    "x-model",
-    "x-modelable",
-    "x-bind",
-    "$c-props",
-    "c-bind",
-    "c-props",
-}
+_CITRY_DIRECTIVES = {"$c-props", "c-bind", "c-props"}
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ROOT_RESERVED = {
     "id",
@@ -274,14 +250,6 @@ def _plain_id(value: object, render_id: str) -> str:
     return plain
 
 
-def _dynamic_target(name: str) -> str | None:
-    if name.startswith("x-bind:"):
-        return name.removeprefix("x-bind:").split(".", 1)[0]
-    if name.startswith((":", ".")):
-        return name[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_destination_attrs(
     input_name: str,
     value: Mapping[str, object] | None,
@@ -295,6 +263,9 @@ def _copy_destination_attrs(
         msg = f"CSplitButton {input_name} must be a mapping or None, got {value!r}."
         raise TypeError(msg)
     attrs = dict(value)
+    # A Vue directive could rebind an owned attribute, add a listener, or change
+    # the structure of a part this component renders, so none may arrive through Python data.
+    reject_vue_directive_attrs(attrs, f"CSplitButton {input_name.removesuffix('attrs').replace('_', ' ')}".rstrip())
     seen: set[str] = set()
     allowed = _COMMON_ATTRS | extra_allowed
     for key in attrs:
@@ -309,21 +280,12 @@ def _copy_destination_attrs(
         if normalized.startswith(_RUNTIME_PREFIXES) or normalized in reserved:
             msg = f"CSplitButton {input_name} cannot override owned attribute {key!r}."
             raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
+        if normalized in _CITRY_DIRECTIVES:
             msg = f"CSplitButton {input_name} cannot use ownership directive {key!r}."
             raise ValueError(msg)
         if normalized.startswith("on"):
             msg = f"CSplitButton {input_name} cannot use raw event attribute {key!r}."
             raise ValueError(msg)
-        if normalized.startswith(("@", "x-on:")):
-            continue
-        target = _dynamic_target(normalized)
-        if target is not None:
-            if target in reserved or not (target in allowed or target.startswith("data-")):
-                msg = f"CSplitButton {input_name} cannot dynamically bind attribute {target!r}."
-                raise ValueError(msg)
-            continue
         if normalized not in allowed and not normalized.startswith("data-"):
             msg = f"CSplitButton {input_name} does not allow attribute {key!r}."
             raise ValueError(msg)
@@ -551,20 +513,22 @@ class CSplitButton(LibraryComponent):
             "label": snapshot["label"],
             "menuLabel": snapshot["menu_label"],
             "primaryType": kwargs.type,
-            "disabled": kwargs.disabled,
-            "primaryDisabled": kwargs.primary_disabled,
-            "menuDisabled": kwargs.menu_disabled,
-            "loading": kwargs.loading,
-            "variant": kwargs.variant,
-            "intent": kwargs.intent,
-            "size": kwargs.size,
-            "block": kwargs.block,
-            "loadingPosition": kwargs.loading_pos,
-            "open": kwargs.open,
-            "loop": kwargs.loop,
-            "placement": kwargs.placement,
-            "matchWidth": kwargs.match_width,
-            "closeOnSelect": kwargs.close_on_select,
+            "serverDefaults": {
+                "disabled": kwargs.disabled,
+                "primaryDisabled": kwargs.primary_disabled,
+                "menuDisabled": kwargs.menu_disabled,
+                "loading": kwargs.loading,
+                "variant": kwargs.variant,
+                "intent": kwargs.intent,
+                "size": kwargs.size,
+                "block": kwargs.block,
+                "loadingPosition": kwargs.loading_pos,
+                "open": kwargs.open,
+                "loop": kwargs.loop,
+                "placement": kwargs.placement,
+                "matchWidth": kwargs.match_width,
+                "closeOnSelect": kwargs.close_on_select,
+            },
         }
 
     template = """
@@ -572,16 +536,16 @@ class CSplitButton(LibraryComponent):
         class="cui-split-button"
         c-id="root_id"
         c-aria-label="label"
-        c-data-disabled="disabled"
-        c-data-primary-disabled="primary_disabled"
-        c-data-menu-disabled="menu_disabled"
-        c-data-loading="loading"
+        c-data-disabled="'' if disabled else None"
+        c-data-primary-disabled="'' if primary_disabled else None"
+        c-data-menu-disabled="'' if menu_disabled else None"
+        c-data-loading="'' if loading else None"
         c-data-loading-position="loading_pos"
-        c-data-open="open"
+        c-data-open="'' if open else None"
         c-data-variant="variant"
         c-data-intent="intent"
         c-data-size="size"
-        c-data-block="block"
+        c-data-block="'' if block else None"
         c-bind="root_attrs"
         role="group"
         data-citry-menu-host
@@ -594,14 +558,14 @@ class CSplitButton(LibraryComponent):
           c-disabled="primary_disabled_without_js"
           c-aria-busy="primary_aria_busy"
           c-aria-disabled="primary_aria_disabled"
-          c-data-loading="loading"
-          c-data-disabled="primary_disabled"
+          c-data-loading="'' if loading else None"
+          c-data-disabled="'' if primary_disabled else None"
           c-data-variant="variant"
           c-data-intent="intent"
           c-data-size="size"
           c-data-loading-position="loading_pos"
-          c-data-citry-button-has-start="has_start"
-          c-data-citry-button-has-end="has_end"
+          c-data-citry-button-has-start="'' if has_start else None"
+          c-data-citry-button-has-end="'' if has_end else None"
           c-bind="primary_attrs"
           data-citry-ui-part="split-button-primary"
         >
@@ -645,7 +609,7 @@ class CSplitButton(LibraryComponent):
           c-aria-controls="surface_id"
           c-aria-expanded="'true' if open else 'false'"
           c-disabled="menu_disabled"
-          c-data-disabled="menu_disabled"
+          c-data-disabled="'' if menu_disabled else None"
           c-data-variant="variant"
           c-data-intent="intent"
           c-data-size="size"
@@ -667,194 +631,7 @@ class CSplitButton(LibraryComponent):
       </div>
     """
 
-    js = (
-        """
-      const buttonRuntime = globalThis[Symbol.for("__BUTTON_RUNTIME_KEY__")];
-      const menuRuntime = globalThis[Symbol.for("__MENU_RUNTIME_KEY__")];
-      const submitRuntime = globalThis[Symbol.for("__SUBMIT_RUNTIME_KEY__")];
-      if (buttonRuntime?.generation !== __BUTTON_RUNTIME_GENERATION__) {
-        throw new Error("[citry-ui] CSplitButton Button runtime dependency did not load.");
-      }
-      if (menuRuntime?.generation !== __MENU_RUNTIME_GENERATION__) {
-        throw new Error("[citry-ui] CSplitButton Menu runtime dependency did not load.");
-      }
-      if (submitRuntime?.generation !== __SUBMIT_RUNTIME_GENERATION__) {
-        throw new Error("[citry-ui] CSplitButton submit runtime dependency did not load.");
-      }
-
-      $component({
-        props: {
-          open: {},
-          disabled: {},
-          primaryDisabled: {},
-          menuDisabled: {},
-          loading: {},
-          variant: {},
-          intent: {},
-          size: {},
-          block: {},
-          loadingPosition: {},
-          loop: {},
-          placement: {},
-          matchWidth: {},
-          closeOnSelect: {},
-          onOpenChange: {},
-          onAction: {},
-        },
-        init: (context) => {
-          const { els, data, props, effect, inject } = context;
-          const root = els[0];
-          let submitRegistration = null;
-          let controller = null;
-          const anatomy = menuRuntime.helpers.createCompoundAnatomy(root, data, () => {
-            applyCompoundConfiguration(configuration);
-            controller?.repairOwned();
-            controller?.refreshRootScope();
-            submitRegistration?.refresh();
-          });
-          const { primary, trigger, surface, indicator } = anatomy;
-          const formContext = inject(Symbol.for("citry-ui:form"), null);
-          const allowed = {
-            variant: ["solid", "outline", "ghost"],
-            intent: ["primary", "neutral", "success", "warn", "danger"],
-            size: ["sm", "md", "lg"],
-            loadingPosition: ["start", "center", "end"],
-          };
-          const resolver = buttonRuntime.helpers.createResolver(
-            "CSplitButton", root, data, props, allowed,
-          );
-          let configuration = {
-            disabled: data.disabled,
-            primaryDisabled: data.primaryDisabled,
-            menuDisabled: data.menuDisabled,
-            loading: data.loading,
-            variant: data.variant,
-            intent: data.intent,
-            size: data.size,
-            block: data.block,
-            loadingPosition: data.loadingPosition,
-          };
-
-          const effectiveFormDisabled = () => Boolean(formContext?.disabled);
-          const applyCompoundConfiguration = (next) => {
-            configuration = next;
-            buttonRuntime.helpers.applyCompoundConfiguration(
-              root, primary, trigger, indicator, effectiveFormDisabled(), next,
-            );
-          };
-          const menuData = {
-            open: data.open,
-            disabled: data.disabled || data.menuDisabled,
-            loop: data.loop,
-            placement: data.placement,
-            matchWidth: data.matchWidth,
-            closeOnSelect: data.closeOnSelect,
-            size: data.size,
-          };
-          const menuProps = {};
-          Object.defineProperties(menuProps, {
-            open: { get: () => props.open },
-            disabled: {
-              get: () => (
-                resolver.boolean("disabled")
-                || resolver.boolean("menuDisabled")
-                || effectiveFormDisabled()
-              ),
-            },
-            loop: { get: () => resolver.boolean("loop") },
-            placement: { get: () => props.placement },
-            matchWidth: { get: () => resolver.boolean("matchWidth") },
-            closeOnSelect: { get: () => resolver.boolean("closeOnSelect") },
-            size: { get: () => props.size },
-            onOpenChange: { get: () => props.onOpenChange },
-            onAction: { get: () => props.onAction },
-          });
-          const menuContext = {
-            ...context,
-            data: menuData,
-            props: menuProps,
-          };
-          controller = menuRuntime.mount(menuContext, {
-            anchor: root,
-            committedOpen: (open) => root.toggleAttribute("data-open", open),
-            componentName: "CSplitButton",
-            compound: true,
-            controller: true,
-            disabledChanged: () => applyCompoundConfiguration(configuration),
-            disabledFocusTarget: () => (
-              primary.isConnected
-              && !primary.matches(":disabled")
-              && primary.getClientRects().length > 0
-                ? primary
-                : null
-            ),
-            host: root,
-            ignoreFocusOutside: (source) => (
-              submitRegistration?.consumeInvalidFocus(source) ?? false
-            ),
-            insideElements: [root],
-            ownsTriggerDisabled: true,
-            readyChanged: (ready) => {
-              root.toggleAttribute("data-citry-split-button-initialized", ready);
-            },
-            surface,
-            trigger,
-          });
-
-          const onPrimaryClick = (event) => {
-            controller.refreshRootScope();
-            submitRegistration?.refresh();
-            if (!anatomy.refresh()) {
-              event.preventDefault();
-              event.stopImmediatePropagation();
-              return;
-            }
-            if (!buttonRuntime.helpers.guardActivation(primary, configuration, event)) {
-              return;
-            }
-            controller.beginPrimaryAction(primary, event);
-          };
-          primary.addEventListener("click", onPrimaryClick, true);
-          if (data.primaryType === "submit") {
-            submitRegistration = submitRuntime.register(primary, {
-              available: (event) => (
-                anatomy.valid()
-                && buttonRuntime.helpers.guardActivation(primary, configuration, event)
-              ),
-              hasAcceptedClick: () => controller.hasPrimaryClickToken(primary),
-              observe: (event) => controller.observePrimarySubmit(event),
-            });
-          }
-
-          effect(() => {
-            applyCompoundConfiguration({
-              disabled: resolver.boolean("disabled"),
-              primaryDisabled: resolver.boolean("primaryDisabled"),
-              menuDisabled: resolver.boolean("menuDisabled"),
-              loading: resolver.boolean("loading"),
-              variant: resolver.choice("variant"),
-              intent: resolver.choice("intent"),
-              size: resolver.choice("size"),
-              block: resolver.boolean("block"),
-              loadingPosition: resolver.choice("loadingPosition"),
-            });
-          });
-          return () => {
-            root.removeAttribute("data-citry-split-button-initialized");
-            primary.removeEventListener("click", onPrimaryClick, true);
-            anatomy.cleanup();
-            submitRegistration?.cleanup();
-            controller.cleanup();
-          };
-        },
-      });
-    """.replace("__BUTTON_RUNTIME_KEY__", _CBUTTON_RUNTIME_KEY)
-        .replace("__BUTTON_RUNTIME_GENERATION__", str(_CBUTTON_RUNTIME_GENERATION))
-        .replace("__MENU_RUNTIME_KEY__", _CMENU_ROOT_RUNTIME_KEY)
-        .replace("__MENU_RUNTIME_GENERATION__", str(_CMENU_ROOT_RUNTIME_GENERATION))
-        .replace("__SUBMIT_RUNTIME_KEY__", _SPLIT_BUTTON_SUBMIT_RUNTIME_KEY)
-        .replace("__SUBMIT_RUNTIME_GENERATION__", str(_SPLIT_BUTTON_SUBMIT_RUNTIME_GENERATION))
-    )
+    js_file = "runtime.min.js"
 
     css = """
       @layer citry-ui.theme {

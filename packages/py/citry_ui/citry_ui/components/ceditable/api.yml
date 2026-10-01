@@ -33,9 +33,9 @@ inputs:
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CEditableSize]}, default: {kind: literal, value: md}, effect: Selects Input and action geometry.}
       - {id: class, name: class_, type: 'CClassValue | None', default: {kind: literal, value: null}, effect: Adds root classes.}
       - {id: style, name: style, type: 'CStyleValue | None', default: {kind: literal, value: null}, effect: Adds root inline styles.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted nonconflicting root attributes.}
-      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted native Input attributes and relationships.}
-      - {id: preview-attrs, name: preview_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted nonconflicting preview attributes.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted nonconflicting root attributes. Vue directive names are rejected.'}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted native Input attributes and relationships. Vue directive names are rejected.'}
+      - {id: preview-attrs, name: preview_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted nonconflicting preview attributes. Vue directive names are rejected.'}
   - id: ceditable-client-inputs
     component: CEditable
     channel: client

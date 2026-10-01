@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from typing import Any
 
 import citry_ui
@@ -25,18 +27,13 @@ class BasicCommandPalette(Component):
     template = """
       <section
         class="command-palette-basic"
-        x-data="{lastAction:'none',lastQuery:'',lastOpen:'closed'}"
       >
         <h2>Workspace commands</h2>
         <p>Search a small set of actions without leaving the current task.</p>
         <c-CCommandPalette
           label="Workspace commands"
           c-entries="commands"
-          $c-props="{
-            onAction:(value)=>lastAction=value,
-            onQueryChange:(value)=>lastQuery=value,
-            onOpenChange:(value)=>lastOpen=value ? 'open' : 'closed',
-          }"
+          :onAction="(value)=>lastAction=value" :onQueryChange="(value)=>lastQuery=value" :onOpenChange="(value)=>lastOpen=value ? 'open' : 'closed'"
         >
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
             <c-CButton
@@ -49,11 +46,20 @@ class BasicCommandPalette(Component):
           </c-fill>
         </c-CCommandPalette>
         <output aria-live="polite">
-          State: <span x-text="lastOpen">closed</span>;
-          query: <span x-text="lastQuery || 'empty'">empty</span>;
-          action: <span x-text="lastAction">none</span>
+          State: <span v-text="lastOpen">closed</span>;
+          query: <span v-text="lastQuery || 'empty'">empty</span>;
+          action: <span v-text="lastAction">none</span>
         </output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            lastAction:'none',lastQuery:'',lastOpen:'closed'
+          };
+        },
+      });
     """
 
     css = """

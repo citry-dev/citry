@@ -21,12 +21,6 @@ def accordion_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack accordion-quality"
             aria-labelledby="accordion-states-title"
-            x-data
-            x-init="Alpine.store('accordionQuality', {
-              value: 'canopy',
-              variant: 'outline',
-              size: 'md',
-            })"
           >
             <h1 id="accordion-states-title">Accordion states</h1>
             <c-CAccordion
@@ -38,12 +32,7 @@ def accordion_states_component(app: Citry) -> type[Component]:
                   'controlled single collapsible open closed disabled-item '
                   'actions region outline md indicator-end ltr',
               }"
-              $c-props="{
-                value: $store.accordionQuality.value,
-                variant: $store.accordionQuality.variant,
-                size: $store.accordionQuality.size,
-                onValueChange: (value) => $store.accordionQuality.value = value,
-              }"
+              :value="value" :variant="variant" :size="size" :onValueChange="(value) => value = value"
             >
               <c-CAccordionItem value="canopy">
                 <c-fill name="title">Canopy</c-fill>
@@ -65,13 +54,14 @@ def accordion_states_component(app: Citry) -> type[Component]:
             <div class="citry-ui-quality-grid">
               <c-for each="variant in variants">
                 <c-CAccordion
+                  #c-key="variant"
                   c-variant="variant"
                   value="one"
                   heading_level="2"
                   size="sm"
                   c-attrs="{'data-quality-states': variant}"
                 >
-                  <c-CAccordionItem value="one">
+                  <c-CAccordionItem #c-key="variant" value="one">
                     <c-fill name="title">{{ variant }} treatment</c-fill>
                     <c-fill name="default">Representative panel content.</c-fill>
                   </c-CAccordionItem>
@@ -79,13 +69,14 @@ def accordion_states_component(app: Citry) -> type[Component]:
               </c-for>
               <c-for each="size in sizes">
                 <c-CAccordion
+                  #c-key="size"
                   c-size="size"
                   value="one"
                   heading_level="2"
                   variant="soft"
                   c-attrs="{'data-quality-states': size}"
                 >
-                  <c-CAccordionItem value="one">
+                  <c-CAccordionItem #c-key="size" value="one">
                     <c-fill name="title">{{ size }} geometry</c-fill>
                     <c-fill name="default">Size-specific panel content.</c-fill>
                   </c-CAccordionItem>
@@ -179,6 +170,17 @@ def accordion_states_component(app: Citry) -> type[Component]:
               </c-CAccordion>
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                value: 'canopy',
+                variant: 'outline',
+                size: 'md',
+              };
+            },
+          });
         """
 
         def template_data(

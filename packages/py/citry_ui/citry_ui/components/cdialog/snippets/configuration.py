@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 import citry_ui
 from citry import Component, citry
 
@@ -8,25 +10,11 @@ class ConfigureDialog(Component):
     template = """
       <section
         class="dialog-config"
-        x-data="{
-          size: 'md',
-          scroll: 'body',
-          dismissible: true,
-          close_on_escape: true,
-          close_on_outside: true,
-        }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <p>Observation archive</p>
         <h2>Configure the Dialog</h2>
         <c-CDialog
-          $c-props="{
-            size,
-            scroll,
-            dismissible,
-            closeOnEscape: close_on_escape,
-            closeOnOutside: close_on_outside,
-          }"
+          :size="size" :scroll="scroll" :dismissible="dismissible" :closeOnEscape="close_on_escape" :closeOnOutside="close_on_outside"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">
@@ -50,6 +38,30 @@ class ConfigureDialog(Component):
           </c-fill>
         </c-CDialog>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            size: 'md',
+            scroll: 'body',
+            dismissible: true,
+            close_on_escape: true,
+            close_on_outside: true,
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

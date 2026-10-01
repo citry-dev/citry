@@ -31,7 +31,7 @@ def _page() -> str:
         template = """
           <!doctype html>
           <html lang="en"><head><meta charset="utf-8" /><title>AlertDialog contract</title><c-css /></head>
-          <body x-data="{controlledOpen: false, accept: false}" x-init="window.__alertEvents = []">
+          <body>
             <c-CAlertDialog id="uncontrolled">
               <c-fill name="activator" data="{activator_attrs}">
                 <c-CButton c-attrs="activator_attrs">Delete project</c-CButton>
@@ -42,27 +42,25 @@ def _page() -> str:
                 <c-CButton
                   c-attrs="cancel_attrs"
                   variant="outline"
-                  @click="window.__alertEvents.push('cancel-click')"
+                  @click="alertEvents.push('cancel-click')"
                 >Keep project</c-CButton>
               </c-fill>
               <c-fill name="action" data="{action_attrs}">
                 <c-CButton
                   c-attrs="action_attrs"
                   intent="danger"
-                  @click="window.__alertEvents.push('action-click')"
+                  @click="alertEvents.push('action-click')"
                 >Delete</c-CButton>
               </c-fill>
             </c-CAlertDialog>
 
             <c-CAlertDialog
               id="controlled-alert"
-              $c-props="{
-                open: controlledOpen,
-                onOpenChange: (open, detail) => {
-                  window.__alertEvents.push(['open', open, detail.reason, detail.returnValue]);
+              :open="controlledOpen"
+              :onOpenChange="(open, detail) => {
+                  alertEvents.push(['open', open, detail.reason, detail.returnValue]);
                   if (accept) controlledOpen = open;
-                }
-              }"
+                }"
             >
               <c-fill name="activator" data="{activator_attrs}">
                 <c-CButton c-attrs="activator_attrs">Open controlled</c-CButton>
@@ -78,6 +76,21 @@ def _page() -> str:
             </c-CAlertDialog>
             <button id="after" type="button">After</button>
           </body></html>
+        """
+        js = """
+          $component({
+            data() {
+              return { controlledOpen: false, accept: false, alertEvents: [] };
+            },
+            mounted() {
+              window.__alertEvents = this.alertEvents;
+              window.__state = this;
+            },
+            beforeUnmount() {
+              delete window.__alertEvents;
+              delete window.__state;
+            },
+          });
         """
 
     return str(Page())
@@ -126,7 +139,7 @@ def test_controlled_rejection_acceptance_escape_and_return_value(page: Any) -> N
     assert page.evaluate("window.__alertEvents[0]") == ["open", True, "trigger", ""]
     assert not page.locator("#controlled-alert").evaluate("element => element.open")
 
-    page.evaluate("Alpine.$data(document.body).accept = true")
+    page.evaluate("window.__state.accept = true")
     trigger.click()
     page.wait_for_function("document.querySelector('#controlled-alert').open")
     page.keyboard.press("Escape")

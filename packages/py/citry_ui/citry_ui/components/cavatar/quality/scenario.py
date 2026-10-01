@@ -1,5 +1,7 @@
 """Shared Avatar scenario used by repository quality tools."""
 
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from __future__ import annotations
 
 from citry import Citry, Component
@@ -27,13 +29,13 @@ def avatar_states_component(app: Citry) -> type[Component]:
             <c-for each="variant in variants">
               <div class="avatar-quality-row">
                 <c-for each="size in sizes">
-                  <c-CAvatar c-variant="variant" c-size="size" c-alt="f'{variant} {size} guide'">MF</c-CAvatar>
+                  <c-CAvatar #c-key="f'{variant}-{size}'" c-variant="variant" c-size="size" c-alt="f'{variant} {size} guide'">MF</c-CAvatar>
                 </c-for>
               </div>
             </c-for>
             <div class="avatar-quality-row">
               <c-for each="shape in shapes">
-                <c-CAvatar c-shape="shape" c-alt="f'{shape} guide'">SG</c-CAvatar>
+                <c-CAvatar #c-key="shape" c-shape="shape" c-alt="f'{shape} guide'">SG</c-CAvatar>
               </c-for>
             </div>
             <c-CAvatar alt="Generic fallback" />

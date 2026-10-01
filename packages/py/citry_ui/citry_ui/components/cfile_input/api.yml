@@ -22,7 +22,7 @@ inputs:
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CFileInputSize]}, default: {kind: literal, value: md}, effect: Selects picker geometry.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted native attributes without replacing owned file input semantics or state.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted native attributes without replacing owned file input semantics or state. Vue directive names are rejected.'}
   - id: cdroptarget-server-inputs
     component: CDropTarget
     channel: server
@@ -40,8 +40,8 @@ inputs:
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CFileInputSize]}, default: {kind: literal, value: md}, effect: Selects drop surface geometry.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds label-root classes.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds label-root inline styles.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted root label attributes.}
-      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds unrelated trusted attributes to the nested native input.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted root label attributes. Vue directive names are rejected.'}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds unrelated trusted attributes to the nested native input. Vue directive names are rejected.'}
   - id: file-client-inputs
     component: CFileInput
     channel: client

@@ -205,9 +205,17 @@ class AssetBytes:
     brotli: int
 
 
+# Each limit is a round whole-KiB ceiling leaving at least a tenth of the budget
+# free above what the catalog measures today. A tenth is the floor, not the target,
+# so a limit may sit further above it. The Vue runtime made the previous
+# JavaScript limits too tight to absorb an ordinary component change: brotli sat
+# 839 bytes under its ceiling, so a single new component tripped the budget before
+# anyone had a chance to weigh whether its cost was reasonable. Raise a limit only
+# as a deliberate edit, and change `tests/test_asset_budgets.py` in the same commit
+# so the new ceiling is visible in review.
 _CATALOG_ASSET_LIMITS = {
-    "javascript": AssetBytes(raw=1088 * 1024, gzip=208 * 1024, brotli=152 * 1024),
-    "css": AssetBytes(raw=368 * 1024, gzip=48 * 1024, brotli=40 * 1024),
+    "javascript": AssetBytes(raw=1152 * 1024, gzip=232 * 1024, brotli=168 * 1024),
+    "css": AssetBytes(raw=400 * 1024, gzip=52 * 1024, brotli=44 * 1024),
 }
 
 

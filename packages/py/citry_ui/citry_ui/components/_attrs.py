@@ -74,25 +74,65 @@ def pop_html_attr(
     return attrs.pop(matches[0]) if matches else default
 
 
-def reject_html_attr_bindings(
+# Vue reads a name starting with one of these as a directive or binding:
+# `v-if`, `v-bind:x`, `:x`, `.x` (sets a DOM property), `^x` (forces an
+# attribute), `@x` (listener) and `#x` (slot).
+_VUE_DIRECTIVE_PREFIXES = ("v-", ":", ".", "^", "@", "#")
+
+
+def is_vue_directive_attribute(name: str) -> bool:
+    """Return whether an attribute name uses Vue directive syntax."""
+    # HTML attribute names are case-insensitive, so `V-IF` must not slip past
+    # a check that only knows the lowercase spelling.
+    return name.casefold().startswith(_VUE_DIRECTIVE_PREFIXES)
+
+
+def reject_vue_directive_attrs(
     attrs: Mapping[str, object] | None,
-    names: set[str] | frozenset[str],
     component_name: str,
 ) -> None:
-    """Reject Alpine shorthand or longhand bindings to selected HTML attributes."""
-    normalized_names = {name.casefold() for name in names}
+    """
+    Reject Vue directive syntax in a Python-owned attribute mapping.
+
+    A component's `attrs` input is data. A Vue directive written there could
+    replace the component's own bindings, structure, or listeners, so the
+    component rejects it here with its own name in the message. Authored Vue
+    attributes in a template go through the Vue compiler and are not affected.
+    """
     for key in attrs or {}:
-        if not isinstance(key, str):
-            continue
-        normalized = key.casefold()
-        target = None
-        if normalized.startswith("x-bind:"):
-            target = normalized.removeprefix("x-bind:").split(".", 1)[0]
-        elif normalized.startswith((":", ".")):
-            target = normalized[1:].split(".", 1)[0]
-        if target in normalized_names:
-            msg = f"{component_name} attrs cannot dynamically bind HTML attribute {target!r}."
+        if isinstance(key, str) and is_vue_directive_attribute(key):
+            msg = (
+                f"{component_name} attrs cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
+
+
+def html_attr_binding_target(name: str) -> str | None:
+    """Return the attribute a `:name`, `.name`, or `v-bind:name` binding sets, or None for any other name."""
+    normalized = name.casefold()
+    if normalized.startswith("v-bind:"):
+        target = normalized.split(":", 1)[1].split(".", 1)[0]
+    elif normalized.startswith((":", ".")):
+        target = normalized[1:].split(".", 1)[0]
+    else:
+        return None
+    # A dynamic argument such as `:[name]` picks its attribute in the browser,
+    # so no fixed target can be checked; callers treat it as unknown.
+    return None if target.startswith("[") else target
+
+
+def is_executable_event_attribute(name: str) -> bool:
+    """
+    Return whether a resolved attribute would install browser code.
+
+    Python-owned attribute mappings are data. They must never smuggle a
+    framework event directive or an inline DOM event handler into the Vue
+    template assembled from that data. Authored Vue attributes still go
+    through the template compiler and are intentionally outside this check.
+    """
+    normalized = name.casefold()
+    return normalized.startswith(("on", "@", "v-on"))
 
 
 def merge_root_attrs(
@@ -115,7 +155,10 @@ __all__ = [
     "CStyleValue",
     "get_html_attr",
     "get_html_form_owner",
+    "html_attr_binding_target",
+    "is_executable_event_attribute",
+    "is_vue_directive_attribute",
     "merge_root_attrs",
     "pop_html_attr",
-    "reject_html_attr_bindings",
+    "reject_vue_directive_attrs",
 ]

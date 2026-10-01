@@ -3,13 +3,22 @@ from citry import Component
 
 class ControlledRangeSlider(Component):
     template = """
-      <section x-data="{range:['20','80']}" class="slider-example-stack">
+      <section class="slider-example-stack">
         <c-CRangeSlider
           c-value="(20, 80)"
-          $c-props="{value:range,onValueChange:(next)=>range=next}"
+          :value="range" :onValueChange="(next)=>range=next"
         />
-        <output x-text="`Selected ${range[0]} through ${range[1]}`">Selected 20 through 80</output>
+        <output v-text="`Selected ${range[0]} through ${range[1]}`">Selected 20 through 80</output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            range:['20','80']
+          };
+        },
+      });
     """
     css = ":where(.slider-example-stack){display:grid;gap:1rem;max-inline-size:32rem}"
 

@@ -10,16 +10,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
 CInfiniteScrollReason = Literal["button", "intersection", "retry"]
 
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-busy",
@@ -35,6 +32,7 @@ _ROOT_OWNED = frozenset(
         "hidden",
         "id",
         "inert",
+        "ref",
         "role",
         "tabindex",
     }
@@ -72,14 +70,6 @@ def _threshold(value: object) -> float:
     return result
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     attrs: Mapping[str, object] | None, class_: CClassValue | None, style: CStyleValue | None
 ) -> dict[str, object]:
@@ -87,16 +77,14 @@ def _attrs(
         raise TypeError(f"CInfiniteScroll attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, _ROOT_OWNED, "CInfiniteScroll attrs")
+    # A Vue directive could rebind an owned attribute, change the root's
+    # structure, or attach a listener, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CInfiniteScroll")
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"CInfiniteScroll attrs require string keys, got {key!r}.")
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CInfiniteScroll attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"CInfiniteScroll attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in _ROOT_OWNED:
-            raise ValueError(f"CInfiniteScroll attrs cannot dynamically bind owned attribute {key!r}.")
     return merge_root_attrs(copied, class_, style)
 
 
@@ -129,6 +117,11 @@ class CInfiniteScroll(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CInfiniteScrollDefaultSlotData] | None = None
+
+    @dataclass(slots=True)
+    class JsData:
+        # Keep this camelCase spelling in sync with the JavaScript data key.
+        serverDefaults: dict[str, object]  # noqa: N815
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_infinite_scroll_snapshot", None)
@@ -188,11 +181,11 @@ class CInfiniteScroll(LibraryComponent):
             "root_attrs": {
                 **cast("dict[str, object]", snapshot["attrs"]),
                 "aria-label": snapshot["aria_label"],
-                "data-auto": True if auto else None,
-                "data-disabled": True if disabled else None,
-                "data-end": True if not has_more and not loading and not error else None,
-                "data-error": True if error and not loading else None,
-                "data-loading": True if loading else None,
+                "data-auto": "" if auto else None,
+                "data-disabled": "" if disabled else None,
+                "data-end": "" if not has_more and not loading and not error else None,
+                "data-error": "" if error and not loading else None,
+                "data-loading": "" if loading else None,
                 "role": "region" if snapshot["aria_label"] is not None else None,
             },
             "content_busy": "true" if loading else "false",
@@ -207,12 +200,19 @@ class CInfiniteScroll(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            key: snapshot[key]
-            for key in ("has_more", "loading", "error", "disabled", "auto", "root_margin", "threshold")
+            "serverDefaults": {
+                "hasMore": snapshot["has_more"],
+                "loading": snapshot["loading"],
+                "error": snapshot["error"],
+                "disabled": snapshot["disabled"],
+                "auto": snapshot["auto"],
+                "rootMargin": snapshot["root_margin"],
+                "threshold": snapshot["threshold"],
+            }
         }
 
     template = """
-      <div class="cui-infinite-scroll" c-id="root_id" c-bind="root_attrs" data-citry-ui-part="infinite-scroll">
+      <div ref="root" class="cui-infinite-scroll" c-id="root_id" c-bind="root_attrs" data-citry-ui-part="infinite-scroll">
         <div c-aria-busy="content_busy" data-citry-ui-part="content">{{ content }}</div>
         <div data-citry-ui-part="status" role="status" aria-live="polite" aria-atomic="true">
           <span c-hidden="not show_loading" c-$c-tr:citry-ui-infinite-scroll-loading="True if catalog['loading'] else None">{{ tr('citry-ui-infinite-scroll-loading') if catalog['loading'] else labels['loading'] }}</span>

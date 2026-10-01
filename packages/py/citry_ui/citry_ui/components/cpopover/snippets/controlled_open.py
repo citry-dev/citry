@@ -8,16 +8,12 @@ class ControlledPopover(Component):
     template = """
       <section
         class="controlled-popover"
-        x-data="{ open: false, locked: false, lastReason: 'none' }"
       >
         <c-CPopover
-          $c-props="{
-            open,
-            onOpenChange: (nextOpen, detail) => {
+          :open="open" :onOpenChange="(nextOpen, detail) => {
               lastReason = detail.reason;
               if (!locked) open = nextOpen;
-            },
-          }"
+            }"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">
@@ -33,11 +29,20 @@ class ControlledPopover(Component):
           </c-fill>
         </c-CPopover>
         <label>
-          <input type="checkbox" x-model="locked" />
+          <input type="checkbox" v-model="locked" />
           Decline visibility requests
         </label>
-        <output x-text="`Last request: ${lastReason}`"></output>
+        <output v-text="`Last request: ${lastReason}`"></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            open: false, locked: false, lastReason: 'none'
+          };
+        },
+      });
     """
 
     css = """

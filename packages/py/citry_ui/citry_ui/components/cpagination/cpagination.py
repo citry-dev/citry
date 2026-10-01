@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
 from citry import LibraryComponent, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
@@ -19,9 +19,6 @@ CPaginationSize = Literal["sm", "md", "lg"]
 _VARIANTS = ("soft", "outline", "plain")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-teleport", "x-text"}
-)
 _OWNED = frozenset(
     {
         "aria-hidden",
@@ -93,27 +90,17 @@ def _range(pages: int, page: int, siblings: int, boundaries: int) -> tuple[int |
     return tuple(result)
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         raise TypeError(f"CPagination attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, _OWNED, "CPagination attrs")
+    # A Vue directive could rebind an owned attribute, replace the page
+    # listeners, or change the root's structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, "CPagination")
     for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"CPagination attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"CPagination attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in _OWNED:
-            raise ValueError(f"CPagination attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 
@@ -300,14 +287,21 @@ class CPagination(LibraryComponent):
         return control
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
-        return self._pagination_data
+        return {
+            **{
+                key: value
+                for key, value in self._pagination_data.items()
+                if key not in {"page", "disabled", "variant", "size"}
+            },
+            "serverDefaults": {key: self._pagination_data[key] for key in ("page", "disabled", "variant", "size")},
+        }
 
     template = """
       <nav
         class="cui-pagination"
         c-bind="attrs"
         data-citry-ui-part="pagination"
-        c-data-disabled="disabled"
+        c-data-disabled="'' if disabled else None"
         c-data-variant="variant"
         c-data-size="size"
         c-aria-label="tr('citry-ui-pagination-label') if catalog_label else label"
@@ -331,7 +325,7 @@ class CPagination(LibraryComponent):
                   c-aria-current="'page' if item['current'] else None"
                   c-data-page="item['page']"
                   c-data-kind="item['kind']"
-                  c-data-current="item['current']"
+                  c-data-current="'' if item['current'] else None"
                   data-citry-ui-part="control"
                 >{{ item['text'] }}</a>
               </c-elif>
@@ -347,7 +341,7 @@ class CPagination(LibraryComponent):
                   c-aria-current="'page' if item['current'] else None"
                   c-data-page="item['page']"
                   c-data-kind="item['kind']"
-                  c-data-current="item['current']"
+                  c-data-current="'' if item['current'] else None"
                   c-disabled="item['disabled']"
                   data-citry-ui-part="control"
                 >{{ item['text'] }}</button>
@@ -361,14 +355,19 @@ class CPagination(LibraryComponent):
     js = r"""
       $component({
         props: {page: {}, disabled: {}, variant: {}, size: {}, onPageChange: {}},
-        init: ({els, data, props, effect, i18n}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const defaults = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
+          const i18n = component.$i18n;
           const list = root.querySelector('[data-citry-ui-part="list"]');
-          let current = data.page;
+          let current = defaults.page;
           let callback = null;
-          let effectiveDisabled = data.disabled;
-          let effectiveVariant = data.variant;
-          let effectiveSize = data.size;
+          let effectiveDisabled = defaults.disabled;
+          let effectiveVariant = defaults.variant;
+          let effectiveSize = defaults.size;
           let translationBindings = [];
           const invalid = new Set();
           const report = (name, value) => {
@@ -469,9 +468,18 @@ class CPagination(LibraryComponent):
                 || (["first", "previous"].includes(kind) && current === 1)
                 || (["next", "last"].includes(kind) && current === data.pages);
               const href = data.href && !unavailable ? data.href.replace("{page}", String(page)) : null;
-              const control = document.createElement(href ? "a" : "button");
-              if (href) control.href = href;
-              else { control.type = "button"; control.disabled = unavailable; }
+              // A control with a URL is a link; any other control is a button, disabled when its page is unavailable.
+              let control;
+              if (href) {
+                const link = document.createElement("a");
+                link.href = href;
+                control = link;
+              } else {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.disabled = unavailable;
+                control = button;
+              }
               control.dataset.citryUiPart = "control";
               control.dataset.page = String(page);
               control.dataset.kind = kind;
@@ -495,9 +503,9 @@ class CPagination(LibraryComponent):
               invalid.delete("page");
               current = props.page;
             } else report("page", props.page);
-            effectiveDisabled = resolveBoolean("disabled", data.disabled);
-            effectiveVariant = resolveChoice("variant", data.variant, ["soft", "outline", "plain"]);
-            effectiveSize = resolveChoice("size", data.size, ["sm", "md", "lg"]);
+            effectiveDisabled = resolveBoolean("disabled", defaults.disabled);
+            effectiveVariant = resolveChoice("variant", defaults.variant, ["soft", "outline", "plain"]);
+            effectiveSize = resolveChoice("size", defaults.size, ["sm", "md", "lg"]);
             root.dataset.variant = effectiveVariant;
             root.dataset.size = effectiveSize;
             render();

@@ -5,6 +5,21 @@ from citry_ui.quality.routes import render_scenario
 from citry_ui.quality.scenarios import SCENARIOS, ScenarioStatus, manifest_json, scenario_by_id
 
 
+def _quality_state_groups(html: str, markup_pattern: str) -> list[str]:
+    """
+    Read quality-state markers from both rendered roots and Vue prepared data.
+
+    Static scenarios expose their component roots in the HTML. Interactive
+    scenarios carry the same attributes in the prepared manifest, and their
+    served HTML may hold a root twice (once in the manifest, once in the
+    page) or only in the manifest, when the server cannot write the part
+    around it. Reading both, each group once, keeps the fixture assertions
+    about state coverage independent of that transport detail.
+    """
+    literal_groups = re.findall(markup_pattern, html)
+    return list(dict.fromkeys(literal_groups + re.findall(r'"data-quality-states":"([^"]+)"', html)))
+
+
 def test_scenario_catalog_has_stable_unique_ordered_ids():
     ids = [scenario.id for scenario in SCENARIOS]
 
@@ -791,9 +806,9 @@ def test_catalog_maps_every_phase_7_5_family_state_to_a_scenario():
 def test_drawer_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("drawer.states")
     html = render_scenario(scenario.id)
-    state_groups = re.findall(
-        r'<dialog(?=[^>]*data-citry-ui-part="drawer")[^>]*data-quality-states="([^"]+)"',
+    state_groups = _quality_state_groups(
         html,
+        r'<dialog(?=[^>]*data-citry-ui-part="drawer")[^>]*data-quality-states="([^"]+)"',
     )
 
     assert state_groups
@@ -803,9 +818,9 @@ def test_drawer_fixture_marks_every_declared_state_on_a_component_root():
 def test_accordion_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("accordion.states")
     html = render_scenario(scenario.id)
-    state_groups = re.findall(
-        r'<div(?=[^>]*data-citry-accordion-root)[^>]*data-quality-states="([^"]+)"',
+    state_groups = _quality_state_groups(
         html,
+        r'<div(?=[^>]*data-citry-accordion-root)[^>]*data-quality-states="([^"]+)"',
     )
     covered = {state for group in state_groups for state in group.split()}
 
@@ -815,9 +830,9 @@ def test_accordion_fixture_marks_every_declared_state_on_a_component_root():
 def test_disclosure_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("disclosure.states")
     html = render_scenario(scenario.id)
-    state_groups = re.findall(
-        r'<div(?=[^>]*data-citry-ui-part="disclosure")[^>]*data-quality-states="([^"]+)"',
+    state_groups = _quality_state_groups(
         html,
+        r'<div(?=[^>]*data-citry-ui-part="disclosure")[^>]*data-quality-states="([^"]+)"',
     )
     covered = {state for group in state_groups for state in group.split()}
 
@@ -827,9 +842,9 @@ def test_disclosure_fixture_marks_every_declared_state_on_a_component_root():
 def test_split_button_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("split-button.states")
     html = render_scenario(scenario.id)
-    state_groups = re.findall(
-        r'<div(?=[^>]*data-citry-ui-part="split-button")[^>]*data-quality-states="([^"]+)"',
+    state_groups = _quality_state_groups(
         html,
+        r'<div(?=[^>]*data-citry-ui-part="split-button")[^>]*data-quality-states="([^"]+)"',
     )
     covered = {state for group in state_groups for state in group.split()}
 
@@ -839,9 +854,9 @@ def test_split_button_fixture_marks_every_declared_state_on_a_component_root():
 def test_tags_input_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("tags-input.states")
     html = render_scenario(scenario.id)
-    state_groups = re.findall(
-        r'<div(?=[^>]*data-citry-ui-part="tags-input")[^>]*data-quality-states="([^"]+)"',
+    state_groups = _quality_state_groups(
         html,
+        r'<div(?=[^>]*data-citry-ui-part="tags-input")[^>]*data-quality-states="([^"]+)"',
     )
     covered = {state for group in state_groups for state in group.split()}
 
@@ -851,9 +866,9 @@ def test_tags_input_fixture_marks_every_declared_state_on_a_component_root():
 def test_image_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("image.states")
     html = render_scenario(scenario.id)
-    state_groups = re.findall(
-        r'<span(?=[^>]*data-citry-ui-part="image-root")[^>]*data-quality-states="([^"]+)"',
+    state_groups = _quality_state_groups(
         html,
+        r'<span(?=[^>]*data-citry-ui-part="image-root")[^>]*data-quality-states="([^"]+)"',
     )
     covered = {state for group in state_groups for state in group.split()}
 
@@ -863,9 +878,9 @@ def test_image_fixture_marks_every_declared_state_on_a_component_root():
 def test_scroll_area_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("scroll-area.states")
     html = render_scenario(scenario.id)
-    state_groups = re.findall(
-        r'<div(?=[^>]*data-citry-ui-part="scroll-area")[^>]*data-quality-states="([^"]+)"',
+    state_groups = _quality_state_groups(
         html,
+        r'<div(?=[^>]*data-citry-ui-part="scroll-area")[^>]*data-quality-states="([^"]+)"',
     )
     covered = {state for group in state_groups for state in group.split()}
 
@@ -875,9 +890,9 @@ def test_scroll_area_fixture_marks_every_declared_state_on_a_component_root():
 def test_menu_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("menu.states")
     html = render_scenario(scenario.id)
-    state_groups = re.findall(
-        r'<div(?=[^>]*data-citry-menu-root)[^>]*data-quality-states="([^"]+)"',
+    state_groups = _quality_state_groups(
         html,
+        r'<div(?=[^>]*data-citry-menu-root)[^>]*data-quality-states="([^"]+)"',
     )
     covered = {state for group in state_groups for state in group.split()}
 
@@ -887,9 +902,9 @@ def test_menu_fixture_marks_every_declared_state_on_a_component_root():
 def test_context_menu_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("context-menu.states")
     html = render_scenario(scenario.id)
-    state_groups = re.findall(
-        r'<div(?=[^>]*data-citry-ui-part="context-menu")[^>]*data-quality-states="([^"]+)"',
+    state_groups = _quality_state_groups(
         html,
+        r'<div(?=[^>]*data-citry-ui-part="context-menu")[^>]*data-quality-states="([^"]+)"',
     )
     covered = {state for group in state_groups for state in group.split()}
 
@@ -899,9 +914,9 @@ def test_context_menu_fixture_marks_every_declared_state_on_a_component_root():
 def test_command_palette_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("command-palette.states")
     html = render_scenario(scenario.id)
-    state_groups = re.findall(
-        r'<dialog(?=[^>]*data-citry-ui-part="command-palette")[^>]*data-quality-states="([^"]+)"',
+    state_groups = _quality_state_groups(
         html,
+        r'<dialog(?=[^>]*data-citry-ui-part="command-palette")[^>]*data-quality-states="([^"]+)"',
     )
     covered = {state for group in state_groups for state in group.split()}
 
@@ -911,9 +926,9 @@ def test_command_palette_fixture_marks_every_declared_state_on_a_component_root(
 def test_toast_fixture_marks_every_declared_state_on_the_region() -> None:
     scenario = scenario_by_id("toast.states")
     html = render_scenario(scenario.id)
-    [state_group] = re.findall(
-        r'<section(?=[^>]*data-citry-ui-part="region")[^>]*data-quality-states="([^"]+)"',
+    [state_group] = _quality_state_groups(
         html,
+        r'<section(?=[^>]*data-citry-ui-part="region")[^>]*data-quality-states="([^"]+)"',
     )
 
     assert set(state_group.split()) == set(scenario.states)

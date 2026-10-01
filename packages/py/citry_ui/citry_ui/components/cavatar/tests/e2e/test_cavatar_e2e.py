@@ -1,5 +1,7 @@
 """Browser evidence for the Avatar contract."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 from typing import Any
@@ -25,6 +27,7 @@ def _avatar_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){const avatarTest=Citry.vue.reactive({source:null,alt:'Reactive guide',variant:'soft',statuses:[]});window.__avatarTest=avatarTest;return {state:{avatarTest}};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -33,15 +36,7 @@ def _avatar_page() -> str:
               <style>.selector [data-citry-ui-part="fallback"] { letter-spacing: 4px; }</style>
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('avatarTest', {
-                source: null,
-                alt: 'Reactive guide',
-                variant: 'soft',
-                statuses: []
-              })"
-            >
+            <body>
               <c-CAvatar c-src="portrait" alt="Loaded guide" c-attrs="{'id': 'loaded'}">LG</c-CAvatar>
               <c-CAvatar
                 src="/definitely-missing-avatar.png"
@@ -63,12 +58,10 @@ def _avatar_page() -> str:
               <c-CAvatar
                 alt="Reactive guide"
                 c-attrs="{'id': 'reactive'}"
-                $c-props="{
-                  src: $store.avatarTest.source,
-                  alt: $store.avatarTest.alt,
-                  variant: $store.avatarTest.variant,
-                  onStatusChange: detail => $store.avatarTest.statuses.push(detail.status)
-                }"
+                :src="state.avatarTest.source"
+                :alt="state.avatarTest.alt"
+                :variant="state.avatarTest.variant"
+                :onStatusChange="detail => state.avatarTest.statuses.push(detail.status)"
               >RG</c-CAvatar>
             </body>
           </html>
@@ -100,7 +93,7 @@ def test_reactive_source_name_variant_and_status_callback(page: Any) -> None:
 
     assert reactive.get_attribute("data-status") == "fallback"
     page.evaluate(
-        "Object.assign(Alpine.store('avatarTest'), {"
+        "Object.assign(window.__avatarTest, {"
         "source: '/missing-reactive-avatar.png', alt: 'Marsh oracle', variant: 'solid'"
         "})"
     )
@@ -108,10 +101,9 @@ def test_reactive_source_name_variant_and_status_callback(page: Any) -> None:
     assert reactive.get_attribute("aria-label") == "Marsh oracle"
     assert reactive.get_attribute("data-variant") == "solid"
     assert page.evaluate(
-        "Alpine.store('avatarTest').statuses.includes('loading') "
-        "&& Alpine.store('avatarTest').statuses.includes('error')"
+        "window.__avatarTest.statuses.includes('loading') && window.__avatarTest.statuses.includes('error')"
     )
-    page.evaluate("Alpine.store('avatarTest').source = null")
+    page.evaluate("window.__avatarTest.source = null")
     page.wait_for_function("document.querySelector('#reactive').dataset.status === 'fallback'")
     assert reactive.locator("[data-citry-ui-part='image']").get_attribute("src") is None
 

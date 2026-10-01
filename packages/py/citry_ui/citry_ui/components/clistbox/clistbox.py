@@ -9,7 +9,7 @@ from html.parser import HTMLParser
 from typing import Any, ClassVar, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CListboxVariant = Literal["plain", "soft", "outline"]
@@ -21,20 +21,6 @@ _CONTEXT = "citry_ui_listbox"
 _VARIANTS = ("plain", "soft", "outline")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -233,14 +219,6 @@ def _initial_values(value: object, *, multiple: bool) -> tuple[str, ...]:
     return result
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     input_name: str,
@@ -262,12 +240,14 @@ def _attrs(
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"{owner} {input_name} cannot contain Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        directive = normalized.split(".", 1)[0]
-        if directive in _OWNERSHIP_DIRECTIVES:
-            msg = f"{owner} {input_name} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if _dynamic_target(normalized) in owned:
-            msg = f"{owner} {input_name} cannot dynamically bind owned attribute {key!r}."
+        # A Vue directive could rebind an owned selection or relationship
+        # attribute, change the structure, or attach a listener, so none may
+        # arrive through Python data.
+        if is_vue_directive_attribute(normalized):
+            msg = (
+                f"{owner} {input_name} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
             raise ValueError(msg)
     return merge_root_attrs(copied, class_, style)
 
@@ -457,15 +437,18 @@ class CListbox(LibraryComponent):
             raise ValueError(f"CListbox value contains unknown Options: {sorted(unknown)!r}.")
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
-        return self._listbox_data
+        return {
+            "multiple": self._listbox_data["multiple"],
+            "serverDefaults": {key: value for key, value in self._listbox_data.items() if key != "multiple"},
+        }
 
     template = """
       <div
         class="cui-listbox"
         c-id="root_id"
-        c-data-multiple="multiple"
-        c-data-mandatory="mandatory"
-        c-data-disabled="disabled"
+        c-data-multiple="'' if multiple else None"
+        c-data-mandatory="'' if mandatory else None"
+        c-data-disabled="'' if disabled else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="attrs"
@@ -494,26 +477,34 @@ class CListbox(LibraryComponent):
         props: {
           value: {}, mandatory: {}, disabled: {}, loop: {}, variant: {}, size: {}, onValueChange: {},
         },
-        init: ({els, data, props, effect}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          // The listbox keeps its browser-side choices on its root element, so a later
+          // server render that reruns this callback on the same element restores them.
+          /** @typedef {{serverFingerprint: string, committed: string[], activeValue: string | null | undefined,
+           *   order: string[], pendingStructural: string | null}} ListboxRuntime */
+          const root = /** @type {HTMLElement & {__citryUiListboxRuntime?: ListboxRuntime}} */ (component.$el);
+          const data = component;
+          const defaults = data.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const surface = root.querySelector(':scope > [data-citry-ui-part="listbox"]');
           const invalidEpisodes = new Set();
           const prior = root.__citryUiListboxRuntime;
-          const serverFingerprint = JSON.stringify(data.value);
+          const serverFingerprint = JSON.stringify(defaults.value);
           let committed = prior?.serverFingerprint === serverFingerprint
             ? [...prior.committed]
-            : [...data.value];
+            : [...defaults.value];
           let current = [...committed];
           let controlled = false;
           let activeValue = prior?.activeValue ?? null;
           let previousOrder = Array.isArray(prior?.order) ? [...prior.order] : [];
           let pendingStructural = prior?.pendingStructural ?? null;
           let configuration = {
-            mandatory: data.mandatory,
-            disabled: data.disabled,
-            loop: data.loop,
-            variant: data.variant,
-            size: data.size,
+            mandatory: defaults.mandatory,
+            disabled: defaults.disabled,
+            loop: defaults.loop,
+            variant: defaults.variant,
+            size: defaults.size,
           };
           let onValueChange = null;
           let clientValue;
@@ -965,11 +956,11 @@ class CListbox(LibraryComponent):
               report('onValueChange', props.onValueChange, '; ignoring the callback');
             } else invalidEpisodes.delete('onValueChange');
             configuration = {
-              mandatory: resolveBoolean('mandatory', data.mandatory),
-              disabled: resolveBoolean('disabled', data.disabled),
-              loop: resolveBoolean('loop', data.loop),
-              variant: resolveChoice('variant', data.variant, ['plain','soft','outline']),
-              size: resolveChoice('size', data.size, ['sm','md','lg']),
+              mandatory: resolveBoolean('mandatory', defaults.mandatory),
+              disabled: resolveBoolean('disabled', defaults.disabled),
+              loop: resolveBoolean('loop', defaults.loop),
+              variant: resolveChoice('variant', defaults.variant, ['plain','soft','outline']),
+              size: resolveChoice('size', defaults.size, ['sm','md','lg']),
             };
             schedule();
           });
@@ -1073,7 +1064,12 @@ class CListboxOption(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
-        return {"disabled": snapshot["disabled"], "textValue": snapshot["text_value"]}
+        return {
+            "serverDefaults": {
+                "disabled": snapshot["disabled"],
+                "textValue": snapshot["text_value"],
+            }
+        }
 
     template = """
       <div
@@ -1087,10 +1083,10 @@ class CListboxOption(LibraryComponent):
         c-aria-selected="'true' if selected else 'false'"
         c-aria-disabled="'true' if disabled else 'false'"
         c-data-value="value"
-        c-data-selected="selected"
-        c-data-active="active"
-        c-data-disabled="disabled"
-        c-data-cui-listbox-option-disabled="disabled"
+        c-data-selected="'' if selected else None"
+        c-data-active="'' if active else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-cui-listbox-option-disabled="'' if disabled else None"
         c-data-cui-listbox-text-value="text_value"
         c-bind="attrs"
         data-citry-ui-part="listbox-option"
@@ -1149,8 +1145,11 @@ class CListboxOption(LibraryComponent):
     js = r"""
       $component({
         props: {disabled: {}, textValue: {}},
-        init: ({els, data, props, effect}) => {
-          const option = els[0];
+        onServerRender: ({component}) => {
+          const option = component.$el;
+          const defaults = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const invalidEpisodes = new Set();
           const report = (name, value) => {
             if (invalidEpisodes.has(name)) return;
@@ -1160,16 +1159,16 @@ class CListboxOption(LibraryComponent):
           const stop = effect(() => {
             const suppliedDisabled = props.disabled;
             const disabled = suppliedDisabled === undefined
-              ? data.disabled
+              ? defaults.disabled
               : typeof suppliedDisabled === 'boolean'
                 ? suppliedDisabled
-                : data.disabled;
+                : defaults.disabled;
             if (suppliedDisabled !== undefined && typeof suppliedDisabled !== 'boolean') {
               report('disabled', suppliedDisabled);
             } else invalidEpisodes.delete('disabled');
             option.toggleAttribute('data-cui-listbox-option-disabled', disabled);
             const suppliedText = props.textValue;
-            let textValue = data.textValue;
+            let textValue = defaults.textValue;
             if (suppliedText === null || suppliedText === undefined) {
               invalidEpisodes.delete('textValue');
             } else if (typeof suppliedText === 'string' && suppliedText.trim() && !suppliedText.includes('\0')) {

@@ -12,7 +12,7 @@ from typing import Any, ClassVar, Literal, TypeAlias, TypedDict, cast
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._active_descendant import ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._dialog_controller import DIALOG_CONTROLLER_RUNTIME_DEPENDENCY
 from citry_ui.components._i18n import uses_catalog_default
 
@@ -133,30 +133,10 @@ _RUNTIME_PREFIXES = (
     "data-citry-",
     "data-cev",
     "data-cid",
-    "data-has-alpine-state",
-    "x-citry-",
 )
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "$c-props",
-        "c-bind",
-        "c-props",
-        "x-bind",
-        "x-data",
-        "x-effect",
-        "x-for",
-        "x-html",
-        "x-id",
-        "x-if",
-        "x-ignore",
-        "x-init",
-        "x-model",
-        "x-modelable",
-        "x-show",
-        "x-teleport",
-        "x-text",
-    }
-)
+# Citry template directive names would let a copied attribute re-enter the
+# template as a props or attribute spread.
+_OWNERSHIP_DIRECTIVES = frozenset({"c-bind"})
 _DIALOG_OWNED = frozenset(
     {
         "aria-describedby",
@@ -210,8 +190,6 @@ _INPUT_OWNED = frozenset(
         "value",
     }
 )
-_DIALOG_EVENTS = frozenset({"cancel", "click", "close", "keydown", "pointercancel", "pointerdown", "submit"})
-_INPUT_EVENTS = frozenset({"beforeinput", "compositionend", "compositionstart", "input", "keydown"})
 
 
 def _plain_string(
@@ -254,28 +232,11 @@ def _plain_choice(component: str, field: str, value: object, allowed: tuple[str,
     return plain
 
 
-def _dynamic_target(name: str) -> str | None:
-    if name.startswith("x-bind:"):
-        return name.removeprefix("x-bind:").split(".", 1)[0]
-    if name.startswith((":", ".")):
-        return name[1:].split(".", 1)[0]
-    return None
-
-
-def _event_target(name: str) -> str | None:
-    if name.startswith("x-on:"):
-        return name.removeprefix("x-on:").split(".", 1)[0]
-    if name.startswith("@"):
-        return name[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(
     value: Mapping[str, object] | None,
     *,
     destination: str,
     owned: frozenset[str],
-    owned_events: frozenset[str],
     reject_all_aria: bool,
 ) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
@@ -289,25 +250,25 @@ def _copy_attrs(
         if normalized in seen:
             raise ValueError(f"CCommandPalette {destination} cannot contain duplicate case variants.")
         seen.add(normalized)
-        directive = normalized.split(".", 1)[0]
-        target = _dynamic_target(normalized)
-        event = _event_target(normalized)
         if (
             normalized in owned
             or normalized.startswith(_RUNTIME_PREFIXES)
             or (reject_all_aria and normalized.startswith("aria-"))
         ):
             raise ValueError(f"CCommandPalette {destination} cannot override owned attributes.")
-        if directive in _OWNERSHIP_DIRECTIVES:
+        # A Vue directive could rebind an owned attribute, replace the palette's
+        # own dialog and input listeners, or change its structure, so none may
+        # arrive through Python data.
+        if is_vue_directive_attribute(key):
+            raise ValueError(
+                f"CCommandPalette {destination} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
+        if normalized.split(".", 1)[0] in _OWNERSHIP_DIRECTIVES:
             raise ValueError(f"CCommandPalette {destination} cannot use ownership directives.")
+        # Inline handlers would run beside the palette's keyboard and input logic.
         if normalized.startswith("on"):
             raise ValueError(f"CCommandPalette {destination} cannot use raw event attributes.")
-        if event in owned_events:
-            raise ValueError(f"CCommandPalette {destination} cannot override owned events.")
-        if target is not None and (
-            target in owned or target.startswith(_RUNTIME_PREFIXES) or (reject_all_aria and target.startswith("aria-"))
-        ):
-            raise ValueError(f"CCommandPalette {destination} cannot dynamically bind owned attributes.")
     return copied
 
 
@@ -690,7 +651,6 @@ class CCommandPalette(LibraryComponent):
                 kwargs.attrs,
                 destination="attrs",
                 owned=_DIALOG_OWNED,
-                owned_events=_DIALOG_EVENTS,
                 reject_all_aria=True,
             ),
             kwargs.class_,
@@ -700,7 +660,6 @@ class CCommandPalette(LibraryComponent):
             kwargs.input_attrs,
             destination="input_attrs",
             owned=_INPUT_OWNED,
-            owned_events=_INPUT_EVENTS,
             reject_all_aria=True,
         )
         data.update(
@@ -727,12 +686,14 @@ class CCommandPalette(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         data = self._snapshot(kwargs)
         return {
-            "open": data["open"],
-            "query": data["query"],
-            "disabled": data["disabled"],
-            "loop": data["loop"],
-            "closeOnAction": data["close_on_action"],
-            "size": data["size"],
+            "serverDefaults": {
+                "open": data["open"],
+                "query": data["query"],
+                "disabled": data["disabled"],
+                "loop": data["loop"],
+                "closeOnAction": data["close_on_action"],
+                "size": data["size"],
+            },
             "regions": data["regions"],
             "fingerprint": data["fingerprint"],
             "hasActivator": "activator" in self.raw_slots,
@@ -781,8 +742,8 @@ class CCommandPalette(LibraryComponent):
           c-id="dialog_id"
           c-open="open"
           c-aria-labelledby="title_id"
-          c-data-open="open"
-          c-data-disabled="disabled"
+          c-data-open="'' if open else None"
+          c-data-disabled="'' if disabled else None"
           c-data-size="size"
           c-bind="attrs"
           data-citry-command-palette-root
@@ -854,7 +815,7 @@ class CCommandPalette(LibraryComponent):
                     c-aria-describedby="entry.command.description_id"
                     c-aria-disabled="'true' if entry.command.disabled else None"
                     c-data-value="entry.command.value"
-                    c-data-disabled="entry.command.disabled"
+                    c-data-disabled="'' if entry.command.disabled else None"
                     c-data-intent="entry.command.intent"
                     c-data-region-index="entry.region_index"
                     data-citry-ui-part="command-palette-command"
@@ -945,7 +906,7 @@ class CCommandPalette(LibraryComponent):
                       c-aria-describedby="command.description_id"
                       c-aria-disabled="'true' if command.disabled else None"
                       c-data-value="command.value"
-                      c-data-disabled="command.disabled"
+                      c-data-disabled="'' if command.disabled else None"
                       c-data-intent="command.intent"
                       data-citry-ui-part="command-palette-command"
                     >
@@ -1123,8 +1084,12 @@ class CCommandPalette(LibraryComponent):
           onQueryChange: {},
           onAction: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const host = els[0];
+        onServerRender: ({component}) => {
+          const host = component.$el;
+          const data = component;
+          const defaults = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const dialogRuntime = globalThis[Symbol.for("citry-ui:dialog-controller-runtime")];
           const activeRuntime = globalThis[Symbol.for("citry-ui:active-descendant-runtime")];
           if (dialogRuntime?.generation !== 1 || activeRuntime?.generation !== 1) {
@@ -1159,12 +1124,8 @@ class CCommandPalette(LibraryComponent):
           );
           host?.[ownerKey]?.transfer?.();
           const previous = host?.[handoffKey] ?? null;
-          if (previous?.timer !== null && previous?.timer !== undefined) {
-            clearTimeout(previous.timer);
-          }
           const abortPrevious = () => {
             if (!previous) return;
-            if (previous.timer !== null) clearTimeout(previous.timer);
             previous.abort();
             if (host[handoffKey] === previous) delete host[handoffKey];
           };
@@ -1196,7 +1157,8 @@ class CCommandPalette(LibraryComponent):
             element.dataset.value,
             element,
           ]));
-          const regionElements = [...listbox.children];
+          // Each child is a group or separator element that the palette hides or shows.
+          const regionElements = /** @type {HTMLElement[]} */ ([...listbox.children]);
           const documentOwner = host.ownerDocument;
           let actualRoot = host.getRootNode();
           const activators = [...host.children].filter((element) => element !== dialog);
@@ -1204,27 +1166,12 @@ class CCommandPalette(LibraryComponent):
             host, dialog, surface, header, title, closeButton, search, input, listbox, empty,
             ...regionElements, ...commandElements,
           ];
-          const frameworkMarker = (attribute) => attribute.name === "data-citry-root"
-            || attribute.name === "data-has-alpine-state"
-            || attribute.name.startsWith("data-cid")
-            || attribute.name.startsWith("data-cev")
-            || attribute.name.startsWith("x-citry-");
-          const correlationValid = () => {
-            const identifiers = (host.getAttribute("data-cid") ?? "").split(/\s+/).filter(Boolean);
-            const markers = [...host.attributes]
-              .filter((attribute) => attribute.name.startsWith("data-cid-"))
-              .map((attribute) => attribute.name.slice(9));
-            return host.getAttribute("data-citry-root") === ""
-              && (!host.hasAttribute("data-has-alpine-state")
-                || host.getAttribute("data-has-alpine-state") === "true")
-              && (!host.hasAttribute("x-citry-boundary")
-                || host.getAttribute("x-citry-boundary") === "")
-              && identifiers.length === 1
-              && markers.length === 1
-              && markers[0] === identifiers[0]
-              && ownedElements.slice(1).every((element) =>
-                ![...element.attributes].some(frameworkMarker));
-          };
+          // Citry's reserved event and component markers never belong on the
+          // anatomy below the host, and must not change while this client owns it.
+          const frameworkMarker = (attribute) => attribute.name.startsWith("data-cid")
+            || attribute.name.startsWith("data-cev");
+          const markersAbsent = () => ownedElements.every((element, index) => ![...element.attributes]
+            .some((attribute) => attribute.name.startsWith("data-cev") || (index > 0 && frameworkMarker(attribute))));
           const frameworkBaseline = ownedElements.map((element) => JSON.stringify(
             [...element.attributes]
               .filter(frameworkMarker)
@@ -1240,7 +1187,6 @@ class CCommandPalette(LibraryComponent):
           const runtimeAttributesValid = (element, allowed = []) => [...element.attributes].every(
             (attribute) => !attribute.name.startsWith("data-citry-")
               || attribute.name === "data-citry-ui-part"
-              || attribute.name === "data-citry-root"
               || allowed.includes(attribute.name),
           );
           const interactiveSelector = [
@@ -1275,7 +1221,7 @@ class CCommandPalette(LibraryComponent):
               || dialog.ownerDocument !== documentOwner
               || host.getRootNode() !== actualRoot
               || host.getRootNode() !== dialog.getRootNode()
-              || !correlationValid()
+              || !markersAbsent()
               || !frameworkMarkersValid()
               || !host.hasAttribute("data-citry-command-palette-host")
               || (requireReady && !host.hasAttribute(readyAttribute))
@@ -1394,7 +1340,10 @@ class CCommandPalette(LibraryComponent):
             && previous.documentOwner === host.ownerDocument
             && previous.actualRoot === actualRoot);
           if (previous && !retained) abortPrevious();
-          if (retained) delete host[handoffKey];
+          if (retained) {
+            previous.adopt();
+            delete host[handoffKey];
+          }
 
           const owner = { active: true, token: Symbol(), transfer: null };
           host[ownerKey] = owner;
@@ -1407,17 +1356,17 @@ class CCommandPalette(LibraryComponent):
           let controller = null;
           let collection = null;
           let configuration = {
-            disabled: data.disabled,
-            loop: data.loop,
-            closeOnAction: data.closeOnAction,
-            size: data.size,
+            disabled: defaults.disabled,
+            loop: defaults.loop,
+            closeOnAction: defaults.closeOnAction,
+            size: defaults.size,
           };
-          let internalOpen = retained ? previous.internalOpen : data.open;
+          let internalOpen = retained ? previous.internalOpen : defaults.open;
           let logicalOpen = retained ? previous.logicalOpen : false;
           let openControlled = false;
           let queryControlled = false;
-          let fallbackQuery = retained ? previous.fallbackQuery : data.query;
-          let query = retained ? previous.query : data.query;
+          let fallbackQuery = retained ? previous.fallbackQuery : defaults.query;
+          let query = retained ? previous.query : defaults.query;
           let suppliedQuery = retained ? previous.suppliedQuery : null;
           let activeValue = retained ? previous.activeValue : null;
           let previousOrder = retained ? previous.previousOrder : flattened.map((item) => item.value);
@@ -1460,7 +1409,7 @@ class CCommandPalette(LibraryComponent):
           };
           const resolveBoolean = (name, fallback) => {
             const value = props[name] === undefined || props[name] === null
-              ? data[name]
+              ? defaults[name]
               : props[name];
             if (typeof value === "boolean") {
               invalid.delete(name);
@@ -1470,7 +1419,7 @@ class CCommandPalette(LibraryComponent):
             return fallback;
           };
           const resolveSize = () => {
-            const value = props.size === undefined || props.size === null ? data.size : props.size;
+            const value = props.size === undefined || props.size === null ? defaults.size : props.size;
             if (["sm", "md", "lg"].includes(value)) {
               invalid.delete("size");
               return value;
@@ -2008,7 +1957,10 @@ class CCommandPalette(LibraryComponent):
             tasks.clear();
             watcher?.cleanup();
             listeners.splice(0).forEach((remove) => remove());
-            const canHandoff = host.isConnected
+            // Lost anatomy fails closed at once. Only an ordinary cleanup can
+            // hand its open state to the next server-render callback.
+            const canHandoff = !diagnose
+              && host.isConnected
               && host.ownerDocument === documentOwner
               && host.getRootNode() === actualRoot
               && dialog.isConnected
@@ -2021,6 +1973,7 @@ class CCommandPalette(LibraryComponent):
             const handedOff = controller.cleanup({ handoff: canHandoff });
             if (host[ownerKey] === owner) delete host[ownerKey];
             if (handedOff) {
+              let handoffObserver = null;
               const record = {
                 host,
                 dialog,
@@ -2041,7 +1994,16 @@ class CCommandPalette(LibraryComponent):
                 composing,
                 collection,
                 timer: null,
+                adopt() {
+                  if (this.timer !== null) {
+                    clearTimeout(this.timer);
+                    this.timer = null;
+                  }
+                  handoffObserver?.disconnect();
+                  handoffObserver = null;
+                },
                 abort() {
+                  this.adopt();
                   dialogRuntime.abortHandoff(dialog);
                   collection.cleanup();
                   host.removeAttribute(readyAttribute);
@@ -2049,12 +2011,39 @@ class CCommandPalette(LibraryComponent):
                   input.removeAttribute("aria-activedescendant");
                 },
               };
+              // The runtime runs this cleanup before it knows whether the
+              // revision keeps or unmounts this host, so the ready marker goes
+              // now. A retained host restores it when its next server-render
+              // callback adopts this record.
+              host.removeAttribute(readyAttribute);
+              // A host removed outside a Vue unmount, after the microtask
+              // below has run, still releases its handoff as soon as it
+              // leaves the DOM. adopt() disconnects this observer.
+              const handoffRoot = host.getRootNode();
+              handoffObserver = new MutationObserver(() => {
+                if (host.isConnected || host[handoffKey] !== record) return;
+                record.abort();
+                delete host[handoffKey];
+              });
+              handoffObserver.observe(
+                handoffRoot instanceof Document ? handoffRoot.documentElement : handoffRoot,
+                {childList: true, subtree: true},
+              );
               host[handoffKey] = record;
               record.timer = setTimeout(() => {
                 if (host[handoffKey] !== record || host[ownerKey]?.active) return;
                 record.abort();
                 delete host[handoffKey];
               }, 1000);
+              // An unmount has no next callback to adopt the record. Vue
+              // removes the host right after this cleanup, so release the
+              // modal and the scroll lock then instead of after the timer.
+              queueMicrotask(() => {
+                if (host[handoffKey] !== record || host.isConnected) return;
+                clearTimeout(record.timer);
+                record.abort();
+                delete host[handoffKey];
+              });
             } else {
               collection.cleanup();
               host.removeAttribute(readyAttribute);

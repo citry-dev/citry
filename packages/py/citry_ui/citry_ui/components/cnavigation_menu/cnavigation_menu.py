@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, overload
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CNavigationMenuOrientation = Literal["horizontal", "vertical"]
@@ -55,9 +55,6 @@ _ORIENTATIONS = ("horizontal", "vertical")
 _VARIANTS = ("plain", "surface")
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-hidden",
@@ -205,27 +202,17 @@ def _milliseconds(component: str, name: str, value: object) -> int:
     return raw
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(component: str, value: Mapping[str, object] | None, owned: frozenset[str]) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"{component} attrs must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
     reject_owned_attrs(copied, owned, f"{component} attrs")
+    # A Vue directive could rebind an owned attribute, replace the menu's
+    # listeners, or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, component)
     for key in copied:
-        normalized = key.casefold()
-        if normalized.startswith(_RUNTIME_PREFIXES):
+        if key.casefold().startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{component} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{component} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{component} attrs cannot dynamically bind owned attribute {key!r}.")
     return copied
 
 
@@ -305,14 +292,16 @@ class CNavigationMenu(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "value": snapshot["value"],
-            "orientation": snapshot["orientation"],
-            "disabled": snapshot["disabled"],
-            "delay": snapshot["delay"],
-            "closeDelay": snapshot["close_delay"],
-            "loop": snapshot["loop"],
-            "variant": snapshot["variant"],
-            "size": snapshot["size"],
+            "serverDefaults": {
+                "value": snapshot["value"],
+                "orientation": snapshot["orientation"],
+                "disabled": snapshot["disabled"],
+                "delay": snapshot["delay"],
+                "closeDelay": snapshot["close_delay"],
+                "loop": snapshot["loop"],
+                "variant": snapshot["variant"],
+                "size": snapshot["size"],
+            }
         }
 
     def on_render(self) -> Any:
@@ -335,8 +324,8 @@ class CNavigationMenu(LibraryComponent):
         c-aria-label="label"
         c-data-value="value"
         c-data-orientation="orientation"
-        c-data-disabled="disabled"
-        c-data-loop="loop"
+        c-data-disabled="'' if disabled else None"
+        c-data-loop="'' if loop else None"
         c-data-variant="variant"
         c-data-size="size"
         data-citry-navigation-menu-root
@@ -359,8 +348,11 @@ class CNavigationMenu(LibraryComponent):
           size: {},
           onValueChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const list = root.querySelector(':scope > [data-citry-ui-part="list"]');
           if (!(root instanceof HTMLElement) || !(list instanceof HTMLUListElement)) {
             throw new Error("[citry-ui] CNavigationMenu requires its owned nav/list anatomy.");
@@ -878,8 +870,8 @@ class CNavigationMenuItem(LibraryComponent):
         class="cui-navigation-menu__item"
         c-bind="attrs"
         c-data-value="value"
-        c-data-disabled="disabled"
-        c-data-open="open"
+        c-data-disabled="'' if disabled else None"
+        c-data-open="'' if open else None"
         data-citry-navigation-menu-item
         data-citry-ui-part="item"
       >
@@ -892,8 +884,8 @@ class CNavigationMenuItem(LibraryComponent):
           c-aria-controls="panel_id"
           c-aria-expanded="'true' if open else 'false'"
           c-data-value="value"
-          c-data-disabled="disabled"
-          c-data-open="open"
+          c-data-disabled="'' if disabled else None"
+          c-data-open="'' if open else None"
           data-citry-navigation-menu-trigger
           data-citry-ui-part="trigger"
         >
@@ -905,7 +897,7 @@ class CNavigationMenuItem(LibraryComponent):
           c-bind="panel_attrs"
           c-id="panel_id"
           c-data-value="value"
-          c-data-open="open"
+          c-data-open="'' if open else None"
           c-hidden="not open"
           c-inert="not open"
           data-citry-navigation-menu-panel

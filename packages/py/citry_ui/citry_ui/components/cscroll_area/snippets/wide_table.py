@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class ScrollAreaWideTable(Component):
     template = """
-      <section class="scroll-area-wide-table" x-data="{direction:'ltr'}">
+      <section class="scroll-area-wide-table" >
         <h2 id="quarterly-results-title">Quarterly service results</h2>
         <p>
           The Table keeps its caption and headers. ScrollArea only bounds the
@@ -69,6 +69,15 @@ class ScrollAreaWideTable(Component):
           column fits inside the physical page.
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            direction:'ltr'
+          };
+        },
+      });
     """
 
     css = """

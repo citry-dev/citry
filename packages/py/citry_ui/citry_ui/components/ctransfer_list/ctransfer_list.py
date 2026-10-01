@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
@@ -28,9 +28,6 @@ CTransferListChangeSource = Literal[
 _TRANSFER_CONTEXT = "citry_ui_transfer_list"
 _SIZES = ("sm", "md", "lg")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
-)
 _ROOT_OWNED = frozenset(
     {
         "aria-disabled",
@@ -105,6 +102,19 @@ class _TransferRegistry:
     items: list[_TransferDeclaration] = field(default_factory=list)
 
 
+class _TransferRow(TypedDict):
+    """One declared item with its pane placement, as the panes and native select render it."""
+
+    declaration: _TransferDeclaration
+    authored_index: int
+    in_target: bool
+    index: int
+    # The wrapper Slot ignores the data it is rendered with and passes the item's
+    # own slot data to the authored content, so it accepts any data.
+    content: str | Slot[object]
+    option_id: str
+
+
 def _plain(name: str, value: object, *, optional: bool = False, single_line: bool = False) -> str | None:
     raw = const_value(value)
     if raw is None and optional:
@@ -136,14 +146,6 @@ def _string_list(name: str, value: object) -> tuple[str, ...]:
     return result
 
 
-def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
-    if key.startswith((":", ".")):
-        return key[1:].split(".", 1)[0]
-    return None
-
-
 def _attrs(
     owner: str,
     attrs: Mapping[str, object] | None,
@@ -155,16 +157,15 @@ def _attrs(
         raise TypeError(f"{owner} attrs must be a mapping or None, got {attrs!r}.")
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"{owner} attrs")
+    # A Vue directive could rebind an owned attribute, spread over the root,
+    # or change its structure, so none may arrive through Python data.
+    reject_vue_directive_attrs(copied, owner)
     for key in copied:
         if not isinstance(key, str):
             raise TypeError(f"{owner} attrs require string keys, got {key!r}.")
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             raise ValueError(f"{owner} attrs cannot contain Citry runtime attribute {key!r}.")
-        if normalized.split(".", 1)[0] in _DIRECTIVES:
-            raise ValueError(f"{owner} attrs cannot use ownership directive {key!r}.")
-        if _dynamic_target(normalized) in owned:
-            raise ValueError(f"{owner} attrs cannot dynamically bind owned attribute {key!r}.")
     return merge_root_attrs(copied, class_, style)
 
 
@@ -343,18 +344,21 @@ class CTransferList(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "value": snapshot["value"],
-            "name": snapshot["name"],
-            "form": snapshot["form"],
-            "required": snapshot["required"],
-            "disabled": snapshot["disabled"],
-            "catalog": snapshot["catalog"],
-            "labels": snapshot["labels"],
+            "serverDefaults": {
+                "value": snapshot["value"],
+                "name": snapshot["name"],
+                "form": snapshot["form"],
+                "required": snapshot["required"],
+                "disabled": snapshot["disabled"],
+                "catalog": snapshot["catalog"],
+                "labels": snapshot["labels"],
+            }
         }
 
     template = """
       <c-CInternalTransferListDeclarations><c-slot /></c-CInternalTransferListDeclarations>
       <c-CInternalTransferList
+        ref="root"
         c-root_id="root_id"
         c-native_id="native_id"
         c-available_title_id="available_title_id"
@@ -468,7 +472,8 @@ class CInternalTransferListDeclarations(LibraryComponent):
 
 
 class CInternalTransferList(LibraryComponent):
-    transparent = True
+    # The outer runtime uses this component as its stable DOM ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -500,7 +505,7 @@ class CInternalTransferList(LibraryComponent):
         if unknown:
             raise ValueError(f"CTransferList value contains unknown item values: {unknown!r}.")
         chosen = set(kwargs.value)
-        items: list[dict[str, object]] = []
+        items: list[_TransferRow] = []
         for authored_index, declaration in enumerate(declarations):
             in_target = declaration.value in chosen
             pane_values = (
@@ -514,7 +519,7 @@ class CInternalTransferList(LibraryComponent):
                 "in_target": in_target,
                 "index": index,
             }
-            content: object = declaration.label
+            content: str | Slot[object] = declaration.label
             if declaration.content is not None:
                 content = Slot(
                     lambda ctx, item=declaration, data=slot_data: cast(
@@ -532,7 +537,7 @@ class CInternalTransferList(LibraryComponent):
                 }
             )
         self.unprovide(_TRANSFER_CONTEXT)
-        available_total = sum(not cast("bool", item["in_target"]) for item in items)
+        available_total = sum(not item["in_target"] for item in items)
         chosen_total = len(kwargs.value)
         count_available = (
             self.i18n.tr("citry-ui-transfer-list-count", selected=str(0), total=str(available_total))
@@ -567,11 +572,9 @@ class CInternalTransferList(LibraryComponent):
             },
             "items": items,
             "available_items": [item for item in items if not item["in_target"]],
-            "chosen_items": sorted(
-                (item for item in items if item["in_target"]), key=lambda item: cast("int", item["index"])
-            ),
+            "chosen_items": sorted((item for item in items if item["in_target"]), key=lambda item: item["index"]),
             "native_items": [item for item in items if not item["in_target"]]
-            + sorted((item for item in items if item["in_target"]), key=lambda item: cast("int", item["index"])),
+            + sorted((item for item in items if item["in_target"]), key=lambda item: item["index"]),
             "available_total": available_total,
             "chosen_total": chosen_total,
             "count_available": count_available,
@@ -583,15 +586,16 @@ class CInternalTransferList(LibraryComponent):
             "move_bottom_label": kwargs.labels["move_bottom"],
         }
 
-    template = """
+    template = (
+        """
       <div
         class="cui-transfer-list"
         c-bind="attrs"
         c-id="root_id"
-        c-data-required="True if required else None"
-        c-data-disabled="True if disabled else None"
-        c-data-available-empty="True if available_total == 0 else None"
-        c-data-chosen-empty="True if chosen_total == 0 else None"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-available-empty="'' if available_total == 0 else None"
+        c-data-chosen-empty="'' if chosen_total == 0 else None"
         c-data-size="size"
         c-aria-disabled="'true' if disabled else 'false'"
         data-citry-ui-part="transfer-list"
@@ -647,8 +651,10 @@ class CInternalTransferList(LibraryComponent):
               data-citry-transfer-listbox="available"
               data-citry-ui-part="listbox"
             >
-              <c-for each="item in available_items"><c-CInternalTransferListItem c-item="item" /></c-for>
-            </div>
+"""
+        '              <c-for each="item in available_items"><c-CInternalTransferListItem #c-ke'
+        'y="item[\'declaration\'].value" c-item="item" /></c-for>\n'
+        """            </div>
             <p
               c-hidden="available_total != 0"
               c-$c-tr:citry-ui-transfer-list-available-empty="True if catalog['available_empty'] else None"
@@ -698,8 +704,10 @@ class CInternalTransferList(LibraryComponent):
               data-citry-transfer-listbox="chosen"
               data-citry-ui-part="listbox"
             >
-              <c-for each="item in chosen_items"><c-CInternalTransferListItem c-item="item" /></c-for>
-            </div>
+"""
+        '              <c-for each="item in chosen_items"><c-CInternalTransferListItem #c-key="'
+        'item[\'declaration\'].value" c-item="item" /></c-for>\n'
+        """            </div>
             <p c-hidden="chosen_total != 0"
               c-$c-tr:citry-ui-transfer-list-chosen-empty="True if catalog['chosen_empty'] else None"
               data-citry-ui-part="empty"
@@ -734,6 +742,7 @@ class CInternalTransferList(LibraryComponent):
         <div aria-live="polite" aria-atomic="true" data-citry-ui-part="status"></div>
       </div>
     """
+    )
 
 
 class CInternalTransferListItem(LibraryComponent):
@@ -741,7 +750,7 @@ class CInternalTransferListItem(LibraryComponent):
 
     @dataclass(slots=True)
     class Kwargs:
-        item: dict[str, object]
+        item: _TransferRow
 
     @dataclass(slots=True)
     class Slots:
@@ -749,13 +758,13 @@ class CInternalTransferListItem(LibraryComponent):
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item
-        declaration = cast("_TransferDeclaration", item["declaration"])
+        declaration = item["declaration"]
         return {
             "attrs": {
                 **declaration.attrs,
                 "aria-disabled": "true" if declaration.disabled else None,
                 "aria-selected": "false",
-                "data-disabled": True if declaration.disabled else None,
+                "data-disabled": "" if declaration.disabled else None,
                 "data-value": declaration.value,
             },
             "content": item["content"],

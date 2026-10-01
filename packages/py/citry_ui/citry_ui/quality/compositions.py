@@ -305,13 +305,6 @@ def repeatable_contacts_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack"
             aria-labelledby="repeatable-contacts-title"
-            x-data="{
-              nextId: 3,
-              contacts: [
-                { id: 1, name: 'Ada Lovelace', email: 'ada@example.com' },
-                { id: 2, name: 'Grace Hopper', email: '' },
-              ],
-            }"
           >
             <h1 id="repeatable-contacts-title">
               Escalation contacts
@@ -321,21 +314,21 @@ def repeatable_contacts_component(app: Citry) -> type[Component]:
               action="/contacts"
               method="post"
             >
-              <template x-for="contact in contacts" :key="contact.id">
+              <template v-for="contact in contacts" :key="contact.id">
                 <fieldset>
-                  <legend x-text="contact.name"></legend>
+                  <legend v-text="contact.name"></legend>
                   <label>
                     Work email
                     <input
                       type="email"
                       required
                       :name="`contacts[${contact.id}][email]`"
-                      x-model="contact.email"
+                      v-model="contact.email"
                     />
                   </label>
                   <button
                     type="button"
-                    @click="contacts = contacts.filter((item) => item.id !== contact.id)"
+                    @click="removeContact(contact.id)"
                   >
                     Remove
                   </button>
@@ -344,7 +337,7 @@ def repeatable_contacts_component(app: Citry) -> type[Component]:
               <c-CButton
                 type="button"
                 variant="outline"
-                @click="contacts.push({ id: nextId++, name: 'New contact', email: '' })"
+                @click="addContact()"
               >
                 Add contact
               </c-CButton>
@@ -360,6 +353,30 @@ def repeatable_contacts_component(app: Citry) -> type[Component]:
               </c-CButton>
             </c-CForm>
           </section>
+        """
+
+        # Browser-owned rows keep this workflow client-heavy: add, remove, and
+        # reorder never round-trip, so the scenario measures Vue list updates.
+        js = """
+          $component({
+            data() {
+              return {
+                nextId: 3,
+                contacts: [
+                  { id: 1, name: 'Ada Lovelace', email: 'ada@example.com' },
+                  { id: 2, name: 'Grace Hopper', email: '' },
+                ],
+              };
+            },
+            methods: {
+              addContact() {
+                this.contacts.push({ id: this.nextId++, name: 'New contact', email: '' });
+              },
+              removeContact(id) {
+                this.contacts = this.contacts.filter((item) => item.id !== id);
+              },
+            },
+          });
         """
 
     return CitryUiRepeatableContacts

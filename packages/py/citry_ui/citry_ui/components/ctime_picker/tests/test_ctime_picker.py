@@ -211,6 +211,29 @@ def test_attrs_reject_owned_root_attributes(attribute: str) -> None:
         _render('<c-CTimePicker c-attrs="attrs" />', {"attrs": {attribute: "hostile"}})
 
 
+@pytest.mark.parametrize(
+    "attribute",
+    [":aria-invalid", "v-bind:role", "v-show", "v-if", "V-IF", "@keydown", "#default"],
+)
+def test_python_attrs_reject_vue_directives(attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    message = re.escape(f"CTimePicker attrs cannot contain the Vue directive {attribute!r}")
+    with pytest.raises(ValueError, match=message):
+        _render('<c-CTimePicker c-attrs="attrs" />', {"attrs": {attribute: "hostile"}})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render('<c-CTimePicker c-attrs="attrs" />', {"attrs": {"x-data": "{}", "hx-get": "/slots"}})
+
+    root = re.search(r'<[^>]+data-citry-ui-part="time-picker"[^>]*>', html)
+    assert root is not None
+    assert 'x-data="{}"' in root.group(0)
+    assert 'hx-get="/slots"' in root.group(0)
+
+
 def test_field_and_form_have_one_control_while_listbox_is_context_isolated() -> None:
     html = _render(
         """

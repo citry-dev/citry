@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
-from citry_ui.quality.routes import build_scenario, render_scenario
+from citry_ui.quality.routes import build_scenario
 
 pytestmark = pytest.mark.e2e
 
@@ -34,8 +34,8 @@ def _wait_for_all_ready(page: Any) -> None:
     )
 
 
-def test_scroll_area_quality_native_semantics_callback_style_and_axe(page: Any) -> None:
-    page.set_content(render_scenario("scroll-area.states"), wait_until="load")
+def test_scroll_area_quality_native_semantics_callback_style_and_axe(page: Any, open_scenario: Any) -> None:
+    open_scenario("scroll-area.states")
     _wait_for_all_ready(page)
 
     generic = page.locator("#quality-scroll-area-generic")

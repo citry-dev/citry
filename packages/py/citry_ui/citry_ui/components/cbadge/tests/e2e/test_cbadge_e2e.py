@@ -62,6 +62,37 @@ def _badge_page() -> str:
     return str(Page())
 
 
+def _vue_binding_page() -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class Page(Component):
+        citry = app
+        template = """
+          <!doctype html><html><head><c-css /></head><body>
+            <main>
+              <c-CBadge
+                c-attrs="{'id': 'vue-badge', 'class': 'server-badge', 'style': '--server-token: 7'}"
+                :class="{active: active}"
+                :style="{'--vue-token': active ? '9' : '3'}"
+                :disabled="disabled"
+                @click="active = !active; disabled = !disabled"
+              >Reactive badge</c-CBadge>
+              <c-CSkeleton
+                c-attrs="{'id': 'vue-skeleton', 'class': 'server-skeleton'}"
+                kind="circle"
+                width="24px"
+                :class="{active: active}"
+              />
+            </main>
+            <c-js />
+          </body></html>
+        """
+        js = "$component({data(){return {active:false,disabled:false};}});"
+
+    return Page().render().serialize()
+
+
 def test_badge_is_neutral_inline_content_with_optional_parts(page: Any) -> None:
     page.set_content(_badge_page(), wait_until="load")
 
@@ -111,3 +142,34 @@ def test_forced_colors_and_print_keep_a_visible_boundary(page: Any) -> None:
     page.emulate_media(forced_colors="none", media="print")
     assert root.evaluate("el => getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
     assert root.evaluate("el => getComputedStyle(el).borderTopStyle") == "solid"
+
+
+def test_authored_vue_bindings_fall_through_without_clobbering_component_metadata(page: Any) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(_vue_binding_page(), wait_until="load")
+
+    badge = page.locator("#vue-badge")
+    skeleton = page.locator("#vue-skeleton")
+    assert "cui-badge" in (badge.get_attribute("class") or "")
+    assert "server-badge" in (badge.get_attribute("class") or "")
+    assert badge.get_attribute("data-variant") == "soft"
+    assert badge.get_attribute("style") is not None
+    assert "--server-token: 7" in (badge.get_attribute("style") or "")
+    # `disabled` has no native semantics on this passive span; Vue forwards its
+    # current value as an ordinary consumer attribute.
+    assert badge.get_attribute("disabled") == "false"
+    assert skeleton.get_attribute("data-kind") == "circle"
+
+    badge.click()
+    page.wait_for_function("document.querySelector('#vue-badge').classList.contains('active')")
+    assert "cui-badge" in (badge.get_attribute("class") or "")
+    assert "server-badge" in (badge.get_attribute("class") or "")
+    assert badge.get_attribute("data-variant") == "soft"
+    assert badge.get_attribute("disabled") == "true"
+    assert "--server-token: 7" in (badge.get_attribute("style") or "")
+    assert "--vue-token: 9" in (badge.get_attribute("style") or "")
+    assert "active" in (skeleton.get_attribute("class") or "")
+    assert "cui-skeleton" in (skeleton.get_attribute("class") or "")
+    assert skeleton.get_attribute("data-kind") == "circle"
+    assert errors == []

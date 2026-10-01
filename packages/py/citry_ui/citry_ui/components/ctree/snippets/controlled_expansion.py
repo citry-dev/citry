@@ -6,10 +6,10 @@ citry.register_library(citry_ui)
 
 class ControlledExpansion(Component):
     template = """
-      <section x-data="{ expanded: ['docs'] }">
+      <section >
         <c-CTree
           label="Knowledge base"
-          $c-props="{ expanded, onExpandedChange: (next) => expanded = next }"
+          :expanded="expanded" :onExpandedChange="(next) => expanded = next"
         >
           <c-CTreeItem value="docs" label="Documentation">
             <c-CTreeItem value="guides" label="Guides" />
@@ -17,8 +17,17 @@ class ControlledExpansion(Component):
           </c-CTreeItem>
           <c-CTreeItem value="examples" label="Examples" />
         </c-CTree>
-        <output x-text="expanded.join(', ') || 'All branches collapsed'"></output>
+        <output v-text="expanded.join(', ') || 'All branches collapsed'"></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            expanded: ['docs']
+          };
+        },
+      });
     """
 
 

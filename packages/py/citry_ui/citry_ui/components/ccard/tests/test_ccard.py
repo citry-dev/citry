@@ -236,18 +236,33 @@ def test_owned_and_reserved_runtime_attrs_are_rejected(input_name, attribute, sl
         _render(CCard(**{input_name: {attribute: "consumer"}}, slots=slots))
 
 
-def test_hostile_slot_text_is_escaped_and_trusted_part_listeners_are_preserved():
+def test_hostile_slot_text_is_escaped_and_trusted_part_attrs_are_preserved():
     html = _render(
         CCard(
-            body_attrs={"x-data": "{}", "@click": "opened = true"},
+            body_attrs={"data-body-state": "ready"},
             slots={"default": "<script>window.__cardPwned = true</script>"},
         )
     )
 
     assert "&lt;script&gt;window.__cardPwned = true&lt;/script&gt;" in html
     assert "<script>window.__cardPwned" not in html
-    assert 'x-data="{}"' in html
-    assert '@click="opened = true"' in html
+    assert 'data-body-state="ready"' in html
+
+
+@pytest.mark.parametrize(
+    ("input_name", "attribute"),
+    [
+        ("body_attrs", "@click"),
+        ("body_attrs", "v-on:click"),
+        ("attrs", ":data-variant"),
+        ("attrs", "V-IF"),
+        ("body_attrs", "#default"),
+        ("body_attrs", ".title"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(input_name, attribute):
+    with pytest.raises(ValueError, match=f"CCard {input_name} cannot contain the Vue directive"):
+        _render(CCard(**{input_name: {attribute: "value"}}, slots={"default": "Card body"}))
 
 
 def test_card_has_static_css_and_no_javascript_asset():

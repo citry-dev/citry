@@ -8,18 +8,20 @@ class SplitButtonAtAGlance(Component):
     template = """
       <section
         class="split-button-glance"
-        x-data="{saved:0,last:'No action yet'}"
+
       >
         <p class="split-button-glance__eyebrow">Field journal</p>
         <h2>Alpine gentian specimen</h2>
         <p>Keep the primary save action visible and related work nearby.</p>
         <c-CSplitButton
+          ref="split"
           label="Save specimen actions"
           menu_label="More save specimen actions"
-          c-primary_attrs="{'@click':'saved += 1; last = `Saved specimen ${saved}`'}"
-          $c-props="{onAction:(value)=>last=value}"
+          v-bind="{onAction:(value)=>last=value}"
         >
-          <c-fill name="default">Save specimen</c-fill>
+          <c-fill name="default">
+            Save specimen
+          </c-fill>
           <c-fill name="menu">
             <c-CMenuItem value="Save a copy">Save a copy</c-CMenuItem>
             <c-CMenuItem value="Export record">Export record</c-CMenuItem>
@@ -28,8 +30,22 @@ class SplitButtonAtAGlance(Component):
             </c-CMenuItem>
           </c-fill>
         </c-CSplitButton>
-        <output x-text="last">No action yet</output>
+        <output v-text="last">No action yet</output>
       </section>
+    """
+
+    js = r"""
+      $component({
+        data(){return {saved:0,last:'No action yet'};},
+        onServerRender({component}) {
+          const primary=component.$refs.split.$el.querySelector(
+            '[data-citry-ui-part="split-button-primary"]'
+          );
+          const save=()=>{component.saved += 1; component.last=`Saved specimen ${component.saved}`;};
+          primary.addEventListener('click',save);
+          return ()=>primary.removeEventListener('click',save);
+        },
+      });
     """
 
     css = """

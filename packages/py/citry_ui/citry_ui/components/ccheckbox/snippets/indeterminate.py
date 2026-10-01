@@ -8,47 +8,53 @@ class IndeterminateCheckbox(Component):
     template = """
       <section
         class="habitat-summary"
-        x-data="{
-          meadow: true,
-          woodland: false,
-          wetland: true,
-          get count() { return [this.meadow, this.woodland, this.wetland].filter(Boolean).length },
-          get all() { return this.count === 3 },
-          get mixed() { return this.count > 0 && this.count < 3 },
-          setAll(value) { this.meadow = value; this.woodland = value; this.wetland = value },
-        }"
       >
         <c-CCheckbox
           variant="outline"
-          $c-props="{checked: all, indeterminate: mixed}"
+          :checked="all" :indeterminate="mixed"
           @input="setAll($event.target.checked)"
         >
           <c-fill name="default">All survey habitats</c-fill>
           <c-fill name="description">
-            <span x-text="`${count} of 3 selected`"></span>
+            <span v-text="`${count} of 3 selected`"></span>
           </c-fill>
         </c-CCheckbox>
         <div class="habitat-summary__children">
           <c-CCheckbox
-            $c-props="{checked: meadow}"
+            :checked="meadow"
             @input="meadow = $event.target.checked"
           >
             Limestone meadow
           </c-CCheckbox>
           <c-CCheckbox
-            $c-props="{checked: woodland}"
+            :checked="woodland"
             @input="woodland = $event.target.checked"
           >
             Beech woodland
           </c-CCheckbox>
           <c-CCheckbox
-            $c-props="{checked: wetland}"
+            :checked="wetland"
             @input="wetland = $event.target.checked"
           >
             Reed wetland
           </c-CCheckbox>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            meadow: true,
+            woodland: false,
+            wetland: true,
+            get count() { return [this.meadow, this.woodland, this.wetland].filter(Boolean).length },
+            get all() { return this.count === 3 },
+            get mixed() { return this.count > 0 && this.count < 3 },
+            setAll(value) { this.meadow = value; this.woodland = value; this.wetland = value },
+          };
+        },
+      });
     """
 
     css = """

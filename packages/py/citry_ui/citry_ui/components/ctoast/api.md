@@ -33,10 +33,8 @@ fresh episode.
 
 ```citry-html
 <c-CToastRegion
-  $c-props="{
-    items: notices,
-    onDismiss: (id) => notices = notices.filter(item => item.id !== id),
-  }"
+  :items="notices"
+  :onDismiss="(id) => notices = notices.filter(item => item.id !== id)"
 />
 ```
 

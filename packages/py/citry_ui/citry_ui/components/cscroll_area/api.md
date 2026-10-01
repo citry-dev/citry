@@ -84,7 +84,7 @@ fallback. An invalid value keeps the last valid effective value and reports one
 diagnostic for that invalid episode.
 
 The root owns instantaneous `scroll-behavior: auto` for direction, disabled-axis,
-and morph repair. An application can still request a smooth native movement in
+and server-update repair. An application can still request a smooth native movement in
 an explicit `scrollTo()` call, but it cannot replace the root's computed CSS
 policy.
 
@@ -102,7 +102,7 @@ Raw viewport geometry and native events follow
 
 A direction change preserves the last cached logical distance when the same
 root remains connected. Stylesheet-only direction changes are reconciled at
-the next native scroll, configuration update, or Citry morph settlement.
+the next native scroll, configuration update, or Citry server update.
 Vertical writing modes keep usable native overflow but suspend normalized
 callbacks and lifecycle repair.
 
@@ -116,29 +116,23 @@ distinct useful names, and leave incidental regions unnamed.
 
 ## Distinguish the component callback from native events
 
-`onScrollChange` is a semantic component callback supplied through `$c-props`.
-It runs at most once per animation frame after one or more actual native
-`scroll` events. It receives the latest native event as `detail.source`.
-Content resize, image load, configuration changes, and component-owned repairs
-do not create this callback.
+`onScrollChange` is a semantic component callback supplied with a native Vue
+`:onScrollChange` binding. It runs at most once per animation frame after one or
+more actual native `scroll` events. It receives the latest native event as
+`detail.source`. Content resize, image load, configuration changes, and
+component-owned repairs do not create this callback.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cscroll_area/snippets/native_callback.py" title="Event-scoped logical scroll details" />
 
-Native root events remain Alpine listeners in `attrs`:
+Native root events must be authored as Vue listeners on the component call:
 
 ```citry-html
-<section
-  x-data="{nativeCount:0,settled:false,last:0}"
-  @build-log-scroll="nativeCount += 1"
-  @build-log-settled="settled = true"
->
+<section>
   <c-CScrollArea
     aria_label="Build log"
-    c-attrs="{
-      '@scroll':'$dispatch(`build-log-scroll`)',
-      '@scrollend':'$dispatch(`build-log-settled`)',
-    }"
-    $c-props="{onScrollChange:(detail)=>last=detail.blockOffset}"
+    @scroll="nativeCount += 1"
+    @scrollend="settled = true"
+    :onScrollChange="(detail) => last = detail.blockOffset"
   >
     ...
   </c-CScrollArea>
@@ -147,11 +141,11 @@ Native root events remain Alpine listeners in `attrs`:
 
 Native listeners observe every browser event, including an event produced by
 component-owned coordinate repair. ScrollArea dispatches no custom DOM event
-and exposes no public method. A listener on a component root has Citry's
-isolated component scope, so it cannot read ancestor-local `x-data` identifiers
-directly. Use `$event`, `$dispatch`, `$store`, or another explicit global bridge;
-use `onScrollChange` for owner-local callback state. Application controls can
-use an ordinary DOM ref and the native `scrollTo()` or `scrollBy()` method.
+and exposes no public method. A Python-resolved `attrs` mapping cannot contain
+listener names such as `@scroll`, `v-on:scroll`, or `onscroll`; those values
+would be executable code. Use an authored Vue listener for raw browser
+events and `:onScrollChange` for the normalized callback; application controls
+can use an ordinary DOM ref and the native `scrollTo()` or `scrollBy()` method.
 
 ## Customize standards-based styling
 
@@ -181,11 +175,11 @@ siblings inert, or create a stacking context.
 
 ## Preserve only a retained root
 
-A correlated Citry morph that retains the same root preserves valid client
+A Citry server update that keeps the same root preserves valid client
 configuration, cached logical position, and focus on that root. Incoming
 server values become new fallbacks for fields without client ownership.
 
-<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cscroll_area/snippets/lifecycle.py" title="Retained-root morph and replacement scope" />
+<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cscroll_area/snippets/lifecycle.py" title="Retained-root server update and replacement scope" />
 
 A replacement root, even with the same authored ID, starts with native browser
 position. Removal cancels pending callbacks and lifecycle work. Restoring a new
@@ -202,13 +196,17 @@ direction repair, and retained-root lifecycle behavior.
 ## Treat root attributes as trusted configuration
 
 `class_`, `style`, and `attrs` all target the native viewport. `attrs` accepts
-ordinary descriptive attributes, `dir`, language hints, nonreserved `data-*`,
-and native Alpine event listeners that respect the isolated scope boundary. It
-rejects values that replace the root ID, role, focusability, region name, part
-marker, reflected state, lifecycle, or owned scrolling policy.
+ordinary descriptive attributes, `dir`, language hints, and `data-*`
+attributes other than Citry's reserved `data-citry-*`, `data-cev*`, and
+`data-cid*`. It rejects executable listener attributes and values that replace the root ID,
+role, focusability, region name, part marker, reflected state, lifecycle, or
+owned scrolling policy. It also rejects any Vue directive syntax: names
+starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Author Vue bindings and listeners
+directly on the component call; use `onScrollChange` for the typed normalized
+callback.
 
 Slotted text and components follow Citry's normal trusted content boundary.
-ScrollArea does not evaluate content as HTML, URLs, selectors, or Alpine
+ScrollArea does not evaluate content as HTML, URLs, selectors, or Vue
 expressions.
 
 <!-- UI_LIBRARY_API_REFERENCE -->

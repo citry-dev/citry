@@ -77,6 +77,55 @@ def test_owned_accessibility_attributes_fail(source):
 
 
 @pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        (
+            "<c-CList c-attrs=\"{'v-bind:aria-label': 'name'}\"><c-CListItem>X</c-CListItem></c-CList>",
+            "CList attrs cannot contain the Vue directive 'v-bind:aria-label'",
+        ),
+        (
+            "<c-CList c-attrs=\"{'V-IF': 'shown'}\"><c-CListItem>X</c-CListItem></c-CList>",
+            "CList attrs cannot contain the Vue directive 'V-IF'",
+        ),
+        (
+            "<c-CList c-attrs=\"{'#default': ''}\"><c-CListItem>X</c-CListItem></c-CList>",
+            "CList attrs cannot contain the Vue directive '#default'",
+        ),
+        (
+            "<c-CList><c-CListItem c-attrs=\"{'v-for': 'row in rows'}\">X</c-CListItem></c-CList>",
+            "CListItem attrs cannot contain the Vue directive 'v-for'",
+        ),
+        (
+            "<c-CList><c-CListItem c-attrs=\"{':role': 'kind'}\">X</c-CListItem></c-CList>",
+            "CListItem attrs cannot contain the Vue directive ':role'",
+        ),
+        (
+            "<c-CList><c-CListItem c-surface_attrs=\"{'v-html': 'markup'}\">X</c-CListItem></c-CList>",
+            "CListItem surface attrs cannot contain the Vue directive 'v-html'",
+        ),
+        (
+            "<c-CList><c-CListItem c-surface_attrs=\"{'@click': 'open()'}\">X</c-CListItem></c-CList>",
+            "CListItem surface attrs cannot contain the Vue directive '@click'",
+        ),
+        (
+            "<c-CList><c-CListItem c-surface_attrs=\"{'.aria-hidden': 'hidden'}\">X</c-CListItem></c-CList>",
+            "CListItem surface attrs cannot contain the Vue directive '.aria-hidden'",
+        ),
+    ],
+)
+def test_python_attrs_reject_vue_directives(source, message):
+    # Python attrs are data; Vue bindings and listeners belong on the
+    # component tag in a template, such as `<c-CListItem @click="open">`.
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _render(source)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes():
+    html = _render("<c-CList c-attrs=\"{'x-data': '{}'}\"><c-CListItem>X</c-CListItem></c-CList>")
+    assert 'x-data="{}"' in html
+
+
+@pytest.mark.parametrize(
     "source",
     [
         '<c-CList><c-CListItem href="/x" c-action="True">X</c-CListItem></c-CList>',

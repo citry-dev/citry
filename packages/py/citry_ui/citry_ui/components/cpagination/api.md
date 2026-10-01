@@ -19,7 +19,7 @@ Put `{page}` in `href`. Server output then works before JavaScript and remains s
 
 ## Control the current page in the browser
 
-Omit `href` for Button controls. Client inputs are passed with `$c-props="{...}"`.
+Omit `href` for Button controls. Client inputs are passed with native Vue bindings.
 Rebuilt Button ranges retain the server locale even without browser i18n; a client-enabled i18n provider also updates recreated labels when its locale changes.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cpagination/snippets/controlled.py" title="Control Pagination in the browser" />
@@ -41,6 +41,12 @@ Rebuilt Button ranges retain the server locale even without browser i18n; a clie
 ## Customize Pagination
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cpagination/snippets/customization.py" title="Customize Pagination" />
+
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes the component sets itself (such as `aria-label`), Citry runtime
+attributes, and any Vue directive syntax: names starting with `v-`, `:`, `.`,
+`^`, `@`, or `#`. Write Vue bindings and listeners on the component tag in your
+template instead, for example `<c-CPagination :title="hint" @focusin="track">`.
 
 ## Accessibility and behavior
 

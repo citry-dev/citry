@@ -38,11 +38,11 @@ inputs:
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the root ID and stable trigger/panel ID pair.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles and merges them with attrs.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted unowned root attributes. Presence may be owned only for the complete root.}
-      - {id: heading-attrs, name: heading_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted unowned native-heading attributes.}
-      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned Button attributes and native listeners. Identity, semantics, state, alternate activation, and popup ownership are reserved.'}
-      - {id: panel-attrs, name: panel_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned panel attributes. Identity, region semantics, and presence are reserved.'}
-      - {id: actions-attrs, name: actions_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned action-wrapper attributes and requires actions. Group naming, presence, and overlay ownership are reserved.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned root attributes. Presence may be owned only for the complete root. Vue directive names are rejected.'}
+      - {id: heading-attrs, name: heading_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned native-heading attributes. Vue directive names are rejected.'}
+      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned Button attributes. Identity, semantics, state, alternate activation, and popup ownership are reserved. Vue directive names are rejected.'}
+      - {id: panel-attrs, name: panel_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned panel attributes. Identity, region semantics, and presence are reserved. Vue directive names are rejected.'}
+      - {id: actions-attrs, name: actions_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned action-wrapper attributes and requires actions. Group naming, presence, and overlay ownership are reserved. Vue directive names are rejected.'}
 
   - id: cdisclosure-client-inputs
     component: CDisclosure

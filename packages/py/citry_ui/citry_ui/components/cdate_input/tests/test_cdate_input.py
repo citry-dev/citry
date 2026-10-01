@@ -145,10 +145,30 @@ def test_invalid_server_inputs_fail_deterministically(kwargs, error, match) -> N
         _render('<c-CDateInput c-bind="kwargs" />', {"kwargs": kwargs})
 
 
-@pytest.mark.parametrize("attribute", ["type", "value", "data-empty", ":min", "x-model", "data-citry-hostile"])
-def test_owned_runtime_and_dynamic_attributes_are_rejected(attribute: str) -> None:
-    with pytest.raises(ValueError, match="cannot"):
+@pytest.mark.parametrize(
+    ("attribute", "message"),
+    [
+        ("type", "cannot override owned attribute"),
+        ("value", "cannot override owned attribute"),
+        ("data-empty", "cannot override owned attribute"),
+        ("data-citry-hostile", "reserved runtime attribute"),
+        (":min", "Vue directive"),
+        ("v-bind:value", "Vue directive"),
+        ("v-model", "Vue directive"),
+        ("v-if", "Vue directive"),
+        ("V-IF", "Vue directive"),
+        ("@change", "Vue directive"),
+        ("#default", "Vue directive"),
+    ],
+)
+def test_owned_runtime_and_dynamic_attributes_are_rejected(attribute: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
         _render('<c-CDateInput c-attrs="attrs" />', {"attrs": {attribute: "hostile"}})
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render('<c-CDateInput c-attrs="attrs" />', {"attrs": {"x-model": "plain"}})
+    assert 'x-model="plain"' in html
 
 
 def test_field_owned_state_and_cross_form_owner_conflicts_fail() -> None:

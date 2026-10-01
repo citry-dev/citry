@@ -11,7 +11,7 @@ from citry import Citry, Component
 from citry_ui import CTree, CTreeItem
 
 
-def _render(template: str, *, include_css: bool = False) -> str:
+def _render(template: str, *, include_css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     source = template + ("<c-css />" if include_css else "")
@@ -20,7 +20,8 @@ def _render(template: str, *, include_css: bool = False) -> str:
         citry = app
         template = source
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _tag(html: str, part: str, index: int = 0) -> str:
@@ -71,7 +72,10 @@ def test_public_schemas_and_aliases_are_exact() -> None:
 
 
 def test_server_tree_anatomy_expansion_selection_and_roving_focus() -> None:
-    html = _render(_tree('c-expanded="[\'docs\']" c-selected="[\'readme\']" variant="outline"'))
+    html = _render(
+        _tree('c-expanded="[\'docs\']" c-selected="[\'readme\']" variant="outline"'),
+        static_fallback=True,
+    )
     root = _tag(html, "tree")
     branch = _tag(html, "item", 0)
     selected = _tag(html, "item", 1)
@@ -92,7 +96,7 @@ def test_server_tree_anatomy_expansion_selection_and_roving_focus() -> None:
 
 
 def test_collapsed_branch_hides_and_inerts_group() -> None:
-    html = _render(_tree())
+    html = _render(_tree(), static_fallback=True)
     assert 'aria-expanded="false"' in _tag(html, "item", 0)
     group = _tag(html, "group")
     assert "hidden" in group
@@ -100,9 +104,12 @@ def test_collapsed_branch_hides_and_inerts_group() -> None:
 
 
 def test_selection_modes_have_exact_aria_surface() -> None:
-    none_html = _render(_tree('selection_mode="none"'))
+    none_html = _render(_tree('selection_mode="none"'), static_fallback=True)
     assert "aria-selected" not in _tag(none_html, "item", 0)
-    multiple = _render(_tree("selection_mode=\"multiple\" c-selected=\"['docs', 'photos']\""))
+    multiple = _render(
+        _tree("selection_mode=\"multiple\" c-selected=\"['docs', 'photos']\""),
+        static_fallback=True,
+    )
     assert 'aria-selected="true"' in _tag(multiple, "item", 0)
     assert 'aria-selected="true"' in _tag(multiple, "item", 3)
 
@@ -111,7 +118,8 @@ def test_disabled_root_and_item_are_reflected_without_native_controls() -> None:
     html = _render(
         '<form><c-CTree label="Files" disabled>'
         '<c-CTreeItem value="a" label="A" /><c-CTreeItem value="b" label="B" disabled />'
-        "</c-CTree><button type=submit>Submit</button></form>"
+        "</c-CTree><button type=submit>Submit</button></form>",
+        static_fallback=True,
     )
     assert "data-disabled" in _tag(html, "tree")
     assert 'aria-disabled="true"' in _tag(html, "item", 0)
@@ -124,7 +132,8 @@ def test_root_and_item_attrs_reach_concrete_elements() -> None:
         '<c-CTree label="Files" class_="brand" style="inline-size:20rem" c-attrs="{\'data-test\': \'root\'}">'
         '<c-CTreeItem value="a" label="A" class_="special" style="color:red" '
         "c-attrs=\"{'data-test': 'item'}\" />"
-        "</c-CTree>"
+        "</c-CTree>",
+        static_fallback=True,
     )
     root = _tag(html, "tree")
     item = _tag(html, "item")
@@ -177,18 +186,52 @@ def test_item_outside_tree_and_unknown_collection_content_fail() -> None:
     "template",
     [
         _tree("c-attrs=\"{'role': 'listbox'}\""),
-        _tree("c-attrs=\"{':data-selection-mode': 'mode'}\""),
-        _tree("c-attrs=\"{'x-html': 'content'}\""),
         '<c-CTree label="Files"><c-CTreeItem value="a" label="A" c-attrs="{\'aria-expanded\': \'true\'}" /></c-CTree>',
     ],
 )
-def test_owned_attrs_and_directives_are_rejected(template: str) -> None:
-    with pytest.raises(ValueError, match="cannot"):
+def test_owned_attrs_are_rejected(template: str) -> None:
+    with pytest.raises(ValueError, match="cannot override owned attribute"):
         _render(template)
 
 
+@pytest.mark.parametrize(
+    ("owner", "attribute"),
+    [
+        ("CTree", ":data-selection-mode"),
+        ("CTree", "v-bind:role"),
+        ("CTree", "v-html"),
+        ("CTree", "V-IF"),
+        ("CTree", "@keydown"),
+        ("CTreeItem", ".aria-expanded"),
+        ("CTreeItem", "v-for"),
+        ("CTreeItem", "#default"),
+    ],
+)
+def test_python_attrs_reject_vue_directives(owner: str, attribute: str) -> None:
+    # Directive syntax in Python data could rebind owned state or change the
+    # structure, so the component names itself and points at the template.
+    attrs = f"c-attrs=\"{{'{attribute}': 'x'}}\""
+    template = (
+        _tree(attrs)
+        if owner == "CTree"
+        else f'<c-CTree label="Files"><c-CTreeItem value="a" label="A" {attrs} /></c-CTree>'
+    )
+    with pytest.raises(ValueError, match=re.escape(f"{owner} attrs cannot contain the Vue directive {attribute!r}")):
+        _render(template)
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    # Names outside Vue's directive syntax are plain HTML attributes, even
+    # when they resemble another framework's directives.
+    html = _render(_tree("c-attrs=\"{'x-data': '{}', 'hx-get': '/files'}\""), static_fallback=True)
+
+    root = _tag(html, "tree")
+    assert 'x-data="{}"' in root
+    assert 'hx-get="/files"' in root
+
+
 def test_css_exposes_public_variables_environment_rules_and_parts() -> None:
-    html = _render(_tree(), include_css=True)
+    html = _render(_tree(), include_css=True, static_fallback=True)
     for token in (
         "--cui-tree-indent",
         "--cui-tree-selected-background",

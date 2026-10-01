@@ -29,12 +29,7 @@ def split_button_states_component(app: Citry) -> type[Component]:
             class="citry-ui-quality-stack split-button-quality"
             aria-labelledby="split-button-states-title"
             @c-quality-morph="refresh"
-            x-data="{
-              controlledOpen:false,
-              submits:0,
-              resets:0,
-              last:'No action yet',
-            }"
+
           >
             <h1 id="split-button-states-title">Split Button states</h1>
 
@@ -62,7 +57,7 @@ def split_button_states_component(app: Citry) -> type[Component]:
                     'submit open-layer commands link choices group separator submenu danger form-data submitter'
                 }"
                 open
-                $c-props="{onAction:(value)=>last=value}"
+                :onAction="(value)=>last=value"
               >
                 <c-fill name="default">Save accession</c-fill>
                 <c-fill name="menu">
@@ -120,10 +115,7 @@ def split_button_states_component(app: Citry) -> type[Component]:
                 menu_label="More controlled publication actions"
                 match_width
                 size="sm"
-                $c-props="{
-                  open:controlledOpen,
-                  onOpenChange:(next)=>controlledOpen=next,
-                }"
+                :open="controlledOpen" :onOpenChange="(next)=>controlledOpen=next"
                 c-attrs="{'data-quality-states':'controlled match-width sm'}"
               >
                 <c-fill name="default">Publish record</c-fill>
@@ -238,9 +230,21 @@ def split_button_states_component(app: Citry) -> type[Component]:
             <output
               id="split-button-quality-log"
               aria-live="polite"
-              x-text="`Submits: ${submits}; resets: ${resets}; last: ${last}`"
+              v-text="`Submits: ${submits}; resets: ${resets}; last: ${last}`"
             >Submits: 0; resets: 0; last: No action yet</output>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlledOpen:false,
+                submits:0,
+                resets:0,
+                last:'No action yet',
+              };
+            },
+          });
         """
 
         css = """

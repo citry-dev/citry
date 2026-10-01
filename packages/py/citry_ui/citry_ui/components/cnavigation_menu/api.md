@@ -46,6 +46,13 @@ ordinary `nav`, list, link, and Tab behavior—application commands belong in
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cnavigation_menu/snippets/customization.py" title="Customize NavigationMenu" />
 
+`attrs`, `link_attrs`, `trigger_attrs`, and `panel_attrs` accept ordinary
+native, ARIA, and data attributes. They reject the attributes each part sets
+itself (such as `role` or `aria-expanded`), Citry runtime attributes, and any
+Vue directive syntax: names starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write
+Vue bindings and listeners on the component tag in your template instead, for
+example `<c-CNavigationMenu :title="label" @focusin="track">`.
+
 ## Accessibility and interaction
 
 Give every root a concise `label`. Links remain native and all top-level links

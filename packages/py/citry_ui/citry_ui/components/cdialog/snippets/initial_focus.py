@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class DialogInitialFocus(Component):
     template = """
-      <section class="dialog-focus-grid" x-data>
+      <section class="dialog-focus-grid" >
         <article>
           <p>Quick observation</p>
           <h2>Focus a control</h2>
@@ -24,7 +24,7 @@ class DialogInitialFocus(Component):
             </c-fill>
             <c-fill name="default">
               <label for="comet-name">Catalog name</label>
-              <input id="comet-name" x-ref="cometName" />
+              <input id="comet-name" ref="cometName" />
             </c-fill>
           </c-CDialog>
         </article>

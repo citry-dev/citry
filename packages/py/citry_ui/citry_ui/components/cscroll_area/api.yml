@@ -19,7 +19,7 @@ inputs:
       - {id: overscroll, name: overscroll, type: {display: '"auto" | "contain" | "none"', interfaces: [CScrollAreaOverscroll]}, default: {kind: literal, value: auto}, effect: Selects logical overscroll policy on enabled axes.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds native viewport classes and merges them with attrs.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds native viewport styles and merges them with attrs before the owned scrolling policy.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed descriptive attributes and isolated-scope native listeners that may use event magics, dispatch, stores, or globals.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed descriptive attributes; executable listener and Vue directive names are rejected. Author raw Vue listeners on the component call.'}
 
   - id: cscroll-area-client-inputs
     component: CScrollArea

@@ -388,26 +388,39 @@ def test_command_fields_are_plain_and_typed(command: CCommandPaletteCommand) -> 
 
 
 @pytest.mark.parametrize(
-    ("destination", "attrs"),
+    ("destination", "attrs", "message"),
     [
-        ("attrs", {"aria-label": "forged"}),
-        ("attrs", {"open": True}),
-        ("attrs", {"x-bind": "{}"}),
-        ("attrs", {"@cancel": "x"}),
-        ("attrs", {"data-cid-forged": "x"}),
-        ("input_attrs", {"value": "forged"}),
-        ("input_attrs", {"name": "query"}),
-        ("input_attrs", {":aria-controls": "forged"}),
-        ("input_attrs", {"@input": "x"}),
-        ("input_attrs", {"oninput": "x"}),
+        ("attrs", {"aria-label": "forged"}, "cannot override owned attributes"),
+        ("attrs", {"open": True}, "cannot override owned attributes"),
+        ("attrs", {"data-cid-forged": "x"}, "cannot override owned attributes"),
+        ("attrs", {"c-bind": "{}"}, "cannot use ownership directives"),
+        ("attrs", {"v-bind": "{}"}, "Vue directive"),
+        ("attrs", {"v-bind:open": "x"}, "Vue directive"),
+        ("attrs", {"V-IF": "x"}, "Vue directive"),
+        ("attrs", {"@cancel": "x"}, "Vue directive"),
+        ("attrs", {"@focus": "x"}, "Vue directive"),
+        ("attrs", {"#default": "x"}, "Vue directive"),
+        ("input_attrs", {"value": "forged"}, "cannot override owned attributes"),
+        ("input_attrs", {"name": "query"}, "cannot override owned attributes"),
+        ("input_attrs", {":aria-controls": "forged"}, "Vue directive"),
+        ("input_attrs", {"v-model": "x"}, "Vue directive"),
+        ("input_attrs", {"@input": "x"}, "Vue directive"),
+        ("input_attrs", {"oninput": "x"}, "cannot use raw event attributes"),
     ],
 )
 def test_owned_attrs_directives_markers_events_and_forms_are_rejected(
     destination: str,
     attrs: dict[str, object],
+    message: str,
 ) -> None:
-    with pytest.raises(ValueError, match="CCommandPalette"):
+    with pytest.raises(ValueError, match=f"CCommandPalette {destination} .*{message}"):
         _render(_basic(**{destination: attrs}))
+
+
+def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
+    html = _render(_basic(attrs={"x-data": "plain"}, input_attrs={"x-on": "plain"}))
+    assert 'x-data="plain"' in html
+    assert 'x-on="plain"' in html
 
 
 def test_safe_attrs_land_on_exact_destinations() -> None:

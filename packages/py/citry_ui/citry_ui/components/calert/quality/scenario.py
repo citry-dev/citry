@@ -21,33 +21,19 @@ def alert_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack alert-quality"
             aria-labelledby="alert-states-title"
-            x-data
-            x-init="Alpine.store('alertQuality', {
-              intent: 'info',
-              variant: 'soft',
-              size: 'md',
-              announce: 'off',
-              icon: true,
-            })"
           >
             <h1 id="alert-states-title">Alert states</h1>
             <c-CAlert
               actions_label="Observation actions"
-              $c-props="{
-                intent: $store.alertQuality.intent,
-                variant: $store.alertQuality.variant,
-                size: $store.alertQuality.size,
-                announce: $store.alertQuality.announce,
-                icon: $store.alertQuality.icon,
-              }"
+              :intent="intent" :variant="variant" :size="size" :announce="announce" :icon="icon"
             >
               <c-fill name="title">Controlled observation status</c-fill>
               <c-fill name="default">The guide camera is following the selected star.</c-fill>
               <c-fill name="actions">
                 <button
                   type="button"
-                  @click="$store.alertQuality.intent = 'success';
-                    $store.alertQuality.announce = 'polite'"
+                  @click="intent = 'success';
+                    announce = 'polite'"
                 >
                   Mark synchronized
                 </button>
@@ -57,17 +43,17 @@ def alert_states_component(app: Citry) -> type[Component]:
 
             <div class="citry-ui-quality-grid">
               <c-for each="intent in intents">
-                <c-CAlert c-intent="intent">
+                <c-CAlert #c-key="intent" c-intent="intent">
                   {{ intent }} Alert
                 </c-CAlert>
               </c-for>
               <c-for each="variant in variants">
-                <c-CAlert intent="warn" c-variant="variant">
+                <c-CAlert #c-key="variant" intent="warn" c-variant="variant">
                   {{ variant }} Alert
                 </c-CAlert>
               </c-for>
               <c-for each="size in sizes">
-                <c-CAlert c-size="size">
+                <c-CAlert #c-key="size" c-size="size">
                   {{ size }} Alert
                 </c-CAlert>
               </c-for>
@@ -101,6 +87,19 @@ def alert_states_component(app: Citry) -> type[Component]:
               </c-fill>
             </c-CAlert>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                intent: 'info',
+                variant: 'soft',
+                size: 'md',
+                announce: 'off',
+                icon: true,
+              };
+            },
+          });
         """
 
         def template_data(

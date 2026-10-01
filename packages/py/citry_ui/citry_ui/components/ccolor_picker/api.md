@@ -49,4 +49,12 @@ keeps the chosen value available while preventing color changes.
 Alpha, gradients, image sampling, EyeDropper permissions, and wide-gamut color
 spaces are outside this first solid-color contract.
 
+## Add root attributes
+
+`attrs` accepts ordinary native, ARIA, and data attributes for the root. It
+rejects the attributes Color Picker sets itself (such as `role` and
+`data-open`), Citry runtime attributes, and any Vue directive syntax: names
+starting with `v-`, `:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on
+the component tag in your template instead.
+
 <!-- UI_LIBRARY_API_REFERENCE -->

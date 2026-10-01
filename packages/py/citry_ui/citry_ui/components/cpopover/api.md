@@ -82,9 +82,9 @@ inputs, selectors, and nested components predictable.
 
 ## Control visibility
 
-Client inputs are passed in the browser through `$c-props="{...}"`. Supply a
-Boolean `open` to control visibility. `onOpenChange` reports requests; update
-the owner value to accept one or leave it unchanged to decline it.
+Client inputs are passed with native Vue bindings. Supply a Boolean `:open` to
+control visibility. `onOpenChange` reports requests; update the owner value to
+accept one or leave it unchanged to decline it.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cpopover/snippets/controlled_open.py"
@@ -93,11 +93,9 @@ the owner value to accept one or leave it unchanged to decline it.
 
 ```citry-html
 <c-CPopover
-  $c-props="{
-    open,
-    onOpenChange: (nextOpen, detail) => {
-      if (mayApply(nextOpen, detail)) open = nextOpen;
-    },
+  :open="open"
+  :onOpenChange="(nextOpen, detail) => {
+    if (mayApply(nextOpen, detail)) open = nextOpen;
   }"
 >
   ...
@@ -198,6 +196,12 @@ public part selectors for targeted regions.
 `class_`, `style`, and `attrs` target the Popover surface. The activator remains
 owned by its own component. Unlayered consumer CSS overrides Citry UI defaults;
 named layers follow the site-wide layer-order contract.
+
+`attrs` accepts ordinary native, ARIA, and data attributes. It rejects the
+attributes the surface sets itself (such as `popover` and `role`), Citry
+runtime attributes, and any Vue directive syntax: names starting with `v-`,
+`:`, `.`, `^`, `@`, or `#`. Write Vue bindings and listeners on the component tag
+in your template instead, for example `<c-CPopover :title="hint">`.
 
 The documented variables, selectors, and reflected attributes are public CSS
 API. `.cui-*` classes, `--_cui-*` variables, host markup, initialization

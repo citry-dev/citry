@@ -8,7 +8,7 @@ from typing import Any, Literal, cast
 
 from citry import LibraryComponent, SlotInput, const_value, merge_attrs
 from citry.attrs import validate_html_attr_name
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._validation import reject_owned_attrs
 
 CAvatarVariant = Literal["soft", "solid", "outline"]
@@ -20,19 +20,6 @@ _VARIANTS = ("soft", "solid", "outline")
 _SIZES = ("sm", "md", "lg")
 _SHAPES = ("circle", "rounded", "square")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
-_OWNERSHIP_DIRECTIVES = frozenset(
-    {
-        "x-bind",
-        "x-for",
-        "x-html",
-        "x-if",
-        "x-ignore",
-        "x-model",
-        "x-modelable",
-        "x-teleport",
-        "x-text",
-    }
-)
 _ROOT_OWNED_ATTRS = frozenset(
     {
         "aria-hidden",
@@ -107,15 +94,6 @@ def _plain_choice(input_name: str, value: object, allowed: tuple[str, ...]) -> s
     return plain
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(
     attrs: Mapping[str, object] | None,
     *,
@@ -129,22 +107,24 @@ def _copy_attrs(
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"CAvatar {destination}")
     for key in copied:
+        # A Vue directive could rebind an owned attribute, add listeners, or
+        # change the Avatar's structure, so none may arrive through Python data.
+        # This runs before the name check so every directive spelling gets the same message.
+        if is_vue_directive_attribute(key):
+            msg = (
+                f"CAvatar {destination} cannot contain the Vue directive {key!r}; "
+                "author Vue bindings and listeners in a template instead."
+            )
+            raise ValueError(msg)
         validate_html_attr_name(key, where=f"CAvatar {destination}")
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"CAvatar {destination} cannot contain reserved Citry runtime attribute {key!r}."
             raise ValueError(msg)
-        if normalized in _OWNERSHIP_DIRECTIVES or any(
-            normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
-        ):
-            msg = f"CAvatar {destination} cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        if inert_only and normalized.startswith(("x-", "@", "on", ":", ".")):
+        # The image's load and error events drive the Avatar's status, so an
+        # inline handler there would run beside that logic.
+        if inert_only and normalized.startswith("on"):
             msg = f"CAvatar {destination} accepts inert image attributes only, got {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in owned:
-            msg = f"CAvatar {destination} cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
     return copied
 
@@ -234,9 +214,12 @@ class CAvatar(LibraryComponent):
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
+        # The public props (src, alt, variant, ...) are Vue props, so the
+        # server values travel under one key that cannot collide with them.
+        # The client uses each value only while its prop is absent.
         data = self._normalized(kwargs)
         data["imgAttrs"] = _client_image_attrs(kwargs.img_attrs)
-        return data
+        return {"serverDefaults": data}
 
     template = """
       <span
@@ -297,8 +280,11 @@ class CAvatar(LibraryComponent):
           shape: {},
           onStatusChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          // Server-rendered values, used while the matching prop is absent.
+          const data = component.serverDefaults;
+          const props = component.$props;
           let image = root.querySelector('[data-citry-ui-part="image"]');
           if (!(image instanceof HTMLImageElement)) {
             image = document.createElement("img");
@@ -422,7 +408,7 @@ class CAvatar(LibraryComponent):
           image.addEventListener("load", onLoad);
           image.addEventListener("error", onError);
 
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             const source = resolveSource();
             const alt = resolveText("alt");
             const variant = resolveChoice("variant");

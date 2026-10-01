@@ -6,13 +6,21 @@ import argparse
 import hashlib
 import json
 import sys
+import threading
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from importlib import import_module
 from importlib.metadata import version
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+from wsgiref.simple_server import WSGIRequestHandler, make_server
 
-from citry_ui.quality.routes import render_scenario
+from citry.contrib.wsgi import wsgi_app
+from citry_ui.quality.routes import build_scenario
 from citry_ui.quality.scenarios import SCENARIOS, QualityTool, scenario_by_id
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +94,52 @@ def _safe_name(value: str) -> str:
     return value.replace(".", "-").replace("/", "-")
 
 
+# Screenshots must not catch an animation or transition halfway through.
+_STILL_MOTION_CSS = "*, *::before, *::after { animation: none !important; transition: none !important; }"
+
+
+class _QuietWSGIHandler(WSGIRequestHandler):
+    def log_message(self, *args: Any) -> None:
+        pass
+
+
+@contextmanager
+def _serve_scenario(scenario_id: str) -> Iterator[str]:
+    """
+    Serve one scenario page and its Citry assets, yielding the page URL.
+
+    The page loads the Vue runtime, component definitions, and stylesheets
+    from `/citry/...` URLs, so it must come from a server that also answers
+    those URLs. Loading the HTML directly into a blank page would leave every
+    component unstarted and capture an empty or unstyled screen.
+    """
+    rendered = build_scenario(scenario_id)
+    prefix = "/citry"
+    citry_wsgi = wsgi_app(rendered.app)
+    body = rendered.html.encode()
+
+    def app(environ: dict[str, Any], start_response: Any) -> Any:
+        path = environ.get("PATH_INFO", "")
+        # build_scenario already mounted the app under this prefix, so the
+        # asset URLs in the page resolve against the same routes.
+        if path == prefix or path.startswith(prefix + "/"):
+            sub = dict(environ)
+            sub["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + prefix
+            sub["PATH_INFO"] = path[len(prefix) :]
+            return citry_wsgi(sub, start_response)
+        start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(body)))])
+        return [body]
+
+    server = make_server("127.0.0.1", 0, app, handler_class=_QuietWSGIHandler)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}/"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def capture_visuals(
     output_dir: Path,
     *,
@@ -131,25 +185,26 @@ def capture_visuals(
                 )
                 try:
                     page = context.new_page()
-                    page.set_content(render_scenario(entry.scenario_id), wait_until="load")
                     scenario = scenario_by_id(entry.scenario_id)
-                    page.wait_for_selector(scenario.ready_selector, state="attached")
-                    if profile.direction == "rtl":
-                        page.evaluate("document.documentElement.dir = 'rtl'")
-                    page.add_style_tag(
-                        content="*, *::before, *::after { animation: none !important; transition: none !important; }",
-                    )
-                    path = output_dir / f"{_safe_name(entry.scenario_id)}--{profile.id}.png"
-                    page.screenshot(path=path, full_page=True, animations="disabled")
-                    captures.append(
-                        {
-                            "scenario": entry.scenario_id,
-                            "profile": asdict(profile),
-                            "file": path.name,
-                            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                            "review_status": "awaiting-human-review",
-                        },
-                    )
+                    with _serve_scenario(entry.scenario_id) as url:
+                        page.goto(url, wait_until="load")
+                        page.wait_for_selector(scenario.ready_selector, state="attached")
+                        if profile.direction == "rtl":
+                            page.evaluate("document.documentElement.dir = 'rtl'")
+                        page.add_style_tag(
+                            content=_STILL_MOTION_CSS,
+                        )
+                        path = output_dir / f"{_safe_name(entry.scenario_id)}--{profile.id}.png"
+                        page.screenshot(path=path, full_page=True, animations="disabled")
+                        captures.append(
+                            {
+                                "scenario": entry.scenario_id,
+                                "profile": asdict(profile),
+                                "file": path.name,
+                                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                                "review_status": "awaiting-human-review",
+                            },
+                        )
                 finally:
                     context.close()
         finally:
