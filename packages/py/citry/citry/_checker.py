@@ -1838,7 +1838,7 @@ def _check_browser_source(
     source: _BrowserSource,
     profiles: dict[str, dict[str, frozenset[str]]],
     *,
-    i18n_configured: bool,
+    i18n_configured: bool = False,
 ) -> list[CheckFinding]:
     """Check component initializer variables and literal server calls."""
     consumers: list[ComponentJsLintConsumer] = []
