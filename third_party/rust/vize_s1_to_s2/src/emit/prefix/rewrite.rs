@@ -8,7 +8,7 @@
 use oxc_ast::ast::Expression;
 use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
-use oxc_span::SourceType;
+use oxc_span::{GetSpan, SourceType};
 use vize_s0::expression_guard::{expression_exceeds_max_depth, expression_has_balanced_delimiters};
 use vize_s0::{Allocator, String};
 
@@ -48,11 +48,18 @@ fn ts_module() -> SourceType {
     SourceType::ts().with_module(true)
 }
 
+/// `as_raw_statements` mirrors the fourth argument of `@vue/compiler-core`'s
+/// `processExpression`: only an event handler whose text contains `;` may be
+/// read as a list of statements. Everywhere else a statement is a parse
+/// error, so the emitter refuses it and the `vize_atelier_core` fallback reports
+/// the diagnostic instead of writing the statement into a position that only
+/// accepts an expression.
 pub(super) fn rewrite_expression(
     content: &str,
     retained: Option<Retained<'_, '_>>,
     scope: &PrefixScope<'_>,
     as_params: bool,
+    as_raw_statements: bool,
 ) -> RewriteResult {
     if !as_params
         && let Some(js) = retained
@@ -70,7 +77,7 @@ pub(super) fn rewrite_expression(
             return project_aliases(rewrite_retained(content, js, scope), scope);
         }
         return project_aliases(
-            rewrite_reparsed(js_content, content, retained, scope),
+            rewrite_reparsed(js_content, content, retained, scope, as_raw_statements),
             scope,
         );
     }
@@ -99,7 +106,7 @@ pub(super) fn rewrite_expression(
         };
     }
     project_aliases(
-        rewrite_reparsed(js_content, content, retained, scope),
+        rewrite_reparsed(js_content, content, retained, scope, as_raw_statements),
         scope,
     )
 }
@@ -146,6 +153,7 @@ fn rewrite_reparsed(
     original: &str,
     retained: Option<Retained<'_, '_>>,
     scope: &PrefixScope<'_>,
+    as_raw_statements: bool,
 ) -> RewriteResult {
     let content = js_content.as_str();
     let allocator = Allocator::new();
@@ -167,9 +175,14 @@ fn rewrite_reparsed(
         };
     }
 
+    // The whole-program parse is for multi-statement handlers only; every
+    // other caller wraps the text as an expression, where a statement would
+    // be emitted as invalid JavaScript.
     let program_allocator = Allocator::new();
-    let parsed = Parser::new(program_allocator.as_oxc(), content, js_module()).parse();
-    if parsed.diagnostics.is_empty() {
+    let parsed = as_raw_statements
+        .then(|| Parser::new(program_allocator.as_oxc(), content, js_module()).parse())
+        .filter(|parsed| parsed.diagnostics.is_empty());
+    if let Some(parsed) = parsed {
         let mut collector = IdentifierCollector::new(scope, content);
         collector.visit_program(&parsed.program);
         let used_unref = collector.used_unref;
@@ -222,7 +235,7 @@ fn rewrite_reparsed(
     }
     let ts_accepts = scope.is_ts()
         && (retained.is_some_and(|js| js_module_compatible(js.ast, js.source))
-            || parses_as_typescript(original));
+            || parses_as_typescript(original, as_raw_statements));
     RewriteResult {
         code: js_content,
         used_unref: false,
@@ -242,9 +255,10 @@ fn parses_as_params(content: &str, source_type: SourceType) -> bool {
         .is_ok()
 }
 
-/// `parse_checks::parses_as_typescript`: the wrapped expression parse,
-/// then the whole-program parse, both as TypeScript.
-fn parses_as_typescript(content: &str) -> bool {
+/// `parse_checks::parses_as_typescript`: the wrapped expression parse, then
+/// (only when `as_raw_statements` allows a list of statements) the
+/// whole-program parse, both as TypeScript.
+fn parses_as_typescript(content: &str, as_raw_statements: bool) -> bool {
     let expr_allocator = Allocator::new();
     let mut wrapped = String::with_capacity(content.len() + 2);
     wrapped.push('(');
@@ -256,6 +270,9 @@ fn parses_as_typescript(content: &str) -> bool {
     {
         return true;
     }
+    if !as_raw_statements {
+        return false;
+    }
     let program_allocator = Allocator::new();
     Parser::new(program_allocator.as_oxc(), content, ts_module())
         .parse()
@@ -263,9 +280,10 @@ fn parses_as_typescript(content: &str) -> bool {
         .is_empty()
 }
 
-/// The legacy prefix parse: `Parser::parse_expression` over the bare
-/// text, which accepts a leading complete expression and ignores the rest.
-pub(super) fn with_prefix_parse<T>(
+/// `Parser::parse_expression` over the bare text, admitted only when that
+/// one expression is the whole text (trailing comments aside), so `a; b()`
+/// is not read as the reference `a` or `() => a(); b()` as a function.
+pub(super) fn with_whole_expression_parse<T>(
     content: &str,
     decide: impl FnOnce(&Expression<'_>) -> T,
 ) -> Option<T> {
@@ -276,5 +294,32 @@ pub(super) fn with_prefix_parse<T>(
     Parser::new(allocator.as_oxc(), content, js_module())
         .parse_expression()
         .ok()
+        .filter(|expr| only_trailing_trivia(&content[expr.span().end as usize..]))
         .map(|expr| decide(&expr))
+}
+
+/// Whether `rest` holds only whitespace and comments. `Parser::parse_expression`
+/// stops after one complete expression without checking that the input ended,
+/// so the shape checks call this on the text after the parsed expression:
+/// `foo; bar()` must not read as the handler reference `foo`, or the whole
+/// text is emitted where only that reference is valid.
+fn only_trailing_trivia(rest: &str) -> bool {
+    let mut rest = rest.trim_start();
+    while !rest.is_empty() {
+        if let Some(line) = rest.strip_prefix("//") {
+            // JavaScript ends a line comment at any of its four line terminators.
+            rest = line
+                .find(['\n', '\r', '\u{2028}', '\u{2029}'])
+                .map_or("", |end| &line[end..]);
+        } else if let Some(block) = rest.strip_prefix("/*") {
+            let Some(end) = block.find("*/") else {
+                return false;
+            };
+            rest = &block[end + 2..];
+        } else {
+            return false;
+        }
+        rest = rest.trim_start();
+    }
+    true
 }

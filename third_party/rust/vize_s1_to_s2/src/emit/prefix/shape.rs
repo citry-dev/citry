@@ -1,10 +1,10 @@
 //! Handler shape decisions (`steps::expression::shape_checks`), retained-AST
-//! first with the dialect gate, the legacy prefix parse otherwise.
+//! first with the dialect gate, a parse of the whole text otherwise.
 
 use oxc_ast::ast::{ChainElement, Expression};
 
 use super::compat::js_module_compatible;
-use super::rewrite::{Retained, with_prefix_parse};
+use super::rewrite::{Retained, with_whole_expression_parse};
 
 pub(super) fn is_handler_reference_shape(expr: &Expression<'_>) -> bool {
     match expr {
@@ -29,12 +29,12 @@ pub(super) fn is_function_shape(expr: &Expression<'_>) -> bool {
 
 /// `is_event_handler_reference_expression` (string entry).
 pub(super) fn is_event_handler_reference_expression(content: &str) -> bool {
-    with_prefix_parse(content, is_handler_reference_shape).unwrap_or(false)
+    with_whole_expression_parse(content, is_handler_reference_shape).unwrap_or(false)
 }
 
 /// `is_function_expression` (string entry).
 pub(super) fn is_function_expression(content: &str) -> bool {
-    with_prefix_parse(content, is_function_shape).unwrap_or(false)
+    with_whole_expression_parse(content, is_function_shape).unwrap_or(false)
 }
 
 /// `is_event_handler_reference_node`: the retained decision when the

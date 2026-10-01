@@ -8,6 +8,9 @@ mod context;
 mod element;
 mod emit;
 mod expression;
+// The handler transform wraps statements in a block body and needs the same
+// line-comment rewrite the expression codegen applies.
+pub(crate) use expression::convert_line_comments_to_block;
 mod generate;
 mod helpers;
 mod node;

@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.95.0"
 name = "vize_atelier_core"
-version = "0.420.0+citry.1"
+version = "0.420.0+citry.2"
 build = false
 autolib = false
 autobins = false
@@ -80,6 +80,10 @@ path = "tests/dynamic_v_model_argument.rs"
 [[test]]
 name = "v_for_unwrapped_runtime_directives"
 path = "tests/v_for_unwrapped_runtime_directives.rs"
+
+[[test]]
+name = "event_handler_statements"
+path = "tests/event_handler_statements.rs"
 
 [[test]]
 name = "expression_guard_regex"
