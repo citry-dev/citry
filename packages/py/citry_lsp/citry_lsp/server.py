@@ -303,7 +303,9 @@ class CitryLanguageServer(LanguageServer):
             return None
 
         async def publish_types() -> None:
-            typescript_findings = await self.typescript_diagnostics(document, browser_findings)
+            # A mistake Citry reports itself, in browser code or in an
+            # attribute value, keeps only Citry's finding.
+            typescript_findings = await self.typescript_diagnostics(document, (*browser_findings, *lint_findings))
             current = self.documents.get(uri)
             if (
                 typescript_findings is None

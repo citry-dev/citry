@@ -27,7 +27,9 @@ All notable changes to `citry-lsp` are documented here.
   `None`.
 - The editor warns about a static HTML attribute value that the attribute
   does not accept, such as `draggable="treu"` or `<input type="datetime">`,
-  and suggests the closest valid keyword.
+  and suggests the closest valid keyword. A Vue binding to one string,
+  such as `:dir="'rlt'"`, is checked the same way, and TypeScript does
+  not report the same value again.
 - The editor asks ty for the type of a `js_data()` value Citry has no
   rule for, such as `self.labels()` or a list comprehension, so
   completion, hover, and TypeScript checks know `this.labels` is a

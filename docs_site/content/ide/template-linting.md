@@ -323,11 +323,30 @@ only valid names with an underscore are `_blank`, `_self`, `_parent`, and
 `_top`. The `name` of an `<iframe>` or `<object>` may not start with an
 underscore at all.
 
-Only values written directly in the template are checked. A bound value
-such as `c-dir` or `:draggable`, a component tag, `<c-element>`, a custom
-element such as `<my-widget>`, and elements inside `<svg>` or `<math>` are
-not. Attributes that take a list of words, such as `rel`, `sandbox`, or
-`autocomplete` on `<input>`, are not checked either.
+`http-equiv` on `<meta>` takes only the pragmas the HTML Standard defines.
+Browsers ignore any other value, such as `Cache-Control` or `Pragma`, so
+the warning says to send it as an HTTP response header instead:
+
+```citry-html
+{# Warning: browsers ignore this; send Cache-Control as a header. #}
+<meta http-equiv="Cache-Control" content="no-cache">
+```
+
+A Vue binding whose value is one JavaScript string sets the same text, so
+it is checked too:
+
+```citry-html
+{# Warning: 'rlt' is not a valid value; did you mean 'rtl'? #}
+<div :dir="'rlt'">...</div>
+```
+
+When the editor also runs TypeScript, a value that Vue's types reject as
+well is reported once, by this rule. Other bound values, such as
+`:dir="direction"` or `c-dir`, and a binding with a modifier such as
+`.prop` are not checked, and neither are component tags, `<c-element>`, a
+custom element such as `<my-widget>`, and elements inside `<svg>` or
+`<math>`. Attributes that take a list of words, such as `rel`, `sandbox`,
+or `autocomplete` on `<input>`, are not checked either.
 
 When a script on the page reads its own values from one of these
 attributes, turn the warning off for the components that use it:

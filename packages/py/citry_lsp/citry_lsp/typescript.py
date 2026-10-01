@@ -38,10 +38,11 @@ from citry._diagnostic_catalog import (
     COMPONENT_JS_UNKNOWN_VARIABLE,
     I18N_ARGUMENT_INVALID,
     I18N_UNKNOWN_MESSAGE,
+    TEMPLATE_INVALID_ATTRIBUTE_VALUE,
     VUE_PYTHON_VARIABLE,
     VUE_UNKNOWN_VARIABLE,
 )
-from citry_lsp.engine import browser_diagnostics, type_check_projections
+from citry_lsp.engine import browser_diagnostics, template_lint_diagnostics, type_check_projections
 from citry_lsp.project_check import ProjectTypeFinding, project_documents
 from citry_lsp.uri import file_uri_path
 
@@ -143,6 +144,9 @@ _CITRY_OWNED_CODES = frozenset(
         BROWSER_INCOMPATIBLE_COMPONENT_PROP,
         I18N_UNKNOWN_MESSAGE,
         I18N_ARGUMENT_INVALID,
+        # A bound string such as `:dir="'rlt'"` is checked against the HTML
+        # Standard's keywords, which also names the closest one.
+        TEMPLATE_INVALID_ATTRIBUTE_VALUE,
     }
 )
 
@@ -659,7 +663,10 @@ def check_project_types(
         )
     results: list[ProjectTypeFinding] = []
     for uri, (document, projections) in sorted(owners.items()):
-        citry = browser_diagnostics(document, project, documents, js_data_checks=False)
+        citry = (
+            *browser_diagnostics(document, project, documents, js_data_checks=False),
+            *template_lint_diagnostics(document, project, documents),
+        )
         path = file_uri_path(uri) or Path(uri)
         results.extend(
             ProjectTypeFinding(path, document.source, diagnostic)

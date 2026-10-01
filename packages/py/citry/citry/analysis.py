@@ -997,10 +997,16 @@ def lint_attribute_values(
     an ``<iframe>`` or ``<object>`` may not start with ``_`` at all.
 
     Only static attributes on lowercase HTML element names are checked,
-    including elements inside nested templates. Component tags,
-    ``<c-element>``, custom elements, PascalCase Vue components, elements
-    inside ``<svg>`` or ``<math>``, bound attributes, and attributes whose
+    including elements inside nested templates, and Vue bindings whose
+    value is one JavaScript string, such as ``:dir="'rlt'"``, which set the
+    same text. Component tags, ``<c-element>``, custom elements, PascalCase
+    Vue components, elements inside ``<svg>`` or ``<math>``, other bound
+    values, bindings with a modifier such as ``.prop``, and attributes whose
     value contains syntax an extension handles are skipped.
+
+    A ``http-equiv`` value that is no standard pragma, such as
+    ``Cache-Control``, is reported with a message that browsers ignore it
+    and that it belongs in an HTTP response header.
 
     A finding is reported unless every consumer ignores the rule, and it is an
     error when any reporting consumer says ``"error"``. The check needs no
@@ -1081,17 +1087,29 @@ def _attribute_value_finding(
     base_index: int,
 ) -> AttributeValueFinding | None:
     """Return a finding for one static attribute whose value its element does not accept."""
-    # Bound and template-valued attributes are typed by other checks, and an
+    # Template-valued attributes are typed by other checks, and an
     # extension-owned part means the written text is not the rendered value.
     if attr.kind != HtmlAttrKind.Static or attr.foreign_parts:
         return None
     name = attr.key.content
-    attribute = _ascii_lower(name)
     inner = attr.inner_value
     value = inner.content if inner is not None else ""
     # The browser decodes character references such as `&#116;` before it
     # reads the keyword, so compare the decoded text.
     decoded = _html_unescape(value)
+    bound = _bound_string_attribute(name, decoded)
+    if bound is not None:
+        # `:dir="'rlt'"` sets the same text as `dir="rlt"`. The finding marks
+        # the whole quoted string, where TypeScript reports a value Vue's
+        # types reject, so the editor keeps only this finding.
+        name, decoded = bound
+        value = decoded
+        if not decoded:
+            return None
+    elif name.startswith((":", "v-bind:", "@", "v-", "#")):
+        # Other bindings, listeners, and directives hold an expression.
+        return None
+    attribute = _ascii_lower(name)
     # The value span sits inside the quotes; an empty or missing value marks the name.
     span = (inner.start_index, inner.end_index) if inner is not None and inner.content else None
     start, end = span if span is not None else (attr.key.start_index, attr.key.end_index)
@@ -1143,6 +1161,37 @@ def _attribute_value_finding(
     )
 
 
+def _bound_string_attribute(name: str, value: str) -> tuple[str, str] | None:
+    """
+    Return the attribute name and text of a Vue binding whose value is one JavaScript string.
+
+    ``:dir="'rtl'"`` and ``v-bind:dir="`rtl`"`` set ``dir`` to ``rtl``. A
+    binding with a modifier, a dynamic name, an escape sequence, or a
+    template literal with a placeholder is ``None``, because its text is
+    not simply the quoted characters.
+    """
+    for prefix in (":", "v-bind:"):
+        if name.startswith(prefix):
+            attribute = name.removeprefix(prefix)
+            break
+    else:
+        return None
+    if not attribute or "." in attribute or attribute.startswith("["):
+        return None
+    literal = value.strip()
+    if len(literal) < 2 or literal[0] not in "'\"`" or literal[-1] != literal[0]:
+        return None
+    text = literal[1:-1]
+    if literal[0] in text or "\\" in text or "\n" in text or (literal[0] == "`" and "${" in text):
+        return None
+    return attribute, text
+
+
+# A typo of a standard pragma is this close to it; a different HTTP header,
+# such as `Content-Security-Policy-Report-Only`, is not.
+_PRAGMA_SUGGESTION_CUTOFF = 0.8
+
+
 def _attribute_value_message(
     name: str,
     element: str,
@@ -1160,14 +1209,26 @@ def _attribute_value_message(
             element=element,
             allowed=listed,
         )
+    # A pragma value is often an HTTP header, such as `Cache-Control`, which
+    # browsers ignore in a <meta>; only a near typo gets a suggestion.
+    pragma = _ascii_lower(name) == "http-equiv" and element == "meta"
     # Suggest the nearest keyword so a typo such as "treu" names its fix.
     keywords = [keyword for keyword in allowed if keyword]
     nearest = get_close_matches(
         _ascii_lower(decoded),
         [_ascii_lower(keyword) for keyword in keywords],
         n=1,
-        cutoff=0.6,
+        cutoff=_PRAGMA_SUGGESTION_CUTOFF if pragma else 0.6,
     )
+    if not nearest and pragma:
+        return render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            variant="pragma",
+            value=value,
+            attribute=name,
+            element=element,
+            allowed=listed,
+        )
     if not nearest:
         return render_diagnostic(
             TEMPLATE_INVALID_ATTRIBUTE_VALUE,

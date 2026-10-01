@@ -25,6 +25,7 @@ from citry_lsp.engine import (
     TypeCheckProjection,
     browser_diagnostics,
     browser_projection,
+    template_lint_diagnostics,
     type_check_projections,
 )
 from citry_lsp.project import load_project
@@ -37,6 +38,7 @@ from citry_lsp.typescript import (
     TypeScriptFinding,
     TypeScriptUnavailableError,
     check_document_types,
+    check_project_types,
     find_typescript_compiler,
     map_type_check_findings,
     parse_tsc_output,
@@ -1071,3 +1073,27 @@ def test_ty_type_displays_become_json_types(display, expected):
     value = _json_type_from_ty_display(display)
 
     assert (value.javascript if value is not None else None) == expected
+
+
+def test_a_bound_string_the_attribute_rule_reports_is_not_reported_by_typescript(tmp_path):
+    command = _command()
+    project, documents = _documents(
+        tmp_path,
+        {"bound.html": ("citry-html", '<div :draggable="\'treu\'" :dir="\'rlt\'" :style="1"></div>')},
+        app=_BOUND_APP,
+    )
+    document = documents[(tmp_path / "bound.html").as_uri()]
+
+    typed = check_project_types(project, tmp_path, command, documents)
+    citry = template_lint_diagnostics(document, project, documents)
+
+    # Vue types `draggable` as a boolean, so TypeScript would also reject
+    # 'treu'; Citry's finding names the closest keyword, so only it is kept.
+    # Vue types `dir` as any string, so only Citry reports 'rlt'.
+    assert [(item.code, item.range.start.character) for item in citry] == [
+        ("citry.template.invalid-attribute-value", 17),
+        ("citry.template.invalid-attribute-value", 31),
+    ]
+    assert [(item.diagnostic.code, item.diagnostic.range.start.character) for item in typed] == [
+        ("citry.typescript.ts2345", 46),
+    ]

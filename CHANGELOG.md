@@ -80,7 +80,11 @@ Upgrading from 0.5.x? Follow
   `x-*` attributes.
 - `citry check` and the editor warn about a static HTML attribute value
   that the attribute does not accept, such as `draggable="treu"` or
-  `<input type="datetime">`, and suggest the closest valid keyword. Set
+  `<input type="datetime">`, and suggest the closest valid keyword. A Vue
+  binding to one string, such as `:dir="'rlt'"`, is checked the same way,
+  and a `<meta http-equiv>` value browsers ignore, such as
+  `Cache-Control`, is reported with the advice to send it as an HTTP
+  header. Set
   `LintSettings.rule_invalid_attribute_value`, or the same name in a
   component's `Lint` class, to change the severity.
 - `citry check` warns when `js_data()` returns a class instance read

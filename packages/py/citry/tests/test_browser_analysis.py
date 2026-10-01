@@ -1262,14 +1262,61 @@ def test_attribute_value_lint_shows_the_written_value_of_a_character_reference()
 
 def test_attribute_value_lint_skips_elements_it_cannot_type():
     # Component tags, `<c-element>`, custom elements, PascalCase Vue components,
-    # SVG and MathML subtrees, and bound attributes are not plain HTML values.
+    # SVG and MathML subtrees, and bound values other than one string are not
+    # plain HTML values.
     source = (
         '<c-card dir="sideways" /><c-element is="div" dir="sideways"></c-element>'
         '<my-widget dir="sideways"></my-widget><Button type="sideways" />'
         '<svg><a target="_sideways"></a></svg><math dir="sideways"></math>'
-        '<div c-dir="\'sideways\'" :draggable="\'sideways\'" v-bind:hidden="x"></div>'
+        '<div c-dir="\'sideways\'" v-bind:hidden="x"></div>'
+        "<div :dir=\"'a' + 'b'\" :translate.prop=\"'x'\"></div>"
+        '<div :dir="\'a\\\\nb\'"></div><div :dir="`${x}`" :[name]="\'x\'"></div>'
     )
     assert _attribute_values(source) == []
+
+
+def test_attribute_value_lint_checks_a_binding_to_one_string():
+    # `:dir="'rlt'"` sets the same text as `dir="rlt"`, in either quote style.
+    source = (
+        '<div :dir="\'rlt\'" v-bind:translate="`yess`"></div>'
+        "<form :method=\"'post'\"></form><form :method='\"foo\"'></form>"
+    )
+
+    findings = lint_attribute_values(parse_template(source), ())
+
+    assert [(finding.attribute, finding.value) for finding in findings] == [
+        ("dir", "rlt"),
+        ("translate", "yess"),
+        ("method", "foo"),
+    ]
+    # The finding marks the whole string, where TypeScript would mark a
+    # value Vue's types reject.
+    assert source.encode()[findings[0].start_index : findings[0].end_index] == b"'rlt'"
+    assert "Did you mean 'rtl'?" in findings[0].message
+
+
+def test_attribute_value_lint_says_a_header_pragma_belongs_in_a_response_header():
+    source = (
+        '<meta http-equiv="Cache-Control" content="no-cache">'
+        '<meta http-equiv="refesh" content="5">'
+        '<meta http-equiv="content-security-policy-report-only" content="x">'
+    )
+
+    findings = lint_attribute_values(parse_template(source), ())
+
+    # A near typo still gets the closest pragma; another HTTP header gets
+    # the advice to send it as a header.
+    assert [finding.value for finding in findings] == [
+        "Cache-Control",
+        "refesh",
+        "content-security-policy-report-only",
+    ]
+    assert findings[0].message.startswith(
+        "'Cache-Control' is not a pragma browsers read from 'http-equiv' on <meta>, so it has no effect. "
+        "Send it as an HTTP response header instead."
+    )
+    assert "Did you mean 'refresh'?" in findings[1].message
+    assert "Send it as an HTTP response header instead." in findings[2].message
 
 
 def test_attribute_value_lint_maps_nested_template_offsets_into_the_outer_source():

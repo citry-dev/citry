@@ -738,6 +738,10 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                          'frame-name': "'{value}' is not a valid value for "
                                                                        "'{attribute}' on <{element}>. A frame name "
                                                                        "cannot start with '_'.",
+                                                         'pragma': "'{value}' is not a pragma browsers read from "
+                                                                   "'{attribute}' on <{element}>, so it has no effect. "
+                                                                   'Send it as an HTTP response header instead. Valid '
+                                                                   'values: {allowed}.',
                                                          'suggestion': "'{value}' is not a valid value for "
                                                                        "'{attribute}' on <{element}>. Did you mean "
                                                                        "'{suggestion}'? Valid values: {allowed}.",
