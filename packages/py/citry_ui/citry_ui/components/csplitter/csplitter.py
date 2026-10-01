@@ -92,6 +92,26 @@ class _SplitterRegistry:
     panels: list[_PanelDeclaration] = field(default_factory=list)
 
 
+# CInternalSplitter renders panels and the handles between them from one list.
+# The `kind` key tells the two row shapes apart, so the type checker knows
+# which keys exist inside the template's `item['kind'] == 'panel'` branch and
+# its `c-else` branch.
+class _PanelRow(TypedDict):
+    kind: Literal["panel"]
+    panel: _PanelDeclaration
+    index: int
+    size: float
+
+
+class _HandleRow(TypedDict):
+    kind: Literal["handle"]
+    index: int
+    before: _PanelDeclaration
+    after: _PanelDeclaration
+    before_size: float
+    pair_total: float
+
+
 def _plain(owner: str, name: str, value: object) -> str:
     raw = const_value(value)
     if not isinstance(raw, str):
@@ -666,7 +686,7 @@ class CInternalSplitter(LibraryComponent):
                     f"its {panel.min_size:g} to {panel.max_size:g} constraint."
                 )
         self.unprovide(_CONTEXT)
-        items: list[dict[str, object]] = []
+        items: list[_PanelRow | _HandleRow] = []
         for index, panel in enumerate(panels):
             items.append({"kind": "panel", "panel": panel, "index": index, "size": sizes[index]})
             if index < len(panels) - 1:
