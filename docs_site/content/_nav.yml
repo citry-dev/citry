@@ -80,17 +80,17 @@ areas:
         collapsible: true
         section_style: true
         items:
-          - { title: I18n overview, path: /i18n/ }
-          - { title: Locales and context, path: /i18n/locale-context/ }
-          - { title: Write messages, path: /i18n/messages/ }
-          - { title: Organize catalogs, path: /i18n/catalogs/ }
-          - { title: Rich messages, path: /i18n/rich-messages/ }
-          - { title: Format values, path: /i18n/formatting/ }
-          - { title: Parse localized input, path: /i18n/parsing/ }
-          - { title: Browser i18n, path: /i18n/browser/ }
-          - { title: Language direction and accessibility, path: /i18n/direction-and-bidi/ }
-          - { title: Translation workflow and tooling, path: /i18n/workflow/ }
-          - { title: Production and deployment, path: /i18n/production/ }
+          - { title: I18n overview, path: /i18n/, needs_review: true }
+          - { title: Locales and context, path: /i18n/locale-context/, needs_review: true }
+          - { title: Write messages, path: /i18n/messages/, needs_review: true }
+          - { title: Organize catalogs, path: /i18n/catalogs/, needs_review: true }
+          - { title: Rich messages, path: /i18n/rich-messages/, needs_review: true }
+          - { title: Format values, path: /i18n/formatting/, needs_review: true }
+          - { title: Parse localized input, path: /i18n/parsing/, needs_review: true }
+          - { title: Browser i18n, path: /i18n/browser/, needs_review: true }
+          - { title: Language direction and accessibility, path: /i18n/direction-and-bidi/, needs_review: true }
+          - { title: Translation workflow and tooling, path: /i18n/workflow/, needs_review: true }
+          - { title: Production and deployment, path: /i18n/production/, needs_review: true }
 
       - label: Advanced
         collapsible: true
