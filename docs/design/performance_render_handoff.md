@@ -109,4 +109,4 @@ the retained benchmark evidence.
 - [Simple-component design](component_simple.md)
 - [Cumulative comparison](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/results/performance-render/round47-comparison.json)
 - [First public simple comparison](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/results/performance-render/simple-api-timing-main.json)
-- [Public feature guide](../../docs_site/content/advanced/simple-components.md)
+- [Public feature guide](../../docs_site/content/performance/simple-components.md)

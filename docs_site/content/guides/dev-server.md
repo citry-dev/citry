@@ -250,6 +250,7 @@ Two related calls help when a single path is not enough:
   is all it takes.
 
 For how Citry reuses rendered work, see
-[Performance](/advanced/performance/) and
-[Cache rendered output](/advanced/caching/). For loading JavaScript and CSS
+[Constant values](/performance/const/),
+[Pure components](/performance/pure/), and
+[Cache rendered output](/performance/caching/). For loading JavaScript and CSS
 from files, see [Dependency files](/advanced/dependency-files/).

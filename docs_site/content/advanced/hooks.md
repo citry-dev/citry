@@ -85,7 +85,7 @@ run data methods, the template, slots, or `on_render()` again.
 
 If a hook's result depends on something outside the declared component inputs,
 that value must also vary the cache key. Otherwise a cached result can outlive
-the condition that produced it. See [Caching](/advanced/caching/).
+the condition that produced it. See [Caching](/performance/caching/).
 
 ## Observe completion or recover from an error
 

@@ -317,7 +317,7 @@ how much time it spends producing its HTML.
 
 ## Related pages
 
-- [Performance](/advanced/performance/) compares simple rendering,
+- [Choose an optimization](/performance/pure/#choose-an-optimization) compares simple rendering,
   `Const` and pure bodies.
 - [Component hooks](/advanced/hooks/) covers ordinary instance behavior.
 - [Benchmarks](/about/benchmarks/) describes the measured workloads.

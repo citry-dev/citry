@@ -313,7 +313,7 @@ Alongside the core framework, there's already quite a bit to try:
 
 There are also features I haven't tried to squeeze into this introduction,
 like [translations with Fluent](/i18n/),
-[caching](/advanced/caching/), or
+[caching](/performance/caching/), or
 [HTML fragments](/advanced/html-fragments/).
 
 ## Start gradually in an existing Django project

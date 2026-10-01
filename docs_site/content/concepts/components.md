@@ -41,7 +41,7 @@ Calling `Welcome()` describes one use of the component. `str(...)` renders
 that use and turns the result into HTML.
 
 For presentation components that do not need an independent instance or
-hooks, see [Simple components](/advanced/simple-components/). The explicit
+hooks, see [Simple components](/performance/simple-components/). The explicit
 `simple = True` declaration trades those features for less rendering setup.
 
 ## Pass values straight to the template

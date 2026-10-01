@@ -224,7 +224,7 @@ performance optimizations:
 ![First, second and warmed render times for optimized Citry, Django, django-components and Jinja2. Lower is better.](https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmark.png)
 
 \* Citry uses `simple` and `pure` optimizations. See the
-[performance optimization guide](https://citry.dev/advanced/performance/).
+[performance optimization guide](https://citry.dev/performance/pure/#choose-an-optimization).
 
 - Citry takes 24.62 ms warmed, about 55% less time than django-components
   on this workload.

@@ -300,7 +300,7 @@ describes changes for Citry to apply only after every extension accepts the
 cached entry.
 
 Treat a cache-mode change or version change as a compatibility decision. See
-[Caching](/advanced/caching/) and the extension cache methods in the
+[Caching](/performance/caching/) and the extension cache methods in the
 [`Extension` reference][citry.Extension].
 
 ## Publish metadata to tools

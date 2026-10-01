@@ -175,7 +175,7 @@ so that option is ignored.
 The request for a generated asset may reach a different worker from the one
 that rendered the fragment. Configure a shared cache backend so every worker
 can serve the generated values. See
-[Cache backends](/advanced/cache-backends/) for Redis, DiskCache, Django, and
+[Cache backends](/performance/cache-backends/) for Redis, DiskCache, Django, and
 deployment generations.
 
 Use the same mounted prefix and cache configuration in the rendering and

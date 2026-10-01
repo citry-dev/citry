@@ -575,7 +575,7 @@ the limit or configure a cache. See
   [Send page content in the served HTML](/advanced/vue-runtime/#send-page-content-in-the-served-html).
 - `simple = "vue"` gives a component its own Vue state and assets without a
   Python component instance; see
-  [Simple components](/advanced/simple-components/#choose-the-components-browser-identity).
+  [Simple components](/performance/simple-components/#choose-the-components-browser-identity).
 - A component tag accepts `v-if`, `v-model`, `v-show`, and custom
   directives; see
   [Use Vue directives on a component tag](/syntax/vue/#use-vue-directives-on-a-component-tag).

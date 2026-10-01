@@ -39,7 +39,7 @@ The proposed core interactive cohort has seven framework families. Selection
 prioritizes architectural coverage and the requested comparisons, not a claimed
 popularity ranking. Use one qualified Citry configuration in public comparison
 charts, with an asterisk linking to the
-[performance guide](../../docs_site/content/advanced/performance.md) and a precise
+[performance guide](../../docs_site/content/performance/pure.md) and a precise
 list of opted-in declarations. Default versus `simple` belongs in internal
 diagnostics or a separately labeled ablation, not two headline Citry entries.
 

@@ -185,7 +185,7 @@ _9 Sep 2026_
 - Components, including `LibraryComponent` definitions, can declare `simple = True` to render
   presentation templates without an independent instance or component hooks,
   keeping data callbacks live; incompatible declarations and calls raise errors.
-  See the [simple component guide](https://citry.dev/advanced/simple-components/).
+  See the [simple component guide](https://citry.dev/performance/simple-components/).
 
 - `RenderFrame` gains an `is_transparent_root` field defaulting to `False`,
   identifying a transparent component's whole output separately from caller-owned

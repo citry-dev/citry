@@ -13,7 +13,7 @@ from 2026-09-10. Lower bars mean less rendering time.
 <c-image src="/static/img/benchmark.png" alt="First, second and warmed render times for optimized Citry, Django, django-components and Jinja2" width="720" />
 
 \* Citry uses `simple` and `pure` optimizations. See the
-[performance optimization guide](/advanced/performance/).
+[performance optimization guide](/performance/pure/#choose-an-optimization).
 
 | Configuration | First render | Second render | Warmed render |
 | --- | ---: | ---: | ---: |
@@ -25,7 +25,7 @@ from 2026-09-10. Lower bars mean less rendering time.
 ## What the Citry result includes
 
 Button, Icon and HeroIcon are declared as
-[simple components](/advanced/simple-components/). Their data callbacks stay
+[simple components](/performance/simple-components/). Their data callbacks stay
 live, but they give up independent instances, hooks and browser identity.
 HeroIcon and ProjectOutputBadge also retain the scenario's existing `pure`
 declarations. The page constructs 146 ordinary instances and emits 989,431 bytes,
@@ -94,7 +94,7 @@ comparable Citry timings.
 
 ## Related pages
 
-- [Performance](/advanced/performance/) compares simple rendering, `Const`
-  and pure component bodies.
-- [Simple components](/advanced/simple-components/) explains the opt-in
+- [Choose an optimization](/performance/pure/#choose-an-optimization)
+  compares simple rendering, `Const` and pure component bodies.
+- [Simple components](/performance/simple-components/) explains the opt-in
   contract used by the Citry result.

@@ -274,7 +274,7 @@ succeeds, but is not stored.
 
 Exceptions raised by the backend's `get()` or `set()` methods propagate.
 Choose or wrap a backend with the failure policy your application needs.
-[Cache backends](/advanced/cache-backends/) covers capacity, shared stores,
+[Cache backends](/performance/cache-backends/) covers capacity, shared stores,
 and deployment settings.
 
 ## Check privacy before enabling a cache
@@ -297,8 +297,9 @@ not make the stored artifact safe to expose.
 
 ## Related pages
 
-- [Cache backends](/advanced/cache-backends/) for in-process and shared
+- [Cache backends](/performance/cache-backends/) for in-process and shared
   storage.
-- [Performance](/advanced/performance/) for reusing stable values and pure
+- [Constant values](/performance/const/) and
+  [Pure components](/performance/pure/) for reusing stable values and
   component bodies inside an ordinary render.
 - [Security](/security/) for template and Events trust boundaries.

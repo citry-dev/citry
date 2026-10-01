@@ -59,7 +59,7 @@ def main() -> None:
     caption = (
         f"Apple M4, Python 3.14.3. {blocks} balanced fresh-process blocks; "
         f"{warm_count} retained warm outputs per worker.\n"
-        "* Citry uses simple and pure optimizations: citry.dev/advanced/performance/\n"
+        "* Citry uses simple and pure optimizations: citry.dev/performance/pure/\n"
         "Output and framework features differ.\n"
         "2026-09-10 · Django 6.0.6 · django-components 0.152.0 · Jinja2 3.1.6 · Citry 0.5.0 / Core 1.7.0"
     )

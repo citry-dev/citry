@@ -5,7 +5,7 @@ The retained publication measurement covers five configurations, including
 ordinary Citry and a configuration using the public `Component.simple` opt-in.
 The public chart shows four series: Django, django-components, Jinja2 and one
 optimized `Citry*` series. Its asterisk points to the
-[performance guide](../../docs_site/content/advanced/performance.md), which
+[performance guide](../../docs_site/content/performance/pure.md), which
 explains the simple and pure optimizations. The configurations emit different
 output and provide different component behavior. See the current results in
 [`benchmarks/README.md`](../../benchmarks/README.md) and the retained

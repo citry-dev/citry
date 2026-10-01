@@ -223,11 +223,11 @@ other applications' data.
 
 For a deployment-wide change, move every worker to a new generation. For one
 rendered-output entry, use the key helpers described in
-[Cache rendered output](/advanced/caching/#change-or-remove-entries).
+[Cache rendered output](/performance/caching/#change-or-remove-entries).
 
 ## See also
 
-- [Cache rendered output](/advanced/caching/) for variations, expiry, and
+- [Cache rendered output](/performance/caching/) for variations, expiry, and
   privacy requirements.
 - [HTML fragments](/advanced/html-fragments/) for the multi-worker asset
   delivery case.

@@ -225,13 +225,13 @@ cannot load their code or styles.
 
 If you run more than one worker process, point every worker at a shared cache
 backend: DiskCache, Redis, or your Django cache through `DjangoCache` (see
-[Cache backends](/advanced/cache-backends/)). Citry writes these entries
+[Cache backends](/performance/cache-backends/)). Citry writes these entries
 without an expiry, because a page that is already open can request them at
 any later time. Give the backend enough room that it does not drop them
 while such pages are still in use. A single worker without a configured
 cache keeps compiled code and stylesheets in memory up to the
 `vue_asset_max_bytes` setting; see
-[Limit memory for interactive page assets](/advanced/cache-backends/#limit-memory-for-interactive-page-assets).
+[Limit memory for interactive page assets](/performance/cache-backends/#limit-memory-for-interactive-page-assets).
 
 ## URL building in a render-only process
 

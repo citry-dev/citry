@@ -727,8 +727,9 @@ class Component(metaclass=ComponentMeta):
     provide/inject, instance hooks and instance configuration are not. The data
     callback runs for every invocation; neither mode makes the component pure.
 
-    See [Simple components](/advanced/simple-components/) for the full contract
-    and [Performance](/advanced/performance/) to compare the available options.
+    See [Simple components](/performance/simple-components/) for the full contract
+    and [Choose an optimization](/performance/pure/#choose-an-optimization) to
+    compare the available options.
     """
 
     pure: ClassVar[bool] = False
@@ -740,7 +741,8 @@ class Component(metaclass=ComponentMeta):
     child, Slot, ordinary component instances, IDs, and i18n work
     still run for every occurrence. A separately declared simple component keeps
     its restricted instance-free contract. A subclass must declare purity again rather than
-    inheriting the promise.
+    inheriting the promise. See [Pure components](/performance/pure/) for the
+    full contract.
     """
 
     name: ClassVar[str | None] = None

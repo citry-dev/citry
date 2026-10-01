@@ -10,6 +10,14 @@ redirects:
   - from: /syntax/alpine/
     to: /syntax/vue/
   - from: /advanced/const-optimization/
-    to: /advanced/performance/
+    to: /performance/const/
+  - from: /advanced/performance/
+    to: /performance/const/
+  - from: /advanced/simple-components/
+    to: /performance/simple-components/
+  - from: /advanced/caching/
+    to: /performance/caching/
+  - from: /advanced/cache-backends/
+    to: /performance/cache-backends/
   - from: /ui-library/components/stack-group/
     to: /ui-library/components/col-row/

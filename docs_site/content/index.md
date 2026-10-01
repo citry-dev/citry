@@ -175,14 +175,14 @@ navigation, feedback, and data display.
 A product that works starts running into different problems. None of them need a different framework.
 </p>
 
-Read about [caching](/advanced/caching/),
+Read about [caching](/performance/caching/),
 [extensions](/advanced/extensions/),
 [internationalization](/i18n/),
 [CSRF protection](/security/#protect-event-posts-from-csrf),
 [strict CSP](/security/#choose-a-csp-compatibility-mode),
 [HTML fragments](/advanced/html-fragments/),
 [component libraries](/advanced/component-libraries/), and
-[performance](/advanced/performance/).
+[performance](/performance/pure/#choose-an-optimization).
 
 <c-landing-depth />
 
