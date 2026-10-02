@@ -13,4 +13,5 @@ renders `<c-TreeNode>` again for each child.
 
 The recursion stops on its own. A leaf has no children, so the `c-if` on
 the child list is false and no further `TreeNode` renders. Your own data
-needs the same end: a node that contains itself never reaches a leaf.
+needs the same end: a node that contains itself never reaches a leaf,
+so the render never finishes.
