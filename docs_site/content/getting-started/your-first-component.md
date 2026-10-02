@@ -186,7 +186,7 @@ Leaving out the default slot fails the same way. The error appears when the
 card turns into HTML, at `str()` or `print()`, not when Python first runs
 `Card(...)`.
 
-!!! note
+!!! note "Type annotations do not check values at runtime"
 
     `accent: str` helps your editor and type checker, but it does not
     reject `accent=123` while your program runs. If values come from a
