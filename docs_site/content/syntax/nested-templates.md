@@ -13,7 +13,7 @@ right in the `c-*` attribute. Wrap it in `<>` and `</>`:
 <c-Card
   c-footer="<>
     <footer>
-      <a c-href="archive_url">Read the archive</a>
+      <a c-href='archive_url'>Read the archive</a>
     </footer>
   </>"
 />
@@ -22,6 +22,11 @@ right in the `c-*` attribute. Wrap it in `<>` and `</>`:
 `<>` and `</>`, called fragment markers, mark the value as markup rather than
 Python. Citry renders the
 markup and passes the result to `Card` as its `footer` input.
+
+Inside the markup, quote attribute values with the quote character the
+outer value does not use. Here the outer value uses double quotes, so the
+link uses single quotes: `c-href='archive_url'`. A double quote inside would
+end the outer value early, and Citry has no way to escape it.
 
 ## Pick attribute or slot
 
@@ -41,7 +46,7 @@ component that receives it:
 <c-Card
   c-footer="<>
     <p>Prepared for {{ user.name }}</p>
-    <c-HelpLink c-topic="help_topic" />
+    <c-HelpLink c-topic='help_topic' />
   </>"
 />
 ```
@@ -74,7 +79,7 @@ class Card(Component):
 The input is not a slot. The component decides where, and whether, to
 render it.
 
-## Leave out the markers { #when-the-fragment-markers-are-optional }
+## Skip the `<>` markers { #when-the-fragment-markers-are-optional }
 
 Citry also reads a value as markup without `<>...</>` when the value, with
 surrounding spaces removed:
