@@ -1,6 +1,6 @@
 ---
 title: Add browser behavior
-description: Use Vue directives in a Citry component, then seed reactive browser data from Python with js_data.
+description: Use Vue attributes in a Citry component and give it starting browser data from Python with js_data.
 ---
 
 # Add browser behavior
@@ -58,8 +58,9 @@ gets its own copy, so clicking Ada cannot change Grace.
 ## Add methods and other Vue options
 
 When a component needs more than data, such as methods, props, emitted
-events, or code that runs when it mounts, pass Vue options to
-[`$component`][$component] in the component's `js`:
+events, or code that runs when it first appears on the page, pass Vue
+options to [`$component`][$component] in the component's `js` string. The
+`js` string holds the component's JavaScript, the way `css` holds its CSS:
 
 ```js
 $component({
