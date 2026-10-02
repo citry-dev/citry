@@ -604,7 +604,7 @@ written" is accurate.
 | `x-data` | v051 `syntax/alpine` | inert attribute, no diagnostic | removed | `$component({ data() {...} })` or `js_data()`. Silent (decision 6.5). |
 | `x-text`, `x-html`, `x-show`, `x-if`, `x-for`, `x-model`, `x-bind:*`, `x-on:*`, `x-init`, `x-effect`, `x-ref`, `x-cloak`, `x-transition`, `x-teleport`, `x-ignore`, `x-id` | same | inert attributes | removed | Vue equivalents. `x-cloak` stays on the element, so an app rule `[x-cloak]{display:none}` hides content for good. |
 | `@event="js"` on an element | Alpine `x-on` | Vue `v-on` | changed-incompatible | Names resolve on the Vue instance; a single statement without `;` fails to compile. In CHANGELOG. |
-| Alpine-only modifiers (`.outside`, `.window`, `.document`, `.debounce`, `.throttle`, `.camel`, `.dot`) | Alpine | accepted, no diagnostic | changed-incompatible | The modifier compiles into a key filter, so the listener never runs. In CHANGELOG as "have no effect" (decision 6.6). |
+| Alpine-only modifiers (`.outside`, `.window`, `.document`, `.debounce`, `.throttle`, `.camel`, `.dot`) | Alpine | rejected when the template loads | changed-incompatible | Vue reads the modifier as a key name: on a keyboard event the listener never runs, and on any other event Vue drops it. The parser rejects these modifiers (decision 6.6). |
 | `:attr="js"` on an element | Alpine `x-bind` | Vue `v-bind` | changed-incompatible | Scope changes as for `@event`. |
 | Alpine loops cannot clone Citry components | same | `v-for` on a component tag is a parse error | changed-compatible | Hint suggests `<c-for>`. |
 | Runtime auto-loads on `x-`/`@`/`:` attributes | same | Vue loads on Vue syntax | changed-compatible | `x-*` alone loads nothing. |
@@ -947,8 +947,9 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 ### 6.6 Alpine-only event modifiers
 
 - **Question:** `.outside`, `.window`, `.document`, `.debounce`, and
-  `.throttle` on a plain `@event` compile into a key filter, so the
-  listener never runs, and nothing reports it. The CHANGELOG says they
+  `.throttle` on a plain `@event` are read as key names, so the listener
+  never runs on a keyboard event and ignores the modifier on any other
+  event, and nothing reports it. The CHANGELOG says they
   "have no effect".
 - **Options:** (a) a compile error that lists the modifiers Vue accepts;
   (b) a warning; (c) leave as is.

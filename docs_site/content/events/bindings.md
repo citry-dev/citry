@@ -33,7 +33,7 @@ Modifiers after the event name control which events send a call, and when:
 | `.stop` | Stop the event from bubbling to ancestors. |
 | `.self` | Send only when the event happened on this element, not on a child. |
 | `.once` | Send at most once. |
-| `.enter` / `.escape` | Send only when the key pressed was Enter / Escape. |
+| `.enter` / `.escape` | Send only when the key pressed was Enter / Escape. Use on `keydown`, `keyup`, or `keypress`. |
 | `.debounce` | Wait until events stop for a moment, then send once. |
 | `.throttle` | Send at most once per interval. |
 
@@ -250,8 +250,18 @@ pressing any other key first means a later Enter sends nothing.
 ### How modifiers match
 
 `.prevent` has an effect only when the event can be cancelled.
-`.enter` and `.escape` read the event's `key` property, whatever the
-event's name. An event without a `key` never matches.
+
+`.enter` and `.escape` work only on `keydown`, `keyup`, and `keypress`,
+written in lowercase. On any other event the template fails to load,
+because that event has no key to check:
+
+```citry-html
+{# Fails: a click has no key #}
+<input @c-click.enter="search" />
+
+{# Works: send when Enter is pressed #}
+<input @c-keydown.enter="search" />
+```
 
 ### `:type` stops a binding
 

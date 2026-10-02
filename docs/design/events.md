@@ -1938,8 +1938,8 @@ that event. The runtime listens on the HTML element carrying the binding, so a
 non-bubbling event reaches that element but does not reach a binding on an
 ancestor. Modifier capability follows the event instance for the same reason:
 a synthetic event named `scroll` may be cancelable even though the browser's
-native `scroll` event is not, and an arbitrarily named `KeyboardEvent` still
-has a `key`.
+native `scroll` event is not. Key filters are the one exception, below: they
+are judged by the event name when the template loads.
 
 The modifiers, exhaustively, for a binding on one HTML element. A component-
 boundary `@c-*` client binding follows 5.5's spike-proven `RootGroup` contract instead:
@@ -1953,7 +1953,7 @@ becoming once-per-root.
 | `.stop` | event bindings | `stopPropagation()`. |
 | `.self` | event bindings | Send only when `event.target` is the bound HTML element itself, ignoring events bubbling up from descendants. |
 | `.once` | event bindings | The HTML-element binding fires at most once per element lifetime. |
-| `.enter` / `.escape` | event bindings, two-way bindings | Send only when the concrete event's `key` is `Enter` / `Escape`. Event names are unrestricted: a native event without `key` simply does not match, while an arbitrarily named keyed event does. |
+| `.enter` / `.escape` | event bindings, two-way bindings | Send only when the concrete event's `key` is `Enter` / `Escape`. An event binding must name `keydown`, `keyup`, or `keypress`, in lowercase, exactly as written. Any other name, such as `@c-click.enter` or `@c-keyDown.enter`, is a template-load error, the same rule the template parser applies to a Vue listener such as `@click.enter`, because a native event by that name has no key and the binding would never send. The generated Vue listener keeps the key modifier, so Vue checks the key before `.prevent`, `.stop`, and `.self`; the browser client checks it again before it sends. A two-way binding checks the `key` of its update event, and nothing yet rejects a key filter on a keyless update event such as the default `input`. |
 | `.debounce[.300ms]` | event bindings, two-way bindings | Hold until the trigger has been idle that long (bare `.debounce` is 250 ms); overrides the `_debounce` / `@event(debounce=...)` defaults (3.5). |
 | `.throttle[.1s]` | event bindings, two-way bindings | At most one send per window (bare `.throttle` is 250 ms); same override chain. |
 | `.lazy` | two-way bindings only | Use the control's committed-value event instead of its active event (table below); a template-load error elsewhere. |

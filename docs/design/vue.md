@@ -1263,12 +1263,12 @@ because Vue looks it up by that name (and its camelCase and PascalCase
 forms), never in lowercase, and the browser reports a name nobody
 registered. On a static event name other than exactly `keydown`, `keyup`, or
 `keypress`, the parser also rejects a modifier outside the set Vue handles
-on any event (the list in compiler-dom's `resolveModifiers`). Citry's Vue
-compiler wraps every other modifier in a check of `event.key`, and the event
-has no key, so the listener would never run. A `@c-*` Events binding still
-accepts `.enter` and `.escape` on any event and simply never matches a
-keyless one; rejecting that at load belongs to the Events binding validator
-and is not done yet.
+on any event (the list in compiler-dom's `resolveModifiers`). Vue reads
+every other modifier as a key name, and on an event without a key it drops
+the name, so the listener would run on every event while the author meant
+one key. A `@c-*` Events binding follows the same rule for `.enter` and
+`.escape`: the Events binding validator rejects them at load on any event
+other than `keydown`, `keyup`, or `keypress`.
 
 #### Conditions on a call
 

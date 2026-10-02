@@ -102,7 +102,8 @@ listens for Enter and stops the browser's default action. A key name such
 as `.enter` works only on `keydown`, `keyup`, and `keypress`. On another
 event, such as `@click.enter`, the template fails when it loads, because
 that event has no key: Vue would ignore `.enter` and run the listener on
-every click. A `@c-*` binding such as `@c-click.enter` fails the same way.
+every click. A `@c-*` binding such as `@c-click.enter` also fails when the
+template loads.
 
 Write the `v-` prefix and Vue's own directive names in lowercase.
 `V-IF` and `v-If` fail when the
@@ -350,7 +351,7 @@ A natural first attempt at a list of components is `v-for`:
 />
 ```
 
-The template fails to compile with an error that says what to write
+The template fails when it loads, with an error that says what to write
 instead. Repeat the component with `<c-for>` over a Python value, and pass
 each item's data as a Python input:
 
@@ -546,7 +547,8 @@ browser runs.
 it. A built-in tag that renders only its content, such as `<c-provide>`,
 accepts no Vue syntax.
 
-`<c-slot>` accepts no Vue syntax either, and the template fails to compile.
+`<c-slot>` accepts no Vue syntax either, and the template fails when it
+loads.
 Its attributes other than `name` and `required` become data that Python
 passes to the slot content, so a `v-if` there could never reach the browser.
 Put `v-if` on a `<template>`
