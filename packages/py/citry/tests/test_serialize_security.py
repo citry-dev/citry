@@ -204,7 +204,9 @@ class TestInlineMetadata:
             calls = 0
 
             def _render(self):
-                self.calls += 1
+                # Count on the class: emission renders its own copy of the
+                # declared entry, so the declared object itself is never rendered.
+                type(self).calls += 1
                 return super()._render()
 
             def render(self):
@@ -226,7 +228,7 @@ class TestInlineMetadata:
         result = Card().render().serialize_result(deps_strategy="simple")
 
         assert "globalThis.once = true;" in result.html
-        assert script.calls == 1
+        assert StatefulScript.calls == 1
 
     @pytest.mark.parametrize("strategy", ["simple", "fragment"])
     def test_same_script_identity_materializes_once_after_a_global_hook(self, strategy):
@@ -777,7 +779,9 @@ class TestCspNonce:
             calls = 0
 
             def _render(self):
-                self.calls += 1
+                # Count on the class: emission renders its own copy of the
+                # declared entry, so the declared object itself is never rendered.
+                type(self).calls += 1
                 return super()._render()
 
             def render(self):
@@ -796,7 +800,7 @@ class TestCspNonce:
         html = Card().render().serialize(deps_strategy="simple", csp_nonce="requestNonce")
 
         assert ".once { display: block; }" in html
-        assert style.calls == 1
+        assert StatefulStyle.calls == 1
 
     def test_static_fragment_nonce_reaches_direct_dependencies(self):
         nonce = "fragmentNonce"

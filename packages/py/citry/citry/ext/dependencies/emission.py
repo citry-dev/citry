@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+from copy import copy
 from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
@@ -594,17 +595,25 @@ def _resolve_records(
                         css_class_attr["data-citry-css-url"] = script_url(comp_cls, "css")
                     styles.append(replace(comp_css, attrs={**comp_css.attrs, **css_class_attr}))
 
+            # Some of these objects outlive this serialization: the class keeps
+            # one Component.js/css object for every render, and a Script or Style
+            # listed in Dependencies is the object the class itself declares.
+            # Hooks may edit an entry's attrs in place (the documented way to add an attribute),
+            # so hand them copies made for this serialization alone; otherwise
+            # one render's edit would appear in every later render.
             cached = (
-                scripts,
-                styles,
+                [_copy_for_hooks(script) for script in scripts],
+                [_copy_for_hooks(style) for style in styles],
                 with_client_js and uses_component(comp_cls),
             )
             class_deps[comp_cls] = cached
 
         cls_scripts, cls_styles, cls_uses_oncomp = cached
         has_component_calls = has_component_calls or cls_uses_oncomp
-        # Copy the class lists so the per-instance scripts below (and any
-        # on_dependencies edit) never mutate the cached entry.
+        # Copy the class lists so adding this instance's variables sheet, or a
+        # hook adding or removing entries, leaves the per-class lists intact.
+        # The entries themselves are shared by every instance in this
+        # serialization.
         instance_scripts: list[Dependency] = list(cls_scripts)
         instance_styles: list[Dependency] = list(cls_styles)
 
@@ -987,6 +996,19 @@ def _merge_shared_style_attrs(
                 owners.append(token)
         merged[key] = " ".join(owners)
     return merged
+
+
+def _copy_for_hooks(dependency: Dependency) -> Dependency:
+    """
+    Copy one dependency so a hook's in-place edits stay in this serialization.
+
+    ``copy`` keeps every field, including a Script's attached response bytes,
+    which ``dataclasses.replace`` would drop. ``attrs`` gets its own dict
+    because it is the field hooks edit in place.
+    """
+    copied = copy(dependency)
+    copied.attrs = dict(dependency.attrs)
+    return copied
 
 
 def _bucket(dep: Dependency, core: list[Dependency], extra: list[Dependency], component: list[Dependency]) -> None:

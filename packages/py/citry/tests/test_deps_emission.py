@@ -687,6 +687,53 @@ class TestOnDependenciesHooks:
             str(page())
         assert Probe.seen is False
 
+    @pytest.mark.parametrize("strategy", ["simple", "document"])
+    def test_attribute_added_in_one_render_does_not_reach_the_next(self, strategy):
+        # Both hooks add an attribute in place on the first render only. The
+        # second render must not show it: the component's own js and css
+        # objects and its declared Dependencies entry are reused by every
+        # render of the class.
+        c_hook_renders = []
+        ext_hook_renders = []
+
+        class Stamp(Extension):
+            name = "stamp"
+
+            def on_dependencies(self, ctx):
+                ext_hook_renders.append(True)
+                if len(ext_hook_renders) == 1:
+                    for script in ctx.scripts:
+                        script.attrs["data-ext-first"] = True
+
+        c = Citry(extensions=[Stamp])
+        lib = Script(url="/static/lib.js")
+
+        class Widget(Component):
+            citry = c
+            template = "<html><head></head><body><span>w</span></body></html>"
+            js = "console.log('widget');"
+            css = ".widget {}"
+
+            class Dependencies:
+                js = [lib]
+
+            @classmethod
+            def on_dependencies(cls, scripts, styles):
+                c_hook_renders.append(True)
+                if len(c_hook_renders) == 1:
+                    for dependency in [*scripts, *styles]:
+                        dependency.attrs["data-first"] = True
+
+        first = Widget().render().serialize(deps_strategy=strategy)
+        second = Widget().render().serialize(deps_strategy=strategy)
+
+        assert "data-first" in first
+        assert "data-ext-first" in first
+        assert "data-first" not in second
+        assert "data-ext-first" not in second
+        # The object the class declares keeps the attributes it was written with.
+        assert lib.attrs == {}
+
     def test_returning_none_keeps_the_component_assets(self):
         # The hook returns None (the default) to mean "no change": the
         # component's own js and css must survive untouched.
