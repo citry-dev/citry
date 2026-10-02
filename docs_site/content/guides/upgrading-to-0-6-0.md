@@ -20,10 +20,10 @@ A project that only renders static HTML from Python, with no browser
 behavior, usually needs only these steps: upgrade the packages,
 [check component tag attributes](#update-attributes-on-component-tags),
 [check `#c-ignore`](#check-your-c-ignore-markers),
-[rename a component named `Mark`](#rename-names-vue-reserves), and work
-through [Update settings and extensions](#update-settings-and-extensions).
+[rename a component named `Mark`](#rename-reserved-names), and work
+through [Settings and extensions](#update-settings-and-extensions).
 
-## Upgrade the packages together
+## Upgrade the packages { #upgrade-the-packages-together }
 
 Upgrade Citry, its UI library, and the language server in one step:
 
@@ -43,7 +43,7 @@ pip lets older versions stay installed next to Citry 0.6.0, but they break:
 - `citry-ui` 0.2.x components render, but their browser behavior does not
   work.
 
-## Replace Alpine directives with Vue
+## Rewrite Alpine syntax { #replace-alpine-directives-with-vue }
 
 **What you see:** the page looks right but does nothing. A menu does not
 open, a counter does not count, and there is no error in Python or in the
@@ -111,7 +111,7 @@ content; see
 [Vue in templates](/syntax/vue/) lists the directives Citry accepts and the
 few it rejects, such as `<Transition>` and `<Teleport>`.
 
-### Find the `x-*` attributes you missed
+### Find leftover `x-*`
 
 Run `citry check` before you test the pages. It reports each `x-*`
 attribute left on an HTML element, and so does the editor. A leftover
@@ -125,7 +125,7 @@ If another library on the page reads `x-*` attributes, turn the warning
 off with `rule_alpine_attribute="ignore"` in `LintSettings` or in the
 component's `Lint` class.
 
-### Rewrite Alpine-only event modifiers
+### Alpine-only modifiers
 
 **What you see:** the template fails to load, and the error names the Vue
 way to write the listener.
@@ -144,7 +144,7 @@ listener to `document` in `mounted()` and remove it in `unmounted()`.
 To slow down calls to the server, the `@c-*` Events bindings still accept
 `.debounce` and `.throttle`; see [Bind events in templates](/events/bindings/).
 
-### End statement listeners with a semicolon
+### End statements with `;`
 
 **What you see:** the render stops with a Vue compile error, "Error parsing
 JavaScript expression".
@@ -161,7 +161,7 @@ statement with `;`, or move it into a method:
 <button @click="if (ok) save();">Save</button>
 ```
 
-### Send events to the parent with `$emit`
+### Use `$emit` { #use-emit }
 
 **What you see:** the listener fails, because Alpine's `$dispatch` does
 not exist in Vue.
@@ -187,7 +187,7 @@ reaches only that listener; it does not bubble up through the page. When
 page code outside the parent must hear it, dispatch a DOM `CustomEvent`
 from an element you hold in a `ref`.
 
-## Pass browser values to a child as Vue props
+## Replace `$c-props` { #replace-c-props }
 
 **What you see:** the template stops loading with
 `'$c-props' was removed; use native Vue ':prop' or 'v-bind' syntax`.
@@ -212,10 +212,9 @@ $component({
 
 The same applies to Citry UI 0.3.0 components: write `:open="open"` on
 `<c-CDialog>`. A callback that 0.5.1 passed as a prop usually becomes an
-emitted event, as in [Send events to the parent with
-`$emit`](#send-events-to-the-parent-with-emit).
+emitted event; see [Use `$emit`](#use-emit).
 
-## Move `$component` initializers to Vue Options { #move-component-initializers-to-vue-options }
+## Update `$component` { #move-component-initializers-to-vue-options }
 
 `$component(callback)` and `$component({ init })` still work, but they run
 at a different time and receive less.
@@ -269,7 +268,7 @@ cleanup function it resolves to, and logs a rejection instead of stopping
 the page. The [Browser APIs reference](/reference/browser-apis/#component)
 lists every option `$component` accepts.
 
-### Use Vue provide and inject in the browser
+### Replace `$provide`
 
 **What you see:** code that calls `$provide`, `$inject`, or `$unprovide`
 fails, because these template helpers do not exist in 0.6.0.
@@ -278,7 +277,7 @@ Provide a value from a component with Vue's `provide` option, and read it
 in a descendant with `inject`. See
 [Provide and inject in client code](/concepts/provide-and-inject/#provide-and-inject-in-client-code).
 
-### Rename names Vue reserves
+### Rename reserved names { #rename-reserved-names }
 
 - **A [`js_data()`][citry.Component.js_data] key that starts with `$` or
   `_`, or the key `citryId`,** stops the render with a `ValueError` that
@@ -296,7 +295,7 @@ lists the rest.
 
 Each change below starts with what you see if you skip it.
 
-### Address a render with `mark:<name>` or `render:<id>`
+### Render targets
 
 **What you see:** `actions.Render` with a CSS selector as its `target`
 raises `ValueError`, saying that the target must be `render:<id>`,
@@ -325,7 +324,7 @@ response can return them all, one after another, as long as no target sits
 inside another. `Citry.events.applyActions` follows the same rule for
 Render and Event actions. See [Event actions](/events/actions/).
 
-### Keep the outermost component when a handler returns a different one
+### Keep the root component
 
 **What you see:** the browser reports an error that names both
 components, and the page stays as it was.
@@ -338,7 +337,7 @@ listeners, and a `ref` that the parent wrote on the old component's tag do
 not reach the new one. See
 [Swap in a different component](/events/actions/#swap-in-a-different-component).
 
-### Forward `request.headers` from a custom transport
+### Custom transports
 
 **What you see:** every handler that returns a render fails with "Vue
 Events requires current app, occurrence, and revision headers."
@@ -347,7 +346,7 @@ Citry now calls a custom transport as `send(envelope, request)`. Send
 `request.headers` with the request. See
 [custom event transports](/reference/browser-apis/#custom-event-transports).
 
-### Replace whole `$state` fields
+### Nested `$state` writes
 
 **What you see:** writing to a nested value, such as
 `$state.tags.push("new")`, throws "Nested $state values are read-only".
@@ -363,14 +362,14 @@ Calls from one app are now sent in order, and an unknown option, or
 `wait: false`, makes the call reject. For live search, where only the
 newest call matters, declare the handler with `@event(latest_wins=True)`.
 
-### Wait for `citry:ready` before calling `Citry.events.send`
+### Wait for `citry:ready`
 
 **What you see:** a call made while the page loads rejects.
 
 A call made before the page's Vue app mounts now rejects instead of
 waiting. Listen for the `citry:ready` event on `document` first.
 
-### Set security modes on the `Citry` instance
+### Set security on `Citry`
 
 **What you see:** on a page with Events, `serialize()` raises `ValueError`
 when you pass it a different `security_csp` or `security_javascript`.
@@ -378,7 +377,7 @@ when you pass it a different `security_csp` or `security_javascript`.
 Pass `security_csp` and `security_javascript` to `Citry(...)` instead. A later server render of the same page must use the same
 policy, so `serialize()` cannot choose a different one.
 
-### Pass `Citry.events.applyActions` only the fields each action defines
+### Clean up `applyActions`
 
 **What you see:** `applyActions` throws a `ProtocolValueError` (a
 `TypeError`) and applies none of the actions.
@@ -390,7 +389,7 @@ forwards. A `state` action you build, for `applyActions` or in an
 `on_event_result` hook, must now include `publicState`, the component's
 public State values.
 
-### Listen for page DOM events with `addEventListener`
+### Page DOM events
 
 **What you see:** a `$onEvent` listener no longer fires for an event that
 page code dispatches inside the component.
@@ -399,7 +398,7 @@ page code dispatches inside the component.
 this component's server handlers dispatch. For a DOM event that page code
 fires, call `addEventListener` on an element you hold in a `ref`.
 
-### Update `citry:events:stale` listeners
+### `citry:events:stale`
 
 **What you see:** a listener that checks for `cancelled` or `timeout`
 never matches.
@@ -407,14 +406,14 @@ never matches.
 The event now reports `superseded`, `retired`, `epoch`, `disposed`, or
 `version`.
 
-### Stop reading `data-citry-events` script tags
+### `data-citry-events` tags
 
 **What you see:** page code that parsed these tags finds nothing.
 
 Pages no longer carry them. Inside the component, read Events values
 through `$state`, `$loading`, and `$error`.
 
-### Reload pages opened before the upgrade
+### Reload open pages
 
 **What you see:** events from a page that was open during the upgrade fail
 with a `stale_state` error.
@@ -422,7 +421,7 @@ with a `stale_state` error.
 Citry now stores server-side State under different cache keys. Reloading
 the page fixes it; new pages are not affected.
 
-## Update attributes on component tags
+## Component tag attributes { #update-attributes-on-component-tags }
 
 **What you see:** a child component no longer receives a kwarg it read,
 a listener on a component tag stops firing, or the render stops with an
@@ -448,7 +447,7 @@ bindings by how they are spelled:
 - **A `.debounce` or `.throttle` `@c-*` binding, or `@c-poll`, stops the
   render.** Put it on an element inside the child's template.
 
-## Write Vue bindings in the template, not in Python
+## Bindings from Python
 
 **What you see:** the render stops with an error that names the attribute
 and says that a Python-resolved attribute "cannot introduce Vue syntax".
@@ -470,7 +469,7 @@ Pass the values the binding needs through `js_data()` or props. A static
 page that never loads Vue writes such attributes as plain text, where they
 do nothing.
 
-### Set each attribute from Python or from Vue
+### Set attributes once
 
 **What you see:** the template fails to load, with a message that two
 attributes set the same attribute.
@@ -485,7 +484,7 @@ cannot sit on an element that has any `c-*` attribute, and `:key` cannot
 sit next to `#c-key`. See
 [Combine `:class` and `:style` with `c-class` and `c-style`](/syntax/vue/#combine-class-and-style-with-c-class-and-c-style).
 
-### Keep Vue-bound content inside a group's tag
+### Group component content
 
 **What you see:** the render stops with an error that names the content,
 the component that wrote it, and the line.
@@ -498,7 +497,7 @@ inside the group's tag, or set `transparent = True` on the component that
 writes it, so it renders its content in place. See
 [Pass Vue content into a group component](/syntax/vue/#keep-vue-bound-group-content-inside-the-groups-tag).
 
-## Check your `#c-ignore` markers
+## Check `#c-ignore` { #check-your-c-ignore-markers }
 
 **What you see:** the template fails to load, with a message that says
 what `#c-ignore` cannot hold or where it cannot go.
@@ -527,12 +526,12 @@ contents can hold only HTML, `{{ }}` expressions, `<c-if>`, `<c-for>`, and
 See
 [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
 
-## Fix HTML that interactive components reject
+## Fix rejected HTML
 
 These rules apply only to components that run in the browser. Static pages
 are not affected.
 
-### Close every tag in `<c-raw>` and `Markup`
+### Close `<c-raw>` tags
 
 **What you see:** the render stops with an error such as "The `<c-raw>`
 block at line 2, column 10 is not a complete HTML fragment".
@@ -541,7 +540,7 @@ Raw HTML inside an interactive component must be a complete HTML
 fragment: every tag closed, and no stray `<`. The error names the input
 and explains the rule.
 
-### Put a full page's content inside one `<body>`
+### One `<body>` per page
 
 **What you see:** serialization stops with an error such as "Interactive
 Vue document serialization requires one well-ordered body element."
@@ -549,7 +548,7 @@ Vue document serialization requires one well-ordered body element."
 An interactive page template that writes `<!doctype html>` or `<html>`
 must put its content inside one `<body>` element.
 
-## Replace removed browser globals
+## Removed browser globals { #replace-removed-browser-globals }
 
 **What you see:** page code fails because a `Citry.*` or Alpine global is
 `undefined`.
@@ -562,7 +561,7 @@ must put its content inside one `<body>` element.
 | `window.Alpine`, `alpine:init` | The `citry:ready` event on `document`. |
 | `/ext/events/runtime-csp.js` route | Nothing. Citry serves one runtime for every CSP mode. |
 
-## Share the cache between worker processes
+## Share the cache { #share-the-cache-between-worker-processes }
 
 **What you see:** with several worker processes, an interactive page shows
 its HTML but never starts, and the browser console shows 404 responses for
@@ -580,7 +579,7 @@ that was dropped gets the same 404, so raise the limit or configure a
 cache. See
 [Share the cache between worker processes](/web-frameworks/#share-the-cache-between-worker-processes).
 
-## Pass Citry's CORS header through a proxy or CDN
+## Proxies and CDNs { #proxies-and-cdns }
 
 **What you see:** the page shows its server-rendered HTML, but components
 never start, and the browser console reports a CORS or Subresource
@@ -592,9 +591,9 @@ sandboxed iframe, make sure the proxy or CDN passes that header through.
 See
 [Keep the CORS header when a proxy or CDN serves Citry's files](/security/#keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files).
 
-## Update settings and extensions
+## Settings and extensions { #update-settings-and-extensions }
 
-### Rename the Alpine lint settings
+### Rename lint settings
 
 **What you see:** `LintSettings` raises `TypeError`, or defining a
 component whose `Lint` class uses the old names raises `ValueError`.
@@ -619,7 +618,7 @@ A tool that builds `TemplateLintInfo` uses the same new names. Keep only
 the names your Vue expressions still read; an Alpine magic such as
 `$dispatch` means nothing to Vue.
 
-### Update scripts that filter `citry check` output
+### Diagnostic codes
 
 **What you see:** a script that filters `citry check --format json` output
 by code stops matching.
@@ -630,7 +629,7 @@ by code stops matching.
 | `citry.component-js.unknown-data-member` | `citry.component-js.unknown-member` |
 | `citry.browser.unknown-component-prop` | Removed |
 
-### Review `security_csp="strict"`
+### Strict CSP mode
 
 `security_csp="strict"` used to select Citry's Alpine CSP build and limit
 the expressions you could write. It now checks the final HTML for raw
@@ -638,7 +637,7 @@ the expressions you could write. It now checks the final HTML for raw
 URLs. Any Vue expression works, because Citry compiles templates on the
 server. See [Security](/security/#choose-a-csp-compatibility-mode).
 
-### Load only classic scripts on interactive pages
+### Classic scripts only
 
 **What you see:** serializing a page or an Events response raises
 `ValueError` about a script.
@@ -650,7 +649,7 @@ rejects a `type="module"` or JSON data script, and a script marked
 `async`, `defer`, or `nomodule`. Scripts in `ctx.early_scripts` load before
 `ctx.scripts`.
 
-### Rename `ctx.before_manifest` to `ctx.early_scripts`
+### `ctx.early_scripts`
 
 **What you see:** an `on_dependencies()` hook raises `AttributeError`,
 naming `early_scripts`.
@@ -658,7 +657,7 @@ naming `early_scripts`.
 Rename `ctx.before_manifest` to `ctx.early_scripts`. The scripts it holds
 still run before `ctx.scripts`. The old name has no alias.
 
-### Build hook contexts with keyword arguments
+### Hook context arguments
 
 **What you see:** code that builds `OnSerializeContext` or
 `OnDependenciesContext` with positional arguments, such as an extension
@@ -667,7 +666,7 @@ test, fails or passes values to the wrong fields.
 Both gain a `selected_render` field, the render being serialized. Build
 them with keyword arguments.
 
-### Use only standard HTTP methods
+### HTTP methods
 
 **What you see:** defining an Events class or building a `URLRoute` raises
 an error.
@@ -680,7 +679,7 @@ an error.
   list raises `TypeError`. An empty tuple raises `ValueError`, and so does
   a lowercase name such as `"get"`, which no framework adapter would match.
 
-### Read `citry.analysis` parameters from index 0
+### `citry.analysis` results
 
 **What you see:** a tool that reads `citry.analysis` results skips the
 kwargs parameter.
@@ -696,7 +695,7 @@ The Alpine helpers in `citry.analysis` are removed. Use
 `AlpineLintFinding`, `lint_unknown_alpine_variables`, and
 `ALPINE_AMBIENT_NAMES`.
 
-### Remove imports of deleted APIs
+### Removed Python APIs
 
 **What you see:** an `ImportError`, or a `TypeError` for an unexpected
 argument.
@@ -726,7 +725,7 @@ argument.
 - **Render cache:** entries saved by Citry 0.5.x count as misses and are
   saved again on the next render. You do not need to clear the cache.
 
-## Features to adopt after upgrading
+## New features to try
 
 - Interactive pages send their content in the served HTML, so search
   engines and readers without JavaScript see it. Tune this with `ssr` and

@@ -71,7 +71,7 @@ walks through every step.
   cache backend, and a proxy or CDN may need to pass Citry's CORS header
   through
   ([cache](https://citry.dev/guides/upgrading-to-0-6-0/#share-the-cache-between-worker-processes),
-  [proxy](https://citry.dev/guides/upgrading-to-0-6-0/#pass-citrys-cors-header-through-a-proxy-or-cdn)).
+  [proxy](https://citry.dev/guides/upgrading-to-0-6-0/#proxies-and-cdns)).
 - **Lint settings and diagnostic codes:** the Alpine names become Vue
   names, such as `rule_unknown_vue_variable` and
   `citry.vue.unknown-variable`
