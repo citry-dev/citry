@@ -4229,8 +4229,8 @@ token), so the client's stored token and its `$state` values always
 reflect the latest state.
 
 An optional server-side state store (the token carries a random key, and
-the State lives in `Citry.cache` under `citry:state:<key>`) ships in v1 as the opt-in `_storage = "server"`
-State meta. It exists for three cases. Two of them a signed
+the State lives in `Citry.cache` under `citry:state:<key>`) ships in v1 as
+the opt-in `_storage = "server"` State meta. It exists for three cases. Two of them a signed
 round-tripping token cannot serve: State too large to ship back and
 forth on every call, and State whose non-public values must not be readable
 in the page source at all (the token is signed against tampering, not
