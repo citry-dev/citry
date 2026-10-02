@@ -6,8 +6,8 @@ description: Find independently maintained packages that connect Citry to framew
 # Community extensions
 
 You want Citry to work with your web framework, or to add the same
-behavior to many components at once. An extension is a package that does
-that. Each package below shows who maintains it: "Citry maintained" or
+behavior to many components at once. An extension is a package that connects
+Citry to a framework or adds behavior to many components. Each package below shows who maintains it: "Citry maintained" or
 "Community maintained".
 
 <c-community-packages category="extension" />
