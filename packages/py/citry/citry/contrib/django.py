@@ -49,13 +49,13 @@ from __future__ import annotations
 
 import inspect
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from citry.util.routing import RouteHeaders, RouteRequest, flatten_routes, normalize_mount_prefix
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
     from typing import Literal
 
     from citry.citry import Citry
@@ -186,41 +186,125 @@ def enable_hot_reload(
     mode: Literal["hot", "restart"] = "hot",
 ) -> Callable[..., bool | None]:
     """
-    Reload changed component files in development, using Django's autoreloader.
+    Pick up edits to component files in development, using Django's autoreloader.
 
-    Connects a receiver to Django's ``file_changed`` autoreload signal. When a
-    watched file changes, the receiver clears the caches of the components that
-    loaded it (``Citry.invalidate_file``). With ``mode="hot"`` (the default) the
-    change is handled in place and the server keeps running; with
-    ``mode="restart"`` the process restart is left to Django (the same thing
-    Django does for a Python edit). Files that back no loaded component fall
-    through to Django's normal handling either way.
+    Call it once at startup, for example from your ``AppConfig.ready()``. When
+    ``runserver`` starts its reloader, this asks the reloader to also watch
+    every file under the engine's ``dirs`` (``Citry(dirs=[...])``). Django
+    already watches Python files and its own template directories. When a
+    watched file that a component has loaded changes, Citry clears that
+    component's stored template, JS, and CSS (see
+    [`invalidate_file()`][citry.Citry.invalidate_file]), so the next render
+    reads the file again.
 
-    Call once at startup, e.g. from your ``AppConfig.ready()``. Django watches
-    its template and static directories, so this needs no watcher of its own.
-    Returns the connected receiver (disconnect it via ``file_changed.disconnect``
-    if you ever need to).
+    Other changed files are handled like this:
+
+    - A Python file goes to Django, which restarts the server.
+    - Any other file under the engine's ``dirs`` needs no action, because no
+      component has read it yet, so the server keeps running.
+    - Any other file outside the engine's ``dirs`` goes to Django's normal
+      handling.
+
+    Args:
+        citry_instance: The engine whose components should pick up edits.
+        mode: What happens after Citry clears a changed component file.
+            ``"hot"`` (the default) keeps the server running, and the next
+            render reads the new file. ``"restart"`` restarts the server
+            process, the same way Django restarts it after a Python edit.
+
+    Calling it again for the same engine replaces the earlier call, so the
+    last ``mode`` wins.
+
+    Point the engine's ``dirs`` at your component folders, not the project
+    root: the reloader checks every file under them for changes.
+
+    Returns:
+        The receiver connected to Django's ``file_changed`` signal.
+
+    Raises:
+        ValueError: When ``mode`` is not ``"hot"`` or ``"restart"``.
+
+    Example:
+        ::
+
+            # apps.py
+            from django.apps import AppConfig
+
+            from citry.contrib.django import enable_hot_reload
+            from myapp import engine
+
+
+            class MyAppConfig(AppConfig):
+                name = "myapp"
+
+                def ready(self):
+                    enable_hot_reload(engine)
+
     """
     if mode not in ("hot", "restart"):
-        msg = f"mode must be 'hot' or 'restart', got {mode!r}"
+        msg = f"mode must be 'hot' or 'restart', got {mode!r}. Pass mode='hot' to reload component files in place."
         raise ValueError(msg)
 
-    from django.utils.autoreload import file_changed  # noqa: PLC0415
+    # Imported here, not at module load: this module must be importable
+    # without Django on the path (citry.contrib hosts several integrations).
+    from django.utils import autoreload  # noqa: PLC0415
+
+    def component_dirs() -> list[Path]:
+        # Read the dirs on each call, so the watch and the claim check always
+        # agree with the engine's current settings. Resolved so they compare
+        # equal to the resolved changed-file paths.
+        return [Path(directory).resolve() for directory in citry_instance.settings.dirs]
+
+    def watch_component_dirs(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+        # Django's reloader reports Python files, files under its template
+        # directories, and translation .mo files, so a component file
+        # elsewhere under the engine's dirs would never reach
+        # on_component_file_changed.
+        for directory in component_dirs():
+            sender.watch_dir(directory, "**/*")
 
     def on_component_file_changed(sender: Any, file_path: Path, **kwargs: Any) -> bool | None:  # noqa: ARG001
         reset = citry_instance.invalidate_file(file_path)
-        if not reset:
-            # The file backs no loaded component: let Django's autoreloader
-            # decide (it restarts the dev server on a Python edit, for example).
+        if reset:
+            if mode == "restart":
+                # Django restarts only when no receiver returns a truthy value,
+                # and its own template receiver returns True for every file in
+                # a template directory. Returning None here would therefore not
+                # restart for those files, so restart the same way Django does.
+                autoreload.trigger_reload(file_path)
+            # A truthy return tells Django the change was handled, so the
+            # server keeps running and the next render reads the new file.
+            return True
+        # A Python edit needs a restart, so leave it to Django.
+        if file_path.suffix == ".py":
             return None
-        # A truthy return tells Django's notify_file_changed the change was
-        # handled, suppressing the restart; returning None lets Django restart.
-        return True if mode == "hot" else None
+        # watch_component_dirs made the reloader report every file under the
+        # engine's dirs, including compiled bytecode and files no component
+        # has loaded. None of them has anything stored to clear, so claim them
+        # instead of letting Django restart the server for each one.
+        resolved = Path(file_path).resolve()
+        if any(directory == resolved or directory in resolved.parents for directory in component_dirs()):
+            return True
+        # The file is outside Citry's dirs: Django's other receivers decide.
+        return None
 
-    # weak=False: the receiver is a local closure, so a weak connection (Django's
-    # default) would let it be garbage-collected right away.
-    file_changed.connect(on_component_file_changed, weak=False)
+    # Django ignores a second connect with the same dispatch_uid. Drop the
+    # receivers from an earlier call for this engine first, so that call's
+    # mode cannot claim a change before this call's mode sees it.
+    dispatch_uid = _hot_reload_dispatch_uid(citry_instance)
+    autoreload.autoreload_started.disconnect(dispatch_uid=dispatch_uid)
+    autoreload.file_changed.disconnect(dispatch_uid=dispatch_uid)
+    # weak=False: both receivers are local closures, so a weak connection
+    # (Django's default) would let them be garbage-collected right away.
+    autoreload.autoreload_started.connect(watch_component_dirs, weak=False, dispatch_uid=dispatch_uid)
+    autoreload.file_changed.connect(on_component_file_changed, weak=False, dispatch_uid=dispatch_uid)
     return on_component_file_changed
+
+
+def _hot_reload_dispatch_uid(citry_instance: Citry) -> str:
+    """Name one engine's hot reload receivers, so a repeated call replaces them."""
+    # id() stays unique while connected: the receiver closures keep the engine alive.
+    return f"citry.contrib.django.enable_hot_reload:{id(citry_instance)}"
 
 
 def secret() -> str:

@@ -48,23 +48,32 @@ class MyAppConfig(AppConfig):
         enable_hot_reload(engine)
 ```
 
-When a component file changes, Citry reloads it and Django keeps running.
-A changed file that belongs to no Citry component goes to Django's normal
-handling.
+Django's reloader already watches your Python files and your Django
+template directories, and `enable_hot_reload` adds every file under the
+engine's `dirs` (the directories you pass to `Citry(dirs=[...])`). When a
+component file there changes, Citry reloads it and Django keeps running.
+When a Python file changes, Django restarts the server as usual.
 
-`enable_hot_reload` also accepts `mode="restart"`, which asks Django to
-restart the process instead. Django reloads files in its template
-directories without a restart, though, so for those component files
-`mode="restart"` behaves like the default.
+Point `dirs` at your component folders, not the project root: the
+reloader checks every file under them for changes.
+
+To restart the server instead of reloading in place, pass
+`mode="restart"`. The server then restarts when a component file that
+has already been rendered changes:
+
+```python
+enable_hot_reload(engine, mode="restart")
+```
 
 !!! warning "Keep component files where Django's reloader looks"
 
-    Django's reloader only reports changes to Python files and to files in
-    your Django template directories (the `DIRS` of a `DjangoTemplates`
-    backend in `TEMPLATES` and, with the app directories loader, each
-    app's `templates/` folder). An edit
-    to a component file outside those directories does not show up. Move
-    the files into a template directory, or use
+    Besides Python files, the reloader reports only files under the
+    engine's `dirs` and your Django template directories (the `DIRS` of a
+    `DjangoTemplates` backend in `TEMPLATES` and, with the app directories
+    loader, each app's `templates/` folder). An edit to a component file
+    anywhere else, such as next to a component's `.py` file outside those
+    directories, does not show up. Move the file into one of those
+    directories, or use
     [`citry.reload.watch`](#enable-in-any-other-app) instead.
 
 ## Enable in FastAPI
