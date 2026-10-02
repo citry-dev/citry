@@ -5,263 +5,720 @@ description: Move a django-components project to Citry with a complete, agent-fr
 
 # Migrate from django-components
 
-If you want to move an existing django-components project to Citry, start with
-one leaf component, keep the existing page working, and use the checklist below
-to find every django-components pattern that needs attention.
+This guide helps you move a django-components project to Citry, one
+component at a time, without breaking the pages that still use the old
+components.
 
-This guide compares Citry's current documented behavior with the
-django-components source at commit
+Citry comes from the maintainer of django-components and keeps its
+component model, so much of your project carries over. A component is still a Python class with a
+template, JavaScript, and CSS. It still declares typed inputs and slots,
+and fills, provide and inject, render caching, extensions, error
+fallbacks, and the dynamic component all have Citry counterparts.
+
+These changes cause most of the migration work:
+
+- **Attribute values are literal unless the name starts with `c-`.**
+  `class="{{ kind }}"` renders the text `{{ kind }}`, with no error. Write
+  `c-class="kind"` ([DJC-033](#djc-033)).
+- **Citry templates are not Django templates.** They have no `{% %}`
+  tags, filters, `{% extends %}`, or `{% include %}`. Use `<c-if>`,
+  `<c-for>`, components, and Python expressions.
+- **A component sees only what it is given.** There is no Django context,
+  request, or context processor. Pass values as inputs, or share them
+  with provide and inject.
+- **The data methods are renamed.** `get_template_data()` becomes
+  `template_data(self, kwargs, slots)`. A method with the old name is
+  never called, and nothing tells you ([DJC-067](#djc-067)).
+- **Settings and the registry belong to a `Citry` object.** You create
+  one `Citry` instance; it holds the settings, the component names, and
+  the caches that Django settings and global registries held before.
+- **Browser code runs as Vue.** Citry mounts interactive components as
+  Vue apps, and `Component.View` handlers become Citry Events: component
+  methods that the browser calls over HTTP.
+
+This guide compares Citry with the django-components source at commit
 [`5d4d4f5`](https://github.com/django-components/django-components/commit/5d4d4f5d13dd06c80ba389f30fc63fdbb71cda75){: target="_blank" rel="noopener"}
-from June 20, 2026. If your project uses another django-components version,
-check its release notes for additional differences. Select the documentation
-version that matches the Citry version installed in your project.
+from June 20, 2026. If your project uses another django-components
+version, check its release notes for further differences. Read the
+version of these docs that matches the Citry version you installed.
+
+## Port one component
+
+Here is a small django-components component and its caller:
+
+```citry
+from django_components import Component, register
+
+
+@register("todo_list")
+class TodoList(Component):
+    template = """
+      <ul class="{{ kind }}">
+        {% for item in items %}
+          <li>{{ item|upper }}</li>
+        {% empty %}
+          <li>Nothing to do</li>
+        {% endfor %}
+      </ul>
+    """
+
+    def get_template_data(self, args, kwargs, slots, context):
+        return {
+            "items": kwargs["items"],
+            "kind": kwargs.get("kind", "plain"),
+        }
+```
+
+```htmldjango
+{% component "todo_list" items=todos kind="compact" / %}
+```
+
+The same component in Citry:
+
+```citry
+from citry import Component
+
+
+class TodoList(Component):
+    citry = app  # your Citry instance
+
+    class Kwargs:
+        items: list[str]
+        kind: str = "plain"
+
+    def template_data(self, kwargs, slots):
+        return {"items": kwargs.items, "kind": kwargs.kind}
+
+    template = """
+      <ul c-class="kind">
+        <c-for each="item in items">
+          <li>{{ item.upper() }}</li>
+        </c-for>
+        <c-empty>
+          <li>Nothing to do</li>
+        </c-empty>
+      </ul>
+    """
+```
+
+```citry-html
+<c-todo-list c-items="todos" kind="compact" />
+```
+
+What changed:
+
+- The class registers itself on `app` when Python defines it, under
+  `todo-list` and `todolist`, so `@register` goes away.
+- Inputs and their defaults are fields on `Kwargs`.
+- `get_template_data()` became `template_data()`, without `args` and
+  `context`.
+- `class="{{ kind }}"` became `c-class="kind"`, and the filter became a
+  Python method call.
+- `c-items="todos"` evaluates `todos`. `kind="compact"` passes the plain
+  string.
 
 ## Choose how to migrate
 
 For a gradual migration inside Django, use
-[`citry-django`](https://github.com/joeyjurjens/citry-django){: target="_blank" rel="noopener"}
-to place Citry components in Django templates and use Django template tags in
-Citry components. It is a community integration, so follow its README for the
-versions and setup it supports.
+[`citry-django`](https://github.com/joeyjurjens/citry-django){: target="_blank" rel="noopener"}.
+It lets you put Citry components in Django templates and use Django
+template tags in Citry components, so both kinds of component can live
+on one page while you migrate. It is a community project, so follow its
+README for the versions and setup it supports.
 
-For a direct port, render Citry from its
-[Django integration](/web-frameworks/#django) and replace a complete component
-subtree at a time. The two integrations solve different problems: Citry's
-integration mounts rendering, assets, and event routes; `citry-django` lets the
-two template languages coexist while you migrate.
+For a direct port, render Citry through its
+[Django integration](/web-frameworks/#django), which mounts Citry's
+rendering, asset routes, and event routes in your Django project. Replace
+a whole component subtree at a time.
 
-Before changing components:
+Either way, work in this order:
 
-1. Create a branch and run the existing Python, browser, and snapshot tests.
-2. Inventory component directories, settings, custom template tags,
-   extensions, JavaScript hooks, caches, and `Component.View` subclasses.
+1. Create a branch and run the existing Python, browser, and snapshot
+   tests.
+2. List what you have: component directories, settings, custom template
+   tags, extensions, JavaScript hooks, caches, and `Component.View`
+   subclasses.
 3. Install Citry, create one `Citry` instance, connect it to Django, and
-   register or discover one leaf component.
-4. Port that component and its tests. Verify it in the browser before moving
-   to the next connected group.
-5. Remove django-components only after searches and tests show that nothing
-   still depends on it.
+   register one leaf component (a component that renders no other
+   components).
+4. Port that component and its tests, and check it in the browser before
+   you move to the next connected group.
+5. Remove django-components only after searches and tests show that
+   nothing still depends on it.
 
-Citry intentionally does not include django-components compatibility aliases
-or silent shims. A leftover pattern should be migrated explicitly.
+Citry has no django-components compatibility aliases or shims. Migrate
+each leftover pattern explicitly.
 
-## How to read the checklist
+## Read the checklist { #how-to-read-the-checklist }
 
-Every known user-visible divergence is included below. Use the stable
-`DJC-###` identifier when tracking work or asking for help.
+The checklist covers every known difference you can observe. Each row has
+a stable `DJC-###` ID; use it when you track work or ask for help.
 
-- **🔴 Breaks:** the project will fail until the pattern is changed.
+- **🔴 Breaks:** the project fails until you change the pattern.
 - **🟡 Check behavior:** output or runtime behavior may differ.
-- **🟢 Update tests:** browser behavior is equivalent, but exact output or an
-  assertion may need updating.
+- **🟢 Update tests:** the browser shows the same page, but an exact
+  output or error assertion may need updating.
 
-Search signatures are written in the django-components column. Not every row
-applies to every project, so record non-matches as not applicable instead of
-making speculative changes.
+The django-components column names the code to search for. Not every row
+applies to every project, so mark rows that do not match as not
+applicable rather than changing code just in case. Rows marked "Details
+below" have more notes in the list under their table.
 
-## HTML attributes
+The sections run from the changes almost every project needs to the
+ones only some projects hit. In the Citry column, `app` means your
+`Citry` instance.
 
-Rewrite attribute merging first because these differences are easy to find and can silently change output.
+## Rewrite templates
 
-| ID | Area | django-components | Citry | What to change | Impact |
-|---|---|---|---|---|---|
-| <span id="djc-001">DJC-001</span> | Merging HTML attributes | The `{% html_attrs %}` tag (positional args, `attrs:` / `defaults:` aggregate keys, spread) | Element-level attributes: `c-bind="mapping"` to spread, plus `c-class` and `c-style` | Rewrite `{% html_attrs attrs defaults class=... %}` as `&lt;div c-bind="defaults" c-bind="attrs" c-class="..."&gt;`. Attributes apply left to right and the later one wins, so put the fallback mapping first and the caller's mapping after it. `class` and `style` merge instead of overwriting. A leftover `attrs:foo=` is not rejected: it arrives as an input literally named `attrs:foo`, so search for `:` in attribute names. | 🔴 |
-| <span id="djc-002">DJC-002</span> | Repeated non-`class`/`style` attribute keys | The same key supplied twice is space-joined (`foo="bar baz"`) | Writing the same attribute twice on one tag is an error ("Duplicate attribute 'foo' found"). When a `c-bind` mapping and an explicit attribute set the same key, the later one wins (`foo="baz"`) | If you relied on a repeated plain attribute concatenating, combine the value into one attribute yourself. `class` and `style` still merge. | 🟡 |
+Start here. These patterns appear in almost every template, and the
+first one fails silently.
 
-## Rendering, context, and inheritance
+| ID | django-components | Citry: what to do | Impact |
+|---|---|---|---|
+| <span id="djc-033">DJC-033</span> | Attribute values are evaluated; `{{ }}` works inside a quoted value | Plain values are literal. Add `c-` to evaluate: `class="{{ x }}"` becomes `c-class="x"`. Details below. | 🔴 |
+| <span id="djc-037">DJC-037</span> | `{% %}` tags such as `{% lorem %}` or custom tags, also inside arguments | `{% %}` is not executed; it renders as typed. Use `<c-if>` / `<c-for>`, or compute the value in `template_data` and pass it as `c-flag="is_active"`. | 🔴 |
+| <span id="djc-014">DJC-014</span> | `{% extends %}`, `{% block %}`, `{% include %}` | Turn the base template into a component with slots. Replace `{% include 'p.html' %}` with a `<c-p />` component. | 🔴 |
+| <span id="djc-018">DJC-018</span> | Django template filters, filter registries, chaining | No filters. Rewrite each one as a Python expression. Details below. | 🔴 |
+| <span id="djc-020">DJC-020</span> | Positional inputs and `...list` spreads | Inputs are keyword-only. Name every input. Replace a list spread with a mapping in `c-bind`, or pass the list as one named input. | 🔴 |
+| <span id="djc-030">DJC-030</span> | A missing variable renders as `""` | Raises `KeyError` that points at the line and column. Pass the name, guard the branch, or set a default in `template_data`. | 🟡 |
+| <span id="djc-080">DJC-080</span> | A dot reads dict keys: `{{ data.error }}` | A dot is Python attribute access. Slot data still allows `d.error`; an ordinary dict needs `d['error']`. Details below. | 🟡 |
+| <span id="djc-019">DJC-019</span> | `_('text')` in arguments, lists, and dicts | The sandbox rejects the name `_`. Use Citry's [i18n](/i18n/) `tr()` messages, or translate in `template_data`. Details below. | 🔴 |
+| <span id="djc-039">DJC-039</span> | `bool_var=" {% noop is_active %} "` gives the string `" True "` | A `c-` value is one expression and keeps its type. Build a string yourself where you want one: `c-label="f' {is_active} '"`. For markup values, see [DJC-042](#djc-042). | 🟡 |
+| <span id="djc-042">DJC-042</span> | A `{% component %}` inside an argument renders to HTML for that input | Write the markup in the value: `c-body="<span>Hello {{ name }}</span>"`. Details below. | 🟡 |
+| <span id="djc-040">DJC-040</span> | `{# #}` anywhere, including inside an argument | Comments go between tags or between attributes, not inside a value. Move each one before the attribute or above the tag. Details below. | 🟡 |
+| <span id="djc-051">DJC-051</span> | `@lol=2` passes a data input | On a component tag, `@lol` is a Vue event listener. Rename data inputs, for example to `at_lol`. Details below. | 🔴 |
+| <span id="djc-017">DJC-017</span> | An unclosed `{{` or `{#` renders as text | `SyntaxError` on the first render, before any output. Close the delimiter. | 🟡 |
+| <span id="djc-007">DJC-007</span> | Unclosed tags in a component template are tolerated | Every tag must be closed and matched, or the first render raises `SyntaxError: Unclosed tag <thead>` (or "Mismatched tags"). Details below. | 🟡 |
 
-Make component dependencies explicit and remove assumptions inherited from Django template context.
+Details:
 
-| ID | Area | django-components | Citry | What to change | Impact |
-|---|---|---|---|---|---|
-| <span id="djc-007">DJC-007</span> | Component template must be well-formed | A component's `template` is arbitrary text passed to the Django template engine; unclosed tags are tolerated | An unclosed or mismatched tag is an error: the component's first render fails with `SyntaxError: Unclosed tag &lt;thead&gt;` (or "Mismatched tags ...") | Close every tag in a component `template`. A partial that was a bare `&lt;thead&gt;` fragment has to become a complete unit, for example by including its `&lt;table&gt;` wrapper and passing the rows in as a slot. | 🟡 |
-| <span id="djc-008">DJC-008</span> | Ambient template context | A component can read variables that are simply in the surrounding `Context`, and exposes `self.outer_context` | A component receives only its explicit props (kwargs) and slots; there is no ambient context and no `outer_context` | Pass every value a component needs as an explicit prop. For caller state that must reach deep descendants, use `provide` / `inject`. | 🔴 |
-| <span id="djc-009">DJC-009</span> | `context_behavior` setting and `only` | `context_behavior` chooses `django` (child sees outer context) vs `isolated`, and `only` forces isolation per call | citry is always isolated, as if `only` were always on | Remove `context_behavior` from settings and drop `only`; behavior already matches djc's `isolated`. A project that ran in `django` mode must also rewrite fills that read the child's variables (loop items and friends): pass them explicitly as scoped slot data (`c-name=` on the slot site, `data=` on the fill). | 🟡 |
-| <span id="djc-010">DJC-010</span> | Request, context processors, CSRF | `self.request`, context-processor variables, and `csrf_token` are injected into the template context | citry injects no ambient request-derived variables | Read the request in your view and pass what each component needs (CSRF token, current user, locale) as ordinary props. There is no per-request ambient context, so a value many components need is best provided once near the top of the page with `&lt;c-provide&gt;` and read with `inject()`. Follow [CSRF protection](/security/#protect-event-posts-from-csrf) for Django and Citry Events. | 🔴 |
-| <span id="djc-011">DJC-011</span> | Slot-filled introspection | `{% if component_vars.is_filled.title %}` branches on whether a slot was filled | The `component_vars.is_filled` magic variable is gone | In `template_data` compute `{'has_title': slots.get('title') is not None}`, then branch with `&lt;c-if&gt;`. | 🟡 |
-| <span id="djc-013">DJC-013</span> | Observing which components rendered | The Django `template_rendered` signal and `assertTemplateUsed` report what rendered | citry has no template signal | Replace signal receivers / `assertTemplateUsed` checks with a test extension that records `on_component_rendered`. | 🟡 |
-| <span id="djc-014">DJC-014</span> | Django template inheritance | Component templates use `{% extends %}` / `{% block %}`, and `{% include %}` pulls in partials | citry has no template inheritance or `{% include %}` | Restructure an `{% extends %}` template into a base component composed via slots; replace `{% include 'p.html' %}` with a `&lt;c-p /&gt;` component. | 🔴 |
+- **DJC-033:** `key="hi"` passes the string `"hi"`; `c-key="hi"`
+  evaluates the name `hi`. `class="{{ kind }}"` outputs
+  `class="{{ kind }}"` with no error, so search your templates for `{{`
+  inside attribute values.
+- **DJC-018:** In Citry, `|` inside an expression is Python's bitwise or.
+  `{{ value|upper }}` becomes `{{ value.upper() }}`, and
+  `{{ value|yesno:"yes,no" }}` becomes `{{ 'yes' if value else 'no' }}`.
+  For anything longer, pass a helper function as an input or register it
+  once with `Citry(template_globals={...})`.
+- **DJC-080:** Fill data is an immutable `SlotData` mapping, so keys that
+  are valid Python names work with a dot. A key such as `aria-label`, a
+  key starting with `_`, or a key with the same name as a mapping method
+  needs brackets or fill destructuring. Dot access to real object
+  attributes works as before.
+- **DJC-019:** Write the text as a message in the component's `messages`
+  block and call it with `tr()`, also in attributes:
+  `c-label="tr('my-app-hello')"`. The component also declares the
+  language its messages are written in (`class I18n: messages_locale`);
+  [Internationalization](/i18n/) shows the setup. Citry messages use
+  Fluent, not gettext. To keep your `.po` files, translate in
+  `template_data`, or register a helper under another name, such as
+  `translate`, with `Citry(template_globals=...)`.
+- **DJC-042:** A `c-` value that starts with an HTML tag and ends with its
+  closing tag is a nested template, not a Python expression. It renders
+  with the same data, so `{{ }}` works inside it. Several roots
+  (`<em>a</em><em>b</em>`), a self-closing tag (`<br/>`), and a component
+  (`<c-badge c-label='name' />`) all work. Any other value is an
+  expression, so plain text needs quotes: `c-body="'hello'"`. A half-open
+  tag is an error. The nested template renders after the outer component,
+  so the outer component's `template_data` cannot read its HTML.
+- **DJC-040:** `<a {# note #} class="x">` works. Inside a plain attribute
+  value the comment renders as visible text, so `title="{# note #}Hi"`
+  sends the comment to the browser. Inside a `c-` value it is an error.
+- **DJC-051:** `@lol="2"` listens for a `lol` event and never reaches the
+  component's inputs. A bare `@lol` raises `TypeError` naming the
+  attribute. An `@lol` key in a `c-bind` mapping raises an error that asks
+  you to write it in the template. Check every `@` attribute that was
+  meant as data.
+- **DJC-007:** In django-components a component template is any text.
+  Citry parses it as markup. A partial that was a bare `<thead>` fragment
+  must become a complete unit, for example by including its `<table>` and
+  receiving the rows through a slot.
 
-## Template syntax and expressions
+## Set up Citry
 
-Citry templates use HTML-shaped component tags and Python-shaped expressions rather than Django template tags and filters.
+Create one `Citry` instance and move Django settings and registries onto
+it. A `Citry` instance holds your settings, the names of your components,
+and the caches.
 
-| ID | Area | django-components | Citry | What to change | Impact |
-|---|---|---|---|---|---|
-| <span id="djc-015">DJC-015</span> | Component invocation syntax | A pluggable `TagFormatter` / `ShorthandComponentFormatter` customizes the `{% component %}` tag form | citry's syntax is the fixed `&lt;c-*&gt;` form; there is no formatter to configure | Remove any `tag_formatter` setting and custom formatter subclasses; write components as `&lt;c-name /&gt;`. | 🔴 |
-| <span id="djc-016">DJC-016</span> | django-template-partials integration | Rendering `template.html#partial_name` where the partial contains components | No direct equivalent | Compose the partial as a citry component and render it directly. | 🔴 |
-| <span id="djc-017">DJC-017</span> | Unterminated expression/comment delimiters | An opened `{{` or `{#` with no closing delimiter falls back to visible text | Citry raises `SyntaxError` the first time the component renders, before any output is produced | Close the expression/comment delimiter; do not rely on malformed template syntax rendering literally. | 🟡 |
-| <span id="djc-018">DJC-018</span> | Django template filters | Tag values use `value\|filter:arg`, filter registries, chaining, and filter-specific whitespace/arity rules | Citry has no template filters; `\|` inside an expression is Python bitwise-or | Rewrite filters as Python expressions, for example `value.upper()`, `'yes' if value else 'no'`, or an explicitly supplied helper callable. | 🔴 |
-| <span id="djc-019">DJC-019</span> | Translation shorthand in component inputs | `_('text')` is a special translation value inside arguments, filter arguments, lists, and dicts | Citry has no translation token/backend; the default sandbox also rejects the variable name `_` | Translate in `template_data`, or expose a non-underscore callable such as `translate` through template globals and use `c-label="translate('Hello')"`. | 🔴 |
-| <span id="djc-020">DJC-020</span> | Positional component inputs and list spreads | Tags accept positional values and `...list`, with Python-like positional/keyword ordering rules | Component invocations are kwargs-only; `c-bind` spreads mappings, not positional lists | Give every input a name. Replace a positional list spread with a mapping and `c-bind`, or model the list as one named prop. | 🔴 |
-| <span id="djc-021">DJC-021</span> | Parser-registered tag flags | A `TagSpec` can declare flags that affect parsing but are omitted from the component's args/kwargs | There are no parser flags. A bare attribute is a normal input with the value `True` | Convert each custom flag into an explicit boolean prop and handle it in the component. | 🔴 |
-| <span id="djc-022">DJC-022</span> | `$component` callback payload | The first callback argument is the component's JS-data object, with a separate context argument | `$component` accepts Vue Options or callback shorthand. The callback receives one object after mount and after each server render that the page applies to the component: `component` (the Vue instance), `revision`, and `onEvent`, plus `state`, `sendEvent`, `loading`, `error`, `i18n`, `els` (the root elements), and `id` (the render ID). `js_data()` keys are reactive members of `component`, so the callback reads them as `component.message` | Move state and behavior into Vue Options where possible. Rewrite the callback as `$component(({component, revision, onEvent}) =&gt; { const {message} = component; ... })`, or use `onServerRender({ component, revision, onEvent })` in the Options object. Read `js_data()` values from `component` rather than from a separate data argument. | 🔴 |
-| <span id="djc-023">DJC-023</span> | Dependency placement tags | `{% component_css_dependencies %}` emits CSS only; `{% component_js_dependencies %}` emits JS only | `&lt;c-css /&gt;` and `&lt;c-js /&gt;` only choose *where* the styles or scripts go. Leave one out and those assets still land on the page, in their usual place | Use the tags for placement only. If you left `{% component_css_dependencies %}` out of a page to keep its CSS off, that no longer works. To keep an asset off the page, remove it from the component or filter it in `on_dependencies`. | 🟡 |
-| <span id="djc-024">DJC-024</span> | Component names containing `/` | The string-form component tag can address a registry name such as `te-s/t` | Component names are HTML-tag-compatible: they start with a letter and contain only letters, digits, hyphens, underscores, or dots | Rename a slash-delimited registry key, for example `te-s/t` to `te-s-t` or `te.s.t`, and update the `&lt;c-*&gt;` invocation. | 🔴 |
-| <span id="djc-025">DJC-025</span> | Browser runtime and load order | A page may load its own browser runtime and component scripts in an order that makes an initialization listener miss the framework's startup event | Citry sends one Vue runtime bundle that matches its own version, and that runtime mounts and owns every Citry Vue app on the page | Remove the browser runtime your page loaded for django-components, along with the attributes that only that runtime understood. Let Citry deliver its Vue runtime and the compiled components, and use native Vue bindings (`v-*`) plus Citry's `@c-*` and `:c-*` attributes where a component calls the server or binds State. | 🔴 |
-| <span id="djc-033">DJC-033</span> | Attribute evaluation (the biggest trap) | An attribute value is evaluated by the template engine, and `{{ }}` interpolates inside a quoted value | A plain attribute value is taken literally: only a `c-`-prefixed attribute is evaluated, and `{{ }}` written into a static value renders **literally** (`class="{{ kind }}"` outputs `class="{{ kind }}"`, with no error) | Add a `c-` prefix to any attribute whose value must be evaluated. `key="hi"` passes the string `"hi"`; `c-key="hi"` evaluates `hi`. Rewrite `class="{{ x }}"` as `c-class="x"`. This one fails silently, so grep your templates for `{{` inside an attribute. | 🔴 |
-| <span id="djc-037">DJC-037</span> | The `{% %}` tag language | Values and bodies may contain any registered block tag, for example `{% lorem n w %}` or a custom tag, including inside a component argument | There is no `{% %}` tag language. Text written that way is not executed; it renders to the page exactly as typed | Compute the value in Python and pass it as an expression attribute (`c-flag="is_active"`), or move the logic into `template_data`. Control flow is `&lt;c-if&gt;` / `&lt;c-for&gt;`. | 🔴 |
-| <span id="djc-039">DJC-039</span> | Mixed literal text plus expression in one value | `bool_var=" {% noop is_active %} "` yields the string `" True "`: stray whitespace silently turns a typed value into a string | A `c-` value is one expression, so you get exactly the type the expression returns. (A value holding a whole `&lt;c-*&gt;` tag is a nested component instead, see [DJC-042](#djc-042)) | Build the string yourself where you want one: `c-label="f' {is_active} '"`. The accidental downgrade cannot happen. | 🟡 |
-| <span id="djc-040">DJC-040</span> | Template comment placement | `{# #}` works anywhere, including inside a component argument, where it collapses to `""` | A comment can sit between tags or between attributes (`&lt;a {# note #} class="x"&gt;`), but not inside an attribute value: in a plain attribute it renders as visible text, and in a `c-` attribute it is an error | Move every `{# #}` out of attribute values: put it before the attribute, or on its own line above the tag. `title="{# note #}Hi"` would ship the comment to the browser. | 🟡 |
-| <span id="djc-042">DJC-042</span> | Passing markup as an input | A whole `{% component 'card' ... / %}` written inside an argument renders to HTML, and that HTML becomes the outer input | A `c-` value that starts with an HTML tag and ends with its closing tag is a **nested template** rather than an expression: real markup, rendered with the same data, so `{{ }}` works inside it. It is the one place a `c-` value is not a Python expression | Write the markup straight into the value: `c-body="&lt;span&gt;Hello {{ name }}&lt;/span&gt;"`. Any HTML works, including several roots (`&lt;em&gt;a&lt;/em&gt;&lt;em&gt;b&lt;/em&gt;`), a self-closing tag (`&lt;br/&gt;`), or a component (`&lt;c-badge c-label='name' /&gt;`). Anything else is still an expression, so plain text needs quotes: `c-body="'hello'"`. Write tags complete: a half-open tag is an error. A nested component renders after the outer one, so its finished HTML is not available inside the outer component's `template_data`. | 🟡 |
-| <span id="djc-043">DJC-043</span> | The same input given in both forms | No such concept; there is one argument syntax | Writing `title="x"` and `c-title="y"` on one tag is always a parse-time error because both explicitly provide the same logical input. Plain-element `class`/`c-class` and `style`/`c-style` are the accumulating exceptions. A `c-bind` spread may interlace with one explicit spelling because the key may be absent at render time. Repeating the *same* spelling twice is always an error | Pick one explicit form per input. Preserve intentional class/style accumulation on elements; move conditional overrides into `c-bind`. | 🟡 |
-| <span id="djc-054">DJC-054</span> | Authoring custom template tags | Subclass `BaseNode` (tag, end_tag, allowed_flags) or decorate a function with `@template_tag`; inputs follow the render function's Python signature | There is no tag-registration API. The one user-defined tag is a registered component: `&lt;c-my-tag /&gt;` looks the name up in the registry, and an unknown name fails at render naming the tag | Rewrite each custom tag as a component: the render function's body moves into `template_data` or `on_render`, its parameters become `Kwargs` fields, the tag body arrives as the default slot, and flags convert as in [DJC-021](#djc-021). | 🔴 |
+| ID | django-components | Citry: what to do | Impact |
+|---|---|---|---|
+| <span id="djc-026">DJC-026</span> | Standalone registries, `@register(..., registry=...)`, `all_registries()` | Each `Citry` instance owns its registry. Set `citry = app` on the class or call `app.register(...)`. Keep your own references instead of calling `all_registries()`. | 🔴 |
+| <span id="djc-027">DJC-027</span> | `COMPONENTS` setting; `dirs` defaults to `BASE_DIR/components` | Pass the settings to `Citry(...)` or `CitrySettings(...)`. List every component directory as an absolute path; Citry does not read `BASE_DIR`. | 🔴 |
+| <span id="djc-064">DJC-064</span> | `COMPONENTS["libraries"]` and `import_libraries()` | Remove them. Put those modules under a scanned directory (`Citry(dirs=...)`), or import them where your app starts. | 🔴 |
+| <span id="djc-065">DJC-065</span> | `autodiscover(map_module=...)` | Call `app.autodiscover()`, or rely on the scan Citry runs at the first lookup. There is no `map_module`; paths are relative to `sys.path`. | 🟡 |
+| <span id="djc-028">DJC-028</span> | Reserved names follow registered Django tags and the tag formatter | `if`, `elif`, `else`, `for`, `empty`, `raw`, `fill`, and `slot` are Citry's own tags. Rename a colliding component, for example `Empty` to `EmptyState`. | 🔴 |
+| <span id="djc-077">DJC-077</span> | `dynamic` and `error_fallback` are reserved | Built-in names are reserved too: `component`, `element`, `provide`, `cache`, `error-fallback`, `js`, `css`, `i18n`, `trans`, `mark`. Details below. | 🔴 |
+| <span id="djc-024">DJC-024</span> | Names with `/`, such as `te-s/t` | A name starts with a letter, followed by letters, digits, `-`, `_`, or `.`. Rename (`te-s-t`) and update the `<c-*>` tags. | 🔴 |
+| <span id="djc-015">DJC-015</span> | `tag_formatter`, `TagFormatter`, `ShorthandComponentFormatter` | The tag form is always `<c-name />`. Remove the setting and formatter classes. | 🔴 |
+| <span id="djc-021">DJC-021</span> | `TagSpec` flags that the parser removes from the inputs | No parser flags. A bare attribute is an input with the value `True`. Turn each flag into a boolean input. | 🔴 |
+| <span id="djc-016">DJC-016</span> | django-template-partials: `template.html#partial_name` | No equivalent. Make the partial a Citry component and render it directly. | 🔴 |
+| <span id="djc-070">DJC-070</span> | A dotted name such as `card.old.py` or `assets.v2/` crashes the scan | Files and directories with an extra dot are silently skipped. Details below. | 🟡 |
+| <span id="djc-060">DJC-060</span> | `reload_on_file_change` setting | Delete it. Call `enable_hot_reload(app, mode="hot")` (or `"restart"`) from `citry.contrib.django`, once, in your `AppConfig.ready()`. Details below. | 🟡 |
 
-## Slots, provide, and inject
+Details:
 
-Port composition together so slot data and values shared with descendants stay explicit.
+- **DJC-077:** A component class registers under its lowercased class
+  name, so a class named `Element` fails at class definition with
+  `AlreadyRegistered`, naming the built-in it collides with. Rename it
+  (for example to `ElementView`) or give it a `name` attribute that is not
+  reserved, then update its `<c-*>` tags. [DJC-028](#djc-028) lists the
+  reserved tag names.
+- **DJC-070:** Citry skips any file or directory with a dot in its name
+  beyond the `.py` suffix: editor and system files (`.#card.py`,
+  `._card.py`, `.cache/`), backups like `card.old.py`, dotted directories
+  with everything inside them, and symlinks that resolve to such paths.
+  Every regular file django-components found is still found. The one
+  exception is a symlink with a plain name that points into a
+  dot-prefixed directory: point it at a path without dots, or replace it
+  with the real file. To have a skipped file discovered, rename it.
+- **DJC-060:** Nothing is watched until you call `enable_hot_reload`.
+  There is no `"off"` mode, and an invalid mode fails at the call.
 
-| ID | Area | django-components | Citry | What to change | Impact |
-|---|---|---|---|---|---|
-| <span id="djc-029">DJC-029</span> | Choosing the implicit/default slot | A `default` flag can mark an arbitrary named `{% slot "main" default %}` as the target of implicit component-body content | Implicit body content always fills the literal slot name `default`, rendered by a bare `&lt;c-slot /&gt;` (or `&lt;c-slot name="default" /&gt;`) | Rename the receiving slot to `default`, or keep its name and wrap caller content in an explicit `&lt;c-fill name="main"&gt;`. | 🔴 |
-| <span id="djc-030">DJC-030</span> | Missing template variables | An absent Django template variable renders as an empty string | A name that is not defined raises `KeyError`, pointing at the line and column where it is used, so a typo fails loudly instead of rendering an empty string | Supply every referenced name, guard the expression/branch, or compute an explicit default in `template_data`. | 🟡 |
-| <span id="djc-031">DJC-031</span> | Slot callbacks and forwarding existing Slots | `SlotContext` exposes a Django `Context`, fallback uses `SlotFallback`, and `{% fill body=my_slot %}` forwards a Slot | `SlotContext` exposes `data`, `fallback: Slot \| None`, and `provides`; there is no Django Context or `body=` shortcut | Remove callback reads from `ctx.context`, treat `ctx.fallback` as an ordinary optional Slot, and forward with `&lt;c-fill name="x"&gt;{{ my_slot }}&lt;/c-fill&gt;`. | 🔴 |
-| <span id="djc-032">DJC-032</span> | Legacy fill fallback alias | `{% fill "x" default="fallback_var" %}` remains as a deprecated alias | Only the explicit `fallback="fallback_var"` attribute is accepted | Rename `default=` to `fallback=` on every fill that binds the receiving slot's fallback. | 🔴 |
-| <span id="djc-034">DJC-034</span> | The `{% provide %}` tag | `{% provide name key=val var:field=... %}...{% endprovide %}`: a positional `name`, and `var:field=` colon-prefix aggregate kwargs | `&lt;c-provide key="name" ...&gt;...&lt;/c-provide&gt;`: the name is the `key` attribute (`c-key` for a computed one). Each `var:field=` group becomes one attribute holding a dict | Rewrite the block as `&lt;c-provide&gt;` and move the positional name to `key=`. Turn each group into one dict attribute: `{% provide "x" var1:key="hi" %}` becomes `&lt;c-provide key="x" c-var1="{'key': 'hi'}"&gt;`. | 🟡 |
-| <span id="djc-035">DJC-035</span> | Injected payload type | `inject(...)` returns a `DepInject` NamedTuple | `inject(...)` returns a `Provided` NamedTuple | Field access (`payload.field`) and tuple behaviour are unchanged; the only observable difference is the type name in the `repr`. Update any assertion or logging that matches the payload's type name or repr. | 🟡 |
-| <span id="djc-036">DJC-036</span> | provide / inject key errors | A missing/empty/invalid provide name raises `TypeError` / `TemplateSyntaxError`; a missing inject key raises `KeyError` | An invalid provide key raises `ValueError`. A missing inject key still raises `KeyError`, now with a suggestion of the closest key that was provided | Update `except` clauses and assertions that match the old exception types or message text. | 🟡 |
+## Merge HTML attributes
 
-## Assets and browser startup
+`{% html_attrs %}` becomes ordinary attributes on the element. These
+changes are easy to find and can silently change output.
 
-Replace Django static-file assumptions and verify how each migrated page starts its browser behavior.
+| ID | django-components | Citry: what to do | Impact |
+|---|---|---|---|
+| <span id="djc-001">DJC-001</span> | `{% html_attrs attrs defaults class=... %}`, `attrs:` and `defaults:` keys | Write `<div c-bind="defaults" c-bind="attrs" c-class="...">`. Fallbacks go first. Details below. | 🔴 |
+| <span id="djc-002">DJC-002</span> | The same key twice is joined: `foo="bar baz"` | The same attribute twice on one tag is an error ("Duplicate attribute 'foo' found"). Combine the values into one attribute. | 🟡 |
+| <span id="djc-043">DJC-043</span> | No equivalent: one argument syntax | `title="x"` and `c-title="y"` on one tag is a parse error. Pick one form per input. Details below. | 🟡 |
 
-| ID | Area | django-components | Citry | What to change | Impact |
-|---|---|---|---|---|---|
-| <span id="djc-004">DJC-004</span> | Dependency rendering strategy | `render_dependencies(html, strategy=...)` / `DJC_DEPS_STRATEGY` with strategies `document`/`simple`/`prepend`/`append`/`raw` and a legacy `type=` alias | One `serialize(deps_strategy=..., deps_position=...)` call: `deps_strategy` is `document`/`simple`/`fragment`/`ignore`, `deps_position` is `smart`/`prepend`/`append` | Call `serialize()` on the render result and pass the strategy there: `MyComp(...).render().serialize(deps_strategy="document", deps_position="append")`. Map `prepend`/`append` to `deps_position`, map `raw` to `deps_strategy="ignore"`, and drop `type=`. A project-wide default goes on the `Citry(...)` instance rather than in settings. | 🟡 |
-| <span id="djc-012">DJC-012</span> | Static asset delivery | Component assets are served through `ComponentsFileSystemFinder` / `collectstatic`, gated by `static_files_allowed` / `static_files_forbidden` | citry serves only generated component scripts/styles through its own mounted WSGI/ASGI routes; component source (`.py`/`.html`) is never served | Remove the finder from `STATICFILES_FINDERS`, drop `collectstatic` for components and the `static_files_*` settings, and mount citry's asset routes. A custom `media_class` (overridden `render_js`/`render_css`) has no hook either: control tag output with `Script`/`Style` entries and the `on_dependencies` hooks. | 🔴 |
-| <span id="djc-045">DJC-045</span> | Order of inherited JS/CSS | A subclass's `Media` entries come before its parent's, so the parent's CSS wins equal-specificity ties | The parent's entries come first and the subclass's last, so the subclass's CSS wins the tie | Usually nothing: the new order is the one that lets a subclass override its parent's styles. If you relied on the parent winning, restate the parent's rule in the subclass. | 🟡 |
-| <span id="djc-046">DJC-046</span> | Order of classes named in `extend` | The listed classes' assets merge in reverse order | They merge in the order you wrote them (`extend = [A, B]` gives A's assets before B's) | Only matters when two listed classes ship conflicting styles: if you relied on the reversed order, reverse your list. | 🟡 |
-| <span id="djc-047">DJC-047</span> | `bytes` asset paths | A `bytes` path in `Media` is accepted | Raises `TypeError` naming the component and the offending value | Decode `bytes` paths to `str` (or use a `pathlib.Path`). The error tells you exactly which component and entry to fix. | 🟡 |
-| <span id="djc-074">DJC-074</span> | Delivery of `js_data()` values to the browser | The script carrying `get_js_data()` values is generated, cached, and shipped whenever the component has any JS at all, even a plain script that never reads the data | `js_data()` values reach the browser whenever the component renders, and each key becomes a reactive member of the component's Vue instance. Vue expressions in the template, Vue Options (`this.message`), and `onServerRender` (`component.message`) can read them. A plain script that runs once when it loads has no instance to read them from. (`css_data()` is unaffected: its stylesheet ships whenever the component has CSS) | Read `js_data()` values in the template, in Vue Options, or in a `$component` callback ([DJC-022](#djc-022) shows the shape). After porting, check every component that pairs a plain script with `js_data()`: either move the script into `$component` or delete the unused `js_data()`. | 🟡 |
-| <span id="djc-085">DJC-085</span> | Browser dependency-manager namespace | The runtime exposes `DjangoComponents`, the legacy `Components` alias, `createComponentsManager()`, and `registerComponentData(..., factory)` | Citry's runtime loads component scripts and styles and passes `js_data()` values to each component itself. Browser code uses `Citry.events` for server calls and `Citry.vue` for Vue helpers; there is no dependency-manager object to call | Delete code that uses `DjangoComponents`, `Components`, or `createComponentsManager()`. Return browser data from `js_data()` instead of registering it by hand. | 🔴 |
-| <span id="djc-086">DJC-086</span> | Component initialization completion and failures | `callComponent()` returns a Promise for the callback's synchronous or asynchronous result; callback errors reject it | Citry calls each component's `$component` callback itself; browser code cannot call it or await it. The callback returns nothing or a cleanup function, and returning any other value throws a `TypeError`. An `async` callback is allowed: Citry does not wait for it, and its rejection is logged instead of stopping the page. An error thrown by a synchronous callback stops the Vue app that contains the component | Move server work to an Events handler and await `$sendEvent()`. Return nothing or a cleanup function (an `async` callback may resolve to one), and catch errors that must not stop the page. | 🔴 |
-| <span id="djc-087">DJC-087</span> | Component initialization with no DOM roots | A component call rejects when no element carries its instance marker | The callback still runs for a component that renders only text or nothing. `component.$el` is then not an element, and `els` is an empty array | Check that `component.$el` is an element before using it when initialization needs a root. | 🟡 |
+Details:
 
-## Extensions and lifecycle hooks
+- **DJC-001:** `c-bind="mapping"` spreads a dict of attributes onto the
+  element; `c-class` and `c-style` add classes and styles. Attributes
+  apply left to right and the later one wins, so put the fallback
+  mapping first and the caller's mapping after it. `class` and `style`
+  merge instead of overwriting. A leftover `attrs:foo=` is not rejected:
+  it arrives as an input literally named `attrs:foo`, so search attribute
+  names for `:`.
+- **DJC-002:** When a `c-bind` mapping and an explicit attribute set the
+  same key, the later one wins (`foo="baz"`). `class` and `style` still
+  merge.
+- **DJC-043:** On plain elements, `class` with `c-class` and `style` with
+  `c-style` may appear together and add up. A `c-bind` spread may sit
+  beside one explicit form, because its key may be missing at render
+  time. Put conditional overrides in `c-bind`. Writing the same
+  form twice is always an error.
 
-Move extension behavior to Citry lifecycle hooks, routes, configuration, and commands.
+## Pass data explicitly
 
-| ID | Area | django-components | Citry | What to change | Impact |
-|---|---|---|---|---|---|
-| <span id="djc-050">DJC-050</span> | Render lifecycle hooks | Three hooks: `on_render_before`, `on_render` (with a lambda-yield protocol), `on_render_after` | One hook: `on_render(self)`. Return content (or `None` to keep the template), or write it as a generator: code before `yield` runs before the template renders, the `yield` receives the finished result, and code after it can inspect or replace the output | Merge the three bodies into one `on_render`: the before-hook code goes before the `yield`, the after-hook code after it. Write `result, error = yield`: `result` is the finished render (a `CitryRender`, not a string), or `None` when rendering failed, and then `error` holds the exception. To append to the output, `return str(result) + "..."`. Each `yield content` replaces the output and receives a new `(result, error)` pair. Code that added template variables in `on_render_before` moves into `template_data`. | 🔴 |
-| <span id="djc-051">DJC-051</span> | Inputs named with a leading `@` | `@lol=2` arrives in the component's kwargs like any other input | An `@`-prefixed attribute on a component tag is a Vue event listener: `@lol="2"` listens for a `lol` event and never reaches the component's inputs. A bare `@lol` fails with a `TypeError` that names the attribute, and `@lol` from `c-bind` fails with an error that asks you to write it in the template | Rename data inputs that start with `@` (for example `at_lol` or `on_lol`). Audit templates for `@`-prefixed attributes that were meant as data, not events. | 🔴 |
-| <span id="djc-052">DJC-052</span> | The render marker attribute | Each rendered root carries `data-djc-id-&lt;id&gt;` | When the rendered output has no browser behavior, each root carries `data-cid-&lt;id&gt;=""` (a fresh id per render). On an interactive page no element carries it | Update CSS selectors, JS lookups, and snapshot assertions that match `data-djc-id-*`. On an interactive page, select a component by a class or data attribute you write in its template, or use a template `ref` in its JavaScript. | 🟡 |
-| <span id="djc-055">DJC-055</span> | Registry lifecycle extension hooks | `on_registry_created` / `on_registry_deleted` fire when a standalone registry is constructed or collected | There is no standalone registry: it is part of each `Citry` engine, and no such hooks exist | Observe engine creation with `on_extension_created` (its context carries the engine); registry-deletion logic has nothing to attach to, since per-engine state dies with the engine. | 🟡 |
-| <span id="djc-056">DJC-056</span> | `on_component_rendered` when a render fails | Fires once on the failing component itself, with the error message wrapped in the components-path prefix | The failing component's own hook does not fire; each *enclosing* component's hook fires as the error bubbles, receiving the original exception | Move per-component error handling (logging, boundaries) to an ancestor's hook or wrap the component; match the original exception, not the wrapped djc string. | 🟡 |
-| <span id="djc-057">DJC-057</span> | Extension URL routes | Auto-served by Django under `/components/ext/&lt;name&gt;/`, Django path syntax with typed converters (`&lt;int:id&gt;` hands the handler an int) | A framework-neutral route table the host app mounts (via a `citry.contrib` adapter) under `&lt;prefix&gt;/ext/&lt;name&gt;/`; params are `{name}` segments, always captured as strings | Rewrite `&lt;int:id&gt;` as `{id}` and convert inside the handler (`int(id)`); return a `RouteResponse` instead of an `HttpResponse`; mount `Citry.urls` in the host app. | 🔴 |
-| <span id="djc-058">DJC-058</span> | Declaring an extension's per-component config | A nested class named `ComponentConfig` (legacy alias `ExtensionClass` still accepted) | A `Config` class attribute subclassing `Extension.Config`; there is no legacy alias | Rename `ComponentConfig` (or `ExtensionClass`) to `Config` and its base to `Extension.Config`; update hook bodies for the renamed context fields (`ctx.component_class` and friends). | 🔴 |
-| <span id="djc-059">DJC-059</span> | Reading hook-processed assets | `Component.template` / `.js` / `.css` return content with the loaded-hooks applied | The class attributes keep exactly what you wrote; the hook-processed, cached content comes from `get_template().source` / `get_js()` / `get_css()` | Switch introspection and tests that read the class attributes expecting processed content to the accessor methods. | 🟡 |
-| <span id="djc-061">DJC-061</span> | Dropping a component class at runtime | Classes are not registered at definition, and the file index tracks them weakly, so an unregistered class dies with your last reference | Defining a class registers it, and the engine holds it strongly: call `engine.unregister(cls)` before dropping the last reference; render caches then release it normally | Unregister classes you replace at runtime (hot-swap tooling, plugin unload), then drop your own references. A fully rendered class is collectable and its weak file-index entry is pruned. | 🟡 |
-| <span id="djc-084">DJC-084</span> | Extensions: authoring CLI commands | An extension declares CLI commands as `ComponentCommand` subclasses; the command's `handle` receives Django's global options (`settings`, `pythonpath`, `skip_checks`, ...) and underscore-prefixed parser internals in its kwargs, which authors had to pop out | The same declarative shape lives on citry's `ExtensionCommand` (imported from `citry`): `name`, `help`, arguments built from `CommandArg`/`CommandArgGroup`, nested subcommands, and a `handle(**kwargs)`. `handle` receives only the options the command tree declares, nothing needs popping, and the engine the CLI resolved is available as `self.citry`. Users run it as `citry ext run &lt;extension&gt; &lt;command&gt;` | Rebase command classes onto citry's `ExtensionCommand` and update the imports (`CommandArg`/`CommandArgGroup` keep their argparse-matching fields). Delete any code that pops parser internals or reads Django global options from kwargs; reach the engine through `self.citry` instead of Django settings. | 🔴 |
-| <span id="djc-090">DJC-090</span> | Component-class deletion extension hook | `on_component_class_deleted(ctx)` receives `OnComponentClassDeletedContext` from a class finalizer | Citry exposes neither the hook nor the context because Python can run finalizers while arbitrary application locks are held | Move explicit-removal cleanup to `on_component_unregistered`. Use weak containers for memory-only indexes that should disappear with an unregistered class. `Citry.clear()` is a bulk teardown and emits no per-component hooks. | 🔴 |
+A Citry component reads only its inputs, its slots, and values provided
+by an ancestor. Port the data methods and the class-level declarations
+here.
 
-## Setup, discovery, and command line
+| ID | django-components | Citry: what to do | Impact |
+|---|---|---|---|
+| <span id="djc-067">DJC-067</span> | `get_template_data(self, args, kwargs, slots, context)`, `get_js_data`, `get_css_data` | Rename to `template_data(self, kwargs, slots)`, `js_data`, `css_data`, and drop `args` and `context`. Details below. | 🔴 |
+| <span id="djc-008">DJC-008</span> | Reading variables from the surrounding `Context`; `self.outer_context` | No ambient context. Pass each value as an input. For values deep descendants need, use provide and inject. | 🔴 |
+| <span id="djc-010">DJC-010</span> | `self.request`, context processors, `csrf_token` | Not injected. Read the request in your view and pass what components need as inputs. Details below. | 🔴 |
+| <span id="djc-009">DJC-009</span> | `context_behavior` setting; `only` | Remove both. Citry always behaves like `isolated`. Details below. | 🟡 |
+| <span id="djc-011">DJC-011</span> | `{% if component_vars.is_filled.title %}` | No `component_vars`. In `template_data`, return `{'has_title': slots.get('title') is not None}` and branch with `<c-if>`. | 🟡 |
+| <span id="djc-050">DJC-050</span> | `on_render_before`, `on_render`, `on_render_after` | Merge them into one `on_render(self)`, written as a generator when it runs before and after the template. Details below. | 🔴 |
+| <span id="djc-071">DJC-071</span> | Inner `Defaults` class; `Default(...)`; `get_component_defaults()` | Make defaults annotated fields on `Kwargs`: `size: int = 10`. Delete `Defaults`, which Citry silently ignores. Details below. | 🔴 |
+| <span id="djc-072">DJC-072</span> | Passing `None` gets the declared default | `None` is a value; the default applies only when the input is left out. Details below. | 🟡 |
+| <span id="djc-073">DJC-073</span> | `self.raw_kwargs` includes defaults | `self.raw_kwargs` holds only what the caller passed, so an omitted input raises `KeyError`. Read defaults from the typed kwargs: `kwargs.size`. | 🟡 |
+| <span id="djc-068">DJC-068</span> | A bare inner `Kwargs`, `Slots`, or `TemplateData` class becomes a NamedTuple | It becomes a dataclass. Use attribute access instead of tuple access. Details below. | 🟡 |
+| <span id="djc-069">DJC-069</span> | `Kwargs = Empty` | There is no `Empty`; the import fails. Write `class Kwargs: pass`, and delete `Args = Empty`. Details below. | 🟡 |
 
-Connect tooling to the same Citry instance used by the application and remove Django-owned discovery settings.
+Details:
 
-| ID | Area | django-components | Citry | What to change | Impact |
-|---|---|---|---|---|---|
-| <span id="djc-026">DJC-026</span> | Registry ownership and discovery | Standalone registries, `@register(..., registry=...)`, and global `all_registries()` support custom scopes and process-wide enumeration | Each `Citry` instance owns its registry; classes declare `citry = app` or use `app.register(...)`, and there is no global registry inventory | Create and retain a `Citry` instance for each component scope. Replace decorators with class assignment or `app.register`, and retain any registry/app references your own tooling needs instead of calling `all_registries()`. | 🔴 |
-| <span id="djc-027">DJC-027</span> | Settings scope and component directories | Django's global `COMPONENTS` accepts a dict or `ComponentsSettings`; absent `dirs` defaults to `BASE_DIR/components` | Settings are typed and per `Citry` instance; component directories are explicit absolute `dirs` and no Django `BASE_DIR` is consulted | Move `COMPONENTS` values into `Citry(...)` arguments or `CitrySettings(...)`. Pass every component directory explicitly as an absolute path. | 🔴 |
-| <span id="djc-028">DJC-028</span> | Parser-reserved component names | Protected names follow django-components' registered Django tags and selected formatter | `if`, `elif`, `else`, `for`, `empty`, `raw`, `fill`, and `slot` are citry's own tag names, so no component can use them | Rename a colliding component and update its `&lt;c-*&gt;` uses; for example, rename `Empty` to `EmptyState`. | 🔴 |
-| <span id="djc-060">DJC-060</span> | Turning on hot reload | The `reload_on_file_change` setting (`True`/`False`/`"hot"`/`"restart"`/`"off"`) | An explicit call: `enable_hot_reload(engine, mode="hot")` (or `"restart"`); nothing watches until you call it, and there is no `off` value | Delete the setting; call `enable_hot_reload` where your dev server starts. An invalid mode fails at the call, not at settings load. | 🟡 |
-| <span id="djc-064">DJC-064</span> | The `libraries` setting | `COMPONENTS["libraries"]` lists module paths that `import_libraries()` loads at startup | No such setting or helper; component modules are found by scanning `Citry(dirs=...)` or by ordinary imports | Delete the `libraries` entry: move those modules under a scanned directory, or import them plainly where your app starts. | 🔴 |
-| <span id="djc-065">DJC-065</span> | Running autodiscovery | The module-level `autodiscover(map_module=...)` function, anchored to Django apps | An instance method: `app.autodiscover()` (or the default lazy scan on first lookup); no `map_module` hook; paths anchor to `sys.path` | Call `autodiscover()` on your `Citry` instance or rely on the lazy default; delete `map_module` usage. | 🟡 |
-| <span id="djc-066">DJC-066</span> | The `@djc_test` testing harness | Wraps tests to reset djc's process-global state (registries, caches, `sys.modules` snapshots) | No harness ships. Each `Citry` instance owns its registry and caches; the one process-wide piece of state is the default instance, which components fall back to when they do not set `citry=` | Remove `@djc_test`; create a fresh `Citry()` per test and pass it to the components under test (`citry = c`) instead of relying on the default instance. | 🟡 |
-| <span id="djc-077">DJC-077</span> | Reserved component names (built-in tags) | Two built-in names are taken at startup, `dynamic` (or your configured rename) and `error_fallback`; registering another component under either raises `AlreadyRegistered` | The built-in tag names `component`, `element`, `provide`, `cache`, `error-fallback`, `js`, `css`, `i18n`, `trans`, and `mark` are all reserved. Because a component class auto-registers under its lowercased class name, a class simply named `Element` fails at class definition with `AlreadyRegistered` naming the built-in it collides with | Rename a colliding class (for example `Element` to `ElementView`) or give it an explicit non-reserved `name` attribute, then update its `&lt;c-*&gt;` uses. Row #28 lists the parser tag names reserved for the same reason; this row adds the built-in component names. | 🔴 |
-| <span id="djc-080">DJC-080</span> | Reading mapping and slot-data keys with a dot in expressions | The Django template dot resolves dict keys too: `{{ data.error }}` shows the `error` entry of a dict, and slot data is habitually read that way | Expressions use Python attribute access. Fill data is Citry's immutable `SlotData`, so identifier keys support `{{ d.error }}`; unusual keys and names colliding with mapping methods use brackets or fill destructuring. Ordinary dict values still require subscripts. | Keep dot access for identifier-like slot-data keys. Rewrite dot access only when the value is an ordinary dict, or use brackets/destructuring for an unusual slot-data key such as `aria-label`. Dot access on real object attributes is unchanged. | 🟡 |
-| <span id="djc-081">DJC-081</span> | Running component commands | Component commands run through Django: `python manage.py components create\|upgrade\|ext\|list`, carrying Django's global options (`--settings`, `--pythonpath`, `--traceback`, `--no-color`, `--skip-checks`, `-v`) | Installing citry puts a standalone `citry` command on your PATH: `citry list`, `citry inspect [component] --json`, `citry create &lt;name&gt;`, `citry check`, `citry format`, `citry watch`, `citry ext list`, `citry ext run &lt;extension&gt; &lt;command&gt;`, plus `--version`. `inspect --json` emits the successfully loaded engine's versioned runtime component catalog; the optional case-insensitive name or alias keeps the same catalog envelope with one component. Neither form has a static-analysis fallback. There is no `manage.py` integration and Django's global options do not exist; a project that builds its own `Citry` instance points the CLI at it with a leading `--app module:attribute` (the same convention ASGI/WSGI servers use). The `upgrade` and `startcomponent` commands do not exist: `upgrade` migrated legacy Django-template syntax that citry does not use, and `startcomponent` was djc's deprecated alias of `create` | Replace every `manage.py components ...` invocation in scripts, docs, and CI with the `citry` binary; add `--app your.module:engine` as the first argument if your project constructs its own engine. Remove Django global options from those invocations. Anything that ran `upgrade` has nothing left to migrate; replace `startcomponent X` with `citry create X` ([DJC-082](#djc-082)). | 🔴 |
-| <span id="djc-082">DJC-082</span> | The `create` scaffold | `components create X` scaffolds a directory `X/` with `template.html`, `script.js`, `style.css` (and `X.py`), customizable via `--js`/`--css`/`--template`, previewable with `--dry-run`, overwritable with `--force`, chatty with `--verbose` | `citry create MyButton` writes a single `my_button.py` containing the component class with an inline multiline template (no separate HTML/JS/CSS files), takes only `--path`, always prints the created file path, and refuses to touch an existing file; there is no `--force`, `--dry-run`, `--js`/`--css`/`--template`, or `--verbose` | Expect one Python file per scaffold instead of a directory of assets, and drop the removed flags from any wrapper scripts (they now fail with a usage error). To redo a scaffold, delete the file first; the command will never overwrite it for you. | 🟡 |
-| <span id="djc-083">DJC-083</span> | Listing output and its flags | `components list` prints `full_name` and `path` columns (dotted class path plus source file), and `list` / `ext list` accept `--all`, `--columns`, and `--simple` to add columns, pick columns, or drop the header row | `citry list` prints one row per component: all its registered names (the lowercased and kebab-case forms share the row), the class name, and the file defining the component (relative to the working directory when inside it; a component with no source file leaves the cell empty); `citry ext list` prints the extension names. The columns are fixed and there are no `--all`/`--columns`/`--simple` flags (passing one is a usage error) | Update anything that parses the listing output to the new fixed columns; strip the formatting flags from saved invocations (they now fail with a usage error). | 🟡 |
+- **DJC-067:** A ported component that still defines `get_template_data`
+  renders without error, but the method is never called, so the template
+  sees only the raw inputs. After porting, search for
+  `def get_template_data`, `def get_js_data`, and `def get_css_data`; each
+  hit is dead code. Values from `args` become named inputs
+  ([DJC-020](#djc-020)). Values from `context` become inputs, provided
+  values, or template globals ([DJC-008](#djc-008)).
+- **DJC-010:** For a value many components need, such as the CSRF token,
+  the current user, or the locale, provide it once near the top of the
+  page with `<c-provide>` and read it with `inject()`. See
+  [CSRF protection](/security/#protect-event-posts-from-csrf) for Django
+  and Citry Events.
+- **DJC-009:** A project that ran in `"django"` mode must also rewrite
+  fills that read the child component's variables, such as loop items.
+  Pass those values as slot data: `<c-slot name="row" c-item="item" />` in
+  the child and `data="row"` on the `<c-fill>`.
+- **DJC-050:** `on_render` may return content, or `None` to keep the
+  template output. As a generator, code before `yield` runs before the
+  template renders. Write `result, error = yield`: `result` is the
+  finished render (a `CitryRender`, not a string), or `None` when
+  rendering failed, and then `error` holds the exception. To append to the
+  output, `return str(result) + "..."`. Each `yield content` replaces the
+  output and receives a new `(result, error)` pair. Code that added
+  template variables in `on_render_before` moves into `template_data`.
+- **DJC-071:** Move each `Defaults` attribute onto `Kwargs` with an
+  annotation: `variable = "test"` becomes `variable: str = "test"`. An
+  unannotated `name = value` declares nothing.
+    - `Default(fn)` becomes `dataclasses.field(default_factory=fn)`, and a
+      mutable default like `items = []` becomes
+      `field(default_factory=list)`. Writing `items: list = []` fails at
+      class definition with "mutable default ... use default_factory".
+    - A leftover `Defaults` class raises no error; the defaults just stop
+      applying. A template that reads the value fails with a missing-name
+      error. If `Kwargs` is declared, passing the input is rejected as
+      unexpected; without `Kwargs` it is accepted untyped.
+    - `get_component_defaults()` has no direct replacement. To inspect
+      declarations, iterate `dataclasses.fields(MyComp.Kwargs)` and
+      handle `dataclasses.MISSING` while reading each field's `default` or
+      `default_factory`. For resolved values, read the typed kwargs while
+      rendering, or write a helper that calls the factories.
+- **DJC-072:** A template that showed the default now shows `None`, with
+  no error. Leave the input out where you meant "use the default". If a
+  caller may really hold `None`, resolve it in `template_data`:
+  `value if value is not None else fallback`. Audit call sites that pass
+  `None` on purpose.
+- **DJC-068:** Indexing, unpacking, `_asdict()`, and `_replace()` raise,
+  and so does setting an attribute the class does not declare. Use
+  attribute access, or `self.raw_kwargs` for a plain dict. A class with an
+  explicit base (NamedTuple, `@dataclass`, or a pydantic model) is left as
+  it is by both libraries and needs no change.
+- **DJC-069:** With an empty `Kwargs`, a template attribute fails when the
+  template is parsed ("can only have the following attributes ..."), and
+  a keyword argument in a Python call raises `TypeError` at render. Delete
+  `Args = Empty` because components take no positional inputs
+  ([DJC-020](#djc-020)).
 
-## Component APIs, dynamic rendering, Events, and caching
+## Port slots and provide
 
-Finish the Python-facing API changes, then verify dynamic components, HTTP behavior, and cached output.
+Port these together, so slot data and the values shared with descendants
+stay explicit.
 
-| ID | Area | django-components | Citry | What to change | Impact |
-|---|---|---|---|---|---|
-| <span id="djc-062">DJC-062</span> | Choosing a component by a variable | `{% component name_var %}` is rejected with "Component name must be a string 'literal', got: ...", steering you to other patterns | A tag name is always literal (`&lt;c-{{ name }}` will not interpolate); the dynamic path is the built-in dynamic component: `&lt;c-component c-is="name_var" /&gt;` | Rewrite variable-name calls as `&lt;c-component c-is="..." /&gt;`. | 🔴 |
-| <span id="djc-067">DJC-067</span> | Data-method names and signatures | Template/JS/CSS data come from `get_template_data(self, args, kwargs, slots, context)` (and `get_js_data`, `get_css_data`) | The methods are `template_data(self, kwargs, slots)`, `js_data(self, kwargs, slots)`, `css_data(self, kwargs, slots)`. A ported component that still defines `get_template_data` renders without any error, but the method is never called: the template sees only the raw kwargs, so the output is silently wrong. | Rename the three methods and drop the `args` and `context` parameters (values read from the Django context become explicit props, `provide`/`inject`, or `template_globals`; see #8 and #20 for those parameters). After porting, grep the project for `def get_template_data`, `def get_js_data`, `def get_css_data`: any hit is a dead method. | 🔴 |
-| <span id="djc-068">DJC-068</span> | What a bare typed-input class becomes | A bare inner `Kwargs`/`Slots`/`TemplateData` (etc.) class is rebuilt as a NamedTuple: instances are tuples, so `kwargs[0]`, `a, b = kwargs`, iteration, and `_asdict()`/`_replace()` all work | The same class is rebuilt as a dataclass with fixed attributes: attribute access works, tuple behavior does not (indexing, unpacking, and `_asdict()` raise), and setting an undeclared attribute on an instance also raises | Replace tuple-style access on typed instances with attribute access (or `self.raw_kwargs` for a plain dict). Classes declared with an explicit base (NamedTuple, `@dataclass`, pydantic model) are left untouched by both frameworks, so those need no change. | 🟡 |
-| <span id="djc-069">DJC-069</span> | Declaring a no-inputs component | `Kwargs = Empty` (imported from django-components) declares the component takes no inputs; violations raise `TypeError` at render | There is no `Empty` type (the import itself fails). The same contract is an empty `class Kwargs: pass`: a template attribute then fails at parse ("can only have the following attributes ..."), and a Python-call kwarg raises `TypeError` at render | Replace `Kwargs = Empty` with `class Kwargs: pass`, and delete `Args = Empty` entirely (components are kwargs-only, [DJC-020](#djc-020)). | 🟡 |
-| <span id="djc-070">DJC-070</span> | Files with dots in their names in component dirs | Dot-prefixed files and directories are silently skipped during discovery, but other dotted names (a `card.old.py` backup, an `assets.v2/` directory) crash the scan | Any file or directory with a dot in its name (beyond the `.py` suffix) is silently skipped: dot-prefixed junk (`.#card.py` editor locks, `._card.py` macOS copies, `.cache/` trees), backup copies like `card.old.py`, directories with a dotted name (hiding their whole subtree), and symlinks resolving to such paths | Files that crashed djc's scan are now skipped, and every regular file djc discovered is still discovered. One exception: a clean-named symlink pointing at a file inside a dot-prefixed directory was imported by djc but is skipped by citry; point the symlink at a dot-free path or replace it with the real file. If a skipped file should be discovered, rename it to a plain dot-free name. | 🟡 |
-| <span id="djc-071">DJC-071</span> | Declaring default input values | Defaults live in a separate inner `Defaults` class; `Default(...)` wraps a factory for mutable values; `get_component_defaults(MyComponent)` reads the resolved defaults | Defaults are ordinary field defaults on the declared `Kwargs` class (`size: int = 10`); a factory is `dataclasses.field(default_factory=...)`; there is no defaults-reading helper. An inner class still named `Defaults` is silently ignored: nothing errors, the defaults just stop applying (a template reading the value fails with a missing-name error; if a `Kwargs` class is declared, passing the input is rejected as unexpected, and without one the input is simply accepted untyped) | Move each `Defaults` attribute onto the `Kwargs` class as an annotated field: `variable = "test"` becomes `variable: str = "test"`. The annotation is required, an unannotated `name = value` declares nothing. Rewrite `Default(fn)` as `field(default_factory=fn)`, and a mutable default like `items = []` as `field(default_factory=list)` (writing `items: list = []` fails at class definition with "mutable default ... use default_factory"). There is no direct replacement for `get_component_defaults(...)`. If the caller only inspects declarations, iterate `dataclasses.fields(MyComp.Kwargs)` and handle `dataclasses.MISSING` while reading each field's `default` or `default_factory`. If it needs resolved per-instance values, read them from the typed kwargs instance during rendering, or add an application helper that explicitly invokes factories. Then delete the `Defaults` class: leaving it behind fails silently. | 🔴 |
-| <span id="djc-072">DJC-072</span> | Passing `None` to get the default | An input explicitly given as `None` still receives its declared default (`None` is treated as "missing") | `None` is a value like any other: the default applies only when the input is omitted, so a template that used to show the default now shows `None` | Omit the input where you meant "use the default". If a caller may legitimately hold `None`, resolve it yourself in `template_data` (`value if value is not None else fallback`). This changes output silently, so audit call sites that pass `None` on purpose. | 🟡 |
-| <span id="djc-073">DJC-073</span> | Defaults in the raw kwargs dict | `self.raw_kwargs` includes the defaults for inputs the caller omitted | `self.raw_kwargs` holds exactly what the caller passed; defaults appear only on the typed kwargs (the `kwargs` argument of `template_data`). Reading an omitted input from the raw dict raises `KeyError` | Read defaulted inputs through the typed kwargs (`kwargs.size`), not the raw dict. Where code iterates `self.raw_kwargs` expecting the complete set of inputs, switch it to the typed instance. | 🟡 |
-| <span id="djc-075">DJC-075</span> | Where processed component JS/CSS is cached | Processed JS/CSS is written to the Django cache named by the components `cache` setting (a private in-memory cache of its own when unset, never Django's default cache), under `__components:...` keys, as soon as the component class is defined | Each `Citry` instance writes to its own pluggable cache (`Citry(cache=...)`, a per-instance in-memory store by default), under `citry:...` keys, when the component first renders | Multi-worker setups that shared processed assets through a configured Django cache must pass a shared store to `Citry(cache=...)`; ready adapters exist for the Django cache framework (`citry.contrib.django.DjangoCache`), Redis, and diskcache (`citry.contrib.caches`). Update monitoring or warm-up jobs that looked for `__components:*` keys or expected the cache to fill at import time: keys start with `citry:` and appear at first render. | 🟡 |
-| <span id="djc-076">DJC-076</span> | Dynamic components | The dynamic component is a Python class you can import and render directly (`DynamicComponent.render(kwargs={"is": ...})`), registered under the tag name `dynamic`, and renameable with the `dynamic_component_name` setting | The dynamic component is the fixed built-in `&lt;c-component&gt;` tag. There is no importable wrapper class and no rename setting; the tag name cannot be changed | Rewrite `{% component "dynamic" is=x %}` (and any renamed shorthand) as `&lt;c-component c-is="x" /&gt;` ([DJC-062](#djc-062) shows the invocation shape). Delete the `dynamic_component_name` setting. In Python, drop the `DynamicComponent` import and resolve the target yourself: `app.get(name)(**kwargs)` when you hold a name, or call the component class you already hold. | 🔴 |
-| <span id="djc-079">DJC-079</span> | The built-in error boundary component | `{% component "error_fallback" %}` with the guarded content in a `content` slot (also fillable as `default`) and the fallback as a `fallback` slot or kwarg; the `ErrorFallback` class is importable; giving the fallback as both slot and kwarg raises `TemplateSyntaxError` | `&lt;c-error-fallback&gt;`: the guarded content is the tag body; the fallback is the `fallback="..."` attribute, or a `fallback` fill that receives the error as slot data (the guarded content then goes in the `default` fill, since fills cannot mix with other content). There is no importable class. A leftover `&lt;c-fill name="content"&gt;` fails on the component's first render, with a parse error naming the fill (the class itself defines without error). Giving both fallback forms raises `RuntimeError` ("give only one") | Rewrite the invocation as `&lt;c-error-fallback&gt;` with the guarded content directly in the body. When you use the fallback fill, rename the `content` fill to `default` and read the error as `d.error`. Delete `ErrorFallback` imports; Python-side, call `app.get("error-fallback")(fallback="...", slots={"default": ...})`. Update any except clause or test that matched `TemplateSyntaxError` or the old both-forms message. | 🔴 |
-| <span id="djc-088">DJC-088</span> | Component HTTP handlers and their `self` | `Component.as_view()` dispatches `get` / `post` either from `Component.View` or directly from the component, and the handler can use a live component instance plus `render_to_response(context=..., slots=...)` | Put verb-shaped handlers in `class Events(ViewEvents):`. Their inputs are typed `data` and the neutral `request`; `self` is the per-call Events config, not a rendered component. Return a fresh component element or an Events action | Move each direct or nested view handler under `Events(ViewEvents)`, replace host request parsing with a data class, and replace `render_to_response` with a returned component or action. Move values formerly read from the live component into explicit data, context, State, or application services. | 🔴 |
-| <span id="djc-089">DJC-089</span> | Component endpoint URLs and exposure | `get_component_url()` builds one optional public URL per component, `public=False` disables it, and `get_route_path()` plus `args` / `kwargs` define custom paths | Public methods placed in `Events` are exposed on fixed routes. Named handlers use `events.url(name, query=..., fragment=...)` or `get_event_url(...)`; there is no `public` flag or custom per-component route reversal, and the method-only ViewEvents route has no dedicated public builder | Replace public flags with handler placement or omission. Use named handlers and the event URL builders for durable call sites; keep query and fragment inputs, but move route parameters into typed event data. Treat `ViewEvents` as the initial method-shaped bridge, not a custom routing API. | 🔴 |
-| <span id="djc-091">DJC-091</span> | Selecting a render-cache backend per component | `Component.Cache.cache_name` selects one named Django cache backend | A `Citry` instance owns one cache backend; component and fragment output caching use it | Pass the intended shared or local backend once as `Citry(cache=...)`. Split components across Citry instances only when they truly require different engine ownership; there is no per-component backend alias. | 🟡 |
-| <span id="djc-092">DJC-092</span> | Component cache key customization and Slots | `Cache.hash()` can replace key generation, while `include_slots` attempts to add Slot values automatically | `Cache.vary(self, kwargs, slots)` returns typed semantic variation and Citry owns canonical hashing. Every content-producing Slot requires an explicit variation; Citry never guesses from closures or source text | Replace `hash()` and `include_slots` with a `vary()` result containing only the values that can change output, including explicit Slot-presence or caller-controlled dimensions where relevant. | 🔴 |
-| <span id="djc-093">DJC-093</span> | Template fragment cache syntax | Django's `{% cache timeout key *vary_on using=... %}...{% endcache %}` can run in a standalone Django template | Citry uses the transparent component `&lt;c-cache key="..." c-ttl="..." c-vary="..."&gt;...&lt;/c-cache&gt;` inside a component template, with the engine-owned backend | Move standalone cached markup into a root component template, translate timeout and variation to typed attributes, and remove `{% load cache %}` / `using=`. | 🔴 |
-| <span id="djc-094">DJC-094</span> | IDs inside cached rendered output | Django's fragment cache reuses frozen rendered HTML, including the original component ID | Citry caches a detached artifact and gives the cached descendants fresh IDs on every replay, reusing only the ID of the cached boundary itself | Do not store or compare a descendant's render ID, such as a `data-cid-*` attribute, across renders. Citry updates its dependency and Events records to the fresh IDs. | 🟡 |
+| ID | django-components | Citry: what to do | Impact |
+|---|---|---|---|
+| <span id="djc-029">DJC-029</span> | `{% slot "main" default %}` marks the slot for body content | Body content always fills the slot named `default` (`<c-slot />` or `<c-slot name="default" />`). Rename the slot to `default`, or wrap caller content in `<c-fill name="main">`. | 🔴 |
+| <span id="djc-032">DJC-032</span> | `{% fill "x" default="fallback_var" %}` | Rename `default=` to `fallback=`. | 🔴 |
+| <span id="djc-031">DJC-031</span> | `SlotContext.context`, `SlotFallback`, `{% fill body=my_slot %}` | `SlotContext` has `data`, `fallback` (an optional `Slot`), and `provides`. Stop reading `ctx.context`. Forward a slot with `<c-fill name="x">{{ my_slot }}</c-fill>`. | 🔴 |
+| <span id="djc-034">DJC-034</span> | `{% provide "x" key=val var:field=... %}` | Write `<c-provide key="x" ...>` (`c-key` for a computed name). Turn each group into one dict: `var1:key="hi"` becomes `c-var1="{'key': 'hi'}"`. | 🟡 |
+| <span id="djc-035">DJC-035</span> | `inject()` returns a `DepInject` NamedTuple | It returns a `Provided` NamedTuple. Field access and tuple behavior are the same; update assertions or logs that match the type name or repr. | 🟡 |
+| <span id="djc-036">DJC-036</span> | A bad provide name raises `TypeError` / `TemplateSyntaxError` | It raises `ValueError`. A missing inject key still raises `KeyError`, now suggesting the closest provided key. Update `except` clauses and assertions. | 🟡 |
 
-## Update exact-output tests
+## Move assets and JS
 
-These differences do not change the page a browser presents, but error assertions and exact HTML snapshots may need updating.
+Replace Django static-file handling, then check how each migrated page
+starts its browser behavior.
 
-| ID | Area | django-components | Citry | What to change | Impact |
-|---|---|---|---|---|---|
-| <span id="djc-003">DJC-003</span> | Single-quote HTML escaping | Escaped as `&#x27;` | Escaped as `&#39;` (the same character, numeric-decimal entity) | Nothing for rendered pages; browsers treat the two entities identically. Update only tests that assert the literal `&#x27;` bytes. | 🟢 |
-| <span id="djc-005">DJC-005</span> | Error when a component's inline JS/CSS contains its own end tag | Raises `RuntimeError`, message `...contains '&lt;/script&gt;' end tag.` | Raises `ValueError`, message `...contains a '&lt;/script&gt;' end tag. This is not allowed.` | If you catch this error or assert its message, switch to `ValueError` and the new wording. | 🟢 |
-| <span id="djc-006">DJC-006</span> | The citry runtime script | A dependency-manager script is emitted on every document render | Citry adds its runtime script only when the rendered output needs browser behavior: Vue syntax, component JavaScript, `js_data()` values, or Events | Nothing changes in your templates. In tests, drop assertions that the runtime `&lt;script&gt;` is present on every rendered document. | 🟢 |
-| <span id="djc-038">DJC-038</span> | Parentheses around expressions | Python-expression mode is opt-in per value: `disabled=(not editable)` | A `c-` value is always an expression, so the parentheses are not what makes it one. Keeping them still works | Nothing has to change. When tidying, drop them: `c-disabled="not editable"`. What matters is the `c-` prefix, not the parentheses. | 🟢 |
-| <span id="djc-041">DJC-041</span> | Builtins in expressions | Helpers such as `len` are commonly added to the render context per call | Python builtins are not available inside expressions: `len(...)`, `str(...)` and friends raise `NameError` unless you supply the name yourself | Not a behavior change, but there is a better home for them: register helpers once with `Citry(template_globals={"len": len})` instead of passing them on every render. | 🟢 |
-| <span id="djc-044">DJC-044</span> | Assets on a plain definition class | A non-component base class carrying a `Media` class contributes its entries | Reusable definition bases and plain classes named in `extend` contribute preserved `Dependencies`; relative paths resolve from the declaring module and files are registered to the consuming component | Keep reusable assets on the definition that owns them. Use `Dependencies = None`, `extend = False`, or an explicit `extend` list to cut or select branches. | 🟢 |
-| <span id="djc-048">DJC-048</span> | Declaring one member of an asset pair as `None` | Setting `js = ...` while `js_file = None` (or the reverse) raises | Legal: only two values that are both set conflict; the set member is used | Nothing required. If you deleted an explicit `= None` to satisfy djc, you can put it back. | 🟢 |
-| <span id="djc-049">DJC-049</span> | Protocol-relative asset URLs (`://example.com/x.js`) | The emitted tag escapes the leading colon (`href="%3A//example.com/..."`) | The entry is emitted exactly as written | Nothing for rendered pages. Update only tests that assert the escaped `%3A//` bytes. | 🟢 |
-| <span id="djc-053">DJC-053</span> | Error paths for components placed via a fill | The error trace includes a slot segment for content rendered through a slot | Content failing inside a fill or fallback still shows a slot segment, as `Card(slot:body)` (djc wrote `provider(slot:content)`). Only a *component* placed via a fill loses the frame: its path is the authorship chain alone (`Page &gt; Failing`) | Update slot-marker assertions to the `Card(slot:body)` spelling, and drop the slot expectation only for component-failure paths. | 🟢 |
-| <span id="djc-063">DJC-063</span> | Text next to explicit fills | Text or variables beside `{% fill %}` tags raise `TemplateSyntaxError` when fills are used | Same protection, different reporter: the parent's first render raises `SyntaxError`, worded "Text cannot appear next to '&lt;c-fill&gt;'" for literal text and "Expression cannot appear..." for a variable | Update assertions that match the djc error type or message. | 🟢 |
-| <span id="djc-078">DJC-078</span> | Unknown component name error message | Rendering an unknown component name raises `NotRegistered` with the message "The component 'x' was not found" | Still `NotRegistered`, now worded "No component registered as 'x'." When `&lt;c-component c-is="..."&gt;` cannot resolve a computed name, the message also suggests `&lt;c-element&gt;` for a plain HTML element | Update except clauses and test assertions that match the old wording; the exception class name is unchanged. Nothing changes for code that only catches the exception type. | 🟢 |
+| ID | django-components | Citry: what to do | Impact |
+|---|---|---|---|
+| <span id="djc-012">DJC-012</span> | `ComponentsFileSystemFinder`, `collectstatic`, `static_files_allowed` / `static_files_forbidden` | Remove the finder from `STATICFILES_FINDERS`, skip `collectstatic` for components, drop the settings, and mount Citry's routes. Details below. | 🔴 |
+| <span id="djc-004">DJC-004</span> | `render_dependencies(html, strategy=...)`, `DJC_DEPS_STRATEGY` | Call `render().serialize(deps_strategy=..., deps_position=...)`. Details below. | 🟡 |
+| <span id="djc-023">DJC-023</span> | `{% component_css_dependencies %}` and `{% component_js_dependencies %}` emit assets | `<c-css />` and `<c-js />` only choose where assets go. Leaving one out does not keep assets off the page. Details below. | 🟡 |
+| <span id="djc-025">DJC-025</span> | The page loads its own runtime script and component scripts | Remove that runtime and the attributes only it understood. Citry sends one Vue runtime that mounts every Citry Vue app. Details below. | 🔴 |
+| <span id="djc-022">DJC-022</span> | `$component` callback receives the JS data object and a context argument | The callback receives one object; read `js_data()` values from its `component`. Prefer Vue Options (a Vue component options object). Details below. | 🔴 |
+| <span id="djc-074">DJC-074</span> | `get_js_data()` values ship whenever the component has any JS | `js_data()` values reach the browser on every render and become reactive members of the component's Vue instance. A plain script that runs once on load cannot read them. Details below. | 🟡 |
+| <span id="djc-085">DJC-085</span> | `DjangoComponents`, `Components`, `createComponentsManager()`, `registerComponentData(...)` | Delete that code and return browser data from `js_data()`. Browser code uses `Citry.events` for server calls and `Citry.vue` for Vue helpers. | 🔴 |
+| <span id="djc-086">DJC-086</span> | `callComponent()` returns a Promise; callback errors reject it | Citry calls each `$component` callback itself; you cannot call or await it. Return nothing or a cleanup function. Details below. | 🔴 |
+| <span id="djc-087">DJC-087</span> | The call rejects when no element carries the instance marker | The callback still runs. `component.$el` may not be an element and `els` is empty, so check before using them. | 🟡 |
+| <span id="djc-045">DJC-045</span> | A subclass's `Media` entries come before its parent's | The parent's come first, so the subclass's CSS wins ties. Usually nothing to do; if you relied on the parent winning, restate its rule in the subclass. | 🟡 |
+| <span id="djc-046">DJC-046</span> | Classes in `extend` merge in reverse order | They merge in the order written: `extend = [A, B]` puts A's assets first. Reverse your list only if you relied on the old order. | 🟡 |
+| <span id="djc-047">DJC-047</span> | `bytes` asset paths are accepted | `TypeError` naming the component and the value. Use `str` or `pathlib.Path`. | 🟡 |
+
+Details:
+
+- **DJC-012:** Citry serves only the scripts and styles it generates,
+  from routes you mount in your app, and never serves component source
+  (`.py` or `.html`). A custom `media_class` that overrode
+  `render_js` / `render_css` has no direct counterpart: control the tags
+  with `Script` and `Style` entries and the `on_dependencies` extension
+  hooks, which can change the list of scripts and styles before Citry
+  writes the tags.
+- **DJC-004:** `deps_strategy` is `document`, `simple`, `fragment`, or
+  `ignore`, and `deps_position` is `smart`, `prepend`, or `append`. The
+  defaults are `document` and `smart`. Map `prepend` and `append` to
+  `deps_position`, map `raw` to `deps_strategy="ignore"`, and drop the
+  `type=` alias. For example, call
+  `serialize(deps_strategy="document", deps_position="append")` on the
+  result of `MyComp(...).render()`. There is no project-wide setting, so pass non-default values on each
+  `serialize()` call.
+- **DJC-023:** If you left `{% component_css_dependencies %}` out of a
+  page to keep its CSS off, that no longer works. To keep an asset off a
+  page, remove it from the component or filter it in `on_dependencies`.
+- **DJC-025:** Let Citry deliver its Vue runtime, which matches the
+  installed Citry version, and the compiled components. In templates, use
+  Vue's own `v-*` attributes, Citry's `@c-*` attributes to call the
+  server, and `:c-*` attributes to bind State (values Citry keeps between
+  server calls).
+- **DJC-022:** `$component` accepts Vue Options or a callback. The
+  callback runs after mount and after each server render the page applies
+  to the component. Its argument has `component` (the Vue instance),
+  `revision`, `onEvent`, `state`, `sendEvent`, `loading`, `error`, `i18n`,
+  `els` (the root elements), and `id` (the render ID). Rewrite the
+  callback to take `({ component, revision, onEvent })` and read
+  `js_data()` values from `component`, such as `component.message`. Or
+  use `onServerRender({ component, revision, onEvent })` in the
+  Options object.
+- **DJC-074:** Templates, Vue Options (`this.message`), and
+  `onServerRender` (`component.message`) can read `js_data()` values. After
+  porting, check each component that pairs a plain script with
+  `js_data()`: move the script into `$component` ([DJC-022](#djc-022)), or
+  delete the unused `js_data()`. `css_data()` is not affected; its
+  stylesheet ships whenever the component has CSS.
+- **DJC-086:** Returning any value other than nothing or a cleanup
+  function throws `TypeError`. An `async` callback is allowed and may
+  resolve to a cleanup function; Citry does not wait for it, and logs a
+  rejection instead of stopping the page. An error thrown by a
+  synchronous callback stops the Vue app that contains the component, so
+  catch errors that must not stop the page. Move server work to an Events
+  handler and await `$sendEvent()`.
+
+## Port built-in tags
+
+These built-ins keep their purpose but change their tag, their Python
+entry point, or where their data is cached.
+
+| ID | django-components | Citry: what to do | Impact |
+|---|---|---|---|
+| <span id="djc-062">DJC-062</span> | `{% component name_var %}` is rejected | Use `<c-component c-is="name_var" />`. A tag name is always literal: `<c-{{ name }}>` does not interpolate. | 🔴 |
+| <span id="djc-076">DJC-076</span> | `DynamicComponent`, the `dynamic` tag, `dynamic_component_name` | Write `<c-component c-is="x" />`; its name cannot change. Delete the setting and the import. Details below. | 🔴 |
+| <span id="djc-079">DJC-079</span> | `{% component "error_fallback" %}`, a `content` slot, the `ErrorFallback` class | Write `<c-error-fallback>` with the guarded content as its body. Details below. | 🔴 |
+| <span id="djc-075">DJC-075</span> | Processed JS/CSS cached in a Django cache under `__components:` keys at class definition | Each `Citry` instance caches in `Citry(cache=...)`, in memory by default, under `citry:` keys at the first render. Details below. | 🟡 |
+| <span id="djc-091">DJC-091</span> | `Component.Cache.cache_name` picks a Django cache per component | A `Citry` instance has one cache backend. Pass it once as `Citry(cache=...)`. | 🟡 |
+| <span id="djc-092">DJC-092</span> | `Cache.hash()`; `include_slots` | Replace both with `Cache.vary(self, kwargs, slots)`, returning only values that can change output; Citry hashes them. Details below. | 🔴 |
+| <span id="djc-093">DJC-093</span> | `{% cache timeout key ... using=... %}` | Write `<c-cache key="..." c-ttl="..." c-vary="...">` in a component template, and remove `{% load cache %}` and `using=`. Details below. | 🔴 |
+| <span id="djc-094">DJC-094</span> | Cached HTML keeps the original component IDs | Cached descendants get fresh IDs on each replay; only the cached boundary keeps its ID. Do not store or compare descendant IDs (`data-cid-*`); Citry updates its own dependency and Events records. | 🟡 |
+
+Details:
+
+- **DJC-076:** In Python, resolve the target yourself:
+  `app.get(name)(**kwargs)` when you hold a name, or call the component
+  class you already hold. [DJC-062](#djc-062) shows the tag.
+- **DJC-079:** For a plain-text fallback, use the `fallback="..."`
+  attribute. For markup, use a `fallback` fill that receives the error as
+  slot data (`<c-fill name="fallback" data="d">`, then read `d.error`),
+  and put the guarded content in the
+  `default` fill, since fills cannot mix with other content. A leftover
+  `<c-fill name="content">` fails at the component's first render with a
+  parse error naming the fill. Giving both fallback forms raises
+  `RuntimeError` ("give only one"); update `except` clauses and tests that
+  matched `TemplateSyntaxError`. Delete `ErrorFallback` imports; in
+  Python, call
+  `app.get("error-fallback")(fallback="...", slots={"default": ...})`.
+  See [Error boundaries](/concepts/error-boundaries/).
+- **DJC-075:** If several workers shared processed assets through a
+  Django cache, pass a shared store to `Citry(cache=...)`:
+  `citry.contrib.django.DjangoCache` wraps a Django cache, and
+  `citry.contrib.caches` has Redis and diskcache adapters. Update
+  monitoring or warm-up jobs that looked for `__components:*` keys or
+  expected the cache to fill when modules are imported.
+- **DJC-091:** Split components across `Citry` instances only when they
+  truly need separate instances; there is no per-component backend name.
+- **DJC-092:** Every slot that produces content needs an explicit
+  variation, such as whether it is present or which caller option shapes
+  it. Citry never guesses a slot's effect from closures or source text.
+- **DJC-093:** Move standalone cached markup into a root component
+  template, and turn the timeout and the vary-on values into `c-ttl` and
+  `c-vary`. The cache uses the `Citry` instance's backend.
+
+## Port extensions
+
+Skip this section if your project has no custom extensions or custom
+template tags.
+
+| ID | django-components | Citry: what to do | Impact |
+|---|---|---|---|
+| <span id="djc-058">DJC-058</span> | Nested `ComponentConfig` class (or the `ExtensionClass` alias) | Rename it to `Config` with the base `Extension.Config`. Update hook bodies for renamed context fields such as `ctx.component_class`. | 🔴 |
+| <span id="djc-057">DJC-057</span> | Routes under `/components/ext/<name>/`; `<int:id>` converters | Routes live under `<prefix>/ext/<name>/` in your app. Write `{id}` and convert it in the handler. Details below. | 🔴 |
+| <span id="djc-084">DJC-084</span> | `ComponentCommand` subclasses whose `handle` receives Django's options | Base the commands on `citry.ExtensionCommand`. Details below. | 🔴 |
+| <span id="djc-054">DJC-054</span> | Custom tags: `BaseNode` or `@template_tag` | There is no tag API. Rewrite each custom tag as a component. Details below. | 🔴 |
+| <span id="djc-056">DJC-056</span> | `on_component_rendered` fires on the failing component | It fires on each enclosing component, with the original exception, not on the failing component itself. Move error handling to an ancestor's hook. | 🟡 |
+| <span id="djc-055">DJC-055</span> | `on_registry_created` / `on_registry_deleted` | No standalone registries, so no such hooks. Use `on_extension_created`, whose context carries the `Citry` instance. Registry-deletion cleanup has no replacement; the registry goes away with its instance. | 🟡 |
+| <span id="djc-059">DJC-059</span> | `Component.template` / `.js` / `.css` return hook-processed content | The class attributes keep what you wrote. Read processed content with `get_template().source`, `get_js()`, and `get_css()`. | 🟡 |
+| <span id="djc-090">DJC-090</span> | `on_component_class_deleted(ctx)` | Not available. Move cleanup to `on_component_unregistered`. Details below. | 🔴 |
+| <span id="djc-061">DJC-061</span> | An unregistered class is freed with your last reference | Classes register when defined and the `Citry` instance keeps them. Call `app.unregister(cls)` before dropping the class. Details below. | 🟡 |
+
+Details:
+
+- **DJC-057:** The route table does not depend on Django; mount
+  `app.urls` in your app with a `citry.contrib` adapter. Route parameters are
+  always strings, so write `int(id)` in the handler. Return a
+  `RouteResponse` instead of an `HttpResponse`.
+- **DJC-084:** `ExtensionCommand` has the same shape: `name`, `help`,
+  arguments built from `CommandArg` and `CommandArgGroup` (with the same
+  argparse fields), nested subcommands, and `handle(**kwargs)`. `handle`
+  receives only the options the command declares, so delete code that
+  pops parser internals or reads Django's global options. Reach the
+  `Citry` instance as `self.citry` instead of through Django settings.
+  Users run the command as `citry ext run <extension> <command>`.
+- **DJC-054:** A registered component is the one kind of user-defined
+  tag: `<c-my-tag />` looks the name up, and an unknown name fails at
+  render naming the tag. Move the tag's render function body into
+  `template_data` or `on_render`, its parameters into `Kwargs` fields, and
+  its body into the default slot. Turn flags into inputs as in
+  [DJC-021](#djc-021).
+- **DJC-090:** Citry has no class-deletion hook because Python can run
+  finalizers while application locks are held. For indexes that only
+  live in memory and should drop an unregistered class, use a
+  `weakref.WeakSet` or `WeakKeyDictionary`. `Citry.clear()` tears everything down at once and emits no
+  per-component hooks.
+- **DJC-061:** This matters for tooling that swaps classes at runtime,
+  such as hot swapping or unloading plugins. Unregister the class, then
+  drop your own references; render caches then release it. Rendering
+  does not keep a class alive: once you unregister it and drop your
+  references, Python frees it.
+
+## Update tests and CLI
+
+These rows change how you test components and which commands your
+scripts and CI call.
+
+| ID | django-components | Citry: what to do | Impact |
+|---|---|---|---|
+| <span id="djc-066">DJC-066</span> | `@djc_test` resets global state | Remove it. Create a fresh `Citry()` per test and set `citry = c` on the components under test. Details below. | 🟡 |
+| <span id="djc-013">DJC-013</span> | Django's `template_rendered` signal and `assertTemplateUsed` | No template signal. Record renders with a test extension that implements `on_component_rendered`. | 🟡 |
+| <span id="djc-052">DJC-052</span> | `data-djc-id-<id>` on each rendered root | `data-cid-<id>=""` appears only on output with no browser behavior, with a fresh ID each render. Details below. | 🟡 |
+| <span id="djc-081">DJC-081</span> | `python manage.py components ...` | Use the standalone `citry` command. Details below. | 🔴 |
+| <span id="djc-082">DJC-082</span> | `components create X` writes a directory of files | `citry create MyButton` writes one `my_button.py`. Details below. | 🟡 |
+| <span id="djc-083">DJC-083</span> | `components list` with `--all`, `--columns`, `--simple` | `citry list` has fixed columns and none of these flags. Details below. | 🟡 |
+
+Details:
+
+- **DJC-066:** No test harness ships. Each `Citry` instance owns its
+  registry and caches. The only process-wide state is the default
+  instance, which a component uses when it does not set `citry=`, so give
+  test components their own instance.
+- **DJC-052:** Update CSS selectors, JavaScript lookups, and snapshots
+  that match `data-djc-id-*`. On an interactive page no element carries
+  the marker: select a component by a class or data attribute you write
+  in its template, or use a template `ref` in its JavaScript.
+- **DJC-081:** Installing Citry adds a `citry` command:
+    - Commands: `citry list`, `citry inspect [component] --json`,
+      `citry create <name>`, `citry check`, `citry format`,
+      `citry watch`, `citry ext list`,
+      `citry ext run <extension> <command>`, and `--version`.
+    - Replace each `manage.py components ...` call in scripts, docs, and
+      CI. If your project builds its own `Citry` instance, put
+      `--app your.module:attribute` first (the convention ASGI and WSGI
+      servers use).
+    - Remove Django's global options (`--settings`, `--pythonpath`,
+      `--traceback`, `--no-color`, `--skip-checks`, `-v`); they do not
+      exist.
+    - `upgrade` is gone, because Citry has no legacy Django template
+      syntax to upgrade. Replace `startcomponent X` with
+      `citry create X` ([DJC-082](#djc-082)).
+    - `inspect --json` prints the component catalog of the loaded
+      instance; a component name or alias (any case) narrows it to that
+      component. It needs an instance that loads; there is no static
+      analysis fallback.
+- **DJC-082:** The file contains the component class with an inline
+  multiline template, and no separate HTML, JS, or CSS files. The command
+  takes only `--path`, always prints the created file's path, and never
+  overwrites an existing file; delete the file first to redo it. Remove
+  `--force`, `--dry-run`, `--js`, `--css`, `--template`, and `--verbose`
+  from wrapper scripts, because they now fail with a usage error.
+- **DJC-083:** `citry list` prints one row per component: all its
+  registered names, the class name, and the file that defines it
+  (relative to the working directory when inside it; empty when there is
+  no source file). `citry ext list` prints extension names. Update
+  anything that parses the output, and remove the old flags, which now
+  fail with a usage error.
 
 ## Migrate `Component.View`
 
-If the project defines `Component.View`, finish the template and component
-port first, then follow [Migrate from Component.View](/guides/migrate-from-component-view/).
-It shows how to keep a verb-shaped route working before splitting it into
+If the project defines `Component.View`, finish the template and
+component port first, then follow
+[Migrate from Component.View](/guides/migrate-from-component-view/). It
+shows how to keep a verb-shaped route working before you split it into
 named, typed Citry Events.
+
+| ID | django-components | Citry: what to do | Impact |
+|---|---|---|---|
+| <span id="djc-088">DJC-088</span> | `Component.as_view()` dispatches `get` / `post` to a live component; `render_to_response(context=..., slots=...)` | Move handlers into `class Events(ViewEvents):`, a Citry Events class for GET/POST-style handlers, and return a component or an Events action (such as a redirect). Details below. | 🔴 |
+| <span id="djc-089">DJC-089</span> | `get_component_url()`, `public=False`, `get_route_path()` with `args` / `kwargs` | Public methods in `Events` get fixed routes. Build URLs with `events.url(name, query=..., fragment=...)` or `get_event_url(...)`. Details below. | 🔴 |
+
+Details:
+
+- **DJC-088:** Handler inputs are typed `data` and a request object that
+  does not depend on Django. `self` is the configuration for that one
+  call, not a rendered component, so move values you read from the live
+  component into explicit data, context, State, or application services.
+  Replace manual request parsing with a data class.
+- **DJC-089:** There is no `public` flag: expose a handler by putting it
+  in `Events`, and hide it by leaving it out. There is no custom route
+  per component. Keep query and fragment inputs, but move route
+  parameters into typed event data. Use named handlers and the URL
+  builders for call sites you want to keep stable. The method-only
+  `ViewEvents` route has no URL builder of its own; treat it as a first
+  step of the port, not as a routing API.
+
+## Update output tests { #update-exact-output-tests }
+
+These differences do not change what the browser shows, but error
+assertions and exact HTML snapshots may need updating.
+
+| ID | django-components | Citry | Impact |
+|---|---|---|---|
+| <span id="djc-003">DJC-003</span> | Single quotes escaped as `&#x27;` | Escaped as `&#39;`, the same character. Update tests that assert the old bytes. | 🟢 |
+| <span id="djc-005">DJC-005</span> | Inline JS/CSS containing its own end tag raises `RuntimeError` | Raises `ValueError`: `...contains a '</script>' end tag. This is not allowed.` | 🟢 |
+| <span id="djc-006">DJC-006</span> | A runtime script on every document render | Added only when the output needs browser behavior: Vue syntax, component JS, `js_data()` values, or Events. Drop assertions that it is always present. | 🟢 |
+| <span id="djc-038">DJC-038</span> | Parentheses opt a value into Python: `disabled=(not editable)` | The `c-` prefix makes it an expression; parentheses still work but are not needed: `c-disabled="not editable"`. | 🟢 |
+| <span id="djc-041">DJC-041</span> | Helpers like `len` added to the context on each call | Python builtins such as `len` and `str` raise `NameError` unless you supply them. Register helpers once: `Citry(template_globals={"len": len})`. | 🟢 |
+| <span id="djc-044">DJC-044</span> | A plain base class with a `Media` class contributes its entries | Reusable bases and plain classes in `extend` contribute their `Dependencies`. Details below. | 🟢 |
+| <span id="djc-048">DJC-048</span> | `js = ...` with `js_file = None` (or the reverse) raises | Allowed; only two values that are both set conflict. You can restore an explicit `= None`. | 🟢 |
+| <span id="djc-049">DJC-049</span> | `://example.com/x.js` emitted as `%3A//example.com/...` | Emitted as written. Update tests that assert `%3A//`. | 🟢 |
+| <span id="djc-053">DJC-053</span> | Error paths include a slot segment for content rendered through a slot | Content in a fill or fallback shows `Card(slot:body)`. A component placed by a fill shows only the chain of components that wrote it (`Page > Failing`). Details below. | 🟢 |
+| <span id="djc-063">DJC-063</span> | Text beside `{% fill %}` raises `TemplateSyntaxError` | The parent's first render raises `SyntaxError`: `Text cannot appear next to '<c-fill>'` (or `Expression cannot appear...` for a variable). | 🟢 |
+| <span id="djc-078">DJC-078</span> | `NotRegistered`: "The component 'x' was not found" | Still `NotRegistered`, now "No component registered as 'x'." Details below. | 🟢 |
+
+Details:
+
+- **DJC-044:** Relative paths resolve from the module that declares them,
+  and the files are registered to the component that uses them. Keep
+  reusable assets on the class that owns them. To cut or choose branches,
+  use `Dependencies = None`, `extend = False`, or an explicit `extend`
+  list.
+- **DJC-053:** django-components wrote `provider(slot:content)`. Update
+  slot-segment assertions to the `Card(slot:body)` form, and drop the
+  slot segment only from paths where a component placed by a fill fails.
+- **DJC-078:** When `<c-component c-is="...">` cannot resolve a computed
+  name, the message also suggests `<c-element>` for a plain HTML element.
+  Code that only catches the exception type needs no change.
 
 ## Verify the migration
 
-Before removing django-components:
+Before you remove django-components:
 
-- Search again for its component, slot, fill, provide, dependency, and cache
-  tags, plus its settings and registry imports.
-- Run the original unit and snapshot tests, updating exact HTML assertions
-  only where the checklist identifies an output-only difference.
-- Exercise browser initialization, Vue behavior, component assets, forms,
-  CSRF protection, fragments, and event endpoints used by the migrated pages.
-- Check that production serves Citry's generated asset routes and that no old
-  component source directory is exposed as a static directory.
-- Run `citry list` and `citry inspect --json` against the same `Citry` instance
-  the application serves.
+- Search again for its component, slot, fill, provide, dependency, and
+  cache tags, its settings, and its registry imports.
+- Run the original unit and snapshot tests. Change exact HTML assertions
+  only where the checklist marks an output-only difference.
+- In the browser, exercise the migrated pages' startup, Vue behavior,
+  component assets, forms, CSRF protection, fragments, and event
+  endpoints.
+- Check that production serves Citry's generated asset routes, and that
+  no old component source directory is exposed as a static directory.
+- Run `citry list` and `citry inspect --json` against the same `Citry`
+  instance the application serves.
 
-## Give this migration to a coding agent
+## Use a coding agent { #give-this-migration-to-a-coding-agent }
 
-Use the Markdown version of this page so the agent receives the checklist
-without navigation or presentation markup. Start with an audit, review its
-plan, and only then ask it to edit the project.
+Give the agent the Markdown version of this page, which has the
+checklist without navigation or page markup. Ask for an audit first,
+review its plan, and only then let it edit the project:
 
 ```text
-Read this project's AGENTS.md, README, dependency files, and test commands.
-Detect the installed Citry and django-components versions before choosing
-documentation. Read https://citry.dev/llms.txt and use its version selector to
-find the matching Markdown version of the "Migrate from django-components"
-guide. If matching Citry documentation is unavailable, report the mismatch
-instead of applying instructions from another version.
+Read this project's AGENTS.md, README, dependency files, and
+test commands. Detect the installed Citry and django-components
+versions. Read https://citry.dev/llms.txt and use its version
+selector to find the Markdown version of the "Migrate from
+django-components" guide that matches the installed Citry. If
+there is none, report the mismatch instead of following another
+version.
 
-Audit this project for every DJC-### item in the migration guide. For each
-applicable item, report the matching file paths, the required rewrite, and its
-risk. Mark every other item not applicable or blocked. Include the existing
-Python, browser, and snapshot commands that should verify the work.
+Audit the project for every DJC-### item in the guide. For each
+item that applies, report the matching files, the rewrite, and
+its risk. Mark every other item not applicable or blocked. List
+the Python, browser, and snapshot commands that will verify the
+work.
 
-Do not edit files yet. Produce a staged plan that migrates one connected group
-of components at a time and keeps the application runnable between stages. Do
-not add django-components compatibility shims.
+Do not edit files yet. Produce a staged plan that migrates one
+connected group of components at a time and keeps the app
+runnable between stages. Do not add django-components
+compatibility shims.
 ```
 
-After approving the audit, tell the agent which stage to implement. Require it
-to report the `DJC-###` items addressed and the verification results before it
-continues to the next stage.
+After you approve the audit, tell the agent which stage to implement.
+Ask it to report the `DJC-###` items it addressed and the verification
+results before it starts the next stage.
