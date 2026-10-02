@@ -362,8 +362,7 @@ accepts.
 
     - On a component tag such as `<c-ActionButton>`, rendering the
       template that writes the tag raises `RuntimeError`, even for a
-      `None` value. A name that starts with `^` or an uppercase `V-`
-      reaches the component as a plain attribute instead.
+      `None` value.
     - On an HTML element, on a page that uses Vue, the render raises
       `TypeError`, unless the value is `None` or `False`. It fails even
       when the template writes the same binding on the element, such as

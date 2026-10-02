@@ -1823,6 +1823,23 @@ fn vue_directive_name(name: &str) -> Option<&str> {
     Some(&directive[..directive.find([':', '.']).unwrap_or(directive.len())])
 }
 
+/// Like `vue_directive_name`, but also returns a directive for two spellings
+/// that a component tag or `<c-slot>` would otherwise pass on as a plain
+/// attribute without a trace. An uppercase `V-` prefix names its directive, because HTML treats
+/// `V-SHOW` as the same name as `v-show`. The `^title` key gives `attr`,
+/// because Vue's runtime reads it as `v-bind:title.attr`. Mirrors
+/// `_vue_directive_name` in `citry.client_directives`.
+fn citry_tag_vue_directive_name(name: &str) -> Option<&str> {
+    // A bare `^` is rejected too, because no plain attribute has that name.
+    if name.starts_with('^') {
+        return Some("attr");
+    }
+    if let Some(directive) = name.strip_prefix("V-") {
+        return Some(&directive[..directive.find([':', '.']).unwrap_or(directive.len())]);
+    }
+    vue_directive_name(name)
+}
+
 /// What to write instead of a Vue directive that a component tag cannot carry.
 ///
 /// Shared wording with `citry.client_directives`, which reports the same
@@ -1845,7 +1862,7 @@ fn component_tag_directive_hint(directive: &str) -> &'static str {
         "on" => {
             "Write each listener as '@event=\"...\"' or 'v-on:event=\"...\"', or bind a listener object with a plain 'v-on=\"...\"'."
         }
-        "prop" => "Pass the value as a component prop with ':name=\"...\"'.",
+        "prop" | "attr" => "Pass the value as a component prop with ':name=\"...\"'.",
         // Pointing these at an element inside the child would only move the
         // failure, because component templates reject them everywhere.
         "once" | "memo" => {
@@ -1885,7 +1902,7 @@ fn validate_component_tag_vue_directives(
         }
         let name = attr.key.content.as_str();
         let logical_name = name.strip_prefix("c-").unwrap_or(name);
-        let Some(directive) = vue_directive_name(logical_name) else {
+        let Some(directive) = citry_tag_vue_directive_name(logical_name) else {
             continue;
         };
         let has_value = attr
@@ -1914,7 +1931,13 @@ fn validate_component_tag_vue_directives(
                 &attr.token,
                 format!(
                     "Vue directive '{name}' is not supported on the component tag '<{tag_name}>'. {}",
-                    component_tag_directive_hint(directive)
+                    // Vue reads `V-SHOW` as a plain attribute, so the prefix
+                    // is the first thing to fix, whatever directive follows it.
+                    if logical_name.starts_with("V-") {
+                        "Vue reads a directive only when its 'v-' prefix is lowercase."
+                    } else {
+                        component_tag_directive_hint(directive)
+                    }
                 ),
             ));
         }
@@ -1961,7 +1984,7 @@ fn slot_tag_directive_hint(directive: &str) -> &'static str {
         "show" => "Wrap the slot in an element that carries 'v-show'.",
         "slot" => "Name the slot with 'name=\"...\"'; the caller fills it with '<c-fill name=\"...\">'.",
         "on" => "Put the listener on an element around the slot or inside the fill.",
-        "bind" | "prop" => {
+        "bind" | "prop" | "attr" => {
             "Vue slot props are not supported. Pass Python slot data as a plain attribute ('item=\"text\"') or a 'c-' attribute ('c-item=\"expr\"')."
         }
         _ => "Put the directive on an element around the slot or inside its fallback content.",
@@ -1991,13 +2014,14 @@ fn validate_slot_tag_vue_directives(
         let name = attr.key.content.as_str();
         let logical_name = name.strip_prefix("c-").unwrap_or(name);
         // The `:` and `@` shorthands spell `v-bind` and `v-on`; every other
-        // directive form (`v-*`, `#name`, `.name`) is named by the helper.
+        // directive form (`v-*` or `V-*`, `#name`, `.name`, `^name`) is
+        // named by the helper.
         let directive = if logical_name.starts_with(':') {
             Some("bind")
         } else if logical_name.starts_with('@') {
             Some("on")
         } else {
-            vue_directive_name(logical_name)
+            citry_tag_vue_directive_name(logical_name)
         };
         let Some(directive) = directive else {
             continue;
@@ -2006,7 +2030,9 @@ fn validate_slot_tag_vue_directives(
             &attr.token,
             format!(
                 "Vue directive '{name}' is not supported on '<{tag_name}>'. Its attributes other than 'name' and 'required' become Python slot data, which the browser never sees. {}",
-                slot_tag_directive_hint(directive)
+                // Every directive is rejected here, so `V-IF` gets the same
+                // advice as `v-if`.
+                slot_tag_directive_hint(&directive.to_ascii_lowercase())
             ),
         ));
     }

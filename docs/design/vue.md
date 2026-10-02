@@ -1231,10 +1231,11 @@ message that names the directive and says what to write instead:
 | `v-slot`, `#name` | `<c-fill name="...">` |
 | `v-html`, `v-text` | a prop or a fill rendered inside the child |
 | `v-show`, `v-if`, `v-else-if`, or `v-else` with an argument or modifiers | the plain directive |
-| `.name`, `v-bind.prop`, or another argument-less `v-bind` modifier | `:name` props |
+| `.name`, `^name`, `v-bind.prop`, or another argument-less `v-bind` modifier | `:name` props |
 | `v-once`, `v-memo`, `v-cloak`, `v-pre`, `v-is` | the same directive on an element in the child's template |
 | `v-c-*`, `v-citry-*` | nothing: Citry reserves these names for its own browser runtime |
 | a built-in name with capitals (`v-If`, `v-On:click`) | the lowercase name |
+| an uppercase `V-` prefix (`V-SHOW`, `V-ON:click`) | the same name with a lowercase `v-`, if this table allows it |
 | `v-model:` or `v-on:` with an empty argument | a named prop or event, or plain `v-model` |
 
 A `c-` spelling of a rejected directive (`c-v-for`) fails the same way. The

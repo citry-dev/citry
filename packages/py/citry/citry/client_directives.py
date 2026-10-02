@@ -179,6 +179,7 @@ _COMPONENT_TAG_DIRECTIVE_HINTS = {
         "or bind a listener object with a plain 'v-on=\"...\"'."
     ),
     "prop": "Pass the value as a component prop with ':name=\"...\"'.",
+    "attr": "Pass the value as a component prop with ':name=\"...\"'.",
     # Pointing these at an element inside the child would only move the
     # failure, because component templates reject them everywhere.
     "once": _ONCE_MEMO_HINT,
@@ -209,6 +210,9 @@ _VUE_BUILT_IN_DIRECTIVES = frozenset(
 )
 _CONDITION_KEYS = frozenset({"v-if", "v-else-if", "v-else"})
 _OTHER_DIRECTIVE_HINT = "Put the directive on an element inside the child's template."
+# Vue reads `V-SHOW` as a plain attribute, so a template that means a
+# directive must spell the prefix in lowercase.
+_UPPERCASE_PREFIX_HINT = "Vue reads a directive only when its 'v-' prefix is lowercase."
 
 
 def _vue_directive_name(key: str) -> str | None:
@@ -219,7 +223,14 @@ def _vue_directive_name(key: str) -> str | None:
     if len(key) > 1 and key.startswith("."):
         # `.name` is Vue's shorthand for binding a DOM property.
         return "prop"
-    if not key.startswith("v-"):
+    if key.startswith("^"):
+        # `^name` is the prop key Vue's runtime reads as "set the HTML
+        # attribute `name`", the same as `v-bind:name.attr`. A bare `^` is
+        # rejected too, because no plain attribute has that name.
+        return "attr"
+    # HTML names are case-insensitive, so `V-SHOW` is reported as a directive
+    # rather than passed on as a plain attribute that Vue would ignore.
+    if key[:2] not in {"v-", "V-"}:
         return None
     return re.split(r"[:.]", key[2:], maxsplit=1)[0]
 
@@ -261,7 +272,9 @@ def unsupported_component_tag_directive_message(key: str, *, tag_name: str) -> s
             return None
         if key.startswith("v-") and (directive == "model" or _is_custom_vue_directive(directive)):
             return None
-    if directive.lower() != directive:
+    if key.startswith("V-"):
+        hint = _UPPERCASE_PREFIX_HINT
+    elif directive.lower() != directive:
         hint = "Vue's own directives and Citry's 'v-c-*' and 'v-citry-*' names are lowercase."
     elif directive.startswith(("c-", "citry-")):
         hint = "Citry reserves 'v-c-*' and 'v-citry-*' for its own browser runtime."
@@ -287,6 +300,7 @@ _SLOT_TAG_DIRECTIVE_HINTS = {
     "bind": _SLOT_DATA_HINT,
     "on": "Put the listener on an element around the slot or inside the fill.",
     "prop": _SLOT_DATA_HINT,
+    "attr": _SLOT_DATA_HINT,
 }
 _OTHER_SLOT_DIRECTIVE_HINT = "Put the directive on an element around the slot or inside its fallback content."
 
@@ -303,8 +317,8 @@ def unsupported_slot_tag_directive_message(key: Any) -> str | None:
     """
     if not isinstance(key, str):
         return None
-    # The `:` and `@` shorthands spell `v-bind` and `v-on`; `v-*`, `#name`,
-    # and `.name` are named by the shared helper.
+    # The `:` and `@` shorthands spell `v-bind` and `v-on`; `v-*` or `V-*`,
+    # `#name`, `.name`, and `^name` are named by the shared helper.
     if key.startswith(":"):
         directive: str | None = "bind"
     elif key.startswith("@"):
@@ -313,7 +327,8 @@ def unsupported_slot_tag_directive_message(key: Any) -> str | None:
         directive = _vue_directive_name(key)
     if directive is None:
         return None
-    hint = _SLOT_TAG_DIRECTIVE_HINTS.get(directive, _OTHER_SLOT_DIRECTIVE_HINT)
+    # Every directive is rejected here, so `V-IF` gets the same advice as `v-if`.
+    hint = _SLOT_TAG_DIRECTIVE_HINTS.get(directive.lower(), _OTHER_SLOT_DIRECTIVE_HINT)
     return (
         f"Vue directive {key!r} is not supported on '<c-slot>'. Its attributes other than 'name' and 'required' "
         f"become Python slot data, which the browser never sees. {hint}"

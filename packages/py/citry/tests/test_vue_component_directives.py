@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -74,6 +75,11 @@ class TestRejectedDirectives:
             ('v-bind.prop="props"', "bind each prop as ':name=\"...\"'"),
             ('.value="text"', "Pass the value as a component prop with ':name=\"...\"'."),
             ('c-v-for="row in rows"', "Repeat the component with '<c-for>'"),
+            # Vue reads an uppercase `V-` as a plain attribute, so the child
+            # would get it as a Python kwarg. `^title` forces an attribute.
+            ('V-SHOW="open"', "Vue reads a directive only when its 'v-' prefix is lowercase."),
+            ("V-focus", "Vue reads a directive only when its 'v-' prefix is lowercase."),
+            ('^title="x"', "Pass the value as a component prop with ':name=\"...\"'."),
         ],
     )
     def test_directly_authored_directive_fails_to_compile(self, attribute, hint):
@@ -87,7 +93,10 @@ class TestRejectedDirectives:
         assert f"Vue directive '{name}' is not supported on the component tag '<c-child>'. " in message
         assert hint in message
 
-    @pytest.mark.parametrize("key", ["v-for", "v-html", "#header", "v-once"])
+    @pytest.mark.parametrize(
+        "key",
+        ["v-for", "v-html", "#header", "v-once", "^title", "V-SHOW", "V-ON:click", "V-BIND:x", "V-focus", "V-If"],
+    )
     def test_directive_from_a_python_spread_fails_at_render(self, key):
         page = _pages(
             "<section>child</section>",
@@ -95,7 +104,42 @@ class TestRejectedDirectives:
             {"attrs": {key: "open"}},
         )
 
-        with pytest.raises(RuntimeError, match=rf"Vue directive '{key}' is not supported on the component tag"):
+        with pytest.raises(
+            RuntimeError, match=rf"Vue directive '{re.escape(key)}' is not supported on the component tag"
+        ):
+            page().render()
+
+    @pytest.mark.parametrize(
+        ("key", "hint"),
+        [
+            ("V-SHOW", "Vue reads a directive only when its 'v-' prefix is lowercase."),
+            ("^title", "Pass the value as a component prop"),
+            ("^", "Pass the value as a component prop"),
+        ],
+    )
+    def test_directive_from_a_python_spread_names_the_fix(self, key, hint):
+        page = _pages(
+            "<section>child</section>",
+            '<main><c-child c-bind="attrs" /></main>',
+            {"attrs": {key: "open"}},
+        )
+
+        with pytest.raises(RuntimeError, match=re.escape(hint)):
+            page().render()
+
+    @pytest.mark.parametrize("key", ["^title", "V-SHOW"])
+    def test_directive_from_a_python_spread_fails_even_when_removed(self, key):
+        # A None value removes a plain attribute, but the key itself is the
+        # mistake, so it fails the same way a lowercase directive key does.
+        page = _pages(
+            "<section>child</section>",
+            '<main><c-child c-bind="attrs" /></main>',
+            {"attrs": {key: None}},
+        )
+
+        with pytest.raises(
+            RuntimeError, match=rf"Vue directive '{re.escape(key)}' is not supported on the component tag"
+        ):
             page().render()
 
     @pytest.mark.parametrize(
@@ -205,6 +249,11 @@ class TestRejectedDirectives:
         ) is (None)
         with pytest.raises(RuntimeError, match="Vue directive 'v-for'"):
             classify_component_tag_client_binding_key("v-for", tag_name="c-child")
+        # `<c-element>` leaves these to the HTML element check, which rejects
+        # any Python-supplied Vue name in every letter case.
+        for key in ("V-SHOW", "^title"):
+            kind = classify_component_tag_client_binding_key(key, tag_name="c-element", component_boundary=False)
+            assert kind is None
 
 
 class TestShownComponentCall:
@@ -644,6 +693,8 @@ class TestSlotDirectives:
             ('@click="go()"', "Put the listener on an element around the slot or inside the fill."),
             ("#header", "Name the slot with 'name=\"...\"'"),
             ('c-v-for="row in rows"', "Repeat the slot with '<c-for>'."),
+            ('V-IF="open"', "use '<c-if>' when Python decides"),
+            ('^title="x"', "Vue slot props are not supported."),
         ],
     )
     def test_directly_authored_directive_fails_to_compile(self, attribute, hint):
@@ -658,7 +709,7 @@ class TestSlotDirectives:
         assert self._SLOT_DATA in message
         assert hint in message
 
-    @pytest.mark.parametrize("key", ["v-if", ":item", "@click", "#header", "v-custom:arg.mod"])
+    @pytest.mark.parametrize("key", ["v-if", ":item", "@click", "#header", "v-custom:arg.mod", "V-IF", "^title"])
     def test_directive_from_a_python_spread_fails_at_render(self, key):
         registry = Citry(autodiscover=False)
 
@@ -677,8 +728,13 @@ class TestSlotDirectives:
                 <main><c-child>body</c-child></main>
             """
 
-        with pytest.raises(RuntimeError, match=rf"Vue directive '{key}' is not supported on '<c-slot>'"):
+        with pytest.raises(
+            RuntimeError, match=rf"Vue directive '{re.escape(key)}' is not supported on '<c-slot>'"
+        ) as caught:
             Page().render()
+        # An uppercase spelling gets the same advice as the lowercase one.
+        if key == "V-IF":
+            assert "use '<c-if>' when Python decides" in str(caught.value)
 
     def test_plain_slot_data_still_reaches_the_fill(self):
         registry = Citry(autodiscover=False)

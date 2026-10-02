@@ -126,6 +126,30 @@ mod tests {
                 "'v-On:click'",
                 "lowercase",
             ),
+            // Vue reads an uppercase `V-` as a plain attribute, so these
+            // would reach the child as Python kwargs without a trace.
+            (
+                r#"<c-child V-SHOW="open" />"#,
+                "'V-SHOW'",
+                "'v-' prefix is lowercase",
+            ),
+            (
+                r#"<c-child V-focus />"#,
+                "'V-focus'",
+                "'v-' prefix is lowercase",
+            ),
+            (
+                r#"<c-child c-V-IF="open" />"#,
+                "'c-V-IF'",
+                "'v-' prefix is lowercase",
+            ),
+            (r#"<c-child ^title="x" />"#, "'^title'", "':name="),
+            (r#"<c-child c-^title="x" />"#, "'c-^title'", "':name="),
+            (
+                r#"<c-component is="child" V-SHOW="open" />"#,
+                "'V-SHOW'",
+                "'v-' prefix is lowercase",
+            ),
             (r#"<c-child v-model:="q" />"#, "'v-model:'", "Name the prop"),
             (r#"<c-child v-on:="go()" />"#, "'v-on:'", "'@event="),
             (
@@ -200,6 +224,11 @@ mod tests {
             (r##"<c-slot #header />"##, "'#header'", "Name the slot with"),
             (r#"<c-slot v-focus />"#, "'v-focus'", "fallback content"),
             (r#"<c-slot c-v-if="open" />"#, "'c-v-if'", "<c-if>"),
+            // HTML names are case-insensitive and `^title` sets an attribute
+            // in Vue, so neither may become slot data.
+            (r#"<c-slot V-IF="open" />"#, "'V-IF'", "<c-if>"),
+            (r#"<c-slot ^title="x" />"#, "'^title'", "Vue slot props"),
+            (r#"<c-slot c-V-FOR="rows" />"#, "'c-V-FOR'", "<c-for>"),
         ];
         for (source, name, hint) in cases {
             let message = format!("{}", parse_template(source, None, None).unwrap_err());

@@ -396,10 +396,11 @@ The template fails to compile when a component tag has one of these:
 | `v-slot` or `#name` | `<c-fill name="...">` inside the component tag |
 | `v-html`, `v-text` | A prop or a fill that the child renders |
 | `v-if`, `v-else-if`, `v-else`, or `v-show` with an argument or modifiers | The directive without them |
-| `.name` or `v-bind.prop` | A prop, `:name="..."` |
+| `.name`, `^name`, or `v-bind.prop` | A prop, `:name="..."` |
 | `v-cloak`, `v-pre` | The directive on an element in the child's template |
 | `v-once`, `v-memo` | Nothing: they are not supported on elements either |
 | `v-If` or another capitalized built-in name | The lowercase name |
+| `V-SHOW` or another name with an uppercase `V-` | The same name with a lowercase `v-`, if this table allows it |
 
 It also fails when `v-if`, `v-else-if`, `v-show`, or `v-model` has no
 expression, or when `v-else` has one.
