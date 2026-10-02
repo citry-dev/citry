@@ -77,6 +77,10 @@ the fields of `ContactIn`. Citry checks each value against its type before
 the handler runs. A value of the wrong type fails the call with an error for
 that field, and `submit` does not run.
 
+Number and range inputs send numbers. Every other input sends text, so
+declare its field as `str` and convert it in the handler. A checked checkbox
+sends `"on"`, which a `bool` field rejects.
+
 ## Show validation errors
 
 Raise [`EventError`][citry.ext.events.EventError] with a message and an error
@@ -97,8 +101,9 @@ show their own errors. To show one banner for the whole component, call
 
 ## Disable the button while the form is sending
 
-[`$loading('submit')`][$loading] is true from the moment the submit is queued
-until the response arrives:
+[`$loading('submit')`][$loading] is true from the moment the user submits
+until the response arrives, including any time spent waiting behind other
+calls:
 
 ```citry-html
 <button type="submit" :disabled="$loading('submit')">
@@ -115,7 +120,7 @@ until the response arrives:
 
 !!! note "Errors when you call a handler from JavaScript"
 
-    An `@c-*` attribute handles a failed call for you: the error appears in
-    `$error()` and nothing else happens. When your own code calls a handler
-    with `$sendEvent(...)`, a failed call also rejects the returned Promise,
-    so catch it with `try`/`catch` or `.catch(...)`.
+    When the server returns an error for an `@c-*` call, the error appears
+    in `$error()` and nothing else happens. When your own code calls a
+    handler with `$sendEvent(...)`, a failed call also rejects the returned
+    Promise, so catch it with `try`/`catch` or `.catch(...)`.
