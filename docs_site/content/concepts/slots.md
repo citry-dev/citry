@@ -10,8 +10,9 @@ supplies what goes inside. A modal, for example, always renders its border,
 body, and button row, but every page that uses it puts in a different
 message and different buttons.
 
-A slot is a place in the component's template that the caller fills with
-content. The content that goes into a slot is called a fill.
+A slot is a place in the component's template where each use of the
+component can insert content. The content that goes into a slot is called
+a fill.
 
 If you have not used a slot yet, start with
 [Add flexible content](/getting-started/add-slots/).
@@ -54,7 +55,7 @@ optional.
 
 Without a `Slots` class, a component accepts any slot name. With one, Citry
 rejects a fill for a slot the class does not list, and a `<c-slot name="...">`
-in the component's own template whose name is not listed.
+with a fixed name that the class does not list.
 
 ## Fill slots from a template
 
@@ -106,8 +107,8 @@ The first button says `Continue`, and the second says `Save changes`.
 
 ## Know which variables a fill can read
 
-A fill is written in the outer template, so it reads that template's
-variables. A fallback is written in the component, so it reads the
+A fill is written in the template that uses the component, so it reads
+that template's variables. A fallback is written in the component, so it reads the
 component's variables:
 
 ```citry-html
@@ -241,6 +242,33 @@ insert that variable in the fill:
 
 `{{ original }}` renders the slot's fallback content at that point.
 
+## Give a slot a default fill
+
+A default other than `None` in the `Slots` class acts as a fill that the
+component supplies itself. It takes priority over the fallback inside
+`<c-slot>`:
+
+```citry
+from citry import Component, SlotInput
+
+
+class Notice(Component):
+    class Slots:
+        title: SlotInput = "Notice"
+        details: SlotInput | None = None
+
+    template = """
+      <aside>
+        <h2><c-slot name="title">Fallback title</c-slot></h2>
+        <c-slot name="details" />
+      </aside>
+    """
+```
+
+When a page does not fill `title`, Citry shows `Notice`, not
+`Fallback title`. A `None` default means no fill, so a fallback inside
+`<c-slot name="details">` would still show.
+
 ## Require a slot conditionally
 
 A slot without a default in the `Slots` class must always be filled. When a
@@ -266,35 +294,8 @@ When a Python expression decides whether the slot is required, use
 />
 ```
 
-A true result behaves like `required`, and a false result leaves the slot
+A truthy result behaves like `required`, and a falsy result leaves the slot
 optional.
-
-## Give a slot a default fill
-
-A default other than `None` in the `Slots` class acts as a fill that the
-component supplies itself. It takes priority over the fallback inside
-`<c-slot>`:
-
-```citry
-from citry import Component, SlotInput
-
-
-class Notice(Component):
-    class Slots:
-        title: SlotInput = "Notice"
-        details: SlotInput | None = None
-
-    template = """
-      <aside>
-        <h2><c-slot name="title">Fallback title</c-slot></h2>
-        <c-slot name="details" />
-      </aside>
-    """
-```
-
-When the caller does not fill `title`, Citry shows `Notice`, not
-`Fallback title`. A `None` default means no fill, so a fallback inside
-`<c-slot name="details">` would still show.
 
 ## Compute slot names
 
@@ -314,7 +315,7 @@ header creates one slot per column:
 </c-for>
 ```
 
-The caller can then fill `header-name`, `header-age`, and so on.
+A template that uses the component can then fill `header-name`, `header-age`, and so on.
 `<c-fill c-name="...">` computes the name of a fill the same way.
 
 Prefer fixed names when the set of slots is known in advance. They are
@@ -322,8 +323,8 @@ easier to find and Citry can check them.
 
 !!! note "Computed names and a `Slots` class"
 
-    A computed fill name must be listed in the component's `Slots` class, or
-    Citry raises `TypeError` when the component renders. Names with dashes,
+    When the component has a `Slots` class, a computed fill name must be
+    listed in it, or Citry raises `TypeError` when the component renders. Names with dashes,
     such as `header-name`, cannot be Python field names, so they work only
     in a component without a `Slots` class. Citry does not check a slot's
     computed name against the class: if the name is not listed, no fill can
