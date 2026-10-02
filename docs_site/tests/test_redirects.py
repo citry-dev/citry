@@ -32,7 +32,21 @@ def test_redirect_stub_forwards_and_self_excludes(tmp_path: Path) -> None:
     # Canonical is absolute; the refresh/JS href is relative (base-path-safe).
     assert '<link rel="canonical" href="https://x.test/new/page/">' in stub
     href = json.dumps("../../new/page/")
-    assert f"window.location.replace({href});" in stub
+    assert f"window.location.replace({href} + window.location.search + window.location.hash);" in stub
+
+
+def test_redirect_stub_keeps_fragment_before_meta_refresh_fires(tmp_path: Path) -> None:
+    # A link to /old/#section must land on /new/#section. Only the script can
+    # read the fragment, so it has to run before the meta refresh is parsed and
+    # append location.hash; the meta refresh and link remain the no-JS route.
+    emit_redirects(tmp_path, site_url="https://x.test", redirects={"/old/": "/new/"})
+
+    stub = (tmp_path / "old" / "index.html").read_text(encoding="utf-8")
+    script = stub.index("<script>")
+    assert "window.location.hash" in stub[script : stub.index("</script>")]
+    assert script < stub.index('http-equiv="refresh"')
+    assert '<meta http-equiv="refresh" content="0; url=../new/">' in stub
+    assert '<a href="../new/">' in stub
 
 
 @pytest.mark.parametrize(

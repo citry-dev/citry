@@ -712,7 +712,10 @@ the catalog route, and publishes the YAML beside the rendered guide so authored
 the grouped UI overview; there is no synchronized copy under
 `docs_site/content`.
 Add a published redirect to `redirects.yml`; redirect chains and unsafe paths
-are rejected.
+are rejected. With JavaScript, the redirect page carries the query string and
+`#fragment` over, so `/old/#section` lands on `/new/#section`. Without
+JavaScript, the visitor lands at the top of the new page, because plain HTML
+cannot read the fragment.
 
 The builder reads these variables when the Python process starts:
 
