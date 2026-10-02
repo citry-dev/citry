@@ -236,9 +236,11 @@ does not remove that element's identity.
 
 `<c-element>` always represents the selected ordinary HTML element. Both the
 static form `<c-element is="section">` and dynamic form
-`<c-element c-is="tag_name">` apply `#c-key` and `#c-ignore` to the produced
-element. The runtime-selected path must forward those attributes to the
-element rather than create component-range semantics.
+`<c-element c-is="tag_name">` apply `#c-key` to the produced element. The
+runtime-selected path must forward that attribute to the element rather than
+create component-range semantics. The parser rejects `#c-ignore` on either
+form, because the checks on a kept element's tag and contents need the tag
+written out; the author writes the plain tag instead.
 
 ## 6. ComponentRange correspondence
 
@@ -668,14 +670,15 @@ contain the existing expression-backed `#c-key` and the static bare
 shape.
 
 Runtime-selected `<c-element>` uses a different, private element-metadata
-channel. The compiler tags its `#c-key` and `#c-ignore` for the element locus;
+channel. The compiler tags its `#c-key` for the element locus;
 `ComponentNode` evaluates the key in the source parent's context and carries
 the normalized element metadata beside `raw_kwargs`. It does not record that
 metadata on the transparent helper invocation and does not expose it through
-user kwargs. `DynamicElement` applies the resulting `data-citry-key` and
-`data-citry-morph` attributes when it constructs the selected `CitryElement`.
-The static `<c-element is="...">` rewrite continues to compile them directly
-as ordinary element attributes.
+user kwargs. `DynamicElement` applies the resulting `data-citry-key`
+attribute when it constructs the selected `CitryElement`. The static
+`<c-element is="...">` rewrite compiles it directly as an ordinary element
+attribute. `#c-ignore` never reaches this channel, because the parser rejects
+it on `<c-element>`.
 
 The compiler implementation plan must pin the tagged tuple and private
 runtime-channel shapes, the exact generated Python source, and their golden

@@ -777,18 +777,28 @@ class TestDynamicElement:
             assert f':key="$citryPrepared.{key_binding}"' in compile_input.template
             assert f':key="{expected_key}"' not in compile_input.template
 
-    def test_dynamic_element_explicitly_rejects_c_ignore_in_prepared_render(self):
+    @pytest.mark.parametrize(
+        "template",
+        [
+            "<c-element c-is=\"'hr'\" #c-ignore />",
+            '<c-element is="div" #c-ignore>x</c-element>',
+        ],
+    )
+    def test_element_rejects_c_ignore_in_both_forms(self, template):
+        # The static form compiles to a plain tag, so the template is
+        # rejected when it loads, before either form picks its tag.
         c = Citry()
 
         class Page(Component):
             citry = c
-            template = "<c-element c-is=\"'hr'\" #c-ignore />"
+
+        Page.template = template
 
         with pytest.raises(
-            TypeError,
-            match=r"'#c-ignore' is not supported on <c-element> \(rendered as <hr>\)\. Write the element",
+            SyntaxError,
+            match=r"'#c-ignore' is not supported on '<c-element>' .*Write the element as a plain HTML tag",
         ):
-            render_prepared_direct(Page())
+            str(Page())
 
     def test_private_key_only_keeps_nonconflicting_ordinary_attrs(self):
         c = Citry()
@@ -825,24 +835,6 @@ class TestDynamicElement:
             """
 
         with pytest.raises(ValueError, match=r"data-citry-key.*#c-key metadata"):
-            render_prepared_direct(Page())
-
-    def test_private_morph_rejects_extension_injection_after_attrs_hook(self):
-        class Inject(Extension):
-            name = "metadata_fixture"
-
-            def on_attrs_resolved(self, ctx):
-                ctx.attrs["data-citry-morph"] = "replace"
-
-        c = Citry(extensions=[Inject])
-
-        class Page(Component):
-            citry = c
-            template = """
-                <c-element c-is="'hr'" #c-ignore />
-            """
-
-        with pytest.raises(ValueError, match=r"data-citry-morph.*#c-ignore metadata"):
             render_prepared_direct(Page())
 
 

@@ -2241,7 +2241,7 @@ def test_dynamic_element_still_rejects_c_ignore() -> None:
         def template_data(self, kwargs, slots):
             return {"tag": "section"}
 
-    with pytest.raises(TypeError, match="#c-ignore"):
+    with pytest.raises(SyntaxError, match=r"'#c-ignore' is not supported on '<c-element>'"):
         render_prepared_direct(App())
 
 

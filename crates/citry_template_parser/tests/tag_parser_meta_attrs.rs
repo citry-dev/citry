@@ -110,11 +110,10 @@ mod tests {
     }
 
     #[test]
-    fn test_meta_ignore_allowed_on_component_and_element_tags() {
+    fn test_meta_ignore_allowed_on_component_tags() {
         for input in [
             "<c-Card #c-ignore />",
             r#"<c-component is="Card" #c-ignore />"#,
-            r#"<c-element c-is="tag" #c-ignore />"#,
         ] {
             let node = parse_first_node(input).unwrap();
             let ignore = node
@@ -124,6 +123,30 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing #c-ignore in {input:?}"));
             assert_eq!(ignore.kind, HtmlAttrKind::Meta);
             assert!(ignore.inner_value.is_none());
+        }
+    }
+
+    #[test]
+    fn test_meta_ignore_rejected_on_element_tag_in_both_forms() {
+        // The static form compiles to a plain tag, so the parser is the only
+        // place that still sees it was written as `<c-element>`.
+        for input in [
+            r#"<c-element c-is="tag" #c-ignore />"#,
+            r#"<c-element is="div" #c-ignore>x</c-element>"#,
+            r#"<c-Element is="div" #c-key="k" #c-ignore>x</c-Element>"#,
+        ] {
+            assert_parse_error(input, "'#c-ignore' is not supported on '<");
+            assert_parse_error(
+                input,
+                "Write the element as a plain HTML tag, such as <div #c-ignore>",
+            );
+        }
+        // `#c-key` keeps working on both forms.
+        for input in [
+            r#"<c-element c-is="tag" #c-key="k" />"#,
+            r#"<c-element is="div" #c-key="k">x</c-element>"#,
+        ] {
+            parse_first_node(input).unwrap();
         }
     }
 

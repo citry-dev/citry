@@ -2023,7 +2023,9 @@ fn validate_slot_tag_vue_directives(
 ///   identity tags. On an element they control ordinary morph behavior; on a
 ///   component tag they describe the child's DOM range. `<c-component>` is a
 ///   component identity tag, while `<c-element>` keeps ordinary selected-
-///   element semantics.
+///   element semantics for `#c-key`.
+/// - `#c-ignore` is rejected on `<c-element>` in both forms, because the
+///   checks on a kept element's tag and contents need the tag written out.
 /// - The reserved structural tags (`<c-if>`, `<c-for>`, `<c-slot>`,
 ///   `<c-fill>`, `<c-raw>`) render no identity of their own, so both metadata
 ///   members are rejected there.
@@ -2051,6 +2053,20 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
                 }
             }
             META_ATTR_IGNORE => {
+                // `<c-element>` picks its tag only when it renders, and its
+                // static form compiles to a plain tag that skips the
+                // contents checks below, so neither form can promise which
+                // contents the browser keeps. The author writes the plain
+                // tag instead.
+                if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+                    return Err(context.error_from_token(
+                        &attr.token,
+                        format!(
+                            "'{}' is not supported on '<{}>' (line {}, column {}). Write the element as a plain HTML tag, such as <div {}>, to keep its contents as the server first rendered them.",
+                            META_ATTR_IGNORE, tag_name, line, col, META_ATTR_IGNORE
+                        ),
+                    ));
+                }
                 if is_reserved_citry_tag_identity(tag_name) {
                     return Err(context.error_from_token(
                         &attr.token,
