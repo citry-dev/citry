@@ -96,8 +96,8 @@ Citry uses these variables only while it imports your application. If you
 edit the file and Citry does not pick up the change, restart the language
 server.
 
-The TypeScript errors are the ones described in
-[TypeScript errors in component JavaScript and templates](/ide/vscode/#typescript-errors-in-component-javascript-and-templates).
+The VS Code page describes these TypeScript errors under
+[TypeScript errors](/ide/vscode/#typescript-errors-in-component-javascript-and-templates).
 In PyCharm, the server needs Node.js and TypeScript's `tsc`, from your
 project's `node_modules` or on `PATH`. When it finds neither, it logs a
 warning and looks again every minute.

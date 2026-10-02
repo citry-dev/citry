@@ -477,7 +477,7 @@ in the component's own template:
 </article>
 ```
 
-See [Keep list items matched to their records](/events/actions/#keep-list-items-matched-to-their-records)
+See [Keep list items matched](/events/actions/#keep-list-items-matched-to-their-records)
 for how keys behave when a handler renders the list again.
 
 ## Keep library contents { #c-ignore-keep-contents-that-a-library-manages }
@@ -577,7 +577,7 @@ binding against the rendered `type`, and the render fails if the binding
 cannot use it. When it comes from a Vue `:type`, the browser checks each new
 type and reports an error for one it cannot bind. The editor also reports
 unsupported elements it can see in the template. See
-[Which elements you can bind](/events/bindings/#which-elements-you-can-bind).
+[Elements you can bind](/events/bindings/#which-elements-you-can-bind).
 
 ### Where `#c-ignore` fails
 

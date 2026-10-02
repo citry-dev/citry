@@ -15,7 +15,7 @@ the [server events](/events/) in the next steps.
 This tutorial uses FastAPI to keep the setup concrete. Citry also works
 with:
 
-- [FastAPI / Starlette](/web-frameworks/#fastapi-and-starlette)
+- [FastAPI and Starlette](/web-frameworks/#fastapi-and-starlette)
 - [Django](/web-frameworks/#django)
 - [Flask](/web-frameworks/#flask)
 - Other [ASGI or WSGI applications](/web-frameworks/#bare-asgi-and-wsgi).

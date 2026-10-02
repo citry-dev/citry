@@ -33,7 +33,7 @@ on the server and puts it in place of the component whose handler ran, here
 HTML, its browser data, and its CSS.
 
 To update a different part of the page instead, pass a `target`, as
-[Update one part of the page](/events/actions/#update-one-part-of-the-page)
+[Update part of the page](/events/actions/#update-one-part-of-the-page)
 shows.
 
 The swap happens only in the open browser tab. Reloading the page shows the
@@ -88,9 +88,8 @@ it shows the new component. That is why the border appears right away.
 ## Next steps
 
 [Event actions](/events/actions/) lists other things a handler can return,
-and [Swap in a different
-component](/events/actions/#swap-in-a-different-component) lists what the new
-component does not keep from the old one. [HTML
+and [Swap in a component](/events/actions/#swap-in-a-different-component)
+lists what the new component does not keep from the old one. [HTML
 fragments](/advanced/html-fragments/) covers rendering part of a page in more
 depth.
 

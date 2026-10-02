@@ -120,7 +120,7 @@ Only the URL carries over unchanged. Update each method body by hand:
     The forms on this page leave out the CSRF token to stay short. Django's
     CSRF middleware still applies to Citry's routes, so a real form needs
     `{% csrf_token %}` or the equivalent `csrfmiddlewaretoken` field. See
-    [Protect event posts from CSRF](/security/#protect-event-posts-from-csrf).
+    [Protect against CSRF](/security/#protect-event-posts-from-csrf).
 
 ## Name each operation
 

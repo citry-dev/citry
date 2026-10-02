@@ -177,7 +177,7 @@ Mark a region in the template with `<c-mark name="...">`, and target it with
 `mark:<name>`. Citry looks the name up in the template of the component whose
 handler ran. Return one `actions.Render` per region that changes, next to
 each other in the list. See
-[Update one part of the page](/events/actions/#update-one-part-of-the-page).
+[Update part of the page](/events/actions/#update-one-part-of-the-page).
 
 Citry has no `parent` or `find_one()` lookup. When Python owns the update,
 return a Render with an explicit target. To render into another component,
@@ -204,7 +204,7 @@ class Events:
 
 If the new render needs slot content, pass it again in the returned
 component. Nothing from an earlier request reappears unless you pass it. See
-[Pass every input when a handler renders again](/events/state/#pass-every-input-when-a-handler-renders-again).
+[Pass every input](/events/state/#pass-every-input-when-a-handler-renders-again).
 
 ## Plan for differences
 

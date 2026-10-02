@@ -41,7 +41,7 @@ Returning `TaskList(...)` is the same as returning
 its options, such as `target` (below).
 
 The new render gets only the inputs you pass. See
-[Pass every input when a handler renders again](/events/state/#pass-every-input-when-a-handler-renders-again).
+[Pass every input](/events/state/#pass-every-input-when-a-handler-renders-again).
 
 ## Keep list items matched { #keep-list-items-matched-to-their-records }
 

@@ -214,7 +214,7 @@ State:
 
 The click makes no request. The next server call from this component sends
 the new value along, unless that call uses GET. See
-[Keep rapid local changes in the browser](/events/bindings/#keep-rapid-local-changes-in-the-browser).
+[Keep changes local](/events/bindings/#keep-rapid-local-changes-in-the-browser).
 
 ## Plan for differences
 
@@ -225,7 +225,7 @@ Python call expressions in the template. It also does not turn an id into a
 model instance for you. Declare State fields, named handlers, and typed
 `data` classes, and load records inside the handler. To control which State
 fields browser code may read or change, see
-[Limit what the browser can read and change](/events/state/#limit-what-the-browser-can-read-and-change).
+[Limit browser access](/events/state/#limit-what-the-browser-can-read-and-change).
 
 ### Build dirty markers
 

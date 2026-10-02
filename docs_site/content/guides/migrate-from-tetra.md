@@ -181,7 +181,7 @@ In the component's JavaScript, listen with the `onEvent` function that
 the component. With the Dispatch first, listeners from the current render
 hear it. When a Render replaces a component that contains this one, the
 Dispatch must come first, without `delay` or `wait=False`; see
-[Return several actions in order](/events/actions/#return-several-actions-in-order).
+[Run several actions](/events/actions/#return-several-actions-in-order).
 
 ## Move Alpine code to Vue
 
@@ -210,13 +210,13 @@ JSON values and is signed, not encrypted. To keep a value out of the page,
 set `_storage = "server"` and leave the field out of `_public`. Server
 storage keeps the values in the server cache, but fields listed in `_public`
 (all fields by default) still reach the browser. See
-[Treat State as client input](/security/#treat-state-as-client-input).
+[Treat State as input](/security/#treat-state-as-client-input).
 
 ### Poll instead of push
 
 Citry's server events run over HTTP, and the server cannot push updates to
 the page. To refresh a part of the page on a timer, use `@c-poll`; see
-[Call a handler on a timer](/events/bindings/#call-a-handler-on-a-timer).
+[Call on a timer](/events/bindings/#call-a-handler-on-a-timer).
 
 ### Accept file uploads
 

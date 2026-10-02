@@ -147,9 +147,9 @@ replaces it:
   it and builds the page when it starts, in one step, so the browser never
   shows an empty page in between.
 
-Most pages are adopted. [Cases where Vue rebuilds the server
-HTML](#cases-where-vue-rebuilds-the-server-html) lists when Vue replaces a
-page or builds part of it in the browser.
+Most pages are adopted.
+[When Vue rebuilds HTML](#cases-where-vue-rebuilds-the-server-html)
+lists when Vue replaces a page or builds part of it in the browser.
 
 Vue starts after the browser has read the whole page, so the content can
 appear first. Your own `defer` and module scripts placed before Citry's
@@ -259,7 +259,7 @@ Citry adds the nonce to the scripts and styles it places, including those
 that dependency hooks add. Your application still generates the nonce and
 sends the matching response header. A `<script>` or `<style>` tag written
 directly in a template does not get the nonce. See
-[Apply a request CSP nonce centrally](/security/#apply-a-request-csp-nonce-centrally).
+[Use a CSP nonce](/security/#apply-a-request-csp-nonce-centrally).
 
 An interactive [HTML fragment](/advanced/html-fragments/) uses the Citry
 runtime the page already loaded. Before starting a fragment, Citry checks
@@ -280,7 +280,7 @@ attributes stay in the HTML, where the browser ignores them.
 
 Set `security_javascript="forbid"` to make serialization fail when the
 output needs browser behavior. See
-[Choose how much JavaScript Citry may deliver](/security/#choose-how-much-javascript-citry-may-deliver).
+[Limit page JavaScript](/security/#choose-how-much-javascript-citry-may-deliver).
 
 ## Preserve page HTML { #preserve-interactive-html }
 
@@ -308,7 +308,7 @@ Citry requests its own scripts and stylesheets with
 a sandboxed iframe or behind a CDN that rewrites asset URLs, a proxy that
 drops the header leaves the page showing its HTML while its components
 never start. See
-[Keep the CORS header when a proxy or CDN serves Citry's files](/security/#keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files).
+[Keep the CORS header](/security/#keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files).
 
 ## Diagnose failures
 
