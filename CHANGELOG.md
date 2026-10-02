@@ -56,6 +56,11 @@ walks through every step.
   `Citry.events.applyActions` or an `on_event_result` hook, needs a
   `publicState` object
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-events-code)).
+- **Handlers that return a different component:** the new component still
+  replaces the calling one, and the old one's browser state is lost, but
+  the outermost component of a page or fragment can no longer be replaced;
+  move the part that changes into a child component or a `<c-mark>` region
+  ([docs](https://citry.dev/events/actions/#replace-the-calling-component-with-a-different-component)).
 - **Page scripts and selectors:** `Citry.alpine`, `Citry.manager`, and
   `Citry.i18n` are removed, and Vue-rendered elements carry no
   `data-cid-*` or `data-citry-key` attributes

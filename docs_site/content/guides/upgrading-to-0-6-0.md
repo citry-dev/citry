@@ -402,6 +402,16 @@ lists the rest.
   several elements becomes one Render action per target. One response can
   return them all as adjacent Render actions without a delay, as long as
   no target sits inside another. See [Event actions](/events/actions/).
+- **Keep the outermost component when a handler returns a different
+  one.** A handler can still return another component to replace the
+  calling one, and the old component's browser state is still lost. The
+  outermost component of a page or HTML fragment cannot be replaced: the
+  browser reports an error that names both components and keeps the page
+  as it was. Move the part that changes into a child component, or into a
+  `<c-mark>` region. Props, listeners, and a `ref` that the parent wrote on
+  the old component's tag do not reach the new one. See [Replace the
+  calling component with a different
+  component](/events/actions/#replace-the-calling-component-with-a-different-component).
 - **Pass `Citry.events.applyActions` only the fields each action
   defines.** It now rejects an action with a field it does not know, a
   value that is not plain JSON such as `undefined`, or an array with gaps

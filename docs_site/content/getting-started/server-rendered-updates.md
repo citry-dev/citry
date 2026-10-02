@@ -25,6 +25,14 @@ fresh component tree, so its HTML, browser data, and CSS travel in the fragment
 response. This public default avoids coupling a component handler to an
 arbitrary page selector.
 
+`Confirmation` takes the form's place inside the `aria-live` region. That
+region belongs to `TutorialPage`, which stays on the page, so screen readers
+announce the confirmation. The swap happens only in the open browser tab:
+reloading the page shows the form again, because `TutorialPage` still
+renders `SignupForm`. [Replace the calling component with a different
+component](/events/actions/#replace-the-calling-component-with-a-different-component)
+lists what the new component does not inherit from the old one.
+
 ## Browser data in the new component
 
 ```python

@@ -1804,8 +1804,12 @@ keys for grouped calls. A candidate is a parent-independent placement key on
 each occurrence, used to match children under the translated parent before
 allocating new IDs. Independent review accepts this for a first bounded stage:
 cross-component morphs whose root has the same component type as the target.
-Class-changing roots remain rejected because the retained parent definition
-and registered Vue component still name the original type.
+A root with a different component is a later stage: the retained parent
+definition and registered Vue component still name the original type, so the
+browser must build the parent's VNode from the occurrence's current
+component. [vue.md](vue.md) ("A Render that replaces a component with a
+different component") describes that stage, which keeps the app root's
+component fixed.
 
 For authored calls, derive the placement key from the source site, component
 type, explicit key or unique unkeyed site, and slot placement route. Grouped
@@ -1988,8 +1992,8 @@ parent, placement and type. For unmatched children, reuse incoming IDs only
 when globally free within the app, otherwise allocate from an attempt-local
 namespace. Aborting preparation must not advance accepted app allocation state.
 Production call records require their key to equal their child ID before both
-fields are translated. Markers, class-changing roots and multiple Render
-actions remain subsequent stages, rather than implied support in this step.
+fields are translated. Markers, roots with a different component, and
+multiple Render actions are later stages, not implied by this step.
 
 The first browser coordinator implementation is source-frozen for independent
 review while mounted-target tests are added. Its synchronous response plan

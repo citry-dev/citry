@@ -341,12 +341,15 @@ the resulting complete tree before publishing the revision. The server does
 not need the rest of the page to render this response. Root identity must be
 an assembly input, not a string replacement over generated identifiers.
 
-Changing the target's component type requires additional handling: an existing
-parent's compiled component call can still name the old type. Same-class
-subtree refresh, different-class replacement, and explicit-marker insertion
-are separate qualification cases. Supporting the first must not be reported
-as support for all three. Multiple Events owners and multiple Vue apps also
-need coverage outside the single-root benchmark.
+A Render may also return a different component than the target, as in the
+tutorial's `SignupForm` handler that returns `Confirmation`. The parent's
+compiled template still names the old component, so the browser builds the
+parent's VNode for that call from the component the occurrence has now. See
+"A Render that replaces a component with a different component" below.
+Same-component subtree refresh, replacement with a different component, and
+explicit-marker insertion are separate qualification cases, and each has its
+own browser tests. Multiple Events owners and multiple Vue apps also need
+coverage outside the single-root benchmark.
 
 A parent refresh may introduce a component class absent from the initial page
 even when the target's own class stays unchanged. Revision preparation must
@@ -1071,6 +1074,107 @@ different type. It renders twice and then renders the caller again in the
 browser. The Card cases also pass the Badge through a slot of the
 replacement Card. Loop fills (call runs) inside a replaced target are not
 covered yet.
+
+#### A Render that replaces a component with a different component
+
+A handler on `SignupForm` returns `actions.Render(Confirmation(...))`. The
+server prepares `Confirmation` as an independent root, and the browser places
+it at the target's occurrence (one placed component, identified by its
+occurrence ID). The caller's compiled template still calls `SignupForm` by
+its tag, and the caller is kept unchanged, so no server output names the new
+component at that call.
+
+The browser resolves this when it builds the VNode. Every component call goes
+through `compilerCreateVNode` in `client.js`. Once a page has replaced a
+component, that helper reads the occurrence's current component (through
+`citryTypeInfo`, which maps each registered Vue type to its app and stable
+type) and builds the VNode for that one instead. The occurrence keeps its ID,
+so the caller's call table stays valid. Vue sees another type under the same
+key, so it unmounts the old instance and mounts the new one. After the
+commit, the browser calls `$forceUpdate()` on the old instance's Vue parent,
+because that parent's render builds the VNode: usually the caller, or the
+receiver whose slot holds a filled-in call. Before the first replacement on a
+page, the helper costs one boolean check per VNode, and each revision makes
+one pass over its incoming occurrences to find replaced ones.
+
+What the new component gets from the call:
+
+- Only its occurrence ID and key. The caller wrote its props, listeners, and
+  `ref` for the old component, so the browser drops them. Without that, they
+  would become stray attributes on the new root, and a `ref` would hand the
+  caller an instance with another component's API. A `ref` therefore reads
+  `null` after the swap.
+- Directives on the call stay. `v-show` and custom directives describe the
+  place on the page, not the old component's API, so they apply to the new
+  root. Dropping `v-show` would show a region that the caller hid.
+- Slots come from the Render. The caller's fills for the old component are
+  not shown; the slots the Render passed to the new component are.
+
+Local state in the replaced part is lost, as it was when 0.5.1 swapped HTML.
+A later server Render of the caller runs its Python again, which places
+whatever component the caller's template names. The next full page load does
+the same.
+
+Revision checks. A revision is accepted when every rule below holds:
+
+- The Events Render check rejects a different component for the app's root
+  occurrence, because Vue fixes the root component when it creates the app,
+  and the root has no caller VNode to rebuild. The message names both
+  components and the two supported alternatives. A `<c-mark>` target always
+  keeps the built-in mark component; a prepared result that changes it is
+  rejected as malformed.
+- `validateCombinedActions` accepts a retained occurrence ID with a new
+  component only when the server listed it in `updatedIds` and it is not the
+  app root. Each such ID joins `expectedRemountIds`, so the commit fails if
+  Vue does not mount it again.
+- The call-table check accepts a component that differs from the
+  declaration only for a kept caller (one the revision does not update)
+  whose child is in `app.replacedTypeIds`, the set of occurrences a Render
+  replaced. A caller that the revision renders again wrote its call table in
+  the same response, so it must name the new component exactly.
+- `registerIncomingTypes` registers a component that arrives only as a
+  replacement without a tag, since no template calls it by tag. When a later
+  revision brings a template that calls it by tag, the same Vue type is
+  registered under that tag.
+
+The commit keeps `app.replacedTypeIds` current: an entry leaves when its
+occurrence leaves or when the server renders its Vue parent again.
+
+A Dispatch that follows the Render in the same response starts at the new
+component, because the bridge follows an accepted remount to the instance now
+at the caller's place.
+
+Error modes:
+
+- A different component for the app root: rejected before anything changes,
+  with the message above.
+- A changed component on an occurrence that the server did not list as
+  updated: the revision is rejected.
+- A caller rendered again whose call table names the old component: the
+  revision is rejected as a stable-type mismatch.
+- A component call whose VNode is not built during its Vue parent's render,
+  such as a VNode that author code builds with `h()` and keeps or passes as a
+  prop: the forced re-render misses it, the remount check fails after the
+  revision is published, and the app is marked failed. This case is not
+  tested.
+
+Alternatives considered: compiling each call as `<component :is=...>` with
+the tag sent per occurrence changes the compiler output, the prepared
+protocol, and the Rust server-render reader, which renders only a literal
+`:is`. Wrapping every call in an implicit `<c-mark>` adds one instance per
+call and changes server HTML and placement keys. Registering each tag as a
+small dispatcher component breaks the caller's `ref` and the child's
+`$parent`.
+
+Falsifier: `packages/py/citry/tests/e2e/test_vue_component_changing_render_e2e.py`
+covers a browser-only and a server re-render of the caller, swapping back,
+a filled-in call, a passed-on slot, a keyed loop row, two Vue apps, dropped
+caller bindings, directives and a `ref` on the call, slots passed by the
+Render, a Dispatch after the Render, a second Render target in the same
+response, cache replay, and a component that a later template calls by tag.
+`packages/js/citry-client/test/prepared-call-runs.test.mjs` covers the
+revision checks. If any of these needs a change to the compiler output or
+the prepared protocol, this design is wrong.
 
 The actual Events integration must preserve declared handler dispatch, CSRF,
 signed State, send sequences, action ordering, and stale-response handling.

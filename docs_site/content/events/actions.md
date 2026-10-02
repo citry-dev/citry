@@ -33,6 +33,45 @@ component inside it. The handler has already run by then, so any database
 writes it made stay. The server does not check the order or targets of
 these Render actions, so assert the returned list in a test of the handler.
 
+## Replace the calling component with a different component
+
+A handler can return a different component from the one that called it. The
+new component takes the caller's place on the page. Here a handler on
+`SignupForm` swaps the form for a `Confirmation`:
+
+```python
+class Events:
+    def submit(self, data: SignupIn):
+        save_signup(data.email)
+        return actions.Render(Confirmation(email=data.email))
+```
+
+After the swap, these things change:
+
+- **Typed input and other browser-only values are gone.** The browser
+  removes `SignupForm` and its child components, then starts `Confirmation`
+  fresh. Nothing the visitor typed into the old component carries over.
+- **Bindings the parent wrote for the old component are dropped.** Vue
+  props, `@event` listeners, and attributes that the parent's template put
+  on `<c-SignupForm>` were written for `SignupForm`, so `Confirmation` does
+  not receive them. A `ref` on the call reads `null`. Directives such as
+  `v-show` stay with the place on the page, so they apply to `Confirmation`.
+  Pass the new component what it needs as arguments in the Render.
+- **A page reload shows the original component again.** The swap happens
+  only in the open browser tab. The next full page load runs the page's
+  Python render again, which places `SignupForm`.
+
+A Dispatch placed after the Render starts at the new component's first
+element, because the caller is no longer on the page.
+
+The outermost component of a render cannot be replaced. That is the
+component your Python code renders for the page, or for an HTML fragment
+that you insert into the page. A Render that would put a different
+component in its place fails: the browser reports an error that names both
+components, and the page keeps the old one. Move the part that changes into a child component
+and handle the event there, or place a `<c-mark name="...">` region in the
+outermost component's template and Render into `target="mark:<name>"`.
+
 ## Dispatch a browser event
 
 [`actions.Dispatch`][citry.ext.events.actions.Dispatch] sends one bubbling DOM
@@ -75,7 +114,7 @@ component, listen on an ancestor element, on `document`, or with
 
 | Return value | Browser result |
 |---|---|
-| `MyComponent(...)` or `actions.Render(...)` | Update the calling component in place. |
+| `MyComponent(...)` or `actions.Render(...)` | Update the calling component in place, or replace it with a different component. |
 | `dict` or `actions.Data(value)` | Resolve an imperative `$sendEvent` Promise. |
 | `actions.Dispatch(name, detail)` | Dispatch a bubbling browser event. |
 | `actions.Redirect(url)` | Navigate. |

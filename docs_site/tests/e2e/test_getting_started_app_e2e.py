@@ -151,6 +151,8 @@ def test_step12_python_replaces_the_form_with_a_confirmation(page: Any, getting_
     confirmation = page.locator(".confirmation")
     expect(confirmation).to_contain_text("ada@example.com")
     expect(page.locator("form")).to_have_count(0)
+    # The live region belongs to the page, so it stays and holds the confirmation.
+    expect(page.locator("[aria-live=polite] .confirmation")).to_have_count(1)
     # The confirmation's CSS and Vue data arrived with the response.
     assert confirmation.evaluate("element => getComputedStyle(element).borderTopStyle") == "solid"
     expect(page.locator(".confirmation__status")).to_contain_text("ada@example.com")
