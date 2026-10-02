@@ -1,58 +1,71 @@
 ---
 title: VS Code
-description: Highlight Citry templates and connect VS Code to the Citry language server.
+description: Get errors as you type, completion, go to definition, type checking, and formatting for Citry components in VS Code and its forks.
 ---
 
 # VS Code
 
-The Citry extension highlights `template`, `js`, `css`, and `messages`
-multiline strings inside Python components. It also supplies language modes for
-standalone Citry templates and Fluent `.ftl` files, and starts one `citry-lsp`
-process for each workspace folder. Formatter commands edit definite template,
-JavaScript, and CSS sections while leaving Fluent and the selected Python
-formatter unchanged.
+The Citry extension makes VS Code understand your components. Inside the
+`template`, `js`, `css`, and `messages` strings of a Python component, and in
+standalone template files, you get:
 
-The language server, `citry-lsp`, is published on PyPI. The extension is
-published on the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry),
-[Open VSX](https://open-vsx.org/extension/citry-dev/citry), and
-[GitHub Releases](https://github.com/citry-dev/citry/releases).
+- errors as you type, such as a misspelled component tag or a variable your
+  template data never provides;
+- completion for component names, inputs, template variables, and browser
+  data;
+- hover with types, and go to definition from a template back to the Python
+  field it came from;
+- TypeScript type checks in component JavaScript and Vue expressions;
+- formatting for the template, JavaScript, and CSS strings;
+- coloring for each of those languages.
 
-## See it in action
-
-Citry completes registered components and their inputs without leaving the
-Python file:
+Citry completes components and their inputs without leaving the Python file:
 
 <c-image src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/autocomplete.gif" alt="Citry component autocomplete inside an inline Python template" width="960" />
 
-Hover hints explain template values, while references and navigation connect
-them to their Python definitions:
+Hover explains template values, and references and navigation connect them to
+their Python definitions:
 
 <c-image src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/refs_hints.gif" alt="Citry hover hints and references connecting a template to Python" width="960" />
 
-## Install the language server
+## Set up the extension
 
-Install `citry-lsp` in the same Python environment as the Citry project:
+1. Install **Citry** from the
+   [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry)
+   or [Open VSX](https://open-vsx.org/extension/citry-dev/citry). Cursor,
+   Windsurf, VSCodium, and other desktop forks use the Open VSX release. Each
+   release's VSIX file is also on
+   [GitHub Releases](https://github.com/citry-dev/citry/releases).
+2. Install the Citry language server in your project's Python environment:
 
-```console
-python -m pip install citry-lsp
-```
+    ```console
+    python -m pip install citry-lsp
+    ```
 
-Keeping the server in the project environment lets it import the registered
-component catalog. An isolated server can still check syntax, but it cannot
-know the application's component names, inputs, or slots.
+    The language server is the program that does the checking. It must run in
+    the environment that can import your application.
 
-Install **Citry** from the
-[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry)
-or [Open VSX](https://open-vsx.org/extension/citry-dev/citry). Cursor, Windsurf,
-VSCodium, and other compatible desktop forks can use the Open VSX release. The
-same VSIX file is attached to each `vscode-citry` release on
-[GitHub Releases](https://github.com/citry-dev/citry/releases).
+3. Tell Citry where your application is, with the `citry.app` setting
+   described [below](#connect-your-app).
 
-## Select the registry target
+The status bar then shows whether Citry is working:
 
-Set `citry.app` to the `module:attribute` path of either the project's
-[`Citry`][citry.Citry] instance or a reusable
-[`ComponentLibrary`][citry.ComponentLibrary]:
+| Status bar | Meaning |
+| --- | --- |
+| **Citry** with a check mark | Citry loaded your application. Everything works. |
+| **Citry: syntax only** | Citry checks template syntax, but does not know your components. See [troubleshooting](#syntax-only). |
+| **Citry unavailable** | The language server did not start. See [troubleshooting](#citry-unavailable). |
+
+Click it, or run **Citry: Show Language Server Status**, to see the Python
+interpreter, application, and Citry version in use.
+
+The extension needs desktop VS Code 1.101 or newer, or a compatible fork. It
+also works in remote workspaces, but not in VS Code for the Web.
+
+## Connect your app
+
+Set `citry.app` in your workspace settings to the `module:attribute` path of
+your [`Citry`][citry.Citry] instance:
 
 ```json
 {
@@ -60,8 +73,13 @@ Set `citry.app` to the `module:attribute` path of either the project's
 }
 ```
 
-For example, select the Citry UI library directly while working without a host
-application:
+Citry imports that instance to learn which components you registered. With
+it, Citry can complete your components, check their inputs and slots, and
+take you to their definitions. Without it, Citry only checks template syntax
+and explains built-in tags such as `<c-if>`.
+
+To work on a component library without a host application, point `citry.app`
+at the library's [`ComponentLibrary`][citry.ComponentLibrary] instead:
 
 ```json
 {
@@ -69,23 +87,13 @@ application:
 }
 ```
 
-The library form creates an isolated registry with Citry's built-ins and that
-library. It does not include host-application components, configuration, or
-host-provided extensions. If the library requires one of those extensions,
-expose a configured `Citry` instance that installs it and select that instance
-instead.
+Citry then knows the built-in components and that library only. If the
+library needs an extension that the host application installs, point
+`citry.app` at a `Citry` instance that installs it.
 
-The extension normally follows the interpreter selected by Microsoft's Python
-extension. Set `citry.python` to an explicit executable when that integration
-is unavailable:
+### Load an env file
 
-```json
-{
-  "citry.python": "/path/to/project/.venv/bin/python"
-}
-```
-
-If importing the selected app needs environment variables, point
+If importing your application needs environment variables, point
 `citry.envFile` to a dotenv file:
 
 ```json
@@ -95,31 +103,189 @@ If importing the selected app needs environment variables, point
 }
 ```
 
-Relative paths resolve from the workspace folder, and file values override
-variables inherited by the Extension Host. Citry applies them only to its
-isolated app-discovery worker; it does not change the environment of the
-language server, Python extension, terminal, application server, or tests.
-Saving, creating, or deleting the file automatically reloads the component
-registry. A configured file that is missing or malformed keeps syntax-only
-features available and explains the setup failure in **Citry: Show Language
-Server Status**. Citry's environment adapter does not print parsed values.
-
-For Django, include settings needed before importing the selected target. The
-language server imports that module directly and does not run `manage.py`:
+For Django, include the settings the import needs. Citry imports the module
+directly and does not run `manage.py`:
 
 ```ini
 DJANGO_SETTINGS_MODULE=myproject.settings
 DJANGO_SECRET_KEY=editor-development-secret
 ```
 
-With no app configured, the status bar reports **syntax only**. Definite
-inline templates and files explicitly using the Citry Template language are
-still checked, but unknown components and their contracts are not inferred.
+Citry uses these variables only while it imports your application. They do
+not change your terminal, tests, or application server. Saving, creating, or
+deleting the file reloads your components. If the file is missing or invalid,
+Citry checks syntax only, and **Citry: Show Language Server Status** says
+why.
 
-## Complete Vue expressions and component JavaScript
+### Pick the interpreter
 
-In a registry-owned component template, Citry connects Vue expressions to
-the component's browser data:
+The extension uses the interpreter you selected in Microsoft's Python
+extension. When that extension is not installed, or you want a different
+interpreter, set `citry.python`:
+
+```json
+{
+  "citry.python": "/path/to/project/.venv/bin/python"
+}
+```
+
+`${workspaceFolder}` works in this path.
+
+## Settings
+
+| Setting | What it does | Default |
+| --- | --- | --- |
+| `citry.app` | Your `Citry` instance or `ComponentLibrary`, as `module:attribute` | Empty: syntax checks only |
+| `citry.envFile` | A dotenv file to load before importing `citry.app`. Relative paths start at the workspace folder | Empty |
+| `citry.python` | The Python executable that runs `citry-lsp` | Empty: the Python extension's interpreter |
+| `citry.typeCheck` | Report [TypeScript errors](#typescript-errors-in-component-javascript-and-templates) in component JavaScript and templates | `true` |
+| `citry.trace.server` | Log messages between VS Code and the language server: `off`, `messages`, or `verbose` | `off` |
+| `citry.trace.performance` | Write timings for completion, hover, and go to definition to the **Citry Performance** output channel | `false` |
+
+Which template mistakes are errors or warnings is not an editor setting. Your
+application sets it, and `citry check` uses the same rules. See
+[Template linting](/ide/template-linting/).
+
+## Troubleshooting
+
+### "Citry unavailable" { #citry-unavailable }
+
+The language server could not start. Run **Citry: Show Language Server
+Status** for the reason, then check:
+
+- `citry-lsp` is installed in the interpreter Citry uses. A notification
+  names that interpreter and the command to install it.
+- `citry.python`, if set, points to a Python executable.
+- Your `citry-lsp` version works with your extension version. Upgrade both if
+  the status names a version problem.
+
+### "Syntax only" { #syntax-only }
+
+Citry is running but has not loaded your application, so it does not know
+your components. Either:
+
+- `citry.app` is not set. Set it as shown
+  [above](#connect-your-app).
+- Importing `citry.app` failed. **Citry: Show Language Server Status** shows
+  the error. A common cause is a missing environment variable; see
+  [`citry.envFile`](#load-an-env-file).
+
+### Template file ignored
+
+The extension does not claim `.html` files, because Citry accepts any file
+name in `template_file`. Associate your template files with the Citry
+Template language:
+
+```json
+{
+  "files.associations": {
+    "templates/components/**/*.html": "citry-html"
+  }
+}
+```
+
+### Stale results
+
+Citry reads open Python files as you type, so most edits update at once. When
+a component or its template is chosen by code, for example by a factory or
+an imported constant, save the file and run **Citry: Restart Language
+Server**.
+
+### `{` adds an f-string
+
+Pylance can add an `f` prefix when you type `{` in a Python string. Its
+`python.analysis.autoFormatStrings` setting is off by default. If you turned
+it on, turn it off for the workspace:
+
+```json
+{
+  "python.analysis.autoFormatStrings": false
+}
+```
+
+The setting applies to every Python file in the window; Pylance has no
+per-string exception.
+
+### Report a bug
+
+Include the Citry extension version, the `citry-lsp` version, the VS Code
+version, your operating system, and the output of **Citry: Show Language
+Server Status**. For a log of what the editor and server exchanged, set
+`citry.trace.server` to `messages` or `verbose`. Remove secrets and private
+paths before posting.
+
+## Template variables { #complete-template-roots }
+
+In a component's template, Citry completes and documents the variables the
+template can use: fields of your `TemplateData` class, keys that
+`template_data()` returns, `Kwargs` fields, `template_globals`, and names you
+declared for [linting](/ide/template-linting/). This works in `{{ ... }}`
+and in `c-*` attributes.
+
+- **Hover** shows the variable's type.
+- **Go to Definition** opens the field or the returned dict key.
+- **Go to Declaration** opens where the name is written: the field, the dict
+  key, or the `c-for` or `c-fill` that introduces it.
+- **Go to Type Definition** opens the Python class of the value.
+- **Find All References** lists the uses of the variable in that template.
+
+Once Citry knows a variable's type, you also get completion of its members,
+signature help for calls, and type errors, inside expressions, loops, and
+nested templates. A `c-if` narrows an optional type, as in Python.
+
+These updates follow your edits in open Python files without saving.
+
+## Look up Citry syntax
+
+Hover a Citry tag, such as `<c-slot>`, or a Citry attribute, such as
+`c-bind`, `#c-key`, or `required`, to see a short explanation and a link to
+its full guide. This works without `citry.app`. A `c-*` attribute that sets
+an HTML attribute, such as `c-class`, shows the HTML help for that
+attribute.
+
+HTML help also works inside a nested template, the markup you write in an
+attribute value between `<>` and `</>`. Use single quotes for attributes
+inside a double-quoted value:
+
+```citry-html
+<c-card c-body="<><input type='email' autocomplete='email' /></>" />
+```
+
+For `<c-element>`, a literal tag such as `is="form"` gets the attribute help
+for `<form>`. With a dynamic `c-is` or `c-bind`, only global HTML attributes
+are offered, because the final tag is not known.
+
+## Check component inputs
+
+A `c-*` value on a component tag is a Python keyword argument, so Citry checks
+it against the child's `Kwargs` annotation. A wrong value shows a
+`citry.python.invalid-assignment` error that names both types:
+
+```citry-html
+{# TaskCard declares `task: Task` #}
+<c-TaskCard c-task="1" />
+```
+
+A static attribute on a component tag passes its text as a string, so it is
+checked the same way:
+
+```citry-html
+{# TaskCard declares `size: Literal["sm", "md", "lg"]` #}
+<c-TaskCard size="xl" />
+```
+
+On HTML elements, `c-class` and `c-style` are checked too. They take a
+string, a dict, a list or tuple of those, or `None`, so `c-class="1"` is an
+error.
+
+The check follows the annotation, not runtime validation. A Pydantic `Kwargs`
+field that converts `"1"` to `1` at runtime still reports a string passed to
+an `int`.
+
+## Vue and component JS { #complete-vue-expressions-and-component-javascript }
+
+In a component's template, Vue expressions know the data the component sends
+to the browser:
 
 ```citry
 class Search(Component):
@@ -136,14 +302,26 @@ class Search(Component):
     """
 ```
 
-Top-level `JsData` names complete in native Vue directives and bindings. Hover shows
-their JSON-derived JavaScript type, and **Go to Definition**, **Go to
-Declaration**, and **Find All References** connect them to the exact Python
-field or a conservatively inferred `js_data()` dict key. Public Events
-`State` fields receive the same navigation through `$state`.
+`JsData` names complete in Vue directives and bindings. Hover shows their
+JavaScript type, and **Go to Definition**, **Go to Declaration**, and **Find
+All References** connect them to the Python field or `js_data()` key. Fields
+of the component's `State` work the same way through `$state`.
 
-A `js_data()` value that reads attributes of a Kwargs field takes its type
-from the annotations of the classes it passes through:
+Hovering `$component`, a callback value, or a helper such as `$sendEvent`,
+`$loading`, or `$error` shows what it does and links to its
+[browser API reference](/reference/browser-apis/). Inside `sendEvent`,
+`$sendEvent`, `$loading`, and `$error`, Citry completes your server event
+handler names. A literal handler name, and the name in an `@c-*` binding,
+must match a handler on the component, and go to definition opens that
+Python method. Names computed at runtime, and names in `onEvent()` and
+`$onEvent()`, are not checked.
+
+VS Code's own JavaScript, HTML, and CSS help keeps working alongside Citry.
+
+### Types of `js_data()`
+
+Citry works out the JavaScript type of each `js_data()` value from your
+Python code:
 
 ```citry
 class TaskCard(Component):
@@ -154,22 +332,19 @@ class TaskCard(Component):
         return {"laneKey": kwargs.task.lane}
 ```
 
-Here `this.laneKey` is a `string`. Dataclasses, NamedTuples, Pydantic
-models, and plain annotated classes can be read this way. A Kwargs
-field's annotation keeps the values it declares: a field
-`size: Literal["sm", "md"]`, or a type alias of it, is `"sm" | "md"`,
-and an `Enum` member's `.value` is the union of its values, such as
-`"todo" | "done"`. A constant you write in `js_data()` keeps only its
-kind, so `False` is a `boolean`, because browser code may change the
-value later. A NamedTuple is sent as an
-array and a TypedDict as an object. A chain through an optional value,
-such as `reviewer: Owner | None`, is untyped. Returning a whole
-dataclass or other class instance, such as `kwargs.task`, is reported as
-[`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type),
-because Citry cannot prove it crosses the JSON wire.
+Here `this.laneKey` is a `string`. Citry follows attributes through
+dataclasses, NamedTuples, Pydantic models, and annotated classes.
 
-Citry has no rule for a value such as a method call or a list
-comprehension, so the editor asks ty for its type:
+- A `Literal["sm", "md"]` field, or a type alias of it, stays `"sm" | "md"`.
+  An `Enum` member's `.value` is the union of its values.
+- A constant you write in `js_data()`, such as `False`, keeps only its kind,
+  `boolean`, because browser code may change it later.
+- A NamedTuple becomes an array, and a TypedDict an object.
+- A value read through an optional, such as `reviewer: Owner | None`, is
+  `any`.
+
+For other values, such as a method call or a list comprehension, the editor
+asks ty, the Python type checker Citry runs:
 
 ```citry
 class TaskList(Component):
@@ -183,16 +358,15 @@ class TaskList(Component):
         }
 ```
 
-Both `this.labels` and `this.upper` are `string[]`. A literal type in
-ty's answer keeps only its kind, as a constant does. The editor asks ty
-when it next checks an open file, so these types can take a moment to
-appear after you open or save a file, and
-[`citry check --types`](/cli/#check-types-with-typescript-and-ty) asks
-ty before it runs TypeScript. A value ty types as a class, as `Any`, or
-as a type it could not infer stays `any`. When ty cannot run, these
-values stay `any`.
+Both `this.labels` and `this.upper` are `string[]`. These types can take a
+moment to appear after you open or save a file. A value that ty types as a
+class or as `Any`, or cannot type, stays `any`.
 
-### Work with component members in `this` and the template
+Returning a whole class instance, such as `kwargs.task`, is a
+[`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type)
+warning, because the value may not survive the trip to the browser as JSON.
+
+### Members of `this`
 
 Inside `$component({ ... })`, `this` has the type of the live component, and
 so does each name a Vue expression in the template reads. Completion and
@@ -217,8 +391,8 @@ class Counter(Component):
     """
 ```
 
-Hovering `this.count` or `count` in the template shows `number`, and
-**Go to Definition** from either opens the `count` key in `data()`. From
+Hovering `this.count`, or `count` in the template, shows `number`, and **Go
+to Definition** from either opens the `count` key in `data()`. From
 `this.step`, it opens the `step` field in `JsData`.
 
 | Member | Declared in | Go to Definition opens |
@@ -232,51 +406,36 @@ Hovering `this.count` or `count` in the template shows `number`, and
 | Browser data | `js_data()` or `JsData` | The Python field or dict key |
 
 `this` has this type in methods, computed getters and setters, `watch`
-handlers, lifecycle hooks such as `mounted()`, and `provide()`. When
-`onServerRender` or `init` is part of the same object, its `component`
-value gets the same type. Citry's helpers, such as `$sendEvent`,
-`$loading`, and `$state`, and Vue's own `$el`, `$refs`, and `$emit` are
-included. The next section describes how `$el`, `$state`, and `$emit` are
-typed.
+handlers, lifecycle hooks such as `mounted()`, and `provide()`. The
+`component` value in `onServerRender` or `init` gets it too. Citry's
+helpers, such as `$sendEvent`, `$loading`, and `$state`, and Vue's `$el`,
+`$refs`, and `$emit` are included.
 
-`this` in `data()` has props, injections, `js_data()` keys, and Citry's
-helpers. The editor does not type the `data()` result or the methods
-there.
+Reading a member the component does not define is an error; see
+[`citry.component-js.unknown-member`](/ide/diagnostics/#citry.component-js.unknown-member).
 
-Types come from the `$component` object as you write it. A section with the
-wrong shape, such as a `computed` entry that is a number instead of a
-function, can stop computed values and methods from being typed until you
-fix it. A
-template that several components share keeps names untyped, because each
-component may declare them differently, but **Go to Definition** still lists
-each component's declaration.
+### `$el`, `$state`, `$emit`
 
-### Types for `$el`, `$state`, and `$emit`
-
-`$el` takes its type from the top-level node of the component's template,
-because Vue sets it to the node that the template renders first:
+`$el` takes its type from the first node of the component's template:
 
 | Template root | Type of `$el` |
 | --- | --- |
 | One element, such as `<button>` | That element's type, such as `HTMLButtonElement`. `<svg>` is `SVGSVGElement` |
-| `v-if` and `v-else`, or `c-if` and `c-else` | Each branch's type joined with `\|`, plus `Comment` when there is no `v-else` or `<c-else>`, because Vue then renders a comment |
+| `v-if` and `v-else`, or `c-if` and `c-else` | Each branch's type joined with `\|`, plus `Comment` when there is no else branch |
 | A child component tag, such as `<c-Lane>` | The child's own `$el` type |
 | Text only | `Text` |
 | Several nodes, `v-for`, `c-for`, a slot, or a template the editor cannot read | `Node` |
 
-When the template renders several nodes, Vue sets `$el` to an empty marker
-node placed before them, not to the first element. The marker is a text
-node, or a comment on a page Vue took over from the server. To reach the elements,
-use `$refs` or the `els` value in `onServerRender`. As in Vue's own types,
-`$el` never includes `null`, but it is `null` until the component mounts,
-for example in `data()` or `created()`.
+With several root nodes, Vue sets `$el` to an empty marker node, not to the
+first element, so use `$refs` or the `els` value in `onServerRender`
+instead. `$el` is `null` until the component
+mounts, for example in `data()` or `created()`, although its type does not
+say so, as in Vue's own types.
 
 `$state` is Citry's [Events State](/reference/browser-apis/#state) for the
-component, not Vue's `data()` and not a Pinia store. Its fields come from the
-component's `State` class. Every public field can be assigned unless the
-`State` class sets `_model`; then only the fields it lists can be assigned,
-and the rest are read-only. A component without `State` has no
-fields, so completion offers none. Hovering `this.$state` says the same.
+component, not Vue's `data()`. Its fields come from the component's `State`
+class. Every public field can be assigned, unless `State` sets `_model`; then
+only the fields it lists can be.
 
 `$emit` follows the `emits` option, as Vue's `defineComponent()` does:
 
@@ -291,93 +450,50 @@ $component({
 });
 ```
 
-- The array form, such as `emits: ['drop-task']`, limits `$emit` to the
-  listed names and accepts any values after the name.
+- The array form, such as `emits: ['drop-task']`, allows only the listed
+  names, with any values.
 - In the object form, the validator's parameters type the values. A `null`
   validator accepts any values.
 - Without `emits`, `$emit` accepts any name, as in Vue.
 
-Completion inside `this.$emit('')` offers the declared names, and hovering
-`$emit` in component JavaScript or a template shows the values each event
-takes. In a parent template, a listener on the child's tag uses the same
-types: `@drop-task="move($event)"` on `<c-Lane>` types `$event` as the first
-value the child emits, and the parameters of an inline function such as
-`@drop-task="(payload) => move(payload)"` get the emitted values' types.
-Citry's `@c-drop-task` server-event binding on the same tag reads the same
-`$event`. A listener for an event the child does not declare gets the DOM
-event of that name, because Vue then passes the listener to the child's
-root element. When the child lists its events as an array, or Citry cannot
-read its `emits`, `$event` is `any`.
+Completion inside `this.$emit('')` offers the declared names. In a parent
+template, a listener on the child's tag gets the same types:
+`@drop-task="move($event)"` on `<c-Lane>` types `$event` as the payload.
+The parameters of an inline function, such as
+`@drop-task="(payload) => move(payload)"`, get the same type, and so does
+`$event` in an `@c-drop-task` binding on that tag.
 
-On an HTML element, `$event` is the DOM event of the listener's name, such
-as `KeyboardEvent` for `@keydown`. A name the DOM does not define, such as
-`@board:notice`, is a `CustomEvent`, so `$event.detail` works. A template
-cannot cast, so `$event.target` and `$event.currentTarget` are `any`.
+On an HTML element, `$event` is the DOM event, such as `KeyboardEvent` for
+`@keydown`. A name the DOM does not define, such as `@board:notice`, is a
+`CustomEvent`, so `$event.detail` works.
 
-Citry also checks event names, in the editor and in `citry check`, when
-`emits` is an array of strings or an object with plain keys:
+### Emitted event names
 
-- `this.$emit('name')`, `component.$emit('name')`, or a template's
-  `$emit('name')` with a name that `emits` does not list is an error
-  ([`citry.browser.undeclared-emit`](/ide/diagnostics/#citry.browser.undeclared-emit)).
-  A prop named `on<Event>`, such as `onPing` for `ping`, also declares the
-  event, as it does in Vue.
-- A listener on a child component tag whose name the child does not declare
-  is a warning
-  ([`citry.browser.undeclared-component-event`](/ide/diagnostics/#citry.browser.undeclared-component-event)).
-  Vue passes such a listener to the child's root element, where it runs
-  only if that element dispatches a DOM event with the same name, so a
-  misspelled name stays silent. A child's `on<Event>` prop also declares
-  the event. Only a name with a hyphen, a colon, or an uppercase letter is
-  reported, because a plain lowercase name such as `@click` is usually a
-  native DOM event.
+When `emits` is an array of strings or an object with plain keys, Citry
+checks event names in the editor and in `citry check`:
 
-A value that does not match a validator's parameter types is a TypeScript
-error; see
-[TypeScript errors in component JavaScript and templates](#typescript-errors-in-component-javascript-and-templates).
+- Emitting a name that `emits` does not list is an error:
+  [`citry.browser.undeclared-emit`](/ide/diagnostics/#citry.browser.undeclared-emit).
+- Listening on a child component for a name the child does not declare is a
+  warning:
+  [`citry.browser.undeclared-component-event`](/ide/diagnostics/#citry.browser.undeclared-component-event).
 
-### Types, checks, and navigation in component JavaScript
+A prop named `on<Event>`, such as `onPing` for `ping`, also declares the
+event, as in Vue.
 
-The component's direct `js` or resolved `js_file` receives matching types for
-the complete `$component` callback context. Direct synchronous writes to
-the callback's `component` value use the generated public-instance type, and
-`v-for` and `v-slot` bindings receive lexical scope and exact navigation. A static
-`$component({ props, onServerRender })` declaration also types its read-only props.
-VS Code's installed JavaScript service supplies ordinary JavaScript member
-completion, hover, and definitions; Citry keeps the Python-backed origins
-authoritative. Unknown Vue expression roots are errors by default through the shared
-Citry lint policy. Free names inside a `$component` initializer are also
-errors by default, which catches an undeclared context value when it was
-used but not destructured. Configure the severity or real host-provided
-globals through `LintSettings`; see [Template linting](/ide/template-linting/).
-A `component.<name>` or `this.<name>` read that names nothing the component
-defines is an error. Citry checks this only when it can read every
-`js_data()` key and every Vue Options section from the source.
+### Child component props
 
-Hovering `$component`, a destructured callback value, or a Citry Vue helper
-such as `$sendEvent`, `$loading`, or `$error` shows its Citry contract and a
-link to the matching browser API reference. Handler-name completion opens
-inside the literal arguments to `sendEvent`, `$sendEvent`, `$loading`, and
-`$error`, including from an empty string.
+When a child component declares `props` in `$component({ props })`, Citry
+checks the props you pass on its tag. It reports an unknown prop, a missing
+required prop, and a value whose type the prop does not accept. Hover and go
+to definition on a prop open its declaration. With a `v-bind` spread on the
+tag, Citry does not report missing props. A component chosen at runtime is
+not checked.
 
-A literal `sendEvent()` or `$sendEvent()` name, a declarative `@c-*` handler,
-and a handler passed to `$loading()` or `$error()` must match an effective
-Python event handler and navigate to that method. Dynamic names are left open,
-as are all `onEvent()` and `$onEvent()` names.
+## TypeScript errors { #typescript-errors-in-component-javascript-and-templates }
 
-Native props on statically resolved child components validate
-unknown keys, required props, and proven value types against the child's
-static `$component({props})` declaration. A prop key hovers and navigates to
-that declaration. A spread keeps explicit keys checkable but suppresses a
-missing-required conclusion; dynamic component targets remain unproven. When a
-`JsData` annotation or known literal value cannot cross
-Citry's strict JSON wire, Citry reports `citry.js-data.unsupported-type` as a
-warning and lets JavaScript tooling treat that value as `any`.
-
-### TypeScript errors in component JavaScript and templates
-
-The editor reports TypeScript's own errors in component JavaScript and in Vue
-expressions, on the line you wrote, whether the code sits in a `.js` file, a
+The editor reports TypeScript's errors in component JavaScript and in Vue
+expressions, on the line you wrote, whether the code is in a `.js` file, a
 template file, or a string in a Python file:
 
 ```citry
@@ -409,10 +525,9 @@ class Lane(Component):
     """
 ```
 
-Each of those lines, and `startDrag('first')` in the template, shows an
-error with the source `Citry (ts)` and a code such as
-`citry.typescript.ts2322`, where the number is TypeScript's own. Citry
-reports these kinds of TypeScript errors:
+Each commented line, and `startDrag('first')` in the template, shows an error
+with a code such as `citry.typescript.ts2322`, where the number is
+TypeScript's own.
 
 | Mistake | Example | TypeScript codes |
 | --- | --- | --- |
@@ -420,120 +535,122 @@ reports these kinds of TypeScript errors:
 | A member that does not exist | `this.$el.fooBar` | 2339, 2551, 2353, 2561 |
 | The wrong number of arguments | `this.startDrag(1, 2)` | 2554, 2555, 2556, 2575 |
 | A syntax error in JavaScript inside a Python string | `const = 1` | 1000 to 1999 |
-| A bound HTML attribute value of the wrong type | `:draggable="'treu'"` | 2345 |
+| A bound HTML attribute value of the wrong type | `:style="1"` | 2345 |
 
-A bound attribute such as `:draggable` or `:style` on an HTML element is
-checked against Vue's types for that element's attributes, so
-`:style="1"` is an error while `:style="{ color: 'red' }"` passes. A
-keyword the HTML Standard lists for the attribute, such as the empty value
-in `:translate="''"`, is also accepted, as the static
-[attribute-value check](/ide/template-linting/#find-invalid-html-attribute-values)
-accepts it. Some attributes Vue types as any string, such as `dir`, so a
-bound `:dir="'sideways'"` is not reported, though the same static value
-is. Vue's types are case-sensitive, so a bound `'LAZY'` is an error where
-a static `"LAZY"` passes. Citry does not check an attribute Vue does not
-declare, such as `data-id`, any attribute on a custom element, or a
-binding with a modifier such as `.prop`.
+A bound attribute on an HTML element is checked against Vue's types for that
+attribute, so `:style="1"` is an error while `:style="{ color: 'red' }"`
+passes.
 
-Vue types `aria-*` attributes too. `aria-expanded` takes a boolean or
-`'true'`/`'false'`, so `:aria-expanded="String(open)"` is an error because
+VS Code's built-in TypeScript runs the check, so you do not need Node.js, but
+the built-in **TypeScript and JavaScript Language Features** extension must be
+enabled. If it does not answer, the **Citry** output channel says so once.
+These errors can appear a moment after Citry's own.
+
+To turn them off, set `citry.typeCheck` to `false`. To run the same check in a
+terminal or CI, use
+[`citry check --types`](/cli/#check-types-with-typescript-and-ty).
+
+### `aria-*`, `id`, `title`
+
+Vue types `aria-*` attributes. `aria-expanded` takes a boolean or
+`'true'`/`'false'`, so `:aria-expanded="String(open)"` is an error, because
 `String()` returns any string. Bind the boolean itself:
-`:aria-expanded="open"`. Vue also types `id` and `title` as strings, so
-`:id="task.id"` is an error when the id is a number; bind
-`:id="String(task.id)"`.
+`:aria-expanded="open"`.
 
-VS Code's own TypeScript runs the check, so you need no Node.js install, but
-the built-in TypeScript and JavaScript Language Features extension must be
-enabled. When it does not answer, the workspace folder's Citry output
-channel says so once. The check uses the same types that completion and hover show, and
-it runs after Citry's own diagnostics, so its errors can appear a moment
-later.
+Vue types `id` and `title` as strings, so `:id="task.id"` is an error when
+the id is a number. Bind `:id="String(task.id)"`.
 
-Some TypeScript errors are left out on purpose:
+### Errors left out
 
-- A mistake that Citry already reports keeps only Citry's finding. For
-  example, an unknown name inside `$component` shows
-  [`citry.component-js.unknown-variable`](/ide/diagnostics/#citry.component-js.unknown-variable),
-  `this.startDargg()` shows
-  [`citry.component-js.unknown-member`](/ide/diagnostics/#citry.component-js.unknown-member),
-  and an event name `emits` does not declare shows
-  [`citry.browser.undeclared-emit`](/ide/diagnostics/#citry.browser.undeclared-emit).
-- An unknown name in a template follows
+- **Mistakes Citry already reports.** An unknown name inside `$component`, an
+  unknown member such as `this.startDargg()`, or an undeclared event name
+  shows only Citry's own diagnostic. An unknown name in a template follows
   [`citry.vue.unknown-variable`](/ide/diagnostics/#citry.vue.unknown-variable)
-  and its lint severity, so TypeScript does not report it.
-- A value Citry cannot type, such as an injection, a server event's result,
-  or a `JsData` field that cannot cross the JSON wire, is `any`, so reading
-  it is never an error.
-- TypeScript's strict mode is off, so a `data()` value that starts as
-  `null` can take any value later, and implicit `any` is not reported.
-- A query by CSS selector, such as `this.$el.querySelector('#name')`, returns
+  and your lint settings.
+- **Values Citry cannot type.** An injection, a server event's result, or a
+  `JsData` field that cannot be sent as JSON is `any`, so reading it is never
+  an error.
+- **Strict-mode errors.** TypeScript's strict mode is off, so a `data()`
+  value that starts as `null` can take any value later, and an implicit
+  `any` is not reported.
+- **Queries by CSS selector.** `this.$el.querySelector('#name')` returns
   `any`, because the selector does not say which element it finds. A query
-  by tag name, such as `querySelector('input')`, keeps the tag's type. A
-  member of `window` that the DOM does not declare, such as `window.htmx`,
-  is `any`, because a page script may add it.
-- A minified file such as `runtime.min.js` is not checked.
-- A `js_data()` value types its key as the value's general type, such as
-  `boolean` for `False`, because Vue code may change it later.
+  by tag name, such as `querySelector('input')`, keeps the tag's type.
+- **Unknown `window` members.** A member such as `window.htmx` is `any`,
+  because a page script may add it.
+- **Template event targets.** A template cannot cast, so `$event.target` and
+  `$event.currentTarget` are `any`.
+- **Minified files**, such as `runtime.min.js`, are not checked.
 
-Set `citry.typeCheck` to `false` to turn these errors off. The language
-server can also run the check for other editors; it then uses the `tsc` in
-your project's `node_modules` or on `PATH`. Run the same check in a terminal
-or CI with [`citry check --types`](/cli/#check-types-with-typescript-and-ty).
+## Format Citry code
 
-## Navigate i18n messages and profiles
+Two commands in the command palette format a Python component's strings:
 
-When the selected application configures i18n, Citry uses its checked catalog
-index across Python, templates, Fluent, Vue expressions, and component JavaScript.
-Literal message IDs complete and navigate from `tr()`,
-`<c-trans message="...">`, `self.i18n.tr()`,
-`Component.I18n.client_messages`, `$i18n.tr()`, and the injected component
-`i18n` service. Checked `$c-tr:message.output[target]` directives and bounded
-`i18n.bind({ message: "...", output: "..." })` calls use the same index. Go to
-definition on a `$c-tr` message opens the selected message value, or the exact
-Fluent attribute when the directive includes `.output`. Hover shows the
-selected output, its typed direct and
-transitive parameters, translator descriptions, and defining owner. The
-catalog belongs to the selected Citry application, so a definition may live
-in another component, another Python file, or a configured catalog package.
+- **Citry: Format Document** formats every `template`, `js`, and `css`
+  string in the current Python file.
+- **Citry: Format at Cursor** formats only the string under the cursor.
 
-Hover an argument name such as `count` in
-`tr("account-unread", count=value)` to see its `@param` type and description.
-Go to definition on that argument to open the exact `@param` declaration.
-The same rule works in template and Python `tr()` calls, Vue `$i18n.tr()`,
-`component.$i18n.tr()` or `this.$i18n.tr()` in component JavaScript, and
-literal `<c-trans>` values and fills.
+Formatting lays out the template's HTML structure and formats the JavaScript
+and CSS, while keeping the Python triple-quoted strings readable:
 
-Named formatter and parser profiles complete in the matching operation, such
-as `fmt.number(..., format="...")`, `self.i18n.parse.percent(...)`, and
-`$i18n.format.currency(...)`. Template `fmt` methods include their call
-signatures and return types. A misspelled template method or a literal profile
-that is not registered for that exact operation is an error. `$i18n` in a
-template and `component.$i18n` or `this.$i18n` in component JavaScript
-include the nested `context`, `format`, and `parse` APIs. Public
-Fluent message references navigate to the same defining source; private term
-references navigate within their own `messages` block.
+<c-image src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/formatting.gif" alt="Citry formatting an inline template, JavaScript, and CSS inside a Python component" width="960" />
 
-The live diagnostics use the same Rust Fluent parser and checked app catalog.
-They report unsupported `@param` types, unknown literal keys or profiles,
-missing, extra, or provably mistyped message arguments, and mismatched
-`<c-trans>` values or fills. `$c-tr` values receive the same named-input
-checks, and malformed directive names such as `$c-tr:`, `$c-tr:notice[]`, or
-`$c-tr:notice.` are errors before rendering. Component inputs complete in
-both their static
-form (`client`) and their expression form (`c-client`). `$i18n` receives
-semantic help only inside a statically known client-enabled `<c-i18n>`
-provider; a server-only nested provider blocks that scope.
+Your Python formatter keeps formatting the rest of the file. To run Citry's
+formatter whenever you save a Python file, add it as a save action:
 
-These features need `citry.app`, because syntax-only mode has no complete
-catalog or profile registry. Fluent syntax coloring itself remains available
-without the application index. Static checks follow literal message IDs,
-literal profile names, and statically named argument-object keys. A dynamic
-message ID or computed argument object remains a runtime responsibility.
+```json
+{
+  "[python]": {
+    "editor.codeActionsOnSave": {
+      "source.format.citry": "explicit"
+    }
+  }
+}
+```
 
-## Navigate from CSS variables to Python data
+A standalone Citry template is formatted as a whole. The two Citry commands
+also format an `.html` file that your application uses as a
+`template_file`. Make Citry its default
+formatter to use VS Code's **Format Document** and format on save:
 
-When the selected registry owns a component's CSS, Citry connects a
-`var(--name)` use to the Python data that produces it:
+```json
+{
+  "[citry-html]": {
+    "editor.defaultFormatter": "citry-dev.citry",
+    "editor.formatOnSave": true
+  }
+}
+```
+
+For JavaScript and CSS, Citry uses
+[Prettier for VS Code](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+when it is installed and selected for that language, so your Prettier
+configuration applies. Otherwise it uses its own copy of Prettier 3.9.6 with
+two-space indentation.
+
+The template formatting matches `citry format` on the command line. The
+JavaScript and CSS output matches only when both use the same formatter,
+version, and options; `citry format` uses Biome. See
+[Command line](/cli/#format-component-files).
+
+### What stays unchanged
+
+- `messages` strings and `.ftl` files. Citry colors Fluent but does not
+  format it.
+- A `<script>` or `<style>` that contains Citry interpolation, such as
+  `{{ title }}`.
+- Code where moving text would change its meaning, such as multiline
+  strings and comments whose whitespace matters, a hashbang, `@charset`, or
+  a byte order mark.
+- Anything outside a `template`, `js`, or `css` string, such as a
+  `template_file` path or a `template_data()` method. The command refuses
+  and makes no edits. Open the file itself to format it, or use
+  `citry format`.
+
+## CSS variables
+
+Citry connects a `var(--name)` in a component's CSS to the Python data that
+sets it:
 
 ```citry
 from citry import Component
@@ -550,228 +667,62 @@ class Chart(Component):
     """
 ```
 
-Inside `var(--...)`, completion offers exact `CssData` names. Hover shows the
-Python producer, **Go to Definition** and **Go to Declaration** open its field,
-and **Find All References** lists uses in that physical stylesheet. The same
-features work for direct string keys inferred conservatively from
-`css_data()`, so `{"row-color": value}` is available as `--row-color`.
+Inside `var(--...)`, completion offers the `CssData` names. Hover shows where
+the value comes from, **Go to Definition** opens the Python field, and **Find
+All References** lists the uses in that stylesheet. Keys that `css_data()`
+returns work too, so `{"row-color": value}` is available as `--row-color`.
+This works in `css` strings and in `css_file` files.
 
-Both direct `css` literals and resolved `css_file` files are supported. A CSS
-file shared by several components exposes only names supplied by every proven
-owner. Saving or synchronizing a Python edit rechecks the schema and asset
-owner before Citry returns navigation.
+Citry does not report an unknown `var(--name)`. The value may come from a
+parent element, a theme, or another stylesheet.
 
-Citry leaves other custom properties alone. A value may come from an ancestor,
-the host page, a theme, JavaScript, an extension, or another stylesheet, so an
-unmatched `var(--host-token)` is not an error. VS Code's CSS service continues
-to provide ordinary CSS completion, validation, and local custom-property
-navigation alongside Citry's producer information.
+## i18n messages
 
-## Associate standalone templates
+When your application uses [i18n](/i18n/), Citry connects message IDs across
+Python, templates, Fluent files, Vue expressions, and component JavaScript.
+This needs `citry.app`.
 
-Citry accepts any filename in `template_file`, so the extension does not claim
-ordinary `.html` files. Add a project-specific association when appropriate:
+- **Message IDs** complete and navigate in `tr()`, `self.i18n.tr()`,
+  `<c-trans message="...">`, `$c-tr`, `Component.I18n.client_messages`,
+  `$i18n.tr()`, and `i18n.bind()`. Go to definition opens the message, even
+  when it lives in another component or a catalog package.
+- **Hover** on a message shows its text, its parameters with their types
+  and descriptions, and where it is defined.
+- **Arguments**, such as `count` in `tr("account-unread", count=value)`, show
+  their `@param` type on hover, and go to definition opens the `@param` line.
+- **Formatter and parser profiles** complete in calls such as
+  `fmt.number(..., format="...")` and `$i18n.format.currency(...)`.
 
-```json
-{
-  "files.associations": {
-    "templates/components/**/*.html": "citry-html"
-  }
-}
-```
+The editor reports an unknown message ID or profile, a missing, extra, or
+mistyped argument, a misspelled `fmt` method, and invalid Fluent, using the
+same checks as `citry check`. It also reports a malformed `$c-tr` name, such
+as `$c-tr:` or `$c-tr:notice[]`. A message ID or argument computed at runtime
+is not checked. Fluent coloring works without `citry.app`.
 
-## Format Citry documents
+## Less common cases
 
-The command palette exposes only two Citry formatting commands:
+### Shared templates
 
-- **Citry: Format Document** formats every definite direct `template`, `js`,
-  and `css` literal in the current Python file.
-- **Citry: Format at Cursor** formats only the direct literal body containing
-  the cursor.
+When several components use the same template file, Citry offers only what
+is true for all of them. A name that one of them does not define gets no
+completion or type, though **Go to Definition** still lists each component's
+declaration. A CSS file shared by several components completes only the
+`var(--name)` names that all of them supply.
 
-Formatting expands Citry/HTML structure and formats embedded JavaScript and
-CSS while preserving readable Python triple-quoted strings:
+### Templates set by code
 
-<c-image src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/formatting.gif" alt="Citry formatting an inline template, JavaScript, and CSS inside a Python component" width="960" />
+Citry follows edits to `template` and `template_file` live when the value is
+a string or a `pathlib.Path(...)`. When the template is chosen by an imported
+constant, a factory, a decorator, or a metaclass, Citry uses the components
+it loaded at startup, and withholds go to definition for variables until you
+save and restart the language server.
 
-The commands do not format `messages` blocks or standalone `.ftl` files.
-Fluent syntax highlighting is available in both places, but Citry does not
-format Fluent source.
+### Union-typed `c-*` values
 
-Both include Citry/HTML structure and Python expressions, eligible direct
-JavaScript and CSS, and eligible `<script>` and `<style>` bodies. A cursor on a
-`template_file`, `js_file`, or `css_file` path, a method such as
-`template_data`, or unrelated Python code is outside a format region and is
-refused without edits. The commands do not follow a Python declaration into
-another file; open the target directly or use `citry format` for statically
-resolved file assets. For a standalone JavaScript or CSS file, “directly” means
-its normal language formatter; Citry does not wrap generic JS/CSS documents.
-
-A file in the Citry Template language is one template, so either command
-formats the whole document. The explicit commands also accept an HTML-mode
-file that the configured registry proves is a resolved `template_file`, while
-unrelated HTML is refused. Associate the file with `citry-html` to use VS
-Code's standard formatter and format-on-save:
-
-```json
-{
-  "[citry-html]": {
-    "editor.defaultFormatter": "citry-dev.citry",
-    "editor.formatOnSave": true
-  }
-}
-```
-
-Citry includes Prettier for deterministic embedded JavaScript and CSS
-formatting. If
-[Prettier for VS Code](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
-is installed and selected for that language, Citry uses its dedicated action so
-your workspace Prettier configuration applies. Otherwise it uses bundled
-Prettier 3.9.6 with Citry's canonical two-space indentation. Your default
-formatters for standalone JavaScript and CSS files remain unchanged. The CLI
-uses its explicit native Biome adapter.
-
-Whitespace-sensitive multiline literals/comments and position-sensitive
-hashbang, `@charset`, or BOM bodies are also left unchanged rather than being
-unsafely reindented.
-
-Keep the normal Python formatter selected and add Citry as an independent
-save action. This uses the same whole-document Citry behavior as **Citry:
-Format Document**:
-
-```json
-{
-  "[python]": {
-    "editor.codeActionsOnSave": {
-      "source.format.citry": "explicit"
-    }
-  }
-}
-```
-
-The Citry/HTML and built-in Python-expression, `c-for`, and `c-fill data`
-passes produce the same bytes across the CLI, Python API, language server, and
-extension. Embedded JavaScript/CSS output also matches when the provider,
-version, and options match. For deterministic automation, configure the CLI's
-explicit Biome adapter instead of relying on editor provider ordering.
-
-## Look up Citry syntax
-
-Hover a Citry structural tag, fixed directive, or structural attribute to see
-a concise explanation and a link to its full Citry guide. This works in
-syntax-only mode, so `<c-slot>`, `required`, `c-bind`, `#c-key`, and related
-syntax do not require an application registry or an installed HTML provider.
-Dynamic HTML attributes such as `c-class` keep using the HTML provider's
-documentation for their underlying native attribute.
-
-HTML assistance also enters parser-proven nested-template values. Use the
-opposite quote for attributes inside the nested value, so a double-quoted host
-contains ordinary single-quoted HTML attributes:
-
-```citry-html
-<c-card c-body="<><input type='email' autocomplete='email' /></>" />
-```
-
-Completion, hover, and go to definition are mapped back from that isolated
-fragment. For `<c-element>`, a literal target such as `is="form"` receives
-form-specific attribute intelligence. A dynamic `c-is` or `c-bind` keeps only
-global HTML attributes because its eventual tag is not proven. Citry returns
-no forwarded result when the current parse, source map, provider response, or
-document version is uncertain.
-
-## Complete template roots
-
-Inside a registry-owned component template, Citry completes and documents
-declared `TemplateData` fields, runtime `template_globals`, and lint-only
-variables in interpolations and Python-valued attributes. Global runtime values
-receive conservative inferred types; explicit annotations and descriptions use
-the application's [template lint settings](/ide/template-linting/).
-When no `TemplateData` schema is declared, it also infers conservative roots
-from direct dict keys and modelled mapping operations in `template_data()`.
-The inherited implementation exposes effective `Kwargs` fields automatically.
-Go to definition targets the annotated field or exact returned dict key.
-Go to references lists uses of the same proven root or exact loop/fill binding
-inside that physical template. Go to declaration targets the authored field,
-dict key, or lexical introduction. Go to type definition targets the actual
-Python class or standard-library type when every component consumer and return
-path produces a safe mapped answer. Unused fill bindings target their current
-neutral `Any` contract. When an unsaved Python edit changes component
-inheritance or which component uses a template, Citry checks the edit again
-before it shows these registry-backed results.
-This live check reads `template` and `template_file` declarations written as
-a direct string or `pathlib.Path(...)`. Imported constants, factories,
-decorators, metaclasses, and other dynamic template selection use the loaded
-registry, but variable
-navigation is withheld while Python source is synchronized because those
-dependencies cannot be bounded safely. Save and restart the language server to
-refresh that registry state.
-
-Once a root is proven, Citry also supplies ordinary Python member and call
-completion, type hover, user-member navigation, signature help, and mapped
-diagnostics. This works in interpolations, Python-valued attributes, loop
-clauses, and nested templates. Template conditions narrow optional and union
-types, while shared templates keep only suggestions that apply to every
-proven component consumer and return path.
-
-Citry also gives every name used as a call target the standard Python function
-or method syntax scope. That keeps calls such as `tr(...)`, `fmt.currency(...)`,
-and application helpers visually distinct even before the language server has
-enough project information to prove their types. A member that is only read,
-such as `fmt.currency` without `(...)`, keeps its ordinary member scope.
-
-The language server installs its supported Python analyzer automatically in
-the same environment. If that analyzer cannot start or stops responding,
-Citry reports the degradation once and keeps parser checks plus root-level
-completion, hover, and navigation available. Unknown root names use the policy
-configured on the `Citry` application, not a separate VS Code preference.
-
-Open Python files use synchronized editor text, so adding or renaming a direct
-key updates completion, hover, and navigation without saving or reloading the
-app. Citry shows no result, rather than a guess, for invalid source, a
-template whose component it cannot pin down, a `template_data()` value it
-cannot follow, or a variable that not every component using the same
-template file defines. Citry's template analysis covers only expressions it
-can trace back to `template_data()`, and does not replace the Python
-extension for ordinary `.py` code.
-
-### Check `c-*` values against their target's type
-
-A `c-*` value on a component tag is a keyword argument, so it is also
-checked against the child's `Kwargs` annotation. A wrong value shows a
-`citry.python.invalid-assignment` error on the value:
-
-```citry-html
-{# TaskCard declares `task: Task` #}
-<c-TaskCard c-task="1" />
-```
-
-ty's error names both types, here `Literal[1]` and `Task`. A static
-attribute on a component tag passes its text as a string, so it is
-checked the same way:
-
-```citry-html
-{# TaskCard declares `size: Literal["sm", "md", "lg"]` #}
-<c-TaskCard size="xl" />
-```
-
-An attribute without a value, such as `<c-TaskCard compact>`, passes
-`True` and is not checked. An unquoted value, or one with a backslash or
-a line break, is not checked either. A missing or unknown input is reported by the
-template's own input checks instead. The
-check follows the annotation, not runtime validation, so a Pydantic
-`Kwargs` field that turns `"1"` into `1` still reports a string passed
-to an `int`. On an HTML element, `c-class` and `c-style` are checked the
-same way: they take a string, a dict, a list or tuple of those, or
-`None`, so `c-class="1"` is an error.
-
-#### Fix a `c-*` value that ty types as a union
-
-If ty reports `str | int` for a row's `size` that only ever holds a
-string, the row is a dict nested inside the dict `template_data()`
-returns. ty types each top-level key on its own, so `{"size": "sm"}`
-passes `Literal["sm"]` to a `size: Literal["sm", "md", "lg"]` input,
-but it types a nested dict as a whole and merges its values into one
-union:
+If ty reports `str | int` for a row's `size` that only ever holds a string,
+the row is probably a dict nested inside the dict `template_data()` returns.
+ty types each top-level key on its own, but merges the values of a nested
+dict into one union:
 
 ```citry
 class Steps(Component):
@@ -790,8 +741,8 @@ class Steps(Component):
     """
 ```
 
-Give the row a type of its own. A `TypedDict` keeps the value a plain
-dict, so the template does not change:
+Give the row its own type. A `TypedDict` keeps the value a plain dict, so the
+template does not change:
 
 ```citry
 from typing import Literal, TypedDict
@@ -811,48 +762,85 @@ class Steps(Component):
         return {"rows": rows}
 ```
 
-A value computed by a function typed `-> str` is `str`, not one of the
-input's choices. Annotate the function or variable with the `Literal`
-type it really returns, or wrap the value in `typing.cast()` when code
-before it has already checked that the value is one of the choices.
+A value from a function typed `-> str` is `str`, not one of the input's
+choices. Annotate the function with the `Literal` type it really returns, or
+use `typing.cast()` after code that has checked the value.
 
-## Keep template strings from becoming f-strings
+### Unchecked `c-*` values
 
-Pylance can add an `f` prefix when you type `{` in a Python string. Its
-`python.analysis.autoFormatStrings` setting is off by default. If your profile
-or workspace enables it, add this workspace setting:
+An attribute without a value, such as `<c-TaskCard compact>`, passes `True`
+and is not checked. Neither is an unquoted value, or a value with a
+backslash or a line break. A missing or unknown input is reported by the
+template's input checks instead.
 
-```json
-{
-  "python.analysis.autoFormatStrings": false
-}
-```
+### Bound attribute values
 
-The setting applies to every Python file in the VS Code window. Pylance does
-not provide a per-literal exception. Citry does not reverse editor changes, so
-deliberate f-strings remain untouched. Editors without Pylance do not need this
-setting.
+A keyword the HTML Standard lists for an attribute, such as the empty value
+in `:translate="''"`, is accepted, as the
+[attribute-value check](/ide/template-linting/#find-invalid-html-attribute-values)
+accepts it. Vue types some attributes, such as `dir`, as any string, so a
+bound `:dir="'sideways'"` is not reported, though the same static value is.
+Vue's types are case-sensitive, so a bound `'LAZY'` is an error where a
+static `"LAZY"` passes. A bound value that both Vue's types and the
+attribute-value rule reject, such as `:draggable="'treu'"`, is reported once,
+by the attribute-value rule. Attributes Vue does not declare, such as `data-id`,
+attributes on custom elements, and bindings with a modifier such as `.prop`
+are not checked.
 
-## Current limits
+### Undeclared child events
 
-- Highlighting of deeply nested or unfinished expressions is best effort.
-- Parsing stops after the first syntax error.
-- General Python-file analysis remains the responsibility of the configured
-  Python extension; Citry analyzes only mapped template expressions.
-- Embedded CSS receives highlighting, completion, hover, and formatting
-  through VS Code providers, but Citry cannot request its diagnostics through
-  VS Code's public API. Embedded JavaScript reports the TypeScript errors
-  listed in
-  [TypeScript errors in component JavaScript and templates](#typescript-errors-in-component-javascript-and-templates),
-  not every JavaScript warning.
-- Embedded JavaScript and CSS use bundled Prettier 3.9.6 unless Prettier for VS
-  Code is installed and selected for that language. Other editor formatters do
-  not replace that fallback.
-- Each embedded provider pass is bounded to 30 seconds. VS Code does not expose
-  cancellation for the underlying public formatter command, so Citry discards
-  any result that arrives after that bound.
-- `<script>` and `<style>` bodies containing Citry interpolation are left
-  unchanged.
-- A TextMate grammar cannot prove that a class with a `template`, `js`, or
-  `css` assignment inherits from `Component`, so unrelated assignments with
-  those exact names may receive Citry highlighting.
+A listener for an event the child does not declare gets the DOM event of
+that name as `$event`, because Vue then passes the listener to the child's
+root element. When the child lists its events as an array, or Citry cannot
+read its `emits`, `$event` is `any`.
+
+### Typing inside `data()`
+
+`this` inside `data()` has props, injections, `js_data()` keys, and Citry's
+helpers, but not the `data()` result or the methods. A Vue Options section
+with the wrong shape, such as a `computed` entry that is a number, can stop
+computed values and methods from being typed until you fix it.
+
+### Hover shows nothing
+
+Citry shows nothing rather than a guess when the source does not parse, when
+it cannot tell which component uses a template, or when it cannot follow a
+value that `template_data()` returns.
+
+### `$i18n` scope
+
+`$i18n` gets completion and checks only inside a `<c-i18n>` that is enabled
+for the browser. A server-only `<c-i18n>` nested inside it turns them off for
+its contents.
+
+### When ty is unavailable
+
+The language server installs ty, the Python type checker it uses, in the same
+environment. If ty cannot start or stops answering, Citry says so once and
+keeps its own checks, completion, hover, and navigation for template
+variables. Member types and Python type errors are missing until ty works
+again.
+
+### Other editors
+
+Other editors that use `citry-lsp` run the TypeScript check with the `tsc`
+from your project's `node_modules` or from `PATH`.
+
+### Limits
+
+- Coloring of deeply nested or unfinished expressions is best effort.
+- Citry reports only the first syntax error in a template.
+- Citry analyzes template expressions. Pylance, Pyright, or another Python
+  extension still checks the rest of your Python code.
+- Embedded CSS gets coloring, completion, hover, and formatting, but no
+  CSS warnings, because VS Code does not share them with extensions.
+- Embedded JavaScript reports the TypeScript errors listed
+  [above](#typescript-errors-in-component-javascript-and-templates), not
+  every JavaScript warning.
+- Citry gives each JavaScript or CSS formatter 30 seconds. A result that
+  arrives later is discarded.
+- Coloring cannot tell whether a class with a `template`, `js`, or `css`
+  assignment is a `Component`, so an unrelated class with those exact
+  attribute names may get Citry coloring.
+- Calls in templates, such as `tr(...)` or `fmt.currency(...)`, are colored
+  as function calls even before Citry knows their types.
