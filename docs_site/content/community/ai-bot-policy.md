@@ -16,8 +16,8 @@ find the pages it needs.
 followed by `Allow: /`). Any crawler that follows `robots.txt` may index
 the docs, and there is no list of named bots to keep up to date.
 
-The same rule also blocks the pages of older documentation versions. That
-block applies to search and AI crawlers alike.
+The same `User-agent: *` group also has `Disallow` lines for older
+documentation versions, so no crawler, search or AI, indexes those pages.
 
 ## Why we allow them
 
