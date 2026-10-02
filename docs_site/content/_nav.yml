@@ -49,14 +49,14 @@ areas:
         collapsible: true
         section_style: true
         items:
-          - { title: Components, path: /concepts/components/, needs_review: true }
-          - { title: Inputs and validation, path: /concepts/inputs-and-validation/, needs_review: true }
-          - { title: Slots, path: /concepts/slots/, needs_review: true }
-          - { title: Rendering, path: /concepts/rendering/, needs_review: true }
-          - { title: Registration, path: /concepts/registration/, needs_review: true }
-          - { title: Provide and inject, path: /concepts/provide-and-inject/, needs_review: true }
-          - { title: Client interactivity, path: /concepts/client-interactivity/, needs_review: true }
-          - { title: Error boundaries, path: /concepts/error-boundaries/, needs_review: true }
+          - { title: Components, path: /concepts/components/ }
+          - { title: Inputs and validation, path: /concepts/inputs-and-validation/ }
+          - { title: Slots, path: /concepts/slots/ }
+          - { title: Rendering, path: /concepts/rendering/ }
+          - { title: Registration, path: /concepts/registration/ }
+          - { title: Provide and inject, path: /concepts/provide-and-inject/ }
+          - { title: Client interactivity, path: /concepts/client-interactivity/ }
+          - { title: Error boundaries, path: /concepts/error-boundaries/ }
 
       - label: Events
         collapsible: true
@@ -138,7 +138,7 @@ areas:
         section_style: true
         items:
           - { title: Compatibility, path: /about/compatibility/ }
-          - { title: Benchmarks, path: /about/benchmarks/, needs_review: true }
+          - { title: Benchmarks, path: /about/benchmarks/ }
           - { title: Security, path: /security/, needs_review: true }
 
       - label: Release notes
