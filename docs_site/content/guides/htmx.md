@@ -48,8 +48,8 @@ files.
 
 ## Load HTMX and Citry
 
-Load a pinned copy of HTMX and Citry's browser runtime once, on the full
-page:
+Load HTMX and Citry's browser runtime once, on the full page. Host a
+fixed version of HTMX yourself, so an update cannot change it under you:
 
 ```html
 <script src="/static/htmx.min.js"></script>
@@ -101,8 +101,8 @@ component, so the component shows up but does nothing:
   plain wrapper around the table or select instead.
 
 For a list, render the list's wrapper on the server and serialize each
-interactive row on its own. Insert those strings into the page as HTML; do
-not use serialized fragment HTML as the source of a Vue template.
+interactive row on its own. Insert those strings into the page as HTML. Do
+not pass them to Vue as template code.
 
 ## Share one URL safely
 
@@ -114,7 +114,7 @@ response when the browser asked for a full page, or the other way around.
 If you use `hx-push-url`, check that every URL it adds to the browser
 history also works when opened directly.
 
-## HTMX inside components
+## Use HTMX in components
 
 HTMX does not see `hx-*` attributes on elements that Vue creates after the
 page loads. Give the element a `ref` and pass it to `htmx.process()` once
