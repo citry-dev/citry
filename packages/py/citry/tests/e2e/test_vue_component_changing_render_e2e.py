@@ -441,19 +441,19 @@ def test_directives_on_the_call_reach_the_new_component_and_a_ref_empties(page: 
           $component({
             data() { return {shown: true}; },
             directives: {mark: {mounted(el) { el.dataset.mark = "yes"; }}},
-            mounted() { globalThis.__formRef = () => this.$refs.form ?? null; },
+            mounted() { globalThis.__formRef = () => this.$refs.form; },
           });
         """
 
     dispatcher_for(engine)
     faults = _open(page, serve_live, engine, Page)
-    assert page.evaluate("__formRef() !== null")
+    assert page.evaluate("__formRef() != null")
     assert page.locator("#submit").get_attribute("data-mark") == "yes"
 
     page.locator("#submit").click()
     page.wait_for_selector("#done")
     assert page.locator("#done").get_attribute("data-mark") == "yes"
-    assert page.evaluate("__formRef()") is None
+    assert page.evaluate("__formRef() === null")
     page.locator("#toggle").click()
     page.wait_for_function("getComputedStyle(document.querySelector('#done')).display === 'none'")
     assert faults == [], faults
@@ -498,6 +498,7 @@ def test_render_passes_slots_to_the_new_component_and_a_later_dispatch_still_arr
                 return [
                     actions.Render(Panel(title="sent", slots={"default": Inside()})),
                     actions.Dispatch("Form:sent", {"ok": True}),
+                    actions.Dispatch("Form:sent", {"later": True}, delay=0.05),
                 ]
 
         template = '<button id="submit" @c-click="submit">submit</button>'
@@ -508,14 +509,16 @@ def test_render_passes_slots_to_the_new_component_and_a_later_dispatch_still_arr
 
     dispatcher_for(engine)
     page.add_init_script(
-        "window.__sent = []; document.addEventListener('Form:sent', event => window.__sent.push(event.detail));"
+        "window.__sent = []; document.addEventListener('Form:sent',"
+        " event => window.__sent.push([event.target.id, event.detail]));"
     )
     faults = _open(page, serve_live, engine, Page)
     page.locator("#submit").click()
     page.wait_for_selector("#panel #inside")
     assert page.locator("#panel h2").text_content() == "sent"
-    page.wait_for_function("window.__sent.length === 1")
-    assert page.evaluate("window.__sent") == [{"ok": True}]
+    # Both events start at Panel's root, the component now at Form's place.
+    page.wait_for_function("window.__sent.length === 2")
+    assert page.evaluate("window.__sent") == [["panel", {"ok": True}], ["panel", {"later": True}]]
 
     # The component that arrived in the Render's slot runs its own handlers.
     with page.expect_response(lambda response: response.url.endswith("/ext/events/call")) as call:

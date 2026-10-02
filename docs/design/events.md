@@ -1133,7 +1133,7 @@ Return-value rules, strict by design (ambiguity is refused, not guessed):
 | `None` | Acknowledged, no actions. If the handler mutated the state, the response still carries a `state` action (4.3) with the refreshed token and the public State values, so `$state` and State bindings show the change. In debug mode the runtime logs a hint when state changed but nothing visible was returned, because server-rendered content stays as it was. |
 | an action instance | That action. |
 | a `list` / `tuple` | Ordered actions; each element coerced by these same rules. Empty means acknowledged. |
-| a `CitryElement` / `CitryRender` | `Render` targeting the calling instance. The element can be any component; you are building a fresh tree, not resuming the old one. A different component replaces the calling instance in the browser: local state in the replaced part is lost, and the caller's props, listeners and `ref` for the old component do not reach the new one. The Vue browser runtime rejects a different component for the app's top-level component, whose component Vue fixes when it creates the app (see "A Render that replaces a component with a different component" in [vue.md](vue.md)). |
+| a `CitryElement` / `CitryRender` | `Render` targeting the calling instance. The element can be any component; you are building a fresh tree, not resuming the old one. A different component replaces the calling instance in the browser: local state in the replaced part is lost, and the props, listeners and `ref` that the parent's template put on the old component's tag do not reach the new one. The Vue browser runtime rejects a different component for the app's top-level component, whose component Vue fixes when it creates the app (see "A Render that replaces a component with a different component" in [vue.md](vue.md)). |
 | a `dict` | `Data` (the one scalar convenience: a dict cannot be mistaken for an action or an element, and it is the overwhelmingly common typed-endpoint return). |
 | anything else (`str`, numbers, custom objects) | A pointed error naming the fix. A string is ambiguous (HTML or JSON?) so it is never guessed: use `actions.Data(s)`, and HTML only ever comes from rendering a component. Custom classes either wrap in `Data(...)` or register a **result resolver** once (6.2), after which returning them bare works. |
 
@@ -4228,8 +4228,8 @@ action otherwise, each carrying the public State values beside the
 token), so the client's stored token and its `$state` values always
 reflect the latest state.
 
-An optional server-side state store (the token becomes a random key into
-`Citry.cache`) ships in v1 as the opt-in `_storage = "server"`
+An optional server-side state store (the token carries a random key, and
+the State lives in `Citry.cache` under `citry:state:<key>`) ships in v1 as the opt-in `_storage = "server"`
 State meta. It exists for three cases. Two of them a signed
 round-tripping token cannot serve: State too large to ship back and
 forth on every call, and State whose non-public values must not be readable

@@ -515,11 +515,11 @@
     }
     return prepared;
   }
-  // An Events Render can put a component of another type in place of a component (#164). The caller's
-  // compiled template still names the old type, so each Citry component VNode reads the type its
-  // occurrence has now. citryTypeInfo maps each registered Vue type to its app and stable type.
+  // An Events Render can replace a component with a different component (#164). The parent's compiled
+  // template still names the old one, so each Citry component VNode reads the component its occurrence
+  // has now. citryTypeInfo maps each registered Vue type to its app and stable type.
   const citryTypeInfo = new WeakMap();
-  // Pages that never change a component's type skip the lookup entirely, so their renders cost nothing extra.
+  // Pages where no Render has replaced a component skip the lookup, so their renders cost one check.
   let typeReplacementSeen = false;
   function currentOccurrenceType(type, props) {
     const info = citryTypeInfo.get(type);
@@ -536,9 +536,9 @@
   function compilerCreateVNode(type, props, children, patchFlag, dynamicProps) {
     if (typeReplacementSeen && type !== null && typeof type === "object") {
       const current = currentOccurrenceType(type, props);
-      // The caller's props, listeners and ref were written for the old type. Passing them on would turn
-      // them into stray attributes on the new component's root, so the new component gets only its
-      // identity, as the 0.5.1 HTML swap gave the new content nothing from the caller.
+      // The parent's props, listeners and ref on this call were written for the old component. Passing
+      // them on would turn them into stray attributes on the new component's root, so the new component
+      // gets only its identity and starts from the Render's arguments alone.
       if (current !== type) {
         type = current;
         props = {"citry-id": props["citry-id"] ?? props.citryId, key: props.key};
@@ -981,15 +981,8 @@
     return declared;
   }
 
-  // A Render into a marker or a component replaces everything inside it and keeps the rest of the
-  // page as it was. A caller outside that target may have written components between the target's
-  // tags (a fill), and the caller's call table still names them after the Render removed them. Only
-  // the slot they filled could render those entries, and the replaced target now shows content the
-  // caller did not supply, so they stay unused. A later server Render of the caller sends a call
-  // table without them. This returns the
-  // components an envelope keeps unchanged, whose call tables may hold such entries.
-  // The components whose type differs from the type their caller's template names: ones replaced by an
-  // earlier Render, plus ones whose type this envelope changes.
+  // The components that a Render replaced with a different component, so their parent's template
+  // still names the old one: those replaced by an earlier Render, plus those this envelope replaces.
   function replacedTypeIds(app, incoming) {
     const ids = new Set(app.replacedTypeIds);
     for (const [id, item] of incoming) {
@@ -998,6 +991,14 @@
     }
     return ids;
   }
+
+  // A Render into a marker or a component replaces everything inside it and keeps the rest of the
+  // page as it was. A caller outside that target may have written components between the target's
+  // tags (a fill), and the caller's call table still names them after the Render removed them. Only
+  // the slot they filled could render those entries, and the replaced target now shows content the
+  // caller did not supply, so they stay unused. A later server Render of the caller sends a call
+  // table without them. This returns the
+  // components an envelope keeps unchanged, whose call tables may hold such entries.
 
   function keptOwnerIds(app, envelope) {
     const updated = new Set(envelope.updatedIds);

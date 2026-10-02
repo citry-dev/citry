@@ -1080,7 +1080,9 @@ covered yet.
 A handler on `SignupForm` returns `actions.Render(Confirmation(...))`. The
 server prepares `Confirmation` as an independent root, and the browser places
 it at the target's occurrence (one placed component, identified by its
-occurrence ID). The caller's compiled template still calls `SignupForm` by
+occurrence ID). In this section the caller is the component whose template
+places the replaced one (`TutorialPage` here), not the component whose
+handler ran. The caller's compiled template still calls `SignupForm` by
 its tag, and the caller is kept unchanged, so no server output names the new
 component at that call.
 
@@ -1094,8 +1096,11 @@ key, so it unmounts the old instance and mounts the new one. After the
 commit, the browser calls `$forceUpdate()` on the old instance's Vue parent,
 because that parent's render builds the VNode: usually the caller, or the
 receiver whose slot holds a filled-in call. Before the first replacement on a
-page, the helper costs one boolean check per VNode, and each revision makes
-one pass over its incoming occurrences to find replaced ones.
+page, the helper costs one boolean check per VNode, and each revision check
+makes one extra pass over the incoming occurrences to find replaced ones
+(an Events revision is checked up to three times). After the first
+replacement, every component VNode on that page costs one map lookup. That
+cost is not measured.
 
 What the new component gets from the call:
 
@@ -1110,12 +1115,12 @@ What the new component gets from the call:
 - Slots come from the Render. The caller's fills for the old component are
   not shown; the slots the Render passed to the new component are.
 
-Local state in the replaced part is lost, as it was when 0.5.1 swapped HTML.
+Local state in the replaced part is lost.
 A later server Render of the caller runs its Python again, which places
 whatever component the caller's template names. The next full page load does
 the same.
 
-Revision checks. A revision is accepted when every rule below holds:
+The browser accepts the revision only when every rule below holds:
 
 - The Events Render check rejects a different component for the app's root
   occurrence, because Vue fixes the root component when it creates the app,
@@ -1142,7 +1147,8 @@ occurrence leaves or when the server renders its Vue parent again.
 
 A Dispatch that follows the Render in the same response starts at the new
 component, because the bridge follows an accepted remount to the instance now
-at the caller's place.
+at the replaced component's place. The same holds for an action with `delay`
+and for page code that applies the actions with `Citry.events.applyActions`.
 
 Error modes:
 
@@ -1157,6 +1163,9 @@ Error modes:
   prop: the forced re-render misses it, the remount check fails after the
   revision is published, and the app is marked failed. This case is not
   tested.
+- A browser plugin, such as i18n, that keys its own data by component
+  rather than by occurrence ID: its revision hook does not see the
+  replacement. This case is not tested.
 
 Alternatives considered: compiling each call as `<component :is=...>` with
 the tag sent per occurrence changes the compiler output, the prepared

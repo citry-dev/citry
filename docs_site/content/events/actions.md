@@ -54,22 +54,25 @@ After the swap, these things change:
 - **Bindings the parent wrote for the old component are dropped.** Vue
   props, `@event` listeners, and attributes that the parent's template put
   on `<c-SignupForm>` were written for `SignupForm`, so `Confirmation` does
-  not receive them. A `ref` on the call reads `null`. Directives such as
-  `v-show` stay with the place on the page, so they apply to `Confirmation`.
+  not receive them. A `ref` on `<c-SignupForm>` reads `null` after the
+  swap. Directives such as `v-show` stay with the place on the page, so they
+  apply to `Confirmation`.
   Pass the new component what it needs as arguments in the Render.
 - **A page reload shows the original component again.** The swap happens
   only in the open browser tab. The next full page load runs the page's
   Python render again, which places `SignupForm`.
 
-A Dispatch placed after the Render starts at the new component's first
-element, because the caller is no longer on the page.
+A Dispatch placed after the Render starts at `Confirmation`'s first
+element, and `Confirmation`'s `onEvent` listeners hear it, because
+`SignupForm` is no longer on the page.
 
 The outermost component of a render cannot be replaced. That is the
 component your Python code renders for the page, or for an HTML fragment
 that you insert into the page. A Render that would put a different
-component in its place fails: the browser reports an error that names both
-components, and the page keeps the old one. Move the part that changes into a child component
-and handle the event there, or place a `<c-mark name="...">` region in the
+component in its place fails with an error that names both components, and
+the page keeps the old one. A declarative `@c-*` call shows the error in the
+browser console. Move the part that changes into a child component and
+handle the event there, or place a `<c-mark name="...">` region in the
 outermost component's template and Render into `target="mark:<name>"`.
 
 ## Dispatch a browser event
@@ -80,8 +83,9 @@ element of the component that called the handler and bubbles up through its
 ancestors to `document`. A component with several top-level elements fires it
 once, from the first of them, so a listener on `document` hears it once. When
 the component renders no element, the event starts at the component's root
-DOM node instead. Dispatch always starts at the calling component; it cannot
-select another component.
+DOM node instead. Dispatch starts at the calling component, or at the
+component that replaced it earlier in the same response; it cannot select
+another component.
 
 Prefix the event name with the component name, as in `TaskRow:saved`. Names
 that start with `citry:` belong to Citry's own events, so `actions.Dispatch`
@@ -93,7 +97,8 @@ return actions.Dispatch("TaskRow:saved", {"title": title})
 
 Inside the component's own JavaScript, listen with the `onEvent` function
 that `onServerRender` receives. It hears the Dispatch actions that this
-component's own handlers return. Citry removes the listener before
+component's own handlers return, and those that follow a Render which put
+this component in place of the one whose handler ran. Citry removes the listener before
 `onServerRender` runs again and when the component unmounts:
 
 ```js

@@ -1559,6 +1559,89 @@ test("an accepted render may remount its sender and still Dispatch from the new 
   assert.deepEqual(dispatched, [{ name: "Board:moved", detail: { to: 2 }, eventSource: source, followRemount: true }]);
 });
 
+// A host whose Render retires the sender, as a component-changing Render always does.
+const remountingHost = (source, record, getBridge) => {
+  const transaction = {};
+  return {
+    ...basicHost(),
+    async prepareRender() {
+      return { transaction };
+    },
+    abortRender() {},
+    async commitRender() {
+      getBridge().retire(source, transaction);
+    },
+    dispatchEvent(name, _detail, _eventSource, followRemount) {
+      record.push({ action: "event", name, followRemount });
+    },
+    redirect(url) {
+      record.push({ action: "redirect", url });
+    },
+    updateUrl(url) {
+      record.push({ action: "url", url });
+    },
+  };
+};
+const remountingRender = {
+  action: "render",
+  target: "render:server_1",
+  swap: "morph",
+  renderer: "vue-prepared/1",
+  prepared: {},
+};
+
+test("delayed actions after a render that remounted the sender still run", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const record = [];
+  let bridge;
+  bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host: remountingHost(source, record, () => bridge),
+    fetch: async (_url, init) =>
+      resultResponse(JSON.parse(init.body), [
+        remountingRender,
+        { action: "event", eventName: "Board:moved", delay: 0.01 },
+        { action: "url", url: "/moved", mode: "push", delay: 0.01 },
+        { action: "redirect", url: "/next", delay: 0.01 },
+      ]),
+  });
+  await bridge.send({ source, handler: "move" });
+  assert.deepEqual(record, [
+    { action: "event", name: "Board:moved", followRemount: true },
+    { action: "url", url: "/moved" },
+    { action: "redirect", url: "/next" },
+  ]);
+});
+
+test("disposing the bridge cancels a delayed action that follows a remount", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const record = [];
+  let bridge;
+  bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host: remountingHost(source, record, () => bridge),
+    fetch: async (_url, init) =>
+      resultResponse(JSON.parse(init.body), [remountingRender, { action: "redirect", url: "/next", delay: 0.05 }]),
+  });
+  const sent = bridge.send({ source, handler: "move" });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  bridge.dispose();
+  await assert.rejects(sent, /disposed/);
+  assert.deepEqual(record, []);
+});
+
+test("page code that applies a remounting render can still Dispatch after it", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const record = [];
+  let bridge;
+  bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host: remountingHost(source, record, () => bridge),
+  });
+  await bridge.applyActions([remountingRender, { action: "event", eventName: "Board:moved" }], source);
+  assert.deepEqual(record, [{ action: "event", name: "Board:moved", followRemount: true }]);
+});
+
 test("a Dispatch without an earlier remount keeps the sender's own instance", async () => {
   const source = { stableId: "board", generation: 1 };
   const dispatched = [];

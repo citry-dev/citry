@@ -356,6 +356,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   const owners = new Map<string, Owner>();
   const queue: Job[] = [];
   let active: Job | null = null;
+  // Calls that page code applies with `applyActions` run outside the queue, so `active` never names them.
+  const externalJobs = new Set<Job>();
   let running = false;
   let disposed = false;
 
@@ -430,17 +432,23 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     current(source);
   };
 
-  const delay = (milliseconds: number, state: Owner): Promise<void> =>
+  // Timers of a call whose own Render remounted its sender. The retired sender's timers are
+  // cancelled with it, but this call's response was accepted, so its later actions still run;
+  // only disposing the bridge stops them.
+  const remountTimers = new Map<ReturnType<typeof globalThis.setTimeout>, (error: unknown) => void>();
+
+  const delay = (milliseconds: number, state: Owner, job: Job): Promise<void> =>
     new Promise((resolve, reject) => {
-      if (state.retired || disposed) {
-        reject(stale(state.retired ? "retired" : "disposed"));
+      if (disposed || (state.retired && !job.acceptedRemount)) {
+        reject(stale(disposed ? "disposed" : "retired"));
         return;
       }
+      const timers = job.acceptedRemount ? remountTimers : state.timers;
       const timer = globalThis.setTimeout(() => {
-        state.timers.delete(timer);
+        timers.delete(timer);
         resolve();
       }, milliseconds);
-      state.timers.set(timer, reject);
+      timers.set(timer, reject);
     });
 
   const continuationCurrent = (source: VueEventSource, state: Owner, epoch: number, job: Job): void => {
@@ -526,14 +534,15 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         job.committingTransaction = undefined;
       }
     } else if (action.action === "state") {
-      stillCurrent(source, state, epoch);
+      // After an accepted remount the host stores the refresh only if an instance still carries
+      // this render ID, so a refresh for a component the Render replaced changes nothing.
+      continuationCurrent(source, state, epoch, job);
       options.host.commitState(action.targetRenderId, action.stateToken, action.publicState, source);
     } else if (action.action === "event") {
       // A Render earlier in this response may have remounted the caller, possibly as another
       // component. That retires the calling instance, but the response was accepted, so the event
       // still goes out, from whatever the page now shows at the caller's place.
-      if (!job.external) continuationCurrent(source, state, epoch, job);
-      else stillCurrent(source, state, epoch);
+      continuationCurrent(source, state, epoch, job);
       const followRemount = job.acceptedRemount;
       // The retired instance has no current context, so after a remount only the caller's own
       // render ID from the call identifies the caller.
@@ -582,7 +591,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     for (const [index, action] of result.actions.entries()) {
       if (hoisted.has(index)) continue;
       const run = async () => {
-        if (typeof action.delay === "number" && action.delay > 0) await delay(action.delay * 1000, state);
+        if (typeof action.delay === "number" && action.delay > 0) await delay(action.delay * 1000, state, job);
         await applyOne(
           action,
           source,
@@ -975,6 +984,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       lifecycle("after", source, job.input.handler, { ok: false });
       throw error;
     }
+    // retire() marks this job when its own Render remounts the source, as it does for a sent call.
+    externalJobs.add(job);
     try {
       const value = await applyActions(prepared.result, source, state, state.acceptedEpoch, job, prepared.renderPlan);
       lifecycle("after", source, job.input.handler, { ok: true });
@@ -987,6 +998,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       }
       lifecycle("after", source, job.input.handler, { ok: false });
       throw error;
+    } finally {
+      externalJobs.delete(job);
     }
   };
 
@@ -1009,6 +1022,15 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         lifecycle("stale", source, job.input.handler, { reason: "retired" });
         job.cancel(error);
       }
+    }
+    for (const job of externalJobs) {
+      if (
+        acceptedTransaction !== undefined &&
+        job.committingTransaction === acceptedTransaction &&
+        job.input.source.stableId === source.stableId &&
+        job.input.source.generation === source.generation
+      )
+        job.acceptedRemount = true;
     }
     if (
       active?.input.source.stableId === source.stableId &&
@@ -1036,6 +1058,11 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       state.timers.clear();
     }
     owners.clear();
+    for (const [timer, reject] of remountTimers) {
+      globalThis.clearTimeout(timer);
+      reject(stale("disposed"));
+    }
+    remountTimers.clear();
     const error = new VueEventStale("disposed");
     for (const job of queue.splice(0)) {
       lifecycle("stale", job.input.source, job.input.handler, { reason: "disposed" });
