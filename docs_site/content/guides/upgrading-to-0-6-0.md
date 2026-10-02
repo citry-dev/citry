@@ -125,7 +125,7 @@ If another library on the page reads `x-*` attributes, turn the warning
 off with `rule_alpine_attribute="ignore"` in `LintSettings` or in the
 component's `Lint` class.
 
-### Alpine-only modifiers
+### Rewrite Alpine modifiers
 
 **What you see:** the template fails to load, and the error names the Vue
 way to write the listener.
@@ -163,8 +163,9 @@ statement with `;`, or move it into a method:
 
 ### Use `$emit` { #use-emit }
 
-**What you see:** the listener fails, because Alpine's `$dispatch` does
-not exist in Vue.
+**What you see:** `citry check` reports `$dispatch` as an unknown
+variable, and clicking throws an error in the browser console, because
+Alpine's `$dispatch` does not exist in Vue.
 
 Emit the event with Vue's `$emit`, and declare it in the child's `emits`:
 
@@ -293,9 +294,7 @@ lists the rest.
 
 ## Update Events code
 
-Each change below starts with what you see if you skip it.
-
-### Render targets
+### Change render targets
 
 **What you see:** `actions.Render` with a CSS selector as its `target`
 raises `ValueError`, saying that the target must be `render:<id>`,
@@ -318,8 +317,8 @@ return actions.Render(
 )
 ```
 
-An addressed target accepts only `swap="morph"`. A 0.5.1 selector that
-matched several elements becomes one Render action per target. One
+A `mark:` or `render:` target accepts only `swap="morph"`. A 0.5.1
+selector that matched several elements becomes one Render action per target. One
 response can return them all, one after another, as long as no target sits
 inside another. `Citry.events.applyActions` follows the same rule for
 Render and Event actions. See [Event actions](/events/actions/).
@@ -336,15 +335,6 @@ that changes into a child component, or into a `<c-mark>` region. Props,
 listeners, and a `ref` that the parent wrote on the old component's tag do
 not reach the new one. See
 [Swap in a different component](/events/actions/#swap-in-a-different-component).
-
-### Custom transports
-
-**What you see:** every handler that returns a render fails with "Vue
-Events requires current app, occurrence, and revision headers."
-
-Citry now calls a custom transport as `send(envelope, request)`. Send
-`request.headers` with the request. See
-[custom event transports](/reference/browser-apis/#custom-event-transports).
 
 ### Nested `$state` writes
 
@@ -369,13 +359,23 @@ newest call matters, declare the handler with `@event(latest_wins=True)`.
 A call made before the page's Vue app mounts now rejects instead of
 waiting. Listen for the `citry:ready` event on `document` first.
 
+### Forward request headers
+
+**What you see:** every handler that returns a render fails with "Vue
+Events requires current app, occurrence, and revision headers."
+
+Citry now calls a custom transport as `send(envelope, request)`. Send
+`request.headers` with the request. See
+[custom event transports](/reference/browser-apis/#custom-event-transports).
+
 ### Set security on `Citry`
 
 **What you see:** on a page with Events, `serialize()` raises `ValueError`
 when you pass it a different `security_csp` or `security_javascript`.
 
-Pass `security_csp` and `security_javascript` to `Citry(...)` instead. A later server render of the same page must use the same
-policy, so `serialize()` cannot choose a different one.
+Pass `security_csp` and `security_javascript` to `Citry(...)` instead.
+A later server render of the same page must use the same policy, so
+`serialize()` cannot choose a different one.
 
 ### Clean up `applyActions`
 
@@ -389,7 +389,7 @@ forwards. A `state` action you build, for `applyActions` or in an
 `on_event_result` hook, must now include `publicState`, the component's
 public State values.
 
-### Page DOM events
+### Listen for DOM events
 
 **What you see:** a `$onEvent` listener no longer fires for an event that
 page code dispatches inside the component.
@@ -398,7 +398,7 @@ page code dispatches inside the component.
 this component's server handlers dispatch. For a DOM event that page code
 fires, call `addEventListener` on an element you hold in a `ref`.
 
-### `citry:events:stale`
+### Update stale listeners
 
 **What you see:** a listener that checks for `cancelled` or `timeout`
 never matches.
@@ -406,7 +406,7 @@ never matches.
 The event now reports `superseded`, `retired`, `epoch`, `disposed`, or
 `version`.
 
-### `data-citry-events` tags
+### Stop reading Events tags
 
 **What you see:** page code that parsed these tags finds nothing.
 
@@ -418,8 +418,8 @@ through `$state`, `$loading`, and `$error`.
 **What you see:** events from a page that was open during the upgrade fail
 with a `stale_state` error.
 
-Citry now stores server-side State under different cache keys. Reloading
-the page fixes it; new pages are not affected.
+Citry 0.6.0 cannot read the server-side State that 0.5.x saved. Reload
+the page; pages opened after the upgrade are not affected.
 
 ## Component tag attributes { #update-attributes-on-component-tags }
 
@@ -447,7 +447,7 @@ bindings by how they are spelled:
 - **A `.debounce` or `.throttle` `@c-*` binding, or `@c-poll`, stops the
   render.** Put it on an element inside the child's template.
 
-## Bindings from Python
+## Move Python bindings
 
 **What you see:** the render stops with an error that names the attribute
 and says that a Python-resolved attribute "cannot introduce Vue syntax".
@@ -471,8 +471,8 @@ do nothing.
 
 ### Set attributes once
 
-**What you see:** the template fails to load, with a message that two
-attributes set the same attribute.
+**What you see:** the template fails to load, with a message that
+`c-title` and `:title` set the same attribute.
 
 One element can no longer set an attribute both ways, such as `c-title`
 together with `:title`. Keep one of them. `:class` and `:style` are the
@@ -484,12 +484,13 @@ cannot sit on an element that has any `c-*` attribute, and `:key` cannot
 sit next to `#c-key`. See
 [Combine `:class` and `:style` with `c-class` and `c-style`](/syntax/vue/#combine-class-and-style-with-c-class-and-c-style).
 
-### Group component content
+### Inline group content
 
 **What you see:** the render stops with an error that names the content,
 the component that wrote it, and the line.
 
-A group component, such as Citry UI's `CTabs`, needs content that uses Vue
+A group component is one whose children work together, such as Citry
+UI's `CTabs` and its tabs. It needs content that uses Vue
 data, handlers, `v-model`, a `ref`, or a `@c-*` binding to be written
 inside the group's tag. The error appears when a separate component writes
 that content and the page passes that component in. Move the content
@@ -536,8 +537,9 @@ are not affected.
 **What you see:** the render stops with an error such as "The `<c-raw>`
 block at line 2, column 10 is not a complete HTML fragment".
 
-Raw HTML inside an interactive component must be a complete HTML
-fragment: every tag closed, and no stray `<`. The error names the input
+Inside an interactive component, `<c-raw>` content and `Markup` values
+must each be a complete HTML fragment: every tag closed, and no stray
+`<`. The error names the input
 and explains the rule.
 
 ### One `<body>` per page
@@ -550,8 +552,9 @@ must put its content inside one `<body>` element.
 
 ## Removed browser globals { #replace-removed-browser-globals }
 
-**What you see:** page code fails because a `Citry.*` or Alpine global is
-`undefined`.
+**What you see:** page code throws because `Citry.alpine` or another
+removed global is `undefined`, an `alpine:init` listener never runs, or a
+request for `runtime-csp.js` returns 404.
 
 | Removed | What to use |
 | --- | --- |
@@ -615,10 +618,10 @@ LintSettings(
 ```
 
 A tool that builds `TemplateLintInfo` uses the same new names. Keep only
-the names your Vue expressions still read; an Alpine magic such as
+the names your Vue expressions still read; an Alpine helper such as
 `$dispatch` means nothing to Vue.
 
-### Diagnostic codes
+### Rename diagnostic codes
 
 **What you see:** a script that filters `citry check --format json` output
 by code stops matching.
@@ -630,6 +633,10 @@ by code stops matching.
 | `citry.browser.unknown-component-prop` | Removed |
 
 ### Strict CSP mode
+
+**What you see:** with `security_csp="strict"`, rendering raises
+`ValueError`: "Citry found N strict-CSP incompatibility issue(s)",
+followed by a list of the problems.
 
 `security_csp="strict"` used to select Citry's Alpine CSP build and limit
 the expressions you could write. It now checks the final HTML for raw
@@ -657,7 +664,7 @@ naming `early_scripts`.
 Rename `ctx.before_manifest` to `ctx.early_scripts`. The scripts it holds
 still run before `ctx.scripts`. The old name has no alias.
 
-### Hook context arguments
+### Keyword hook contexts
 
 **What you see:** code that builds `OnSerializeContext` or
 `OnDependenciesContext` with positional arguments, such as an extension
@@ -666,7 +673,7 @@ test, fails or passes values to the wrong fields.
 Both gain a `selected_render` field, the render being serialized. Build
 them with keyword arguments.
 
-### HTTP methods
+### Check HTTP methods
 
 **What you see:** defining an Events class or building a `URLRoute` raises
 an error.
@@ -790,11 +797,13 @@ argument.
 18. Close every tag in `<c-raw>` and `Markup` inside interactive
     components, and put an interactive page's content inside one
     `<body>`.
-19. Remove uses of `Citry.alpine`, `Citry.manager`, and `Citry.i18n`.
+19. Remove uses of `Citry.alpine`, `Citry.manager`, `Citry.i18n`,
+    `window.Alpine`, and `alpine:init`.
 20. On a deployment with several workers, configure a shared cache
     backend, and let a proxy or CDN pass `Access-Control-Allow-Origin`
     through for Citry's files.
-21. Rename the Alpine lint settings and diagnostic codes.
+21. Rename the Alpine lint settings and diagnostic codes, and fix any
+    output that `security_csp="strict"` now rejects.
 22. Check that dependency scripts on interactive pages are classic
     JavaScript, rename `ctx.before_manifest` to `ctx.early_scripts`, and
     build `OnSerializeContext` and `OnDependenciesContext` with keyword
@@ -805,5 +814,5 @@ argument.
     arguments.
 24. Remove `citry-htmx.js`, `hx-ext="citry-fragments"`, and `data-cid-*`
     or `data-citry-key` selectors.
-25. Open each interactive page and check the browser console for
-    `[Citry]` errors.
+25. Open each interactive page, reloading pages opened before the
+    upgrade, and check the browser console for `[Citry]` errors.
