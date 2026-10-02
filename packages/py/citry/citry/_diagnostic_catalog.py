@@ -134,7 +134,7 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                              'name': 'Authored event name.'},
                                               'summary': 'A template listens on a child component for an event the '
                                                          'child does not declare, often because of a typo. The '
-                                                         'listener never runs.',
+                                                         'listener usually never runs.',
                                               'surfaces': ['check', 'lsp'],
                                               'title': 'Listener for an event the child component does not declare',
                                               'when': 'An @name or v-on:name listener on a component tag names an '
@@ -192,8 +192,7 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                                 'component.'},
                                         'parameters': {'name': 'Authored server-event wire name.'},
                                         'summary': 'Browser code names a server event that the component has no '
-                                                   'handler for, often because of a typo. Nothing runs on the server '
-                                                   'when it fires.',
+                                                   'handler for, often because of a typo.',
                                         'surfaces': ['check', 'lsp'],
                                         'title': 'Unknown server event',
                                         'when': 'A template or component JavaScript calls sendEvent, $sendEvent, '
@@ -399,8 +398,8 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                                  'and call a component method from the template.'},
                                          'parameters': {'detail': 'The unsupported directive, host, token, or '
                                                                   'operation.'},
-                                         'summary': 'Browser code in a template or asset is not allowed by the strict '
-                                                    'Content Security Policy your application uses.',
+                                         'summary': 'Browser code in a template or asset is not allowed by the Content '
+                                                    'Security Policy mode your application sets.',
                                          'surfaces': ['check', 'lsp'],
                                          'title': 'Browser code is incompatible with strict CSP',
                                          'when': 'The application sets security_csp to "warn" or "strict", and a '
@@ -520,8 +519,8 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                        'constant': 'FORMAT_PROVIDER_UNAVAILABLE',
                                        'defaultSeverity': 'warning',
                                        'documentationPath': '/ide/diagnostics/#citry.format.provider-unavailable',
-                                       'fix': 'Check that a formatter for the language is installed and enabled, such '
-                                              "as VS Code's built-in one or Prettier.",
+                                       'fix': 'In VS Code, check that Prettier for VS Code is installed and enabled '
+                                              'for the language, or disable it so Citry uses its own copy of Prettier.',
                                        'messages': {'default': '{detail}'},
                                        'parameters': {'detail': 'Provider availability detail.'},
                                        'summary': 'No JavaScript or CSS formatter answered, so that region was left '
@@ -578,11 +577,11 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                               'fix': 'Nothing to fix. Format that part by hand, or wrap it in fmt: off and fmt: on.',
                               'messages': {'default': '{detail}'},
                               'parameters': {'detail': 'Formatter-provided explanation.'},
-                              'summary': 'The template is valid, but the formatter cannot yet rewrite this shape '
-                                         'safely, so it left it unchanged.',
+                              'summary': 'The template is valid, but the formatter cannot rewrite this shape safely, '
+                                         'so it left it unchanged.',
                               'surfaces': ['formatter', 'lsp', 'vscode'],
                               'title': 'Formatting shape unsupported',
-                              'when': "The template's structure is outside what the formatter can currently rewrite."},
+                              'when': "The template's structure is outside what the formatter can rewrite."},
  'citry.i18n.argument-invalid': {'code': 'citry.i18n.argument-invalid',
                                  'constant': 'I18N_ARGUMENT_INVALID',
                                  'defaultSeverity': 'error',
@@ -630,8 +629,9 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                         'constant': 'I18N_CROSS_LANGUAGE_FALLBACK',
                                         'defaultSeverity': 'error',
                                         'documentationPath': '/ide/diagnostics/#citry.i18n.cross-language-fallback',
-                                        'fix': 'Add a translation for every locale that can be selected. See the i18n '
-                                               'guide on marking fallback text with its language.',
+                                        'fix': 'Add a translation for every locale that can be selected. The i18n '
+                                               "guide's Language direction and accessibility page shows how to mark "
+                                               'fallback text with its language.',
                                         'messages': {'default': '{detail}'},
                                         'parameters': {'detail': 'Fallback coverage explanation.'},
                                         'summary': 'A plain translated string can fall back to a message in another '
@@ -857,8 +857,8 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                      'named_fill': 'Marker accepts only its default slot.'},
                                         'parameters': {},
                                         'summary': 'A <c-mark> tag, which marks part of a component that an event '
-                                                   'handler can replace, has no usable name or has content it does not '
-                                                   'accept.',
+                                                   'handler can replace, has no usable name, an extra attribute, or '
+                                                   'content it does not accept.',
                                         'surfaces': ['check', 'lsp'],
                                         'title': 'Invalid <c-mark> tag',
                                         'when': 'A <c-mark> tag has no name attribute, a dynamic or invalid name, any '
@@ -902,7 +902,7 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                              'not determine whether it is supplied dynamically.'},
                                      'parameters': {'name': 'Authored variable name.'},
                                      'summary': 'A template reads a variable that nothing provides, often because of a '
-                                                'typo. It renders as an empty value or raises an error at runtime.',
+                                                'typo. Rendering then fails with a KeyError.',
                                      'surfaces': ['check', 'lsp'],
                                      'title': 'Unknown template variable',
                                      'when': "A name in {{ ... }} or in a c-* attribute is not in the component's "

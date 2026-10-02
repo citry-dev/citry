@@ -10,8 +10,8 @@ Every error and warning Citry reports has a code, such as
 and `citry check` prints it with each finding. Find the code below to see what
 went wrong and how to fix it.
 
-The code always names the same mistake in every tool: the editor, `citry
-check`, `citry format`, and the template parser. The message can add details,
+The code always names the same mistake in every tool: the editor,
+`citry check`, `citry format`, and the template parser. The message can add details,
 such as the name you misspelled.
 
 Some rules can be made stricter or turned off. Those entries say "Your
