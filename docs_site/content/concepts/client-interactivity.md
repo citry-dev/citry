@@ -58,9 +58,17 @@ browser.
 
 ## Add state and methods
 
-`$component({...})` takes standard Vue options. Use `data()` for state that
-lives only in the browser, `methods` and `computed` for behavior, and Vue's
-lifecycle hooks such as `mounted` for work tied to the component's life:
+`$component({...})` takes standard
+[Vue options](https://vuejs.org/api/#options-api){: target="_blank" rel="noopener"}.
+Use
+[`data()`](https://vuejs.org/api/options-state.html#data){: target="_blank" rel="noopener"}
+for state that lives only in the browser,
+[`methods`](https://vuejs.org/api/options-state.html#methods){: target="_blank" rel="noopener"}
+and
+[`computed`](https://vuejs.org/api/options-state.html#computed){: target="_blank" rel="noopener"}
+for behavior, and
+[Vue's lifecycle hooks](https://vuejs.org/api/options-lifecycle.html){: target="_blank" rel="noopener"}
+such as `mounted` for work tied to the component's life:
 
 ```js
 $component({
@@ -80,8 +88,11 @@ $component({
 });
 ```
 
-Vue's synchronous `setup()` works too. Take Composition API helpers such as
-`ref` from `Citry.vue`, which is the Vue build the page uses:
+Vue's synchronous
+[`setup()`](https://vuejs.org/api/composition-api-setup.html){: target="_blank" rel="noopener"}
+works too. Take Composition API helpers such as
+[`ref`](https://vuejs.org/api/reactivity-core.html#ref){: target="_blank" rel="noopener"}
+from `Citry.vue`, which is the Vue build the page uses:
 
 ```js
 $component({
