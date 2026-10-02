@@ -176,7 +176,7 @@ def test_an_unregistered_directive_stops_the_app_with_its_name(page: Any, serve_
     assert any(
         "Component Panel_" in error
         and "uses the directive 'v-tooltipp', but no directive named 'tooltipp' is registered" in error
-        and "`directives` option" in error
+        and "'directives' option" in error
         and 'app.directive("tooltipp", ...)' in error
         for error in errors
     ), errors

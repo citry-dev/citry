@@ -409,7 +409,7 @@ mod tests {
     fn key_names_on_a_non_keyboard_event_are_rejected() {
         assert_parse_error(
             r#"<button @click.enter="go();"></button>"#,
-            "'@click.enter' (line 1, column 9) uses '.enter' on the 'click' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so the listener would never run. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. To react to a key, listen to 'keydown' or 'keyup' instead.",
+            "'@click.enter' (line 1, column 9) uses '.enter' on the 'click' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so the listener would never run. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. Remove '.enter', or listen to 'keydown' or 'keyup' to react to a key.",
         );
         for (input, modifier, event) in [
             (r#"<button @click.foo="go();"></button>"#, "foo", "click"),
@@ -425,6 +425,9 @@ mod tests {
                 "submit",
             ),
             (r#"<c-child @select.enter="go();" />"#, "enter", "select"),
+            // Citry's Vue compiler listens for `KeyDown` as written, which
+            // the browser never sends, so it is not a keyboard event.
+            (r#"<input @KeyDown.enter="go();" />"#, "enter", "KeyDown"),
         ] {
             assert_parse_error(
                 input,
@@ -434,10 +437,21 @@ mod tests {
     }
 
     #[test]
+    fn model_and_native_modifiers_on_a_listener_name_their_own_fix() {
+        assert_parse_error(
+            r#"<input @input.trim="go();" />"#,
+            "'.trim' is a 'v-model' modifier. Put it on 'v-model', or remove it from the listener.",
+        );
+        assert_parse_error(
+            r#"<c-child @click.native="go();" />"#,
+            "Vue 3 has no '.native' modifier",
+        );
+    }
+
+    #[test]
     fn key_names_on_keyboard_and_dynamic_events_still_parse() {
         for input in [
             r#"<input @keydown.enter="go();" @keyup.page-down="go();" @keypress.a="go();" />"#,
-            r#"<input @KeyDown.my-key="go();" />"#,
             r#"<div @[name].enter="go();"></div>"#,
             r#"<button @click.ctrl.shift.alt.meta.exact.left.right.middle="go();"></button>"#,
             r#"<div @scroll.passive.capture.once.self.stop.prevent="go();"></div>"#,
@@ -489,7 +503,9 @@ mod tests {
                 r#"v-else-if="open""#,
             ),
             (r#"<li v-for>x</li>"#, r#"v-for="item in items""#),
-            (r#"<input v-model:title />"#, r#"v-model="query""#),
+            (r#"<input v-model.lazy />"#, r#"v-model.lazy="query""#),
+            (r#"<div v-html></div>"#, r#"v-html="html""#),
+            (r#"<p v-text=""></p>"#, r#"v-text="label""#),
         ] {
             assert_parse_error(
                 input,
@@ -499,6 +515,18 @@ mod tests {
         assert_parse_error(
             r#"<div v-show.lazy="open">x</div>"#,
             "'v-show.lazy' on <div> (line 1, column 6) takes no argument or modifiers.",
+        );
+    }
+
+    #[test]
+    fn element_model_argument_and_v_is_are_rejected() {
+        assert_parse_error(
+            r#"<input v-model:title="q" />"#,
+            "'v-model:title' on <input> (line 1, column 8) names an argument, which only a component tag's 'v-model' takes.",
+        );
+        assert_parse_error(
+            r#"<div v-is="'x'"></div>"#,
+            "'v-is' on <div> (line 1, column 6) is not supported: Vue 3 reads 'v-is' only in its compatibility build.",
         );
     }
 

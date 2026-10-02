@@ -976,9 +976,9 @@ test("a custom directive nobody registered stops the render with the component's
   assert.throws(() => compilerRuntime.resolveDirective("tooltipp"), {
     message:
       "Component OrderPanel uses the directive 'v-tooltipp', but no directive named 'tooltipp' " +
-      "is registered, so Vue would skip it. Register it in the component's `directives` option in its " +
-      "$component() options, or for every component with Citry.vue.use(plugin), where the plugin's " +
-      'install(app) calls app.directive("tooltipp", ...).',
+      "is registered. Check the spelling, or register it: in the 'directives' option of the " +
+      "component's $component() call, or for every component with Citry.vue.use(plugin), where the " +
+      'plugin\'s install(app) calls app.directive("tooltipp", ...).',
   });
   instance = null;
   assert.throws(() => compilerRuntime.resolveDirective("focus"), /Component \(unknown\) uses the directive 'v-focus'/);

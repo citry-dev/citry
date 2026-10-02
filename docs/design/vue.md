@@ -1256,13 +1256,19 @@ An HTML element (or `<c-element>`) accepts Vue directives other than
 `v-once` and `v-memo`, but the parser rejects the spellings Vue would not
 run as written, with a message that names the directive: an uppercase `V-`
 prefix, a built-in name with capitals, `v-c-*` and `v-citry-*`, a `v-show`
-with an argument or modifiers, and a `v-show`, `v-if`, `v-else-if`, `v-for`,
-or `v-model` without an expression. A custom directive keeps its case
-(`v-Tooltip`), because Vue looks it up by that exact name and the browser
-reports a name nobody registered. On a static, non-keyboard event name
-(anything but `keydown`, `keyup`, and `keypress`), the parser also rejects a
-modifier outside the set Vue's `compiler-dom` handles on any event, because
-Vue would read it as a key name and the event has no key.
+with an argument or modifiers, a `v-model` with an argument, `v-is`, and a
+`v-show`, `v-if`, `v-else-if`, `v-for`, `v-model`, `v-html`, or `v-text`
+without an expression. A custom directive keeps its case (`v-Tooltip`),
+because Vue looks it up by that name (and its camelCase and PascalCase
+forms), never in lowercase, and the browser reports a name nobody
+registered. On a static event name other than exactly `keydown`, `keyup`, or
+`keypress`, the parser also rejects a modifier outside the set Vue handles
+on any event (the list in compiler-dom's `resolveModifiers`). Citry's Vue
+compiler wraps every other modifier in a check of `event.key`, and the event
+has no key, so the listener would never run. A `@c-*` Events binding still
+accepts `.enter` and `.escape` on any event and simply never matches a
+keyless one; rejecting that at load belongs to the Events binding validator
+and is not done yet.
 
 #### Conditions on a call
 

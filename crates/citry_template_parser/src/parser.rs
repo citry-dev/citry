@@ -2131,21 +2131,36 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
     Ok(())
 }
 
-/// The modifiers Vue's compiler handles itself on any event: event options,
+/// The modifiers Vue handles itself on any event: event options,
 /// propagation and target checks, modifier-key checks, and mouse buttons.
-/// Vue reads every other modifier as a key name. The list matches
-/// `resolveModifiers` in Vue's `compiler-dom` (3.5).
+/// The list matches `resolveModifiers` in Vue's `compiler-dom` (3.5).
+/// Citry's Vue compiler (vize, `codegen/props/events.rs`) wraps every other
+/// modifier in a check of `event.key`, whatever the event.
 const VUE_NON_KEY_MODIFIERS: [&str; 14] = [
     "stop", "prevent", "self", "capture", "once", "passive", "ctrl", "shift", "alt", "meta",
     "exact", "left", "right", "middle",
 ];
 
-/// Whether Vue treats a static event name as a keyboard event, where key-name
-/// modifiers work. Vue lowercases the name before it compares, so this does too.
+/// Whether a static event name is a keyboard event, where key-name modifiers
+/// work. The name must match exactly: on an element, Citry's Vue compiler
+/// listens for an event spelled `KeyDown` as written, and the browser never
+/// sends one.
 fn is_vue_keyboard_event(event: &str) -> bool {
-    ["keydown", "keyup", "keypress"]
-        .iter()
-        .any(|keyboard| event.eq_ignore_ascii_case(keyboard))
+    matches!(event, "keydown" | "keyup" | "keypress")
+}
+
+/// What to write instead of a modifier that is not a key name on a
+/// non-keyboard event: the usual mistakes get their own advice.
+fn non_key_modifier_hint(modifier: &str) -> String {
+    match modifier {
+        "native" => "Vue 3 has no '.native' modifier: a listener on a component tag already hears the child's root element events that the child does not declare. Remove '.native'.".to_string(),
+        "trim" | "lazy" | "number" => format!(
+            "'.{modifier}' is a 'v-model' modifier. Put it on 'v-model', or remove it from the listener."
+        ),
+        _ => format!(
+            "Remove '.{modifier}', or listen to 'keydown' or 'keyup' to react to a key."
+        ),
+    }
 }
 
 /// What to write instead of an Alpine event modifier that Vue does not have,
@@ -2213,12 +2228,15 @@ fn validate_element_once_memo(node: &Node, context: &ParserContext) -> Result<()
 /// prefix (`V-IF`) makes a plain attribute, so the element always shows, and
 /// a built-in name in another case (`v-If`) makes a custom directive named
 /// `If`. Citry's own browser runtime owns `v-c-*` and `v-citry-*`. `v-show`,
-/// `v-if`, `v-else-if`, `v-for`, and `v-model` need an expression, and
-/// `v-show` takes no argument or modifiers; without these checks the page
-/// would fail at render with a message that does not name the directive.
-/// Component tags and `<c-slot>` report the same mistakes through their own
-/// checks. A custom directive may use any case (`v-Tooltip`), because Vue
-/// looks it up by that exact name.
+/// `v-if`, `v-else-if`, `v-for`, `v-model`, `v-html`, and `v-text` need an
+/// expression (an empty `v-html` would clear the element). `v-show` takes no
+/// argument or modifiers, `v-model` on an element takes no argument, and
+/// `v-is` has no element meaning in Vue 3. Vue would otherwise drop these
+/// silently or fail at render with a message that does not name the
+/// directive. Component tags and `<c-slot>` report the same mistakes through
+/// their own checks. A custom directive may use any case (`v-Tooltip`),
+/// because Vue looks it up by that name (and its camelCase and PascalCase
+/// forms), never in lowercase.
 fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
     let tag_name = node.tag_name();
     if has_citry_component_prefix(tag_name) && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
@@ -2270,14 +2288,26 @@ fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Resu
         if directive == "show" && !suffix.is_empty() {
             return fail("takes no argument or modifiers. Write 'v-show=\"...\"'.".to_string());
         }
-        let example = match directive {
-            "show" => "v-show=\"open\"",
-            "if" => "v-if=\"open\"",
-            "else-if" => "v-else-if=\"open\"",
-            "for" => "v-for=\"item in items\"",
-            "model" => "v-model=\"query\"",
+        if directive == "model" && suffix.starts_with(':') {
+            return fail(
+                "names an argument, which only a component tag's 'v-model' takes. On a form element, write 'v-model=\"...\"'.".to_string(),
+            );
+        }
+        if directive == "is" {
+            return fail(
+                "is not supported: Vue 3 reads 'v-is' only in its compatibility build. To choose a component in Python, write a component tag inside '<c-if>'; to choose an element's tag, use '<c-element c-is=\"...\">'.".to_string(),
+            );
+        }
+        // The example keeps the modifiers the author wrote, such as `.lazy`.
+        let sample = match directive {
+            "show" | "if" | "else-if" => "open",
+            "for" => "item in items",
+            "model" => "query",
+            "html" => "html",
+            "text" => "label",
             _ => continue,
         };
+        let example = format!("{name}=\"{sample}\"");
         let has_value = attr
             .inner_value
             .as_ref()
@@ -2298,7 +2328,7 @@ fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Resu
 /// as an unknown element. Rejecting it here gives one clear message on every
 /// page, and `citry check` and the editor report it too. Vue matches the
 /// PascalCase and kebab-case spellings; any letter case is matched here,
-/// because no HTML element uses these names.
+/// because no standard HTML element uses these names.
 fn validate_vue_builtin_component_tag(
     node: &Node,
     context: &ParserContext,
@@ -2318,7 +2348,7 @@ fn validate_vue_builtin_component_tag(
         ),
         "suspense" => (
             "Suspense",
-            "To show a placeholder while data loads, keep a loading flag in the component's data and switch between the two with 'v-if' and 'v-else'.",
+            "To show a placeholder while data loads, keep a loading flag in the component's data and switch between the placeholder and the content with 'v-if' and 'v-else'.",
         ),
         _ => return Ok(()),
     };
@@ -2472,9 +2502,10 @@ fn validate_vue_binding_python_conflicts(
 /// Reject event modifiers that would stop a Vue listener (`@event` or
 /// `v-on:event`) from ever running.
 ///
-/// Vue reads every modifier it does not know as a key name and lets the
-/// listener run only when the event's `key` matches. That works for keyboard
-/// events, but a `click` has no `key`, so `@click.enter` would never run. Two
+/// Citry's Vue compiler wraps every modifier outside `VUE_NON_KEY_MODIFIERS`
+/// in a check that lets the listener run only when the event's `key`
+/// matches. That works for keyboard events, but a `click` has no `key`, so
+/// `@click.enter` would never run. Two
 /// kinds of modifier are rejected: Alpine modifiers that Vue lacks, on any
 /// event, and key names on an event whose static name is not a keyboard
 /// event. A dynamic event name (`@[name]`) is checked only for Alpine
@@ -2532,7 +2563,8 @@ fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Resu
             return Err(context.error_from_token(
                 &attr.token,
                 format!(
-                    "'{name}' (line {line}, column {col}) uses '.{modifier}' on the '{event}' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so the listener would never run. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. To react to a key, listen to 'keydown' or 'keyup' instead."
+                    "'{name}' (line {line}, column {col}) uses '.{modifier}' on the '{event}' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so the listener would never run. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. {}",
+                    non_key_modifier_hint(modifier)
                 ),
             ));
         }

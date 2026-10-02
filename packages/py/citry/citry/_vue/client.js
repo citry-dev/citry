@@ -596,9 +596,9 @@
       const record = instance && (instanceRecords.get(instance.proxy) || instanceRecords.get(instance.ctx));
       const component = record?.app.occurrences.get(record.occurrenceId)?.typeKey || instance?.type?.name || "(unknown)";
       throw new Error("Component " + component + " uses the directive 'v-" + name + "', but no directive " +
-        "named '" + name + "' is registered, so Vue would skip it. Register it in the component's " +
-        "`directives` option in its $component() options, or for every component with " +
-        "Citry.vue.use(plugin), where the plugin's install(app) calls app.directive(\"" + name + "\", ...).");
+        "named '" + name + "' is registered. Check the spelling, or register it: in the 'directives' option " +
+        "of the component's $component() call, or for every component with Citry.vue.use(plugin), where " +
+        "the plugin's install(app) calls app.directive(\"" + name + "\", ...).");
     },
     enumerable: true,
   });

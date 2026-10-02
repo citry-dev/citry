@@ -2540,8 +2540,8 @@ def test_misspelled_element_directive_fails_when_the_template_loads(element, pro
         citry = app
         template = page_template.format(element)
 
-    # Before this check, the static page wrote these as plain attributes and the
-    # interactive page failed at render without naming the directive.
+    # Both the static and the interactive page fail with the same parse error,
+    # before the Vue compiler sees the template.
     with pytest.raises(SyntaxError, match=re.escape(problem)):
         str(Page())
 
