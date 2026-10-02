@@ -80,11 +80,11 @@ class Dependencies:
 ```
 
 Each URL contains a hash of the file's content, so a changed file gets a
-new URL. Serving needs Citry mounted in your web app (see
-[Web frameworks](/web-frameworks/)); without that, Citry puts the content
+new URL. Serving needs Citry's routes added to your web app (see
+[Web frameworks](/web-frameworks/)); without them, Citry puts the content
 into the page as before. `local_files` accepts only `"inline"` (the
-default) and `"serve"`. Any other value raises `ValueError` when the page
-is serialized.
+default) and `"serve"`. Any other value raises `ValueError` when a page
+that includes one of the component's project files is serialized.
 
 To serve project files for every component, set the default on your
 `Citry` instance:
@@ -182,8 +182,8 @@ Script(
 Script(url="https://cdn.example.com/editor.umd.js")
 ```
 
-When you call `str()` or `serialize()` on an interactive page, Citry raises
-`ValueError` for a `Script` that has:
+When you turn an interactive page's render into HTML with `str()` or
+`serialize()`, Citry raises `ValueError` for a `Script` that has:
 
 - an `async`, `defer`, or `nomodule` attribute;
 - a `type` other than JavaScript, such as `type="module"`;
@@ -215,14 +215,17 @@ the same URL or the same inline content, and adds that file once:
   component lists it under two `media` keys, serialization raises
   `ValueError`. Give such stylesheets different URLs.
 
-## Compute the list of files
+## Use other kinds of entries
 
-An entry can also be one of these, for cases a fixed list does not cover:
+Besides URLs, file paths, `Script`, and `Style`, an entry can be one of
+these:
 
 ### A glob pattern
 
 A string such as `"widgets/*.js"` adds every matching file, sorted by
-path. Citry searches the same places as for a single file.
+path. Citry searches the same places as for a single file, and uses only
+the first place that has matches. A string glob that matches nothing is
+kept as a URL.
 
 ### A function
 
