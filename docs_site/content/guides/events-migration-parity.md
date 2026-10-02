@@ -5,8 +5,8 @@ description: Compare Component.View, django-unicorn, Tetra, and livecomponents c
 
 # Events migration parity
 
-You are porting a component from another server-component library and want
-to know: does Citry Events cover what my component relies on, and if not,
+You are porting a component from another server-component library to
+Citry Events, Citry's server-events feature, and want to know: does it cover what my component relies on, and if not,
 what do I do instead? These tables answer that, one capability per row.
 
 Clicks, forms, values kept between calls, and re-rendering part of the page
@@ -44,9 +44,8 @@ A few Citry terms appear throughout:
 
 - A **handler** is a public method in a component's nested `class Events`.
   Browser code can call it by name.
-- **State** holds the values a handler needs on the next call. Citry sends
-  them to the browser with the rendered component and gets them back with
-  each call.
+- **State** holds the values a handler needs on the next call. Citry keeps
+  them between calls, either on the server or in the page.
 - A **per-event route** is the URL of one handler. Calls made from
   templates are usually bundled and sent to a shared **batch route** instead.
 
@@ -55,7 +54,7 @@ A few Citry terms appear throughout:
 | Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
 | Callable declaration | HTTP-verb method | Most public methods | `@public` | `@command` | Public method in nested `Events` | **v1** |
-| Explicit allowlist | Overridden verbs | Public by default, with exclusions | Decorator | Decorator | Being in `Events`; underscore methods stay private | **v1** |
+| Explicit allowlist | Overridden verbs | Public by default, with exclusions | Decorator | Decorator | Methods in `Events`; underscore methods stay private | **v1** |
 | Several actions per component | Verb or query multiplexing | Named methods | Named methods | Named commands | One named handler per operation | **v1** |
 | Typed input | Manual parsing | Coerced from type hints | JS arguments | Body kwargs | One strict `data` schema, with field errors | **v1** |
 | JSON return to caller | Host response | Return value | Promise result | Execution-result model | `dict` or `actions.Data` resolves the caller's promise | **v1** |
@@ -68,7 +67,7 @@ A few Citry terms appear throughout:
 | Plain HTML form without JavaScript | Manual | Needs client runtime | Needs client runtime | Needs htmx | Post to the per-event URL; get HTML, a redirect, or JSON | **v1** |
 | HTTP-verb handlers | Native model | - | - | - | `ViewEvents` for GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS | **v1** |
 | TRACE handler | Supported | - | - | - | No compatibility handler | **Dropped** |
-| Custom route pattern | Per component | Fixed message route | Fixed call route | Fixed command route | Fixed per-event, batch, and compatibility routes | **Dropped** |
+| Custom route pattern | Per component | Fixed message route | Fixed call route | Fixed command route | Fixed per-event and batch routes, plus the `ViewEvents` route | **Dropped** |
 | Reverse args for custom paths | Supported | - | - | - | Fixed event paths need no reverse args | **Dropped** |
 | Load model from primary key automatically | - | Automatic | Object token in state | Stored model objects | Load by validated id and check access yourself | **Dropped** |
 | OpenAPI document | - | - | - | - | Deterministic OpenAPI 3.1 from the CLI | **v1** |
@@ -88,11 +87,11 @@ instead of host responses. The method-only URL has no public URL builder;
 | Default storage | Your code | Client data, checksum, cached pickle | Encrypted pickle token | Redis pickle | Signed strict-JSON token (full HMAC) | **v1** |
 | State kept on the server | Your code | Cached component | - | Default | `_storage = "server"` in `Citry.cache`, strict JSON | **v1** |
 | Stateless handler | Natural | Full component state | Basic component variant | Special subclass | Omit `State`; no token is created | **v1** |
-| Control what the browser reads | Your code | `javascript_exclude` | Public/private split | Server-held | `_public` limits what templates read; it does not hide values | **v1** |
+| Control what the browser reads | Your code | `javascript_exclude` | Public/private split | Server-held | `_public` limits what browser code reads; with signed State the other fields still travel in the token | **v1** |
 | Client-writable fields | Your code | Public setters | Public attributes | Commands only | `_model` lists the writable public fields | **v1** |
 | Per-component expiry | Your code | Cache policy | Token max age | Page-session TTL | `_max_age` on signed or server State | **v1** |
 | Pluggable server store | Your code | Django cache | Token design | Store and serializer classes | Configure `Citry.cache`; State stays strict JSON | **v1** |
-| Encrypted State token | Your code | - | Default | Server-held | Not built in; keep secret values in server State | **v1.x** |
+| Encrypted State token | Your code | - | Default | Server-held | Not built in; use server State, with the field left out of `_public` | **v1.x** |
 | Rich Python values in State | Your code | Models, custom objects | Pickled component | Pickled/Pydantic values | Strict JSON only | **Dropped** |
 | Undeclared attributes kept on the server | Natural | Yes | Private pickled attrs | Stored State | Only declared State fields survive the call | **Dropped** |
 | Original kwargs during a call | Request code decides | Rehydrated object | Saved component | Stored State/context | Not available; pass every input to the returned component | **Dropped** |
@@ -103,8 +102,8 @@ instead of host responses. The method-only URL has no public URL builder;
 !!! warning "Signed State is readable by anyone"
 
     Signing lets Citry detect a changed token, but anyone can read the
-    values in it. Put a value that must stay secret in server State
-    (`_storage = "server"`), which keeps it out of the page.
+    values in it. To keep a value out of the page, set
+    `_storage = "server"` and leave the field out of `_public`.
 
 ## Bind events
 
@@ -156,8 +155,10 @@ instead of host responses. The method-only URL has no public URL builder;
 | Merge duplicate re-renders | Host code | Partial logic | Self render | Ancestor dedup | The order of returned actions is what runs | **Dropped** |
 
 **Update several parts at once.** Put the `Render` actions next to each
-other in the returned list, one per target. Another action between them, a
-`delay`, or `wait=False` makes the call fail.
+other in the returned list, one per target. The call fails if another
+action sits between them, if one uses `delay` or `wait=False`, or if two
+targets are the same or one contains the other. Nothing on the page
+changes then, although the handler has already run.
 
 **Keep focus and typed text.** When keyed rows are reordered, the focused
 field keeps its focus, caret, and text. A text field keeps what the user
@@ -165,7 +166,7 @@ typed until the server sends a different value.
 
 **Keep DOM a JS library manages.** An HTML element with `#c-ignore` keeps
 its server-rendered contents through later renders. On a component tag,
-`#c-ignore` raises an error.
+`#c-ignore` raises an error when the template loads.
 
 **Slot fills after an update.** Each fill keeps the Vue scope of the
 template that wrote it.
@@ -175,7 +176,7 @@ handles its slots, several root elements, and components that render no
 element. State lives under `$state`, separate from the component's own Vue
 data.
 
-## Forms, files, URLs
+## Forms, files, links
 
 | Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
@@ -190,9 +191,10 @@ data.
 | Upload across several requests | Your code | - | Temporary files | Upload flow | Not built in; keep it in your code | **Dropped** |
 | Error attrs or template tag | Manual | Built in | Template state | Your code | Render from `$error(name)` | **Dropped** |
 
-**File download.** `actions.Download` works only on a per-event call. A
-batched call that returns it is rejected, so mark the handler
-`@event(bundle=False)`.
+**File download.** `actions.Download` works only on a per-event call, so
+mark the handler `@event(bundle=False)`. Return the download on its own,
+and do not change State in that handler. See
+[Download a file](/events/actions/#download-a-file).
 
 **File upload.** Citry's built-in payload codecs do not read
 `multipart/form-data`. To accept files now, register a custom payload codec
@@ -234,7 +236,8 @@ State or event data names.
 ## Events v1 acceptance checklist
 
 The Citry project treats Events v1 as complete only while all of these hold.
-For a migrator, they are the guarantees you can build on:
+The items about hosts, CSRF, and the browser runtime are behavior your port
+can rely on; the rest describe how the project checks itself:
 
 - The protocol examples replay against the Python dispatcher and validate
   against the protocol schema, so the wire format matches its spec.
