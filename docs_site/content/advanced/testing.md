@@ -10,10 +10,10 @@ These tests are fast and need no server or browser. Reach for slower tests
 only for what Python rendering cannot show:
 
 - a plain Python test checks inputs, slots, and the rendered HTML;
-- your web framework's test client checks routes and server events over
-  HTTP;
-- a browser test checks clicks, Vue, and other behavior that runs in the
-  page.
+- your web framework's test client checks Citry routes and server events
+  over HTTP: the request, the status code, and the actions a handler
+  returns;
+- a browser test checks clicks, reactive state, focus, and page updates.
 
 ## Give each test its own Citry instance
 
@@ -188,12 +188,8 @@ renders both, all without an HTTP server.
 
 A Python render shows the HTML, bindings, and assets Citry sends to the
 browser. It does not run Vue or Citry's browser code, so it cannot show
-what happens after a click.
-
-- Use a Python render test for inputs and the first HTML.
-- Use your framework's test client for Citry routes, server event
-  requests, response status codes, and the actions a handler returns.
-- Use a browser test for clicks, reactive state, focus, and page updates.
+what happens after a click. Use the test client and browser tests listed
+at the top of this page for that.
 
 For [server events](/events/), keep the business logic in ordinary Python
 functions and test those directly. Then add one smaller test that calls
