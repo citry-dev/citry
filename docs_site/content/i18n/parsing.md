@@ -5,16 +5,18 @@ description: Convert strict locale-sensitive form edits into canonical numbers, 
 
 # Parse localized input
 
-Formatting and parsing solve opposite problems, but they share the same named
-profile. A profile says how a value is displayed and, when configured, which
-strict editing grammar the matching parser accepts.
+Users type numbers and dates the way their language writes them. A Czech
+user enters `1234,5`, an American user `1234.5`. Your code needs the
+same `Decimal("1234.5")` from both.
 
-Citry does not parse free-form requests such as "next Tuesday evening" or
-guess a currency or measurement unit from text.
+Citry reads this input with the same [format profile](/i18n/formatting/)
+you use to display the value. A profile can say which input it accepts,
+and the parser accepts only that: the locale's own digits, separators,
+and field order. It does not guess.
 
-## Keep the user's edit separate from its value
+## Read a number from a form field
 
-A parse result preserves the exact input and reports its state:
+Call `self.i18n.parse.number()` with the text and a profile name:
 
 ```python
 result = self.i18n.parse.number(
@@ -28,20 +30,25 @@ else:
     show_edit_again(result.input, result.error)
 ```
 
-Numeric results have three states:
+A number result keeps the user's exact text in `input` and reports one
+of three states:
 
-- `valid`: `value` contains a canonical `Decimal`;
-- `incomplete`: the input may become valid with more typing, such as a trailing
+- `valid`: `value` holds the number as a `Decimal`;
+- `incomplete`: more typing could make it valid, as with a trailing
   decimal separator; and
-- `invalid`: the input breaks the profile's grammar.
+- `invalid`: the text does not match the profile.
 
-Do not replace the edit field with `value` while the user is still typing. Keep
-the localized string in the control and use the canonical value for domain
-logic after the result becomes valid.
+While the user is still typing, leave their text in the field. Do not
+replace it with `value`; use `value` in your own logic once the result
+is valid.
 
-## Parse numbers with locale digits and separators
+Outside a component, use `parse` on a service for an explicit locale
+context, as in the datetime example below.
 
-Every `NumberFormat` includes a `NumberInput` policy:
+## Choose which number formats to accept
+
+Every `NumberFormat` accepts plain decimal numbers by default. To also
+accept scientific notation, set `NumberInput`:
 
 ```python
 from citry import FormatRegistry, NumberFormat, NumberInput
@@ -58,19 +65,19 @@ formats = FormatRegistry(
 )
 ```
 
-The default accepts strict decimal notation. It checks the locale's digits,
-decimal separator, grouping separator, grouping sizes, and signs. It does not
-silently accept a digit or separator from another locale.
+The parser checks the locale's digits, decimal separator, grouping
+separator and group sizes, and signs. A separator or digit from another
+locale is invalid.
 
-`decimal_or_scientific` also accepts ASCII `e` or `E`; the exponent digits
-still use the selected locale's digit set.
+With `decimal_or_scientific`, the exponent marker is ASCII `e` or `E`.
+The exponent digits still use the locale's digits.
 
-## Parse percentages as ratios
+## Read percentages
 
-`PercentInput` chooses whether the user edits the locale's percent affix:
+`PercentInput` says whether the user types the percent sign:
 
 ```python
-from citry import PercentFormat, PercentInput
+from citry import FormatRegistry, PercentFormat, PercentInput
 
 formats = FormatRegistry(
     percent={
@@ -84,18 +91,18 @@ formats = FormatRegistry(
 )
 ```
 
-Use `required` when the percent sign belongs inside the editable text. Use
-`omit` when the control renders the affix outside its input field.
+Use `required` when the percent sign is part of the typed text. Use
+`omit` when the form shows the sign outside the input field.
 
-Both modes return a ratio. Parsing localized 12.5 percent returns
-`Decimal("0.125")`.
+Both return a ratio: 12.5 percent comes back as `Decimal("0.125")`.
 
-## Choose strict text or segmented dates
+## Read dates
 
-A date profile may be display-only or may declare one input mode:
+A date profile only reads input when you give it a `DateInput`. Choose
+one of two modes:
 
 ```python
-from citry import DateFormat, DateInput
+from citry import DateFormat, DateInput, FormatRegistry
 
 formats = FormatRegistry(
     date={
@@ -111,12 +118,14 @@ formats = FormatRegistry(
 )
 ```
 
-`strict_text` accepts the locale-specific field order, separators, digits, and
-month names produced by that profile. It does not accept another locale's date
-shape.
+- `strict_text` reads one text field. It accepts the field order,
+  separators, digits, and month names this profile displays in the
+  locale, and nothing from other locales.
+- `segments` reads a form that already has separate year, month, and
+  day fields.
 
-`segments` is for a control that already owns separate fields. Pass the fields
-by meaning, regardless of their visual order:
+For `segments`, pass each field by name, whatever order the form shows
+them in:
 
 ```python
 from citry import DateSegments
@@ -131,32 +140,21 @@ result = self.i18n.parse.date_segments(
 )
 ```
 
-The valid result is a canonical Python `date`. Citry uses the selected locale's
-calendar when reading the fields and reports ambiguous or unsupported calendar
-input rather than guessing.
+A valid result holds a Python `date`. Citry reads the fields in the
+locale's calendar and reports an error for unclear or unsupported input
+instead of guessing.
 
-## Make two-digit years explicit
+## Read times
 
-By default, a year requires enough digits to identify it. If a product truly
-accepts two-digit years, define the first year of one explicit 100-year window:
+Time profiles use the same two modes, with `TimeInput`:
 
 ```python
-DateInput(
-    mode="strict_text",
-    two_digit_year_start=1950,
+from citry import (
+    FormatRegistry,
+    TimeFormat,
+    TimeInput,
+    TimeSegments,
 )
-```
-
-The profile now maps two-digit years into 1950 through 2049. Another product
-can choose another window. Citry does not derive the window from the current
-date.
-
-## Parse wall-clock time without a zone
-
-Time parsing follows the same two input modes:
-
-```python
-from citry import TimeFormat, TimeInput, TimeSegments
 
 formats = FormatRegistry(
     time={
@@ -178,13 +176,14 @@ result = self.i18n.parse.time_segments(
 )
 ```
 
-A valid result is a zone-free Python `time`. Converting it to an instant needs
-a date and a time zone, so it belongs to datetime parsing instead.
+A valid result holds a Python `time` without a time zone. To get an
+exact moment, you also need a date and a zone; read both together as a
+datetime.
 
-## Resolve local datetimes through an explicit zone
+## Read a date and time in a time zone
 
-Datetime parsing combines date and time fields and requires a context with an
-IANA time zone:
+A datetime profile combines date and time fields. Reading it needs a
+locale context with a time zone:
 
 ```python
 from citry import (
@@ -237,11 +236,15 @@ edit = DateTimeSegments(
 result = parser.datetime_segments(edit, format="appointment")
 ```
 
-A local time that the clocks skip when daylight saving starts is `invalid`.
-A local time that happens twice when the clocks go back is `ambiguous`, and
-the result lists both possible aware instants in `alternatives`. The example
-above is ambiguous: 2:30 AM happens twice in Prague on 25 October 2026.
-Pass the user's choice as `fold`:
+Daylight saving time makes some local times special:
+
+- A time that the clocks skip when daylight saving starts is `invalid`.
+- A time that happens twice when the clocks go back is `ambiguous`. The
+  result lists both possible moments in `alternatives`.
+
+The example above is ambiguous: 2:30 AM happens twice in Prague on
+25 October 2026. Ask the user which one they mean, then pass it as
+`fold`:
 
 ```python
 result = parser.datetime_segments(
@@ -251,14 +254,10 @@ result = parser.datetime_segments(
 )
 ```
 
-Citry reads time-zone transitions from the `tzdata` Python package it
-depends on, not from the host machine's zone database. A context with a time
-zone records the exact `tzdata` version it used.
-
 ## Parse numbers and percentages in the browser
 
-The browser service provides synchronous strict parsing for numbers and
-percentages:
+Inside a [browser i18n provider](/i18n/browser/), `$i18n.parse` reads
+numbers and percentages:
 
 ```javascript
 const result = $i18n.parse.number(
@@ -268,15 +267,44 @@ const result = $i18n.parse.number(
 ```
 
 It returns a frozen object with `input`, `state`, `value`, `error`, and
-`valid`. The canonical numeric `value` is a string so JavaScript does not lose
-decimal precision.
+`valid`. `value` is a string, so JavaScript does not lose decimal
+digits.
 
-Date, time, and datetime parsing runs only on the server, and the browser
-service has no methods for it. Parsing these values the same way as the
-server needs the server's calendar and daylight-saving data, and Citry does not
-try to reconstruct that data from `Intl.DateTimeFormat` output.
+Dates, times, and datetimes are parsed only on the server; the browser
+has no methods for them. Reading them exactly like the server needs the
+server's calendar and daylight saving data, and Citry does not try to
+rebuild that data in the browser.
 
-Unit controls parse their numeric field with `parse.number()` and keep the
-unit as separate domain data. Currency controls likewise keep the currency
-code explicit.
+## Rules for less common cases
 
+### Accept two-digit years
+
+By default, a year must have enough digits to identify it. To accept
+two-digit years, choose the first year of a 100-year window:
+
+```python
+DateInput(
+    mode="strict_text",
+    two_digit_year_start=1950,
+)
+```
+
+Two-digit years then map to 1950 through 2049. Citry does not move the
+window with the current date.
+
+### Read a currency amount or a measurement
+
+Parse the amount with `parse.number()` and keep the currency code or
+unit as separate data. Citry does not read a currency or unit from the
+typed text.
+
+### Text such as "next Tuesday" is not read
+
+Citry does not read phrases such as "next Tuesday evening". Each profile
+accepts one strict format.
+
+### Where daylight saving data comes from
+
+Citry reads time-zone rules from the `tzdata` Python package it depends
+on, not from the operating system. A context with a time zone records
+the `tzdata` version it used.
