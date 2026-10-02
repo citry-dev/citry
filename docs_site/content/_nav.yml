@@ -27,7 +27,7 @@ areas:
           - { title: Connect components in the browser, path: /getting-started/client-props-and-handlers/ }
           - { title: Serve pages with FastAPI, path: /getting-started/fastapi/ }
           - { title: Call Python from a click, path: /getting-started/call-python/ }
-          - { title: Events state, path: /getting-started/state/ }
+          - { title: Keep values between calls, path: /getting-started/state/ }
           - { title: Handle and validate forms, path: /getting-started/forms/ }
           - { title: Update page from Python, path: /getting-started/server-rendered-updates/ }
           - { title: Build CRUD pages, path: /getting-started/build-crud-pages/ }
