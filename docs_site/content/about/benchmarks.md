@@ -26,8 +26,8 @@ faster.
 - A bar runs from the moment the browser asks for the page until the
   page's scripts respond to input and the browser has laid the page out.
 - The first chart times the first request for the page. The second
-  chart times the next request for the same page, again with an empty
-  browser cache.
+  chart times the next request for the same page, after the server has
+  handled it once. The browser cache is empty both times.
 - Green is the server building the page. Blue is the browser loading and
   running scripts after the page arrives. The remaining parts of each bar
   are short: the wait for the next layout takes 5 to 25 ms, and the
