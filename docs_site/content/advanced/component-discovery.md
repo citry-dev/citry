@@ -64,6 +64,9 @@ myproject/
     card.py
 ```
 
+A directory that holds component modules but cannot be imported raises
+`ValueError` during discovery.
+
 Paths in `dirs` must be absolute; a relative path raises `ValueError`.
 Build them from `__file__`, as above, or call `Path(...).resolve()`.
 
@@ -109,13 +112,18 @@ from myproject.engine import app
 app.initialize()
 ```
 
-It runs discovery and prepares the checks Citry applies to each component
-tag. An import error or invalid component then stops startup, instead of
-failing the first request that needs it.
+It runs discovery and reads every component's inputs and slots, so Citry
+can check each component tag in a template. An import error or invalid
+component then stops startup, instead of failing the first request that
+needs it.
 
 Calling `initialize()` again does nothing unless components were added or
 removed since; then it prepares them again. If it raises, fix the problem
 and call it again.
+
+Start discovery from one place, at startup. A second thread that starts
+discovery or `initialize()` while one is running raises
+[`CitryLifecycleInProgress`][citry.CitryLifecycleInProgress].
 
 [Web frameworks](/web-frameworks/) shows where startup code goes in each
 framework.
@@ -147,10 +155,6 @@ module's exception. Components from modules imported before it stay
 registered. Components that the failing module registered before the error
 are removed, so after you fix the module, calling discovery again imports
 it cleanly.
-
-Start discovery from one place, at startup. A second thread that starts
-discovery or `initialize()` while one is running raises
-`CitryLifecycleInProgress`.
 
 ## List which components use each other
 
