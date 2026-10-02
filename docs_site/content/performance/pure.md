@@ -42,7 +42,7 @@ top-level render call such as `str(Page())`. The next page render starts
 empty. To reuse output across requests, see
 [Cache rendered output](/performance/caching/).
 
-## What still runs for every copy
+## Know what still runs for every copy
 
 `pure = True` reuses only the HTML that the template itself produces.
 Citry still does the rest for every copy:
@@ -74,9 +74,10 @@ appears once, or receives different data every time, gains nothing.
 
 ## Edge cases
 
-### Subclasses
+### Subclasses and later changes
 
-`pure` is not inherited. A subclass must declare `pure = True` itself,
+`pure` is not inherited, and you cannot reassign it after the class is
+defined. A subclass must declare `pure = True` itself,
 because it can add behavior that breaks the promise.
 
 ### Combining with `simple`
@@ -84,7 +85,8 @@ because it can add behavior that breaks the promise.
 A component can declare both `pure = True` and
 [`simple = True`](/performance/simple-components/). The simple component
 rules still apply, and a `simple = True` template that contains
-`<c-slot />` renders again on every call.
+`<c-slot />` renders again on every call. `simple = "vue"` cannot be
+combined with `pure = True`; every call raises an error.
 
 ## Related pages
 
