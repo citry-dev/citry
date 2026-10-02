@@ -13,9 +13,9 @@ styles.
 Subclass the component for this. Put the shared parts on a base class, and
 let each child change only what makes it different.
 
-When the two pieces should change independently of each other, use one
-inside the other's template instead. A subclass also inherits every future
-change to its parent.
+A subclass inherits every future change to its parent. When the two
+should change independently, render one inside the other's template
+instead.
 
 ## Reuse inputs and behavior
 
@@ -92,9 +92,14 @@ To start a child without the parent's declaration, set it to `None`:
 ```citry
 class FreeformMessage(Message):
     Kwargs = None
+
+    def template_data(self, kwargs, slots):
+        return {"message": kwargs.get("text", "")}
 ```
 
-`FreeformMessage` declares no `Kwargs`, so it accepts any inputs.
+`FreeformMessage` declares no `Kwargs`, so it accepts any inputs. It also
+overrides `template_data()`, because the inherited one reads
+`kwargs.text`, which no longer exists.
 
 ## Replace the template, JavaScript, or CSS
 
@@ -105,7 +110,7 @@ loaded from a file:
 - [`js`][citry.Component.js] or `js_file`;
 - [`css`][citry.Component.css] or `css_file`.
 
-Each line is one pair. A child that sets neither member of a pair inherits
+Each line above is one pair. A child that sets neither member of a pair inherits
 the parent's. A child that sets either member replaces the whole pair, and
 still inherits the other two pairs:
 
@@ -200,7 +205,7 @@ parents'.
 [Dependency files](/advanced/dependency-files/) covers the forms an entry
 can take, local files, URLs, and how the files are served.
 
-## Rules for duplicates and conflicts
+## Errors and duplicate entries
 
 ### Mixing schema styles across a family
 
