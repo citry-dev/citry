@@ -18,23 +18,30 @@ the component's `js`.
 
 ## Add a browser counter
 
-Define the values the browser keeps in Vue's `data()` option:
+In the component's `js`, call `$component({...})` and return the values the
+browser keeps from a `data()` function, as in any Vue component. The
+`template` holds the Vue attributes and can read and change `count`
+directly:
 
-```js
-$component({
-  data() {
-    return { count: 0 };
-  },
-});
-```
+```citry
+from citry import Component
 
-The template can read and change `count` directly:
 
-```citry-html
-<button type="button" @click="count += 1">
-  Add one
-</button>
-<output v-text="count"></output>
+class Counter(Component):
+    template = """
+      <button type="button" @click="count += 1">
+        Add one
+      </button>
+      <output v-text="count"></output>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { count: 0 };
+        },
+      });
+    """
 ```
 
 Each copy of the component on the page keeps its own `count`.
@@ -63,6 +70,9 @@ class Counter(Component):
       <output v-text="count"></output>
     """
 ```
+
+This component needs no `js`: the `js_data()` values are enough to turn on
+Vue.
 
 The values must convert to JSON: strings, numbers, booleans, `None`, lists,
 and dictionaries with string keys. Convert dates, model instances, and other
@@ -221,27 +231,35 @@ component exists at all, use `<c-if>`.
 ### `v-model` on a child { #bind-with-v-model }
 
 `v-model` on a component tag passes the value as the `modelValue` prop. It
-updates the value when the child emits `update:modelValue`:
+updates the value when the child emits `update:modelValue`. Here `query` is
+the parent's browser data:
 
 ```citry-html
 <c-SearchField v-model="query" />
 ```
 
-These are Vue props, not Python inputs, so the child declares them in its
-`$component` options, not in `Kwargs`:
+`modelValue` is a Vue prop, not a Python input, so `SearchField` declares
+it, along with the `update:modelValue` event, in `$component({...})` in its
+`js`, not in `Kwargs`:
 
-```js
-$component({
-  props: ["modelValue"],
-  emits: ["update:modelValue"],
-});
-```
+```citry
+from citry import Component
 
-```citry-html
-<input
-  :value="modelValue"
-  @input="$emit('update:modelValue', $event.target.value)"
-/>
+
+class SearchField(Component):
+    template = """
+      <input
+        :value="modelValue"
+        @input="$emit('update:modelValue', $event.target.value)"
+      />
+    """
+
+    js = """
+      $component({
+        props: ["modelValue"],
+        emits: ["update:modelValue"],
+      });
+    """
 ```
 
 An argument names a different prop. Modifiers reach the child in a
@@ -258,28 +276,41 @@ modifier of your own, the child reads the modifiers prop and decides.
 ### `v-show` on a child { #use-v-show-on-a-child }
 
 `v-show` and custom directives act on the element at the root of the child's
+template. The parent registers a custom directive in its own `js`. Here
+`OrderPanel` registers `tooltip` and uses it on the `StatusBadge` in its
 template:
 
-```citry-html
-<c-StatusBadge
-  v-show="expanded"
-  v-tooltip:top="statusHelp"
-  :status="currentStatus"
-/>
-```
+```citry
+from citry import Component
 
-The component whose template contains the tag registers the custom directive:
 
-```js
-$component({
-  directives: {
-    tooltip: {
-      mounted(el, binding) {
-        el.title = binding.value;
-      },
-    },
-  },
-});
+class OrderPanel(Component):
+    template = """
+      <c-StatusBadge
+        v-show="expanded"
+        v-tooltip:top="statusHelp"
+        :status="currentStatus"
+      />
+    """
+
+    js = """
+      $component({
+        data() {
+          return {
+            expanded: true,
+            statusHelp: "Updated every hour",
+            currentStatus: "shipped",
+          };
+        },
+        directives: {
+          tooltip: {
+            mounted(el, binding) {
+              el.title = binding.value;
+            },
+          },
+        },
+      });
+    """
 ```
 
 If nothing registers the name, Vue skips the directive silently, so check
@@ -325,7 +356,8 @@ run, so the template fails when it loads:
 <div @click.outside="open = false;">...</div>
 ```
 
-For a click outside, add a `click` listener to `document` in `mounted()` and
+For a click outside, add a `click` listener to `document` in the
+`mounted()` option of `$component({...})` in the component's `js`, and
 remove it in `unmounted()`. For a Python event handler, `@c-*` attributes
 accept `.debounce` and `.throttle`; see
 [Bind events in templates](/events/bindings/).
@@ -345,13 +377,29 @@ Vue, the tag is written out as plain HTML and does nothing.
 ## Fill group components { #keep-vue-bound-group-content-inside-the-groups-tag }
 
 Some Citry UI components, such as `CTabs`, collect the content you put inside
-them and render it in their own layout. The page stops with an error when
-you pass such content from a separate component, and that content uses Vue data,
-handlers, `v-model`, a `ref`, or an `@c-*` binding. For example, `TabLabels`
-writes a tab:
+them and render it in their own layout. If another component writes that
+content, and the content uses Vue data, a Vue event listener, `v-model`, a
+`ref`, or an `@c-*` binding, the page stops with an error. For example,
+`TabLabels` writes a tab that shows its own browser data, `label`:
 
-```citry-html
-<c-CTab value="one"><span v-text="label"></span></c-CTab>
+```citry
+from citry import Component
+
+
+class TabLabels(Component):
+    template = """
+      <c-CTab value="one">
+        <span v-text="label"></span>
+      </c-CTab>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { label: "Overview" };
+        },
+      });
+    """
 ```
 
 and the page passes `TabLabels` into the group:
@@ -369,11 +417,14 @@ of the component that wrote it only inside that component, and the tab list
 is not inside `TabLabels`. The error names the content, the component that
 wrote it, and the line.
 
-Write the content directly inside the group's tag:
+Write the content directly inside the group's tag, in the page component's
+template, and define `label` in that component's `js`:
 
 ```citry-html
 <c-CTabs default_value="one" aria_label="Example">
-  <c-CTab value="one"><span v-text="label"></span></c-CTab>
+  <c-CTab value="one">
+    <span v-text="label"></span>
+  </c-CTab>
   <c-CTabPanel value="one">Details</c-CTabPanel>
 </c-CTabs>
 ```
