@@ -11,7 +11,7 @@ checking your components. Each entry starts with what you see, then the
 cause and the fix. The tools at the end of the page help with bugs that
 have no clear error.
 
-## A render error does not say which component failed
+## Which component failed
 
 You see a bare exception such as `KeyError: 'name'`, and the page has many
 components.
@@ -64,7 +64,7 @@ exception's message, so your own `try`/`except` sees it too. When the
 error happens inside slot content, the path also names the slot, for
 example `Page > Layout > Layout(slot:body)`.
 
-## A template expression raises an error
+## Error in a template
 
 You see `Error in variable: KeyError: 'user_name'`, followed by a snippet
 of your template.
@@ -103,7 +103,7 @@ In template of 'Profile' (/path/to/profile.py::Profile):
 Return the missing name from `template_data()`, or fix its spelling in the
 template.
 
-## A component shows up but does nothing in the browser
+## Component does nothing
 
 The page looks right, but buttons, menus, and other browser behavior do
 not work. Open the browser console and find the first message that starts
@@ -120,7 +120,7 @@ Citry checks the data the server sends before it changes the page, so it
 rejects a broken update as a whole. Fix the first error rather than
 working around it.
 
-## A component tag with `v-for` fails to load
+## `v-for` on a component
 
 The template fails to load, and the error says:
 
@@ -133,7 +133,7 @@ with '<c-for>'.
 your Python components. Repeat the component with
 [`<c-for>`](/syntax/control-flow/), which loops on the server.
 
-## `citry check` reports a missing or wrong Vue prop
+## Missing or wrong prop
 
 `citry check` or the editor reports that a required Vue prop is missing,
 for example:
@@ -150,7 +150,7 @@ parent's tag does not pass it, or passes a value of the wrong type. Pass
 the prop on the parent's tag with `:name="..."` or `v-bind`, or change the
 child's `props` declaration.
 
-## The editor shows `Citry: syntax only`
+## Editor: syntax only
 
 The VS Code status bar shows `Citry: syntax only`, and the editor reports
 template syntax errors but does not check component names, inputs, or
@@ -193,7 +193,7 @@ loads also appears in the status.
     Template** language mode, or add a `files.associations` rule to your
     workspace settings.
 
-## See each step of a render in the logs
+## Trace a render
 
 When the output is wrong but nothing raises, turn on Citry's logs. Citry
 logs through the standard Python logger named `citry`, at two levels:
@@ -242,7 +242,7 @@ With `TRACE` on, a render takes about twice as long, plus the time to
 write each line. Use it while debugging, not in production. When it is
 off, it costs almost nothing.
 
-## See which component rendered each part of the page { #visualize-component-and-slot-boundaries }
+## Show component boxes { #visualize-component-and-slot-boundaries }
 
 Add the [Debug][citry.ext.debug.Debug] extension to draw a box around each
 component and slot on the page. Component boxes are blue and show the
@@ -300,7 +300,7 @@ renders a whole HTML document, or around a transparent component.
     production or in tests that depend on layout. To inspect what another
     extension changed in the output, list Debug after that extension.
 
-## Save the rendered HTML to a file
+## Save the HTML
 
 To read exactly what a component produced, save it to a file. `str()` on a
 component renders it and returns the HTML:
@@ -315,7 +315,7 @@ To choose where JavaScript and CSS go, render and serialize in two steps:
 `HomePage().render().serialize()` returns the same HTML and takes the
 options described in [Asset placement](/advanced/asset-placement/).
 
-## Ask an AI coding agent for help
+## Ask an AI agent
 
 An AI coding agent can debug a render if you give it three things: the
 component source, which is already in your repository, the HTML that was
