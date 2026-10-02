@@ -897,7 +897,7 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   guide row DJC-052 limits the marker to output without browser behavior.
   Only the decision itself remains to confirm.
 - **Evidence:** `CHANGELOG.md` Unreleased; `docs_site/content/guides/upgrading-to-0-6-0.md`;
-  `docs_site/content/guides/migrate-from-django-components.md:148`.
+  `docs_site/content/guides/migrate-from-django-components.md` row `#djc-052`.
 - **Status:** option (b) accepted; covered by the upgrade guide.
 
 ### 6.4 Element-level `#c-ignore`
