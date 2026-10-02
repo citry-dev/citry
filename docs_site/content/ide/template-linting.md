@@ -5,11 +5,12 @@ description: Find names that come from nowhere, Python variables read by Vue, le
 
 # Template linting
 
-A template can render without an error and still be wrong. A misspelled
-variable renders as nothing, a Vue binding reads a Python loop variable the
-browser never sees, an attribute value the browser does not accept is
-silently ignored. Citry's lint rules find these mistakes in the editor and in
-`citry check`, before anyone opens the page.
+Some template mistakes show up only when the page renders, and some never
+raise an error at all. A misspelled variable fails only when the page
+renders. A Vue binding can read a Python loop variable the browser never
+sees. The browser silently ignores an attribute value it does not accept.
+Citry's lint rules find these mistakes in the editor and in `citry check`,
+before anyone opens the page.
 
 Your application owns the rules. You set them once on your
 [`Citry`][citry.Citry] instance, and both `citry check` and the editor read
@@ -33,7 +34,8 @@ or `c-fill` binding around it, or a global you configured. Anything else is an
 error:
 
 ```citry-html
-{# error: Template variable 'usr' is not available in this template. #}
+{# error: Template variable 'usr' is not available
+   in this template. #}
 <p>{{ usr.name }}</p>
 ```
 
@@ -42,7 +44,8 @@ Vue expressions follow the same idea. A name in `:title`, `v-text`, or
 `js_data()` key, or a Vue or Citry helper:
 
 ```citry-html
-{# error: Vue variable 'submitting1' is not available in this component. #}
+{# error: Vue variable 'submitting1' is not available
+   in this component. #}
 <button :disabled="submitting1">Save</button>
 ```
 
@@ -75,11 +78,13 @@ $component(({ component }) => {
 });
 ```
 
-A Vue plugin that adds a property to every component should name it with a
-`$` prefix, such as `$api`. Citry does not check `$` names, but it reports an
-unprefixed plugin property, such as `this.axios`.
+Citry runs this check only when it can see every `js_data()` key and every
+Vue Options section in the source. It skips names that start with `$` or
+`_`, so a Vue plugin that adds a property to every component should name it
+with a `$` prefix, such as `$api`. An unprefixed plugin property, such as
+`this.axios`, is reported.
 
-## Python loop vars in Vue
+## Python loops in Vue
 
 Python runs a `c-for` loop on the server. Vue evaluates `:title` later, in the
 browser, where `item` does not exist:
@@ -94,7 +99,8 @@ browser, where `item` does not exist:
 
 Citry reports this once per read. When it knows every name the component
 sends to the browser, it reports a `citry.vue.unknown-variable` error whose
-message says the name is a Python variable. Otherwise, it reports a
+message says the name is a Python variable. Otherwise, or when you set
+`rule_unknown_vue_variable` to `"ignore"`, it reports a
 `citry.vue.python-variable` warning that suggests the `c-` attribute.
 
 The warning also fires when the component's browser data has a name equal to
@@ -297,7 +303,7 @@ The keywords come from the HTML Standard. The check covers:
   `<textarea>`, and `scope` on `<th>`;
 - `target` and `formtarget`, `http-equiv` on `<meta>`, and `name` on
   `<iframe>` and `<object>`, as described
-  [below](#window-names-pragmas).
+  [below](#window-names-meta-tags).
 
 Letter case does not matter, so `type="Email"` passes. An attribute that
 accepts an empty value, such as `hidden`, may also be written with no value.
@@ -374,8 +380,8 @@ keys are closed.
 ### Mixins and extends
 
 The unknown member check needs every name the component defines. When the
-Vue Options merge in `mixins` or `extends`, those names are not in the
-source, so Citry skips the check. A Python loop variable read by Vue is then
+component's Vue Options use `mixins` or `extends`, those names are not in
+the source, so Citry skips the check. A Python loop variable read by Vue is then
 reported as the `citry.vue.python-variable` warning.
 
 ### Unchecked attributes
@@ -384,7 +390,8 @@ The attribute-value check does not look at a bound value that is not one
 string, such as `:dir="direction"` or `c-dir`, or at a binding with a
 modifier such as `.prop`. It also skips component tags, `<c-element>`,
 custom elements such as `<my-widget>`, elements inside `<svg>` or `<math>`,
-and attributes that take a list of words, such as `rel` or `sandbox`.
+and attributes that take a list of words, such as `rel`, `sandbox`, or
+`autocomplete` on `<input>`.
 
 For `type` on `<ol>` and `<li>`, letter case matters: `"a"` and `"A"` are
 different list markers.
@@ -393,7 +400,7 @@ When the editor or `citry check --types` also runs TypeScript, a bound value
 that Vue's types reject is reported once, by this rule, at this rule's
 severity. Set the rule to `"error"` if such a value should fail a check.
 
-### Window names, pragmas
+### Window names, meta tags
 
 `target` and `formtarget` accept any window name, so Citry checks only names
 that start with an underscore. The valid ones are `_blank`, `_self`,
