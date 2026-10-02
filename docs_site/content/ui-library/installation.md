@@ -8,6 +8,8 @@ description: Add the Citry UI package and register its components with a Citry i
 To use Citry UI components such as `<c-CButton>` in your templates,
 install the package and register it once with Citry.
 
+Working on Citry UI itself? See [Develop Citry UI](/ui-library/development/).
+
 ## Install the package
 
 Add [`citry-ui`](https://pypi.org/project/citry-ui/){: target="_blank" rel="noopener"}
@@ -94,20 +96,3 @@ from citry import citry
 
 html = str(save_button.render(citry=citry))
 ```
-
-## Edit Citry UI in VS Code { #edit-citry-ui-in-vs-code }
-
-This applies only when you work on Citry UI's own templates without an
-application around them. Point the VS Code extension at the library
-directly:
-
-```json
-{
-  "citry.app": "citry_ui:__citry_library__"
-}
-```
-
-The editor then reads Citry UI's component names, inputs, slots, and
-template data. When you also need your application's own components or
-settings, point `citry.app` at your application's `Citry` instance
-instead.

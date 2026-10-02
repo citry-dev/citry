@@ -192,6 +192,10 @@ areas:
       - label: Components
         source: ui_library
 
+      - label: Development
+        items:
+          - { title: Develop Citry UI, path: /ui-library/development/, needs_review: true }
+
   - label: IDE
     scope: versioned
     items:
