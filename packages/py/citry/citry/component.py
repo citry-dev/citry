@@ -749,8 +749,10 @@ class Component(metaclass=ComponentMeta):
     name: ClassVar[str | None] = None
     """Override the name under which this component is registered.
 
-    By default, the class name is used (lowercased + kebab-case).
-    Set this to register under a specific name instead::
+    By default, a component registers under its class name, so
+    ``MyWidget`` is used as ``<c-MyWidget>``. Letter case does not matter,
+    and ``<c-my-widget>`` works too. Set ``name`` to register under a
+    specific name instead::
 
         class MyWidget(Component):
             name = "fancy-widget"

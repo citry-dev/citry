@@ -27,7 +27,8 @@ class Welcome(Component):
     """
 
 
-html = str(Welcome())
+welcome = Welcome()
+html = str(welcome)
 ```
 
 `str(...)` renders the component and returns the HTML as a string.
@@ -55,7 +56,8 @@ class Welcome(Component):
     """
 
 
-html = str(Welcome(name="Ada", message_count=3))
+welcome = Welcome(name="Ada", message_count=3)
+html = str(welcome)
 ```
 
 `name` is required, and `message_count` defaults to `0`. Citry rejects a
@@ -113,9 +115,8 @@ Without one, `kwargs` is a dictionary, so read `kwargs["name"]`.
 
 ## Nest components
 
-Inside a template, a `<c-*>` tag renders another component. The tag name is
-the class name in lowercase, with words joined by hyphens, so `Welcome` is
-`<c-welcome>`:
+Inside a template, a `<c-*>` tag renders another component. Write the class
+name after `c-`, so `Welcome` is `<c-Welcome>`:
 
 ```citry
 from citry import Component
@@ -127,13 +128,17 @@ class ProfilePage(Component):
 
     template = """
       <main>
-        <c-welcome c-name="user_name" />
+        <c-Welcome c-name="user_name" />
       </main>
     """
 ```
 
 A plain attribute such as `name="Ada"` passes a string. The `c-` prefix in
 `c-name="user_name"` passes the value of a Python expression instead.
+
+In a component tag, letter case does not matter after `c-`, and you can
+also write a class name of several words with hyphens between the words.
+`<c-TaskCard>`, `<c-taskcard>`, and `<c-task-card>` all render `TaskCard`.
 [Registration](/concepts/registration/) explains how Citry finds the class
 for a tag.
 
@@ -153,7 +158,9 @@ class PageFrame(Component):
     """
 
 
-html = str(PageFrame(body=Welcome(name="Ada")))
+welcome = Welcome(name="Ada")
+page = PageFrame(body=welcome)
+html = str(page)
 ```
 
 To let the outer template supply markup that the component places in its
