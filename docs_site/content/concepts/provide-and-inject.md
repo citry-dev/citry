@@ -5,40 +5,20 @@ description: Make shared data available to a rendered subtree without passing it
 
 # Provide and inject
 
-Use provide and inject when several descendants need the same surrounding
-information, but the components between them do not. A page can provide its
-theme once, for example, and a deeply nested label can read it without every
-intermediate component accepting and forwarding a `theme` kwarg.
+Sometimes a component deep in the page needs a value that only the page
+knows, such as the current theme or the signed-in user. Passing it as an
+input through every component in between is tedious, and those components
+do not use it.
 
-The server and browser each have a provide/inject channel. Start with the
-server model, which applies while Citry renders HTML. The browser version uses
-the same nearest-provider idea after that HTML reaches the page, but it holds
-separate JavaScript values.
+Instead, a component higher up provides the value, and any component inside
+it injects it, meaning it reads the value directly. This page covers
+providing values while Citry renders HTML on the server, then the separate
+browser version for Vue code.
 
-## Provide a value at the render root
+## Provide a value to the components inside
 
-Pass a mapping to `render()` when the value belongs to the whole tree:
-
-```python
-rendered = Page().render(
-    provides={"request": request},
-)
-```
-
-The root and its rendered descendants may inject that exact value. Citry copies
-the mapping before rendering and validates every key. A key must be a non-empty
-Python identifier.
-
-Each direct `render()` call starts a new root. If `template_data()` directly
-renders another component, that nested call must pass any required values
-again. Citry does not take them from the function's current render. The nested
-call's injected values therefore depend on that call, not on the outer tree's
-provided values.
-
-## Provide a value to server-rendered descendants
-
-[`<c-provide>`](/reference/builtins/#c-provide) wraps the part of the render
-tree that should receive a value. It adds no HTML of its own:
+Wrap part of a template in [`<c-provide>`](/reference/builtins/#c-provide)
+and give the value a `key`. The tag adds no HTML of its own:
 
 ```citry
 from citry import Citry, Component
@@ -70,13 +50,14 @@ class Page(Component):
     """
 ```
 
-The provider stores fields under the key `theme`. The descendant reads the
-nearest matching payload with
-[`Component.inject()`][citry.Component.inject]. Its fields are immutable and
-available through attribute access, such as `theme.name`.
+`Page` provides a value under the key `theme` with one field, `name`.
+`ThemeLabel` reads it with
+[`Component.inject()`][citry.Component.inject] and returns what its own
+template needs. The fields are read-only and read as attributes, such as
+`theme.name`.
 
-Static attributes are strings. Prefix an attribute with `c-` to evaluate a
-Python expression, or use `c-bind` to add a mapping:
+Plain attributes are strings. Use the `c-` prefix to pass the value of a
+Python expression, or `c-bind` to add every entry of a mapping:
 
 ```citry-html
 <c-provide
@@ -88,21 +69,30 @@ Python expression, or use `c-bind` to add a mapping:
 </c-provide>
 ```
 
-The key can be dynamic too:
+The key can come from an expression too, as in `c-key="context_key"`. A
+key must be a valid Python name.
 
-```citry-html
-<c-provide c-key="context_key" c-value="current_value">
-  <c-reader />
-</c-provide>
+## Handle a missing value
+
+When no component above provides the key, `inject()` raises `KeyError`:
+
+```python
+theme = self.inject("theme")
 ```
 
-Server keys must be non-empty valid Python identifiers.
+Pass a second argument when the value is optional. Citry returns it when
+the key is missing:
 
-## Provide from Python
+```python
+theme = self.inject("theme", None)
+locale = self.inject("locale", "en")
+```
+
+## Provide a value from Python
 
 Call [`Component.provide()`][citry.Component.provide] in a data method when
-Python is the clearest place to assemble the fields. The value becomes visible
-to descendants rendered by that component:
+Python is the easier place to build the value. Components that this
+component renders can inject it:
 
 ```citry
 from citry import Citry, Component
@@ -138,59 +128,57 @@ class AccountPage(Component):
     """
 ```
 
-The key argument is positional-only, so `key` may also be one of the provided
-field names. Pass one positional value when you already have the complete
-object:
+Keyword arguments become the read-only fields shown above. To provide an
+object you already have, pass it as the one value after the key:
 
 ```python
 self.provide("citry_i18n", locale_context)
 ```
 
-The descendant receives that exact object. Pass keyword fields when Citry
-should build the immutable attribute payload shown in the account example. A
-call cannot mix a direct value with keyword fields.
+The component that injects it receives that same object. One call takes
+either the object or keyword fields, not both.
 
-## Follow the rendered path
+## Provide a value to the whole page
 
-A value reaches descendants along the path where Citry renders them. It is not
-limited to tags literally nested in the same template file. If a provider
-wraps `<c-slot>`, components in the surrounding template's fill can inject
-that value too.
-
-When providers use the same key, the nearest one wins for its whole subtree.
-It replaces the outer payload rather than merging with it. Providers with
-different keys remain available together.
-
-The component that establishes a value cannot inject its own new value during
-the same render. Its `inject()` still sees an inherited value, if one exists.
-The new value is outgoing to descendants.
-
-Provided fields also do not become template variables. A field named `mode`
-does not change `{{ mode }}`. A descendant must call `inject()` and deliberately
-return anything its own template needs.
-
-## Handle a missing value
-
-Without a default, a missing key raises `KeyError`:
+Pass `provides` to `render()` when every component in the page may need the
+value:
 
 ```python
-theme = self.inject("theme")
+rendered = Page().render(
+    provides={"request": request},
+)
 ```
 
-Pass a default when absence is valid:
+Each key must be a valid Python name.
+
+A `render()` call starts a new page with its own provided values. If a data
+method renders another component directly by calling `render()`, that call
+does not see the values from the page around it. Pass them again:
 
 ```python
-theme = self.inject("theme", None)
-locale = self.inject("locale", "en")
+def template_data(self, kwargs, slots):
+    request = self.inject("request")
+    summary = Summary().render(
+        provides={"request": request},
+    )
+    return {"summary": summary}
 ```
 
-An explicit `None` is a real default and does not raise.
+## Know which provider a component reads
 
-## Stop an inherited value
+When two providers use the same key, a component reads the nearest one above
+it. The inner value replaces the outer one for everything inside it; their
+fields are not merged. Values under different keys are all available.
 
-[`Component.unprovide()`][citry.Component.unprovide] makes an inherited key
-appear missing to descendants. The current component can still read the old
-value before setting that boundary:
+"Above" follows where a component ends up on the page, not where its tag is
+written. If a component wraps its `<c-slot>` in `<c-provide>`, a component
+that the outer template passes into that slot can inject the value.
+
+## Hide an inherited value
+
+[`Component.unprovide()`][citry.Component.unprovide] makes a key look
+missing to the components inside this one. The component itself can still
+read the old value before it calls `unprovide()`:
 
 ```citry
 from citry import Component, SlotInput
@@ -214,27 +202,15 @@ class NestedTabsBoundary(Component):
     """
 ```
 
-A descendant can establish a new `tabs` provider below the boundary. This is
-useful for compound components whose inner instance must not accidentally join
-the outer instance. The [`SlotInput`][citry.SlotInput] declaration lets the
-boundary wrap that descendant without accepting unknown named fills.
-
-## Keep server and browser values separate
-
-Server provide/inject and browser provide/inject do not share storage. A value
-provided by Python is available while HTML renders; Vue's `inject` option
-cannot read it automatically. Likewise, a JavaScript value does not appear in
-`Component.inject()` on a later request.
-
-When both sides need the same information, cross the boundary deliberately.
-For example, return JSON-compatible data from
-[`js_data()`][citry.Component.js_data], then provide that value during the
-component's browser setup.
+This helps when components can nest inside copies of themselves. Here, a
+tab set placed inside another tab set's panel does not attach to the outer
+tab set by mistake. A component inside the boundary can still provide a new
+`tabs` value.
 
 ## Provide and inject in client code
 
-Use native Vue `provide` and `inject` options on component boundaries. A parent
-can provide a reactive object:
+The browser has its own provide and inject, from Vue. Use Vue's `provide`
+and `inject` options in `$component`. A parent provides a reactive object:
 
 ```js
 $component({
@@ -247,7 +223,8 @@ $component({
 });
 ```
 
-The descendant declares the injected member and reads it in its template:
+A component inside it declares what it injects, then reads it in its
+template:
 
 ```js
 $component({
@@ -263,21 +240,40 @@ $component({
 <output v-text="theme.name"></output>
 ```
 
-Native Vue nearest-provider rules apply. When shared data must change later,
-provide one stable reactive object and mutate its fields. Composition API
-helpers from the page's runtime are available through `Citry.vue` when Options
-alone are not enough.
+Vue's usual rules apply: the nearest provider wins. To share data that
+changes later, provide one reactive object and change its fields. Vue's
+Composition API helpers are available as `Citry.vue` when options are not
+enough.
 
-A browser provider is always a component: put `provide` in the `$component`
-options of the component whose descendants need the value. To hide an
-inherited value from part of the page, wrap that part in a component that
-provides a replacement value under the same key.
+Only a component can provide a value in the browser. To hide an inherited
+value from part of the page, wrap that part in a component that provides a
+replacement under the same key.
+
+## Send a server value to the browser
+
+Server values and browser values are stored separately. A value provided in
+Python is not visible to Vue's `inject`, and a value provided in JavaScript
+is not visible to `Component.inject()`.
+
+When the browser needs a server value, return it from
+[`js_data()`][citry.Component.js_data] as JSON-compatible data, then
+provide it from that component's `$component` options.
+
+!!! note "Provided values are not template variables"
+
+    A provided field named `mode` does not change what `{{ mode }}` reads.
+    To use a provided value in a template, call `inject()` in a data method
+    and return the value.
+
+!!! note "A component cannot inject the value it provides"
+
+    A component's own `provide()` call affects only the components inside
+    it. If the component calls `inject()` with the same key, it gets the
+    value from a provider above it, if there is one.
 
 ## Next steps
 
-- [Slots](/concepts/slots/) explains how fills keep the surrounding template's
-  scope while they follow the rendered path.
+- [Slots](/concepts/slots/) explains which variables a fill reads.
 - [Client interactivity](/concepts/client-interactivity/) covers browser
-  data, local Vue state, props, and reacting after a server render.
-- [Browser APIs](/reference/browser-apis/) lists the exact client helper and
-  Vue runtime contracts.
+  data, local Vue state, and props.
+- [Browser APIs](/reference/browser-apis/) lists the exact client helpers.
