@@ -122,15 +122,18 @@ object's `str()` or `repr()`, which can change between runs or contain
 private data. If a record can change while keeping its ID, add a
 revision number or update time, as `product_revision` does here.
 
-Return only plain values:
+Return only plain values of these exact types:
 
-- `None`, booleans, integers, finite floats, strings, or bytes;
-- lists, tuples, or dictionaries of those values, with string keys.
+- `None`, `bool`, `int`, finite `float`, `str`, or `bytes`;
+- `list`, `tuple`, or `dict` of those values, with `str` keys.
+
+Subclasses such as enums, named tuples, or `OrderedDict` are rejected.
 
 ## Cache one region of a template
 
 `<c-cache>` caches part of a template and adds no HTML of its own. Give
-it a fixed `key` that names the region, and list in `c-vary` every value
+it a fixed `key` that names the region (the name is shared across the
+whole app, so two templates with the same `key` share entries), and list in `c-vary` every value
 the region uses:
 
 ```citry-html
@@ -148,8 +151,8 @@ the region uses:
 
 This stores a separate entry for each user and locale. Citry does not
 look inside the body to build the key, so add anything else that can
-change it: the tenant, permissions, time zone, feature flags, or
-injected values.
+change it: the tenant, permissions, time zone, feature flags, or values
+passed down with [provide and inject](/concepts/provide-and-inject/).
 
 `<c-cache>` accepts these attributes:
 
@@ -175,11 +178,12 @@ cache:
 
 1. Put every value that depends on the user or request into the key.
 2. Share an entry only among users allowed to see the same output.
-3. Include CSRF tokens, CSP nonces, `template_globals`, and injected
+3. Include CSRF tokens, CSP nonces, `template_globals`, and provided
    values when they appear in the cached HTML.
-4. Change the deployment generation (a value you change on every deploy,
-   set up in [Cache backends](/performance/cache-backends/#share-cached-output-between-workers))
-   after each deploy that changes output.
+4. After each deploy that changes output, change the deployment
+   generation, a value set up in
+   [Cache backends](/performance/cache-backends/#share-cached-output-between-workers)
+   that you change on every deploy.
 5. Protect the cache store like your database. Anyone who can write to
    it can inject HTML that Citry trusts, and stored entries can contain
    private HTML, Events state, and JavaScript or CSS data.
@@ -187,9 +191,9 @@ cache:
 Citry stores keys as hashes, so logs do not show the raw values or region
 names. The stored entries themselves still need protection.
 
-## What a cached call skips
+## Know what a cached call still runs
 
-On a cache hit, a cached component skips its data methods, render hooks,
+When Citry finds a stored entry, a cached component skips its data methods, render hooks,
 template, child components, and slots. A `<c-cache>` region skips its
 whole body.
 
@@ -203,8 +207,8 @@ inside it can tolerate.
 
 ## Update or remove entries
 
-When the output for a whole family of entries changes, raise its
-`version`:
+When the output changes for all entries of one component or region,
+raise its `version`:
 
 ```citry-html
 <c-cache key="category-nav" version="nav-v3">
@@ -278,17 +282,18 @@ class PersonalizedPanel(Component):
     """
 ```
 
-## What happens when the cache fails
+## Handle a cache that misses or fails
 
-An entry that is missing, damaged, in an incompatible format, too large,
-or impossible to reuse counts as a miss. Citry renders normally and stores the
-new result. A result larger than the size limit still renders but is not
+When an entry is missing, damaged, in an incompatible format, too
+large, or impossible to reuse, Citry treats it as if no entry existed.
+It renders normally and stores the new result. A result larger than the size limit still renders but is not
 stored. [Cache backends](/performance/cache-backends/#limit-the-size-of-one-stored-render)
 explains the limit.
 
 An exception raised by the cache store's `get()` or `set()` reaches your
-code. If a store outage should count as a miss, wrap the store in an
-adapter that catches the error.
+code. If a store outage should count as a missing entry, wrap the store
+in an [adapter](/performance/cache-backends/#write-an-adapter-for-another-store)
+that catches the error.
 
 ## Edge cases
 
@@ -311,7 +316,7 @@ to reason about.
 ### Transparent components
 
 A component with `transparent = True` cannot use `Cache`, because it has
-no boundary of its own to store. Wrap its template region in `<c-cache>`
+no HTML of its own for Citry to store and reuse. Wrap its template region in `<c-cache>`
 instead.
 
 ### The Debug extension
