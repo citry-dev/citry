@@ -5,17 +5,18 @@ description: Let translators position application-owned links and inline compone
 
 # Rich messages
 
-Some sentences contain an application-owned link, icon, emphasis element, or
-small component. Languages may place that element at different points in the
-sentence.
+Some sentences contain a link, an icon, emphasis, or a small component,
+such as "Ada accepts the **terms of service**." Each language may need
+that link at a different place in the sentence, so you cannot split the
+sentence into a text part and a link part.
 
-Use `<c-trans>` for this case. It returns translated text mixed with named
-Citry fills. Translators control the order, but they never provide HTML,
-attributes, URLs, or component names.
+`<c-trans>` solves this. The message marks where the link goes, and the
+template supplies the link itself. Translators move the marker; they
+never write HTML, attributes, URLs, or component names.
 
-## Declare structural parameters as Slot
+## Mark the place for the content in the message
 
-The source message uses an ordinary Fluent variable and declares it as
+Add a variable where the content belongs and declare its type as
 `Slot`:
 
 ```fluent
@@ -25,12 +26,13 @@ my-app-terms-acceptance =
     { $account_name } accepts the { $terms_link }.
 ```
 
-`Slot` tells Citry that the value is application-owned structure, not text to
-send through Fluent.
+A `Slot` variable is filled with content from the template, not with
+text.
 
-## Supply values and named fills
+## Fill the message in the template
 
-Pass scalar parameters through `c-values` and structural parameters as fills:
+Pass ordinary values in `c-values`, and each `Slot` as a `<c-fill>` with
+the variable's name:
 
 ```citry-html
 <c-trans
@@ -43,16 +45,16 @@ Pass scalar parameters through `c-values` and structural parameters as fills:
 </c-trans>
 ```
 
-The `message` name is the Fluent key. `values` contains every non-`Slot`
-parameter. A name cannot appear in both `values` and a fill.
+`message` is the message ID. `c-values` holds every variable that is not
+a `Slot`; the `c-` prefix makes Citry evaluate it as Python. A name may appear in `values` or as a fill, not both.
 
-Citry rejects a missing, unknown, or mistyped value or fill. Literal calls are
-checked before rendering, and dynamic mappings receive the same validation at
-runtime.
+Citry reports a missing, unknown, or wrongly typed value or fill. It
+checks fixed calls like this one before rendering, and checks values
+built at runtime when it renders.
 
-## Translators may move or repeat a fill
+## Let translators move or repeat the content
 
-A translation may place a fill anywhere and may use it more than once:
+A translation may put the slot anywhere, and may use it more than once:
 
 ```fluent
 # @param {Slot} $terms_link - Link to the terms page.
@@ -60,45 +62,51 @@ my-app-read-terms =
     Read { $terms_link }, then review { $terms_link } again.
 ```
 
-Citry invokes the lazy fill separately for every occurrence. Repeating a fill
-therefore creates a distinct rendered subtree at each position; it does not
-clone or move an already-rendered DOM node.
+Citry renders the fill once for each place it appears. If the two places
+need different content or behavior, declare two `Slot` variables
+instead.
 
-If two occurrences need different state or behavior, declare two named `Slot`
-parameters instead of repeating one name.
+## Translated text cannot add HTML
 
-Every reachable selector branch must use each required Slot at least once. A
-Slot must appear as its own direct `{ $slot_name }` placeable. It cannot be a
-selector, a formatter argument, or part of a larger Fluent expression.
-
-## Catalog text stays text
-
-Citry escapes every translated text segment:
+Citry escapes all text that comes from the message:
 
 ```fluent
 # @param {Slot} $link - Application-owned link.
 my-app-safe-message = <unsafe> { $link } & text
 ```
 
-The `<unsafe>` text renders as text. Only the markup supplied by the
-application fill remains structural.
+`<unsafe>` appears on the page as text. Only the content of the fill is
+rendered as HTML. A translation therefore cannot add an event handler, an
+unsafe URL, an attribute, or a component.
 
-This is why `<c-trans>` does not accept translated HTML. A catalog cannot
-create an event handler, unsafe URL, arbitrary attribute, or unexpected
-component.
+## Rules for less common cases
 
-## Rich messages are server-owned
+### Use tr() when the result is plain text
 
-`<c-trans>` renders on the server. A browser `switchLocale()` does not reorder
-or recreate its fills. Render the page or fragment again when a rich message
-needs another locale.
+`<c-trans>` is only for messages with `Slot` variables. For a message
+that is text only, call `tr()`.
 
-The component adds no element around the whole message. It wraps only each fill
-in `<bdi dir="auto">` to isolate its direction, so it has no element that could
-carry a fallback message's `lang`. Project checking therefore requires
-equivalent-language coverage for each selectable locale used at a rich call. A
-cross-language rich fallback fails rather than emitting text with incorrect
-language metadata.
+### Where a slot may appear in a message
 
-Use ordinary `tr()` when the result is text only. Use `<c-trans>` only when a
-translator must place application-owned structure.
+A `Slot` must appear on its own as `{ $terms_link }`. It cannot be the
+value a selector chooses on, a formatting function's argument, or part
+of a larger expression. Every branch of a selector must use each `Slot`
+at least once.
+
+### The browser does not change a rich message's language
+
+`<c-trans>` renders on the server. `$i18n.switchLocale()` in the browser
+does not change it. Render the page or that part of it again to show
+another language.
+
+### A rich message needs a translation in every selectable locale
+
+`<c-trans>` adds no element around the message. It wraps each fill in
+`<bdi dir="auto">` so the fill's text direction does not affect the
+sentence around it. Because there is no wrapping element, fallback text
+from another locale could not be marked with its own `lang`.
+
+So `citry check` reports an error
+(`citry.i18n.cross-language-fallback`) when a rich message would fall
+back to another locale. Add a translation for each selectable locale
+that renders it.
