@@ -188,7 +188,7 @@ stack holds two kinds of work item:
 ```
 def scan(render):  # the DeferredComponents directly owned by `render`'s component
     walk render.parts; for nested CitryRenders that SHARE render.context.component
-    (control-flow: IfNode/ForNode/TemplateNode) descend in; STOP at component
+    (control-flow: IfNode/ForNode) descend in; STOP at component
     boundaries (a nested render whose context.component differs); yield each
     DeferredComponent as Render(deferred, position=(its list, its index, render.context)).
 

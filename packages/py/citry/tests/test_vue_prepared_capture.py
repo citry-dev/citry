@@ -37,7 +37,7 @@ from citry.citry_render import CitryRender
 from citry.constness import ConstBodyCache
 from citry.ext.events.bindings import RUNTIME_CONTROL_ATTR
 from citry.ext.events.renderers import dispatcher_for
-from citry.nodes import ExprHtmlAttr, StaticHtmlAttr, TemplateNode
+from citry.nodes import ExprHtmlAttr, StaticHtmlAttr, TemplateHtmlAttr
 from citry.slots import Slot
 
 
@@ -1202,12 +1202,12 @@ def test_prepared_render_bypasses_component_output_cache_during_cutover() -> Non
 def test_nested_template_generators_are_isolated_by_render_mode() -> None:
     from citry._vue.capture import _PREPARED_RENDER
 
-    node = TemplateNode("outer", (0, 5), "<em>{{ value }}</em>", ("value",))
+    node = TemplateHtmlAttr("outer", (0, 5), "c-body", "<em>{{ value }}</em>", ("value",))
     context = CitryContext(variables={"value": "nested"})
-    ordinary = node.render(context)
+    ordinary = node.resolve(context)
     token = _PREPARED_RENDER.set(True)
     try:
-        prepared = node.render(context)
+        prepared = node.resolve(context)
     finally:
         _PREPARED_RENDER.reset(token)
 

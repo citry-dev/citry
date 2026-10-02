@@ -94,7 +94,6 @@ from citry.nodes import (
     SlotNode,
     StaticHtmlAttr,
     TemplateHtmlAttr,
-    TemplateNode,
 )
 from citry.slots import Slot
 from citry.util.exception import (
@@ -2491,7 +2490,6 @@ def _compile_template(
         "source": template.root_source or template.source,
         "ExprNode": ExprNode,
         "ForeignNode": ForeignNode,
-        "TemplateNode": TemplateNode,
         "ComponentNode": ComponentNode,
         "ElementAttrsNode": ElementAttrsNode,
         "ElementKeyNode": ElementKeyNode,

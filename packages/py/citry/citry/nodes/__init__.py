@@ -5,8 +5,8 @@ The V3 compiler generates Python source code that instantiates these classes.
 Each class accepts the exact arguments the compiler emits and stores them as
 attributes.
 
-The value nodes ``ExprNode`` and ``TemplateNode`` render against a
-``CitryContext`` (see docs/design/component_rendering.md), and the attribute nodes
+The value node ``ExprNode`` renders against a ``CitryContext`` (see
+docs/design/component_rendering.md), and the attribute nodes
 (``StaticHtmlAttr``, ``ExprHtmlAttr``, ``TemplateHtmlAttr``) ``resolve`` to
 their values. ``ComponentNode`` renders a child component across a context
 boundary: attributes become the child's kwargs, and its body content becomes
@@ -29,7 +29,7 @@ Example:
         from citry_core.template_parser.nodes import (
             ExprNode, ElementKeyNode, ComponentNode, IfNode, ForNode,
             SlotNode, FillNode, StaticHtmlAttr, ExprHtmlAttr,
-            TemplateHtmlAttr, TemplateNode,
+            TemplateHtmlAttr,
         )
 
         source = '<c-Card title="Hi">{{ body }}</c-Card>'
@@ -40,7 +40,6 @@ Example:
             "source": source,
             "ExprNode": ExprNode,
             "ElementKeyNode": ElementKeyNode,
-            "TemplateNode": TemplateNode,
             "ComponentNode": ComponentNode,
             "ElementAttrsNode": ElementAttrsNode,
             "IfNode": IfNode,
@@ -714,72 +713,6 @@ class ExprNode(Node):
 
 
 @final
-class TemplateNode(Node):
-    """
-    A template node that compiles and renders a nested template string in the surrounding scope.
-
-    The ``expr`` field holds the nested template source string, such as
-    ``"<span>{{ x }}</span>"``. The node compiles it on first use and renders
-    it against the enclosing component's variables, the same way
-    [`TemplateHtmlAttr`][citry.TemplateHtmlAttr] renders a template-valued
-    attribute. The template compiler does not generate this node: a
-    template-valued ``c-*`` attribute on an HTML element compiles to a
-    ``TemplateHtmlAttr`` inside an
-    [`ElementAttrsNode`][citry.ElementAttrsNode]. An extension can build one
-    by hand in ``on_template_compiled``.
-
-    Constructed as::
-
-        TemplateNode(source, (start, end), "template", ("var1", ...))
-
-    """
-
-    def __init__(self, source: Any, position: tuple[int, int], expr: str, used_vars: tuple[str, ...]) -> None:
-        self.source = source
-        self.position = position
-        # `expr` is the nested template SOURCE STRING (for example
-        # "<span>{{ x }}</span>"), not a Python expression.
-        self.expr = expr
-        self.used_vars = used_vars
-        # Compiled lazily on first use in each render mode and then reused in that mode.
-        self._generators: dict[bool, Callable[[], list[Any]]] = {}
-        self._compile_lock = RLock()
-
-    @override
-    def render(self, context: CitryContext) -> CitryRender:
-        # A nested template is not a component boundary: it shares the
-        # surrounding component's context, so it renders against the same
-        # variables and writes any dependencies into the same context.
-        #
-        # Imported lazily because component_render imports the node classes:
-        # importing the body pipeline at module load would be circular.
-        from citry._vue.capture import prepared_render_active  # noqa: PLC0415
-        from citry.component_render import _compile_nested_template, _render_body  # noqa: PLC0415
-
-        prepared = prepared_render_active()
-        generator = self._generators.get(prepared)
-        if generator is None:
-            with self._compile_lock:
-                generator = self._generators.get(prepared)
-                if generator is None:
-                    # The nested template is validated like any other: the parse gets
-                    # the rules derived from the registered components' declarations.
-                    component = context.component
-                    user_rules = component.citry._tag_rules() if component is not None else None
-                    generator = _compile_nested_template(
-                        self.expr,
-                        user_rules,
-                        type(component) if component is not None else None,
-                    )
-                    self._generators[prepared] = generator
-        parts = _render_body(generator(), context)
-        return CitryRender(parts=parts, context=context)
-
-    def __repr__(self) -> str:
-        return f"TemplateNode(position={self.position}, expr={self.expr!r})"
-
-
-@final
 class StaticHtmlAttr(HtmlAttr):
     """
     A static HTML attribute (``key="value"``).
@@ -923,7 +856,7 @@ class TemplateHtmlAttr(HtmlAttr):
         Render the nested template and return it as a ``CitryRender`` kwarg value.
 
         The template is defined in the parent's scope, so it renders against the
-        surrounding component's context (the same rule as ``TemplateNode``).
+        surrounding component's context.
         """
         from citry._vue.capture import prepared_render_active  # noqa: PLC0415
         from citry.component_render import _compile_nested_template, _render_body  # noqa: PLC0415

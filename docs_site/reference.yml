@@ -150,7 +150,6 @@ categories:
       - citry.IfNode
       - citry.SlotNode
       - citry.FillNode
-      - citry.TemplateNode
       - citry.HtmlAttr
       - citry.ExprHtmlAttr
       - citry.StaticHtmlAttr

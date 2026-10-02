@@ -1,12 +1,12 @@
 """
-Tests for the value nodes: ExprNode and TemplateNode (component_rendering.md phase 2).
+Tests for the value nodes: ExprNode and a template-valued element attribute.
 
 Covers expression evaluation via safe_eval, autoescaping in both body-text and
 attribute positions, the None/Markup rules, and the embedded-CitryRender /
 CitryElement detection. Also covers the value layer underneath rendering, where
 `ExprNode.evaluate` and `ExprHtmlAttr.resolve` hand back the Python value
-untouched. The remaining HTML-attr nodes (StaticHtmlAttr/TemplateHtmlAttr) are
-phase 3 (they resolve to component kwargs).
+untouched, and a `TemplateHtmlAttr` on an HTML element, which renders its
+nested template into the attribute value.
 """
 
 # ruff: noqa: ANN
@@ -212,7 +212,7 @@ class TestExprNodeEmbedding:
         assert _html("<main>{{ c }}</main>", c=element) == '<main data-cid-c1=""><span data-cid-c2="">IN</span></main>'
 
 
-class TestTemplateNode:
+class TestTemplateHtmlAttrOnElement:
     def test_renders_nested_template(self):
         # The nested template renders in the same context. Its HTML is escaped
         # at the outer attribute boundary and decodes to the original value.

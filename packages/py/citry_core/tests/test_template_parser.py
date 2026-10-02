@@ -171,14 +171,6 @@ class ExprNode:
         self.used_vars = used_vars
 
 
-class TemplateNode:
-    def __init__(self, source, position, expr, used_vars):
-        self.source = source
-        self.position = position
-        self.expr = expr
-        self.used_vars = used_vars
-
-
 class StaticHtmlAttr:
     def __init__(self, source, position, key, value, used_vars):
         self.source = source
@@ -438,7 +430,6 @@ class TestRoundTrip:
         ns = {
             "source": input_str,
             "ExprNode": ExprNode,
-            "TemplateNode": TemplateNode,
             "ComponentNode": ComponentNode,
             "IfNode": IfNode,
             "ForNode": ForNode,

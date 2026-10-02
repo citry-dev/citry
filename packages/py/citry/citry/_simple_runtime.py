@@ -28,12 +28,13 @@ from citry.nodes import (
     SlotNode,
     StaticHtmlAttr,
     TemplateHtmlAttr,
-    TemplateNode,
 )
 from citry.slots import Slot, normalize_slot_fills
 from citry.util.misc import to_dict
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from citry._simple_declarations import SimpleDeclaration
     from citry.citry_render import RenderPart
     from citry.citry_template import CitryTemplate
@@ -151,7 +152,35 @@ def simple_deferred(
     )
 
 
-def _validate_body(body: list[BodyItem], cls: type[Component]) -> bool:
+def _nested_template_generator(
+    item: TemplateHtmlAttr, cls: type[Component], compiled: CitryTemplate
+) -> Callable[[], list[BodyItem]]:
+    """Compile a template-valued attribute once and share the result with its own render."""
+    from citry._vue.capture import prepared_render_active  # noqa: PLC0415
+    from citry.component_render import _compile_nested_template  # noqa: PLC0415
+
+    # The attribute caches one generator per render mode. Storing the result
+    # under the current mode, with the same template record metadata that
+    # `TemplateHtmlAttr.resolve` passes, lets the later render reuse it, so
+    # the extension hooks see each nested body only once.
+    prepared = prepared_render_active()
+    with item._compile_lock:
+        generator = item._generators.get(prepared)
+        if generator is None:
+            generator = _compile_nested_template(
+                item.template,
+                cls.citry._tag_rules(),
+                cls,
+                source_offset=item.source_offset,
+                provider_metadata=compiled.foreign_provider_metadata,
+                template_id=compiled.template_id,
+                origin=compiled.origin,
+            )
+            item._generators[prepared] = generator
+    return generator
+
+
+def _validate_body(body: list[BodyItem], cls: type[Component], compiled: CitryTemplate) -> bool:
     """Check every authored branch and nested template before inputs prune any work."""
     from citry._i18n_directives import looks_like_i18n_binding  # noqa: PLC0415
     from citry._vue.capture import (  # noqa: PLC0415
@@ -159,7 +188,6 @@ def _validate_body(body: list[BodyItem], cls: type[Component]) -> bool:
         PreparedSourceTextNode,
         PreparedVerbatimHtmlNode,
     )
-    from citry.component_render import _compile_nested_template  # noqa: PLC0415
 
     pending: list[Any] = list(body)
     has_outlet = False
@@ -194,14 +222,11 @@ def _validate_body(body: list[BodyItem], cls: type[Component]) -> bool:
             pending.extend(item.attrs)
         elif kind is ElementKeyNode:
             pending.append(item.attr)
-        elif kind in (TemplateNode, TemplateHtmlAttr):
-            if kind is TemplateHtmlAttr and item.foreign_spans:
+        elif kind is TemplateHtmlAttr:
+            if item.foreign_spans:
                 msg = f"Component {cls.__name__} uses simple=True; foreign template attributes are unsupported."
                 raise TypeError(msg)
-            source = item.expr if kind is TemplateNode else item.template
-            if item._generator is None:
-                item._generator = _compile_nested_template(source, cls.citry._tag_rules(), cls)
-            pending.extend(item._generator())
+            pending.extend(_nested_template_generator(item, cls, compiled)())
         else:
             msg = f"Component {cls.__name__} uses simple=True; template node {kind.__name__} is unsupported."
             raise TypeError(msg)
@@ -238,7 +263,7 @@ def _prepared_template(cls: type[Component]) -> tuple[CitryTemplate | None, list
             origin=compiled.origin,
             template_kind=compiled.kind,
         )
-        cached = compiled, body, _validate_body(body, cls)
+        cached = compiled, body, _validate_body(body, cls, compiled)
         cls._citry_simple_template = cached
         return cached
 

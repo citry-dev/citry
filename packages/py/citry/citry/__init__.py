@@ -195,7 +195,6 @@ from citry.nodes import (
     SlotNode,
     StaticHtmlAttr,
     TemplateHtmlAttr,
-    TemplateNode,
 )
 from citry.settings import (
     CitrySettings,
@@ -382,7 +381,6 @@ __all__ = [
     "TemplateLintInfo",
     "TemplateNamespaceContext",
     "TemplateNamespaceContribution",
-    "TemplateNode",
     "TemplateVariableInfo",
     "TimeFormat",
     "TimeInput",

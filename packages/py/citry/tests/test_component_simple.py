@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from citry import Citry, Component, ComponentLibrary, LibraryComponent, Slot
+from citry import (
+    Citry,
+    Component,
+    ComponentLibrary,
+    Extension,
+    LibraryComponent,
+    OnTemplateCompiledContext,
+    Slot,
+)
 
 
 def test_simple_raw_body_keeps_exact_opaque_content_on_static_path() -> None:
@@ -900,3 +908,43 @@ def test_kwargs_adapter_cannot_replace_the_checked_slot_constructor() -> None:
     with pytest.raises(TypeError, match="Slots declaration changed"):
         Box().render()
     assert calls == []
+
+
+def test_simple_renders_template_valued_attributes_and_compiles_each_once() -> None:
+    nested_compiles: list[str] = []
+
+    class CountNested(Extension):
+        name = "count_nested"
+
+        def on_template_compiled(self, ctx: OnTemplateCompiledContext) -> None:
+            if ctx.template_kind == "nested":
+                nested_compiles.append(ctx.component_class.__name__)
+
+    app = Citry(extensions=[CountNested])
+
+    class Card(Component):
+        citry = app
+
+        template = """
+            <section>{{ body }}</section>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"body": kwargs["body"]}
+
+    class Example(Component):
+        citry = app
+        simple = True
+
+        template = """
+            <div c-title="<b>{{ x }}</b>"><c-Card c-body="<span>{{ x }}</span>" /></div>
+        """
+
+    # The simple path checks each nested template before rendering it, and the
+    # render reuses that compiled result instead of compiling it again.
+    for _ in range(2):
+        html = Example(x="hi").render().serialize(deps_strategy="ignore")
+        assert 'title="&lt;b&gt;hi&lt;/b&gt;"' in html
+        assert "<section" in html
+        assert "<span>hi</span></section>" in html
+    assert nested_compiles == ["Example", "Example"]

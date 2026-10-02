@@ -165,11 +165,11 @@ so the grand total counts them twice.
 | Area | unchanged | changed-compatible | changed-incompatible | removed | restored | new | Rows |
 |---|---|---|---|---|---|---|---|
 | Browser JavaScript | 8 | 9 | 9 | 20 | 9 | 6 | 61 |
-| Python API | 14 | 19 | 27 | 3 | 1 | 8 | 72 |
+| Python API | 14 | 19 | 27 | 4 | 1 | 8 | 73 |
 | Settings, extensions, CLI, LSP | 41 | 11 | 9 | 6 | 1 | 14 | 82 |
 | Template syntax | 39 | 16 | 13 | 17 | 0 | 6 | 91 |
 | HTTP, protocol, i18n, citry-ui | 19 | 16 | 9 | 9 | 4 | 6 | 63 |
-| **Total** | **121** | **71** | **67** | **55** | **15** | **40** | **369** |
+| **Total** | **121** | **71** | **67** | **56** | **15** | **40** | **370** |
 
 "restored" means 0.5.1 behavior that the branch had lost and that works
 again now. A restored row is compatible with 0.5.1 for the part that was
@@ -302,12 +302,15 @@ TypeScript types were ever published.
 
 #### `citry.__all__`
 
-The name set is identical: 191 names in both. The rows below are the 13
-that changed, plus one row for the rest.
+0.5.1 exports 191 names and the branch exports 190: `TemplateNode` is
+removed (decision 6.18), and every other name is still there. The rows
+below are the 13 names that changed, the removed name, and one row for the
+rest.
 
 | Surface | 0.5.1 | 0.6.0 branch | Status | Notes / replacement |
 |---|---|---|---|---|
-| 178 other names in `citry.__all__` | `P/__init__.py` | same | unchanged | Same signatures and public members. |
+| 177 other names in `citry.__all__` | `P/__init__.py` | same | unchanged | Same signatures and public members. |
+| `citry.TemplateNode` (also `citry.nodes.TemplateNode`) | `P/nodes/__init__.py` | not defined | removed | The template compiler never generated it. An extension that built one should add the markup to the template source in `on_template_loaded`. Decision 6.18. |
 | `citry.Citry(...)` | `P/citry.py:130` | `P/citry.py:130, 170-171` | changed-compatible | Adds keyword params `ssr=True`, `ssr_element_threshold=0`. Methods unchanged. |
 | `citry.CitrySettings` | `P/settings.py` | `P/settings.py` | changed-compatible | Gains `ssr`, `ssr_element_threshold`. |
 | `citry.CitryRender.serialize()` / `serialize_result()` | `P/citry_render.py:236, 309` | `P/citry_render.py:364, 441` | changed-compatible | New keyword `ssr`. Constructor gains keyword-only `render_target`, `owner_citry`. |
@@ -668,7 +671,7 @@ written" is accurate.
 
 | Surface | 0.5.1 | 0.6.0 branch | Status | Notes |
 |---|---|---|---|---|
-| `Node`, `ComponentNode`, `ElementAttrsNode`, ... (14 classes) | v051 `reference/nodes` | identical signatures (checked by rendering) | unchanged | Some return typed prepared values in interactive renders. |
+| `Node`, `ComponentNode`, `ElementAttrsNode`, ... (13 classes) | v051 `reference/nodes` | identical signatures (checked by rendering) | unchanged | Some return typed prepared values in interactive renders. The 14th 0.5.1 class, `TemplateNode`, is removed (section 3.2, decision 6.18). |
 
 #### New syntax
 
@@ -834,6 +837,7 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 | `citry.component_render.CacheArtifactError` re-export | Incidental re-export | Import from `citry.ext.cache` |
 | `citry:events:stale` reasons `cancelled` and `timeout` | A timed-out call is aborted, and `disposed` covers most cancellations | `disposed`; rejection of the call |
 | `citry_core.html_transform.scan_alpine_html`, `analyze_component_members` | Alpine-only | In the citry-core CHANGELOG |
+| `citry.TemplateNode` | The compiler never generated it, and no built-in code built one (decision 6.18) | Add the markup to the template source in `on_template_loaded`; a template-valued attribute is a `TemplateHtmlAttr` |
 
 ## 6. Maintainer decisions
 
@@ -1109,6 +1113,22 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 - **Status:** kept; the release checklist now opens them after tagging
   (`e076be6e`).
 
+### 6.18 The `TemplateNode` node class
+
+- **Question:** `citry.TemplateNode` rendered a nested template string as
+  body content. The template compiler never generates it: a template-valued
+  `c-*` attribute compiles to `TemplateHtmlAttr`, inside an
+  `ElementAttrsNode` on an HTML element or in a `ComponentNode`'s
+  attributes. Its docstring said an extension could build one in
+  `on_template_compiled`, but no built-in code did, and the `simple=True`
+  path read an attribute the class does not have.
+- **Recommendation:** remove it before 0.6.0 rather than keep an untested
+  public class.
+- **Status:** removed, with a CHANGELOG line and an upgrade guide line that
+  point an extension at `on_template_loaded`. The `simple=True` check that
+  read the missing attribute also broke `TemplateHtmlAttr`; that is fixed
+  in the same change.
+
 ## 7. CHANGELOG reconciliation
 
 Each "Not in CHANGELOG" item from the five audits was checked against the
@@ -1158,8 +1178,9 @@ Covered now:
 Added after the maintainer's decisions: `wait: false` rejection,
 `Citry.vue.use`, async initializers, `#c-ignore` keeping its contents,
 the `x-*` lint rules, Alpine-only modifier errors, `@event` method checks,
-`vue_asset_max_bytes`, and citry-lsp 0.2.0. The CHANGELOG lists the
-`early_scripts` rename, the one change to that field since 0.5.1.
+`vue_asset_max_bytes`, citry-lsp 0.2.0, and the `TemplateNode` removal.
+The CHANGELOG lists the `early_scripts` rename, the one change to that
+field since 0.5.1.
 
 Still missing from the root CHANGELOG:
 

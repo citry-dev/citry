@@ -166,7 +166,6 @@ with Vue-like `class`/`style` merging.
 | Node | Renders |
 |---|---|
 | `ExprNode` | Evaluates a Python expression |
-| `TemplateNode` | Evaluates a nested template (recursive) |
 | `StaticHtmlAttr` | Returns `key="value"` or bare `key` |
 | `ExprHtmlAttr` | Evaluates expression, returns `key="result"` |
 | `TemplateHtmlAttr` | Evaluates nested template, returns `key="result"` |
@@ -532,7 +531,7 @@ pipeline (`CitryRender` parts + `CitryContext.extra`).
 
 | Feature | Status | Notes |
 |---|---|---|
-| `TemplateExpression` (nested `{% %}` tags inside tag-attribute strings) | ♻️ Superseded | Template-in-attribute is first-class in V3 (`TemplateHtmlAttr` / `TemplateNode`); expressions are `safe_eval` Python |
+| `TemplateExpression` (nested `{% %}` tags inside tag-attribute strings) | ♻️ Superseded | Template-in-attribute is first-class in V3 (`TemplateHtmlAttr`); expressions are `safe_eval` Python |
 | Single-node passthrough of non-string values | ♻️ Superseded | `ExprHtmlAttr` resolves to raw Python values by design |
 | `StringifiedNode` | ⏭️ Skip (Django) | Django nodelist mechanics |
 
@@ -1605,7 +1604,7 @@ ported.
   `template_data()` output is validated by constructing `TemplateData(**data)`,
   which raises on a missing or unexpected field. Skipped when `template_data()`
   already returned a `TemplateData` instance.
-- **Node rendering status.** The value nodes (`ExprNode`, `TemplateNode`), the
+- **Node rendering status.** The value node (`ExprNode`), the
   attribute nodes, `ComponentNode`, and the control-flow nodes (`IfNode`,
   `ForNode`) are implemented (see the entries below); the slot nodes (`SlotNode`,
   `FillNode`) still raise `NotImplementedError` on `render` and are a later
@@ -1729,12 +1728,12 @@ assert str(Hello()) == "<p>Hello!</p>"   # element -> render -> serialize
 
 ### Value nodes and autoescaping (`citry/nodes/__init__.py`, `citry/util/html.py`)
 
-**What:** The body value nodes. `ExprNode` evaluates a `{{ expr }}` with
+**What:** The value nodes. `ExprNode` evaluates a `{{ expr }}` with
 `safe_eval` against the context variables and returns an autoescaped string (or
-inlines an embedded render). `TemplateNode` renders a nested template (a `c-*`
-attribute whose value is itself a template) against the same context. Escaping
-lives in `citry/util/html.py`, a thin layer over `markupsafe` exporting
-`escape` and `Markup`.
+inlines an embedded render). A `c-*` attribute whose value is itself a
+template compiles to `TemplateHtmlAttr`, which renders that nested template
+against the same context. Escaping lives in `citry/util/html.py`, a thin layer
+over `markupsafe` exporting `escape` and `Markup`.
 
 **Why:** Makes dynamic templates actually render, with correct HTML escaping.
 
