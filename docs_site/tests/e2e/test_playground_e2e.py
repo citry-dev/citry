@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pygments.lexers import get_lexer_by_name
 
 pytest.importorskip("pytest_playwright")
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -17,6 +18,9 @@ from playwright.sync_api import expect
 from docs_site._internal.code_display import display_code
 
 pytestmark = pytest.mark.e2e
+
+# The site displays these Citry sources with the citry lexer's blank-line rule.
+_CITRY_LEXER = get_lexer_by_name("citry")
 
 _CITRY_UI_TABS = (
     Path(__file__).parents[3] / "packages/py/citry_ui/citry_ui/components/ctabs/snippets/night_sky_guide.py"
@@ -263,7 +267,7 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
     expect(root.locator(".cm-content")).to_be_attached(timeout=15_000)
     # The editor starts from the displayed block, whose extra blank lines are removed.
     expect(root.locator("[data-live-fallback]")).to_have_value(
-        display_code(_CITRY_UI_TABS.read_text(encoding="utf-8")).text
+        display_code(_CITRY_UI_TABS.read_text(encoding="utf-8"), _CITRY_LEXER).text
     )
     expect(built_preview).to_be_hidden()
     page.wait_for_function(

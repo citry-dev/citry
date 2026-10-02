@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from lxml import html as lxml_html
+from pygments.lexers import get_lexer_by_name
 
 from citry import citry as default_citry
 from docs_site._internal.code_display import display_code
@@ -52,6 +53,8 @@ from docs_site._internal.project import default_docs_project, load_docs_project,
 # Read repository files from this file's location rather than the working
 # directory, so the tests pass however pytest is launched.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+# The site displays these Citry sources with the citry lexer's blank-line rule.
+_CITRY_LEXER = get_lexer_by_name("citry")
 
 
 def _landing_nav() -> NavTree:
@@ -370,7 +373,7 @@ def test_a_moved_adapter_fails_the_host_section(monkeypatch: pytest.MonkeyPatch)
 def test_walkthrough_offers_the_displayed_source_for_copying() -> None:
     """Block-per-line markup carries no newlines, so copy must not read the DOM."""
     # Copy answers with the text the reader sees, like every other code block.
-    shown = display_code(_TOUR_PATH.read_text(encoding="utf-8")).text
+    shown = display_code(_TOUR_PATH.read_text(encoding="utf-8"), _CITRY_LEXER).text
     document = lxml_html.document_fromstring(str(LandingTour()))
     tour = document.xpath("//div[@data-landing-tour]")[0]
 
@@ -395,7 +398,8 @@ def test_landing_snippets_load_from_any_directory_and_repo_root(
         editor = lxml_html.document_fromstring(str(LandingEditorDemoMarkup()))
 
     encoded = tour.xpath("//div[@data-landing-tour]")[0].get("data-tour-source")
-    assert base64.b64decode(encoded).decode() == display_code(_TOUR_PATH.read_text(encoding="utf-8")).text
+    shown = display_code(_TOUR_PATH.read_text(encoding="utf-8"), _CITRY_LEXER).text
+    assert base64.b64decode(encoded).decode() == shown
     assert _EDITOR_PATH.name in editor.text_content()
 
 
@@ -432,7 +436,7 @@ def test_editor_demo_marks_exact_symbols_without_changing_the_source() -> None:
     definitions = document.xpath(".//span[@data-editor-definition]")
 
     assert len(annotations) == len(_EDITOR_MARKS)
-    assert document.xpath(".//pre")[0].text_content() == display_code(source).text
+    assert document.xpath(".//pre")[0].text_content() == display_code(source, _CITRY_LEXER).text
     assert {item.get("data-editor-annotation") for item in annotations} == {mark["id"] for mark in _EDITOR_MARKS}
     assert {item.get("data-editor-definition") for item in definitions} == {
         mark["definition"] for mark in _EDITOR_MARKS if mark.get("definition")

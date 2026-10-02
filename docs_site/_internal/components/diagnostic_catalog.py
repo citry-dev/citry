@@ -8,7 +8,7 @@ from typing import Any
 from markupsafe import Markup, escape
 
 from citry import Component
-from docs_site._internal.code_display import display_code, language_collapses
+from docs_site._internal.code_display import display_code_for_language
 from docs_site._internal.project import current_docs_project
 
 _SURFACE_LABELS = {
@@ -110,7 +110,7 @@ def _examples_block(examples: list[dict[str, str]]) -> str:
         language = escape(example["language"])
         # Catalog examples follow the same blank-line rule as every other
         # code block on the site; the catalog data itself is left as written.
-        shown = display_code(example["source"], collapse=language_collapses(example["language"])).text
+        shown = display_code_for_language(example["source"], example["language"]).text
         source = escape(shown)
         description = example.get("description")
         description_html = f"<p>{escape(description)}</p>" if description else ""

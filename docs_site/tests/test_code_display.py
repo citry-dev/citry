@@ -18,10 +18,13 @@ from docs_site._internal.pipeline import render_page
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pygments.lexer import Lexer
+
 # Two top-level definitions the way ruff formats them, with a whitespace-only
 # line in the middle of the second run to prove it also counts as blank.
 _FORMATTED = "import os\n\n\nclass First:\n    pass\n\n  \n\ndef second():\n    return os\n"
 _SHOWN = "import os\n\nclass First:\n    pass\n\ndef second():\n    return os\n"
+_PYTHON = get_lexer_by_name("python")
 
 
 def _code_blocks(html: str) -> list[str]:
@@ -31,10 +34,10 @@ def _code_blocks(html: str) -> list[str]:
 
 
 def test_display_code_keeps_one_blank_line_from_each_run() -> None:
-    shown = display_code(_FORMATTED)
+    shown = display_code(_FORMATTED, _PYTHON)
 
     assert shown.text == _SHOWN
-    # Source line 6 (the def after the first run) is displayed as line 4.
+    # Source line 4 (`class First:`, after the first run) is displayed as line 3.
     assert shown.display_line(4) == 3
     assert shown.display_line(9) == 6
     # Dropped blank lines point at the blank line kept from their run.
@@ -42,18 +45,36 @@ def test_display_code_keeps_one_blank_line_from_each_run() -> None:
     assert shown.display_lines([6, 7, 8]) == [5]
 
 
-def test_display_code_without_collapsing_maps_every_line_to_itself() -> None:
-    shown = display_code(_FORMATTED, collapse=False)
+@pytest.mark.parametrize("lexer", [None, get_lexer_by_name("text")])
+def test_display_code_without_collapsing_maps_every_line_to_itself(lexer: Lexer | None) -> None:
+    shown = display_code(_FORMATTED, lexer)
 
     assert shown.text == _FORMATTED
-    assert shown.display_lines(range(1, 11)) == list(range(1, 11))
+    assert shown.display_lines(range(1, 10)) == list(range(1, 10))
 
 
-def test_display_line_clamps_numbers_past_either_end() -> None:
-    shown = display_code("a\n\n\nb")
+def test_line_numbers_outside_the_source() -> None:
+    shown = display_code("a\n\n\nb", _PYTHON)
 
+    # A single line clamps so a bad range still lands somewhere visible.
     assert shown.display_line(0) == 1
     assert shown.display_line(99) == 3
+    # hl_lines past the end are dropped, as Pygments drops them.
+    assert shown.display_lines([4, 5, 99]) == [3]
+
+
+@pytest.mark.parametrize(
+    ("language", "source"),
+    [
+        ("python", 'TEXT = """\nfirst\n\n\nsecond\n"""\n'),
+        ("citry", 'class C:\n    template = """\n      <p></p>\n\n\n      <p></p>\n    """\n'),
+        ("javascript", "const text = `first\n\n\nsecond`;\n"),
+    ],
+)
+def test_blank_lines_inside_strings_are_kept(language: str, source: str) -> None:
+    # A blank line inside a string is part of its value, so copying or running
+    # the displayed code must give the same string.
+    assert display_code(source, get_lexer_by_name(language)).text == source
 
 
 @pytest.mark.parametrize("language", ["python", "py", "citry", "citry-html", "html", "js", "css", "json"])
@@ -90,6 +111,12 @@ def test_hl_lines_still_mark_the_source_lines_they_name() -> None:
     document = lxml_html.fragment_fromstring(result.html, create_parent="div")
     marked = [span.text_content().strip() for span in document.xpath('.//span[@class="hll"]')]
     assert marked == ["class First:", "def second():"]
+
+
+def test_hl_lines_past_the_end_mark_nothing() -> None:
+    result = render_page('```python hl_lines="7-9"\na\n\n\nb\n```\n', wrap_in_layout=False)
+
+    assert 'class="hll"' not in result.html
 
 
 def test_fence_with_line_numbers_keeps_source_numbering() -> None:

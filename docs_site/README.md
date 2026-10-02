@@ -164,6 +164,31 @@ breadcrumbs, page table of contents, and previous/next navigation. Keep all
 meaningful copy in `content/index.md`; JavaScript may enhance it but must not be
 required to read it or follow its primary actions.
 
+### How code blocks show blank lines
+
+Keep example sources formatted as ruff formats them, with two blank lines
+between top-level definitions. When the site renders a code block, it shows
+each run of two or more blank lines as one blank line, so examples take less
+vertical space. This applies to Markdown fences, `--8<--` includes,
+`<c-include-file>`, live examples, Citry UI previews, example cards, and the
+landing page. The source files are not changed, and executed examples run from
+them.
+
+- Only Python, `citry`, `citry-html`, HTML, JavaScript, TypeScript, CSS, and
+  JSON blocks change. Other languages, such as `text`, `console`, `diff`,
+  Markdown, YAML, Fluent, and shell, keep every blank line.
+- Blank lines inside a Python or JavaScript string stay, because they are part
+  of the string's value. In a Citry component this covers the `template`,
+  `js`, `css`, and `messages` strings.
+- Count `hl_lines` and landing walkthrough line ranges in source-file lines.
+  The site moves them to the matching displayed lines.
+- A fence with `linenums` keeps every blank line, so its numbers match the
+  file.
+- The copy button copies the displayed code, and **Try live** starts from it.
+  Markdown companions and LLM exports keep the source as written.
+
+The rule lives in `_internal/code_display.py`.
+
 ### Add an inline live example
 
 Reference one complete Python module anywhere in the repository. Keep reusable

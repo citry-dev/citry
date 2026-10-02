@@ -522,14 +522,16 @@ def render_page(
 
 def _display_extensions(extensions: tuple[str, ...], configs: dict[str, Any]) -> list[str | Extension]:
     """
-    Swap ``pymdownx.highlight`` for the docs variant that shapes code for display.
+    Swap ``pymdownx.highlight`` for the docs variant that shortens runs of blank lines in fenced code.
 
-    The maintainer still enables and configures the extension by its ordinary
-    name in ``settings.yml``. Replacing it in place keeps its position in the
-    list, which matters because superfences and inlinehilite adopt the first
-    highlight extension registered. Its options move from ``configs`` onto the
-    instance, since Python-Markdown applies ``extension_configs`` only to
-    extensions named by string.
+    ``settings.yml`` enables and configures the extension under its ordinary
+    name, and the swap keeps its place in the list. superfences and
+    inlinehilite ask the registered highlight extension for its highlighter, so
+    every fence follows the blank-line rule in ``code_display``. A profile that
+    leaves ``pymdownx.highlight`` out gets no swap, and its fences keep every
+    blank line. The options move from ``configs`` onto the instance, since
+    Python-Markdown applies ``extension_configs`` only to extensions named by
+    string.
     """
     resolved: list[str | Extension] = []
     for name in extensions:

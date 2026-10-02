@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from markupsafe import Markup, escape
+from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 
 from citry import Component
-from docs_site._internal.code_display import display_code, highlight_for_display, lexer_collapses
+from docs_site._internal.code_display import display_code, highlight_for_display
 from docs_site._internal.project import current_docs_project
 from docs_site._internal.util import flatten_for_markdown
 from docs_site.snippets.landing.status_card import StatusCard
@@ -1367,7 +1368,7 @@ class LandingTourMarkup(Component):
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         source = _TOUR_PATH.read_text(encoding="utf-8")
-        shown = display_code(source, collapse=lexer_collapses(get_lexer_by_name("citry"))).text
+        shown = display_code(source, get_lexer_by_name("citry")).text
         return {
             "file_name": _TOUR_PATH.name,
             "code": Markup(_tour_code(source, _TOUR_STOPS)),  # noqa: S704 - pygments output
@@ -1522,7 +1523,7 @@ def _editor_code(source: str, marks: tuple[dict[str, Any], ...]) -> str:
     lexer = get_lexer_by_name("citry")
     # Shape the text for display before locating the symbols, so every offset
     # below refers to the text the reader actually sees.
-    source = display_code(source, collapse=lexer_collapses(lexer)).text
+    source = display_code(source, lexer).text
     ranges = _editor_ranges(source, marks)
     boundaries = {position for start, end, _mark in ranges for position in (start, end)}
     starts = {start: mark for start, _end, mark in ranges}
@@ -1849,8 +1850,8 @@ def _tour_code(source: str, stops: tuple[dict[str, Any], ...]) -> str:
     is translated to the displayed lines before the spans are tagged.
     """
     lexer = get_lexer_by_name("citry")
-    shown = display_code(source, collapse=lexer_collapses(lexer))
-    html = highlight_for_display(shown.text, lexer, HtmlFormatter(linespans="tourline"))
+    shown = display_code(source, lexer)
+    html = highlight(shown.text, lexer, HtmlFormatter(linespans="tourline"))
     line_to_stop: dict[int, tuple[str, bool]] = {}
     for stop in stops:
         first, last = stop["lines"]
