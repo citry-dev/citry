@@ -14,7 +14,7 @@ sentence into a text part and a link part.
 template supplies the link itself. Translators move the marker; they
 never write HTML, attributes, URLs, or component names.
 
-## Mark the place for the content in the message
+## Add a slot variable
 
 Add a variable where the content belongs and declare its type as
 `Slot`:
@@ -29,7 +29,7 @@ my-app-terms-acceptance =
 A `Slot` variable is filled with content from the template, not with
 text.
 
-## Fill the message in the template
+## Fill the message
 
 Pass ordinary values in `c-values`, and each `Slot` as a `<c-fill>` with
 the variable's name:
@@ -52,7 +52,7 @@ Citry reports a missing, unknown, or wrongly typed value or fill. It
 checks fixed calls like this one before rendering, and checks values
 built at runtime when it renders.
 
-## Let translators move or repeat the content
+## Move or repeat content
 
 A translation may put the slot anywhere, and may use it more than once:
 
@@ -66,7 +66,7 @@ Citry renders the fill once for each place it appears. If the two places
 need different content or behavior, declare two `Slot` variables
 instead.
 
-## Translated text cannot add HTML
+## Text stays escaped
 
 Citry escapes all text that comes from the message:
 
@@ -79,27 +79,27 @@ my-app-safe-message = <unsafe> { $link } & text
 rendered as HTML. A translation therefore cannot add an event handler, an
 unsafe URL, an attribute, or a component.
 
-## Rules for less common cases
+## Less common cases
 
-### Use tr() when the result is plain text
+### Use `tr()` for text
 
 `<c-trans>` is only for messages with `Slot` variables. For a message
 that is text only, call `tr()`.
 
-### Where a slot may appear in a message
+### Where a slot may go
 
 A `Slot` must appear on its own as `{ $terms_link }`. It cannot be the
 value a selector chooses on, a formatting function's argument, or part
 of a larger expression. Every branch of a selector must use each `Slot`
 at least once.
 
-### The browser does not change a rich message's language
+### No browser switching
 
 `<c-trans>` renders on the server. `$i18n.switchLocale()` in the browser
 does not change it. Render the page or that part of it again to show
 another language.
 
-### A rich message needs a translation in every selectable locale
+### Translate all locales
 
 `<c-trans>` adds no element around the message. It wraps each fill in
 `<bdi dir="auto">` so the fill's text direction does not affect the

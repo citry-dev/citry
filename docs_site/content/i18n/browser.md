@@ -15,7 +15,7 @@ that changes. This page shows how to enable translations in one part of
 the page, how to translate text from Vue, and how to keep
 server-rendered text up to date when the language changes.
 
-## Choose where each text is translated
+## Choose who translates
 
 Each piece of text has one owner, and only that owner updates it:
 
@@ -29,7 +29,7 @@ Each piece of text has one owner, and only that owner updates it:
 - **`$i18n.bind()`** for a destination with no fixed place in the HTML,
   such as an element your JavaScript creates.
 
-## Change the whole page's language from the server
+## Switch from the server
 
 Put the locale in the URL, a form field, a cookie, or another request
 input, and render the page again:
@@ -49,7 +49,7 @@ One server render updates every server-translated text. Moving all of a
 page's text into Vue instead also works, but many Vue expressions add
 work in the browser and can delay the page becoming interactive.
 
-## Enable translations in one part of the page
+## Enable browser i18n
 
 Wrap that part in `<c-i18n>` with the bare `client` attribute and a
 `tag`:
@@ -87,7 +87,7 @@ The service offers:
 - the read-only `context` (the current locale and direction) and
   `status`.
 
-## Translate text in Vue expressions
+## Translate in Vue
 
 Call `$i18n.tr()` in a Vue binding. Pass variables as an object, and
 choose a Fluent attribute with `{ attr: ... }`:
@@ -113,7 +113,7 @@ When the language changes, Vue runs these expressions again.
 `resolve()` takes the same arguments. Besides the text, it returns the
 locale actually used, its direction, and whether it was a fallback.
 
-## Keep server-rendered text translated in the browser
+## Translate server text
 
 `$c-tr` lets the server render the first value with `tr()`, and the
 browser translate it again later. Use it when the text has a fixed
@@ -176,7 +176,7 @@ keeps its server-rendered language and needs a real `tag`:
 </c-i18n>
 ```
 
-## Format and parse values in the browser
+## Format and parse
 
 `$i18n.format` uses the same named profiles as the server:
 
@@ -193,7 +193,7 @@ keeps its server-rendered language and needs a real `tag`:
 [Format values](/i18n/formatting/#format-values-in-the-browser) and
 [Parse localized input](/i18n/parsing/#parse-numbers-and-percentages-in-the-browser).
 
-## Load messages whose ID is built at runtime
+## Load computed IDs
 
 Citry sends the browser only the messages the page uses. It finds them
 by reading message IDs written literally in your code, such as
@@ -230,7 +230,7 @@ class DynamicNotice(Component):
 Listing a message includes all its attributes. Literal IDs do not need
 to be listed.
 
-## Translate a destination created in JavaScript
+## Bind text in JS
 
 Use `bind()` when the text has no fixed place in the HTML for `$c-tr`,
 such as an element or property your JavaScript manages. Here it keeps
@@ -266,9 +266,9 @@ component does.
 
 For a one-time translation that should not update, call `i18n.tr()`.
 
-## Rules for less common cases
+## Less common cases
 
-### Which message IDs Citry finds
+### Which IDs are found
 
 Citry sends the browser every message it finds written literally in:
 
@@ -312,7 +312,7 @@ Empty names, empty or unclosed brackets, extra punctuation, uppercase
 spellings, and other HTML attributes are errors. Rendering,
 `citry check`, and the editor all report them.
 
-### Add $c-tr only when a Python condition holds
+### Add `$c-tr` from Python
 
 To decide during the server render whether to add the binding, use the
 `c-` prefix, `c-$c-tr:...="python_expression"`, or return a `$c-tr:...`
@@ -327,12 +327,12 @@ Any other value raises `TypeError`. The binding must be on a plain HTML
 element that holds the text or attribute itself, not on a component
 tag.
 
-### Do not use v-text and $c-tr on the same text
+### One owner per text
 
 That gives two browser mechanisms ownership of the same text. Give each
 text one owner.
 
-### Translate re-rendered content and inserted HTML
+### Translate new content
 
 When an [Events](/events/) handler (server code that runs after a
 browser event) renders part of the page again, the new content

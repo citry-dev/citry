@@ -20,7 +20,7 @@ This page walks through the basic setup: write text as messages, add the
 languages users can choose, and pick a language for each request. The
 other pages in this section cover each part in depth.
 
-## Write text as messages beside the component
+## Write messages
 
 A message is a piece of user-visible text with a stable ID. Write
 messages in the component's `messages` block, using
@@ -69,7 +69,7 @@ This works without any i18n settings and adds no browser code. Any registered co
 `my-app-account-greeting`, even when `AccountCard` is not on the page.
 [Write messages](/i18n/messages/) covers the Fluent syntax.
 
-## Add the languages users can choose
+## Add languages
 
 To offer more than the source language, list the locales in the
 engine's i18n settings:
@@ -96,7 +96,7 @@ The translations themselves go in a catalog package: a Python package of
 Fluent files, one folder per locale. See
 [Organize catalogs](/i18n/catalogs/).
 
-## Choose the language for each request
+## Choose the language
 
 Read the locale from the request, such as a URL parameter or a cookie.
 Build a locale context from it, then pass the context to the root
@@ -125,7 +125,7 @@ Inside a component, Python code reads the same context through
 different language for one part of the page, and use outside a
 component.
 
-## Change the language in the browser only where needed
+## Switch in the browser
 
 By default, text is translated on the server and arrives as ordinary
 HTML:

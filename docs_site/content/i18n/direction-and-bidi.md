@@ -25,7 +25,7 @@ Setting `dir` does not translate anything, and translating text does not
 update the `lang` of the elements around it. This page shows how to get
 each one right.
 
-## Set lang and dir for part of the page
+## Set lang and dir
 
 Give `<c-i18n>` a `tag` so it renders a real element:
 
@@ -43,7 +43,7 @@ Citry picks the direction from the locale and renders:
 </section>
 ```
 
-## Set lang and dir on the html element
+## Set them on `<html>`
 
 Citry does not change the `<html>` element by itself. When your web
 framework renders the document shell, read the locale context there and
@@ -55,7 +55,7 @@ set both attributes:
 
 Take the values from `context.locale` and `context.direction`.
 
-## Write CSS that works in both directions
+## Use logical CSS
 
 Use logical CSS properties, which follow the text direction, instead of
 `left` and `right`:
@@ -70,7 +70,7 @@ Use logical CSS properties, which follow the text direction, instead of
 Check icons one by one. An arrow that means "next" usually needs to flip
 in right-to-left layouts; a play button or a logo usually should not.
 
-## Inserted values keep their own direction
+## Values keep direction
 
 A name, file path, ID, or number inserted into a message may run in a
 different direction from the sentence around it. Citry isolates each
@@ -80,7 +80,7 @@ This is separate from HTML escaping. Escaping stops a value from adding
 markup; isolation stops it from changing the visual order. Citry does
 both.
 
-## Translate accessible labels too
+## Translate labels too
 
 Keep a control's visible text and its accessible label in one message,
 as Fluent attributes:
@@ -96,7 +96,7 @@ attribute falls back on its own, so a missing `.aria-label` translation
 is never replaced by the visible label. See
 [Write messages](/i18n/messages/#translate-labels-such-as-aria-label).
 
-## Mark fallback text with its language
+## Mark fallback text { #mark-fallback-text-with-its-language }
 
 When a translation is missing, Citry falls back to another language.
 `tr()` returns only text, so the text cannot carry its own `lang`, and a
@@ -126,7 +126,7 @@ return {
 `resolved.used_fallback` is `True` when the text came from a different
 locale than the one requested.
 
-## Keep server text out of a browser-switched provider
+## Keep server text apart
 
 When a [client provider](/i18n/browser/) (a `<c-i18n client>` element)
 switches language in the
@@ -137,20 +137,20 @@ element would claim a language its text does not use.
 Put such text inside its own `<c-i18n tag="...">` without `client`, or
 render it again on the server.
 
-## Rules for less common cases
+## Less common cases
 
-### Choose the direction yourself
+### Force a direction
 
 `<c-i18n>` accepts `direction="ltr"` or `direction="rtl"` for an unusual
 part of the page. Usually, let Citry derive it from the locale.
 
-### Line breaks and direction marks in a value
+### Line breaks in values
 
 A value passed into a message may not contain Unicode direction control
 characters or line or paragraph breaks. For text on several lines, or
 text that needs a fixed direction, use separate elements.
 
-### citry check reports a cross-language fallback
+### Fallback warnings
 
 `citry check` reports `citry.i18n.cross-language-fallback` when text
 would fall back to another locale and nothing can mark its `lang`. This

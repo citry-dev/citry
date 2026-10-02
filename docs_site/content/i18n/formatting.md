@@ -123,7 +123,7 @@ formatted = i18n.for_context(context).format.number(
 )
 ```
 
-## Pass the right kind of value
+## Pass the right value
 
 Each kind accepts a specific Python value:
 
@@ -142,7 +142,7 @@ Each kind accepts a specific Python value:
 Floats are rejected with `TypeError`, because they cannot hold every
 decimal amount exactly. Convert amounts to `Decimal` first.
 
-## Pass percentages as ratios
+## Use ratios for percent
 
 A percent profile takes the ratio, not the number of percent:
 
@@ -159,7 +159,7 @@ label = self.i18n.format.percent(
 digits, the decimal separator, the spacing, and the percent sign.
 Reading the value back with the same profile returns the ratio again.
 
-## Format dates, times, and moments in time
+## Format dates and times
 
 Citry keeps three kinds apart:
 
@@ -192,7 +192,7 @@ text = formatter.datetime(
 because the offset of a zone can depend on the date, which a `time`
 does not have.
 
-## Show only some parts of a date
+## Show part of a date
 
 By default a date profile shows year, month, and day. Set `fields` for
 a calendar heading, a weekday name, or another partial date:
@@ -227,7 +227,7 @@ A profile that also reads user input (`input=DateInput(...)`) must keep
 the default `fields="year_month_day"`, because Citry only reads complete
 dates.
 
-## Format values in the browser
+## Format in the browser { #format-values-in-the-browser }
 
 Inside a [browser i18n provider](/i18n/browser/), `$i18n.format` uses
 the same profile names:
@@ -247,9 +247,9 @@ enough for JavaScript to hold exactly. Pass a date as
 `{ year, month, day }`, a time as its clock fields, and a moment as a
 JavaScript `Date`, which is shown in the context's time zone.
 
-## Rules for less common cases
+## Less common cases
 
-### Errors from profile names and kinds
+### Name and kind errors
 
 A profile name may contain ASCII letters, digits, `-`, and `_`. Any
 other name raises `ValueError` when you create the registry. A profile
@@ -257,14 +257,14 @@ of the wrong class for its kind, such as a `PercentFormat` under
 `number`, raises `TypeError` there too. Calling a profile name that does
 not exist raises `ValueError`.
 
-### Only the built-in kinds are supported
+### Built-in kinds only
 
 You can add any number of profiles under the kinds above, but you cannot
 add a new kind or plug in your own formatter. The server and the browser
 must apply the same rules, and that is only possible for the built-in
 kinds.
 
-### Browser output can differ slightly from server output
+### Browser output differs
 
 The server formats with ICU4X, the locale library Citry uses, and the
 browser with its built-in `Intl`

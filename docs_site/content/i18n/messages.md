@@ -20,7 +20,7 @@ This page covers writing messages and calling them. Translations into
 other languages go in catalogs, covered in
 [Organize catalogs](/i18n/catalogs/).
 
-## Add messages to a component
+## Add messages
 
 Put the messages in the component's `messages` block, after the
 template, JavaScript, and CSS:
@@ -72,7 +72,7 @@ Messages work without any i18n settings. Citry then translates on the
 server into the source language only; it adds no browser code, language
 switching, or named formats until you configure them.
 
-## Call a message from templates and Python
+## Call a message
 
 In a template, call `tr()` with the message ID and its variables:
 
@@ -100,7 +100,7 @@ text = service.tr("my-app-account-greeting", name="Ada")
 
 All three return plain text. A template escapes it like any other value.
 
-## Declare the type of each variable
+## Declare variable types
 
 Write one `@param` comment per variable directly above the message:
 
@@ -132,7 +132,7 @@ Write the type name exactly as listed. Citry reads it as text and does
 not import anything, so a dotted path such as `decimal.Decimal` is not
 accepted.
 
-## Write plural forms and other grammar
+## Write plural forms
 
 Use a selector, `{ $count -> ... }`, which picks one branch based on a
 value. Each language can then choose its right form:
@@ -149,7 +149,7 @@ The branch marked `*` is the default. Each translation may use the
 branches its own language needs; a language with three plural forms
 writes three, and a language with none writes one.
 
-## Translate labels such as aria-label
+## Translate labels { #translate-labels-such-as-aria-label }
 
 A message can have attributes: related texts, each on its own line
 starting with `.`, that describe the same thing. Use them for an
@@ -187,7 +187,7 @@ The `@param` comments above the message cover the main text and all its
 attributes. Do not put a comment between the main text and an
 attribute, because that ends the message.
 
-## Name messages by feature, not by their English text
+## Name by feature
 
 Give each ID a prefix for your application or package, then one for the
 feature or component:
@@ -203,7 +203,7 @@ components and packages apart. Do not build the ID from the English
 sentence. Translations are stored under the ID, so it must stay the same
 when the wording changes.
 
-## Keep messages in a separate file
+## Use a messages file
 
 Use `messages_file` when you prefer a separate `.ftl` file:
 
@@ -218,9 +218,9 @@ A component has either `messages` or `messages_file`, not both. They
 load, inherit, and reload like a component's other files, such as
 `template_file`.
 
-## Reuse text inside a message
+## Reuse text
 
-### Reuse a phrase within one file with a term
+### Reuse with a term
 
 A Fluent term is a reusable phrase whose name starts with `-`:
 
@@ -235,7 +235,7 @@ A term is private to the `messages` block or `.ftl` file that defines
 it. Another component may define its own `-product-name` without a
 conflict. To share a phrase across files, use a public message instead.
 
-### Include one public message in another
+### Include a message
 
 A message may include another message by its ID:
 
@@ -248,7 +248,7 @@ Citry follows these references when it checks variable types and
 fallback, and when it sends messages to the browser. Calling
 `my-app-page-title` is enough; the message it includes comes along.
 
-## Find out which language a message came from
+## Get the language used
 
 When a translation is missing, Citry falls back to another language.
 `tr()` returns only the text. Use `resolve()` when you also need to know
@@ -271,7 +271,7 @@ Use this to mark fallback text with its own `lang` attribute. A plain
 because its text cannot carry a `lang`. See
 [Language direction and accessibility](/i18n/direction-and-bidi/#mark-fallback-text-with-its-language).
 
-## See variable types in the editor
+## Hover for types
 
 When the Citry editor extension knows your application (the `citry.app`
 setting), hover a variable name in a `tr()` call to see its type and
@@ -280,9 +280,9 @@ message is in another component, file, or catalog package. This works in
 templates, Python, Vue `$i18n.tr()`, component JavaScript, and
 `<c-trans>`. See [VS Code](/ide/vscode/).
 
-## Rules for less common cases
+## Less common cases
 
-### A variable has no @param comment
+### Missing `@param`
 
 For a simple variable used only on the server, a missing `@param` is a
 warning (`citry.i18n.missing-param-type`).
@@ -293,7 +293,7 @@ A type is always required when the variable is used in a selector, a
 `Slot`, a formatting function, or a browser call, because Citry cannot
 check those safely without it.
 
-### Translations do not repeat @param comments
+### `@param` in translations
 
 The message in the source language declares the types. Translations use
 the same variables without the comments.
@@ -303,7 +303,7 @@ component's message with the same `@param` names and types. This lets a
 library build its catalog package from its components' `messages`
 blocks. Changing a name or type in the repeat is an error.
 
-### Which component sets messages_locale
+### Set `messages_locale`
 
 Declare `I18n.messages_locale` on the component that defines `messages`
 or `messages_file`. A subclass that inherits those messages also keeps

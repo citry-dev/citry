@@ -17,7 +17,7 @@ packages, and keeping caches and browser translations correct.
 `Citry(mode="development")`, Citry reads the `.ftl` files directly, so
 you can edit translations without compiling.
 
-## Compile each catalog package
+## Compile the catalogs
 
 From a development checkout, run:
 
@@ -44,7 +44,7 @@ my_app_i18n/_compiled/
 The package must be a writable folder in your source tree. Compile
 before you build a wheel or zip archive.
 
-## Include the compiled files in the wheel
+## Ship compiled files
 
 Every installed catalog package needs:
 
@@ -68,7 +68,7 @@ Keep the package's `__init__.py` free of setup code. Citry finds the
 files by the package name you list in `catalogs` and needs no
 registration code.
 
-## Test the installed package
+## Test the install
 
 Test the built artifacts, not only your source checkout: the source
 distribution, the wheel rebuilt from it, and the installed wheel. From
@@ -79,7 +79,7 @@ contains every file listed in `_compiled/manifest.json`.
 A catalog package also loads when installed as an importable zip
 archive.
 
-## Know what stops startup in production
+## Pass startup checks
 
 When a production engine loads a catalog package, it checks:
 
@@ -98,7 +98,7 @@ rebuild.
 This applies to catalog packages only. Messages in your application's
 own components are loaded with the components, as in development.
 
-## Cache translated output safely
+## Cache safely { #cache-translated-output-safely }
 
 A cached render must not be reused for another language. When a cached
 component's output depends on i18n, add the locale context's
@@ -124,7 +124,7 @@ catalog version, and format version.
 Leaving the identity out means you promise the output is the same in
 every language.
 
-## Create contexts after a reload
+## Recreate after reload
 
 A locale context records the catalog version it was built from. If a
 hot reload or another change loads a new catalog, operations on an older
@@ -141,7 +141,7 @@ from citry.ext.i18n import make_context
 context = make_context(app, locale=request.locale)
 ```
 
-## Send the browser only the messages it needs
+## Send fewer messages
 
 A page without a [client provider](/i18n/browser/) (a
 `<c-i18n client>` element) sends no i18n code

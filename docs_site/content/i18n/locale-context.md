@@ -19,7 +19,7 @@ This page shows how to configure the locales your application supports,
 create a context for each request, and pass it to the render. It then
 covers changing the language for one part of the page.
 
-## Configure the supported locales
+## Configure locales
 
 List the locales in the engine's i18n settings:
 
@@ -57,7 +57,7 @@ Citry checks the settings when it creates the engine. A fallback that
 names an unknown locale, or fallbacks that form a loop, raise
 an error.
 
-## Create a context for each request
+## Create a context
 
 Call `make_context()` with the same engine that owns the components:
 
@@ -83,7 +83,7 @@ default.
 Each call returns a new value. It does not change the engine's default
 or affect any other request.
 
-## Pass the context to the root render
+## Pass the context
 
 Provide the context under the key `citry_i18n` when you render the page:
 
@@ -115,7 +115,7 @@ class Summary(Component):
 This keeps each render's output determined by what you pass to it. See
 [Provide and inject](/concepts/provide-and-inject/) for the general rule.
 
-## Show one part of the page in another language
+## Switch one part
 
 Wrap part of a template in `<c-i18n>` to give it a different locale:
 
@@ -144,7 +144,7 @@ zone raises `ValueError` during the render.
 To let this part of the page switch language in the browser, add
 `client` and keep `tag`. See [Browser i18n](/i18n/browser/).
 
-## Translate outside a component
+## Translate in any code
 
 Code outside a component, such as an email builder or a view function,
 gets the same operations from the extension:
@@ -164,7 +164,7 @@ amount = service.format.currency(
 The service has `context`, `tr()`, `resolve()`, `format`, and `parse`,
 and every operation uses the context you passed.
 
-## Cache translated output per context
+## Cache per context
 
 A cached render must not be reused for a different language. Return the
 context's `identity` from the cache's `vary()` method:
@@ -183,9 +183,9 @@ context would change the output. See
 [Production and deployment](/i18n/production/#cache-translated-output-safely)
 for a cache key that combines it with other inputs.
 
-## Rules for less common cases
+## Less common cases
 
-### Different spellings of the same locale
+### Locale spellings
 
 Citry converts locale names to one standard spelling (BCP 47) before it
 compares them. For example, `EN-us` becomes `en-US`, and an outdated
@@ -195,7 +195,7 @@ turn out to be the same locale are a configuration error.
 Folder names inside a catalog package are stricter: they must already
 use the standard spelling, such as `en-US`.
 
-### Locales with extra options
+### Extra locale options
 
 A locale can carry Unicode options that pick a numbering system or
 calendar, such as `hi-IN-u-nu-deva` for Hindi with Devanagari digits.
@@ -209,7 +209,7 @@ context = make_context(app, locale="hi-IN-u-nu-deva")
 The context keeps the full name. Citry does not shorten it to the
 language and region.
 
-### Components with messages but no i18n settings
+### No i18n settings
 
 When components declare `I18n.messages_locale` and the engine has no
 i18n settings, `make_context()` still works. Citry infers the default

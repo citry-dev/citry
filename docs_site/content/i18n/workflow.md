@@ -23,7 +23,7 @@ Write source messages
 
 This page covers each step and the commands that support it.
 
-## Write the source messages first
+## Write source messages
 
 The message in the source language defines the message: its ID, its
 text and attributes, and the type of each variable. Write it in the
@@ -44,7 +44,7 @@ my-app-account-greeting = Ahoj, { $name }.
 See [Write messages](/i18n/messages/) and
 [Organize catalogs](/i18n/catalogs/).
 
-## Check messages and the code that calls them
+## Check messages
 
 Run the project checker with your application:
 
@@ -68,7 +68,7 @@ configured catalog package at once. It reports problems such as:
 `citry check --static` checks syntax only and cannot see the whole
 catalog. Use the `--app` form in CI.
 
-## Find missing translations
+## Find untranslated text { #find-missing-translations }
 
 `coverage` lists, for each message and each Fluent attribute, whether
 the locale has its own translation, falls back to another configured
@@ -95,7 +95,7 @@ citry --app myproject.engine:app \
 
 `coverage` also works when the engine has no i18n settings.
 
-## Give translators context
+## Help translators
 
 Translators see the comments above a message. Say where the text
 appears, how much space it has, its tone, and whether it is an
@@ -114,7 +114,7 @@ Use IDs with application and feature prefixes, such as
 `my-app-account-owner`. A translator, or an error message, can then
 trace the text back to its feature.
 
-## Check translations in CI
+## Check in CI
 
 At minimum, have CI:
 
@@ -148,7 +148,7 @@ Loads every component's messages and every configured package, builds
 the complete catalog, and prints the catalog and formatter versions. It
 does not render any component.
 
-### List the message sources
+### List sources
 
 ```bash
 citry --app myproject.engine:app \
@@ -160,7 +160,7 @@ source Citry found, always in the same order. Use it to confirm that
 Citry finds your files, or as input to other tools. It does not change
 any `.ftl` file.
 
-### Inspect the built catalog
+### Inspect the catalog
 
 ```bash
 citry --app myproject.engine:app \
@@ -171,7 +171,7 @@ Writes the complete built catalog as JSON, or prints it when you leave
 out `--out`. Use it to see which locale and file supplied a message, the
 variables Citry found, and the versions that identify the result.
 
-### Compile catalog packages
+### Compile packages
 
 ```bash
 citry --app myproject.engine:app \
@@ -184,7 +184,7 @@ compiles every package in the `catalogs` setting. The packages must be
 writable source folders. Run it before building the wheel; see
 [Production and deployment](/i18n/production/).
 
-## Make a missing type an error or ignore it
+## Change type warnings { #make-a-missing-type-an-error-or-ignore-it }
 
 A simple server-only variable without an `@param` comment is a warning
 by default. Change this for the whole application with
@@ -212,7 +212,7 @@ The severities are `ignore`, `warning`, and `error`. Variables used in
 selectors, formatting functions, browser calls, or as a `Slot` always
 need a type, whatever the setting.
 
-## Navigate messages in VS Code
+## Navigate in VS Code
 
 When the [VS Code extension](/ide/vscode/) knows your application (the
 `citry.app` setting), it uses the same catalog as the checker. It

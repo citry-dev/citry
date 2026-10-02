@@ -16,7 +16,7 @@ descriptor file. This page shows how to create one, add translations,
 and control which translation wins when several packages define the same
 message.
 
-## Create a catalog package
+## Create a package
 
 A catalog package looks like this:
 
@@ -93,7 +93,7 @@ A translation file may leave messages out. Citry then uses a fallback
 language, as described below; it does not copy source text into every
 locale file.
 
-## Load packages in priority order
+## Order the packages
 
 List the packages in the engine settings, from lowest to highest
 priority:
@@ -119,7 +119,7 @@ above all packages and may replace package messages too.
 
 Two packages may not use the same `owner`.
 
-## Know which translation is used
+## Which translation wins
 
 Citry first looks for the message in the requested locale, across every
 package and the application's components, from highest priority down.
@@ -160,7 +160,7 @@ Add `--fail-on-missing` to make CI fail when a message falls back to its
 source language. See
 [Translation workflow and tooling](/i18n/workflow/#find-missing-translations).
 
-## Share common messages across components
+## Share common messages
 
 A catalog package may define messages that no component owns:
 
@@ -177,7 +177,7 @@ Keep shared messages for text that really is shared. Text that belongs
 to one component reads best beside that component, where translators
 can see how it is used.
 
-## Include the catalog files in your wheel
+## Package the files { #include-the-catalog-files-in-your-wheel }
 
 Make sure your build includes the descriptor and the compiled files.
 Also include the `.ftl` files if the installed package should load in
@@ -203,7 +203,7 @@ my_app_i18n = [
 With another build backend, include the same paths through its own
 package-data setting.
 
-## Publish a component library's messages
+## Publish library text
 
 A component library writes its text in each component's `messages`
 block, and shared text in `.ftl` files in its source locale. Its build
@@ -218,7 +218,7 @@ The application can list its own catalog after the library's package to
 replace selected messages. A replaced message still belongs to the
 library, so it keeps falling back to the library's source locale.
 
-## Ship named formats with a package
+## Ship named formats
 
 A library can also ship format profiles: named formatting settings such
 as `my-app-page-number`, described in [Format values](/i18n/formatting/).
@@ -247,23 +247,23 @@ Include `formats.json` in the wheel and compile the package again after
 any change. Production refuses a compiled package whose `formats.json`
 has changed since it was compiled.
 
-## Rules for less common cases
+## Less common cases
 
-### Startup fails after you edit a compiled package
+### Startup fails
 
 A development engine still compares an existing
 `_compiled/manifest.json` with the current `.ftl` files. After you edit
 a package that has compiled files, startup fails with a "does not match
 its installed FTL sources" error. Run the compile command again.
 
-### An edited package is not picked up
+### Edits not picked up
 
 A running engine keeps the package list and files it started with.
 When your development server reloads, it must create a new engine to
 see package edits. A new engine reads the current files, including from
 an editable install.
 
-### The same message is defined in two files
+### Duplicate messages
 
 Citry keeps each component's `messages` block and each `.ftl` file as a
 separate source. If two

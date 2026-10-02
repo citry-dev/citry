@@ -14,7 +14,7 @@ you use to display the value. A profile can say which input it accepts,
 and the parser accepts only that: the locale's own digits, separators,
 and field order. It does not guess.
 
-## Read a number from a form field
+## Read a number
 
 Call `self.i18n.parse.number()` with the text and a profile name:
 
@@ -45,7 +45,7 @@ is valid.
 Outside a component, use `parse` on a service for an explicit locale
 context, as in the datetime example below.
 
-## Choose which number formats to accept
+## Accept number formats
 
 Every `NumberFormat` accepts plain decimal numbers by default. To also
 accept scientific notation, set `NumberInput`:
@@ -180,7 +180,7 @@ A valid result holds a Python `time` without a time zone. To get an
 exact moment, you also need a date and a zone; read both together as a
 datetime.
 
-## Read a date and time in a time zone
+## Read a date and time
 
 A datetime profile combines date and time fields. Reading it needs a
 locale context with a time zone:
@@ -254,7 +254,7 @@ result = parser.datetime_segments(
 )
 ```
 
-## Parse numbers and percentages in the browser
+## Parse in the browser { #parse-numbers-and-percentages-in-the-browser }
 
 Inside a [browser i18n provider](/i18n/browser/), `$i18n.parse` reads
 numbers and percentages:
@@ -275,7 +275,7 @@ has no methods for them. Reading them exactly like the server needs the
 server's calendar and daylight saving data, and Citry does not try to
 rebuild that data in the browser.
 
-## Rules for less common cases
+## Less common cases
 
 ### Accept two-digit years
 
@@ -292,18 +292,18 @@ DateInput(
 Two-digit years then map to 1950 through 2049. Citry does not move the
 window with the current date.
 
-### Read a currency amount or a measurement
+### Read money and units
 
 Parse the amount with `parse.number()` and keep the currency code or
 unit as separate data. Citry does not read a currency or unit from the
 typed text.
 
-### Text such as "next Tuesday" is not read
+### No relative dates
 
 Citry does not read phrases such as "next Tuesday evening". Each profile
 accepts one strict format.
 
-### Where daylight saving data comes from
+### Time-zone data
 
 Citry reads time-zone rules from the `tzdata` Python package it depends
 on, not from the operating system. A context with a time zone records
