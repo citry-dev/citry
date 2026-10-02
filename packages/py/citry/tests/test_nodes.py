@@ -1,5 +1,5 @@
 """
-Tests for the value nodes: ExprNode and a template-valued element attribute.
+Tests for `ExprNode` and for a template-valued attribute on an HTML element.
 
 Covers expression evaluation via safe_eval, autoescaping in both body-text and
 attribute positions, the None/Markup rules, and the embedded-CitryRender /

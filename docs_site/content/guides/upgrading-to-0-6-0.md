@@ -542,11 +542,11 @@ Also check these settings and hooks:
   `on_dependencies()` hooks; the scripts it holds still run before
   `ctx.scripts`. The old name has no alias, so a hook that still uses it
   raises `AttributeError`, naming `early_scripts`, when the hook runs.
-- **`TemplateNode` is removed.** The template compiler never created it.
-  An extension that built one in `on_template_compiled` should add the
+- **`TemplateNode` is removed.** Compiled templates never contained it,
+  so delete any import of it or `isinstance` check against it. An
+  extension that built one in `on_template_compiled` should add the
   nested template's markup to the template source in
-  `on_template_loaded` instead, so it compiles with the rest of the
-  template.
+  `on_template_loaded`, so it compiles with the rest of the template.
 - **Ownership APIs** are removed: the `citry.ownership` and
   `citry.ownership_manifest` modules and the `ownership` parameters of
   `CitryContext` and `CitryElement`. Delete imports of these modules and

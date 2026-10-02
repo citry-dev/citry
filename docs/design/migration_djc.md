@@ -1728,7 +1728,7 @@ assert str(Hello()) == "<p>Hello!</p>"   # element -> render -> serialize
 
 ### Value nodes and autoescaping (`citry/nodes/__init__.py`, `citry/util/html.py`)
 
-**What:** The value nodes. `ExprNode` evaluates a `{{ expr }}` with
+**What:** The value node and nested templates. `ExprNode` evaluates a `{{ expr }}` with
 `safe_eval` against the context variables and returns an autoescaped string (or
 inlines an embedded render). A `c-*` attribute whose value is itself a
 template compiles to `TemplateHtmlAttr`, which renders that nested template

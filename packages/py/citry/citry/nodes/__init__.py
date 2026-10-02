@@ -1,5 +1,5 @@
 """
-Stub runtime node classes for the Citry template compiler output.
+Runtime node classes for the Citry template compiler output.
 
 The V3 compiler generates Python source code that instantiates these classes.
 Each class accepts the exact arguments the compiler emits and stores them as
@@ -26,10 +26,10 @@ Example:
     Parse a template, compile it, and exec the result::
 
         from citry_core.template_parser import parse_template, compile_template
-        from citry_core.template_parser.nodes import (
-            ExprNode, ElementKeyNode, ComponentNode, IfNode, ForNode,
-            SlotNode, FillNode, StaticHtmlAttr, ExprHtmlAttr,
-            TemplateHtmlAttr,
+        from citry.nodes import (
+            ExprNode, ElementAttrsNode, ElementKeyNode, ComponentNode,
+            IfNode, ForNode, SlotNode, FillNode, StaticHtmlAttr,
+            ExprHtmlAttr, TemplateHtmlAttr,
         )
 
         source = '<c-Card title="Hi">{{ body }}</c-Card>'
@@ -122,6 +122,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
     from citry.citry_render import RenderPart
+    from citry.citry_template import CitryTemplate
+    from citry.component import Component
     from citry.extension import ForeignClaim
 
 
@@ -850,6 +852,47 @@ class TemplateHtmlAttr(HtmlAttr):
         self._generators: dict[bool, Callable[[], list[Any]]] = {}
         self._compile_lock = RLock()
 
+    def _compiled_body(
+        self,
+        component_class: type[Component] | None,
+        template_record: CitryTemplate | None,
+    ) -> Callable[[], list[Any]]:
+        """
+        Compile the nested template for the current render mode, once per mode.
+
+        Both ``resolve`` and the ``simple=True`` template check call this, so
+        whichever runs first compiles the body and the other reuses it. The
+        extension hooks therefore see each nested body once per mode.
+        """
+        from citry._vue.capture import prepared_render_active  # noqa: PLC0415
+        from citry.component_render import _compile_nested_template  # noqa: PLC0415
+
+        prepared = prepared_render_active()
+        generator = self._generators.get(prepared)
+        if generator is not None:
+            return generator
+        with self._compile_lock:
+            generator = self._generators.get(prepared)
+            if generator is None:
+                # The nested template is validated like any other: the parse gets
+                # the rules derived from the registered components' declarations.
+                user_rules = component_class.citry._tag_rules() if component_class is not None else None
+                generator = _compile_nested_template(
+                    self.template,
+                    user_rules,
+                    component_class,
+                    root_source=self.source if self.foreign_spans else None,
+                    source_offset=self.source_offset,
+                    foreign_spans=self.foreign_spans,
+                    provider_metadata=(
+                        template_record.foreign_provider_metadata if template_record is not None else None
+                    ),
+                    template_id=(template_record.template_id if template_record is not None else None),
+                    origin=(template_record.origin if template_record is not None else None),
+                )
+                self._generators[prepared] = generator
+        return generator
+
     @override
     def resolve(self, context: CitryContext) -> CitryRender:
         """
@@ -859,33 +902,18 @@ class TemplateHtmlAttr(HtmlAttr):
         surrounding component's context.
         """
         from citry._vue.capture import prepared_render_active  # noqa: PLC0415
-        from citry.component_render import _compile_nested_template, _render_body  # noqa: PLC0415
+        from citry.component_render import _render_body  # noqa: PLC0415
 
+        # A simple component renders inside its caller's context, so the
+        # context's component is the caller. The class that owns this template
+        # (and whose tag rules and hooks apply) is the simple component's.
+        component = context.component
+        if context._simple_scope is not None:
+            owner: type[Component] | None = context._simple_scope.component_class
+        else:
+            owner = type(component) if component is not None else None
+        generator = self._compiled_body(owner, context.template_record)
         prepared = prepared_render_active()
-        generator = self._generators.get(prepared)
-        if generator is None:
-            with self._compile_lock:
-                generator = self._generators.get(prepared)
-                if generator is None:
-                    # The nested template is validated like any other: the parse gets
-                    # the rules derived from the registered components' declarations.
-                    component = context.component
-                    user_rules = component.citry._tag_rules() if component is not None else None
-                    active_template = context.template_record
-                    generator = _compile_nested_template(
-                        self.template,
-                        user_rules,
-                        type(component) if component is not None else None,
-                        root_source=self.source if self.foreign_spans else None,
-                        source_offset=self.source_offset,
-                        foreign_spans=self.foreign_spans,
-                        provider_metadata=(
-                            active_template.foreign_provider_metadata if active_template is not None else None
-                        ),
-                        template_id=(active_template.template_id if active_template is not None else None),
-                        origin=(active_template.origin if active_template is not None else None),
-                    )
-                    self._generators[prepared] = generator
         parts = _render_body(generator(), context)
         selected = CitryRender(parts=parts, context=context)
         if prepared:

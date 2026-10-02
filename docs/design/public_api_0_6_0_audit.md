@@ -837,7 +837,7 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 | `citry.component_render.CacheArtifactError` re-export | Incidental re-export | Import from `citry.ext.cache` |
 | `citry:events:stale` reasons `cancelled` and `timeout` | A timed-out call is aborted, and `disposed` covers most cancellations | `disposed`; rejection of the call |
 | `citry_core.html_transform.scan_alpine_html`, `analyze_component_members` | Alpine-only | In the citry-core CHANGELOG |
-| `citry.TemplateNode` | The compiler never generated it, and no built-in code built one (decision 6.18) | Add the markup to the template source in `on_template_loaded`; a template-valued attribute is a `TemplateHtmlAttr` |
+| `citry.TemplateNode` | The compiler never generated it, and no built-in code built one (decision 6.18) | Delete imports and `isinstance` checks; an extension that built one adds the markup to the template source in `on_template_loaded` |
 
 ## 6. Maintainer decisions
 
@@ -1120,14 +1120,17 @@ Alpine or the ownership graph, or Vue already provides the same thing.
   `c-*` attribute compiles to `TemplateHtmlAttr`, inside an
   `ElementAttrsNode` on an HTML element or in a `ComponentNode`'s
   attributes. Its docstring said an extension could build one in
-  `on_template_compiled`, but no built-in code did, and the `simple=True`
-  path read an attribute the class does not have.
+  `on_template_compiled`, but no built-in code did. On this branch the
+  `simple=True` check still read `_generator`, a single cached value that
+  both nested template classes had replaced with one cache per render
+  mode.
 - **Recommendation:** remove it before 0.6.0 rather than keep an untested
   public class.
 - **Status:** removed, with a CHANGELOG line and an upgrade guide line that
   point an extension at `on_template_loaded`. The `simple=True` check that
   read the missing attribute also broke `TemplateHtmlAttr`; that is fixed
-  in the same change.
+  in the same change. The regression never shipped (0.5.1 is not
+  affected), so the CHANGELOG has no fix entry.
 
 ## 7. CHANGELOG reconciliation
 
