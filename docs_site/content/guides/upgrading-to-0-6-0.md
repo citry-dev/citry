@@ -480,7 +480,7 @@ exception: they combine with `class` and `c-class`, or `style` and
 For the same reason, an object `v-bind="..."` or a dynamic `:[name]`
 cannot sit on an element that has any `c-*` attribute, and `:key` cannot
 sit next to `#c-key`. See
-[Combine class bindings](/syntax/vue/#combine-class-and-style-with-c-class-and-c-style).
+[`c-*` with `:` bindings](/syntax/vue/#combine-class-and-style-with-c-class-and-c-style).
 
 ### Inline group content
 

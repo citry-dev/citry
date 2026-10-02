@@ -72,7 +72,7 @@ A `js_data()` key must not reuse a name from `data()`, `setup()`, props,
 injections, methods, or computed values. Citry reports the clash rather than
 picking one.
 
-## Use Vue directives
+## Vue `v-*` directives { #use-vue-directives }
 
 Vue attributes that start with `v-` are called directives. Vue also has short
 forms for listening to events and setting attributes:
@@ -142,7 +142,7 @@ Use `<c-for>` and `<c-if>` when the loop or condition creates Citry
 components. Only Python creates Citry components, so a `v-for` cannot repeat
 one.
 
-## Combine class bindings { #combine-class-and-style-with-c-class-and-c-style }
+## `c-*` with `:` bindings { #combine-class-and-style-with-c-class-and-c-style }
 
 `:class` adds to an element's classes rather than replacing them. Vue joins
 it with `class`, and Citry joins it with `c-class` the same way:
@@ -186,7 +186,7 @@ A Citry component tag accepts these Vue directives:
 | `v-show` | Hides or shows the child's root element. |
 | A custom directive | Runs on the child's root element. |
 
-### Pass data to a child
+### `:prop` on a child { #pass-data-to-a-child }
 
 A child component has its own browser data. Pass it a value from the parent
 with a Vue prop:
@@ -203,7 +203,7 @@ and slots.
 Content you pass into a child's slot still reads the data of the component
 that wrote it. A slot's fallback content reads the child's data.
 
-### Add or remove a child
+### `v-if` on a child { #add-or-remove-a-child }
 
 `v-if` works on a component tag as on an element, and one chain can mix
 both:
@@ -218,7 +218,7 @@ Python still renders every component in the chain, so the browser can switch
 between them without asking the server. When Python should decide whether a
 component exists at all, use `<c-if>`.
 
-### Bind with `v-model`
+### `v-model` on a child { #bind-with-v-model }
 
 `v-model` on a component tag passes the value as the `modelValue` prop. It
 updates the value when the child emits `update:modelValue`:
@@ -255,7 +255,7 @@ Here the child declares `title` and `titleModifiers`, and emits
 `update:title`. Vue applies `.trim` and `.number` itself. For `.lazy` or a
 modifier of your own, the child reads the modifiers prop and decides.
 
-### Use `v-show` on a child
+### `v-show` on a child { #use-v-show-on-a-child }
 
 `v-show` and custom directives act on the element at the root of the child's
 template:
