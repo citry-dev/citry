@@ -22,7 +22,7 @@ For a new Citry app, try [Citry Events](/events/) first. It is built into
 Citry and is usually simpler. Do not attach both HTMX and Citry Events to
 the same button, input, or form.
 
-## Return a component from an HTMX route
+## Return a fragment
 
 Render the component in a normal route and serialize it with
 `deps_strategy="fragment"`:
@@ -46,7 +46,7 @@ load its CSS and JavaScript. Citry must be
 [mounted on your web framework](/web-frameworks/) so it can serve those
 files.
 
-## Load HTMX and Citry on the page
+## Load HTMX and Citry
 
 Load a pinned copy of HTMX and Citry's browser runtime once, on the full
 page:
@@ -79,7 +79,7 @@ In a Citry template, write a fixed HTMX attribute as plain HTML, such as
 `hx-target="#results"`. When the value comes from component data, add
 Citry's `c-` prefix: `c-hx-get="edit_url"`.
 
-## Swap the response into a plain wrapper
+## Swap into a wrapper
 
 Citry starts each inserted response as its own Vue app: a separate part of
 the page that Vue controls. To update it, replace the whole response at
@@ -104,7 +104,7 @@ For a list, render the list's wrapper on the server and serialize each
 interactive row on its own. Insert those strings into the page as HTML; do
 not use serialized fragment HTML as the source of a Vue template.
 
-## Serve full pages and HTMX responses from one URL safely
+## Share one URL safely
 
 Use separate URLs for full pages and HTMX responses when you can. If one URL
 returns different HTML depending on the `HX-Request` header, add
@@ -114,7 +114,7 @@ response when the browser asked for a full page, or the other way around.
 If you use `hx-push-url`, check that every URL it adds to the browser
 history also works when opened directly.
 
-## Use HTMX attributes inside an interactive component
+## HTMX inside components
 
 HTMX does not see `hx-*` attributes on elements that Vue creates after the
 page loads. Give the element a `ref` and pass it to `htmx.process()` once
@@ -138,7 +138,7 @@ Do not let HTMX rewrite elements inside a Vue app that stays on the page.
 To change what it shows, replace the whole app through its wrapper, as
 described above.
 
-## Test the integration in a browser
+## Test in a browser
 
 Checking the response text is not enough. Run browser tests against the
 same HTMX file you deploy, and check that:
