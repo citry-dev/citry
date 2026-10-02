@@ -5,193 +5,194 @@ description: Give a Citry component its own JavaScript, CSS, and per-render brow
 
 # Component JavaScript and CSS
 
-A reusable component can bring the behavior and styles it needs. Put its
-JavaScript in `js` and its CSS in `css`. Citry collects those assets when the
-component renders and includes each one once in the finished page.
+A component often needs a little browser code or a few styles of its own: a
+search box that takes focus, a chart that draws itself, a banner in a color
+the page chooses. Put that code on the component, in `js` and `css`. Citry
+adds it to every page that renders the component, once per page however many
+times the component appears.
 
-This page covers assets owned by one component. For libraries and shared
-files, see [Dependency files](/advanced/dependency-files/). To control where
-the collected tags appear, see
+This page covers code that belongs to one component. To add a library or a
+shared file, see [Dependency files](/advanced/dependency-files/). To choose
+where the tags go in the page, see
 [Place JavaScript and CSS](/advanced/asset-placement/).
 
-## Add behavior and styles
-
-This chart sends its points and height from Python to the browser:
+## Add JavaScript and CSS to a component
 
 ```citry
 from citry import Component
 
 
-class Chart(Component):
+class SearchBox(Component):
+    template = """
+      <input
+        ref="input"
+        class="search-box"
+        type="search"
+      />
+    """
+
+    js = """
+      $component({
+        onServerRender({ component }) {
+          component.$refs.input.focus();
+        },
+      });
+    """
+
+    css = """
+      .search-box {
+        width: 100%;
+      }
+    """
+```
+
+[`$component()`][$component] registers the browser code for each rendered
+`SearchBox`. Its `onServerRender` callback runs when the component appears
+on the page, and again each time a server event renders it again.
+`component` is that rendered component, and `component.$refs.input` is the
+element marked with `ref="input"` in the template.
+
+`onServerRender` may return a function. Citry calls it before the next
+`onServerRender` call and when the component is removed, so you can undo
+what the callback set up. Here the search box takes focus when the user
+presses `/`, and stops listening when it goes away:
+
+```javascript
+$component({
+  onServerRender({ component }) {
+    const onKey = (event) => {
+      if (event.key === "/") component.$refs.input.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  },
+});
+```
+
+Code outside `$component()` runs once, when the script loads. Use it for
+setup that the whole page shares. Code inside `onServerRender` runs for each
+rendered component.
+
+Each component's script runs inside its own function, so its top-level
+variables do not clash with other scripts on the page.
+[Browser APIs](/reference/browser-apis/#component) lists everything that
+`$component()` and `onServerRender` accept.
+
+## Send data from Python to JavaScript
+
+Return a mapping from [`js_data()`][citry.Component.js_data] to give one
+render's values to its JavaScript. Each key becomes a field on `component`:
+
+```citry
+from citry import Component
+
+
+class Sparkline(Component):
     class Kwargs:
         points: list[int]
-        height: str = "240px"
 
-    class JsData:
-        chart_points: list[int]
-
-    class CssData:
-        chart_height: str
-
-    def js_data(
-        self,
-        kwargs: Kwargs,
-        slots,
-    ) -> JsData:
-        return self.JsData(chart_points=kwargs.points)
-
-    def css_data(
-        self,
-        kwargs: Kwargs,
-        slots,
-    ) -> CssData:
-        return self.CssData(chart_height=kwargs.height)
+    def js_data(self, kwargs: Kwargs, slots):
+        return {"points": kwargs.points}
 
     template = """
       <canvas
-        ref="chart"
-        class="chart"
-        width="480"
-        height="240"
+        ref="canvas"
+        width="120"
+        height="30"
       ></canvas>
     """
 
     js = """
       $component({
         onServerRender({ component }) {
-          const canvas = component.$refs.chart;
-          if (!(canvas instanceof HTMLCanvasElement)) return;
-          const context = canvas.getContext("2d");
-          if (context === null) return;
-
-          const width = canvas.width;
-          const height = canvas.height;
-          const points = component.chart_points;
-          context.clearRect(0, 0, width, height);
-          if (points.length !== 0) {
-            const maximum = Math.max(1, ...points.map(Math.abs));
-            context.beginPath();
-            points.forEach((point, index) => {
-              const x = points.length === 1
-                ? width / 2
-                : index * width / (points.length - 1);
-              const y = height / 2 - point * (height / 2) / maximum;
-              if (index === 0) context.moveTo(x, y);
-              else context.lineTo(x, y);
-            });
-            context.stroke();
-          }
-
-          return () => context.clearRect(0, 0, width, height);
+          // drawSparkline comes from a charting library.
+          drawSparkline(component.$refs.canvas, component.points);
         },
       });
     """
+```
+
+Two sparklines on one page each get their own `points`. Vue expressions in
+the template can read the same fields.
+
+Citry sends the data to the browser as JSON, so the mapping must follow
+these rules:
+
+- every key is a `str`;
+- no key starts with `$` or `_`, and no key is `citryId`, because Vue and
+  Citry already use those names on `component`;
+- every value can be turned into JSON, and numbers are finite (`NaN` and
+  infinity are rejected).
+
+## Send values from Python to CSS
+
+Return a mapping from [`css_data()`][citry.Component.css_data] to give one
+render's values to its CSS. Each key becomes a CSS custom property that
+you read with `var(--<key>)`:
+
+```citry
+from citry import Component
+
+
+class Banner(Component):
+    class Kwargs:
+        color: str = "#fde68a"
+
+    def css_data(self, kwargs: Kwargs, slots):
+        return {"banner_color": kwargs.color}
+
+    template = """
+      <div class="banner">
+        <c-slot />
+      </div>
+    """
 
     css = """
-      .chart {
-        height: var(--chart_height);
+      .banner {
+        background: var(--banner_color);
       }
     """
 ```
 
-[`$component()`][$component] configures each rendered `Chart` as a Vue
-component. `onServerRender` receives its public `component` instance after the
-first mount and after each accepted server revision. Template refs such as
-`component.$refs.chart` identify authored elements, and values returned by
-[`js_data()`][citry.Component.js_data] are available directly on the instance.
-The optional cleanup runs before the next callback and when the instance is
-removed.
+The property applies only to that render's elements, so two banners with
+different colors show different colors. The component needs its own `css`
+for this to work; without it, Citry does not emit the values.
 
-Code outside `$component()` runs once when the component script loads. Keep
-page-wide setup there. Put code that reads one rendered component's elements
-or data inside `onServerRender`:
+Each value must be a string, a finite number, or `None`. A key must be a
+string that is valid as the name of a custom property, without the leading
+`--`. Citry quotes a string that contains spaces, unless it starts with a
+CSS function such as `calc(...)` or `rgba(...)`. It raises `ValueError` for
+a value that could break out of the generated CSS, such as one with a
+top-level `;` or a `</style` end tag.
 
-```javascript
-console.log("The chart script loaded");
+!!! warning "Keep secrets out of CSS data"
 
-$component({
-  onServerRender({ component, revision }) {
-    console.log(
-      "One chart is ready",
-      component.$refs,
-      component.chart_points,
-      revision,
-    );
-  },
-});
+    Citry delivers these values as a stylesheet at a URL. Anyone who has
+    the URL can download it, so never put a secret in `css_data()`.
+
+## Check the data that a data method returns
+
+Declare a nested `JsData` or `CssData` class to have Citry check the names
+that `js_data()` or `css_data()` returns. A missing or unexpected name then
+raises `TypeError` when the component renders. Return either an instance of
+the class or a plain dictionary:
+
+```python
+class JsData:
+    points: list[int]
+
+def js_data(self, kwargs: Kwargs, slots) -> JsData:
+    return self.JsData(points=kwargs.points)
 ```
 
-Citry wraps classic component JavaScript in a self-executing function. Its
-top-level variables therefore stay private to that script.
+A plain annotated class checks names, not the type of each value. See
+[Inputs and validation](/concepts/inputs-and-validation/) for schema styles
+that also check types.
 
-## Send data to JavaScript
+## Keep the code in separate files
 
-[`js_data()`][citry.Component.js_data] returns the data for one render. Citry
-serializes it as strict JSON and seeds its top-level keys into that render's
-Vue component instance. Template expressions resolve those keys on the same
-instance, and each rendered component receives its own data graph.
-
-The returned mapping must follow these rules:
-
-- every key is an exact `str`;
-- no key starts with `$` or `_`, and no key is `citryId`, because Vue and
-  Citry already use those names on the component instance;
-- every value is JSON-serializable;
-- numbers are finite, so `NaN` and infinity are rejected.
-
-A Vue expression can read those keys directly, so `onServerRender` should be
-used for DOM setup or other imperative integration rather than copying server
-data into a second scope. Nested arrays and objects are not shared between
-component instances.
-
-Python names normally use `snake_case`. Assign them to `camelCase` names when
-browser code keeps using them:
-
-```javascript
-const chartPoints = component.chart_points;
-```
-
-That small distinction makes it easier to see which language owns a name.
-
-## Send data to CSS
-
-[`css_data()`][citry.Component.css_data] turns one render's values into CSS
-custom properties. A returned `{"chart_height": "240px"}` is available as
-`var(--chart_height)` inside that component.
-
-CSS data follows a narrower contract:
-
-- every key is an exact `str` and a valid custom-property suffix;
-- values are strings, finite numbers, or `None`;
-- booleans and structured values are rejected.
-
-Citry quotes and escapes strings with spaces, unless the value starts with a
-CSS function such as `calc(...)` or `rgba(...)`. It also rejects values that
-could break out of the generated declaration, such as a top-level semicolon,
-an unmatched block, or a `</style` end tag. The browser still decides whether
-the value makes sense for the CSS property that uses it.
-
-CSS data is only emitted when the component has CSS that could use it.
-
-Keep secrets out of CSS data. Citry serves a render's custom properties as a
-stylesheet at a public URL named after a hash of its contents, and any page
-that has the URL can download and read it.
-
-## Check the returned shape
-
-`JsData` and `CssData` are optional. When present, they catch missing and
-unexpected fields in the mapping returned by the matching method. You may
-return an instance, as `Chart` does above, or a plain dictionary.
-
-Plain annotated schemas check field names, not the runtime type of every
-value. JSON and CSS serialization still apply their own value rules. See
-[Inputs and validation](/concepts/inputs-and-validation/) for the available
-schema styles.
-
-## Read source from files
-
-Use `js_file` or `css_file` when the primary source lives beside the component
-instead of inside its Python class:
+Use `js_file` and `css_file` to keep the code in files next to the
+component:
 
 ```citry
 from citry import Component
@@ -203,17 +204,14 @@ class Calendar(Component):
     css_file = "calendar.css"
 ```
 
-Citry resolves these files like `template_file`. For each asset, choose either
-the inline value or the file value. Defining both `js` and `js_file`, or both
-`css` and `css_file`, raises `ValueError`.
+Citry finds these files the same way it finds `template_file`. Set either
+`js` or `js_file`, not both, and either `css` or `css_file`. Setting both
+raises `ValueError` when the class is defined.
 
-Use the nested `Dependencies` declaration for files that the component uses
-but does not own, such as a charting library or a shared stylesheet.
+## Highlight inline code in your editor
 
-## Highlight inline source in an editor
-
-JetBrains editors understand a language comment immediately above an inline
-asset:
+JetBrains editors highlight a string in the language named by a comment
+just above it:
 
 ```citry
 class Calendar(Component):
@@ -230,17 +228,16 @@ class Calendar(Component):
     """
 ```
 
-VS Code extensions for inline source can use annotations such as
-`template: "html"`, `css: "css"`, and `js: "js"`. These hints affect only
-editor highlighting.
+Some VS Code extensions read type annotations instead, such as
+`template: "html"`, `css: "css"`, and `js: "js"`. These hints change only
+how the editor shows the code.
 
 ## Next steps
 
-- [Dependency files](/advanced/dependency-files/) adds libraries, shared
-  files, tag attributes, and local-file serving.
-- [Place JavaScript and CSS](/advanced/asset-placement/) controls where and
-  how the collected tags are inserted.
-- [Component hooks](/advanced/hooks/) adjusts the tags contributed by one
-  component.
-- [HTML fragments](/advanced/html-fragments/) carries new dependencies into
-  an already-loaded page.
+- [Dependency files](/advanced/dependency-files/) adds libraries and shared
+  files that several components use.
+- [Place JavaScript and CSS](/advanced/asset-placement/) chooses where the
+  tags go in the page.
+- [Component hooks](/advanced/hooks/) changes the tags one component adds.
+- [HTML fragments](/advanced/html-fragments/) adds the JavaScript and CSS
+  of new components to a page that is already open.
