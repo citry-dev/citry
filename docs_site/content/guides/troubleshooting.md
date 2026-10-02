@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-description: Debug citry: read the component path in render errors, turn on trace logging, and inspect a component's rendered HTML.
+description: Fix common Citry problems: render errors, components that do nothing in the browser, editor checks that stop, and tools to trace a render.
 ---
 
 # Troubleshooting
@@ -125,8 +125,9 @@ working around it.
 The template fails to load, and the error says:
 
 ```text
-A browser 'v-for' cannot create Citry components. Repeat the component
-with '<c-for>'.
+Vue directive 'v-for' is not supported on the component tag
+'<c-Card>'. A browser 'v-for' cannot create Citry components.
+Repeat the component with '<c-for>'.
 ```
 
 `v-for` is a Vue loop that runs in the browser, and the browser cannot run
@@ -179,8 +180,9 @@ with a check mark. To fix it:
    **Citry: Restart Language Server**.
 
 The language server loads your app in a separate process and waits up to
-15 seconds. If the import fails, exits, crashes, or takes too long, the
-editor keeps working with syntax checks only. Fix the first error the
+15 seconds. If the import fails, exits, crashes, or takes too long, or the
+installed `citry-lsp` does not support your Citry version, the editor
+keeps working with syntax checks only. Fix the first error the
 status shows, then restart the server. Anything your app prints while it
 loads also appears in the status.
 
