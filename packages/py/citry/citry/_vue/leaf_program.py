@@ -3223,7 +3223,8 @@ def _validate_open(value: PreparedElementOpen) -> str | None:
         if is_vue_directive_name(name):
             return (
                 f"Python-resolved attribute {name!r} on <{value.tag}> cannot introduce Vue syntax; "
-                "Vue directives and bindings must be authored statically in the template."
+                "Vue directives and bindings must be authored statically in the template. Remove "
+                f"{name!r} from the c-bind mapping or c-* attribute that sets it."
             )
         normalized = name.casefold()
         if normalized in {"innerhtml", "outerhtml", "textcontent", "innertext"} or normalized.startswith("on"):
@@ -3272,7 +3273,8 @@ def _validate_data_attrs(value: dict[str, object], *, tag: str) -> str | None:
         if is_vue_directive_name(name):
             return (
                 f"Python-resolved attribute {name!r} on <{tag}> cannot introduce Vue syntax; "
-                "Vue directives and bindings must be authored statically in the template."
+                "Vue directives and bindings must be authored statically in the template. Remove "
+                f"{name!r} from the c-bind mapping or c-* attribute that sets it."
             )
         normalized = name.casefold()
         if normalized in {"innerhtml", "outerhtml", "textcontent", "innertext"} or normalized.startswith("on"):

@@ -906,8 +906,14 @@ class PreparedElementOpenNode(ElementAttrsNode):
         static = self._static_prepared
         if static is not None:
             return static
-        resolved, extension_validated = self._resolve_for_output(context)
-        return self._prepared_from_resolved(resolved, context=context, extension_validated=extension_validated)
+        shadowed_vue_keys: set[str] = set()
+        resolved, extension_validated = self._resolve_for_output(context, shadowed_vue_keys)
+        return self._prepared_from_resolved(
+            resolved,
+            context=context,
+            extension_validated=extension_validated,
+            shadowed_vue_keys=shadowed_vue_keys,
+        )
 
     def _format(
         self,
@@ -926,6 +932,7 @@ class PreparedElementOpenNode(ElementAttrsNode):
         context: CitryContext,
         extension_validated: bool,
         owner_name: str | None = None,
+        shadowed_vue_keys: set[str] | None = None,
     ) -> PreparedElementOpen:
         from citry.nodes import StaticHtmlAttr  # noqa: PLC0415
 
@@ -998,9 +1005,14 @@ class PreparedElementOpenNode(ElementAttrsNode):
         data_attrs = merge_attrs(data_attrs)
         dynamic_keys = {attr.key.removeprefix("c-") for attr in self.attrs if not isinstance(attr, StaticHtmlAttr)}
         preserved_source: dict[str, PreparedAttribute] = {}
+        # A Vue binding that a c-bind mapping also set is not template source
+        # anymore, even when the template's value won the merge: keeping it as
+        # source would hide the mapping's Vue key from the check below.
+        shadowed_identities = {_html_attr_identity(key) for key in shadowed_vue_keys or ()}
         for attr, source_text in self._static_source_attrs:
             if (
                 attr.key not in dynamic_keys
+                and _html_attr_identity(attr.key) not in shadowed_identities
                 and attr.key in data_attrs
                 and type(data_attrs[attr.key]) is type(attr.value)
                 and data_attrs[attr.key] == attr.value
@@ -1108,7 +1120,8 @@ def _reject_executable_dynamic_attrs(attrs: Mapping[str, object], *, tag: str) -
         if is_vue_directive_name(name):
             raise ValueError(
                 f"Python-resolved attribute {name!r} on <{tag}> cannot introduce Vue syntax; "
-                "Vue directives and bindings must be authored statically in the template."
+                "Vue directives and bindings must be authored statically in the template. Remove "
+                f"{name!r} from the c-bind mapping or c-* attribute that sets it."
             )
 
 

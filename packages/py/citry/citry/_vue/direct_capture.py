@@ -2155,7 +2155,9 @@ def assemble_typed_render(
                     executable_data_attrs = [name for name in effective_data_attrs if is_vue_directive_name(name)]
                     if executable_data_attrs:
                         raise UnsupportedPreparedView(
-                            f"Python-resolved attributes cannot introduce Vue syntax: {executable_data_attrs!r}"
+                            f"Python-resolved attributes {executable_data_attrs!r} on <{part.tag}> cannot introduce "
+                            "Vue syntax; Vue directives and bindings must be authored statically in the "
+                            "template. Remove them from the c-bind mapping or c-* attribute that sets them."
                         )
                     if unsafe_data_attrs:
                         raise UnsupportedPreparedView(

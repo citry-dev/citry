@@ -1023,9 +1023,18 @@ class ElementAttrsNode(Node):
         resolved, validate_keys = self._resolve_for_output(context)
         return self._format(resolved, context, validate_keys=validate_keys)
 
-    def _resolve_for_output(self, context: CitryContext) -> tuple[dict[str, Any], bool]:
-        """Resolve and run attribute hooks once, before target-specific formatting."""
-        resolved = self._resolve(context)
+    def _resolve_for_output(
+        self,
+        context: CitryContext,
+        shadowed_vue_keys: set[str] | None = None,
+    ) -> tuple[dict[str, Any], bool]:
+        """
+        Resolve and run attribute hooks once, before target-specific formatting.
+
+        ``shadowed_vue_keys``, when given, collects the names of Vue bindings
+        that both a ``c-bind`` mapping and the template set on this tag.
+        """
+        resolved = self._resolve(context, shadowed_vue_keys)
         runtime_candidate = self._runtime_extension_candidate(resolved)
 
         # Let extensions rewrite the resolved dict (e.g. class dedup). Fires
@@ -1072,7 +1081,7 @@ class ElementAttrsNode(Node):
             for key in resolved
         )
 
-    def _resolve(self, context: CitryContext) -> dict[str, Any]:
+    def _resolve(self, context: CitryContext, shadowed_vue_keys: set[str] | None = None) -> dict[str, Any]:
         """
         Collect the attribute contributions and merge them into one dict.
 
@@ -1089,7 +1098,7 @@ class ElementAttrsNode(Node):
                 items.append((resolved_key, const_value(attr.resolve(context))))
             merged = _merge_resolved_attrs(items)
         else:
-            merged = self._resolve_with_spread(context)
+            merged = self._resolve_with_spread(context, shadowed_vue_keys)
         # `#c-*` framework attributes (`#c-key`, `#c-ignore`) are
         # template-authored only in v1: authored on the tag, the compiler
         # handles them before this node exists, so one arriving here came
@@ -1112,13 +1121,17 @@ class ElementAttrsNode(Node):
             )
         return {key: value for key, value in merged.items() if value is not None and value is not False}
 
-    def _resolve_with_spread(self, context: CitryContext) -> dict[str, Any]:
+    def _resolve_with_spread(
+        self,
+        context: CitryContext,
+        shadowed_vue_keys: set[str] | None = None,
+    ) -> dict[str, Any]:
         """Resolve the general path used when a dynamic ``c-bind`` is present."""
         items: list[tuple[str, Any]] = []
         # A spread key that Vue reads as a binding (`@click`) and a binding
-        # written on the same tag share one attribute slot, so the merge below
-        # would keep one and silently drop the other. Collect both sides to
-        # reject that pair before the merge hides it.
+        # written on the same tag share one attribute name, so the merge below
+        # keeps one value and the other disappears. Collect both sides so the
+        # caller can still see that the c-bind mapping set a Vue binding.
         spread_vue_keys: dict[str, str] = {}
         authored_identities: set[str] = set()
         for attr, compiled_key in zip(self.attrs, self._resolved_keys, strict=True):
@@ -1170,18 +1183,14 @@ class ElementAttrsNode(Node):
                 elif isinstance(attr, StaticHtmlAttr):
                     authored_identities.add(_html_attr_identity(compiled_key))
                 items.append((compiled_key, const_value(attr.resolve(context))))
-        # A Vue binding written in the template makes this a Vue page, where a
-        # Vue binding from Python is always an error. Without this check a
-        # binding written after the c-bind would silently drop its key, and
-        # one written before it would be silently replaced until a later step.
-        for identity, key in spread_vue_keys.items():
-            if identity in authored_identities:
-                msg = (
-                    f"c-bind on <{self.tag_name}> sets the Vue binding {key!r}, which the template also "
-                    "writes on this tag. A c-bind mapping cannot introduce Vue syntax, because Vue bindings "
-                    f"must stay visible in the template. Remove {key!r} from the c-bind mapping."
-                )
-                raise TypeError(msg)
+        # Whether the page uses Vue is decided only when the render is turned
+        # into HTML, so report the pair instead of raising. The typed opening
+        # then treats the attribute as Python-resolved, and the Vue check
+        # rejects it there; a page without Vue keeps writing it as text.
+        if shadowed_vue_keys is not None:
+            shadowed_vue_keys.update(
+                key for identity, key in spread_vue_keys.items() if identity in authored_identities
+            )
         return _merge_resolved_attrs(items)
 
     def _format(

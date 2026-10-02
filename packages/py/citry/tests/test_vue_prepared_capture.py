@@ -1097,21 +1097,22 @@ def test_plain_spread_keeps_vue_syntax_rejection_strict() -> None:
 def test_spread_vue_key_written_on_the_same_tag_is_rejected(source: str) -> None:
     # The merge keeps only one of the two attributes, so whichever order the
     # tag uses, the c-bind key must fail instead of vanishing or winning.
-    registry = Citry(autodiscover=False, extensions=[])
+    registry = Citry(autodiscover=False)
 
     class Shadowed(Component):
         citry = registry
         template = source
 
         def template_data(self, kwargs, slots):
-            return {"attrs": {"@click": "other", ":title": "other"}, "label": "x"}
+            name = "@click" if "@click" in source else ":title"
+            return {"attrs": {name: "other"}, "label": "x"}
 
-    with pytest.raises(TypeError, match=r"c-bind on <button> sets the Vue binding '[@:]\w+'"):
-        Shadowed().render()
+    with pytest.raises(TypeError, match=r"\['[@:]\w+'\] on <button> cannot introduce Vue syntax"):
+        str(Shadowed().render())
 
 
 def test_spread_vue_key_set_to_none_beside_written_binding_is_allowed() -> None:
-    registry = Citry(autodiscover=False, extensions=[])
+    registry = Citry(autodiscover=False)
 
     class Removed(Component):
         citry = registry
@@ -1120,7 +1121,7 @@ def test_spread_vue_key_set_to_none_beside_written_binding_is_allowed() -> None:
         def template_data(self, kwargs, slots):
             return {"attrs": {"@click": None}}
 
-    Removed().render()
+    str(Removed().render())
 
 
 def test_runtime_attr_hook_may_remove_but_not_replace_authored_vue_source() -> None:
