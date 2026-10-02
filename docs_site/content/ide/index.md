@@ -20,7 +20,7 @@ and at runtime.
 | --- | --- | --- |
 | VS Code, Cursor, and other VS Code forks | Errors as you type, completion, hover, go to definition, type checking, formatting, and template coloring | [VS Code](/ide/vscode/) |
 | PyCharm | The same errors, completion, hover, and navigation, without Citry coloring | [PyCharm](/ide/pycharm/) |
-| Any editor | `citry check` in a terminal | [Check from the command line](#check-templates-from-the-command-line) |
+| Any editor | `citry check` in a terminal | [Check from the command line](#check-from-a-terminal) |
 
 VS Code has the most complete support. The editor help comes from a separate
 program, the Citry language server (`citry-lsp` on PyPI), which the VS Code
@@ -28,7 +28,7 @@ extension starts for you. It uses the standard Language Server Protocol, so
 another editor can use it too, once that editor is set up to start it for
 Python and Citry template files.
 
-## Check templates from the command line
+## Check from a terminal
 
 `citry check` runs the same checks without an editor. Point it at the
 [`Citry`][citry.Citry] instance your application uses:
@@ -53,7 +53,7 @@ only, and exits with status 2, so a CI job cannot mistake it for a full check.
 See [Command line](/cli/#check-component-templates) for every option and exit
 status.
 
-## Choose which mistakes are errors
+## Choose what's an error
 
 Your application decides which template mistakes are errors, warnings, or
 ignored, and which extra variable names are known. `citry check` and the

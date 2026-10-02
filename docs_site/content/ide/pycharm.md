@@ -19,7 +19,7 @@ Two things are not included: Citry adds no coloring to templates in PyCharm,
 and HTML help inside nested templates is missing. For those, use
 [VS Code](/ide/vscode/).
 
-## Set up Citry in PyCharm
+## Set up PyCharm
 
 1. Install the language server in your project's Python environment, the one
    that can import your application:
@@ -48,7 +48,7 @@ Windows:     $PROJECT_DIR$/.venv/Scripts/citry-lsp.exe
 
 If your environment lives elsewhere, change the command after importing.
 
-## Point Citry at your application
+## Connect your app
 
 Citry needs your [`Citry`][citry.Citry] instance to know which components you
 registered. Without it, Citry checks only template syntax: it cannot complete
@@ -103,7 +103,7 @@ In PyCharm, the server needs Node.js and TypeScript's `tsc`, from your
 project's `node_modules` or on `PATH`. When it finds neither, it logs a
 warning and looks again every minute.
 
-## Check templates from the terminal
+## Check from a terminal
 
 PyCharm's terminal, or an external tool entry, can run the same checks as a
 command. This is also what you run in CI:
@@ -115,7 +115,7 @@ citry --app myproject.app:citry_app check
 Use `citry check --static` when the project cannot be imported. See
 [Command line](/cli/#check-component-templates).
 
-## What PyCharm does not support yet
+## Current limits
 
 - **No Citry coloring.** Inline `template`, `js`, and `css` strings keep
   PyCharm's normal Python string color, and `*.citry-html` files get no
