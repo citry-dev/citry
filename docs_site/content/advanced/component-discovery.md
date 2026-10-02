@@ -5,18 +5,21 @@ description: Find component modules and prepare Citry before serving requests.
 
 # Component discovery and startup
 
-In a small project, you can import every component module yourself. In a
-larger project, Citry can find those modules for you. Point it at one or more
-directories and it will import the Python files inside them.
+A component becomes available to templates when Python runs its `class`
+statement, which happens when its module is imported. In a small project you
+can import every component module yourself. In a larger one, tell Citry
+which directories hold your components, and it imports the Python files in
+them for you. This is called discovery.
 
-Discovery happens automatically when Citry first needs the complete component
-catalog. Production applications should usually run it during startup, before
-worker threads begin serving requests.
+Discovery runs on its own the first time Citry needs the full list of
+components. In a web app, also call
+[`initialize()`][citry.Citry.initialize] at startup, so that a broken
+component fails before the first request rather than during it.
 
-## Put components in an importable directory
+## Point Citry at your component directory
 
-Create one [`Citry`][citry.Citry] instance in a module that every component can
-import:
+Create one [`Citry`][citry.Citry] instance in a module that every component
+can import, and pass it your component directory in `dirs`:
 
 ```python
 # myproject/engine.py
@@ -28,7 +31,7 @@ component_dir = Path(__file__).parent / "components"
 app = Citry(dirs=[component_dir])
 ```
 
-Then bind each component to that instance:
+Bind each component to that instance:
 
 ```citry
 # myproject/components/card.py
@@ -38,10 +41,10 @@ from myproject.engine import app
 
 
 class Card(Component):
+    citry = app
+
     class Kwargs:
         title: str
-
-    citry = app
 
     template = """
       <article>
@@ -50,7 +53,7 @@ class Card(Component):
     """
 ```
 
-The directory must be importable from Python. A typical layout is:
+The directory must be importable from Python, as in this layout:
 
 ```text
 myproject/
@@ -61,15 +64,18 @@ myproject/
     card.py
 ```
 
-Paths passed to `Citry(dirs=...)` must be absolute. Build them from
-`__file__`, as above, or call `Path(...).resolve()` before creating the
-engine.
+Paths in `dirs` must be absolute; a relative path raises `ValueError`.
+Build them from `__file__`, as above, or call `Path(...).resolve()`.
 
-## Let Citry discover components on first use
+Citry also looks in `dirs` for files that components name, such as a
+`template_file`, after looking next to the component's own module.
 
-You do not need to call discovery in a small script. Operations that need the
-complete registry trigger it automatically, including rendering an unknown
-component tag and inspecting the component catalog.
+## Let discovery run on first use
+
+You do not need to start discovery yourself. Citry runs it the first time
+it needs the full list of components, for example when a template uses a
+component tag that is not registered yet, or when you inspect the
+components:
 
 ```python
 from myproject.engine import app
@@ -77,23 +83,82 @@ from myproject.engine import app
 catalog = app.inspect_components()
 ```
 
-Each configured directory is scanned recursively. Citry imports `.py` files in
-a stable order. It skips private names beginning with `_`, except
-`__init__.py`, and paths whose import-name pieces contain a dot, such as
-`.cache/` or `card.old.py`. Non-files are skipped too. Point discovery at the
-component directory itself rather than a broad project or environment root.
+Citry searches each directory, including subdirectories, and imports every
+`.py` file in a fixed order. It skips:
 
-Only class definitions register components. Discovery does not instantiate or
-render them, and it does not load their templates, JavaScript, or CSS.
+- files and directories whose names start with `_`, except `__init__.py`;
+- names that Python cannot import: a file with another dot besides `.py`,
+  such as `card.old.py`, or a directory with a dot in its name, such as
+  `.cache/`.
 
-## Inspect authored component dependencies
+Point `dirs` at the component directory itself, not at the project root or
+a virtual environment, so Citry imports only component modules.
 
-Use [`inspect_component_graph()`][citry.Citry.inspect_component_graph] when a
-tool needs to know which registered components refer to each other:
+Importing a module only registers its classes. Citry does not render the
+components or read their template, JavaScript, or CSS files until a page
+needs them.
+
+## Initialize before starting worker threads
+
+Call [`initialize()`][citry.Citry.initialize] once at startup, before your
+server starts handling requests:
 
 ```python
 from myproject.engine import app
 
+app.initialize()
+```
+
+It runs discovery and prepares the checks Citry applies to each component
+tag. An import error or invalid component then stops startup, instead of
+failing the first request that needs it.
+
+Calling `initialize()` again does nothing unless components were added or
+removed since; then it prepares them again. If it raises, fix the problem
+and call it again.
+
+[Web frameworks](/web-frameworks/) shows where startup code goes in each
+framework.
+
+## Run discovery yourself
+
+Call [`autodiscover()`][citry.Citry.autodiscover] when you want the names
+of the modules it imported:
+
+```python
+modules = app.autodiscover()
+```
+
+Pass a list of directories to import components from other places, such as
+plugins, on demand. These paths may be relative to the current working
+directory:
+
+```python
+modules = app.autodiscover(["plugins/components"])
+```
+
+This does not change `app.settings.dirs`, and it does not count as the
+automatic first-use discovery, which still searches the configured `dirs`.
+
+## Recover from an import error
+
+Discovery stops at the first module that fails to import and raises that
+module's exception. Components from modules imported before it stay
+registered. Components that the failing module registered before the error
+are removed, so after you fix the module, calling discovery again imports
+it cleanly.
+
+Start discovery from one place, at startup. A second thread that starts
+discovery or `initialize()` while one is running raises
+`CitryLifecycleInProgress`.
+
+## List which components use each other
+
+Tools such as linters or documentation generators sometimes need to know
+which components use which. Call
+[`inspect_component_graph()`][citry.Citry.inspect_component_graph]:
+
+```python
 graph = app.inspect_component_graph()
 
 for dependency in graph.dependencies("checkout-page"):
@@ -103,86 +168,27 @@ for dependent in graph.dependents("price"):
     print(dependent.name)
 ```
 
-The graph reads each component's effective primary template without rendering
-it. `references_from()` and `references_to()` retain every authored occurrence
-and its source range, while `dependencies()` and `dependents()` return unique
-component definitions. Names and aliases are matched case-insensitively.
+`dependencies()` lists each component that a component's template uses,
+and `dependents()` lists each component whose template uses it. Each
+component appears once. To get every place a tag is written, with its
+location in the source, use `references_from()` and `references_to()`.
+Component names match without regard to case.
 
-Unknown tags and dynamic `<c-component c-is="...">` targets appear in
-`graph.unresolved`. A missing, unreadable, or malformed source appears in
-`graph.problems` without discarding facts from other templates. Check
-`graph.coverage_complete` and `graph.fully_resolved` before treating the result
-as exhaustive for its documented scope.
+The graph reads each registered component's template without rendering it.
+It does not see components that Python code creates, or that a template
+chooses at render time with `<c-component c-is="...">`. Built-in components
+are left out unless you pass `include_builtins=True`.
 
-That scope is deliberately narrower than a runtime call graph. It covers
-component tags written in registered components' authored primary templates.
-It does not discover components composed in Python, inserted by a
-template-loading transform, or chosen dynamically at render time. Built-in
-components are omitted by default; pass `include_builtins=True` to include
-them. [`ComponentGraph.to_json()`][citry.ComponentGraph.to_json] produces a
-versioned local-tooling document, which may contain absolute developer-machine
-paths.
+Before you treat the graph as complete, check two flags:
 
-## Initialize before starting worker threads
+- `graph.coverage_complete` is false when a template could not be read or
+  parsed. `graph.problems` lists those templates.
+- `graph.fully_resolved` is also false when a template uses an unknown tag
+  or a dynamic component. `graph.unresolved` lists those uses.
 
-Call [`initialize()`][citry.Citry.initialize] before starting worker threads.
-It completes discovery and prepares validation for every registered component
-tag, so configuration and import errors fail during startup rather than during
-the first request.
-
-```python
-from myproject.engine import app
-
-app.initialize()
-```
-
-Calling `initialize()` again has no effect while the registry stays unchanged.
-Registering or removing a component invalidates that prepared state, so the
-next call rebuilds it. If initialization raises, fix the problem and call it
-again. Citry does not mark a failed initialization as complete.
-
-Your web framework decides where startup code belongs. See
-[Web frameworks](/web-frameworks/) for framework-specific setup.
-
-## Run discovery explicitly
-
-Use [`autodiscover()`][citry.Citry.autodiscover] when you want the imported
-module names or need to discover a one-off set of directories:
-
-```python
-from myproject.engine import app
-
-modules = app.autodiscover()
-```
-
-Pass `dirs` to replace the configured directories for that call. Unlike the
-constructor setting, this one-off path may be relative to the current working
-directory:
-
-```python
-modules = app.autodiscover(["plugins/components"])
-```
-
-This does not change `app.settings.dirs`. A later automatic discovery still
-uses the directories configured on the engine.
-
-## Recover from an import error
-
-Discovery stops at the first module that cannot be imported and raises the
-original exception. It remembers modules imported successfully before the
-failure, so retrying does not define their components twice.
-
-```python
-try:
-    app.autodiscover()
-except ImportError:
-    # Report the startup failure, or fix it in a development tool.
-    raise
-```
-
-Do not start concurrent discovery yourself. Run
-[`initialize()`][citry.Citry.initialize] once during startup, then let request
-workers use the prepared engine.
+[`ComponentGraph.to_json()`][citry.ComponentGraph.to_json] writes the
+graph as JSON for other tools. The JSON can contain absolute file paths
+from your machine, so check it before you share it.
 
 ## Related reference
 
