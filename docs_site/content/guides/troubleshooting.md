@@ -5,87 +5,33 @@ description: Debug citry: read the component path in render errors, turn on trac
 
 # Troubleshooting
 
-As a project grows, a bug can hide deep inside a tree of components. Citry gives
-you four things to work with when that happens: render errors that name the
-failing component, verbose logs of the render walk, visual component and slot
-boundaries, and a way to capture the exact HTML a component produced.
+Use this page when something goes wrong: a render raises an error, a
+component shows up in the browser but does nothing, or the editor stops
+checking your components. Each entry starts with what you see, then the
+cause and the fix. The tools at the end of the page help with bugs that
+have no clear error.
 
-## Debug the editor integration
+## A render error does not say which component failed
 
-The VS Code status bar shows how much the Citry language server can check in
-the active workspace folder. `Citry` with a check mark means the server loaded
-the configured Citry instance or component library (registry mode), so it can
-check component names, inputs, and slots. When you select a component library,
-the status message says that only that library's components are loaded.
-`Citry: syntax only` means template syntax errors are still reported, but the
-checks and completions that need your components are off.
+You see a bare exception such as `KeyError: 'name'`, and the page has many
+components.
 
-If the status shows `Citry: syntax only` unexpectedly:
-
-1. Install `citry-lsp` in the Python environment selected for the workspace:
-
-   ```console
-   python -m pip install citry-lsp
-   ```
-
-2. Set `citry.app` to the same `module:attribute` Citry instance the application
-   starts, for example `myproject.app:engine`. A component-library author can
-   select its manifest, such as `acme_ui:__citry_library__`; status then reports
-   that host-app components, configuration, and host-provided extensions are
-   outside that registry.
-3. Run **Citry: Show Language Server Status**. Check the reported interpreter,
-   app spec, Citry version, protocol version, and discovery message.
-4. If the interpreter is wrong, select the intended Python environment or set
-   `citry.python` to its executable. Then run **Citry: Restart Language Server**.
-
-Registry discovery has a 15-second startup limit and runs in a child process. An
-import exception, `SystemExit`, process crash, startup timeout, unsupported
-Citry version, or catalog mismatch therefore degrades that workspace to syntax
-only without breaking the editor's language-server connection. Fix the first
-reported discovery error, then restart the server. Output printed by project
-imports is captured and included in status instead of entering the LSP stream.
-
-Ordinary HTML files are not claimed globally because Citry permits any
-`template_file` name. Registry mode analyzes files resolved from the component
-catalog. For an unassociated standalone template, select the **Citry Template**
-language mode or add a project-specific `files.associations` rule.
-
-## Read browser diagnostics first
-
-Client failures start with a `[Citry]` message in the browser console. Use the
-first error in the chain:
-
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| Vue component failed to mount | The component's definition or one of its assets did not arrive complete | Fix the first validation or asset error before retrying the render |
-| A required Vue prop is missing or incompatible | The parent omitted a declared prop or supplied a value with a proven incompatible type | Check the child's native `props` option and the parent's `:` or `v-bind` binding |
-| Generated Vue host or configuration is missing | An optimizer, sanitizer, or DOM update removed part of the interactive delivery | Preserve the [Vue host, configuration, and fragment descriptors](/advanced/vue-runtime/#preserve-interactive-html) |
-| A fragment is discarded or its assets do not load | Citry's routes are not mounted, or the fragment's data or one of its assets is incomplete | Mount the integration and inspect the first network or `[Citry]` console error |
-| A `v-for` cannot create the expected Citry child | Vue owns the browser loop and cannot run Python | Use `<c-for>` when the loop creates Python component instances |
-
-Citry rejects invalid data from the server before any of your code can see a
-partly applied update. Do not suppress the diagnostic and continue with only
-the visible HTML.
-
-## Read the component path in errors
-
-When a component fails to render, the bare exception (say `KeyError: 'name'`)
-does not say which component was rendering. Citry rewrites the message to name
-the path from the root component down to the one that failed.
-
-Take a `Page` that renders a `Card`, which renders an `Avatar` that expects a
-`name` it never receives:
+Read the first line of the message. Citry adds the path from the outermost
+component down to the one that failed. Take a `Page` that renders a
+`Card`, which renders an `Avatar` that never receives the `name` it reads:
 
 ```citry
 from citry import Component
 
+
 class Avatar(Component):
+    def template_data(self, kwargs, slots):
+        return {"name": kwargs["name"]}
+
     template = """
       <img c-alt="name" />
     """
 
-    def template_data(self, kwargs, slots):
-        return {"name": kwargs["name"]}
 
 class Card(Component):
     template = """
@@ -94,6 +40,7 @@ class Card(Component):
       </div>
     """
 
+
 class Page(Component):
     template = """
       <main>
@@ -101,35 +48,33 @@ class Page(Component):
       </main>
     """
 
+
 str(Page())
 ```
 
-Rendering `Page` raises, and the message names the chain that led to the
-failure:
+The error names the whole chain:
 
 ```text
 An error occurred while rendering components Page > Card > Avatar:
 name
 ```
 
-The path reads root first and failing component last, so `Avatar` is where to
-look. It travels with the exception itself, so it survives being caught and
-re-raised: a `try`/`except` in your own code still sees the annotated message.
+The last name, `Avatar`, is where the error happened. The path stays in the
+exception's message, so your own `try`/`except` sees it too. When the
+error happens inside slot content, the path also names the slot, for
+example `Page > Layout > Layout(slot:body)`.
 
-When the failure happens inside slot content, the path also carries a frame for
-the slot that was being filled, for example
-`Page > Layout > Layout(slot:body)`.
+## A template expression raises an error
 
-## Find the failing line in a template
+You see `Error in variable: KeyError: 'user_name'`, followed by a snippet
+of your template.
 
-The path above points at Python code (`Avatar.template_data`). When the error is
-in a template expression instead, citry adds an underlined snippet of the
-template, so you see the exact expression and the lines around it.
-
-Here `Profile` reads `user_name` in its template but never defines it:
+The template reads a name that the component never provides. Here
+`Profile` reads `user_name` but never defines it:
 
 ```citry
 from citry import Component
+
 
 class Profile(Component):
     template = """
@@ -137,7 +82,8 @@ class Profile(Component):
     """
 ```
 
-Rendering it points straight at the offending expression:
+The error points at the exact expression, names the component, and shows
+the file it lives in:
 
 ```text
 An error occurred while rendering components Profile:
@@ -154,22 +100,101 @@ In template of 'Profile' (/path/to/profile.py::Profile):
      3 |
 ```
 
-The header names the component whose template failed and the file it lives in,
-and the `^^^` underline marks the expression that raised.
+Return the missing name from `template_data()`, or fix its spelling in the
+template.
 
-## Turn on debug and trace logging
+## A component shows up but does nothing in the browser
 
-Everything citry logs goes through the standard library logger named `citry`, so
-you configure it the usual way with Python's `logging` module. Citry uses two
-levels:
+The page looks right, but buttons, menus, and other browser behavior do
+not work. Open the browser console and find the first message that starts
+with `[Citry]`. Later errors are often caused by the first one, so fix
+that one first.
 
-- `DEBUG`: loading a component's associated HTML, JS, and CSS files, and
-  autodiscovery of component modules.
-- `TRACE`: a detailed view of the render walk. Logs when components, slots, and
-  nodes start and finish rendering, and which fills a slot received.
+| What the console shows | Cause | Fix |
+|---|---|---|
+| 404 responses for `citry.js`, component code, or stylesheets | Citry is not mounted on your web app, or another worker process answered without the stored files | [Mount Citry](/web-frameworks/), and [share the cache between worker processes](/web-frameworks/#share-the-cache-between-worker-processes) |
+| `[Citry] discarded Vue fragment` | An inserted fragment arrived incomplete, or its files did not load | Insert the whole response, and fix the first network error |
+| `[Citry] expected one configuration block for app ...` | A tool such as an HTML minifier, sanitizer, or your own script removed part of the HTML Citry wrote | [Keep Citry's elements and data blocks in the HTML](/advanced/vue-runtime/#preserve-interactive-html) |
 
-`TRACE` is a level citry adds below `DEBUG`, with the numeric value `5`. To see
-trace logs, set the level to `5` (there is no named constant for it):
+Citry checks the data the server sends before it changes the page, so it
+rejects a broken update as a whole. Fix the first error rather than
+working around it.
+
+## A component tag with `v-for` fails to load
+
+The template fails with: `A browser 'v-for' cannot create Citry
+components. Repeat the component with '<c-for>'.`
+
+`v-for` is a Vue loop that runs in the browser, and the browser cannot run
+your Python components. Repeat the component with
+[`<c-for>`](/syntax/control-flow/), which loops on the server.
+
+## `citry check` reports a missing or wrong Vue prop
+
+`citry check` or the editor reports `Required Vue prop 'open' is missing
+for <c-dialog>`, or says that a Vue prop expects a different type than the
+binding passes.
+
+The child component declares the prop in its JavaScript `props`, and the
+parent's tag does not pass it, or passes a value of the wrong type. Pass
+the prop on the parent's tag with `:name="..."` or `v-bind`, or change the
+child's `props` declaration.
+
+## The editor shows `Citry: syntax only`
+
+The VS Code status bar shows `Citry: syntax only`, and the editor reports
+template syntax errors but does not check component names, inputs, or
+slots.
+
+The Citry language server, the editor helper that runs these checks,
+could not load your Citry app. When it works, the status bar shows `Citry`
+with a check mark. To fix it:
+
+1. Install `citry-lsp` in the Python environment the workspace uses:
+
+   ```console
+   python -m pip install citry-lsp
+   ```
+
+2. Set `citry.app` to the Citry instance your app starts, written as
+   `module:attribute`, for example `myproject.app:engine`. A component
+   library author can set it to the library's manifest instead, such as
+   `acme_ui:__citry_library__`; the editor then checks only that
+   library's components.
+3. Run **Citry: Show Language Server Status**. It shows the Python
+   interpreter, the app setting, the Citry version, and the error from
+   loading your app, if any.
+4. If the interpreter is wrong, select the right Python environment or set
+   `citry.python` to its executable. Then run
+   **Citry: Restart Language Server**.
+
+The language server loads your app in a separate process and waits up to
+15 seconds. If the import fails, exits, crashes, or takes too long, the
+editor keeps working with syntax checks only. Fix the first error the
+status shows, then restart the server. Anything your app prints while it
+loads also appears in the status.
+
+!!! note "A template file opens as plain HTML"
+
+    The editor does not treat every `.html` file as a Citry template,
+    because a template file can have any name. Once the editor has loaded
+    your app, it checks the files your components name in
+    `template_file`. For any other template, select the **Citry
+    Template** language mode, or add a `files.associations` rule to your
+    workspace settings.
+
+## See each step of a render in the logs
+
+When the output is wrong but nothing raises, turn on Citry's logs. Citry
+logs through the standard Python logger named `citry`, at two levels:
+
+- `DEBUG`: loading a component's HTML, JS, and CSS files, and finding
+  component modules;
+- `TRACE`: each component, slot, and template part as it starts and
+  finishes rendering, and which content each slot received.
+
+`TRACE` is a level that Citry adds below `DEBUG`, with the number `5`.
+Python's `logging` module has no name for it, so set the level to `5`:
 
 ```python
 import logging
@@ -180,8 +205,8 @@ logging.basicConfig(
 )
 ```
 
-Rendering a small page (a `HomePage` that renders a `Hello` greeting) then logs
-each step of the walk. An excerpt, with some `RENDER NODE` lines left out:
+A small page that renders a `Hello` component inside `HomePage` then logs
+lines like these (some `RENDER NODE` lines left out):
 
 ```text
 TRACE citry RENDER COMPONENT: 'HomePage' ID ck52imnvf PATH: HomePage
@@ -189,13 +214,13 @@ TRACE citry RENDER NODE ComponentNode @7:18
 TRACE citry RENDER COMPONENT: 'Hello' ID ck52imnvg PATH: HomePage > Hello
 ```
 
-Each `RENDER COMPONENT` line shows the component, its `ID`, and its `PATH` in
-the tree. Each `RENDER NODE` line shows one piece of the template being
-rendered; when it has an `@start:end` span, the span marks where that piece
-sits in the template source.
+A `RENDER COMPONENT` line shows the component, its render ID, and its path
+in the tree. A `RENDER NODE` line shows one part of the template; its
+`@start:end` numbers, when present, mark where that part sits in the
+template source.
 
-`basicConfig` turns on logging for the whole program. To keep the rest of your
-app quiet and raise only citry's level, target the named logger:
+`basicConfig` turns on logs for your whole program. To change only Citry's
+logs, set the level on its logger:
 
 ```python
 import logging
@@ -203,14 +228,16 @@ import logging
 logging.getLogger("citry").setLevel(5)
 ```
 
-Trace logging is nearly free when it is off (the render path only checks whether
-the level is enabled), but with it on a render is roughly twice as slow, plus the
-cost of whatever handler writes each line. Use it while debugging, not in
-production.
+With `TRACE` on, a render takes about twice as long, plus the time to
+write each line. Use it while debugging, not in production. When it is
+off, it costs almost nothing.
 
-## Visualize component and slot boundaries
+## See which component rendered each part of the page { #visualize-component-and-slot-boundaries }
 
-Install the opt-in [Debug][citry.ext.debug.Debug] extension when you need to see which component or slot produced each region of a page. Component boundaries are blue and carry the component class and render ID. Slot boundaries are red and carry the receiving component class and slot name.
+Add the [Debug][citry.ext.debug.Debug] extension to draw a box around each
+component and slot on the page. Component boxes are blue and show the
+component class and render ID. Slot boxes are red and show the component
+that receives the slot and the slot name.
 
 ```citry
 from citry import Citry, Component
@@ -226,37 +253,47 @@ app = Citry(
     },
 )
 
+
 class Card(Component):
     citry = app
+
     template = """
       <article><c-slot name="body" /></article>
     """
 ```
 
-The engine defaults apply to every component. Override either switch on one component with its nested config:
+These settings apply to every component. To change them for one
+component, add a nested `Debug` class:
 
 ```citry
 class Layout(Component):
     citry = app
-    template = """
-      <main><c-slot /></main>
-    """
 
     class Debug:
         highlight_components = False
         highlight_slots = True
+
+    template = """
+      <main><c-slot /></main>
+    """
 ```
 
-Debug adds its wrapper around the component's output and leaves the elements and attributes that the component writes unchanged. Debug skips full-document component or slot boundaries and transparent structural components.
+Debug wraps each component's output and does not change the elements the
+component writes. It draws no box around a component or slot that
+renders a whole HTML document, or around a transparent component.
 
-The boundaries themselves are real `<div>` elements. They can change flex or grid children, direct-child selectors, exact element identity, and restricted table or select content. Use Debug for development inspection, not in production or for layout-sensitive behavioral tests. Place it after an output-rewriting extension if you want to inspect that extension's final result.
+!!! warning "Debug boxes can change your layout"
 
-## Inspect the rendered output
+    Each box is a real `<div>`. It can break flex and grid layouts, CSS
+    rules that select direct children, and content that must sit directly
+    inside a `<table>` or `<select>`. Use Debug while developing, not in
+    production or in tests that depend on layout. To inspect what another
+    extension changed in the output, list Debug after that extension.
 
-Rendering a component gives you back a plain HTML string, so you can write it to
-a file and read exactly what came out. Calling a component builds a
-[CitryElement][citry.CitryElement]; `str()` on it runs the full render and
-returns the HTML:
+## Save the rendered HTML to a file
+
+To read exactly what a component produced, save it to a file. `str()` on a
+component renders it and returns the HTML:
 
 ```python
 html = str(HomePage())
@@ -264,19 +301,17 @@ with open("result.html", "w", encoding="utf-8") as f:
     f.write(html)
 ```
 
-If you need to serialize with specific options, render first and call
-`serialize()` on the result: `HomePage().render().serialize()` returns the same
-string and lets you choose how JavaScript and CSS are placed (see
-[Asset placement](/advanced/asset-placement/)).
+To choose where JavaScript and CSS go, render and serialize in two steps:
+`HomePage().render().serialize()` returns the same HTML and takes the
+options described in [Asset placement](/advanced/asset-placement/).
 
-## Debug with an AI coding agent
+## Ask an AI coding agent for help
 
-The features above make citry work well with AI coding agents. To debug a render
-with one, give it three things: the component source (already in your repo), the
-HTML that was produced, and a log of how it was produced.
+An AI coding agent can debug a render if you give it three things: the
+component source, which is already in your repository, the HTML that was
+produced, and the trace log.
 
-Capture the rendered output to a file as shown above, and send trace logs to
-their own file with a file handler:
+Save the HTML as shown above, and write the trace log to its own file:
 
 ```python
 import logging
@@ -287,14 +322,14 @@ citry_logger.setLevel(5)
 citry_logger.addHandler(handler)
 ```
 
-Then prompt the agent with both files attached:
+Then attach both files and ask, for example:
 
-> I have a citry project. Citry is component-based web rendering for Python, in
-> the style of Vue or React.
+> I have a citry project. Citry is component-based web rendering for
+> Python, in the style of Vue or React.
 >
 > I am rendering the `HomePage` component, but the output is missing the
 > greeting. The trace log is in `citry.log` and the rendered HTML is in
 > `result.html`.
 >
-> Tell me what you would look for in the log and why, whether it is there, and
-> how you would fix the issue.
+> Tell me what you would look for in the log and why, whether it is there,
+> and how you would fix the issue.
