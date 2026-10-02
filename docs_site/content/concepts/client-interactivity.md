@@ -157,7 +157,8 @@ the server when the child emits `select`, write `@c-select` instead; see
 
 ## Pass arbitrary HTML attributes explicitly
 
-A plain attribute on a component tag is a Python input. To let callers set
+A plain attribute on a component tag is a Python input. To let the template
+that uses a component set
 HTML attributes such as `class` or `aria-label`, accept a mapping as an
 input and spread it onto the element that should get them:
 
@@ -243,6 +244,11 @@ Citry calls the function once the component first appears on the page, and
 again each time the server renders it again. A change in browser state
 alone does not call it. `component` is the component's Vue instance.
 
+Reach elements through a `ref`, as above, not through `component.$el`. A
+Vue component can render one root element, several, only text, or nothing,
+so `$el` is not always the element you expect. Check the element's type
+before you use it.
+
 Return a cleanup function to undo the work. Citry runs it before the next
 call and when the component is removed.
 
@@ -258,15 +264,9 @@ $component(({ component }) => {
 
     Watchers and effects you create synchronously inside the callback, for
     example with `Citry.vue.watchEffect()`, are stopped with the cleanup
-    automatically. A timer or a Promise started from the callback must be
-    cancelled by your own cleanup function.
+    automatically. Work that starts later, from a timer or after an
+    `await`, is not stopped automatically. Stop it in your cleanup function.
 
-!!! note "A component may not have one root element"
-
-    A Vue component can render one root element, several, only text, or
-    nothing. So `component.$el` is not always an `Element`. Put a `ref` on
-    the element your JavaScript needs, and check its type before you use
-    it.
 
 ## See also
 
