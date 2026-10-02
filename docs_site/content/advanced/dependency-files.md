@@ -197,7 +197,7 @@ write ordinary tags, so these attributes work there. On every page, a
 Use `Script` and `Style` themselves, not subclasses of them. A subclass
 raises `TypeError` on an interactive page.
 
-## Order the files { #order-files-and-handle-duplicates }
+## Order and duplicates { #order-files-and-handle-duplicates }
 
 Entries from a base component come first, then the child's own entries.
 [Subclassing components](/advanced/subclassing/) shows how to extend or

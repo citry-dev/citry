@@ -54,7 +54,7 @@ To run code each time the server renders the component again, such as
 redrawing a chart, use the `onServerRender` option. See
 [React to a re-render](/concepts/client-interactivity/#react-after-a-server-render).
 
-## Use Citry control flow
+## Choose `v-if` or `<c-if>`
 
 Use Vue's `v-if` and `v-for` for plain HTML inside one component, and give
 each repeated item a stable `:key`.
@@ -129,7 +129,7 @@ A `js_data()` key that matches a prop, `data()` key, `setup()` value,
 method, computed value, or injection of the same component is caught only
 in the browser: the component fails when it first appears.
 
-## Server-render the page { #send-page-content-in-the-served-html }
+## What the server sends { #send-page-content-in-the-served-html }
 
 The HTML the server sends for an interactive page already contains the
 page's content. Search engines, link previews, and readers without

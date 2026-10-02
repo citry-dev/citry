@@ -33,7 +33,7 @@ JavaScript, CSS, or browser behavior comes back as plain HTML.
 JavaScript and CSS, and [Rendering](/concepts/rendering/) explains the
 `render()` and `serialize()` steps.
 
-## Insert with Citry
+## Insert into a Citry page
 
 Load Citry's runtime once in the page, then insert the response wherever
 you like:
@@ -63,7 +63,7 @@ Insert the whole response in one step. Do not split it into separate swaps,
 because the fragment's HTML and the data block that describes its
 components must arrive together.
 
-## Insert without Citry
+## Insert into other pages
 
 When the page has not loaded Citry, the fragment brings a small script that
 loads the runtime. That script must run, and a `<script>` added through

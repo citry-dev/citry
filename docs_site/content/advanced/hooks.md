@@ -108,7 +108,7 @@ After the `yield`, you can:
 - return `None` to keep a successful result, or to let the error continue
   to the components around this one.
 
-## Change component tags
+## Change asset tags
 
 `on_dependencies()` receives the script and style tags that one rendered
 component adds to the page. Those are its own `js` and `css`, the files in
@@ -180,7 +180,7 @@ describes every step.
 The hook runs before Citry removes tags that several components share.
 When two components add the same script, the first one wins, together with
 any attribute the hook added. Stylesheets follow stricter rules; see
-[Order the files](/advanced/dependency-files/#order-files-and-handle-duplicates).
+[Order and duplicates](/advanced/dependency-files/#order-files-and-handle-duplicates).
 
 ### Change page-wide tags
 
