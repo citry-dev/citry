@@ -203,16 +203,6 @@ class MetaTag:
 [`markupsafe.Markup`](https://markupsafe.palletsprojects.com/en/stable/escaping/#markupsafe.Markup){: target="_blank" rel="noopener"}
 itself, so its documentation applies.
 
-!!! note "Trusted HTML must be complete on pages that use Vue"
-
-    When anything on the page or fragment runs in the browser, such as a Vue
-    directive or `$component`, each `Markup` value must be complete HTML.
-    Close every element it opens, do not self-close a non-void element
-    (`<span/>`), and write a `<` in text as `&lt;`. Otherwise the render
-    fails with "A Markup value (trusted HTML from Python) is not a complete
-    HTML fragment". Pages without browser behavior insert the value
-    unchanged.
-
 !!! tip "Let Ruff flag unsafe `Markup` calls"
 
     Ruff's
@@ -224,6 +214,19 @@ itself, so its documentation applies.
     [tool.ruff.lint.flake8-bandit]
     extend-markup-names = ["citry.Markup"]
     ```
+
+### Keep trusted HTML complete on pages that use Vue
+
+When anything on the page or fragment runs in the browser, such as a Vue
+directive or `$component`, each `Markup` value must be complete HTML:
+
+- close every element it opens;
+- do not self-close an element that needs a closing tag, such as `<span/>`;
+- write a `<` in text as `&lt;`.
+
+Otherwise the render fails with "A Markup value (trusted HTML from Python)
+is not a complete HTML fragment". On pages without browser behavior, Citry
+inserts the value unchanged.
 
 ## Add a comment inside an expression
 
