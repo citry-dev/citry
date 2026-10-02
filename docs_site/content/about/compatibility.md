@@ -40,6 +40,10 @@ Wheels are published for:
 - Windows, 64-bit and 32-bit
 - macOS, on Intel and Apple Silicon
 
+These wheels cover regular CPython 3.10 to 3.14. Free-threaded CPython
+3.14 and PyPy 3.11 have wheels only on Linux; elsewhere pip builds
+`citry-core` from source, as described below.
+
 The exact list is in the
 [files on PyPI](https://pypi.org/project/citry-core/#files){: target="_blank" rel="noopener"}.
 
