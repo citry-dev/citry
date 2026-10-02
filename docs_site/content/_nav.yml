@@ -40,11 +40,11 @@ areas:
           - { title: Template basics, path: /syntax/ }
           - { title: Expressions, path: /syntax/expressions/ }
           - { title: Attributes, path: /syntax/dynamic-attributes/ }
-          - { title: Conditions and loops, path: /syntax/control-flow/, needs_review: true }
+          - { title: Conditions and loops, path: /syntax/control-flow/ }
           - { title: Vue, path: /syntax/vue/, needs_review: true }
-          - { title: Markup in attributes, path: /syntax/nested-templates/, needs_review: true }
-          - { title: Comments, path: /syntax/comments/, needs_review: true }
-          - { title: Literal text, path: /syntax/raw/, needs_review: true }
+          - { title: Markup in attributes, path: /syntax/nested-templates/ }
+          - { title: Comments, path: /syntax/comments/ }
+          - { title: Literal text, path: /syntax/raw/ }
 
       - label: Concepts
         collapsible: true
