@@ -234,36 +234,36 @@ replaces it.
 
 ## When a binding does not behave as expected
 
-!!! note "Debounce, throttle, and polling need an HTML element"
+### Debounce, throttle, and polling need an HTML element
 
-    `.debounce`, `.throttle`, and `@c-poll` work only on HTML elements. On a
-    child component tag they raise `TypeError` when the page renders. A
-    `c-bind` spread can add `@c-poll` to an element, but only with a plain
-    handler name such as `"refresh"`, without arguments.
+`.debounce`, `.throttle`, and `@c-poll` work only on HTML elements. On a
+child component tag they raise `TypeError` when the page renders. A
+`c-bind` spread can add `@c-poll` to an element, but only with a plain
+handler name such as `"refresh"`, without arguments.
 
-!!! note "`.once` is used up by the first event"
+### `.once` is used up by the first event
 
-    `.once` removes the listener after the first event, even when another
-    modifier stops that event from sending. With `@c-keydown.enter.once`,
-    pressing any other key first means a later Enter sends nothing.
+`.once` removes the listener after the first event, even when another
+modifier stops that event from sending. With `@c-keydown.enter.once`,
+pressing any other key first means a later Enter sends nothing.
 
-!!! note "Modifiers check the actual event"
+### Modifiers check the actual event
 
-    `.prevent` has an effect only when the event can be cancelled.
-    `.enter` and `.escape` read the event's `key` property, whatever the
-    event's name. An event without a `key` never matches.
+`.prevent` has an effect only when the event can be cancelled.
+`.enter` and `.escape` read the event's `key` property, whatever the
+event's name. An event without a `key` never matches.
 
-!!! note "A binding stops when its input type changes"
+### A binding stops when its input type changes
 
-    If Vue later changes `:type` to a type that cannot be bound, the binding
-    stops and the browser console says why. It works again once the type
-    changes back.
+If Vue later changes `:type` to a type that cannot be bound, the binding
+stops and the browser console says why. It works again once the type
+changes back.
 
-!!! note "Binding a custom element"
+### Binding a custom element
 
-    Citry reads and writes a custom element's `value` property as is, so
-    numbers, lists, and objects arrive unchanged. If reading `value` throws,
-    returns `undefined`, or returns something that is not JSON, Citry
-    leaves State unchanged, sends nothing, and reports the problem in the
-    browser console. The element may be defined after Citry starts: Citry
-    waits for it and then applies the current State value.
+Citry reads and writes a custom element's `value` property as is, so
+numbers, lists, and objects arrive unchanged. If reading `value` throws,
+returns `undefined`, or returns something that is not JSON, Citry
+leaves State unchanged, sends nothing, and reports the problem in the
+browser console. The element may be defined after Citry starts: Citry
+waits for it and then applies the current State value.

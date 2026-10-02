@@ -62,8 +62,8 @@ areas:
         collapsible: true
         section_style: true
         items:
-          - { title: Server events, path: /events/, needs_review: true }
-          - { title: Keep state between calls, path: /events/state/, needs_review: true }
+          - { title: Server events, path: /events/ }
+          - { title: Server state, path: /events/state/ }
           - { title: Handle and validate forms, path: /events/forms/, needs_review: true }
           - { title: Bind events in templates, path: /events/bindings/, needs_review: true }
           - { title: Event actions, path: /events/actions/, needs_review: true }

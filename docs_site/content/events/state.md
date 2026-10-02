@@ -1,9 +1,9 @@
 ---
-title: Keep State between calls
+title: Server state
 description: Keep the values your Citry event handlers need between calls, and pass every input when a handler renders the component again.
 ---
 
-# Keep State between calls
+# Server state
 
 An event handler often needs values from the component it was called from:
 which project it shows, which page of results, what the user typed. It does

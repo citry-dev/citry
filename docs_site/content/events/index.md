@@ -95,7 +95,7 @@ frameworks.
 
 ## Choose your next step
 
-- [Keep State between calls](/events/state/): decide which values survive
+- [Server state](/events/state/): decide which values survive
   from one call to the next.
 - [Handle and validate forms](/events/forms/): receive form fields as typed
   Python data and show validation errors.
