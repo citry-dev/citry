@@ -5,22 +5,26 @@ description: Store shared and translated Fluent resources in importable packages
 
 # Organize catalogs
 
-Component `messages` blocks work well for source text that belongs to one
-component. A standalone catalog package holds translations, shared application
-messages, or messages published by a reusable library.
+A component's `messages` block holds its text in one language. The
+translations into other languages need a home of their own, and so do
+messages that many components share or that a component library
+publishes.
 
-Citry loads catalog packages as resources. Importing one does not need to run
-registration code or create an extension object.
+Citry keeps them in a catalog package: an ordinary Python package that
+contains Fluent `.ftl` files, one folder per locale, plus a small
+descriptor file. This page shows how to create one, add translations,
+and control which translation wins when several packages define the same
+message.
 
 ## Create a catalog package
 
-A package uses this layout:
+A catalog package looks like this:
 
 ```text
 my_app_i18n/
 ├── __init__.py
 ├── citry-i18n.toml
-├── formats.json
+├── formats.json        # optional
 ├── locales/
 │   ├── en-US/
 │   │   ├── account.ftl
@@ -34,18 +38,7 @@ my_app_i18n/
     └── link.json
 ```
 
-The `_compiled` files are generated for production. With
-`Citry(mode="development")`, Citry reads the `.ftl` files directly. `Citry()`
-runs in production mode by default, and production mode refuses to load a
-package without its `_compiled` files, so either compile the package or set
-`mode="development"` while you edit translations.
-
-A development engine still checks an existing `_compiled/manifest.json`
-against the current `.ftl` files. After you edit a package that already has
-compiled files, startup fails with a "does not match its installed FTL
-sources" error until you run the compile command again.
-
-The descriptor contains exactly three fields:
+The descriptor `citry-i18n.toml` contains exactly three fields:
 
 ```toml
 schema_version = 1
@@ -53,22 +46,143 @@ owner = "my-app"
 source_locale = "en-US"
 ```
 
-`owner` is a stable identity for the messages. It is not the import package
-name, so reorganizing Python modules does not need to transfer ownership.
+- `owner` is a stable name for whoever defines these messages. It is
+  separate from the Python package name, so you can move or rename
+  modules without changing it.
+- `source_locale` is the language the package's original messages are
+  written in. The package must contain at least one `.ftl` file in that
+  locale's folder.
 
-Every package must contain at least one `.ftl` source for its `source_locale`.
-Locale directory names must already use canonical spelling, such as `en-US`
-rather than `EN-us`.
+Locale folders must use the standard spelling, such as `en-US`, not
+`EN-us`.
 
-Make sure your build backend includes the TOML descriptor and generated
-`_compiled` files in the wheel. Include the `.ftl` resources too when the
-installed package should support development loading or downstream translation
-work. A new development engine reads the current files from an editable
-install. The configured package topology of an existing engine stays fixed, so
-an application reload cycle must create a new engine after a package edit. A
-production-only wheel may omit the source files after compilation.
+The `_compiled` folder holds files that the compile command generates
+for production. While you edit translations, run the engine in
+development mode so Citry reads the `.ftl` files directly:
 
-Citry verifies this setuptools recipe in its own wheel builds:
+```python
+app = Citry(mode="development")
+```
+
+`Citry()` runs in production mode by default, and production mode
+refuses a package that has no `_compiled` files. See
+[Production and deployment](/i18n/production/) for the compile command.
+
+## Add translations
+
+Write each message's `@param` comments only in the source locale:
+
+```fluent
+# locales/en-US/account.ftl
+# @param {str} $name - User name.
+my-app-account-greeting = Hello, { $name }.
+```
+
+The translation uses the same variables without repeating the comments:
+
+```fluent
+# locales/cs-CZ/account.ftl
+my-app-account-greeting = Ahoj, { $name }.
+```
+
+A translation may reorder the variables or use different plural
+branches. It may not use a variable that the source does not declare.
+Citry checks this before it builds the catalog.
+
+A translation file may leave messages out. Citry then uses a fallback
+language, as described below; it does not copy source text into every
+locale file.
+
+## Load packages in priority order
+
+List the packages in the engine settings, from lowest to highest
+priority:
+
+```python
+app = Citry(
+    extensions_defaults={
+        "i18n": {
+            "source_locale": "en-US",
+            "locales": ("en-US", "cs-CZ"),
+            "catalogs": (
+                "vendor_checkout_i18n",
+                "my_app_i18n",
+            ),
+        },
+    },
+)
+```
+
+Here `my_app_i18n` may replace a message from `vendor_checkout_i18n` in
+the same locale. Messages in your application's own components rank
+above all packages and may replace package messages too.
+
+Two packages may not use the same `owner`.
+
+## Know which translation is used
+
+Citry first looks for the message in the requested locale, across every
+package and the application's components, from highest priority down.
+Only then does it move to a fallback locale.
+
+For example:
+
+- the application replaces the English `my-app-account-greeting`;
+- a package has both English and Czech versions; and
+- the application has no Czech version.
+
+An English request uses the application's version. A Czech request uses
+the package's Czech translation. Your English replacement does not hide
+an existing Czech translation.
+
+When no locale in the configured fallbacks has the message, Citry uses
+the source locale of the package that defined it. Different packages may
+have different source locales.
+
+A message's main text and each of its attributes fall back separately.
+A locale may translate a button's label but not its `.aria-label`; the
+`.aria-label` then comes from the fallback language.
+
+Fallback text needs its own `lang` attribute, which plain `tr()` text
+cannot carry. `citry check` therefore reports a `tr()` call that would
+fall back to another locale. See
+[Language direction and accessibility](/i18n/direction-and-bidi/#mark-fallback-text-with-its-language)
+for how to allow fallback where you need it.
+
+To list every message that falls back in a locale, run:
+
+```bash
+citry --app myproject.engine:app \
+  ext run i18n coverage --locale cs-CZ
+```
+
+Add `--fail-on-missing` to make CI fail when a message falls back to its
+source language. See
+[Translation workflow and tooling](/i18n/workflow/#find-missing-translations).
+
+## Share common messages across components
+
+A catalog package may define messages that no component owns:
+
+```fluent
+my-app-common-open = Open
+my-app-common-close = Close
+my-app-common-save = Save
+```
+
+Every component registered with the engine can call these IDs, and
+Citry checks such calls against the whole catalog.
+
+Keep shared messages for text that really is shared. Text that belongs
+to one component reads best beside that component, where translators
+can see how it is used.
+
+## Include the catalog files in your wheel
+
+Make sure your build includes the descriptor and the compiled files.
+Also include the `.ftl` files if the installed package should load in
+development mode or be translated further. Citry checks this setuptools
+setup in its own wheel builds:
 
 ```toml
 [tool.setuptools]
@@ -86,15 +200,29 @@ my_app_i18n = [
 ]
 ```
 
-If you use another build backend, configure its package-data feature to include
-the same paths. The backend changes how files enter the distribution; it does
-not change Citry's catalog layout.
+With another build backend, include the same paths through its own
+package-data setting.
 
-## Ship package-owned format profiles
+## Publish a component library's messages
 
-A reusable library may include a `formats.json` beside `citry-i18n.toml`. It
-uses the same closed profile shape as the application's Python
-`FormatRegistry`, expressed as JSON:
+A component library writes its text in each component's `messages`
+block, and shared text in `.ftl` files in its source locale. Its build
+can collect these into one catalog package.
+
+Set the package's `owner` to the library's `ComponentLibrary.name`. When
+an application lists that package in `catalogs`, Citry uses the package
+for those messages and does not load the components' `messages` blocks a
+second time.
+
+The application can list its own catalog after the library's package to
+replace selected messages. A replaced message still belongs to the
+library, so it keeps falling back to the library's source locale.
+
+## Ship named formats with a package
+
+A library can also ship format profiles: named formatting settings such
+as `my-app-page-number`, described in [Format values](/i18n/formatting/).
+Put them in a `formats.json` file next to `citry-i18n.toml`:
 
 ```json
 {
@@ -106,149 +234,40 @@ uses the same closed profile shape as the application's Python
 }
 ```
 
-Every profile name must start with the descriptor's stable owner plus `-`. For
-an owner of `my-app`, `my-app-page-number` is valid and `page-number` is not.
-This keeps independently installed libraries from claiming generic profile
-names.
+Each profile name must start with the package's `owner` followed by
+`-`. For the owner `my-app`, `my-app-page-number` is valid and
+`page-number` is not. This keeps separately installed libraries from
+taking the same names.
 
-Package profiles are merged with the application's registry when the engine is
-created. A package may not replace an application profile or a profile from
-another package; a collision is a startup error. The `formats.json` digest is
-part of the package manifest, so production rejects stale compiled artifacts.
-Include the file in the wheel and rerun the catalog compile command after any
-profile change.
+Citry adds package profiles to the application's profiles when it
+creates the engine. A profile name that already exists, in the
+application or in another package, stops startup with an error.
 
-## Configure packages in precedence order
+Include `formats.json` in the wheel and compile the package again after
+any change. Production refuses a compiled package whose `formats.json`
+has changed since it was compiled.
 
-Pass ordinary import-package strings:
+## Rules for less common cases
 
-```python
-app = Citry(
-    extensions_defaults={
-        "i18n": {
-            "source_locale": "en-US",
-            "locales": ("en-US", "cs-CZ"),
-            "catalogs": (
-                "vendor_checkout_i18n",
-                "my_app_i18n",
-            ),
-        },
-    },
-)
-```
+### Startup fails after you edit a compiled package
 
-The sequence runs from lower to higher priority. In this example,
-`my_app_i18n` may override a public message from
-`vendor_checkout_i18n` in the same locale. Application component messages form
-the application layer and may override package messages too.
+A development engine still compares an existing
+`_compiled/manifest.json` with the current `.ftl` files. After you edit
+a package that has compiled files, startup fails with a "does not match
+its installed FTL sources" error. Run the compile command again.
 
-Two configured packages may not claim the same stable owner.
+### An edited package is not picked up
 
-## Keep one source unit per component or file
+A running engine keeps the package list and files it started with.
+When your development server reloads, it must create a new engine to
+see package edits. A new engine reads the current files, including from
+an editable install.
 
-Citry does not paste every `.ftl` file into one large resource. It keeps each
-component `messages` block and each catalog file as its own source unit.
+### The same message is defined in two files
 
-This matters for two reasons:
-
-- a duplicate public message points to both source locations instead of being
-  decided by file order; and
-- a private Fluent term remains private to the file or component block that
-  defines it.
-
-Use a public namespaced message when several source units need the same text.
-For example, put `my-app-common-open` in `common.ftl`, then reference that
-public message from another public message.
-
-## Define types in the source locale
-
-The source locale owns each message's `@param` declarations:
-
-```fluent
-# locales/en-US/account.ftl
-# @param {str} $name - User name.
-my-app-account-greeting = Hello, { $name }.
-```
-
-Translations use the same variables without repeating their Python types:
-
-```fluent
-# locales/cs-CZ/account.ftl
-my-app-account-greeting = Ahoj, { $name }.
-```
-
-The translation may reorder variables or use a different selector shape. It
-may not add an undeclared input. Citry checks references and the effective
-interface before building the catalog.
-
-## Understand locale-major fallback
-
-Citry looks for the requested locale before it falls back to another locale.
-Within one locale, it checks higher-priority layers before lower-priority
-layers.
-
-Consider this setup:
-
-- the application overrides the English `my-app-account-greeting`;
-- a package supplies both English and Czech versions; and
-- the application has no Czech override.
-
-An English request uses the application's override. A Czech request uses the
-package's Czech translation before it considers any English source text. An
-English-only application override therefore does not hide an available Czech
-translation.
-
-If no configured fallback contains the output, Citry tries the source locale
-of the package that owns that message. Different packages may have different
-source locales.
-
-Message values and attributes fall back independently. A locale may translate
-the visible label while an untranslated `.aria-label` safely comes from an
-earlier fallback, provided the call site can represent that language correctly.
-See [Language direction and accessibility](/i18n/direction-and-bidi/) for the
-language-markup rule.
-
-Translation files may be sparse. An omitted output follows the configured
-fallback chain and finally its defining owner's source locale; Citry does not
-silently copy source text into every locale file. Use
-`citry ext run i18n coverage --locale <locale>` to see the exact outputs that
-fall back, and add `--fail-on-missing` when a locale must be complete in CI.
-
-## Put common messages outside components
-
-A catalog package may define public messages that no component owns directly:
-
-```fluent
-my-app-common-open = Open
-my-app-common-close = Close
-my-app-common-save = Save
-```
-
-Any component registered with the configured engine may call those public IDs.
-Citry checks literal keys against the complete project catalog, not only the
-calling component's `messages` block.
-
-Use shared messages for genuinely shared concepts. Keep component-specific
-copy near its component so translators can find the owning interface and
-context.
-
-## Package reusable library messages
-
-A component library authors family-specific source text in each component's
-`messages` block and shared text in standalone source-locale FTL. Its build can
-collect those source units into a dedicated catalog package. Set the
-descriptor's `owner` to the same value as the library's
-`ComponentLibrary.name`; when an application configures that package, Citry
-uses the checked package artifact instead of loading the exported component
-block a second time as an application override.
-
-The application adds that package to `catalogs` and may place an application
-catalog later in the sequence to override selected public messages.
-
-An override keeps the original message owner and its source fallback. The
-application does not become the defining owner merely because it supplies a
-higher-priority value.
-
-Compile package artifacts before building a production wheel. See
-[Production and deployment](/i18n/production/) for the exact command and
-validation behavior.
+Citry keeps each component's `messages` block and each `.ftl` file as a
+separate source. If two
+sources at the same priority define the same public message, such as two
+files in one package, the error names both locations rather than letting
+file order decide. A Fluent term (a phrase starting
+with `-`) stays private to the file or block that defines it.
