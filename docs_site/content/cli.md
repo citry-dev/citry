@@ -18,7 +18,7 @@ citry watch --help
 citry --version
 ```
 
-## Create a component file
+## Create a component
 
 `citry create` writes a new component file:
 
@@ -51,7 +51,7 @@ The command never overwrites an existing file. It also refuses a Python
 keyword, such as `class`, and a name that turns into a module name starting
 with `__`.
 
-## Point commands at your application
+## Point at your app
 
 Most commands work on a [`Citry`][citry.Citry] instance: they read its
 registered components and extensions. By default they use the module-level
@@ -73,7 +73,7 @@ it from the current directory, as web servers such as uvicorn do.
 If importing the application fails, the command stops with an error.
 `check` is the exception, described below.
 
-## Check component templates
+## Check templates { #check-component-templates }
 
 `citry check` finds template mistakes without rendering anything. Run it
 against your application:
@@ -110,7 +110,7 @@ Add `--format json` to print one JSON report instead of text lines. Each
 finding has an `origin`, `code`, `severity`, `message`, and `range`.
 `range` is `null` when the finding has no position.
 
-### Check without importing your application
+### Check syntax only
 
 When you cannot import the project, for example in a CI job without its
 dependencies, check template syntax only:
@@ -132,21 +132,21 @@ as `/home/me/proj/myapp/card.py (Card.template)`.
 passing result always says which kind of check ran. The two options cannot
 be combined.
 
-### What happens when the application fails to import
+### When import fails
 
 With `--app`, a failed import does not stop the check. The command reports
 the failure once, checks template syntax as `--static` would, and exits
 with status 2. It never reports results from a partly loaded set of
 components as complete.
 
-### What the check does not cover
+### What is not checked
 
 - It does not look for unknown component tags inside attribute values
   that hold template source.
 - It does not run template transform hooks. It checks the template as you
   wrote it, and notes this once in its output.
 
-### Check types with TypeScript and ty
+### Check types { #check-types-with-typescript-and-ty }
 
 Add `--types` to also type-check your components the way the editor does:
 
@@ -252,7 +252,7 @@ The formatter lays out the HTML structure conservatively and formats
 Python expressions, `c-for` clauses, and `c-fill data` patterns. Add
 `--verbose` to see which formatters are active.
 
-### Format JavaScript and CSS with Biome
+### Format JS and CSS
 
 Citry formats JavaScript and CSS only when you name a
 [Biome](https://biomejs.dev/) executable:
@@ -290,7 +290,7 @@ language:
 
 A region you turned off with `{# fmt: off #}` never counts as missing.
 
-### How Citry keeps Biome runs repeatable
+### Repeatable Biome runs
 
 Citry identifies each Biome setup by a fingerprint: a hash of the Biome
 binary and of the exact configuration it used. Error messages include it,
@@ -313,7 +313,7 @@ Citry never searches `PATH` for Biome, never runs it through a shell, and
 never lets it write files itself. It stops Biome after 15 seconds, or when
 its output passes 8 MiB.
 
-## Reload templates while you develop
+## Reload templates
 
 `watch` watches your component directories. When a template, JavaScript,
 or CSS file changes, the next render uses the new file:
@@ -341,7 +341,7 @@ If `watchfiles` or `watchdog` is installed, Citry uses it to get file
 change events from the operating system. Otherwise it checks the files
 for changes at regular intervals.
 
-## List registered components
+## List components
 
 `list` prints every component your application registered, Citry's
 built-in components included:
@@ -355,7 +355,7 @@ file. Use it when a template tag does not find the component you expect,
 or to check that [component discovery](/advanced/component-discovery/)
 found a module.
 
-## Export component details as JSON
+## Export as JSON
 
 `inspect --json` prints a description of your components, as a
 [`ComponentCatalog`][citry.ComponentCatalog] in JSON, for tools to read:
@@ -385,7 +385,7 @@ it from a public endpoint. Anything your application prints while it is
 imported also goes to the output, so keep imports quiet when another tool
 reads the JSON.
 
-## List installed extensions
+## List extensions
 
 `ext list` prints the [extensions](/advanced/extensions/) your
 application uses:
@@ -397,7 +397,7 @@ citry --app myproject.engine:app ext list
 Every application has `cache`, `dependencies`, `events`, and `i18n`.
 Extensions your application adds come after them.
 
-## Run an extension command
+## Run extension commands { #run-an-extension-command }
 
 Extensions can add their own commands. Run one with `ext run`, the
 extension name, and the command name:
@@ -413,7 +413,7 @@ Leave out the command name to list the commands an extension offers:
 citry --app myproject.engine:app ext run events
 ```
 
-### Add a command to an extension
+### Add a command
 
 Subclass [`ExtensionCommand`][citry.ExtensionCommand], describe its
 arguments with [`CommandArg`][citry.CommandArg], and list it in the
