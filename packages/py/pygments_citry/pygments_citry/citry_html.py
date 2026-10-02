@@ -348,35 +348,39 @@ class CitryHtmlLexer(ExtendedRegexLexer, HtmlLexer):
         ],
         # A c-* value whose trimmed body begins with a tag or <> fragment is a
         # nested template. Other values are Python expressions.
+        # In this state and the value states below, a quoted value ends at
+        # the first matching quote, as in the template grammar. The grammar
+        # has no escape character, so a backslash cannot keep the value open,
+        # and a template the parser rejects must not highlight as valid.
         "dynamic-attr": [
             (
-                r'(")(\s*<(?=>|[A-Za-z])(?:[^"\\]|\\.)*)(")',
+                r'(")(\s*<(?=>|[A-Za-z])[^"]*)(")',
                 bygroups(Punctuation, _nested_template, Punctuation),
                 "#pop",
             ),
             (
-                r"(')(\s*<(?=>|[A-Za-z])(?:[^'\\]|\\.)*)(')",
+                r"(')(\s*<(?=>|[A-Za-z])[^']*)(')",
                 bygroups(Punctuation, _nested_template, Punctuation),
                 "#pop",
             ),
-            (r'(")((?:[^"\\]|\\.)*)(")', bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
-            (r"(')((?:[^'\\]|\\.)*)(')", bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
+            (r'(")([^"]*)(")', bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
+            (r"(')([^']*)(')", bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
             (r'(")([\s\S]*)$', bygroups(Punctuation, using(PythonLexer)), "#pop"),
             (r"(')([\s\S]*)$", bygroups(Punctuation, using(PythonLexer)), "#pop"),
             (r"[^\s>]+", using(PythonLexer), "#pop"),
         ],
         # The value of a fixed server-side attribute is a Python expression.
         "python-attr": [
-            (r'(")((?:[^"\\]|\\.)*)(")', bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
-            (r"(')((?:[^'\\]|\\.)*)(')", bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
+            (r'(")([^"]*)(")', bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
+            (r"(')([^']*)(')", bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
             (r'(")([\s\S]*)$', bygroups(Punctuation, using(PythonLexer)), "#pop"),
             (r"(')([\s\S]*)$", bygroups(Punctuation, using(PythonLexer)), "#pop"),
             (r"[^\s>]+", using(PythonLexer), "#pop"),
         ],
         # Direct Vue directive values are JavaScript expressions.
         "javascript-attr": [
-            (r'(")((?:[^"\\]|\\.)*)(")', bygroups(Punctuation, using(JavascriptLexer), Punctuation), "#pop"),
-            (r"(')((?:[^'\\]|\\.)*)(')", bygroups(Punctuation, using(JavascriptLexer), Punctuation), "#pop"),
+            (r'(")([^"]*)(")', bygroups(Punctuation, using(JavascriptLexer), Punctuation), "#pop"),
+            (r"(')([^']*)(')", bygroups(Punctuation, using(JavascriptLexer), Punctuation), "#pop"),
             (r'(")([\s\S]*)$', bygroups(Punctuation, using(JavascriptLexer)), "#pop"),
             (r"(')([\s\S]*)$", bygroups(Punctuation, using(JavascriptLexer)), "#pop"),
             (r"[^\s>]+", using(JavascriptLexer), "#pop"),
@@ -386,16 +390,16 @@ class CitryHtmlLexer(ExtendedRegexLexer, HtmlLexer):
         # aliases that themselves contain parentheses, so it treats the first
         # opening parenthesis as the author-facing call shell.
         "event-handler": [
-            (r'"(?:[^"\\]|\\.)*"', _event_handler, "#pop"),
-            (r"'(?:[^'\\]|\\.)*'", _event_handler, "#pop"),
+            (r'"[^"]*"', _event_handler, "#pop"),
+            (r"'[^']*'", _event_handler, "#pop"),
             (r'"[\s\S]*$', _event_handler, "#pop"),
             (r"'[\s\S]*$", _event_handler, "#pop"),
             (r"[^\s>]+", _event_handler, "#pop"),
         ],
         # A valued :c-* binding names the handler that flushes the update.
         "state-handler": [
-            (r'"(?:[^"\\]|\\.)*"', _state_handler, "#pop"),
-            (r"'(?:[^'\\]|\\.)*'", _state_handler, "#pop"),
+            (r'"[^"]*"', _state_handler, "#pop"),
+            (r"'[^']*'", _state_handler, "#pop"),
             (r'"[\s\S]*$', _state_handler, "#pop"),
             (r"'[\s\S]*$", _state_handler, "#pop"),
             (r"[^\s>]+", _state_handler, "#pop"),

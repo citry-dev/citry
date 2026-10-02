@@ -96,6 +96,54 @@ def test_fragment_delimiters_are_special_only_inside_nested_values():
     assert standalone == [(Text, "<>")]
 
 
+def test_multiline_fragment_highlights_inner_markup_with_the_other_quote():
+    # Inner attribute values use the quote the outer value does not, so the
+    # outer value spans every line up to its own closing quote.
+    for outer, inner in (('"', "'"), ("'", '"')):
+        source = (
+            f"<c-Card\n  c-footer={outer}<>\n    <footer>\n"
+            f"      <a c-href={inner}archive_url{inner}>Read</a>\n"
+            f"      <c-HelpLink c-topic={inner}help_topic{inner} />\n"
+            f"    </footer>\n  </>{outer}\n/>\n"
+        )
+        toks = lex_html(source)
+
+        assert not any(token in Error for token, _ in toks)
+        assert (Punctuation, "<>") in toks
+        assert (Punctuation, "</>") in toks
+        assert (Name.Tag, "footer") in toks
+        assert (Name.Tag, "c-HelpLink") in toks
+        assert (Name, "archive_url") in toks
+        assert (Name, "help_topic") in toks
+
+
+def test_same_quote_inside_a_fragment_value_stays_an_error():
+    # The template grammar ends a quoted value at the first matching quote, so
+    # the parser rejects this template. The highlighted docs must show that
+    # instead of styling the snippet as if it were valid.
+    toks = lex_html('<c-Card c-footer="<><a c-href="url">x</a></>" />')
+
+    assert (Error, "<") in toks
+
+
+def test_backslash_does_not_escape_a_quote_in_an_attribute_value():
+    # The grammar has no escape character, so `\"` closes the value just like
+    # `"`. Escaping the inner quote is a natural first attempt at the
+    # same-quote mistake, and the parser rejects it, so it must stay visible.
+    for source in (
+        '<c-Card c-footer="<><a c-href=\\"url\\">x</a></>" />',
+        "<c-Card c-body='<>it\\'s</>' />",
+    ):
+        assert any(token in Error for token, _ in lex_html(source)), source
+
+    # A value that ends in a backslash is valid and closes at its quote.
+    # Each value below ends in a backslash, in Python and in JavaScript.
+    toks = lex_html(r"""<a c-title="path + '\\'" @c-click="save" :c-value="flush" :alt="'C:\\'">x</a>""")
+    assert not any(token in Error for token, _ in toks)
+    assert (Name.Function, "save") in toks
+    assert (Name.Function, "flush") in toks
+
+
 def test_vue_component_prop_value_is_javascript():
     toks = lex_template('<c-child :enabled="true" :count="localCount" />')
     assert (Name.Attribute, ":enabled") in toks

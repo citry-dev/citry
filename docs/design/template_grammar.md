@@ -155,6 +155,12 @@ nested template) is decided afterwards in Rust. One consequence worth knowing:
 an unquoted value cannot contain a space, so an expression that needs one (for
 example `- .123e-5`) must be quoted: `key="- .123e-5"`.
 
+A quoted value ends at the first matching quote, and the grammar has no escape
+character, so `\"` also ends a double-quoted value. A value that contains one
+quote character must use the other quote around it. This matters most for a
+nested template, whose inner attributes have to use the quote the outer value
+does not: `c-footer="<><a c-href='url'>x</a></>"`.
+
 ### Why nesting is built in Rust, not in the grammar
 
 Pest rules cannot refer back to text they already matched, so the grammar
