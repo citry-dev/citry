@@ -41,7 +41,7 @@ from citry.ext.events.handlers import (
     validate_topics_value,
 )
 from citry.ext.events.openapi import OpenApiCommand
-from citry.ext.events.routes import events_config_url, events_routes
+from citry.ext.events.routes import events_routes
 from citry.ext.events.state import (
     StateMeta,
     build_state_instance,
@@ -76,13 +76,6 @@ def _config_name_hint(name: str) -> str:
     close = get_close_matches(name, CONFIG_NAMES, n=1, cutoff=0.7)
     return f" Did you mean {close[0]!r}?" if close else ""
 
-
-# The URL builder rides the one class every component's Events config is
-# woven on (design events.md 3.8: component.events.url(...) during render).
-# The implementation lives with the routes it points at; attaching it here,
-# where the weaving is set up, keeps the config module a pure typing surface
-# and the woven class identical to the typed base.
-Events.url = events_config_url  # type: ignore[attr-defined]
 
 # The built-in defaults, the lowest of the three config levels (component
 # beats extensions_defaults["events"] beats these).

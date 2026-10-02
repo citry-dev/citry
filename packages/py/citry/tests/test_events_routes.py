@@ -29,7 +29,7 @@ from citry.ext.events.csrf import build_csrf_check, enforce_floor
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError
 from citry.ext.events.renderers import configure_render_encoder, dispatcher_for
-from citry.ext.events.routes import events_config_url, get_event_url
+from citry.ext.events.routes import get_event_url
 from citry.ext.events.schemas import StringArgs
 from citry.ext.events.tokens import mint_state_token
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse
@@ -645,17 +645,10 @@ class TestEventUrls:
         html = str(Form())
         assert f"/citry/ext/events/e/{Form.class_id}/submit" in html
 
-    def test_the_woven_config_and_the_typing_base_share_url(self):
-        # The url method rides the one class the weaving uses, which is also
-        # the public typing base (citry.Events).
-        import citry as citry_module
-
-        assert citry_module.Events.url is events_config_url
-
     def test_typing_base_url_names_the_required_component_config(self):
         import citry as citry_module
 
-        with pytest.raises(RuntimeError, match=r"call it as component\.events\.url"):
+        with pytest.raises(RuntimeError, match=r"Call it as self\.events\.url"):
             citry_module.Events(None).url("save")
 
 

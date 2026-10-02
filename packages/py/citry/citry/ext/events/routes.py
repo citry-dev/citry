@@ -23,10 +23,8 @@ HTML is the body, a redirect becomes HTTP 303, a data action answers as
 plain JSON, and errors carry their HTTP status as plain text.
 
 This module also owns event URL building:
-[`get_event_url`][citry.ext.events.routes.get_event_url] anywhere, and the
-``component.events.url(...)`` method the extension attaches to the woven
-config class (the component's ``Events`` class as the extension manager
-rebuilt it on the config base).
+[`get_event_url`][citry.ext.events.routes.get_event_url] builds a handler's
+URL anywhere, and [`Events.url`][citry.Events.url] calls it during a render.
 
 The primary handlers are plain ``def``: the same route table must mount
 under sync Django and WSGI (which reject ``async def`` route handlers at
@@ -68,7 +66,6 @@ if TYPE_CHECKING:
 
     from citry.citry import Citry
     from citry.component import Component
-    from citry.ext.events.config import Events
     from citry.ext.events.extension import EventHandler, EventsExtension
     from citry.util.routing import RouteRequest
 
@@ -81,7 +78,6 @@ __all__ = [
     "MAX_ENVELOPE_BYTES",
     "RUNTIME_PATH",
     "STYLE_ASSET_PATH",
-    "events_config_url",
     "events_routes",
     "get_event_url",
 ]
@@ -161,42 +157,6 @@ def get_event_url(
         raise ValueError(msg)
     url = comp_cls.citry.build_url(f"ext/events/e/{comp_cls.class_id}/{name}")
     return format_url(url, query=query, fragment=fragment)
-
-
-def events_config_url(
-    self: Events,
-    name: str,
-    *,
-    query: dict[str, Any] | None = None,
-    fragment: str | None = None,
-) -> str:
-    """
-    Build the URL of one of this component's events (``component.events.url``).
-
-    Available during render as ``self.events.url("submit")`` on the
-    component (typically from ``template_data``, to feed a form's action
-    URL). Same behavior as
-    [`get_event_url`][citry.ext.events.routes.get_event_url], with the
-    component class taken from the config instance.
-
-    Args:
-        self: The per-component Events config instance (``component.events``).
-        name: The handler's wire name.
-        query: Optional query parameters to append.
-        fragment: Optional ``#fragment`` to append.
-
-    Returns:
-        The absolute URL path of the per-event route.
-
-    """
-    comp_cls = getattr(self, "component_class", None)
-    if comp_cls is None:
-        msg = (
-            "Events.url() needs the component class, which only the per-component Events config"
-            " carries; call it as component.events.url(...) (or use get_event_url(MyComponent, ...))."
-        )
-        raise RuntimeError(msg)
-    return get_event_url(comp_cls, name, query=query, fragment=fragment)
 
 
 ################################################

@@ -25,10 +25,10 @@ Set up your web framework's CSRF protection as described in
 ## Post a plain form { #keep-a-form-working-without-javascript }
 
 A plain HTML form keeps working when JavaScript is off or has not loaded
-yet. Point its `action` at the handler's URL. `self.events.url()` builds the
-URL while the component renders. It takes the same `query` and `fragment`
-options as [`get_event_url()`][citry.ext.events.get_event_url], which builds
-it outside a render:
+yet. Point its `action` at the handler's URL.
+[`self.events.url()`][citry.Events.url] builds the URL while the component
+renders, and [`get_event_url()`][citry.ext.events.get_event_url] builds it
+outside a render:
 
 ```citry
 from citry.ext.events import actions
@@ -84,8 +84,9 @@ class Stats(Component):
             }
 ```
 
-Build the URL while rendering with `self.events.url("summary")`, or elsewhere
-with [`get_event_url()`][citry.ext.events.get_event_url]. A GET handler must
+Build the URL while rendering with
+[`self.events.url("summary")`][citry.Events.url], or elsewhere with
+[`get_event_url()`][citry.ext.events.get_event_url]. A GET handler must
 not change anything on the server. Its arguments arrive in the query string,
 which holds strings, booleans, numbers, and non-empty lists of those.
 
