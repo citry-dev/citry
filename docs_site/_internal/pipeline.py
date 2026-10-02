@@ -40,6 +40,7 @@ from docs_site._internal.blog import (
     project_blog_list_for_text,
     use_blog_catalog,
 )
+from docs_site._internal.code_display import DisplayHighlightExtension
 from docs_site._internal.community_packages import (
     CommunityPackageCatalog,
     project_community_package_lists_for_text,
@@ -519,6 +520,26 @@ def render_page(
     return RenderResult(html=page_html, toc_tokens=toc_tokens, meta=meta, markdown_body=expanded)
 
 
+def _display_extensions(extensions: tuple[str, ...], configs: dict[str, Any]) -> list[str | Extension]:
+    """
+    Swap ``pymdownx.highlight`` for the docs variant that shapes code for display.
+
+    The maintainer still enables and configures the extension by its ordinary
+    name in ``settings.yml``. Replacing it in place keeps its position in the
+    list, which matters because superfences and inlinehilite adopt the first
+    highlight extension registered. Its options move from ``configs`` onto the
+    instance, since Python-Markdown applies ``extension_configs`` only to
+    extensions named by string.
+    """
+    resolved: list[str | Extension] = []
+    for name in extensions:
+        if name == "pymdownx.highlight":
+            resolved.append(DisplayHighlightExtension(**configs.pop(name, {})))
+        else:
+            resolved.append(name)
+    return resolved
+
+
 def _pass2_markdown(source: str, *, config: DocsConfig, project: DocsProject | None = None) -> tuple[str, list]:
     """Convert Markdown to HTML; also return Python-Markdown's TOC tokens."""
     project = project or load_docs_project(config)
@@ -548,7 +569,7 @@ def _pass2_markdown_with_expanded_source(
     captured: list[str] = []
     md = markdown.Markdown(
         extensions=[
-            *settings.markdown_pages.extensions,
+            *_display_extensions(settings.markdown_pages.extensions, configs),
             _CaptureExpandedMarkdownExtension(captured),
             _WrapTablesExtension(),
         ],

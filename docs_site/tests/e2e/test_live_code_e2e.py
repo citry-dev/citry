@@ -10,6 +10,8 @@ import pytest
 pytest.importorskip("pytest_playwright")
 from playwright.sync_api import expect
 
+from docs_site._internal.code_display import display_code
+
 pytestmark = pytest.mark.e2e
 
 _WELCOME_SOURCE = Path(__file__).parents[2] / "live_snippets" / "welcome.py"
@@ -29,7 +31,8 @@ def test_inline_example_loads_lazily_runs_events_and_recovers_a_draft(
     root = page.locator("[data-citry-live-code]")
     static_source = root.locator("[data-live-static] .highlight")
     expect(root).to_be_visible()
-    assert static_source.text_content() == _WELCOME_SOURCE.read_text(encoding="utf-8")
+    # The static block shows the source with each run of blank lines shortened.
+    assert static_source.text_content() == display_code(_WELCOME_SOURCE.read_text(encoding="utf-8")).text
     assert root.locator(".cm-editor").count() == 0
     assert root.locator("iframe").count() == 0
     assert not any("live_code_runtime.js" in url for url in requests)

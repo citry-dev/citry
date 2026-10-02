@@ -12,11 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from markupsafe import Markup, escape
-from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 
 from citry import Component
+from docs_site._internal.code_display import display_code, highlight_for_display, lexer_collapses
 from docs_site._internal.project import current_docs_project
 from docs_site._internal.util import flatten_for_markdown
 from docs_site.snippets.landing.status_card import StatusCard
@@ -1367,15 +1367,17 @@ class LandingTourMarkup(Component):
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         source = _TOUR_PATH.read_text(encoding="utf-8")
+        shown = display_code(source, collapse=lexer_collapses(get_lexer_by_name("citry"))).text
         return {
             "file_name": _TOUR_PATH.name,
             "code": Markup(_tour_code(source, _TOUR_STOPS)),  # noqa: S704 - pygments output
             # Each line is its own block so a highlight can span the full width,
             # which means the rendered text carries no newline characters. The
-            # copy button reads the original source from here instead. It is
-            # encoded because the markup this component emits passes through
-            # whitespace handling that would otherwise rewrite the blank lines.
-            "source": base64.b64encode(source.encode()).decode(),
+            # copy button reads the displayed source from here instead, matching
+            # what every other code block copies. It is encoded because the
+            # markup this component emits passes through whitespace handling
+            # that would otherwise rewrite the blank lines.
+            "source": base64.b64encode(shown.encode()).decode(),
             # A note names attributes and methods, which read better as code than
             # in quotes, so its text is markup written in this module.
             "stops": [
@@ -1479,7 +1481,7 @@ def _editor_symbol_open(mark: dict[str, Any]) -> str:
     classes = "landing-editor__symbol"
     if severity:
         classes += f" landing-editor__symbol--{severity}"
-    signature_html = highlight(
+    signature_html = highlight_for_display(
         mark["signature"],
         get_lexer_by_name(mark["language"]),
         HtmlFormatter(nowrap=True),
@@ -1517,6 +1519,10 @@ def _editor_symbol_close(mark: dict[str, Any]) -> str:
 
 def _editor_code(source: str, marks: tuple[dict[str, Any], ...]) -> str:
     """Highlight source with the real Citry lexer and wrap only annotated symbols."""
+    lexer = get_lexer_by_name("citry")
+    # Shape the text for display before locating the symbols, so every offset
+    # below refers to the text the reader actually sees.
+    source = display_code(source, collapse=lexer_collapses(lexer)).text
     ranges = _editor_ranges(source, marks)
     boundaries = {position for start, end, _mark in ranges for position in (start, end)}
     starts = {start: mark for start, _end, mark in ranges}
@@ -1527,7 +1533,6 @@ def _editor_code(source: str, marks: tuple[dict[str, Any], ...]) -> str:
     # Split lexer tokens at annotation boundaries. The original token type is
     # retained on every piece, so an interactive name has exactly the same
     # colour it would have in an ordinary Citry code block.
-    lexer = get_lexer_by_name("citry")
     for offset, token_type, value in lexer.get_tokens_unprocessed(source):
         token_end = offset + len(value)
         cuts = [offset, *(point for point in boundaries if offset < point < token_end), token_end]
@@ -1838,13 +1843,20 @@ def _tour_code(source: str, stops: tuple[dict[str, Any], ...]) -> str:
     many lines, so splitting the highlighted HTML by newline would cut tags in
     half. The line spans are added by the formatter, after tokenizing, so they
     always land between lines rather than inside a token.
+
+    A stop's ``lines`` are numbered as in the source file, which is where an
+    author reads them. The displayed text drops extra blank lines, so each range
+    is translated to the displayed lines before the spans are tagged.
     """
-    html = highlight(source, get_lexer_by_name("citry"), HtmlFormatter(linespans="tourline"))
+    lexer = get_lexer_by_name("citry")
+    shown = display_code(source, collapse=lexer_collapses(lexer))
+    html = highlight_for_display(shown.text, lexer, HtmlFormatter(linespans="tourline"))
     line_to_stop: dict[int, tuple[str, bool]] = {}
     for stop in stops:
         first, last = stop["lines"]
-        for number in range(first, last + 1):
-            line_to_stop[number] = (stop["id"], number == first)
+        displayed_first = shown.display_line(first)
+        for number in shown.display_lines(range(first, last + 1)):
+            line_to_stop[number] = (stop["id"], number == displayed_first)
 
     def tag(match: re.Match[str]) -> str:
         number = int(match.group(1))
@@ -1883,7 +1895,7 @@ def _clean(message: str) -> str:
 
 def _highlight(code: str) -> str:
     """Colour one snippet with the same lexer the page's code blocks use."""
-    return highlight(code, get_lexer_by_name("citry"), HtmlFormatter())
+    return highlight_for_display(code, get_lexer_by_name("citry"), HtmlFormatter())
 
 
 def _capture(render: Callable[[], object], expected: type[Exception], contains: str) -> tuple[str, str]:

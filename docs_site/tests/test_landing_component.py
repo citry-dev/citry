@@ -13,6 +13,7 @@ import pytest
 from lxml import html as lxml_html
 
 from citry import citry as default_citry
+from docs_site._internal.code_display import display_code
 from docs_site._internal.components.landing import (
     _DEPTH_CASES,
     _EDITOR_MARKS,
@@ -366,13 +367,14 @@ def test_a_moved_adapter_fails_the_host_section(monkeypatch: pytest.MonkeyPatch)
         _check_host_entrypoints()
 
 
-def test_walkthrough_offers_the_original_source_for_copying() -> None:
+def test_walkthrough_offers_the_displayed_source_for_copying() -> None:
     """Block-per-line markup carries no newlines, so copy must not read the DOM."""
-    source = _TOUR_PATH.read_text(encoding="utf-8")
+    # Copy answers with the text the reader sees, like every other code block.
+    shown = display_code(_TOUR_PATH.read_text(encoding="utf-8")).text
     document = lxml_html.document_fromstring(str(LandingTour()))
     tour = document.xpath("//div[@data-landing-tour]")[0]
 
-    assert base64.b64decode(tour.get("data-tour-source")).decode() == source
+    assert base64.b64decode(tour.get("data-tour-source")).decode() == shown
     # The rendered lines really do lack newlines, which is why the above matters.
     rendered = "".join(tour.xpath('.//span[contains(@class, "landing-tour__line")]/text()'))
     assert "\n" not in rendered
@@ -393,7 +395,7 @@ def test_landing_snippets_load_from_any_directory_and_repo_root(
         editor = lxml_html.document_fromstring(str(LandingEditorDemoMarkup()))
 
     encoded = tour.xpath("//div[@data-landing-tour]")[0].get("data-tour-source")
-    assert base64.b64decode(encoded).decode() == _TOUR_PATH.read_text(encoding="utf-8")
+    assert base64.b64decode(encoded).decode() == display_code(_TOUR_PATH.read_text(encoding="utf-8")).text
     assert _EDITOR_PATH.name in editor.text_content()
 
 
@@ -430,7 +432,7 @@ def test_editor_demo_marks_exact_symbols_without_changing_the_source() -> None:
     definitions = document.xpath(".//span[@data-editor-definition]")
 
     assert len(annotations) == len(_EDITOR_MARKS)
-    assert document.xpath(".//pre")[0].text_content() == source
+    assert document.xpath(".//pre")[0].text_content() == display_code(source).text
     assert {item.get("data-editor-annotation") for item in annotations} == {mark["id"] for mark in _EDITOR_MARKS}
     assert {item.get("data-editor-definition") for item in definitions} == {
         mark["definition"] for mark in _EDITOR_MARKS if mark.get("definition")

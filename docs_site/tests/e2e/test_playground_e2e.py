@@ -14,6 +14,8 @@ pytest.importorskip("pytest_playwright")
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
+from docs_site._internal.code_display import display_code
+
 pytestmark = pytest.mark.e2e
 
 _CITRY_UI_TABS = (
@@ -259,7 +261,10 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
     expect(root.locator("[data-live-activate]")).to_be_visible()
     root.locator("[data-live-activate]").click()
     expect(root.locator(".cm-content")).to_be_attached(timeout=15_000)
-    expect(root.locator("[data-live-fallback]")).to_have_value(_CITRY_UI_TABS.read_text(encoding="utf-8"))
+    # The editor starts from the displayed block, whose extra blank lines are removed.
+    expect(root.locator("[data-live-fallback]")).to_have_value(
+        display_code(_CITRY_UI_TABS.read_text(encoding="utf-8")).text
+    )
     expect(built_preview).to_be_hidden()
     page.wait_for_function(
         """root => {
