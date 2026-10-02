@@ -36,7 +36,7 @@ Each component family has its own directory under
 `packages/py/citry_ui/citry_ui/components/`. A family is one component or
 a few that work together, such as `CTabs`, `CTab`, and `CTabPanel`. The
 directory name is the family's name with a `c` prefix, for example
-`ctabs/` or `cbutton/`.
+`ctabs/` or `calert_dialog/`.
 
 | File | What it holds |
 |---|---|
@@ -47,19 +47,20 @@ directory name is the family's name with a `c` prefix, for example
 | `api.yml` | The API reference tables that the docs build adds below `api.md` |
 | `snippets/` | Example modules that `api.md` shows as live previews |
 | `tests/` | The family's browser tests |
-| `quality/` | Example states that the shared quality tools render and check |
+| `quality/` | Example states for the [quality tools](#use-the-quality-tools) |
 | `README.md` | Notes for maintainers |
 
 A few families, such as Button and Dialog, keep their CSS and JavaScript
 as strings in their Python module instead of in separate files.
 
 The full design of each family, including its accessibility and keyboard
-rules, lives in `docs/design/ui_components/<name>.md`. Update it when you
+rules, lives in `docs/design/ui_components/`, in a file named after the
+family with hyphens, such as `tabs.md` or `alert-dialog.md`. Update it when you
 change what a component does.
 
-`citry_ui/components/__init__.py` lists every component in order. Citry UI
-registers only the components listed there, so add a new component to that
-list.
+The `COMPONENTS` tuple in `citry_ui/components/__init__.py` lists every
+component in order. Citry UI registers only the components in that tuple,
+so add a new component there.
 
 ### Edit CSS and JavaScript
 
@@ -91,8 +92,8 @@ ships with the package:
 uv run --no-sync python -m citry_ui_i18n._generate_catalog
 ```
 
-Every message also needs an entry in the family's `api.yml`, under its
-translation keys. The package tests fail when the catalog or `api.yml`
+Every message also needs an entry in the `translations` table of the
+family's `api.yml`. The package tests fail when the catalog or `api.yml`
 does not match the component.
 
 ### Update the docs page
@@ -131,8 +132,8 @@ These include the checks that catch most mistakes in a component change:
   component, so a typo in a template expression or in the component's
   JavaScript fails the test. It needs the Node tools from
   `pnpm install`, and skips without them.
-- `test_asset_budgets.py` fails when the compressed CSS or JavaScript of
-  all components together grows past a fixed size limit. When the growth is
+- `test_asset_budgets.py` fails when the CSS or JavaScript of all
+  components together, raw or compressed, grows past a fixed size limit. When the growth is
   intended, raise the limit in the test and say why in your pull request.
 - `test_i18n_catalog.py` checks the translation catalog and the
   translation keys in `api.yml`.
@@ -180,8 +181,10 @@ python scripts/check.py
 ## Use the quality tools
 
 `packages/py/citry_ui/citry_ui/quality/` holds tools that check all
-components together. They are not part of the published package. Each
-family's `quality/scenario.py` describes the states these tools render.
+components together. They are not part of the published package. Most
+families have a `quality/scenario.py` that describes example states, each
+one the component rendered with particular inputs, for these tools to
+check.
 
 Common commands, run from the repository root:
 
