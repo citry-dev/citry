@@ -5,16 +5,25 @@ description: Define Fluent messages beside components and call them through type
 
 # Write messages
 
-Citry uses Fluent for translated messages. Fluent gives translators stable
-message names, attributes for related outputs, selectors for language-specific
-grammar, and private terms for reuse inside one source unit.
+To make text translatable, move it out of the template into a message: a
+piece of text with a stable ID that translators can translate. The
+template then asks for the message by ID, and Citry returns the text in
+the current language.
 
-Citry adds one piece of metadata: a small `@param` declaration that tells the
-checker and runtime which Python value type each message variable accepts.
+Citry writes messages in [Fluent](https://projectfluent.org/), a
+translation format in which each language can follow its own grammar,
+such as its own plural forms. Citry adds one thing to Fluent: an
+`@param` comment that declares the type of each variable, so Citry can
+check every call.
 
-## Add a messages asset to a component
+This page covers writing messages and calling them. Translations into
+other languages go in catalogs, covered in
+[Organize catalogs](/i18n/catalogs/).
 
-Place `messages` after the component's template, JavaScript, and CSS:
+## Add messages to a component
+
+Put the messages in the component's `messages` block, after the
+template, JavaScript, and CSS:
 
 ```citry
 from citry import Component
@@ -49,44 +58,29 @@ class AccountCard(Component):
     """
 ```
 
-Use `messages_file` when the source belongs in a separate `.ftl` file:
+Each message starts with its ID, then `=`, then the text. `{ $name }`
+inserts a variable, which the caller passes as a keyword argument to
+`tr()`.
 
-```citry
-class AccountCard(Component):
-    citry = app
-    messages_file = "account_card.ftl"
-```
+`I18n.messages_locale` says which language the messages are written in.
 
-`messages` and `messages_file` are mutually exclusive. They load, inherit, and
-reload like the other primary component assets.
+A message defined in one component is available to every component
+registered with the same engine. Any of them can call
+`my-app-account-greeting`, even when `AccountCard` has not rendered.
 
-`Component.I18n.messages_locale` identifies the language of the component's
-defining source. Keep it on the component that owns the `messages` or
-`messages_file` declaration; an inherited asset keeps its declaration owner's
-locale. When engine i18n settings already declare `source_locale`, an
-application component may omit the component field and inherit that locale.
-Reusable libraries should declare it explicitly.
-
-Defining a message asset activates source-mode server translation even when the
-application has no i18n settings. Citry compiles the complete registered source
-catalog, so component B may call a public key defined by component A without
-rendering A first. No browser catalog, locale switcher, named package format,
-or parser is enabled until the application configures those features.
-
-With no explicit engine default, Citry chooses the only application source
-locale. If there are no application message owners, it chooses the only
-library source locale. Multiple possible application or library source locales
-are an error; configure the engine instead of relying on discovery order.
+Messages work without any i18n settings. Citry then translates on the
+server into the source language only; it adds no browser code, language
+switching, or named formats until you configure them.
 
 ## Call a message from templates and Python
 
-Template `tr()` is the text form of `self.i18n.tr()`:
+In a template, call `tr()` with the message ID and its variables:
 
 ```citry-html
 <p>{{ tr("my-app-account-greeting", name=account.name) }}</p>
 ```
 
-Inside Python component code:
+In component Python code, call `self.i18n.tr()`:
 
 ```python
 text = self.i18n.tr(
@@ -95,7 +89,8 @@ text = self.i18n.tr(
 )
 ```
 
-Outside a component, use a service with an explicit context:
+Outside a component, get a service for an explicit
+[locale context](/i18n/locale-context/):
 
 ```python
 i18n = app.extensions.get_extension("i18n")
@@ -103,25 +98,62 @@ service = i18n.for_context(context)
 text = service.tr("my-app-account-greeting", name="Ada")
 ```
 
-All three forms return plain text. Template rendering escapes the result.
+All three return plain text. A template escapes it like any other value.
 
-Use `resolve()` when the caller also needs the locale selected by fallback:
+## Declare the type of each variable
 
-```python
-resolved = self.i18n.resolve("my-app-account-greeting", name=name)
+Write one `@param` comment per variable directly above the message:
 
-resolved.text
-resolved.locale
-resolved.direction
-resolved.used_fallback
+```fluent
+# @param {str} $name - User name shown in the greeting.
+my-app-account-greeting = Welcome, { $name }.
 ```
 
-See [Language direction and accessibility](/i18n/direction-and-bidi/) before
-putting fallback text into an element whose surrounding language may differ.
+The text after `-` is optional. It is shown to translators and in the
+editor, so use it to say what the value is.
 
-## Group related outputs with attributes
+The types are:
 
-A message may contain a main value and related attributes:
+| Type | Accepted value |
+|---|---|
+| `str` | A Python string |
+| `int` | An exact Python integer |
+| `Decimal` | A finite `decimal.Decimal` |
+| `datetime` | An aware Python `datetime`, where the message needs an exact moment in time |
+| `Slot` | Content supplied by the application, used in [rich messages](/i18n/rich-messages/) |
+
+Citry checks `tr()` calls against these declarations. A missing
+variable, an unknown one, or a value of the wrong type is an error.
+
+Each declaration belongs to one message. Two messages may both use
+`$name` with different types.
+
+Write the type name exactly as listed. Citry reads it as text and does
+not import anything, so a dotted path such as `decimal.Decimal` is not
+accepted.
+
+## Write plural forms and other grammar
+
+Use a selector, `{ $count -> ... }`, which picks one branch based on a
+value. Each language can then choose its right form:
+
+```fluent
+# @param {int} $count - Number of unread messages.
+my-app-inbox-count = { $count ->
+    [one] One unread message
+   *[other] { $count } unread messages
+}
+```
+
+The branch marked `*` is the default. Each translation may use the
+branches its own language needs; a language with three plural forms
+writes three, and a language with none writes one.
+
+## Translate labels such as aria-label
+
+A message can have attributes: related texts, each on its own line
+starting with `.`, that describe the same thing. Use them for an
+element's visible label and its accessible label or tooltip:
 
 ```fluent
 # @param {str} $name - User whose actions are available.
@@ -130,7 +162,8 @@ my-app-account-actions = Actions
     .title = Open the actions for { $name }
 ```
 
-Request an attribute explicitly:
+Ask for an attribute with `attr=`, and put the result in an HTML
+attribute with a `c-` attribute, whose value Citry evaluates as Python:
 
 ```citry-html
 <button
@@ -144,82 +177,52 @@ Request an attribute explicitly:
 </button>
 ```
 
-Use a `c-` attribute, whose value Citry evaluates as a Python expression, to
-put a translation into an HTML attribute. A `{{ }}`
-expression inside a plain attribute value stays literal text.
+A `{{ }}` expression inside a plain attribute value stays literal text,
+so the `c-` form is required.
 
-The `@param` declarations above the message apply to its value and all its
-attributes. Fluent does not attach a comment to an individual attribute. Do
-not put another top-level comment between the value and an attribute, because
-that ends the message.
+Citry works out the needed variables for each output separately. Above,
+the main text needs none, while `.aria-label` and `.title` need `name`.
 
-Citry derives the required subset separately for each output. The main value
-above needs no arguments, while `.aria-label` and `.title` require `name`.
+The `@param` comments above the message cover the main text and all its
+attributes. Do not put a comment between the main text and an
+attribute, because that ends the message.
 
-## Declare each message's parameter types
+## Name messages by feature, not by their English text
 
-The declaration syntax is:
+Give each ID a prefix for your application or package, then one for the
+feature or component:
 
-```fluent
-# @param {str} $name - User name shown in the greeting.
-my-app-account-greeting = Welcome, { $name }.
+```text
+my-app-account-card-greeting
+my-app-account-card-actions
+my-app-checkout-payment-error
 ```
 
-The description is optional but useful to translators. The accepted types
-are:
+A prefix shows where a message is defined and keeps IDs from different
+components and packages apart. Do not build the ID from the English
+sentence. Translations are stored under the ID, so it must stay the same
+when the wording changes.
 
-| Type | Accepted value |
-|---|---|
-| `str` | A Python string |
-| `int` | An exact Python integer |
-| `Decimal` | A finite `decimal.Decimal` |
-| `datetime` | An aware Python `datetime` where the operation requires an instant |
-| `Slot` | An application-owned rich-message fill |
+## Keep messages in a separate file
 
-The type belongs to one message. Two unrelated messages may both use `$name`
-with different types. Within one message, its value and attributes share one
-parameter namespace.
+Use `messages_file` when you prefer a separate `.ftl` file:
 
-Citry parses the type name from the comment. It does not inspect imports,
-evaluate Python, or accept an arbitrary dotted import path.
+```citry
+class AccountCard(Component):
+    citry = app
 
-The defining source writes `@param` declarations. Translations inherit the
-interface and must not redeclare it. One exact source-locale override may
-repeat the same parameter names and types. This narrow case lets a library
-generate its standalone source catalog from co-located component `messages`
-blocks; changing a name or type in that repeat is still an error.
-
-With a configured `citry.app`, the editor uses these declarations as the
-message-call interface. Hover an argument name in template or Python `tr()`,
-browser `$i18n.tr()`, component JavaScript `component.$i18n.tr()`, or a literal
-`<c-trans>` value or fill to see its type and description. Go to definition
-opens the exact `@param` line, even when the message belongs to another
-component, file, or catalog package.
-
-A simple server-only scalar without a declaration produces the
-`citry.i18n.missing-param-type` warning by default. A concrete type is required
-when a selector, rich Slot, browser operation, or formatter needs it to prove
-the call is safe.
-
-## Use selectors for grammar
-
-Let the translation choose language-specific forms:
-
-```fluent
-# @param {int} $count - Number of unread messages.
-my-app-inbox-count = { $count ->
-    [one] One unread message
-   *[other] { $count } unread messages
-}
+    messages_file = "account_card.ftl"
 ```
 
-The source and each translation may use the selector shape appropriate for its
-language. Translators do not need to copy English branches that their locale
-does not use.
+A component has either `messages` or `messages_file`, not both. They
+load, inherit, and reload like a component's other files, such as
+`template_file`.
 
-## Reuse private terms inside one source unit
+## Reuse text inside a message
 
-Fluent terms start with `-`:
+### Reuse a phrase within one file with a term
+
+A Fluent term is a reusable phrase whose name starts with `-`:
 
 ```fluent
 -product-name = Citry
@@ -228,34 +231,85 @@ my-app-welcome = Welcome to { -product-name }.
 my-app-about = About { -product-name }
 ```
 
-Citry keeps terms private to the component block or `.ftl` source file that
-defines them. Another component may define its own `-product-name` without a
-conflict. Cross-file reuse needs a public, namespaced message ID.
+A term is private to the `messages` block or `.ftl` file that defines
+it. Another component may define its own `-product-name` without a
+conflict. To share a phrase across files, use a public message instead.
 
-## Reference another public message
+### Include one public message in another
 
-A public message may include another public message:
+A message may include another message by its ID:
 
 ```fluent
 my-app-product-name = Citry
 my-app-page-title = { my-app-product-name } account
 ```
 
-Citry follows these references when it checks argument types, fallback, and
-browser message loading. A message required by another message travels with
-it; callers do not need to load the dependency separately.
+Citry follows these references when it checks variable types and
+fallback, and when it sends messages to the browser. Calling
+`my-app-page-title` is enough; the message it includes comes along.
 
-## Name messages for ownership, not English text
+## Find out which language a message came from
 
-Use stable names with an application or package prefix and a feature or
-component prefix:
+When a translation is missing, Citry falls back to another language.
+`tr()` returns only the text. Use `resolve()` when you also need to know
+which language was used:
 
-```text
-my-app-account-card-greeting
-my-app-account-card-actions
-my-app-checkout-payment-error
+```python
+resolved = self.i18n.resolve(
+    "my-app-account-greeting",
+    name=name,
+)
+
+resolved.text
+resolved.locale
+resolved.direction
+resolved.used_fallback
 ```
 
-This makes a definition traceable and reduces collisions across components and
-packages. Do not generate an ID from the English sentence. The ID is part of
-the catalog's public contract and should stay stable when the wording changes.
+Use this to mark fallback text with its own `lang` attribute. A plain
+`tr()` call that would fall back to another locale fails `citry check`,
+because its text cannot carry a `lang`. See
+[Language direction and accessibility](/i18n/direction-and-bidi/#mark-fallback-text-with-its-language).
+
+## See variable types in the editor
+
+When the Citry editor extension knows your application (the `citry.app`
+setting), hover a variable name in a `tr()` call to see its type and
+description. Go to definition opens the `@param` line, even when the
+message is in another component, file, or catalog package. This works in
+templates, Python, Vue `$i18n.tr()`, component JavaScript, and
+`<c-trans>`. See [VS Code](/ide/vscode/).
+
+## Rules for less common cases
+
+### A variable has no @param comment
+
+For a simple variable used only on the server, a missing `@param` is a
+warning (`citry.i18n.missing-param-type`).
+[Translation workflow and tooling](/i18n/workflow/#make-a-missing-type-an-error-or-ignore-it)
+shows how to change its severity.
+
+A type is always required when the variable is used in a selector, a
+`Slot`, a formatting function, or a browser call, because Citry cannot
+check those safely without it.
+
+### Translations do not repeat @param comments
+
+The message in the source language declares the types. Translations use
+the same variables without the comments.
+
+One exception exists: a source-language catalog file may repeat a
+component's message with the same `@param` names and types. This lets a
+library build its catalog package from its components' `messages`
+blocks. Changing a name or type in the repeat is an error.
+
+### Which component sets messages_locale
+
+Declare `I18n.messages_locale` on the component that defines `messages`
+or `messages_file`. A subclass that inherits those messages also keeps
+that language.
+
+An application component may leave it out when the engine settings
+declare `source_locale`; it then uses that locale. A reusable library
+should always declare it, because it cannot rely on the application's
+settings.
