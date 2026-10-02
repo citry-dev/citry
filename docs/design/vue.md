@@ -1261,14 +1261,7 @@ with an argument or modifiers, a `v-model` with an argument, `v-is`, and a
 without an expression. A custom directive keeps its case (`v-Tooltip`),
 because Vue looks it up by that name (and its camelCase and PascalCase
 forms), never in lowercase, and the browser reports a name nobody
-registered. On a static event name other than exactly `keydown`, `keyup`, or
-`keypress`, the parser also rejects a modifier outside the set Vue handles
-on any event (the list in compiler-dom's `resolveModifiers`). Citry's Vue
-compiler wraps every other modifier in a check of `event.key`, and the event
-has no key, so the listener would never run. A `@c-*` Events binding still
-accepts `.enter` and `.escape` on any event and simply never matches a
-keyless one; rejecting that at load belongs to the Events binding validator
-and is not done yet.
+registered.
 
 #### Conditions on a call
 
