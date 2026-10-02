@@ -14,7 +14,7 @@ Each has two forms:
 - An attribute, such as `c-if` or `c-for`, on the one tag it controls.
 - A tag, such as `<c-if>` or `<c-for>`, around a larger block.
 
-## Add a condition
+## `c-if`, `c-elif`, `c-else` { #add-a-condition }
 
 Put `c-if` on the element:
 
@@ -37,7 +37,7 @@ For several cases, add `c-elif` and `c-else` on the elements right after it:
 Citry renders the first branch whose condition is true and skips the rest.
 `c-else` takes no value.
 
-## Wrap several elements
+## `<c-if>` blocks { #wrap-several-elements }
 
 When a branch holds several elements, use the tag form. Write the condition
 in `cond`, without `{{ }}`:
@@ -54,7 +54,7 @@ in `cond`, without `{{ }}`:
 
 `<c-elif>` also takes `cond`. `<c-else>` takes nothing.
 
-## Repeat an element
+## `c-for` and `c-empty` { #repeat-an-element }
 
 Put `c-for` on the element to repeat. Add a `c-empty` element right after it
 for the case when there are no items:
@@ -80,7 +80,7 @@ attributes:
 </li>
 ```
 
-## Repeat a larger block
+## `<c-for>` blocks { #repeat-a-larger-block }
 
 When each item needs several elements, use `<c-for>` and write the loop in
 `each`, without `{{ }}`:
