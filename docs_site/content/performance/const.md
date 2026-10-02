@@ -10,7 +10,7 @@ in every table row or a layout setting that is fixed for the whole site.
 Citry still evaluates and escapes the template parts that use them on
 every render.
 
-Wrap such a value in [`Const`][citry.Const] where you pass it. Citry then
+Wrap such a value in [`Const`][citry.Const]. Citry then
 prepares the template parts that depend only on constant values once,
 and reuses them in later renders. Measure a real page first, and mark
 only values that repeat.
@@ -63,7 +63,7 @@ choices, and site-wide settings. Do not mark a value that differs on
 almost every render, such as `Const(user.id)`. Each new value adds an
 entry that is never reused and pushes out useful ones.
 
-## What Citry prepares in advance
+## See which template parts Citry prepares once
 
 Citry prepares a template part in advance when every value it uses is
 constant:
@@ -73,7 +73,8 @@ constant:
 - A `<c-for>` loop that produces only text is expanded once, up to 1,000
   iterations.
 - An attribute expression becomes ready-made attribute text, unless an
-  installed extension needs to see the final attributes.
+  installed extension implements the `on_attrs_resolved` hook to inspect
+  or change the final attributes on every render.
 
 Child components and slot content always render again, because they can
 create new components or depend on the template that supplied the
@@ -83,7 +84,7 @@ advance.
 Keep template expressions free of side effects. Citry may evaluate a
 constant expression in a branch that the current render does not show.
 
-## Values Citry treats as constant automatically
+## Let values written in the template count as constant
 
 A value written directly on a component tag is the same in every render,
 so Citry treats it as constant without `Const`:
@@ -127,7 +128,8 @@ value, unless the caller writes `Const(4)`.
 ## Keep values constant through `template_data()`
 
 With the default `template_data()`, every constant input stays constant
-in the template. The `Metric` and `Grid` examples need nothing more.
+in the template, unless the `Kwargs` class converts or copies it. The
+`Metric` and `Grid` examples need nothing more.
 
 A custom `template_data()` can return anything, so Citry does not guess.
 An output stays constant only when it has the same name as a constant
@@ -141,9 +143,9 @@ def template_data(self, kwargs, slots):
 ```
 
 `return kwargs` works the same way. Citry compares the objects with
-Python's `is` test, after the `Kwargs` class and the output data checks
-have run. A `Kwargs` class that converts or copies a value therefore
-loses the mark for that value.
+Python's `is` test, after the `Kwargs` class, the output data class,
+and any extension data hooks have run. If one of them converts or
+replaces a value, that value loses its mark.
 
 Mark a renamed or computed output yourself, but only when it really is
 stable:
@@ -169,16 +171,10 @@ Because Citry uses the `is` test, a recomputed value that Python happens
 to reuse, such as a small integer or a short string, counts as the same
 object and keeps its mark.
 
-### Generators
+### Do not mark a generator
 
-Do not mark a generator. Preparing the template can use it up and leave
+Preparing the template can use it up and leave
 later work with an empty iterator. Pass a list or tuple.
-
-### Extensions that read final attributes
-
-An extension that implements the `on_attrs_resolved` hook makes Citry
-compute attributes on every render, so the extension can still inspect
-or change them.
 
 ### Constant defaults in your own schema classes
 
@@ -208,9 +204,12 @@ if is_const(marked):
 
 Citry removes nested markers only when the outer value is marked:
 `Const([Const(1)])` reaches the component as `[1]`. It looks inside
-built-in lists, tuples, sets, frozensets, and dictionaries, but not inside your own
-classes. An unmarked list keeps its markers, so `[Const(1)]` still
-contains a wrapper. Unwrap it where you use it:
+built-in lists, tuples, sets, frozensets, and dictionaries, but not
+inside your own classes.
+
+An unmarked list keeps its markers, so `[Const(1)]` still contains a
+wrapper, and so does a list that component or extension code puts a
+marker into. Unwrap it where you use it:
 
 ```python
 from operator import add
@@ -222,15 +221,24 @@ items = [Const(1)]
 total = add(const_value(items[0]), 2)
 ```
 
-### Shared and cyclic data
+### Inputs that share data
 
 Citry unwraps markers passed in the same call together, so two inputs
-that refer to the same object still do afterwards. When a marked and an
-unmarked input share data that Citry must rebuild, the marked input can
-get its own cleaned copy; the original stays unchanged. A marker that
-contains itself raises `ValueError`, and so may a marked cyclic tuple or
-frozenset. A value that cannot be used as a lookup key, such as an
-unhashable custom object, renders normally without the speed-up.
+that refer to the same object still do afterwards.
+
+When a marked and an unmarked input share data that Citry must rebuild,
+the marked input can get its own cleaned copy. The original stays
+unchanged.
+
+### Cyclic data
+
+A marker that contains itself raises `ValueError`. A marked tuple or
+frozenset that contains itself can raise it too.
+
+### Values that cannot be hashed
+
+A marked value that cannot be hashed, such as an unhashable custom
+object, renders normally without the speed-up.
 
 ## Related pages
 
