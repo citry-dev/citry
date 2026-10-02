@@ -54,7 +54,7 @@ class Divider(Component):
     """
 ```
 
-## See where a wrong input is reported
+## Find input errors
 
 A mistake in a `<c-*>` tag written in a template raises `SyntaxError` the
 first time that template renders. This covers a misspelled name and a
@@ -86,7 +86,7 @@ button.render()
 Inputs added with a `c-bind` spread are also checked when the child renders,
 because their names are known only then.
 
-## Check the values, not only the names
+## Check value types
 
 A plain `Kwargs` class checks that required names are present and unknown
 names are absent. Its type annotations are not checked when the page runs:
@@ -127,7 +127,7 @@ Python.
 You can also use a `@dataclass` or a `NamedTuple` as `Kwargs`. Like a plain
 class, these check names but not value types.
 
-## Give list and dict defaults a fresh value per render
+## Set fresh defaults
 
 A list, dictionary, or set written directly as a default would be shared by
 every render, so Citry rejects it when Python defines the class:
@@ -163,7 +163,7 @@ class TodoList(Component):
 A default applies only when the input is left out. Passing `None` gives the
 component `None`, not the default.
 
-## Declare the slots a component accepts
+## Declare slots
 
 A slot is a place in the component's template where each use of the component can insert
 its own content. List the accepted slots in a nested
@@ -193,7 +193,7 @@ same points as a wrong keyword input. A slot can also pass data to its
 fill with `SlotInput[...]`; see
 [Slots](/concepts/slots/#pass-data-from-the-component-to-the-fill).
 
-## Check the data a component returns
+## Check returned data
 
 Input schemas check what goes into a component. Three more nested classes
 check what its data methods return:
@@ -232,7 +232,7 @@ conversions the model made.
 [Client interactivity](/concepts/client-interactivity/#seed-browser-data-from-python)
 shows how the browser reads `js_data()`.
 
-## Extend inputs in a subclass
+## Extend inputs
 
 A plain `Kwargs` class in a subclass adds its fields to the ones it
 inherits:

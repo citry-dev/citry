@@ -13,7 +13,7 @@ Split rendering into its steps when you need more control: to give every
 component in the page a value such as the current user, to choose where the
 page's JavaScript and CSS go, or to keep a rendered result and use it later.
 
-## Render a component to HTML
+## Render to HTML
 
 ```citry
 from citry import Component
@@ -33,7 +33,7 @@ html = str(Greeting(name="Ada"))
 
 `str(...)` runs all the rendering steps below with their default options.
 
-## Run the rendering steps yourself
+## Run each step yourself
 
 `str(...)` does three things, which you can also do one at a time:
 
@@ -53,7 +53,7 @@ html = rendered.serialize()
 3. [`serialize()`][citry.CitryRender.serialize] turns that result into the
    final HTML string and inserts the JavaScript and CSS.
 
-## Add values for one whole render
+## Add render-wide values { #add-values-for-one-whole-render }
 
 Pass `template_globals` to `render()` to give every template in the page
 the same values. This suits values that belong to the request, such as the
@@ -97,7 +97,7 @@ than one place, the later entry in this list wins:
 A component's own data therefore always wins over a global value with the
 same name.
 
-## Pass data to child components
+## Pass data to children
 
 A child component does not see the variables its parent's
 [`template_data()`][citry.Component.template_data] returns. Each component
@@ -122,7 +122,7 @@ Choose by how widely the value is needed:
   [slots](/concepts/slots/);
 - every template in the page needs it: use `template_globals`.
 
-## Share a Python object with the whole page
+## Share an object
 
 Pass `provides` to `render()` when the page and the components inside it
 need the same Python object, such as the request, but it should not become
@@ -138,7 +138,7 @@ Any component in this render can read it with
 [`inject()`][citry.Component.inject].
 [Provide and inject](/concepts/provide-and-inject/) explains the details.
 
-## Choose where JavaScript and CSS go
+## Place JS and CSS
 
 `str(...)` places the page's JavaScript and CSS in the default way. When
 the HTML goes somewhere else, call `serialize()` yourself and choose a
@@ -158,7 +158,7 @@ that you insert into a page that is already open.
 To return the HTML from a web route, see the
 [Web frameworks guide](/web-frameworks/).
 
-## Render the same component more than once
+## Render more than once
 
 A `CitryElement` only describes what to render, so you can render it as
 many times as you like. Each `render()` call starts fresh:

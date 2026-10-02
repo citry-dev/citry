@@ -10,7 +10,7 @@ button, or a page header, write it once as a component and reuse it. A Citry
 component is a Python class based on [`Component`][citry.Component]. It
 takes inputs, and its template turns them into HTML.
 
-## Render the smallest component
+## Write a component
 
 Set [`template`][citry.Component.template] to the markup the component
 produces:
@@ -32,7 +32,7 @@ html = str(Welcome())
 
 `str(...)` renders the component and returns the HTML as a string.
 
-## Pass values to the template
+## Pass values in
 
 List the keyword arguments a component accepts in a nested
 [`Kwargs`][citry.Component.Kwargs] class. The template can read each one by
@@ -71,7 +71,7 @@ template, but accepts any name.
     `Modal(slots={...})` passes content for the component's slots, not an
     input named `slots`. See [Slots](/concepts/slots/#fill-slots-from-python).
 
-## Calculate a value for the template
+## Compute template values
 
 When the template needs a value that is not an input as written, override
 [`template_data()`][citry.Component.template_data] and return the values
@@ -111,7 +111,7 @@ in place of the inputs. Here the template cannot read `messages`.
 With a `Kwargs` class, read inputs as attributes, such as `kwargs.name`.
 Without one, `kwargs` is a dictionary, so read `kwargs["name"]`.
 
-## Use one component inside another
+## Nest components
 
 Inside a template, a `<c-*>` tag renders another component. The tag name is
 the class name in lowercase, with words joined by hyphens, so `Welcome` is
@@ -159,7 +159,7 @@ html = str(PageFrame(body=Welcome(name="Ada")))
 To let the outer template supply markup that the component places in its
 own layout, use [Slots](/concepts/slots/).
 
-## Keep the template in its own file
+## Use a template file
 
 An inline `template` suits short markup. For longer markup, set
 [`template_file`][citry.Component.template_file] instead:
@@ -199,7 +199,7 @@ elements first and render it once at the end. You can also render the same
 element several times, or insert it in several places.
 [Rendering](/concepts/rendering/) covers the steps in detail.
 
-## Less common component setups
+## Less common setups
 
 ### Leave out the template
 
@@ -208,7 +208,7 @@ default. This suits a base class that other components extend, or a
 component whose [`on_render()`][citry.Component.on_render] hook produces
 the complete output.
 
-### Render small display components faster
+### Render faster
 
 For small display-only components that do not need hooks or their own
 instance, [Simple components](/performance/simple-components/) render with

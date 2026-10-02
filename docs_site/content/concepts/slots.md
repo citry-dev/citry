@@ -17,7 +17,7 @@ a fill.
 If you have not used a slot yet, start with
 [Add slots](/getting-started/add-slots/).
 
-## Add slots to a component
+## Add slots
 
 Put a [`<c-slot>`](/reference/builtins/#c-slot) tag where the content should
 appear. A slot without a name is the `default` slot. Give any other slot a
@@ -57,7 +57,7 @@ Without a `Slots` class, a component accepts any slot name. With one, Citry
 rejects a fill for a slot the class does not list, and a `<c-slot name="...">`
 with a fixed name that the class does not list.
 
-## Fill slots from a template
+## Fill from a template
 
 When a component has only a default slot, put the content between its
 opening and closing tags:
@@ -87,7 +87,7 @@ Use one form or the other. Once the body has a `<c-fill>` tag, everything
 in it other than whitespace must be inside a `<c-fill>`, including the
 default slot's content.
 
-## Supply fallback content
+## Add fallback content
 
 Content inside `<c-slot>` is a fallback. Citry shows it when the slot is not
 filled:
@@ -105,7 +105,7 @@ filled:
 
 The first button says `Continue`, and the second says `Save changes`.
 
-## Know which variables a fill can read
+## What a fill can read
 
 A fill is written in the template that uses the component, so it reads
 that template's variables. A fallback is written in the component, so it reads the
@@ -126,7 +126,7 @@ component's variables:
 Vue expressions in the browser follow the same rule. See
 [Understand slot scope](/concepts/client-interactivity/#understand-slot-scope).
 
-## Pass data from the component to the fill
+## Pass data to the fill { #pass-data-from-the-component-to-the-fill }
 
 Sometimes the component holds data that the fill should format. A list
 component can hand each item and its position to the fill, and let the page
@@ -205,7 +205,7 @@ component passes, and lets Citry reject an unpacked field name that
 did not name. [`<c-fill>`](/reference/builtins/#c-fill) lists the full
 unpacking syntax.
 
-## Fill slots from Python
+## Fill from Python { #fill-slots-from-python }
 
 When Python code builds the component, pass the fills in a `slots`
 mapping:
@@ -226,7 +226,7 @@ the slot unfilled. The [`Slot`][citry.Slot] reference covers other kinds of
 fill, such as a function that renders the content or HTML you have already
 marked safe.
 
-## Wrap the fallback instead of replacing it
+## Wrap the fallback { #wrap-the-fallback-instead-of-replacing-it }
 
 A fill normally replaces the fallback. To keep the fallback and add markup
 around it, give the fallback a variable name with `fallback="..."`, then
@@ -242,7 +242,7 @@ insert that variable in the fill:
 
 `{{ original }}` renders the slot's fallback content at that point.
 
-## Give a slot a default fill
+## Set a default fill
 
 A default other than `None` in the `Slots` class acts as a fill that the
 component supplies itself. It takes priority over the fallback inside
@@ -269,7 +269,7 @@ When a page does not fill `title`, Citry shows `Notice`, not
 `Fallback title`. A `None` default means no fill, so a fallback inside
 `<c-slot name="details">` would still show.
 
-## Require a slot conditionally
+## Require conditionally { #require-a-slot-conditionally }
 
 A slot without a default in the `Slots` class must always be filled. When a
 slot is needed only if a certain part of the template renders, add
@@ -331,7 +331,7 @@ easier to find and Citry can check them.
     reach that slot, and it always shows its fallback. Two computed fills
     that produce the same name raise `RuntimeError`.
 
-## Spread slot and fill settings
+## Bind slot settings { #spread-slot-and-fill-settings }
 
 `<c-slot>` and `<c-fill>` accept a `c-bind` mapping, so the settings can come
 from one Python value. On `<c-slot>`, the keys `name` and `required` set

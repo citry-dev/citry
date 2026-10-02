@@ -15,7 +15,7 @@ state and behavior, and pass data and events between components. For the
 directive syntax itself, such as `v-if` and `@click`, see
 [Vue in templates](/syntax/vue/).
 
-## Seed browser data from Python
+## Set data from Python { #seed-browser-data-from-python }
 
 Return the starting data from
 [`Component.js_data()`][citry.Component.js_data]. Each top-level key becomes
@@ -56,7 +56,7 @@ component again, for example after an
 [event handler](/events/) returns it, Citry updates these values in the
 browser.
 
-## Add browser state and behavior
+## Add state and methods
 
 `$component({...})` takes standard Vue options. Use `data()` for state that
 lives only in the browser, `methods` and `computed` for behavior, and Vue's
@@ -155,7 +155,7 @@ This listener runs JavaScript in the browser. To run a Python handler on
 the server when the child emits `select`, write `@c-select` instead; see
 [Bind events in templates](/events/bindings/).
 
-## Pass arbitrary HTML attributes explicitly
+## Pass HTML attributes { #pass-arbitrary-html-attributes-explicitly }
 
 A plain attribute on a component tag is a Python input. To let the template
 that uses a component set
@@ -173,7 +173,7 @@ input and spread it onto the element that should get them:
 </article>
 ```
 
-## Forward fallthrough attributes to a chosen child
+## Forward attributes
 
 In Vue, attributes and listeners that a component does not declare as props
 or events are collected in `$attrs`. To place them on a specific child
@@ -217,7 +217,7 @@ Here `pageTitle` comes from the outer component. `Panel`'s own values are
 not visible inside the fill. [Slots](/concepts/slots/) covers the same rule
 for Python expressions.
 
-## React after a server render
+## React to a re-render { #react-after-a-server-render }
 
 Use `onServerRender` for work that must run again each time the server
 renders this component, such as drawing a chart into the new HTML:

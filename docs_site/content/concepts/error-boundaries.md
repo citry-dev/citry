@@ -16,7 +16,7 @@ An error boundary catches errors raised while Citry renders HTML on the
 server. It does not catch JavaScript errors in the browser, or errors in an
 event handler's own code.
 
-## Wrap a section that may fail
+## Wrap risky content
 
 Put the risky content inside `<c-error-fallback>` and give it a short
 message:
@@ -43,7 +43,7 @@ markup.
 Without a `fallback`, a failed section shows nothing, and the content
 around it still renders.
 
-## Show markup in the fallback
+## Use markup as fallback
 
 Citry escapes the `fallback` text, including a value from
 `c-fallback="message"`, so HTML tags in it show as text. For a fallback with
@@ -95,7 +95,7 @@ outer section renders normally.
 An error raised by a fallback itself goes to the next boundary out. Keep an
 outer fallback small and simple so that it does not fail too.
 
-## When no boundary catches an error
+## Uncaught errors
 
 A render error that no boundary catches reaches your web framework's view
 or route, like any other exception. Its message includes the path of

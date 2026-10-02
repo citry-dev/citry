@@ -15,7 +15,7 @@ it injects it, meaning it reads the value directly. This page covers
 providing values while Citry renders HTML on the server, then the separate
 browser version for Vue code.
 
-## Provide a value to the components inside
+## Provide a value
 
 Wrap part of a template in [`<c-provide>`](/reference/builtins/#c-provide)
 and give the value a `key`. The tag adds no HTML of its own:
@@ -88,7 +88,7 @@ theme = self.inject("theme", None)
 locale = self.inject("locale", "en")
 ```
 
-## Provide a value from Python
+## Provide from Python
 
 Call [`Component.provide()`][citry.Component.provide] in a data method when
 Python is the easier place to build the value. Components that this
@@ -138,7 +138,7 @@ self.provide("citry_i18n", locale_context)
 The component that injects it receives that same object. One call takes
 either the object or keyword fields, not both.
 
-## Provide a value to the whole page
+## Provide to the page
 
 Pass `provides` to `render()` when every component in the page may need the
 value:
@@ -164,7 +164,7 @@ def template_data(self, kwargs, slots):
     return {"summary": summary}
 ```
 
-## Know which provider a component reads
+## Which provider wins
 
 When two providers use the same key, a component reads the nearest one above
 it. The inner value replaces the outer one for everything inside it; their
@@ -174,7 +174,7 @@ fields are not merged. Values under different keys are all available.
 written. If a component wraps its `<c-slot>` in `<c-provide>`, a component
 that the outer template passes into that slot can inject the value.
 
-## Hide an inherited value
+## Hide a provided value
 
 [`Component.unprovide()`][citry.Component.unprovide] makes a key look
 missing to the components inside this one. The component itself can still
@@ -207,7 +207,7 @@ tab set placed inside another tab set's panel does not attach to the outer
 tab set by mistake. A component inside the boundary can still provide a new
 `tabs` value.
 
-## Provide and inject in client code
+## Provide in the browser { #provide-and-inject-in-client-code }
 
 The browser has its own provide and inject, from Vue. Use Vue's `provide`
 and `inject` options in `$component`. A parent provides a reactive object:
@@ -249,7 +249,7 @@ Only a component can provide a value in the browser. To hide an inherited
 value from part of the page, wrap that part in a component that provides a
 replacement under the same key.
 
-## Send a server value to the browser
+## Pass a value to Vue
 
 Server values and browser values are stored separately. A value provided in
 Python is not visible to Vue's `inject`, and a value provided in JavaScript
@@ -259,15 +259,15 @@ When the browser needs a server value, return it from
 [`js_data()`][citry.Component.js_data] as JSON-compatible data, then
 provide it from that component's `$component` options.
 
-## When an injected value is not what you expect
+## Fix unexpected values
 
-### The template does not show a provided field
+### Field not shown
 
 A provided field named `mode` does not change what `{{ mode }}` reads.
 Provided values are not template variables. Call `inject()` in a data
 method and return the value the template needs.
 
-### A component reads an old value, not the one it provides
+### Reads the outer value
 
 A component's own `provide()` call affects only the components inside it.
 If the component calls `inject()` with the same key, it gets the value

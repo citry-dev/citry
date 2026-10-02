@@ -43,7 +43,7 @@ words gets two names, and either works:
 Case does not matter after the `c-` prefix, so `<c-ReadingList>` works too.
 The `c-` prefix itself must be lowercase.
 
-## Choose a different tag name
+## Change the tag name
 
 Set `name` when the tag should not follow the class name:
 
@@ -64,7 +64,7 @@ class StatusBadge(Component):
 
 The component is now used as `<c-result-badge>`.
 
-## Import the module before using its tag
+## Import before use
 
 Because registration happens when Python runs the `class` statement, a
 component in a module that has not been imported yet has no tag. Rendering
@@ -84,7 +84,7 @@ file.
 In a larger project, let Citry import whole directories of components at
 startup. [Component discovery](/advanced/component-discovery/) shows how.
 
-## Keep an app's components on one Citry instance
+## Use one Citry instance
 
 Each component belongs to one [`Citry`][citry.Citry] instance. A component
 that does not set one belongs to the shared [`citry`][citry.citry]
@@ -118,7 +118,7 @@ A template looks up `<c-*>` tags on its own component's Citry instance. Two
 components can use each other's tags only when they belong to the same
 instance.
 
-## Give a component a second name
+## Add a second name
 
 Use [`register()`][citry.Citry.register] to add another tag name for a
 component you already have:
