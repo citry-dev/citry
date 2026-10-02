@@ -360,7 +360,9 @@ def _compute_simple_vue_admission(
     if inline_messages is not None or messages_file is not None:
         return rejected("component messages are not supported")
     dependencies = component_class.get_dependencies()
-    if dependencies.css:
+    # A media type with no entries declares no stylesheet, so check the
+    # entries rather than the mapping itself.
+    if any(dependencies.css.values()):
         return rejected("secondary CSS dependencies are unsupported for simple='vue'")
     if dependencies.js:
         return rejected("secondary JavaScript dependencies are unsupported for simple='vue'")
