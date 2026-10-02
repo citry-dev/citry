@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from citry.contrib.asgi import asgi_app
+from citry.util.routing import normalize_mount_prefix
 
 if TYPE_CHECKING:
     from citry.citry import Citry
@@ -33,6 +34,15 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     """
     Mount ``citry_instance``'s routes into a FastAPI/Starlette ``app`` at
     ``prefix``, and record the prefix on the instance.
+
+    A trailing ``/`` on ``prefix`` is dropped.
+
+    Raises:
+        ValueError: If ``prefix`` does not start with ``/``.
+
     """
+    # Check the prefix before handing it to Starlette, whose own check fails
+    # with a bare AssertionError that does not name the Citry setting.
+    prefix = normalize_mount_prefix(prefix)
     app.mount(prefix, asgi_app(citry_instance))
     citry_instance.set_mounted_prefix(prefix)

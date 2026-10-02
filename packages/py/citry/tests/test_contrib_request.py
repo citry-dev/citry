@@ -592,6 +592,19 @@ class TestDjangoAdapter:
         assert "Django view adapter cannot run" in message
         assert "citry.contrib.asgi.asgi_app" in message
 
+    def test_rejected_async_handler_leaves_the_prefix_unrecorded(self):
+        # The prefix is recorded only once every route is accepted, so a
+        # failed urlconf build does not leave URL building pointing at it.
+        from citry.contrib.django import urlpatterns
+
+        async def async_handler(_request):
+            return RouteResponse(content="never")
+
+        engine = _engine(URLRoute("async", handler=async_handler))
+        with pytest.raises(TypeError):
+            urlpatterns(engine, prefix="/citry")
+        assert engine.mounted_prefix is None
+
     def test_route_with_an_async_twin_mounts_and_runs_the_plain_handler(self):
         # The twin is for adapters with an event loop; the synchronous Django
         # views mount the route table unchanged and run the plain handler.

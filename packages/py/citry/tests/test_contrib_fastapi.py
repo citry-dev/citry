@@ -47,6 +47,24 @@ class TestMount:
         client = TestClient(app)
         assert client.get("/assets/citry/citry.js").status_code == 200
 
+    def test_trailing_slash_prefix_is_dropped(self):
+        c = Citry()
+        app = fastapi.FastAPI()
+        mount(app, c, prefix="/citry/")
+        assert c.mounted_prefix == "/citry"
+        assert TestClient(app).get("/citry/citry.js").status_code == 200
+
+    def test_invalid_prefix_raises_citry_error_before_mounting(self):
+        # Citry checks the prefix itself, so the user sees a ValueError that
+        # names the mount prefix rather than Starlette's bare AssertionError.
+        c = Citry()
+        app = fastapi.FastAPI()
+        routes_before = list(app.routes)
+        with pytest.raises(ValueError, match="Mount prefix must start with '/'"):
+            mount(app, c, prefix="citry")
+        assert list(app.routes) == routes_before
+        assert c.mounted_prefix is None
+
 
 class TestServedEndpoints:
     def test_serves_the_runtime(self):

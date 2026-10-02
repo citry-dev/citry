@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from citry.contrib.wsgi import wsgi_app
+from citry.util.routing import normalize_mount_prefix
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -36,7 +37,20 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     """
     Mount ``citry_instance``'s routes into a Flask ``app`` at ``prefix``, and
     record the prefix on the instance.
+
+    A trailing ``/`` on ``prefix`` is dropped, so ``"/citry/"`` serves the
+    same paths as ``"/citry"``.
+
+    Raises:
+        ValueError: If ``prefix`` does not start with ``/``. The app is left
+            unchanged.
+
     """
+    # Validate before touching the app: a failure after the wsgi_app swap
+    # would leave the app routing to a Citry instance that never recorded
+    # its prefix. Normalizing also keeps "/citry/" from matching only
+    # "/citry//..." paths below.
+    prefix = normalize_mount_prefix(prefix)
     citry_wsgi = wsgi_app(citry_instance)
     host_wsgi = app.wsgi_app
 

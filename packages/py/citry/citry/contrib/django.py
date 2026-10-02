@@ -51,7 +51,7 @@ import inspect
 import re
 from typing import TYPE_CHECKING, Any, cast
 
-from citry.util.routing import RouteHeaders, RouteRequest, flatten_routes
+from citry.util.routing import RouteHeaders, RouteRequest, flatten_routes, normalize_mount_prefix
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -144,8 +144,9 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
     """
     from django.urls import path as django_path  # noqa: PLC0415
 
-    if prefix is not None:
-        citry_instance.set_mounted_prefix(prefix)
+    # Check the prefix up front, but record it only after every route has
+    # been accepted, so a rejected async handler leaves the instance untouched.
+    mounted_prefix = normalize_mount_prefix(prefix) if prefix is not None else None
 
     patterns = []
     for full_path, route in flatten_routes(citry_instance.urls):
@@ -172,6 +173,9 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
             patterns.append(re_path(pattern, _make_view(route), name=route.name))
         else:
             patterns.append(django_path(full_path, _make_view(route), name=route.name))
+
+    if mounted_prefix is not None:
+        citry_instance.set_mounted_prefix(mounted_prefix)
     return patterns
 
 

@@ -266,6 +266,25 @@ def flatten_routes(routes: Iterable[URLRoute]) -> list[tuple[str, URLRoute]]:
     return flat
 
 
+def normalize_mount_prefix(prefix: str) -> str:
+    """
+    Check a mount prefix and return it without a trailing ``/``.
+
+    Every host adapter calls this before it changes the host app or the Citry
+    instance, so a bad prefix fails with the same ``ValueError`` everywhere and
+    leaves nothing half-mounted. ``"/citry/"`` and ``"/citry"`` mount at the
+    same place, and ``"/"`` becomes ``""`` (the host's root).
+
+    Raises:
+        ValueError: If ``prefix`` does not start with ``/``.
+
+    """
+    if not prefix.startswith("/"):
+        msg = f"Mount prefix must start with '/', got {prefix!r}"
+        raise ValueError(msg)
+    return prefix.rstrip("/")
+
+
 # A path parameter: `{name}` where name is a Python identifier.
 _PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 

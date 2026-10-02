@@ -76,6 +76,7 @@ from citry.settings import (
     SecurityScriptIntegrityMode,
 )
 from citry.tag_rules import build_tag_rules
+from citry.util.routing import normalize_mount_prefix
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
@@ -1507,11 +1508,12 @@ class Citry:
         process that builds URLs without mounting the routes itself (for
         example a worker that renders fragments served by another process).
         ``prefix`` must start with ``/``; a trailing ``/`` is dropped.
+
+        Raises:
+            ValueError: If ``prefix`` does not start with ``/``.
+
         """
-        if not prefix.startswith("/"):
-            msg = f"Mount prefix must start with '/', got {prefix!r}"
-            raise ValueError(msg)
-        self._mounted_prefix = prefix.rstrip("/")
+        self._mounted_prefix = normalize_mount_prefix(prefix)
 
     def build_url(self, path: str) -> str:
         """

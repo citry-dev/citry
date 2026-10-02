@@ -73,10 +73,10 @@ matches your stack.
 | Bare ASGI | `citry.contrib.asgi.asgi_app(citry)` |
 | Bare WSGI | `citry.contrib.wsgi.wsgi_app(citry)` |
 
-Pass a `prefix` that starts with `/` and has no trailing slash, such as
-`"/citry"`. A prefix without the leading `/` is
-rejected: Django, Flask, and `set_mounted_prefix()` raise `ValueError`, and
-FastAPI or Starlette raises its own `AssertionError` from `app.mount()`.
+Pass a `prefix` that starts with `/`, such as `"/citry"`. A trailing slash is
+dropped, so `"/citry/"` serves the same paths. Every entry point and
+`set_mounted_prefix()` rejects a prefix without the leading `/` with a
+`ValueError`, before it changes your app or the Citry instance.
 
 If you would rather run and copy a complete application, the
 [starter project matrix]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}
