@@ -26,8 +26,8 @@ This documentation site is built with Citry too.
 
 The tutorial starts with reusable HTML rendered in Python. Each step adds one
 thing: browser behavior, a FastAPI server, Python event handlers, values
-kept between calls, and forms. By the end, you have an admin page that lists items and lets you
-edit each row.
+kept between calls, and forms. By the end, you have an admin page that
+lists items and lets you edit each row.
 
 Follow it in order, or start with the part you need:
 
@@ -44,7 +44,7 @@ Follow it in order, or start with the part you need:
 4. **Connect the browser to Python:**
    [serve the page with FastAPI](/getting-started/fastapi/),
    [call Python from a click](/getting-started/call-python/),
-   [keep State between calls](/getting-started/state/), and
+   [keep values between calls](/getting-started/state/), and
    [handle forms](/getting-started/forms/).
 5. **Update the page from Python:**
    [replace a component with new HTML](/getting-started/server-rendered-updates/)
