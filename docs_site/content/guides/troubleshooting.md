@@ -122,8 +122,12 @@ working around it.
 
 ## A component tag with `v-for` fails to load
 
-The template fails with: `A browser 'v-for' cannot create Citry
-components. Repeat the component with '<c-for>'.`
+The template fails to load, and the error says:
+
+```text
+A browser 'v-for' cannot create Citry components. Repeat the component
+with '<c-for>'.
+```
 
 `v-for` is a Vue loop that runs in the browser, and the browser cannot run
 your Python components. Repeat the component with
@@ -131,9 +135,15 @@ your Python components. Repeat the component with
 
 ## `citry check` reports a missing or wrong Vue prop
 
-`citry check` or the editor reports `Required Vue prop 'open' is missing
-for <c-dialog>`, or says that a Vue prop expects a different type than the
-binding passes.
+`citry check` or the editor reports that a required Vue prop is missing,
+for example:
+
+```text
+Required Vue prop 'open' is missing for <c-dialog>.
+```
+
+Or it reports that a Vue prop expects a different type than the binding
+passes.
 
 The child component declares the prop in its JavaScript `props`, and the
 parent's tag does not pass it, or passes a value of the wrong type. Pass
