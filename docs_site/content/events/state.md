@@ -1,9 +1,9 @@
 ---
-title: Server state
+title: Event state
 description: Keep the values your Citry event handlers need between calls, and pass every input when a handler renders the component again.
 ---
 
-# Server state
+# Event state
 
 An event handler often needs values from the component it was called from:
 which project it shows, which page of results, what the user typed. It does

@@ -63,9 +63,9 @@ areas:
         section_style: true
         items:
           - { title: Server events, path: /events/ }
-          - { title: Server state, path: /events/state/ }
-          - { title: Handle and validate forms, path: /events/forms/, needs_review: true }
-          - { title: Bind events in templates, path: /events/bindings/, needs_review: true }
+          - { title: Event state, path: /events/state/ }
+          - { title: Handle and validate forms, path: /events/forms/ }
+          - { title: Bind events in templates, path: /events/bindings/ }
           - { title: Event actions, path: /events/actions/, needs_review: true }
           - { title: Use event routes directly, path: /events/http/, needs_review: true }
 
