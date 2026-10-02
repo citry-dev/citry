@@ -195,7 +195,7 @@ areas:
   - label: IDE
     scope: versioned
     items:
-      - { title: Overview, path: /ide/, needs_review: true }
+      - { title: Overview, path: /ide/ }
     groups:
       - label: Editors
         items:
