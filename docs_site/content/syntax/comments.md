@@ -78,7 +78,7 @@ not rendered as a component. Event attributes such as `@c-click="save"` and
 `:c-query` stay plain text too.
 
 `<c-raw>` takes no attributes and needs a closing tag. It cannot nest: the
-first `</c-raw>` ends the block.
+first closing tag ends the block.
 
 !!! warning "`<c-raw>` does not make HTML safe"
 
@@ -86,6 +86,21 @@ first `</c-raw>` ends the block.
     reads any HTML in it as HTML. Use it only for text you wrote in the
     template. To show text from a user, insert it with `{{ ... }}`, which
     escapes it.
+
+## Keep raw HTML complete on pages that use Vue
+
+When anything on the page or fragment runs in the browser, such as a Vue
+directive or `$component`, the content of `<c-raw>` must be complete HTML.
+Vue takes over that part of the page and needs to know where the raw HTML
+starts and ends. Otherwise the render fails with an error that gives the
+block's line and column and says it "is not a complete HTML fragment":
+
+```citry-html
+--8<-- "docs_site/snippets/builtin_raw_complete.html"
+```
+
+Void elements such as `<br>` and `<img>` need no closing tag. On pages
+without browser behavior, Citry copies the content unchanged.
 
 ## Less common comment and raw-text rules
 
@@ -100,19 +115,3 @@ first `</c-raw>` ends the block.
   the HTML tags at its top level count as the component's top-level
   elements. On a page without browser behavior, Citry adds the component's
   `data-cid-<id>` attribute to them, as it does to every top-level element.
-
-!!! note "Raw HTML must be complete on pages that use Vue"
-
-    When anything on the page or fragment runs in the browser, such as a Vue
-    directive or `$component`, the content of `<c-raw>` must be complete
-    HTML. Vue takes over that part of the page and needs to know where the
-    raw HTML starts and ends. Otherwise the render fails with an error that
-    names the block, such as "The <c-raw> block at line 2, column 10 is not
-    a complete HTML fragment":
-
-    ```citry-html
-    --8<-- "docs_site/snippets/builtin_raw_complete.html"
-    ```
-
-    Void elements such as `<br>` and `<img>` need no closing tag. Pages
-    without browser behavior copy the content unchanged.
