@@ -257,7 +257,17 @@ def make_trans_component(citry_instance: Citry) -> type[Component]:
     extension = cast("Any", citry_instance.extensions.get_extension("i18n"))
 
     class Trans(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
-        """Render escaped translated text with application-owned named fills."""
+        """
+        Render a translated message that contains HTML, such as a link or a component.
+
+        ``message`` (required) is the message id. ``values`` maps the
+        message's plain placeholders to values, and each ``<c-fill>``
+        supplies the HTML for the placeholder with the same name, so the
+        translator decides where the link goes. ``attr`` picks one
+        attribute of the message instead of its main text. Citry escapes
+        the translated text itself. Using one name both in ``values`` and as
+        a fill, or passing any other attribute, raises ``ValueError``.
+        """
 
         citry = citry_instance
         name = "trans"
