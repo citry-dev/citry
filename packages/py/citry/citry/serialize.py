@@ -41,6 +41,7 @@ from citry._javascript_policy import _JavascriptPolicy
 from citry._serialization_security import _ScriptSecurityMaterializer
 from citry.attrs import format_attrs
 from citry.citry_render import (
+    _AFTER_RENDER_HOOKS_RENDER_ID,
     CitryRender,
     DepsPosition,
     DepsStrategy,
@@ -668,7 +669,13 @@ def serialize_render_result(
             # False, e.g. <c-provide>) stays unmarked even when serialized directly.
             # Extensions add per-instance markers (e.g. the CSS-variables hash)
             # under the well-known extra key on the component's own context.
-            if render_frame.render_id is not None and render_frame.is_component_root:
+            # A component whose after-render hooks are serializing its own
+            # result gets its markers later, on the HTML the hook returns.
+            if (
+                render_frame.render_id is not None
+                and render_frame.is_component_root
+                and render_frame.render_id != _AFTER_RENDER_HOOKS_RENDER_ID.get()
+            ):
                 extension_markers = list(render_frame.root_markers)
                 if component is not None:
                     extension_markers.extend(render.context._get_root_markers())

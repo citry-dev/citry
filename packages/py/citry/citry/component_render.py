@@ -61,6 +61,7 @@ from citry.citry_render import (
     DeferredComponent,
     RenderFrame,
     SimpleVueRecord,
+    _after_render_hooks_scope,
     _render_slot_value,
 )
 from citry.citry_template import CitryTemplate, DeclaredSlot
@@ -1521,11 +1522,14 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
     if error is not None:
         render.context._error_tainted = True
     try:
-        new_render, out_error, had_error = component.citry.extensions.on_component_rendered(
-            component,
-            None if error is not None else render,
-            error,
-        )
+        # An extension may also serialize the result and return the HTML, so
+        # its hook gets the same marker rule as the component's on_render.
+        with _after_render_hooks_scope(component.id):
+            new_render, out_error, had_error = component.citry.extensions.on_component_rendered(
+                component,
+                None if error is not None else render,
+                error,
+            )
     except Exception:  # noqa: TRY203
         raise
     if had_error:
@@ -2242,7 +2246,11 @@ def _send_on_render_generator(
     """Execute one generator phase with its component as the active Slot receiver."""
     from citry._vue.direct import direct_receiver_scope  # noqa: PLC0415
 
-    with direct_receiver_scope(context):
+    # The generator may serialize its own result and return the HTML; see
+    # _AFTER_RENDER_HOOKS_RENDER_ID for why that serialization skips this
+    # component's root markers.
+    render_id = context.component.id if context.component is not None else None
+    with direct_receiver_scope(context), _after_render_hooks_scope(render_id):
         return generator.send(send_arg)
 
 

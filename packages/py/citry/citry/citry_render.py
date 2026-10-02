@@ -54,6 +54,7 @@ Example:
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from html import unescape
@@ -89,6 +90,32 @@ if TYPE_CHECKING:
     from citry.settings import SecurityCspMode, SecurityJavascriptMode, SecurityScriptIntegrityMode
 
 _VALUE_CONTEXT: ContextVar[CitryContext | None] = ContextVar("citry_value_context", default=None)
+
+# A component's after-render hooks (its `on_render` generator and the
+# extensions' `on_component_rendered`) may serialize the component's own live
+# result and return that HTML as its new output. The returned HTML becomes the
+# component's root output again, and the final serialization marks its root
+# tags then. So while those hooks run, serializing that same render must leave
+# the component's own root markers off, or the page would carry each marker
+# twice on one tag (and on tags that are no longer roots, when the hook wraps
+# the result). This holds the render id of the component whose hooks run.
+_AFTER_RENDER_HOOKS_RENDER_ID: ContextVar[str | None] = ContextVar(
+    "citry_after_render_hooks_render_id",
+    default=None,
+)
+
+
+@contextmanager
+def _after_render_hooks_scope(render_id: str | None) -> Iterator[None]:
+    """Mark `render_id` as the component whose after-render hooks are running."""
+    # The token restores the outer value, so a hook that renders another
+    # component (with hooks of its own) gets its scope back afterwards.
+    token = _AFTER_RENDER_HOOKS_RENDER_ID.set(render_id)
+    try:
+        yield
+    finally:
+        _AFTER_RENDER_HOOKS_RENDER_ID.reset(token)
+
 
 # One piece of rendered output. It is one of:
 #   - str: final text.
