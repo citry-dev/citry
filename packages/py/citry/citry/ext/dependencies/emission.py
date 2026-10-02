@@ -650,19 +650,33 @@ def _resolve_records(
             style_owner_groups.setdefault(style, set()).add(record.component_id)
 
     all_styles = [*core_css, *extra_css, *component_css]
+    # Equal stylesheets (same URL or same inline content) are emitted once, so
+    # every declaration of one sheet must agree on its attributes. The one
+    # exception is the class ownership markers: two components whose `css` is
+    # byte-identical share one sheet, and that sheet lists both owners.
     style_attrs: dict[Dependency, dict[str, str | bool]] = {}
     for style in all_styles:
         prior_attrs = style_attrs.get(style)
-        if prior_attrs is not None and prior_attrs != style.attrs:
+        if prior_attrs is None:
+            style_attrs[style] = dict(style.attrs)
+            continue
+        merged_attrs = _merge_shared_style_attrs(prior_attrs, style.attrs)
+        if merged_attrs is None:
             identity = style.url if style.url is not None else "inline stylesheet content"
             raise ValueError(
                 f"The same stylesheet {identity!r} was declared with conflicting attributes; "
                 "use distinct stylesheet URLs until attribute-specific stylesheet ownership is supported."
             )
-        style_attrs[style] = dict(style.attrs)
+        style_attrs[style] = merged_attrs
 
     deduped_scripts = list(dict.fromkeys([*core_js, *extra_js, *component_js]))
-    deduped_styles = list(dict.fromkeys(all_styles))
+    # Keep the first-seen object for each sheet, but give it the merged
+    # attributes. `replace` builds a new object so the per-class lists cached
+    # above (and any cache-backed Style) keep their own attributes.
+    deduped_styles = [
+        style if style_attrs[style] == style.attrs else replace(style, attrs=style_attrs[style])
+        for style in dict.fromkeys(all_styles)
+    ]
 
     return _Resolved(
         scripts=deduped_scripts,
@@ -927,6 +941,52 @@ def _validate_hook_nonces(
         return
     for dependency in [*scripts, *styles, *early_scripts]:
         script_security.validate_declared_nonce(dependency)
+
+
+# Attributes that name the component class (and its fragment URL) a static
+# `Component.css` sheet belongs to. They describe who uses a sheet, not how the
+# browser applies it, so a sheet shared by several classes lists every owner.
+_STYLE_OWNER_ATTRS = ("data-citry-css-class", "data-citry-css-url")
+
+
+def _merge_shared_style_attrs(
+    first: dict[str, str | bool],
+    other: dict[str, str | bool],
+) -> dict[str, str | bool] | None:
+    """
+    Combine the attributes of two declarations of one emitted stylesheet.
+
+    Every attribute other than the class ownership markers must match, because
+    the browser applies it (``media``, for example). Each ownership marker
+    becomes a space-separated list of the owners in first-seen order, which a
+    ``[data-citry-css-class~="Name_abc123"]`` selector still finds. Returns
+    ``None`` when the declarations disagree on any other attribute.
+    """
+    applied_first = {key: value for key, value in first.items() if key not in _STYLE_OWNER_ATTRS}
+    applied_other = {key: value for key, value in other.items() if key not in _STYLE_OWNER_ATTRS}
+    if applied_first != applied_other:
+        return None
+
+    merged = dict(first)
+    for key in _STYLE_OWNER_ATTRS:
+        added = other.get(key)
+        if added is None:
+            continue
+        existing = merged.get(key)
+        # Citry writes these markers as strings; a boolean here came from
+        # user code and has no owner list to extend, so only an exact match
+        # can share the sheet.
+        if isinstance(existing, bool) or isinstance(added, bool):
+            if existing != added and existing is not None:
+                return None
+            merged[key] = added
+            continue
+        owners = existing.split() if existing else []
+        for token in added.split():
+            if token not in owners:
+                owners.append(token)
+        merged[key] = " ".join(owners)
+    return merged
 
 
 def _bucket(dep: Dependency, core: list[Dependency], extra: list[Dependency], component: list[Dependency]) -> None:

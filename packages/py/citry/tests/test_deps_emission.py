@@ -8,6 +8,7 @@ import pytest
 from citry import Citry, Component, Extension, InMemoryCache, Markup
 from citry._inline_assets import normalize_inline_asset
 from citry.ext.dependencies import Script, Style
+from citry.ext.dependencies.routes import script_url
 from citry.ext.dependencies.scripts import (
     component_script_hash,
     gen_cache_key,
@@ -42,6 +43,22 @@ def _page(c, js=None, css=None, deps=None, template=PAGE_TEMPLATE):
     return type("Page", (Component,), attrs)
 
 
+def _twin_components(c, *, with_js):
+    """Define two different component classes with byte-identical assets."""
+    assets = {
+        "css": """
+            .shared { color: red; }
+            """,
+    }
+    if with_js:
+        assets["js"] = """
+            console.log('shared');
+            """
+    first = type("First", (Component,), {"citry": c, "template": "<p>first</p>", **assets})
+    second = type("Second", (Component,), {"citry": c, "template": "<p>second</p>", **assets})
+    return first, second
+
+
 class TestDocumentEmission:
     def test_same_stylesheet_with_conflicting_media_fails_explicitly(self):
         c = Citry()
@@ -63,6 +80,69 @@ class TestDocumentEmission:
         page = _page(c, template="<main><c-First/><c-Second/></main>")
         with pytest.raises(ValueError, match="conflicting attributes"):
             page().render().serialize()
+
+    @pytest.mark.parametrize("mounted", [False, True], ids=["unmounted", "mounted"])
+    @pytest.mark.parametrize(
+        ("deps_strategy", "with_js"),
+        [("document", False), ("simple", False), ("simple", True)],
+        ids=["document-css", "simple-css", "simple-css-js"],
+    )
+    def test_identical_assets_of_two_classes_emit_once_on_a_static_page(self, deps_strategy, with_js, mounted):
+        # Two different components whose assets are byte-identical share one
+        # sheet (and one script) on a static page. The sheet names both owning
+        # classes instead of raising a conflicting-attributes error.
+        c = Citry()
+        if mounted:
+            c.set_mounted_prefix("/citry")
+        first, second = _twin_components(c, with_js=with_js)
+
+        page = _page(c, template="<html><head></head><body><c-First/><c-Second/></body></html>")
+        html = page().render().serialize(deps_strategy=deps_strategy)
+
+        style_tags = re.findall(r"<style[^>]*>", html)
+        assert style_tags == [
+            f'<style data-citry-css-class="{first.class_id} {second.class_id}"'
+            + (f' data-citry-css-url="{script_url(first, "css")} {script_url(second, "css")}">' if mounted else ">")
+        ]
+        assert html.count(".shared { color: red; }") == 1
+        assert html.count("console.log('shared');") == (1 if with_js else 0)
+
+    def test_identical_css_of_two_classes_is_one_sheet_on_a_vue_page(self):
+        # With JavaScript the document becomes a Vue page. Each class lists
+        # its owned style asset, both entries point at the same bytes, and the
+        # document inlines that sheet once.
+        c = Citry()
+        _twin_components(c, with_js=True)
+
+        page = _page(c, template="<html><head></head><body><c-First/><c-Second/></body></html>")
+        html = page().render().serialize(deps_strategy="document")
+
+        assert len({item["source"]["sha256"] for item in _prepared(html)["styles"]}) == 1
+        assert len(re.findall(r"<style[^>]*>", html)) == 1
+        assert html.count(".shared { color: red; }") == 1
+
+    def test_shared_stylesheet_still_rejects_conflicting_applied_attrs(self):
+        # Only the ownership markers merge; an attribute the browser applies
+        # (here `media`) must still agree between two declarations of one sheet.
+        c = Citry()
+
+        class First(Component):
+            citry = c
+            template = "<p>first</p>"
+            css = """
+            .shared { color: red; }
+            """
+
+        class Second(Component):
+            citry = c
+            template = "<p>second</p>"
+
+            class Dependencies:
+                css = {"print": [Style(content="\n.shared { color: red; }\n")]}
+
+        page = _page(c, template="<main><c-First/><c-Second/></main>")
+        with pytest.raises(ValueError, match="conflicting attributes"):
+            page().render().serialize(deps_strategy="simple")
 
     def test_js_and_css_land_in_default_locations(self):
         c = Citry()

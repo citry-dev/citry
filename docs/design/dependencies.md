@@ -554,6 +554,16 @@ then dependency scripts. Static fragments carry no runtime or JSON dependency
 manifest. Repeated URL tags are allowed; the browser cache handles repeated
 fetches, and the integrating fragment library owns the inserted tags' lifetime.
 
+Equal stylesheets (same URL, or same inline content) are emitted once, so
+their declarations must agree on every attribute the browser applies, such as
+`media`; a disagreement raises a `ValueError` naming the sheet. A static
+`Component.css` sheet names its class in `data-citry-css-class` (and, under a
+mounted integration, its fragment URL in `data-citry-css-url`). When two
+classes declare byte-identical `css`, the page inlines one sheet and each of
+these markers lists every owner, space-separated in first-seen order, so a
+`[data-citry-css-class~="Name_abc123"]` selector finds the sheet for either
+class. Byte-identical `js` from two classes is likewise emitted once.
+
 Trusted pre-rendered `Markup` dependency entries are accepted on this static
 path and rendered through the configured security materializer. When a nonce or
 integrity policy needs structured metadata, its existing `Script` and `Style`
