@@ -10,11 +10,12 @@ Sometimes a button should be disabled while a form saves, a row should get a
 value comes from your data rather than from fixed text.
 
 Put `c-` in front of the attribute name to make its value a Python
-expression. This page starts with that, then covers classes and styles,
-applying many attributes at once with `c-bind`, and the special `:c-*`,
-`#c-key`, and `#c-ignore` attributes.
+expression. This page starts with that, including `True` and `False` values
+and component inputs. It then covers classes and styles, applying many
+attributes at once with `c-bind`, Vue's `:prop` and `@event`, and the
+special `:c-*`, `#c-key`, and `#c-ignore` attributes.
 
-## Set an attribute { #c-dynamic-attributes }
+## Set with `c-*` { #c-dynamic-attributes }
 
 An ordinary attribute holds fixed text. With `c-` in front, Citry evaluates
 the value as a Python [expression](/syntax/expressions/) and removes the `c-`
@@ -46,7 +47,7 @@ Write the expression without `{{ }}`: `c-title="user.name"`, not
 Citry HTML-escapes attribute names and values. To insert a value without
 escaping, see [Insert HTML you trust](/syntax/expressions/#insert-html-you-trust).
 
-## Toggle an attribute { #html-elements }
+## Toggle with `c-*` { #html-elements }
 
 On an HTML element, `True` renders a bare attribute, and `False` or `None`
 leaves the attribute out:
@@ -81,7 +82,7 @@ including when the state is false:
     `disabled` on an `input` element, stay bare either way. In CSS and
     JavaScript, test `[data-open]` or `hasAttribute("data-open")`.
 
-## Pass component inputs
+## `c-*` on components
 
 On a component tag, each attribute is one of the
 [component's inputs](/concepts/inputs-and-validation/). A plain attribute
@@ -108,7 +109,7 @@ UserBadge(
 Unlike on HTML elements, `False` and `None` are passed to the component
 like any other value.
 
-## Build `class` values
+## Class
 
 `c-class` accepts more than a string. You can give it:
 
@@ -146,7 +147,7 @@ Citry leaves the attribute out:
 <!-- Result: <div></div> -->
 ```
 
-## Build `style` values
+## Style
 
 `c-style` accepts a string, a dictionary of CSS properties, or a list of
 them. Write property names in kebab-case:
@@ -196,7 +197,7 @@ later `None` leaves the earlier value alone. An empty style is left out:
     inputs like any other, and the component decides where to put them. See
     [Pass HTML attributes](/concepts/client-interactivity/#pass-arbitrary-html-attributes-explicitly).
 
-## Apply a dict with `c-bind` { #c-bind-spread }
+## `c-bind` { #c-bind-spread }
 
 When the attributes come from a dictionary, apply them all with `c-bind`:
 
@@ -323,7 +324,7 @@ class Card(Component):
 
 See [Forward HTML attributes](/advanced/html-attributes/) for more.
 
-## Pass props and events
+## Vue `:prop` and `@event`
 
 Attributes that start with `:` or `@` are Vue syntax. They run in the browser
 and pass reactive values and event listeners to a child component:
@@ -382,18 +383,20 @@ the binding:
 
 ```citry
 class Panel(Component):
-    class JsData:
+    class Kwargs:
         open: bool
 
-    def js_data(self, kwargs, slots):
-        return {"open": True}
+    def js_data(self, kwargs: Kwargs, slots):
+        return {"open": kwargs.open}
 
     template = """
       <div :class="{ open: open }"></div>
     """
+
+# Use as <c-Panel c-open="True" />
 ```
 
-## Bind a field to State
+## `:c-*` State bindings
 
 A component's [`State`][citry.Component.State] holds values the server keeps
 between event calls. A `:c-*` attribute shows a State field in a form field
@@ -448,7 +451,7 @@ Read [Bind controls to State](/events/bindings/#bind-controls-to-state) for
 which input types are supported in which direction, and
 [Event state](/events/state/) for declaring State.
 
-## Keep items matched { #c-key }
+## `#c-key` { #c-key }
 
 When an event handler renders a list again, Vue matches old and new items by
 position. If the list was reordered, an open panel or a half-typed field can
@@ -498,7 +501,7 @@ in the component's own template:
 See [Keep list items matched](/events/actions/#keep-list-items-matched-to-their-records)
 for how keys behave when a handler renders the list again.
 
-## Keep library contents { #c-ignore-keep-contents-that-a-library-manages }
+## `#c-ignore` { #c-ignore-keep-contents-that-a-library-manages }
 
 A chart, map, or rich-text editor library changes the elements you give it.
 When an event handler renders the component again, Vue resets those elements
