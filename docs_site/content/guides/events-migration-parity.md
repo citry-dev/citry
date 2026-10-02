@@ -22,7 +22,7 @@ For step-by-step ports, start from the guide for your library:
 - [Tetra](/guides/migrate-from-tetra/)
 - [livecomponents](/guides/migrate-from-livecomponents/)
 
-## How to read the tables
+## Read the tables
 
 Each row names a capability, how each library provides it, what to use in
 Citry, and a delivery label:
@@ -50,7 +50,7 @@ A few Citry terms appear throughout:
 - A **per-event route** is the URL of one handler. Calls made from
   templates are usually bundled and sent to a shared **batch route** instead.
 
-## Declare and call handlers
+## Declare handlers
 
 | Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
@@ -80,7 +80,7 @@ they read typed `data` and the neutral `request`, and return Events values
 instead of host responses. The method-only URL has no public URL builder;
 `events.url("post")` builds the named `/post` route instead.
 
-## Keep values between calls
+## Keep State across calls
 
 | Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
@@ -106,7 +106,7 @@ instead of host responses. The method-only URL has no public URL builder;
     values in it. Put a value that must stay secret in server State
     (`_storage = "server"`), which keeps it out of the page.
 
-## Bind events in templates
+## Bind events
 
 | Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
@@ -132,7 +132,7 @@ instead of host responses. The method-only URL has no public URL builder;
 | Change poll interval from server | Handwritten | `PollUpdate` | Your code | htmx | Re-render with a different binding, or use your own code | **Dropped** |
 | Run when scrolled into view | Handwritten | `unicorn:visible` | Alpine/plugin | htmx trigger | IntersectionObserver or a Vue integration | **Dropped** |
 
-## Update the page after a call
+## Update the page
 
 | Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
@@ -175,7 +175,7 @@ handles its slots, several root elements, and components that render no
 element. State lives under `$state`, separate from the component's own Vue
 data.
 
-## Handle forms, files, and navigation
+## Forms, files, URLs
 
 | Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
@@ -213,7 +213,7 @@ CSRF middleware still runs, and the browser still sends its token.
 user may act on what it names. Load and check access for every record that
 State or event data names.
 
-## Send calls and handle slow responses
+## Send and queue calls
 
 | Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
