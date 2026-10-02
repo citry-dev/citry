@@ -150,7 +150,7 @@ HTML, once for each time the component appears on the page.
 Removing the component's own script stops its browser code from running.
 Remove an entry only when the same code reaches the page another way.
 
-## Know the limits of each hook
+## Handle caching, repeated yields, and page-wide tags
 
 ### A cached render skips `on_render()`
 
@@ -165,8 +165,8 @@ result outlives the condition that produced it.
 Do not call `str(result)` just to look at the HTML. The render is still
 linked to the components and slot content around it, and turning it into a
 string inside the hook may fail. If you do return serialized HTML, it
-replaces the result, and Citry adds this component's `data-cid-*`
-attribute to it.
+replaces the result, and Citry adds this component's marker attribute to
+it.
 
 ### Try several outputs by yielding more than once
 
