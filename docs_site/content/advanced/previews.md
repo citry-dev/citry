@@ -99,8 +99,10 @@ port 8001 by default; pass `--port 0` to pick any free port. Refresh the
 page to see changes to preview template files. Restart the command after
 changing Python code.
 
-The gallery shows each example in its own frame, sized to the example's
-viewport (the frame's width and height). An example wider than the window
+The gallery shows each example in its own frame (an iframe), sized to the
+example's viewport (the frame's width and height). Each frame is a separate
+page, so one example's styles and teleported content stay inside its
+frame. An example wider than the window
 scrolls rather than shrinking. All frames share one server, and may share
 browser storage such as cookies.
 
@@ -117,7 +119,8 @@ citry --app myproject.components:app ext run preview serve \
 
 Separate several names with commas. A name can be a component's
 registered name or an alias. A directory filter is relative to the current
-directory, and `**` includes subdirectories. When you give both names and
+directory, and `**` includes subdirectories. Repeat `--dir` to include
+several directories. When you give both names and
 directories, a named component must also be inside one of the directories.
 The command fails when a filter matches nothing, a named component has no
 previews, or a named variant does not exist.
@@ -259,8 +262,8 @@ variant, it is the example itself. `preview.selection` is `"variant"`,
 A component's `page_layout` applies to its own preview pages and its own
 gallery. The gallery of all components uses the default from the `Citry`
 instance, but the frames inside it still use each component's page
-layout. A custom layout decides which content to show, as with ordinary
-slots.
+layout. If your layout leaves out `{{ item.content }}` or writes it
+twice, the page shows exactly that.
 
 ## Preview a simple component
 
