@@ -55,8 +55,9 @@ with `__`.
 
 Most commands work on a [`Citry`][citry.Citry] instance: they read its
 registered components and extensions. By default they use the module-level
-[`citry`][citry.citry] instance. If your application creates its own, name
-it with `--app module:attribute`, before the command name:
+[`citry`][citry.citry] instance, except `check`, which needs `--app` or
+`--static`. If your application creates its own instance, name it with
+`--app module:attribute`, before the command name:
 
 ```bash
 citry --app myproject.engine:app list
@@ -245,7 +246,7 @@ citry format --diff path/to/card.py
 `--check` lists the files that would change, and `--diff` prints the
 changes. Both exit with status 1 when a file would change. They cannot be
 combined. A file that cannot be formatted makes the command exit with
-status 2. `citry format` does not accept `--app`.
+status 2. `citry format` rejects `--app` and `--static` with status 2.
 
 The formatter lays out the HTML structure conservatively and formats
 Python expressions, `c-for` clauses, and `c-fill data` patterns. Add
