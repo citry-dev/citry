@@ -29,9 +29,9 @@ These changes cause most of the migration work:
 - **The data methods are renamed.** `get_template_data()` becomes
   `template_data(self, kwargs, slots)`. A method with the old name is
   never called, and nothing tells you ([DJC-067](#djc-067)).
-- **Settings and the registry belong to a `Citry` object.** You create
-  one `Citry` instance; it holds the settings, the component names, and
-  the caches that Django settings and global registries held before.
+- **Settings and the registry belong to a `Citry` object.** Django
+  settings and global registries move onto one `Citry` instance
+  ([DJC-026](#djc-026), [DJC-027](#djc-027)).
 - **Browser code runs as Vue.** Citry mounts interactive components as
   Vue apps, and `Component.View` handlers become Citry Events: component
   methods that the browser calls over HTTP.
@@ -182,7 +182,7 @@ first one fails silently.
 | <span id="djc-020">DJC-020</span> | Positional inputs and `...list` spreads | Inputs are keyword-only. Name every input. Replace a list spread with a mapping in `c-bind`, or pass the list as one named input. | 🔴 |
 | <span id="djc-030">DJC-030</span> | A missing variable renders as `""` | Raises `KeyError` that points at the line and column. Pass the name, guard the branch, or set a default in `template_data`. | 🟡 |
 | <span id="djc-080">DJC-080</span> | A dot reads dict keys: `{{ data.error }}` | A dot is Python attribute access. Slot data still allows `d.error`; an ordinary dict needs `d['error']`. Details below. | 🟡 |
-| <span id="djc-019">DJC-019</span> | `_('text')` in arguments, lists, and dicts | The sandbox rejects the name `_`. Use Citry's [i18n](/i18n/) `tr()` messages, or translate in `template_data`. Details below. | 🔴 |
+| <span id="djc-019">DJC-019</span> | `_('text')` in arguments, lists, and dicts | Citry rejects template names that start with `_`. Use Citry's [i18n](/i18n/) `tr()` messages, or translate in `template_data`. Details below. | 🔴 |
 | <span id="djc-039">DJC-039</span> | `bool_var=" {% noop is_active %} "` gives the string `" True "` | A `c-` value is one expression and keeps its type. Build a string yourself where you want one: `c-label="f' {is_active} '"`. For markup values, see [DJC-042](#djc-042). | 🟡 |
 | <span id="djc-042">DJC-042</span> | A `{% component %}` inside an argument renders to HTML for that input | Write the markup in the value: `c-body="<span>Hello {{ name }}</span>"`. Details below. | 🟡 |
 | <span id="djc-040">DJC-040</span> | `{# #}` anywhere, including inside an argument | Comments go between tags or between attributes, not inside a value. Move each one before the attribute or above the tag. Details below. | 🟡 |
@@ -204,9 +204,11 @@ Details:
 - **DJC-080:** Fill data is an immutable `SlotData` mapping, so keys that
   are valid Python names work with a dot. A key such as `aria-label`, a
   key starting with `_`, or a key with the same name as a mapping method
-  needs brackets or fill destructuring. Dot access to real object
+  needs brackets: `d['aria-label']`. Dot access to real object
   attributes works as before.
-- **DJC-019:** Write the text as a message in the component's `messages`
+- **DJC-019:** Citry evaluates template expressions in a restricted
+  mode, and a name that starts with `_` raises `SecurityError` at render.
+  Write the text as a message in the component's `messages`
   block and call it with `tr()`, also in attributes:
   `c-label="tr('my-app-hello')"`. The component also declares the
   language its messages are written in (`class I18n: messages_locale`);
@@ -246,7 +248,7 @@ and the caches.
 | <span id="djc-026">DJC-026</span> | Standalone registries, `@register(..., registry=...)`, `all_registries()` | Each `Citry` instance owns its registry. Set `citry = app` on the class or call `app.register(...)`. Keep your own references instead of calling `all_registries()`. | 🔴 |
 | <span id="djc-027">DJC-027</span> | `COMPONENTS` setting; `dirs` defaults to `BASE_DIR/components` | Pass the settings to `Citry(...)` or `CitrySettings(...)`. List every component directory as an absolute path; Citry does not read `BASE_DIR`. | 🔴 |
 | <span id="djc-064">DJC-064</span> | `COMPONENTS["libraries"]` and `import_libraries()` | Remove them. Put those modules under a scanned directory (`Citry(dirs=...)`), or import them where your app starts. | 🔴 |
-| <span id="djc-065">DJC-065</span> | `autodiscover(map_module=...)` | Call `app.autodiscover()`, or rely on the scan Citry runs at the first lookup. There is no `map_module`; paths are relative to `sys.path`. | 🟡 |
+| <span id="djc-065">DJC-065</span> | `autodiscover(map_module=...)` | Call `app.autodiscover()`, or rely on the scan Citry runs at the first lookup. There is no `map_module`; module names are worked out from the `sys.path` entry that contains each file. | 🟡 |
 | <span id="djc-028">DJC-028</span> | Reserved names follow registered Django tags and the tag formatter | `if`, `elif`, `else`, `for`, `empty`, `raw`, `fill`, and `slot` are Citry's own tags. Rename a colliding component, for example `Empty` to `EmptyState`. | 🔴 |
 | <span id="djc-077">DJC-077</span> | `dynamic` and `error_fallback` are reserved | Built-in names are reserved too: `component`, `element`, `provide`, `cache`, `error-fallback`, `js`, `css`, `i18n`, `trans`, `mark`. Details below. | 🔴 |
 | <span id="djc-024">DJC-024</span> | Names with `/`, such as `te-s/t` | A name starts with a letter, followed by letters, digits, `-`, `_`, or `.`. Rename (`te-s-t`) and update the `<c-*>` tags. | 🔴 |
@@ -283,8 +285,8 @@ changes are easy to find and can silently change output.
 | ID | django-components | Citry: what to do | Impact |
 |---|---|---|---|
 | <span id="djc-001">DJC-001</span> | `{% html_attrs attrs defaults class=... %}`, `attrs:` and `defaults:` keys | Write `<div c-bind="defaults" c-bind="attrs" c-class="...">`. Fallbacks go first. Details below. | 🔴 |
-| <span id="djc-002">DJC-002</span> | The same key twice is joined: `foo="bar baz"` | The same attribute twice on one tag is an error ("Duplicate attribute 'foo' found"). Combine the values into one attribute. | 🟡 |
-| <span id="djc-043">DJC-043</span> | No equivalent: one argument syntax | `title="x"` and `c-title="y"` on one tag is a parse error. Pick one form per input. Details below. | 🟡 |
+| <span id="djc-002">DJC-002</span> | The same key twice is joined: `foo="bar baz"` | The same attribute twice on one tag is an error ("Duplicate attribute 'foo' found"). Combine the values into one attribute. Only `c-bind` may repeat. | 🟡 |
+| <span id="djc-043">DJC-043</span> | No equivalent: one argument syntax | `title="x"` and `c-title="y"` on one tag is a parse error. Pick one form per input (`c-bind` may still repeat). Details below. | 🟡 |
 
 Details:
 
@@ -403,21 +405,41 @@ starts its browser behavior.
 
 | ID | django-components | Citry: what to do | Impact |
 |---|---|---|---|
+| <span id="djc-095">DJC-095</span> | `class Media` on a component | Citry ignores `Media` silently: no error and no assets. Rename it to `class Dependencies`. Details below. | 🔴 |
+| <span id="djc-025">DJC-025</span> | The page loads its own runtime script and component scripts | Remove that runtime and the attributes only it understood. Citry sends one Vue runtime that mounts every Citry Vue app. Details below. | 🔴 |
+| <span id="djc-022">DJC-022</span> | `$component` callback receives the JS data object and a context argument | The callback receives one object; read `js_data()` values from its `component`. Prefer Vue Options (a Vue component options object). Details below. | 🔴 |
+| <span id="djc-085">DJC-085</span> | `DjangoComponents`, `Components`, `createComponentsManager()`, `registerComponentData(...)` | Delete that code and return browser data from `js_data()`. Browser code uses `Citry.events` for server calls and `Citry.vue` for Vue helpers. | 🔴 |
 | <span id="djc-012">DJC-012</span> | `ComponentsFileSystemFinder`, `collectstatic`, `static_files_allowed` / `static_files_forbidden` | Remove the finder from `STATICFILES_FINDERS`, skip `collectstatic` for components, drop the settings, and mount Citry's routes. Details below. | 🔴 |
 | <span id="djc-004">DJC-004</span> | `render_dependencies(html, strategy=...)`, `DJC_DEPS_STRATEGY` | Call `render().serialize(deps_strategy=..., deps_position=...)`. Details below. | 🟡 |
 | <span id="djc-023">DJC-023</span> | `{% component_css_dependencies %}` and `{% component_js_dependencies %}` emit assets | `<c-css />` and `<c-js />` only choose where assets go. Leaving one out does not keep assets off the page. Details below. | 🟡 |
-| <span id="djc-025">DJC-025</span> | The page loads its own runtime script and component scripts | Remove that runtime and the attributes only it understood. Citry sends one Vue runtime that mounts every Citry Vue app. Details below. | 🔴 |
-| <span id="djc-022">DJC-022</span> | `$component` callback receives the JS data object and a context argument | The callback receives one object; read `js_data()` values from its `component`. Prefer Vue Options (a Vue component options object). Details below. | 🔴 |
 | <span id="djc-074">DJC-074</span> | `get_js_data()` values ship whenever the component has any JS | `js_data()` values reach the browser on every render and become reactive members of the component's Vue instance. A plain script that runs once on load cannot read them. Details below. | 🟡 |
-| <span id="djc-085">DJC-085</span> | `DjangoComponents`, `Components`, `createComponentsManager()`, `registerComponentData(...)` | Delete that code and return browser data from `js_data()`. Browser code uses `Citry.events` for server calls and `Citry.vue` for Vue helpers. | 🔴 |
 | <span id="djc-086">DJC-086</span> | `callComponent()` returns a Promise; callback errors reject it | Citry calls each `$component` callback itself; you cannot call or await it. Return nothing or a cleanup function. Details below. | 🔴 |
-| <span id="djc-087">DJC-087</span> | The call rejects when no element carries the instance marker | The callback still runs. `component.$el` may not be an element and `els` is empty, so check before using them. | 🟡 |
+| <span id="djc-087">DJC-087</span> | The call rejects when no element carries the instance marker | For a component that renders only text or nothing, the callback still runs, but `component.$el` is not an element and `els` is empty. Check before using them. | 🟡 |
 | <span id="djc-045">DJC-045</span> | A subclass's `Media` entries come before its parent's | The parent's come first, so the subclass's CSS wins ties. Usually nothing to do; if you relied on the parent winning, restate its rule in the subclass. | 🟡 |
 | <span id="djc-046">DJC-046</span> | Classes in `extend` merge in reverse order | They merge in the order written: `extend = [A, B]` puts A's assets first. Reverse your list only if you relied on the old order. | 🟡 |
 | <span id="djc-047">DJC-047</span> | `bytes` asset paths are accepted | `TypeError` naming the component and the value. Use `str` or `pathlib.Path`. | 🟡 |
 
 Details:
 
+- **DJC-095:** A nested `Dependencies` class takes `js`, `css` (a list, or
+  a dict keyed by media type such as `"print"`), and `extend`, like
+  `Media`. [Dependency files](/advanced/dependency-files/) shows the
+  options. Search for `class Media` after porting; a leftover one fails
+  silently.
+- **DJC-025:** Let Citry deliver its Vue runtime, which matches the
+  installed Citry version, and the compiled components. In templates, use
+  Vue's own `v-*` attributes, Citry's `@c-*` attributes to call the
+  server, and `:c-*` attributes to bind State (values Citry keeps between
+  server calls).
+- **DJC-022:** `$component` accepts Vue Options or a callback. The
+  callback runs after mount and after each server render the page applies
+  to the component. Its argument has `component` (the Vue instance),
+  `revision`, `onEvent`, `state`, `sendEvent`, `loading`, `error`, `i18n`,
+  `els` (the root elements), and `id` (the render ID). Rewrite the
+  callback to take `({ component, revision, onEvent })` and read
+  `js_data()` values from `component`, such as `component.message`. Or
+  use `onServerRender({ component, revision, onEvent })` in the
+  Options object.
 - **DJC-012:** Citry serves only the scripts and styles it generates,
   from routes you mount in your app, and never serves component source
   (`.py` or `.html`). A custom `media_class` that overrode
@@ -436,20 +458,6 @@ Details:
 - **DJC-023:** If you left `{% component_css_dependencies %}` out of a
   page to keep its CSS off, that no longer works. To keep an asset off a
   page, remove it from the component or filter it in `on_dependencies`.
-- **DJC-025:** Let Citry deliver its Vue runtime, which matches the
-  installed Citry version, and the compiled components. In templates, use
-  Vue's own `v-*` attributes, Citry's `@c-*` attributes to call the
-  server, and `:c-*` attributes to bind State (values Citry keeps between
-  server calls).
-- **DJC-022:** `$component` accepts Vue Options or a callback. The
-  callback runs after mount and after each server render the page applies
-  to the component. Its argument has `component` (the Vue instance),
-  `revision`, `onEvent`, `state`, `sendEvent`, `loading`, `error`, `i18n`,
-  `els` (the root elements), and `id` (the render ID). Rewrite the
-  callback to take `({ component, revision, onEvent })` and read
-  `js_data()` values from `component`, such as `component.message`. Or
-  use `onServerRender({ component, revision, onEvent })` in the
-  Options object.
 - **DJC-074:** Templates, Vue Options (`this.message`), and
   `onServerRender` (`component.message`) can read `js_data()` values. After
   porting, check each component that pairs a plain script with
@@ -464,7 +472,7 @@ Details:
   catch errors that must not stop the page. Move server work to an Events
   handler and await `$sendEvent()`.
 
-## Port built-in tags
+## Port built-ins, caching
 
 These built-ins keep their purpose but change their tag, their Python
 entry point, or where their data is cached.
@@ -472,13 +480,13 @@ entry point, or where their data is cached.
 | ID | django-components | Citry: what to do | Impact |
 |---|---|---|---|
 | <span id="djc-062">DJC-062</span> | `{% component name_var %}` is rejected | Use `<c-component c-is="name_var" />`. A tag name is always literal: `<c-{{ name }}>` does not interpolate. | 🔴 |
-| <span id="djc-076">DJC-076</span> | `DynamicComponent`, the `dynamic` tag, `dynamic_component_name` | Write `<c-component c-is="x" />`; its name cannot change. Delete the setting and the import. Details below. | 🔴 |
+| <span id="djc-076">DJC-076</span> | `DynamicComponent`, the `dynamic` tag, `dynamic_component_name` | Write `<c-component c-is="x" />`. The tag name `c-component` is fixed, so delete `dynamic_component_name` and the import. Details below. | 🔴 |
 | <span id="djc-079">DJC-079</span> | `{% component "error_fallback" %}`, a `content` slot, the `ErrorFallback` class | Write `<c-error-fallback>` with the guarded content as its body. Details below. | 🔴 |
 | <span id="djc-075">DJC-075</span> | Processed JS/CSS cached in a Django cache under `__components:` keys at class definition | Each `Citry` instance caches in `Citry(cache=...)`, in memory by default, under `citry:` keys at the first render. Details below. | 🟡 |
 | <span id="djc-091">DJC-091</span> | `Component.Cache.cache_name` picks a Django cache per component | A `Citry` instance has one cache backend. Pass it once as `Citry(cache=...)`. | 🟡 |
 | <span id="djc-092">DJC-092</span> | `Cache.hash()`; `include_slots` | Replace both with `Cache.vary(self, kwargs, slots)`, returning only values that can change output; Citry hashes them. Details below. | 🔴 |
 | <span id="djc-093">DJC-093</span> | `{% cache timeout key ... using=... %}` | Write `<c-cache key="..." c-ttl="..." c-vary="...">` in a component template, and remove `{% load cache %}` and `using=`. Details below. | 🔴 |
-| <span id="djc-094">DJC-094</span> | Cached HTML keeps the original component IDs | Cached descendants get fresh IDs on each replay; only the cached boundary keeps its ID. Do not store or compare descendant IDs (`data-cid-*`); Citry updates its own dependency and Events records. | 🟡 |
+| <span id="djc-094">DJC-094</span> | Cached HTML keeps the original component IDs | Cached descendants get fresh IDs on each replay; only the cached component itself keeps its ID. Do not store or compare descendant IDs (`data-cid-*`); Citry updates its own dependency and Events records. | 🟡 |
 
 Details:
 
@@ -505,9 +513,9 @@ Details:
   expected the cache to fill when modules are imported.
 - **DJC-091:** Split components across `Citry` instances only when they
   truly need separate instances; there is no per-component backend name.
-- **DJC-092:** Every slot that produces content needs an explicit
-  variation, such as whether it is present or which caller option shapes
-  it. Citry never guesses a slot's effect from closures or source text.
+- **DJC-092:** Every slot that produces content must appear in the
+  `vary()` result, for example whether it is present or which caller
+  option shapes it. Citry never guesses a slot's effect from closures or source text.
 - **DJC-093:** Move standalone cached markup into a root component
   template, and turn the timeout and the vary-on values into `c-ttl` and
   `c-vary`. The cache uses the `Citry` instance's backend.
@@ -520,11 +528,11 @@ template tags.
 | ID | django-components | Citry: what to do | Impact |
 |---|---|---|---|
 | <span id="djc-058">DJC-058</span> | Nested `ComponentConfig` class (or the `ExtensionClass` alias) | Rename it to `Config` with the base `Extension.Config`. Update hook bodies for renamed context fields such as `ctx.component_class`. | 🔴 |
-| <span id="djc-057">DJC-057</span> | Routes under `/components/ext/<name>/`; `<int:id>` converters | Routes live under `<prefix>/ext/<name>/` in your app. Write `{id}` and convert it in the handler. Details below. | 🔴 |
+| <span id="djc-057">DJC-057</span> | Routes under `/components/ext/<name>/`; `<int:id>` converters | Routes live under `ext/<name>/` below your Citry mount prefix. Write `{id}` and convert it in the handler. Details below. | 🔴 |
 | <span id="djc-084">DJC-084</span> | `ComponentCommand` subclasses whose `handle` receives Django's options | Base the commands on `citry.ExtensionCommand`. Details below. | 🔴 |
 | <span id="djc-054">DJC-054</span> | Custom tags: `BaseNode` or `@template_tag` | There is no tag API. Rewrite each custom tag as a component. Details below. | 🔴 |
-| <span id="djc-056">DJC-056</span> | `on_component_rendered` fires on the failing component | It fires on each enclosing component, with the original exception, not on the failing component itself. Move error handling to an ancestor's hook. | 🟡 |
-| <span id="djc-055">DJC-055</span> | `on_registry_created` / `on_registry_deleted` | No standalone registries, so no such hooks. Use `on_extension_created`, whose context carries the `Citry` instance. Registry-deletion cleanup has no replacement; the registry goes away with its instance. | 🟡 |
+| <span id="djc-056">DJC-056</span> | `on_component_rendered` fires on the failing component | It fires on each enclosing component, with the original exception, not on the failing component itself. Move error handling to an ancestor's hook, or wrap the component in an error boundary. | 🟡 |
+| <span id="djc-055">DJC-055</span> | `on_registry_created` / `on_registry_deleted` | No standalone registries, so no such hooks. Use `on_extension_created`, whose context carries the `Citry` instance. Details below. | 🟡 |
 | <span id="djc-059">DJC-059</span> | `Component.template` / `.js` / `.css` return hook-processed content | The class attributes keep what you wrote. Read processed content with `get_template().source`, `get_js()`, and `get_css()`. | 🟡 |
 | <span id="djc-090">DJC-090</span> | `on_component_class_deleted(ctx)` | Not available. Move cleanup to `on_component_unregistered`. Details below. | 🔴 |
 | <span id="djc-061">DJC-061</span> | An unregistered class is freed with your last reference | Classes register when defined and the `Citry` instance keeps them. Call `app.unregister(cls)` before dropping the class. Details below. | 🟡 |
@@ -548,16 +556,16 @@ Details:
   `template_data` or `on_render`, its parameters into `Kwargs` fields, and
   its body into the default slot. Turn flags into inputs as in
   [DJC-021](#djc-021).
-- **DJC-090:** Citry has no class-deletion hook because Python can run
-  finalizers while application locks are held. For indexes that only
+- **DJC-055:** Registry-deletion cleanup has no replacement; the
+  registry goes away with its `Citry` instance.
+- **DJC-090:** For indexes that only
   live in memory and should drop an unregistered class, use a
   `weakref.WeakSet` or `WeakKeyDictionary`. `Citry.clear()` tears everything down at once and emits no
   per-component hooks.
 - **DJC-061:** This matters for tooling that swaps classes at runtime,
   such as hot swapping or unloading plugins. Unregister the class, then
-  drop your own references; render caches then release it. Rendering
-  does not keep a class alive: once you unregister it and drop your
-  references, Python frees it.
+  drop your own references. Rendering does not keep a class alive, so
+  Python then frees it.
 
 ## Update tests and CLI
 
@@ -566,7 +574,7 @@ scripts and CI call.
 
 | ID | django-components | Citry: what to do | Impact |
 |---|---|---|---|
-| <span id="djc-066">DJC-066</span> | `@djc_test` resets global state | Remove it. Create a fresh `Citry()` per test and set `citry = c` on the components under test. Details below. | 🟡 |
+| <span id="djc-066">DJC-066</span> | `@djc_test` resets global state | Remove it. In each test, create `c = Citry()` and set `citry = c` on the components under test. Details below. | 🟡 |
 | <span id="djc-013">DJC-013</span> | Django's `template_rendered` signal and `assertTemplateUsed` | No template signal. Record renders with a test extension that implements `on_component_rendered`. | 🟡 |
 | <span id="djc-052">DJC-052</span> | `data-djc-id-<id>` on each rendered root | `data-cid-<id>=""` appears only on output with no browser behavior, with a fresh ID each render. Details below. | 🟡 |
 | <span id="djc-081">DJC-081</span> | `python manage.py components ...` | Use the standalone `citry` command. Details below. | 🔴 |
@@ -643,22 +651,22 @@ Details:
   `ViewEvents` route has no URL builder of its own; treat it as a first
   step of the port, not as a routing API.
 
-## Update output tests { #update-exact-output-tests }
+## Output-only changes { #update-exact-output-tests }
 
 These differences do not change what the browser shows, but error
 assertions and exact HTML snapshots may need updating.
 
-| ID | django-components | Citry | Impact |
+| ID | django-components | Citry: what to do | Impact |
 |---|---|---|---|
 | <span id="djc-003">DJC-003</span> | Single quotes escaped as `&#x27;` | Escaped as `&#39;`, the same character. Update tests that assert the old bytes. | 🟢 |
 | <span id="djc-005">DJC-005</span> | Inline JS/CSS containing its own end tag raises `RuntimeError` | Raises `ValueError`: `...contains a '</script>' end tag. This is not allowed.` | 🟢 |
 | <span id="djc-006">DJC-006</span> | A runtime script on every document render | Added only when the output needs browser behavior: Vue syntax, component JS, `js_data()` values, or Events. Drop assertions that it is always present. | 🟢 |
 | <span id="djc-038">DJC-038</span> | Parentheses opt a value into Python: `disabled=(not editable)` | The `c-` prefix makes it an expression; parentheses still work but are not needed: `c-disabled="not editable"`. | 🟢 |
-| <span id="djc-041">DJC-041</span> | Helpers like `len` added to the context on each call | Python builtins such as `len` and `str` raise `NameError` unless you supply them. Register helpers once: `Citry(template_globals={"len": len})`. | 🟢 |
+| <span id="djc-041">DJC-041</span> | Helpers like `len` added to the context on each call | As before, builtins are not available: `len(...)` raises `KeyError` unless you supply it. Register helpers once: `Citry(template_globals={"len": len})`. | 🟢 |
 | <span id="djc-044">DJC-044</span> | A plain base class with a `Media` class contributes its entries | Reusable bases and plain classes in `extend` contribute their `Dependencies`. Details below. | 🟢 |
 | <span id="djc-048">DJC-048</span> | `js = ...` with `js_file = None` (or the reverse) raises | Allowed; only two values that are both set conflict. You can restore an explicit `= None`. | 🟢 |
 | <span id="djc-049">DJC-049</span> | `://example.com/x.js` emitted as `%3A//example.com/...` | Emitted as written. Update tests that assert `%3A//`. | 🟢 |
-| <span id="djc-053">DJC-053</span> | Error paths include a slot segment for content rendered through a slot | Content in a fill or fallback shows `Card(slot:body)`. A component placed by a fill shows only the chain of components that wrote it (`Page > Failing`). Details below. | 🟢 |
+| <span id="djc-053">DJC-053</span> | Error paths include a slot segment for content rendered through a slot | Content in a fill or fallback shows `Card(slot:body)`. A component placed by a fill shows only the components whose templates contain it (`Page > Failing`). Details below. | 🟢 |
 | <span id="djc-063">DJC-063</span> | Text beside `{% fill %}` raises `TemplateSyntaxError` | The parent's first render raises `SyntaxError`: `Text cannot appear next to '<c-fill>'` (or `Expression cannot appear...` for a variable). | 🟢 |
 | <span id="djc-078">DJC-078</span> | `NotRegistered`: "The component 'x' was not found" | Still `NotRegistered`, now "No component registered as 'x'." Details below. | 🟢 |
 
