@@ -646,11 +646,11 @@ def assemble_typed_render(
         except (TypeError, ValueError) as error:
             # js_data() is the author's code, and the bare conversion error
             # names neither the component nor what to return instead.
-            msg = f"js_data() of component {frame.class_id!r} returned a value the browser cannot receive: {error}."
-            raise type(error)(msg) from error
+            msg = f"js_data() of component {frame.class_id!r} returned an unsupported value: {error}."
+            raise (TypeError(msg) if isinstance(error, TypeError) else ValueError(msg)) from error
         if type(frame_data) is not dict:
             raise TypeError(
-                f"js_data() of component {frame.class_id!r} must return a dict, got {type(frame_data).__name__}"
+                f"js_data() of component {frame.class_id!r} must return a dict, got {type(frame_data).__name__}."
             )
         type_key = frame.class_id
         if not type_key:

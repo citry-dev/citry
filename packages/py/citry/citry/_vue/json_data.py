@@ -31,7 +31,7 @@ def _json_plain(value: object, _ancestors: set[int] | None = None) -> object:
             )
         ancestors = set() if _ancestors is None else _ancestors
         if id(value) in ancestors:
-            raise ValueError("data sent to the browser must not contain itself")
+            raise ValueError("data sent to the browser must not contain itself; return a copy without the loop")
         ancestors.add(id(value))
         try:
             return {str(key): _json_plain(item, ancestors) for key, item in value.items()}
@@ -40,7 +40,7 @@ def _json_plain(value: object, _ancestors: set[int] | None = None) -> object:
     if isinstance(value, (list, tuple)):
         ancestors = set() if _ancestors is None else _ancestors
         if id(value) in ancestors:
-            raise ValueError("data sent to the browser must not contain itself")
+            raise ValueError("data sent to the browser must not contain itself; return a copy without the loop")
         ancestors.add(id(value))
         try:
             return [_json_plain(item, ancestors) for item in value]

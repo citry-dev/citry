@@ -78,8 +78,8 @@ class TestJsVars:
         with pytest.raises(
             TypeError,
             match=(
-                r"js_data\(\) of component 'Widget_\w+' returned a value the browser "
-                r"cannot receive: .*must use only string dict keys"
+                r"js_data\(\) of component 'Widget_\w+' returned an unsupported "
+                r"value: .*must use only string dict keys"
             ),
         ):
             str(_page(c)())

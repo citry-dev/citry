@@ -612,7 +612,7 @@ def test_direct_capture_json_and_document_helpers_validate_boundaries() -> None:
             _json_plain(value)
     cyclic: list[object] = []
     cyclic.append(cyclic)
-    with pytest.raises(ValueError, match="must not contain itself"):
+    with pytest.raises(ValueError, match="must not contain itself; return a copy"):
         _json_plain(cyclic)
 
     source = [
