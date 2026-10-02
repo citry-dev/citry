@@ -5,11 +5,11 @@ description: Port django-components Component.View handlers to typed Citry Event
 
 # Migrate from Component.View
 
-This guide is for django-components users whose components handle requests
-with a nested `class View`, through methods such as `get()` and `post()`. It
-shows how to move that code to Citry's server events in two steps: first keep
-the verb methods as they are, then give each user action its own named
-method.
+Your django-components components handle requests with a nested
+`class View`, through methods such as `get()` and `post()`, and you want
+those forms and fragment loaders to keep working in Citry. You can move them
+in two steps: first keep the verb methods as they are, then give each user
+action its own named method.
 
 Most of the shape carries over. The component still owns its request
 handling, and a plain HTML form can still post to the component's own URL.
@@ -37,7 +37,7 @@ from citry.ext.events import ViewEvents, actions, event, get_event_url
 | `class View: def post(...)` | First step: `class Events(ViewEvents): def post(...)` |
 | Several operations inside one `post()` | One named handler per operation |
 | `request.POST.get("name")` | A `data` parameter with a typed class |
-| `request.user` | `request.native.user`, or a value from `_context` |
+| `request.user` | `request.native.user`, or a value your `_context` method loads once per call |
 | `HttpResponse` with component HTML | Return the component |
 | `HttpResponseRedirect(url)` | Return `actions.Redirect(url)` |
 | `get_component_url(...)` | `self.events.url(name)` or `get_event_url(...)` |
@@ -87,13 +87,15 @@ class ContactForm(Component):
 For the first step, make the nested class `class Events(ViewEvents)`.
 `ViewEvents` keeps the verb names: `post` still answers POST requests, at a
 URL that ends with the ID Citry gives the component class, so the form does
-not need to name a handler. The `data` parameter receives the form fields, checked
-against `ContactIn`:
+not need to name a handler. The `data` parameter receives the form fields,
+checked against `ContactIn`:
 
 ```citry
 --8<-- "docs_site/snippets/migrate_component_view.py:view-events"
 ```
 
+Citry has no public builder for the verb URL, so `template_data()` builds it
+with `self.citry.build_url(...)`; see [Build the verb URL](#build-the-verb-url).
 The handler returns `ThankYouMessage`, and Citry sends its rendered HTML as
 the whole response to the form post.
 
@@ -109,8 +111,8 @@ Only the URL carries over unchanged. Update each method body by hand:
 - Return a component, `actions.Render`, `actions.Redirect`, or a `dict`
   instead of building a response. See [Event actions](/events/actions/).
 - Leave `state` out of verb methods. State is the set of values Citry keeps
-  for a component between calls. Citry raises `ValueError` when a verb
-  method declares it. Values that must survive between calls belong in a
+  for a component between calls. When a verb method declares it,
+  Citry raises `ValueError` when the class is defined. Values that must survive between calls belong in a
   named handler, as described in [Event state](/events/state/).
 
 !!! warning "Add the CSRF token to every plain form"
