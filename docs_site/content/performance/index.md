@@ -36,7 +36,7 @@ where the measurement shows a gain.
 | Option | What it skips | What you promise | How long the saving lasts |
 | --- | --- | --- | --- |
 | [`simple = True`](/performance/simple-components/) | Setting up a component instance for each call | The component needs no instance, hooks, or JavaScript and CSS of its own | Each call; nothing is stored |
-| [`Const(value)`](/performance/const/) | Template work that uses only constant values | The marked value never changes | Across renders, for the 512 most recently used combinations on each `Citry` instance |
+| [`Const(value)`](/performance/const/) | Template work that uses only constant values | The marked value never changes | Across renders, for the 512 most recently used combinations of component and `Const` values on each `Citry` instance |
 | [`pure = True`](/performance/pure/) | Rendering the template again for the same data; child components and slots still render | The template's output depends only on its data | One page render |
 | [`Cache` or `<c-cache>`](/performance/caching/) | Data methods, the template, and child components | The cache key includes every value that changes the output | Until the entry expires, you remove it, or the backend drops it |
 
@@ -55,7 +55,8 @@ skip.
 - **`Const`** values are never checked again. If you change a marked
   object in place after passing it, the page can show the old output.
   Marking a value that differs on almost every render, such as a user
-  ID, fills the store with entries that are never reused.
+  ID, fills Citry's store of prepared templates with entries that are
+  never reused.
 - **Pure components** produce wrong output when the template changes
   something or reads values that are not in its data. The saving only
   appears when the same data repeats within one page render.
@@ -70,7 +71,7 @@ skip.
 ## Combine options
 
 A component can declare both `simple = True` and `pure = True` when both
-promises hold. Its `template_data()` still runs on every call.
+promises hold; `simple = "vue"` cannot be combined with `pure = True`. Its `template_data()` still runs on every call.
 
 `Const` values and pure components also speed up the first render of a
 cached component or region. Once a cached entry exists, Citry reuses it
