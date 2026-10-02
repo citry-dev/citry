@@ -28,6 +28,7 @@ from docs_site._internal.guards import (
     fence_validator,
     format_report,
     frontmatter,
+    heading_length,
     internal_link,
     json_ld,
     make_context,
@@ -187,6 +188,34 @@ def test_nav_guard_requires_sources_for_generated_pages(
     assert len(results) == 1
     assert results[0].severity is Severity.ERROR
     assert source in results[0].message
+
+
+def test_heading_length_guard_reports_long_section_headings_as_info(tmp_path: Path) -> None:
+    # Anchors, link targets, and backticks are not shown in the sidebar, so
+    # they must not count; fenced lines and other levels are not headings here.
+    (tmp_path / "page.md").write_text(
+        "# A page title that is long enough to be reported\n"
+        "\n"
+        "## Short heading { #a-very-long-explicit-anchor-id }\n"
+        "\n"
+        "## Call [`render`](/reference/) from a template page\n"
+        "\n"
+        "### Configure a signing secret before using State\n"
+        "\n"
+        "```python\n"
+        "## a comment line inside a code block that is long\n"
+        "```\n"
+        "\n"
+        "#### A fourth-level heading that is long enough\n",
+        encoding="utf-8",
+    )
+
+    results = list(heading_length.check(_content_ctx(tmp_path)))
+
+    assert [(r.line, r.severity) for r in results] == [(5, Severity.INFO), (7, Severity.INFO)]
+    assert results[0].source == "page.md"
+    assert "'Call render from a template page'" in results[0].message
+    assert run_guards(_content_ctx(tmp_path), strict=True, guards=[heading_length.check])[1] is True
 
 
 def test_fence_validator_flags_unclosed_fence(tmp_path: Path) -> None:

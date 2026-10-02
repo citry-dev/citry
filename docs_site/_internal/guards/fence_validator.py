@@ -37,6 +37,7 @@ class Fence:
     open_line: int  # 1-based line number of the opening fence
     closed: bool
     body: str = ""  # the lines between the opening and closing fence, joined by "\n"
+    close_line: int | None = None  # 1-based line number of the closing fence; None when unclosed
 
 
 def scan_fences(source: str) -> list[Fence]:
@@ -76,7 +77,14 @@ def scan_fences(source: str) -> list[Fence]:
         ):
             lang = info_string.split()[0] if info_string else ""
             fences.append(
-                Fence(info_string=info_string, lang=lang, open_line=open_line, closed=True, body="\n".join(body_lines))
+                Fence(
+                    info_string=info_string,
+                    lang=lang,
+                    open_line=open_line,
+                    closed=True,
+                    body="\n".join(body_lines),
+                    close_line=lineno,
+                )
             )
             in_fence = False
         else:

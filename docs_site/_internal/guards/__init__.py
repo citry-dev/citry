@@ -37,6 +37,7 @@ from docs_site._internal.guards import (
     example_contract,
     fence_validator,
     frontmatter,
+    heading_length,
     headings,
     html_wellformed,
     internal_link,
@@ -99,6 +100,7 @@ SOURCE_GUARDS: list[Guard] = [
     authored_reference.check,
     api_symbols.check,
     crossref.check,
+    heading_length.check,
 ]
 
 POST_BUILD_GUARDS: list[Guard] = [
