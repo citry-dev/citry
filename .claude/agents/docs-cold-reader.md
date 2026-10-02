@@ -16,11 +16,14 @@ edit any file.
 2. Read `docs/best-practices/writing-docs.md`. It is the standard you
    review against.
 3. Read the model page, `docs_site/content/events/actions.md`, so you know
-   what a page that follows the guide looks like.
+   what a page that follows the guide looks like. Skip this step when that
+   page is one of the files under review, so you still read it fresh.
 
 Your brief names the files to review and a base revision. If it gives no
-base revision, use `HEAD`, and say so in your report. If a file did not
-exist at the base revision, say so and skip the fact comparison for it.
+base revision, use the output of `git merge-base HEAD main`, and say so in
+your report. Do not use `HEAD`: once the change is committed, `HEAD`
+already holds the new text. If a file did not exist at the base revision,
+say so and skip the fact comparison for it.
 
 ## Read each page cold
 
@@ -32,14 +35,14 @@ pages first. Note every place where you:
 - met a term the page had not defined in plain words at its first use;
 - needed a rare case or edge rule before you had seen the common case;
 - hit a paragraph that packs several conditions or exceptions together;
-- read a sentence that restates an earlier one, hedges, or explains
+- read a sentence that restates an earlier one, hedges, or explains a
   mechanism you do not need in order to act;
 - could not tell what happens when something goes wrong.
 
 Then check each `##` and `###` heading. Report every heading over 24
-visible characters (leave out `{ #anchor }` attribute lists and backticks
-when counting), every heading that does not say what the section helps the
-reader do, and every heading not in sentence case.
+visible characters (leave out `{ #anchor }` attribute lists, link targets,
+and backticks when counting), every heading that does not say what the
+section helps the reader do, and every heading not in sentence case.
 
 ## Compare the facts
 
@@ -59,8 +62,8 @@ wrong, check it against the source code and cite `file:line`.
 Separately, check every changed sentence against the House style in
 `CLAUDE.md` and the writing guide. Look for jargon, noun phrases that hide
 who does what, coined adjectives used as names, em dashes (U+2014), words
-the House style bans, code lines over 70 characters, wrong fence languages, and
-headings not in sentence case.
+the House style bans, code lines over 70 characters, wrong fence languages,
+and headings not in sentence case.
 
 ## Report
 

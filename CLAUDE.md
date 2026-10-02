@@ -220,9 +220,9 @@ run it at **high or greater** effort. Fold its findings back before delivery.
   replacement or state explicitly that it found none. A general technical
   review does not satisfy this rule unless it reports the prose pass separately.
   Trivial typo-only changes are exempt.
-- **User-facing text also gets a cold read.** When work creates or rewrites a
-  docs page, README, or other text a Citry user reads, a separate agent reads
-  it as a first-time reader, using the saved reviewer in
+- **User-facing text also gets a cold read.** When work creates or
+  substantially rewrites a docs page, README, or public docstring, a separate
+  agent reads it as a first-time reader, using the saved reviewer in
   [`.claude/agents/docs-cold-reader.md`](.claude/agents/docs-cold-reader.md).
   Give it the changed pages and the base revision to compare facts against.
   It reports unclear, out-of-order, dense, or jargon-heavy passages, long
@@ -660,11 +660,9 @@ forward before continuing.
     they are supposed to distinguish.
 - **User-facing text follows the writing guide.** Docs pages, READMEs,
   public docstrings, error messages, and changelog entries follow
-  [`docs/best-practices/writing-docs.md`](docs/best-practices/writing-docs.md):
-  open with the reader's goal, go from common to rare, move edge cases to the
-  end, keep headings to about four words, and keep the error modes. It also
-  holds the rules for docs examples and before/after pairs to copy. Two rules
-  apply even when you do not open it:
+  [`docs/best-practices/writing-docs.md`](docs/best-practices/writing-docs.md),
+  which also holds the rules for docs examples. Two rules apply even when
+  you do not open it:
   - Keep lines in code blocks at 70 characters or fewer when practical. The
     rendered documentation column is narrower than a terminal. This applies
     to fenced code in Markdown and code examples inside docstrings.
