@@ -22,9 +22,9 @@ Someone may have hit the same thing already. Before you post, search:
 
 ## Ask a question
 
-If you cannot find an answer,
-[open a new issue]({{ repo_issues_url }}/new){: target="_blank" rel="noopener"}.
-Usage questions are welcome there, not only bug reports.
+If you cannot find an answer, ask in
+[Discussions]({{ repo_url }}/discussions){: target="_blank" rel="noopener"}.
+Keep issues for bug reports and feature requests.
 
 To get a useful answer quickly, include:
 
