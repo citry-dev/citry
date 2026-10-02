@@ -5,8 +5,9 @@ description: Port livecomponents in two safe steps, first keeping server-held St
 
 # Migrate from livecomponents
 
-This guide is for livecomponents users porting components to Citry. It
-shows where each part of a `LiveComponent` goes: its state model, its
+You have livecomponents components whose state lives in Redis, and you want
+to move them to Citry without changing how they behave on day one. This
+guide shows where each part of a `LiveComponent` goes: its state model, its
 commands, and the results a command returns.
 
 You can port in two steps. First, keep component state on the server, as
@@ -138,7 +139,9 @@ values, remove `_storage` to use the default:
 
 The handler and template stay the same. Citry now sends the State to the
 browser with the rendered component, signed so the server can detect a
-changed value, and the component no longer needs the cache.
+changed value, and the component no longer needs the cache. `_public` still
+decides which fields browser code can read. This example drops it, so its
+one field, `count`, stays readable.
 
 Signing does not hide anything: anyone can read the values in the page
 source, and you must check them like any other user input. A component with
@@ -178,8 +181,9 @@ each other in the list. See
 
 Citry has no `parent` or `find_one()` lookup. When Python owns the update,
 return a Render with an explicit target. To render into another component,
-use `target="render:<id>"` with that component's render ID. When another component should react
-in its own way, dispatch an event and let that component listen for it.
+use `target="render:<id>"`, where the render ID is the value of that
+component's `id` in the browser. When another component should react in its
+own way, dispatch an event and let that component listen for it.
 
 ## Rebuild each render
 
@@ -219,7 +223,7 @@ handler, or in the handler itself. Do it for every event, even when the page
 that rendered the component was protected. See
 [Authorize every event](/security/#authorize-every-event).
 
-### Plan for uploads
+### Files and server push
 
 Citry has no staged file uploads, and the server cannot push updates to the
 page. A handler marked `@event(bundle=False)` can return
