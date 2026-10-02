@@ -1055,6 +1055,12 @@ class Component(metaclass=ComponentMeta):
     _citry_mark_replacement: bool = False
     """Set on the instance that stands in for a synthetic mark element."""
 
+    _citry_mark_names: set[str] | None = None
+    """Names of the ``<c-mark>`` tags this component wrote that have rendered so far."""
+
+    _citry_mark_name_repeated: bool = False
+    """Set when a ``<c-mark>`` name rendered twice, so the render loop checks the settled output."""
+
     _citry_class_id: str
     """Stable class identity cached once for this render instance's hot path."""
 

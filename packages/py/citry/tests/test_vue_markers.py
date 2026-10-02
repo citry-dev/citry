@@ -226,17 +226,182 @@ def test_same_marker_name_is_valid_for_different_owners() -> None:
     }
 
 
-def test_duplicate_marker_names_within_one_owner_reject_prepared_assembly() -> None:
+_REPEATED_SHARED = r"Component '{owner}' rendered more than one <c-mark name='shared'>"
+
+
+@pytest.mark.parametrize("interactive", [False, True])
+def test_repeated_marker_name_rejects_every_render_path(interactive: bool) -> None:
     app = Citry(autodiscover=False)
+    button = '<button @click="count = 1">b</button>' if interactive else ""
 
     class DuplicateOwner(Component):
         citry = app
-        template = (
-            '<main><c-mark name="shared"><b>first</b></c-mark><c-mark name="shared"><b>second</b></c-mark></main>'
-        )
+        template = f"""
+            <main>
+              {button}
+              <c-mark name="shared"><b>first</b></c-mark>
+              <c-mark name="shared"><b>second</b></c-mark>
+            </main>
+        """
 
-    with pytest.raises(UnsupportedPreparedView, match="duplicated within its lexical owner"):
+    expected = _REPEATED_SHARED.format(owner="DuplicateOwner")
+    with pytest.raises(ValueError, match=expected):
+        DuplicateOwner().render().serialize()
+    with pytest.raises(ValueError, match=expected):
         _assemble(DuplicateOwner())
+
+
+def test_marker_inside_loop_rejects_more_than_one_item() -> None:
+    app = Citry(autodiscover=False)
+
+    class Loop(Component):
+        citry = app
+        template = """
+            <ul>
+              <c-for each="item in items">
+                <li><c-mark name="shared">{{ item }}</c-mark></li>
+              </c-for>
+            </ul>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"items": kwargs["items"]}
+
+    assert "only</li>" in Loop(items=["only"]).render().serialize()
+    with pytest.raises(ValueError, match=_REPEATED_SHARED.format(owner="Loop")):
+        Loop(items=["a", "b"]).render().serialize()
+
+
+def test_marker_names_may_repeat_across_exclusive_branches_and_instances() -> None:
+    app = Citry(autodiscover=False)
+
+    class Branches(Component):
+        citry = app
+        template = """
+            <section>
+              <c-if cond="ready"><c-mark name="shared"><b>ready</b></c-mark></c-if>
+              <c-else><c-mark name="shared"><b>waiting</b></c-mark></c-else>
+            </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"ready": kwargs["ready"]}
+
+    class Page(Component):
+        citry = app
+        template = """
+            <main>
+              <c-Branches c-ready="True" />
+              <c-Branches c-ready="False" />
+            </main>
+        """
+
+    html = Page().render().serialize()
+
+    assert "ready</b>" in html
+    assert "waiting</b>" in html
+
+
+def test_marker_in_fill_belongs_to_the_fill_author() -> None:
+    app = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = app
+        template = """
+            <article>
+              <c-mark name="shared"><c-slot /></c-mark>
+            </article>
+        """
+
+    class Twice(Component):
+        citry = app
+        template = """
+            <div><c-slot /><c-slot /></div>
+        """
+
+    class Page(Component):
+        citry = app
+        template = """
+            <main>
+              <c-Card><c-mark name="shared"><b>fill</b></c-mark></c-Card>
+            </main>
+        """
+
+    class SameAuthor(Component):
+        citry = app
+        template = """
+            <main>
+              <c-mark name="shared"><b>own</b></c-mark>
+              <c-Card><c-mark name="shared"><b>fill</b></c-mark></c-Card>
+            </main>
+        """
+
+    class ShownTwice(Component):
+        citry = app
+        template = """
+            <main>
+              <c-Twice><c-mark name="shared"><b>fill</b></c-mark></c-Twice>
+            </main>
+        """
+
+    # Card's own region and the region Page wrote in the fill have different owners.
+    assert "fill</b>" in Page().render().serialize()
+    with pytest.raises(ValueError, match=_REPEATED_SHARED.format(owner="SameAuthor")):
+        SameAuthor().render().serialize()
+    with pytest.raises(ValueError, match=_REPEATED_SHARED.format(owner="ShownTwice")):
+        ShownTwice().render().serialize()
+
+
+def test_error_fallback_may_reuse_the_name_of_the_content_it_replaces() -> None:
+    app = Citry(autodiscover=False)
+
+    class Broken(Component):
+        citry = app
+        template = """
+            <p>never</p>
+        """
+
+        def template_data(self, kwargs, slots):
+            raise RuntimeError("broken")
+
+    class Page(Component):
+        citry = app
+        template = """
+            <c-error-fallback>
+              <c-fill name="default">
+                <c-mark name="shared"><b>content</b></c-mark>
+                <c-Broken />
+              </c-fill>
+              <c-fill name="fallback">
+                <c-mark name="shared"><b>fallback</b></c-mark>
+              </c-fill>
+            </c-error-fallback>
+        """
+
+    html = Page().render().serialize()
+
+    assert "fallback</b>" in html
+    assert "content</b>" not in html
+
+
+def test_repeated_marker_name_in_cached_component_fails_every_render() -> None:
+    app = Citry(autodiscover=False)
+
+    class CachedDuplicate(Component):
+        citry = app
+        template = """
+            <main>
+              <c-mark name="shared">first</c-mark>
+              <c-mark name="shared">second</c-mark>
+            </main>
+        """
+
+        class Cache:
+            enabled = True
+
+    for _ in range(2):
+        with pytest.raises(ValueError, match=_REPEATED_SHARED.format(owner="CachedDuplicate")):
+            CachedDuplicate().render().serialize()
 
 
 def test_default_dispatcher_encodes_marker_render_once_with_nested_alias() -> None:

@@ -69,6 +69,7 @@ from citry.citry_render import (
 from citry.citry_template import CitryTemplate, DeclaredSlot
 from citry.client_directives import CLIENT_PROPS_ATTR, validate_client_props_target
 from citry.component_like import ComponentLike, _component_like_render_scope, _resolve_component_like
+from citry.components.mark import reject_repeated_mark_names
 from citry.constness import (
     _const_mapping,
     _ConstMapping,
@@ -1088,6 +1089,12 @@ def _settle_render(
                 continue
             return None
         finalized = _finalize(task.render, error)
+        owner = finalized.context.component
+        if owner is not None and owner._citry_mark_name_repeated:
+            # Two <c-mark> tags with one name rendered for this component. Every
+            # fill and branch it wrote has settled by now, so check the output it
+            # kept: an on_render hook or error boundary may have dropped one.
+            reject_repeated_mark_names(owner, finalized)
         if finalized.frame.is_component_root and finalized.context.component is not None:
             root_markers = tuple(dict.fromkeys(finalized.context._get_root_markers()))
             # Most roots have no extra markers. Keep their immutable frame;

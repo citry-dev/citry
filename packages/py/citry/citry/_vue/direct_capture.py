@@ -23,7 +23,7 @@ from citry.citry_render import (
     SimpleVueRecord,
 )
 from citry.client_directives import ComponentTagClientBindingKind
-from citry.components.mark import validate_mark_name
+from citry.components.mark import repeated_mark_name_error, validate_mark_name
 from citry.util.html import Markup, escape_to_str
 from citry_core.template_parser import analyze_browser_source
 
@@ -2605,8 +2605,14 @@ def assemble_typed_render(
         if definition_id is not None  # narrowed by the invariant above
     )
     ordered_markers = tuple(sorted(markers, key=lambda item: (item.owner_id, item.name, item.occurrence_id)))
-    if len({(item.owner_id, item.name) for item in ordered_markers}) != len(ordered_markers):
-        raise UnsupportedPreparedView("prepared marker name is duplicated within its lexical owner")
+    owned_names: set[tuple[str, str]] = set()
+    for item in ordered_markers:
+        if (item.owner_id, item.name) in owned_names:
+            # The render loop already rejects this when the owner settles, so
+            # this runs only if the two disagree about which component owns a
+            # region. Even then the author should see the same plain message.
+            raise repeated_mark_name_error(class_name_of(None, item.owner_id), item.name)
+        owned_names.add((item.owner_id, item.name))
     if len({item.occurrence_id for item in ordered_markers}) != len(ordered_markers):
         raise UnsupportedPreparedView("prepared marker occurrence has more than one alias")
     view = AssembledView(revision, root_id, occurrences, tuple(definitions.values()), ordered_markers)
