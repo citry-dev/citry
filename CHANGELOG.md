@@ -44,7 +44,7 @@ walks through every step.
 - **Component tag attributes become Vue bindings:** `:name`, `v-*`, and
   `ref` on a component tag no longer reach the child as kwargs, Vue
   bindings built in Python are rejected, and `#c-ignore` works only on
-  HTML elements
+  plain HTML elements, not on component tags or `<c-element>`
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-attributes-on-component-tags)).
 - **Component JavaScript moves to Vue Options:** the `$component` callback
   gets a smaller context, and `js_data()` keys that start with `$` or `_`
@@ -142,6 +142,23 @@ walks through every step.
   JavaScript or one guarded by `self.i18n.configured`, matching the
   editor; an unguarded Python call is still reported.
 
+- `citry create` now rejects a name whose file would be a Python keyword,
+  such as `citry create class`, instead of writing a module nobody can
+  import.
+- A Flask mount prefix written with a trailing slash, such as
+  `prefix="/citry/"`, now serves Citry's routes instead of sending every
+  Citry request to your app. A FastAPI or Flask prefix without a leading
+  `/` raises Citry's `ValueError` without changing the app.
+- Server-side State is now stored under `citry:state:` cache keys, so a
+  State token can only refer to State that Citry stored. After the
+  upgrade, events from a page opened earlier fail with a `stale_state`
+  error until the page is reloaded.
+- A component that declares `Dependencies` with an empty `css` list no
+  longer makes a fragment raise `RuntimeError` when no web integration is
+  mounted.
+- An `on_render` or `on_component_rendered` hook that returns
+  `str(result)` with extra HTML no longer writes the component's
+  `data-cid-*` attribute twice on one tag.
 
 ## v0.5.1
 
