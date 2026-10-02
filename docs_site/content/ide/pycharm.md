@@ -1,78 +1,62 @@
 ---
 title: PyCharm
-description: Connect PyCharm to the Citry language server with LSP4IJ, or run the command-line checker.
+description: Get Citry errors, completion, hover, and go to definition in PyCharm by connecting the Citry language server through the LSP4IJ plugin.
 ---
 
 # PyCharm
 
-!!! warning "No first-party JetBrains plugin yet"
+In PyCharm, Citry can report template mistakes as you type, complete
+component names and inputs, show types on hover, and take you to where a
+name is defined. This works inside the `template` strings of your Python
+components and in standalone `*.citry-html` template files.
 
-    Citry does not currently have a native PyCharm or IntelliJ plugin. Follow
-    development and vote for the integration on
-    [GitHub issue #78](https://github.com/citry-dev/citry/issues/78){: target="_blank" rel="noopener"}.
-    The tested LSP4IJ setup below provides substantial language-server
-    support while that work remains parked.
+This help comes from the Citry language server, `citry-lsp`. PyCharm starts it
+through the free [LSP4IJ plugin](https://plugins.jetbrains.com/plugin/23257-lsp4ij){: target="_blank" rel="noopener"}.
+Citry runs next to PyCharm's own Python support, so nothing you already rely
+on changes.
 
-Citry's tested PyCharm integration uses the free
-[LSP4IJ plugin](https://plugins.jetbrains.com/plugin/23257-lsp4ij){: target="_blank" rel="noopener"}
-to start `citry-lsp` from the project's Python environment. Citry attaches as
-a second language server to Python files, so PyCharm's own Python support
-continues to work.
+Two things are not included: Citry adds no coloring to templates in PyCharm,
+and HTML help inside nested templates is missing. For those, use
+[VS Code](/ide/vscode/).
 
-This setup provides live Citry diagnostics, completion, hover, Definition,
-References, Declaration, and Type Definition in inline Python templates and
-standalone `*.citry-html` files. Standalone Citry formatting also works. The
-setup was exercised in PyCharm 2026.2.0.1 with LSP4IJ 0.20.1.
+## Set up Citry in PyCharm
 
-Citry does not currently publish an official JetBrains plugin. The LSP4IJ
-route therefore does not add Citry syntax coloring, and it cannot reproduce
-the VS Code extension's private HTML, JavaScript, and CSS provider bridges.
+1. Install the language server in your project's Python environment, the one
+   that can import your application:
 
-## Install the language server
+    ```console
+    python -m pip install citry-lsp
+    ```
 
-Install `citry-lsp` in the same Python environment as the Citry project:
+2. Install **LSP4IJ** from PyCharm's plugin Marketplace.
+3. Download Citry's
+   [LSP4IJ template folder]({{ repo_url }}/tree/main/packages/editors/jetbrains/lsp4ij/citry){: target="_blank" rel="noopener"}.
+4. Open **Settings → Languages & Frameworks → Language Servers**, add a
+   language server, open the template selector, and choose
+   **Import from custom template…**. Select the downloaded `citry` folder.
+5. Tell Citry where your application is, as the next section shows.
 
-```console
-python -m pip install citry-lsp
-```
+Then open a component module or a template file. One Citry server handles
+both kinds of file for the project.
 
-Keeping the server in the project environment lets it import the registered
-component catalog. Then install **LSP4IJ** from PyCharm's plugin Marketplace.
-
-## Import the Citry server definition
-
-1. Download or copy Citry's
-   [LSP4IJ template directory]({{ repo_url }}/tree/main/packages/editors/jetbrains/lsp4ij/citry){: target="_blank" rel="noopener"}.
-2. Open **Settings → Languages & Frameworks → Language Servers** in PyCharm.
-3. Add a language server, open the template selector, and choose
-   **Import from custom template…**.
-4. Select the downloaded `citry` template directory.
-
-The definition maps Python documents to the `python` language ID and
-`*.citry-html` files to `citry-html`. Its default command expects the project
-environment at `.venv`:
+The template starts the server from a virtual environment in `.venv`:
 
 ```text
 macOS/Linux: $PROJECT_DIR$/.venv/bin/citry-lsp
 Windows:     $PROJECT_DIR$/.venv/Scripts/citry-lsp.exe
 ```
 
-Change the command after importing when the environment lives elsewhere.
+If your environment lives elsewhere, change the command after importing.
 
-## Select the registry target
+## Point Citry at your application
 
-The imported definition defaults to this initialization option:
+Citry needs your [`Citry`][citry.Citry] instance to know which components you
+registered. Without it, Citry checks only template syntax: it cannot complete
+your components or report a misspelled component tag.
 
-```json
-{
-  "protocolVersion": 1,
-  "app": "app:app",
-  "standardFormatting": true
-}
-```
-
-Change `app` to the `module:attribute` path of the project's [`Citry`][citry.Citry]
-instance or [`ComponentLibrary`][citry.ComponentLibrary]. For example:
+Set `app` in the server's initialization options to the instance's
+`module:attribute` path. The template uses `app:app`; change it to match your
+project:
 
 ```json
 {
@@ -82,8 +66,23 @@ instance or [`ComponentLibrary`][citry.ComponentLibrary]. For example:
 }
 ```
 
-When that import needs environment variables, add a workspace-relative
-`envFile` initialization option:
+`app` can also name a [`ComponentLibrary`][citry.ComponentLibrary], to work on
+a component library without a host application.
+
+## Settings
+
+These keys go in the same initialization options:
+
+| Key | What it does | Default |
+| --- | --- | --- |
+| `app` | The `module:attribute` path of your `Citry` instance or `ComponentLibrary` | `"app:app"` in the template |
+| `envFile` | A dotenv file to load before importing `app`, relative to the project root | None |
+| `typeCheck` | Report TypeScript errors in component JavaScript and templates | `true` |
+| `standardFormatting` | Let PyCharm format standalone `*.citry-html` files with Citry | `true` |
+| `protocolVersion` | The settings format version. Keep it at `1` | `1` |
+
+Use `envFile` when importing your application needs environment variables,
+such as Django settings:
 
 ```json
 {
@@ -94,53 +93,42 @@ When that import needs environment variables, add a workspace-relative
 }
 ```
 
-Citry reads the file only for its isolated app-discovery worker. Restart the
-language server after editing it if the current LSP4IJ version does not send a
-watched-file notification for that path.
+Citry uses these variables only while it imports your application. If you
+edit the file and Citry does not pick up the change, restart the language
+server.
 
-Open a component module or standalone template after saving the definition.
-One Citry server serves both mappings for that project.
+The TypeScript errors are the ones described in
+[TypeScript errors in component JavaScript and templates](/ide/vscode/#typescript-errors-in-component-javascript-and-templates).
+In PyCharm, the server needs Node.js and TypeScript's `tsc`, from your
+project's `node_modules` or on `PATH`. When it finds neither, it logs a
+warning and looks again every minute.
 
-The server also reports
-[TypeScript errors in component JavaScript and templates](/ide/vscode/#typescript-errors-in-component-javascript-and-templates)
-when it finds Node.js and TypeScript's `tsc`, in the project's
-`node_modules` or on `PATH`. When it finds neither, it logs a warning and
-looks again every minute. Add `"typeCheck": false` to the initialization
-options to turn them off.
+## Check templates from the terminal
 
-## Current limitations
-
-- Inline `template`, `js`, and `css` values retain normal Python string
-  coloring. Standalone `*.citry-html` files also have no Citry-specific
-  coloring through this setup.
-- Nested-template and `<c-element>` Citry semantics still work, but LSP4IJ
-  cannot delegate their embedded HTML to JetBrains' HTML provider as the
-  VS Code extension does. The same limitation applies to the richer embedded
-  JavaScript and CSS provider integrations.
-- LSP4IJ does not display Citry's private registry status notification. An app
-  discovery failure still appears through the standard editor warning and the
-  server falls back to syntax-only analysis.
-- The setup was tested in local PyCharm only, not in JetBrains remote
-  development.
-
-Citry has no JetBrains plugin. The LSP4IJ setup above is all PyCharm needs
-to attach Citry to Python files.
-
-## Check templates from PyCharm
-
-Run Citry's batch checker from PyCharm's terminal or as an external tool:
-
-```console
-citry check --static
-```
-
-Use registry mode when the project can import its [`Citry`][citry.Citry]
-instance:
+PyCharm's terminal, or an external tool entry, can run the same checks as a
+command. This is also what you run in CI:
 
 ```console
 citry --app myproject.app:citry_app check
 ```
 
-This provides the same parser diagnostics used by the language server, but as
-a command rather than live editor feedback. It remains useful in CI and when
-LSP4IJ is unavailable.
+Use `citry check --static` when the project cannot be imported. See
+[Command line](/cli/#check-component-templates).
+
+## What PyCharm does not support yet
+
+- **No Citry coloring.** Inline `template`, `js`, and `css` strings keep
+  PyCharm's normal Python string color, and `*.citry-html` files get no
+  Citry coloring either.
+- **No HTML, JavaScript, or CSS help inside nested templates.** Citry's own
+  checks and completion still work in nested templates and `<c-element>`,
+  but PyCharm's HTML, JavaScript, and CSS help does not reach them, as it
+  does in VS Code.
+- **No status message when the application fails to import.** You see the
+  standard editor warning instead, and Citry checks syntax only until the
+  import works.
+- **Remote development is untested.** The setup was tested in local PyCharm
+  2026.2.0.1 with LSP4IJ 0.20.1.
+
+Citry has no native PyCharm or IntelliJ plugin. To follow or vote for one, see
+[GitHub issue #78](https://github.com/citry-dev/citry/issues/78){: target="_blank" rel="noopener"}.
