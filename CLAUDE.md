@@ -220,6 +220,13 @@ run it at **high or greater** effort. Fold its findings back before delivery.
   replacement or state explicitly that it found none. A general technical
   review does not satisfy this rule unless it reports the prose pass separately.
   Trivial typo-only changes are exempt.
+- **User-facing text also gets a cold read.** When work creates or rewrites a
+  docs page, README, or other text a Citry user reads, a separate agent reads
+  it as a first-time reader, using the saved reviewer in
+  [`.claude/agents/docs-cold-reader.md`](.claude/agents/docs-cold-reader.md).
+  Give it the changed pages and the base revision to compare facts against.
+  It reports unclear, out-of-order, dense, or jargon-heavy passages, long
+  headings, and changed facts, then runs the prose pass above.
 - **Prove uncertain behavior, do not assert it.** A claim that some mechanism
   "is enough" or "is not needed" is a hypothesis until a harness or a walked
   edge case (the teleport-out-of-subtree case, the empty input, the concurrent
@@ -598,8 +605,8 @@ forward before continuing.
   asks for a specific register, style, or exact format, use plain language in
   every kind of text: replies, plans, reports, agent instructions, design docs,
   specifications, issue and PR text, code comments, docstrings, error messages,
-  and user-facing documentation. The user-facing section below adds extra
-  presentation rules; it does not limit this default to user-facing text.
+  and user-facing documentation. The writing guide below adds page-level
+  rules for user-facing text; it does not limit this default to that text.
   State who acts, what they do, what they act on, and why it matters. Prefer a
   sentence that explains the action over an abstract noun phrase that merely
   labels it. This is an open-source project, so write for a first-time visitor:
@@ -651,7 +658,13 @@ forward before continuing.
     explanations of the same relationship, full component classes where a
     template fragment suffices, and examples that apply equally to both terms
     they are supposed to distinguish.
-- **User-facing docs (README, future docs site) additionally:**
+- **User-facing text follows the writing guide.** Docs pages, READMEs,
+  public docstrings, error messages, and changelog entries follow
+  [`docs/best-practices/writing-docs.md`](docs/best-practices/writing-docs.md):
+  open with the reader's goal, go from common to rare, move edge cases to the
+  end, keep headings to about four words, and keep the error modes. It also
+  holds the rules for docs examples and before/after pairs to copy. Two rules
+  apply even when you do not open it:
   - Keep lines in code blocks at 70 characters or fewer when practical. The
     rendered documentation column is narrower than a terminal. This applies
     to fenced code in Markdown and code examples inside docstrings.
@@ -659,43 +672,6 @@ forward before continuing.
     template-only examples. Use `html` only for plain HTML without Citry or
     Vue syntax. The ordinary HTML lexer marks valid attributes such as
     `@click` as errors.
-  - Keep component examples focused on the contracts the page uses. In
-    ordinary documentation, omit an empty `Kwargs` when the component neither
-    uses nor discusses inputs, and omit an empty `Slots` when it neither uses
-    nor discusses slots. Omitting a schema makes that contract permissive;
-    declaring an empty schema rejects every name, so keep the declaration when
-    that rejection is part of the lesson. Data methods still receive both
-    `kwargs` and `slots` when either declaration is omitted, so retain both
-    parameters and remove only annotations that name a missing declaration.
-    Also keep explicit schemas in the Getting Started examples after the
-    minimal installation check, where the guided journey establishes
-    component contracts, and in Examples recipes, where an empty schema
-    deliberately shows that the component accepts no kwargs or slots. This is
-    an editorial convention for reader-facing examples, including docs/example
-    source files that the docs machinery imports or executes. Production
-    component implementations and generated scaffolds still follow the
-    explicit-schema convention in the component-authoring guide.
-  - Lead with the symptom, not the mechanism. Frame a gotcha around what
-    the reader will see ("the second render shows stale text"), not the
-    internal cause; mention the mechanism only when the reader needs it to
-    act.
-  - Don't leak internals into user docs: private symbol names, cache key
-    formats, debug attribute names belong in code comments or contributor
-    guides. If a limitation can't be described without naming an internal,
-    that's a sign the API needs a name first.
-  - Don't put internal roadmap in user docs ("this will be refactored in
-    v2" belongs in the tracking issue).
-  - Section titles must say what the section is about; a skim-reader should
-    know from the heading alone whether it applies to them. No vague
-    headings ("Notes", "Caveats").
-  - When warning against a mistake, show the reader's natural first attempt,
-    why it breaks in plain language, then the fix; pair a wrong and a right
-    example with comments on the lines that matter.
-  - Order a feature showcase by value to the target reader (for citry, a
-    Python/web engineer), not by what is easiest to defend: core capabilities
-    first, then validation, then optimizations. Do not drop a genuinely
-    valuable feature for a weak caveat (e.g. "no turnkey endpoint"); show it,
-    framed honestly. Keep it accurate: only showcase what is actually built.
 - **No em dashes** (the U+2014 character) in agent docs, code comments, or
   docstrings. Use a hyphen, a comma, parentheses, or two sentences. A
   PostToolUse hook ([`.claude/hooks/check-em-dashes.py`](.claude/hooks/check-em-dashes.py))
@@ -780,6 +756,8 @@ commit history already records it.
 - Cross-crate architecture -> [`docs/agent/INDEX.md`](docs/agent/INDEX.md)
 - Why the rules exist -> [`docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md)
 - Monorepo dev / build / release -> [`docs/codebase.md`](docs/codebase.md)
+- Writing user-facing text ->
+  [`docs/best-practices/writing-docs.md`](docs/best-practices/writing-docs.md)
 - Brand assets (the C3 logo, favicons, icons) ->
   [`docs/codebase.md`](docs/codebase.md) "Brand assets"
 - Python `citry` changelog -> [`CHANGELOG.md`](CHANGELOG.md); auxiliary package
