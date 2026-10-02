@@ -5,9 +5,10 @@ description: Port Tetra public state, server methods, promise calls, and client 
 
 # Migrate from Tetra
 
-This guide is for Tetra users porting components to Citry. It shows where
-each part of a Tetra component goes: its public attributes, its `@public`
-methods, its JavaScript calls, and its client callbacks.
+You have Tetra components whose templates call Python methods and await
+their results, and you want them to keep working in Citry. This guide shows
+where each part of a Tetra component goes: its public attributes, its
+`@public` methods, its JavaScript calls, and its client callbacks.
 
 The core idea carries over: a template calls a Python method on the server,
 and the page updates. Debounce settings, awaiting a method's return value
@@ -20,8 +21,8 @@ you declare, as JSON. The browser side also uses Vue instead of Alpine.js.
 Three Citry terms come up throughout:
 
 - [`State`][citry.Component.State] lists the values a later call needs.
-  Citry sends them to the browser with the rendered component and gets them
-  back with the next call. See [Event state](/events/state/).
+  Citry keeps them between calls, either on the server or in the page. See
+  [Event state](/events/state/).
 - A **handler** is a public method in the component's nested `class Events`.
   The browser calls it by name. See [Server events](/events/).
 - An **action** is a value a handler returns to tell the browser what to do
@@ -179,10 +180,8 @@ In the component's JavaScript, listen with the `onEvent` function that
 `onServerRender` receives, or with `addEventListener` on an element above
 the component. With the Dispatch first, listeners from the current render
 hear it. When a Render replaces a component that contains this one, the
-Dispatch must come first; see
+Dispatch must come first, without `delay` or `wait=False`; see
 [Return several actions in order](/events/actions/#return-several-actions-in-order).
-
-Every effect of a handler is visible in its return value.
 
 ## Move Alpine code to Vue
 
@@ -239,14 +238,15 @@ way for Python to call a browser function by path; use `actions.Dispatch`.
 Before shipping a migrated component, check that:
 
 - every public Tetra attribute is now a render input (`Kwargs`), a State
-  field, data for browser code (`js_data()`), or Vue `data()` (see
+  field, values that `js_data()` computes for browser code on each render,
+  or Vue `data()` (see
   [Event state](/events/state/) for how to choose);
 - State holds only JSON values and no secrets;
 - each handler returns a render, data, event, or redirect;
 - client callbacks have become named `actions.Dispatch` events;
 - database rows are reloaded and permissions checked on each call; and
-- components that need server push, uploads, downloads, or history changes
-  are checked against the parity matrix.
+- components that need server push or file uploads are checked against the
+  parity matrix.
 
 The [Events migration parity matrix](/guides/events-migration-parity/)
 compares the rest of Tetra's features with Citry.
