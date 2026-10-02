@@ -14,7 +14,7 @@ rendered component, and the browser sends them back with the next call.
 Start with [Server events](/events/) if you have not called a Python handler
 from a component yet.
 
-## Store the values the next call needs
+## Store values in State
 
 When the component's inputs are already the values you need, make `State`
 inherit from `Kwargs`:
@@ -56,7 +56,7 @@ class ProjectPanel(Component):
 The handler then loads the project again from `project_id`, as the next
 section shows.
 
-## Pass every input when a handler renders again
+## Pass every input { #pass-every-input-when-a-handler-renders-again }
 
 When a handler returns a component, Citry renders it from scratch, using
 only the inputs you pass. The original kwargs and slot fills are not kept.
@@ -90,7 +90,7 @@ class Events:
 The rule: if the new render needs a value, the handler must get it and pass
 it in.
 
-## Connect an input to State
+## Bind an input to State
 
 A `:c-<field>` attribute shows a State field in a form control. Give it a
 handler name, and edits update the field and call the handler. This
@@ -139,7 +139,7 @@ list in place, so the input keeps its focus and cursor position.
 [Bind events in templates](/events/bindings/#bind-controls-to-state) lists
 every control you can bind and the Python type each one sends.
 
-## Limit what the browser can read and change
+## Limit browser access { #limit-what-the-browser-can-read-and-change }
 
 By default, browser code can read every State field and change it, through
 the `$state` object in templates or a `:c-*` binding. Two settings narrow
@@ -167,7 +167,7 @@ The signed State is visible to anyone who opens the page, and a field the
 browser can change may arrive with any value. Validate it in the handler like
 any other user input. See [Security](/security/#treat-state-as-client-input).
 
-## Choose between State, js_data, and Vue data
+## Choose where data lives
 
 | Data | Put it in | How long it lives |
 |---|---|---|

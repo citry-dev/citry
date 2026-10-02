@@ -417,7 +417,7 @@ Authentication still belongs to the host application and is available through
 the injected neutral `request` or `request.native`.
 
 For the handler and State workflow, see [Server events](/events/). The
-[direct event routes](/events/http/) page covers the HTTP-facing cases.
+[event routes](/events/routes/) page covers the HTTP-facing cases.
 
 ## Sandbox Python template expressions
 

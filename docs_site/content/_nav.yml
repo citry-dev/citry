@@ -22,7 +22,7 @@ areas:
           - { title: Your first component, path: /getting-started/your-first-component/ }
           - { title: Use data in components, path: /getting-started/data-in-components/ }
           - { title: Build a page from components, path: /getting-started/build-page/ }
-          - { title: Add flexible content, path: /getting-started/add-slots/ }
+          - { title: Add slots, path: /getting-started/add-slots/ }
           - { title: Add browser behavior, path: /getting-started/browser-interactivity/ }
           - { title: Connect components in the browser, path: /getting-started/client-props-and-handlers/ }
           - { title: Serve pages with FastAPI, path: /getting-started/fastapi/ }
@@ -66,8 +66,8 @@ areas:
           - { title: Event state, path: /events/state/ }
           - { title: Handle and validate forms, path: /events/forms/ }
           - { title: Bind events in templates, path: /events/bindings/ }
-          - { title: Event actions, path: /events/actions/, needs_review: true }
-          - { title: Use event routes directly, path: /events/http/, needs_review: true }
+          - { title: Event actions, path: /events/actions/ }
+          - { title: Event routes, path: /events/routes/ }
 
       - label: I18n
         collapsible: true

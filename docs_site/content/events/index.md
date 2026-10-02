@@ -13,7 +13,7 @@ reload, and you write no JavaScript or API endpoint.
 Events are built in. There is nothing to install, and pages that use them load
 the browser code automatically.
 
-## Call Python from a button
+## Call Python on click
 
 Put the method in a nested `class Events`, and name it in an `@c-click`
 attribute:
@@ -58,7 +58,7 @@ Every public method on [`Events`][citry.Component.Events] can be called from
 the browser. A method whose name starts with an underscore cannot, so use that
 for helpers.
 
-## Configure a signing secret before using State
+## Set a signing secret { #configure-a-signing-secret-before-using-state }
 
 By default, Citry signs State before sending it to the browser, so it can
 detect when someone changes it. Signing needs a secret. Rendering a component
@@ -103,10 +103,10 @@ frameworks.
   event, connect inputs to State, and show loading and errors.
 - [Event actions](/events/actions/): decide what happens after the handler
   runs, such as re-rendering, notifying other code, or redirecting.
-- [Use event routes directly](/events/http/): call handlers by URL from
-  plain HTML forms, htmx, or downloads.
+- [Event routes](/events/routes/): call handlers by URL from plain HTML
+  forms, htmx, or GET requests.
 
-## Coming from another server-component library?
+## Migrate from a library
 
 Each migration guide starts from how the other library works and shows the
 Citry equivalent:

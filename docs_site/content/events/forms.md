@@ -13,7 +13,7 @@ Python object for your handler, and shows the errors your handler raises.
 Start with [Server events](/events/) if you have not called a Python handler
 from a component yet.
 
-## Receive typed form data
+## Receive form data
 
 Write a class with the fields the form sends, and use it as the type of the
 handler's `data` parameter:
@@ -99,7 +99,7 @@ handlers in the same component are separate, so two forms in one component
 show their own errors. To show one banner for the whole component, call
 `$error()` without a name: it returns the newest error from any handler.
 
-## Disable the button while the form is sending
+## Disable while sending
 
 [`$loading('submit')`][$loading] is true from the moment the user submits
 until the response arrives, including any time spent waiting behind other
@@ -115,7 +115,7 @@ calls:
 
 - [Bind events in templates](/events/bindings/) covers the other modifiers
   and the loading and error helpers.
-- [Use event routes directly](/events/http/#keep-a-form-working-without-javascript)
+- [Event routes](/events/routes/#keep-a-form-working-without-javascript)
   shows how to make the same form work without JavaScript.
 
 !!! note "Errors when you call a handler from JavaScript"

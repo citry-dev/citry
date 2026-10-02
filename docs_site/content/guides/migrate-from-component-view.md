@@ -169,7 +169,7 @@ handler answer GET requests:
 ```
 
 Each handler now has its own URL, allowed HTTP methods, input type, and entry
-in Citry's [OpenAPI export](/events/http/#expose-a-read-only-get-endpoint).
+in Citry's [OpenAPI export](/events/routes/#expose-a-read-only-get-endpoint).
 The component a handler returns brings its own JavaScript, CSS, and event
 bindings with it, so there is no htmx or fetch code to wire it up.
 

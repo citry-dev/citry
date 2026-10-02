@@ -1,6 +1,6 @@
 ---
 title: Event actions
-description: Decide what the page does after a Citry event handler runs, from re-rendering the component to notifying browser code or redirecting.
+description: Decide what the page does after a Citry event handler runs, from re-rendering the component to notifying browser code, redirecting, or downloading a file.
 ---
 
 # Event actions
@@ -13,18 +13,18 @@ Return one value for one effect, or a list of values to apply in order:
 
 | Return value | What the browser does |
 |---|---|
-| `MyComponent(...)` or `actions.Render(...)` | Re-renders the component whose handler ran, or puts a different component in its place. |
-| `actions.Dispatch(name, detail)` | Fires a browser event that JavaScript can listen for. |
-| `dict` or `actions.Data(value)` | Gives the value to the JavaScript that called `$sendEvent`. |
-| `actions.Redirect(url)` | Navigates to another page. |
-| `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` | Changes the address bar without loading a page. |
-| `actions.Download(...)` | Downloads a file. See [Download a file from one event](/events/http/#download-a-file-from-one-event). |
-| `None` | Nothing visible. State changes still reach `$state`. |
+| `MyComponent(...)` or `actions.Render(...)` | Re-renders the component whose handler ran, or puts a different component in its place. See [Re-render the component](#re-render-the-component). |
+| `actions.Dispatch(name, detail)` | Fires a browser event that JavaScript can listen for. See [Notify browser code](#notify-browser-code-that-something-happened). |
+| `dict` or `actions.Data(value)` | Gives the value to the JavaScript that called `$sendEvent`. See [Return data to JavaScript](#return-data-to-javascript). |
+| `actions.Redirect(url)` | Navigates to another page. See [Redirect to a page](#redirect-to-a-page). |
+| `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` | Changes the address bar without loading a page. See [Change the URL](#change-the-url). |
+| `actions.Download(...)` | Downloads a file. See [Download a file](#download-a-file). |
+| `None` | Nothing visible. State changes still reach `$state`. See [Return nothing](#return-nothing). |
 
 The examples below import the actions with
 `from citry.ext.events import actions`.
 
-## Re-render the component after a change
+## Re-render the component
 
 Return the component with its new inputs. Citry renders it on the server and
 the browser updates the component whose handler ran, in place:
@@ -43,7 +43,7 @@ its options, such as `target` (below).
 The new render gets only the inputs you pass. See
 [Pass every input when a handler renders again](/events/state/#pass-every-input-when-a-handler-renders-again).
 
-## Keep list items matched to their records
+## Keep list items matched { #keep-list-items-matched-to-their-records }
 
 When a re-render adds, removes, or reorders list items, Vue matches the old
 and new items by position unless they have a key. Without one, what the user
@@ -66,7 +66,7 @@ key on the component or element that should follow the record.
 A key works only among items under the same parent. It cannot move an item
 into a different parent or wrapper element.
 
-## Swap in a different component
+## Swap in a component { #swap-in-a-different-component }
 
 A handler can return a different component from the one whose handler ran. The
 new one takes its place. Here a handler on `SignupForm` swaps the form for a
@@ -96,10 +96,11 @@ After the swap:
     The component your Python code renders for the page (or for an HTML
     fragment you insert) cannot be swapped for a different one. The call
     fails with an error that names both components, and the page keeps the
-    old one. With an `@c-*` call, the error appears in the browser console. Move the part that changes into a child component, or wrap it in
-    a `<c-mark>` region as described next.
+    old one. With an `@c-*` call, the error appears in the browser console.
+    Move the part that changes into a child component, or wrap it in a
+    `<c-mark>` region as described next.
 
-## Update one part of the page
+## Update part of the page { #update-one-part-of-the-page }
 
 To replace only part of the component, wrap that part in `<c-mark>` with a
 name:
@@ -124,7 +125,7 @@ update another component instead, use `target="render:<id>"`. The render ID
 is the value of that component's `id` in the browser; see
 [Browser APIs](/reference/browser-apis/).
 
-## Notify browser code that something happened
+## Notify browser code { #notify-browser-code-that-something-happened }
 
 Sometimes other code in the browser needs to react to the handler: your
 component's JavaScript shows a toast, or a header badge refreshes.
@@ -161,22 +162,118 @@ To hear the event anywhere else, such as in a parent component or page
 script, listen on an ancestor element, on `document`, or with
 [`Citry.events.on`](/reference/browser-apis/#citry-events-on).
 
-## Return a value to JavaScript
+## Return data to JavaScript
 
 When your JavaScript calls a handler with `$sendEvent`, return a `dict` or
-[`actions.Data`][citry.ext.events.actions.Data]. The `$sendEvent` Promise
-resolves with that value.
+[`actions.Data`][citry.ext.events.actions.Data]:
+
+```python
+class Events:
+    def count_matches(self, data: SearchIn):
+        return {"count": count_tasks(data.query)}
+```
+
+The `$sendEvent` Promise resolves with that value:
+
+```js
+const result = await this.$sendEvent(
+  "count_matches",
+  {query: "invoice"},
+);
+console.log(result.count);
+```
+
+Wrap any other JSON value in `actions.Data(value)`. A bare list would be
+read as a list of actions, so return `actions.Data(["a", "b"])` to send one.
+A response can carry at most one Data value.
 
 An `@c-*` attribute in a template does not receive the value. To let browser
 code react to such a call, return `actions.Dispatch` instead.
 
-## Change the URL or redirect
+## Redirect to a page
 
-`actions.Redirect(url)` loads another page. `actions.PushUrl(url)` and
-`actions.ReplaceUrl(url)` change the address bar without loading a page;
-`PushUrl` adds a history entry and `ReplaceUrl` replaces the current one.
+[`actions.Redirect`][citry.ext.events.actions.Redirect] makes the browser
+load another page:
 
-## Return several actions in order
+```python
+class Events:
+    def delete(self, data: DeleteIn):
+        delete_project(data.id)
+        return actions.Redirect("/projects/")
+```
+
+When a plain HTML form posts to the handler's URL, the same action becomes a
+real HTTP redirect. See [Event routes](/events/routes/).
+
+## Change the URL
+
+[`actions.PushUrl`][citry.ext.events.actions.PushUrl] and
+[`actions.ReplaceUrl`][citry.ext.events.actions.ReplaceUrl] change the
+address bar without loading a page, for example so the open task has its
+own link:
+
+```python
+class Events:
+    def open_task(self, data: TaskRef):
+        task = load_task(data.id)
+        return [
+            TaskDetail(task=task),
+            actions.PushUrl(f"/tasks/{task.id}/"),
+        ]
+```
+
+`PushUrl` adds a history entry, so Back returns to the previous address.
+`ReplaceUrl` replaces the current entry. Either way, Back and Forward change
+only the address: Citry does not restore the earlier HTML or State.
+
+## Download a file
+
+Return [`actions.Download`][citry.ext.events.actions.Download] on its own,
+and mark the handler with
+[`@event(bundle=False)`][citry.ext.events.event]:
+
+```python
+from citry.ext.events import actions, event
+
+
+class Events:
+    @event(bundle=False)
+    def export_orders(self):
+        return actions.Download(
+            make_orders_csv(),
+            "orders.csv",
+            content_type="text/csv; charset=utf-8",
+        )
+```
+
+The file is the whole HTTP response. By default, the browser may send several
+calls in one request; `bundle=False` makes it send this call on its own.
+
+Call the handler as usual, from `@c-*`, `$sendEvent`, or
+[`Citry.events.send`][Citry.events.send]. With `$sendEvent` or
+`Citry.events.send`, the Promise resolves with `undefined` once the browser
+starts saving the file.
+
+A download cannot be combined with other actions in a list, and its handler
+must not change State, because the file response has no room for the new
+State. Either mistake makes the call fail.
+
+## Return nothing
+
+A handler that returns `None` changes nothing visible on the page. Use it
+when the handler only saves something, or only changes State:
+
+```python
+class Events:
+    def toggle_editing(self, state):
+        state.editing = not state.editing
+```
+
+The new State still reaches the browser, so a template that reads
+`$state.editing` updates. See
+[Event state](/events/state/#limit-what-the-browser-can-read-and-change).
+
+## Run several actions { #return-several-actions-in-order }
 
 Return a list to do several things. The browser applies the actions one at a
 time, in list order, and each waits for the one before it. A Dispatch after a
@@ -197,9 +294,25 @@ Two options change the timing of any action:
   `actions.Data` always waits, so `actions.Data(value, wait=False)` raises
   `ValueError`.
 
+Here a toast appears at once and hides three seconds later:
+
+```python
+return [
+    actions.Dispatch("Toast:show", {"text": "Saved"}),
+    actions.Dispatch("Toast:hide", delay=3),
+]
+```
+
 Put a Redirect last. Actions after it may not run before the browser leaves
 the page. To show something first, give the Redirect a delay and
-`wait=False`, as in `actions.Redirect(url, delay=5, wait=False)`.
+`wait=False`:
+
+```python
+return [
+    actions.Dispatch("Toast:show", {"text": "Goodbye"}),
+    actions.Redirect("/", delay=5, wait=False),
+]
+```
 
 !!! note "Update several separate parts of the page in one response"
 
@@ -207,8 +320,8 @@ the page. To show something first, give the Redirect a delay and
     returning several Renders next to each other in the list. They must not
     have another action between them, use `delay` or `wait=False`, target
     the same place twice, or target both a component and something inside
-    it. Otherwise the call fails and nothing
-    on the page changes, although the handler has already run.
+    it. Otherwise the call fails and nothing on the page changes, although
+    the handler has already run.
 
 !!! note "A Dispatch before or after a Render reaches different listeners"
 

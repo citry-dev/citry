@@ -549,4 +549,4 @@ document.addEventListener("citry:events:stale", (event) => {
 
 The Events guides cover [State](/events/state/), [template
 bindings](/events/bindings/), [returned actions](/events/actions/), and
-[direct HTTP routes](/events/http/).
+[event routes](/events/routes/).

@@ -1,16 +1,17 @@
 ---
-title: Use event routes directly
-description: Call Citry event handlers by URL from plain HTML forms, htmx, GET requests, and file downloads.
+title: Event routes
+description: Call Citry event handlers by URL from plain HTML forms, htmx, and GET requests.
 ---
 
-# Use event routes directly
+# Event routes
 
 Every event handler has its own URL. Citry's browser code calls it for you,
 but you can also call it yourself: from a plain HTML form that must work
-without JavaScript, from htmx, from other code that reads data with a GET
-request, or to download a file.
+without JavaScript, from htmx, or from other code that reads data with a
+GET request. A handler that sends a file also uses its own URL; see
+[Download a file](/events/actions/#download-a-file).
 
-## Protect every handler like an HTTP endpoint
+## Protect every handler
 
 Anyone can send a request to a handler's URL, with any arguments. Check the
 current user's permissions in every handler, and load records by id rather
@@ -21,10 +22,12 @@ any value.
 Set up your web framework's CSRF protection as described in
 [Security](/security/#protect-event-posts-from-csrf).
 
-## Keep a form working without JavaScript
+## Post a plain form { #keep-a-form-working-without-javascript }
 
-Point a plain form's `action` at the handler's URL. `self.events.url()` builds
-it while the component renders:
+A plain HTML form keeps working when JavaScript is off or has not loaded
+yet. Point its `action` at the handler's URL. `self.events.url()` builds the
+URL while the component renders, and works like
+[`get_event_url()`][citry.ext.events.get_event_url]:
 
 ```citry
 from citry.ext.events import actions
@@ -57,40 +60,10 @@ The response depends on what the handler returns: HTML for a component, a
 real HTTP redirect for `actions.Redirect`, or JSON for data. htmx can post to
 the same URL and swap in the returned HTML.
 
-## Download a file from one event
+## Allow GET requests { #expose-a-read-only-get-endpoint }
 
-Return [`actions.Download`][citry.ext.events.actions.Download] on its own, and
-mark the handler with `@event(bundle=False)`:
-
-```python
-from citry.ext.events import actions, event
-
-
-class Events:
-    @event(bundle=False)
-    def export_orders(self):
-        return actions.Download(
-            make_orders_csv(),
-            "orders.csv",
-            content_type="text/csv; charset=utf-8",
-        )
-```
-
-The file is the whole HTTP response. By default, the browser may send several
-calls in one request; `bundle=False` makes it send this call on its own.
-
-Call the handler as usual, from `@c-*`, `$sendEvent`, or
-[`Citry.events.send`][Citry.events.send]. With `$sendEvent` or
-`Citry.events.send`, the Promise resolves with `undefined` once the browser
-starts saving the file.
-
-A download cannot be combined with other actions in a list, and its handler
-must not change State, because the file response has no room for the new
-State. Either mistake makes the call fail.
-
-## Expose a read-only GET endpoint
-
-Allow GET on a handler that only reads data. Browser code and other servers
+Allow GET on a handler that only reads data, with the `methods` option of
+[`@event()`][citry.ext.events.event]. Browser code and other servers
 can then call its URL, and Citry's
 [OpenAPI export](/cli/#run-an-extension-command) describes it:
 
