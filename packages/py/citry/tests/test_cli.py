@@ -474,6 +474,23 @@ class TestCreateComponent:
             run(build_cli(engine), ["create", "True", "--path", str(tmp_path)], citry=engine)
         assert list(tmp_path.iterdir()) == []  # nothing written
 
+    @pytest.mark.parametrize("name", ["class", "import", "async", "Lambda"])
+    def test_rejects_name_whose_module_is_a_keyword(self, tmp_path, capsys, name):
+        # The class name (``Class``) is valid, but the module (``class.py``)
+        # could never be imported, so the command must refuse it.
+        engine = _Citry()
+        with pytest.raises(SystemExit):
+            run(build_cli(engine), ["create", name, "--path", str(tmp_path)], citry=engine)
+        assert "is not a usable component name" in capsys.readouterr().out
+        assert list(tmp_path.iterdir()) == []  # nothing written
+
+    def test_accepts_soft_keyword_name(self, tmp_path):
+        # ``import match`` is valid Python, so a soft keyword stays allowed.
+        engine = _Citry()
+        code = run(build_cli(engine), ["create", "match", "--path", str(tmp_path)], citry=engine)
+        assert code == 0
+        assert "class Match(Component):" in (tmp_path / "match.py").read_text(encoding="utf-8")
+
     def test_rejects_dunder_module_name(self, tmp_path):
         engine = _Citry()
         with pytest.raises(SystemExit):
