@@ -1,105 +1,150 @@
 ---
 title: Event actions
-description: Return Citry event actions in order, rerender the calling component, and notify browser code.
+description: Decide what the page does after a Citry event handler runs, from re-rendering the component to notifying browser code or redirecting.
 ---
 
 # Event actions
 
-An event handler can rerender its calling component, return data, dispatch a
-browser event, change browser history, or navigate. Return one result for one
-effect, or a list when effects must happen in order.
+Your Python handler ran. Now the page should change: show the new data, swap
+in a confirmation, tell other browser code what happened, change the URL, or
+send a file. What the handler returns decides what the browser does next.
 
-## Rerender the calling component
+Return one value for one effect, or a list of values to apply in order:
+
+| Return value | What the browser does |
+|---|---|
+| `MyComponent(...)` or `actions.Render(...)` | Re-renders the component whose handler ran, or puts a different component in its place. |
+| `actions.Dispatch(name, detail)` | Fires a browser event that JavaScript can listen for. |
+| `dict` or `actions.Data(value)` | Gives the value to the JavaScript that called `$sendEvent`. |
+| `actions.Redirect(url)` | Navigates to another page. |
+| `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` | Changes the address bar without loading a page. |
+| `actions.Download(...)` | Downloads a file. See [Download a file from one event](/events/http/#download-a-file-from-one-event). |
+| `None` | Nothing visible. State changes still reach `$state`. |
+
+The examples below import the actions with
+`from citry.ext.events import actions`.
+
+## Re-render the component after a change
+
+Return the component with its new inputs. Citry renders it on the server and
+the browser updates the component whose handler ran, in place:
 
 ```python
 class Events:
-    def refresh(self):
-        return actions.Render(TaskList(tasks=load_tasks()))
+    def add(self, data: TaskIn):
+        create_task(data.title)
+        return TaskList(tasks=load_tasks())
 ```
 
-A Render action updates one component on the page or an explicit marker in
-place. Omitting `target` selects the calling instance. Use a known
-`render:<id>` address for another component on the page or a caller-relative
-`mark:<name>` address for a marker. A component element returned directly is
-equivalent to `actions.Render(element)`.
+Returning `TaskList(...)` is the same as returning
+`actions.Render(TaskList(...))`. Use the `actions.Render` form when you need
+its options, such as `target` (below).
 
-One response may update several independent targets when their Render actions
-form one contiguous group. Every action in that group must be immediate and
-blocking: omit `delay` or use `0`, and do not set `wait=False`. Otherwise
-the call fails and nothing on the page changes: the browser rejects a
-response that puts another action between two Renders, defers one of them,
-targets the same component instance twice, or targets both a component and a
-component inside it. The handler has already run by then, so any database
-writes it made stay. The server does not check the order or targets of
-these Render actions, so assert the returned list in a test of the handler.
+The new render gets only the inputs you pass. See
+[Build every event render from explicit inputs](/events/state/#build-every-event-render-from-explicit-inputs).
 
-## Replace the calling component with a different component
+## Keep list items matched to their records
 
-A handler can return a different component from the one that called it. The
-new component takes the caller's place on the page. Here a handler on
-`SignupForm` swaps the form for a `Confirmation`:
+When a re-render adds, removes, or reorders list items, Vue matches the old
+and new items by position unless they have a key. Without one, what the user
+typed into a row, or a row's open or focused state, can end up on a different
+record. Give each repeated item a key with `#c-key`:
+
+```citry-html
+<c-for each="item in items">
+  <c-TaskRow
+    #c-key="item.id"
+    c-task="item"
+  />
+</c-for>
+```
+
+Use a value that identifies the record and stays the same between renders,
+such as a database id or a slug. Keys must be unique within the list. Put the
+key on the component or element that should follow the record.
+
+A key keeps an item matched only while it stays in the same place in the
+template. It does not carry an item into a different parent or wrapper.
+
+## Swap in a different component
+
+A handler can return a different component from the one whose handler ran. The
+new one takes its place. Here a handler on `SignupForm` swaps the form for a
+`Confirmation`:
 
 ```python
 class Events:
     def submit(self, data: SignupIn):
         save_signup(data.email)
-        return actions.Render(Confirmation(email=data.email))
+        return Confirmation(email=data.email)
 ```
 
-After the swap, these things change:
+After the swap:
 
-- **Typed input and other browser-only values are gone.** The browser
-  removes `SignupForm` and its child components, then starts `Confirmation`
-  fresh. Nothing the visitor typed into the old component carries over.
-- **Bindings the parent wrote for the old component are dropped.** Vue
-  props, `@event` listeners, and attributes that the parent's template put
-  on `<c-SignupForm>` were written for `SignupForm`, so `Confirmation` does
-  not receive them. A `ref` on `<c-SignupForm>` reads `null` after the
-  swap. Directives such as `v-show` stay with the place on the page, so they
-  apply to `Confirmation`.
-  Pass the new component what it needs as arguments in the Render.
-- **A page reload shows the original component again.** The swap happens
-  only in the open browser tab. The next full page load runs the page's
-  Python render again, which places `SignupForm`.
+- **Nothing from the old component carries over.** What the user typed into
+  `SignupForm` and its child components is gone. `Confirmation` starts fresh,
+  so pass it everything it needs.
+- **The parent's props, listeners, and `ref` for the old component do not
+  apply.** The parent wrote them on `<c-SignupForm>`, so `Confirmation` does
+  not receive them, and the `ref` reads `null`. Directives such as `v-show`
+  stay with the place on the page, so they apply to `Confirmation`.
+- **Reloading the page shows the original component again.** The swap happens
+  only in the open browser tab.
 
-A Dispatch placed after the Render starts at `Confirmation`'s first
-element, and `Confirmation`'s `onEvent` listeners hear it, because
-`SignupForm` is no longer on the page.
+!!! warning "The outermost component cannot be replaced"
 
-The outermost component of a render cannot be replaced. That is the
-component your Python code renders for the page, or for an HTML fragment
-that you insert into the page. A Render that would put a different
-component in its place fails with an error that names both components, and
-the page keeps the old one. A declarative `@c-*` call shows the error in the
-browser console. Move the part that changes into a child component and
-handle the event there, or place a `<c-mark name="...">` region in the
-outermost component's template and Render into `target="mark:<name>"`.
+    The component your Python code renders for the page (or for an HTML
+    fragment you insert) cannot be swapped for a different one. The call
+    fails with an error that names both components, and the page keeps the
+    old one. Move the part that changes into a child component, or wrap it in
+    a `<c-mark>` region as described next.
 
-## Dispatch a browser event
+## Update one part of the page
 
-[`actions.Dispatch`][citry.ext.events.actions.Dispatch] sends one bubbling DOM
-`CustomEvent` under the exact given name. The event starts at the first
-element of the component that called the handler and bubbles up through its
-ancestors to `document`. A component with several top-level elements fires it
-once, from the first of them, so a listener on `document` hears it once. When
-the component renders no element, the event starts at the component's root
-DOM node instead. Dispatch starts at the calling component, or at the
-component that replaced it earlier in the same response; it cannot select
-another component.
+To replace only part of the component, wrap that part in `<c-mark>` with a
+name:
 
-Prefix the event name with the component name, as in `TaskRow:saved`. Names
-that start with `citry:` belong to Citry's own events, so `actions.Dispatch`
-raises `ValueError` for them.
+```citry-html
+<c-mark name="cart-badge">
+  <c-CartBadge c-count="cart.count" />
+</c-mark>
+```
+
+Then render into it with `target="mark:<name>"`:
+
+```python
+return actions.Render(
+    CartBadge(count=cart.count),
+    target="mark:cart-badge",
+)
+```
+
+The name is looked up in the template of the component whose handler ran. To
+update another component instead, use `target="render:<id>"` with that
+component's render ID.
+
+## Notify browser code that something happened
+
+Sometimes other code in the browser needs to react to the handler: your
+component's JavaScript shows a toast, or a header badge refreshes.
+[`actions.Dispatch`][citry.ext.events.actions.Dispatch] fires a DOM
+`CustomEvent` with that name and data:
 
 ```python
 return actions.Dispatch("TaskRow:saved", {"title": title})
 ```
 
-Inside the component's own JavaScript, listen with the `onEvent` function
-that `onServerRender` receives. It hears the Dispatch actions that this
-component's own handlers return, and those that follow a Render which put
-this component in place of the one whose handler ran. Citry removes the listener before
-`onServerRender` runs again and when the component unmounts:
+Start the name with your component's name, as in `TaskRow:saved`. Names that
+start with `citry:` are reserved for Citry, so `actions.Dispatch` raises
+`ValueError` for them.
+
+The event starts at the first element of the component whose handler ran and
+bubbles up to `document`. It fires once, even when the component has several
+top-level elements.
+
+In the component's own JavaScript, listen with the `onEvent` function that
+`onServerRender` receives. Citry removes the listener before `onServerRender`
+runs again and when the component unmounts:
 
 ```js
 $component({
@@ -111,66 +156,63 @@ $component({
 });
 ```
 
-To hear a Dispatch from a child component, or from code outside the
-component, listen on an ancestor element, on `document`, or with
+To hear the event anywhere else, such as in a parent component or page
+script, listen on an ancestor element, on `document`, or with
 [`Citry.events.on`](/reference/browser-apis/#citry-events-on).
 
-## Return actions in order
+## Return a value to JavaScript
 
-| Return value | Browser result |
-|---|---|
-| `MyComponent(...)` or `actions.Render(...)` | Update the calling component in place, or replace it with a different component. |
-| `dict` or `actions.Data(value)` | Resolve an imperative `$sendEvent` Promise. |
-| `actions.Dispatch(name, detail)` | Dispatch a bubbling browser event. |
-| `actions.Redirect(url)` | Navigate. |
-| `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` | Change browser history without navigation. |
-| `actions.Download(...)` | Download a file. The handler must use `@event(bundle=False)`; see [Download a file from one event](/events/http/#download-a-file-from-one-event). |
-| `None` | Acknowledge the call. If the handler changed State, `$state` still gets the new values. |
+When your JavaScript calls a handler with `$sendEvent`, return a `dict` or
+[`actions.Data`][citry.ext.events.actions.Data]. The `$sendEvent` Promise
+resolves with that value.
 
-The browser applies a list of actions one at a time, in list order. Each
-action waits for the one before it, so a Dispatch placed after a Render runs
-once the new HTML is on the page. Give an action `delay=<seconds>` to wait
-before applying it, or `wait=False` to let the actions after it start without
-waiting for it. `actions.Data` always waits, because it resolves the caller's
-Promise, so `actions.Data(value, wait=False)` raises `ValueError`.
+An `@c-*` attribute in a template does not receive the value. To let browser
+code react to such a call, return `actions.Dispatch` instead.
 
-Order decides which listeners hear a Dispatch when the same response
-rerenders the component that listens. A Dispatch placed before the Render
-reaches the listeners of the current render. A Dispatch placed after it
-reaches the listeners that `onServerRender` added when it ran for the new
-render, before its first `await`. When the Render targets a component that
-contains the caller, put the Dispatch before the Render, without `delay` or
-`wait=False`; otherwise the browser rejects the whole response.
+## Change the URL or redirect
 
-Actions after a Redirect race the navigation, so put the Redirect last, or
-give it `delay` and `wait=False` when something must show first:
-`actions.Redirect(url, delay=5, wait=False)`.
+`actions.Redirect(url)` loads another page. `actions.PushUrl(url)` and
+`actions.ReplaceUrl(url)` change the address bar without loading a page;
+`PushUrl` adds a history entry and `ReplaceUrl` replaces the current one.
 
-A declarative `@c-*` binding does not expose a Data result. Use `$sendEvent`
-when browser code owns the Promise. Use Dispatch when a declarative call must
-notify a listener.
+## Return several actions in order
 
-## Preserve identity in rendered lists
+Return a list to do several things. The browser applies the actions one at a
+time, in list order, and each waits for the one before it. A Dispatch after a
+Render therefore runs once the new HTML is on the page:
 
-Vue matches unkeyed siblings by position. Give repeated items a stable
-application key so surviving component and element instances correspond to the
-same domain record after the calling component renders again:
-
-```citry-html
-<c-for each="item in items">
-  <c-TaskRow
-    #c-key="item.id"
-    c-task="item"
-  />
-</c-for>
+```python
+tasks = load_tasks()
+return [
+    TaskList(tasks=tasks),
+    actions.Dispatch("TaskList:changed", {"count": len(tasks)}),
+]
 ```
 
-Use a database primary key, stable slug, or another domain identifier. Do not
-use a Citry occurrence ID, which belongs to one render. Keys must be unique
-among the repeated siblings that can compete with one another. Put the key on
-the component or element whose identity should follow the record.
+Two options change the timing of any action:
 
-An Events update can address the calling component, another component
-occurrence, or an explicit marker. Do not rely on a key to move browser-owned
-DOM across arbitrary wrappers, parents, or nesting depths. Keep a keyed item at
-the same structural position across renders.
+- `delay=<seconds>` waits before applying it.
+- `wait=False` lets the actions after it start without waiting for it.
+  `actions.Data` always waits, so `actions.Data(value, wait=False)` raises
+  `ValueError`.
+
+Put a Redirect last. Actions after it may not run before the browser leaves
+the page. To show something first, give the Redirect a delay and
+`wait=False`, as in `actions.Redirect(url, delay=5, wait=False)`.
+
+!!! note "Update several separate parts of the page in one response"
+
+    You can update several separate parts of the page in one response by
+    returning several Renders next to each other in the list. They must not
+    use `delay` or `wait=False`, target the same place twice, or target both
+    a component and something inside it. Otherwise the call fails and nothing
+    on the page changes, although the handler has already run.
+
+!!! note "A Dispatch before or after a Render reaches different listeners"
+
+    When a response re-renders the component that listens, a Dispatch placed
+    before the Render reaches the listeners of the old render. A Dispatch
+    placed after it reaches the listeners that `onServerRender` added for
+    the new render. When the Render targets a component that contains the
+    one whose handler ran, put the Dispatch before the Render, without
+    `delay` or `wait=False`, or the call fails.

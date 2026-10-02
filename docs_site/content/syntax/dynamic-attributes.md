@@ -718,7 +718,7 @@ write the flag in the template that renders the markup:
 </article>
 ```
 
-[Preserve identity in rendered lists](/events/actions/#preserve-identity-in-rendered-lists)
+[Keep list items matched to their records](/events/actions/#keep-list-items-matched-to-their-records)
 covers how keys behave when an event handler renders the list again.
 
 ## `#c-ignore` Keep contents that a library manages

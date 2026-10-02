@@ -31,8 +31,8 @@ handler needs no address at all.
 region belongs to `TutorialPage`, which stays on the page, so screen readers
 announce the confirmation. The swap happens only in the open browser tab:
 reloading the page shows the form again, because `TutorialPage` still
-renders `SignupForm`. [Replace the calling component with a different
-component](/events/actions/#replace-the-calling-component-with-a-different-component)
+renders `SignupForm`. [Swap in a different
+component](/events/actions/#swap-in-a-different-component)
 lists what the new component does not inherit from the old one.
 
 ## Browser data in the new component
