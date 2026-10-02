@@ -164,12 +164,13 @@ walks through every step.
 - An attribute that an `on_dependencies()` hook adds to a script or
   stylesheet in one render no longer appears in later renders of the same
   component.
-- `self.events.url()` now type-checks under mypy and pyright and has an
-  entry in the API reference.
+- mypy and pyright now accept `self.events.url()`, and it is listed in
+  the API reference.
 - `enable_hot_reload(engine, mode="restart")` from `citry.contrib.django`
-  now restarts the Django dev server when a component file changes, and
-  both modes now notice component files under `Citry(dirs=...)` outside
-  Django's template folders.
+  now restarts the Django dev server when a component file changes.
+- `enable_hot_reload` now notices component files under `Citry(dirs=...)`
+  outside Django's template folders. Point `dirs` at your component
+  folders, since the reloader checks every file under them.
 - A component that keeps rendering itself, such as a tree node whose data
   lists the node among its own children, now fails quickly with a
   `RecursionError` naming the component instead of running until the

@@ -736,7 +736,7 @@ written" is accurate.
 | `citry.contrib.{asgi,wsgi,django,flask,fastapi,caches}` | `P/contrib/*.py` | same names; the `methods is not None` guards were removed again | unchanged | |
 | `citry.URLRoute.methods` | `tuple[str, ...] = ("GET",)` | same (`04084529`) | restored | Tested by `test_events_route_methods.py`. |
 | `citry.ext.events.routes` constants | `CSP_RUNTIME_PATH`, `EVENTS_CSP_RUNTIME_SRC` | removed; new constants added | changed-incompatible | Undocumented. |
-| `get_event_url()`, `component.events.url()` | `P/ext/events/routes.py:115, 161` | same | unchanged | |
+| `get_event_url()`, `component.events.url()` | `P/ext/events/routes.py:115, 161` | `routes.py` (`get_event_url`), `config.py` (`Events.url`) | changed | `Events.url` is now declared on `citry.Events`, so it is typed and in the reference. `citry.ext.events.routes.events_config_url`, the 0.5.1 helper attached at import time, was removed; it was never re-exported or documented. |
 | `EventsDispatcher()` | no-arg | keyword-only encoder params | changed-compatible | |
 | `RenderEncoder`, `RenderEncodingContext`, `HtmlFragmentRenderEncoder` | none | `P/ext/events/results.py` | new | |
 | `emit_events_dependencies` | public name | removed | removed | Undocumented. |
