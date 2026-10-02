@@ -3763,8 +3763,45 @@ def test_leaf_program_compiles_constant_and_fixed_name_attribute_plans() -> None
     assert program.resolved_opens
     assert all(type(value) is dict for value in program.resolved_opens.values())
     html = rendered.serialize(deps_strategy="ignore")
-    assert '<i data-kind="constant"></i><input type="text" v-citry-vue-owned="[]" title="A" hidden/>' in html
-    assert '<i data-kind="constant"></i><input type="text" v-citry-vue-owned="[]" title="B"/>' in html
+    # The Vue-only ownership directive belongs to Vue's template, never to
+    # the served HTML.
+    assert '<i data-kind="constant"></i><input type="text" title="A" hidden/>' in html
+    assert '<i data-kind="constant"></i><input type="text" title="B"/>' in html
+
+
+@pytest.mark.parametrize(
+    ("template", "expected"),
+    [
+        ('<input c-value="v">', '<input value="py" data-cid-c1="">'),
+        (
+            '<input type="checkbox" c-checked="on">',
+            '<input type="checkbox" checked data-cid-c1="">',
+        ),
+        (
+            '<select><option c-selected="on">a</option></select>',
+            '<select data-cid-c1=""><option selected>a</option></select>',
+        ),
+        (
+            '<form><input name="q" c-value="v"><input c-value="v" c-for="i in items"></form>',
+            '<form data-cid-c1=""><input name="q" value="py"><input value="py"><input value="py"></form>',
+        ),
+    ],
+)
+def test_static_form_control_html_carries_no_vue_ownership_directive(template: str, expected: str) -> None:
+    # A page without browser behavior is served as written, so the private
+    # directive Vue uses to track bound form properties must not appear.
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class Plain(Component):
+        citry = registry
+
+        def template_data(self, kwargs, slots):
+            return {"v": "py", "on": True, "items": [1, 2]}
+
+    Plain.template = template
+    rendered = Plain().render()
+    assert any(isinstance(part, PreparedLeafProgram) for part in rendered.parts)
+    assert rendered.serialize(deps_strategy="ignore") == expected
 
 
 def test_leaf_program_keeps_class_merging_on_general_attribute_resolver() -> None:

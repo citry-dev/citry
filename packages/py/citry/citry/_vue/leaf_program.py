@@ -2612,6 +2612,11 @@ class _Compiler:
             if node._has_spread
             else [source for attr, source in node._static_source_attrs if attr.key not in dynamic_keys]
         )
+        # The HTML writers print these authored attributes into the served
+        # page, so take them before any Vue-only directive joins `attrs`.
+        # The ownership directive below exists only for Vue's template; the
+        # browser keeps that information off the DOM.
+        authored_attrs = tuple(attrs)
         # A native form control marks which of its properties an authored or
         # Python binding owns, so the browser keeps a user's unsaved edit
         # only in the properties nothing binds.
@@ -2634,7 +2639,6 @@ class _Compiler:
             for attr, source in node._static_source_attrs
             if attr.key not in dynamic_keys
         )
-        authored_attrs = tuple(attrs)
         if node._authored_vue_attrs:
             self.browser_requirements.add("vue_binding")
         if node._event_bindings:
