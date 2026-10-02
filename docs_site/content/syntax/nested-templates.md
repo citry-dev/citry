@@ -23,7 +23,7 @@ right in the `c-*` attribute. Wrap it in `<>` and `</>`:
 Python. Citry renders the
 markup and passes the result to `Card` as its `footer` input.
 
-## Choose between a markup attribute and a slot
+## Pick attribute or slot
 
 For content that the caller provides, a slot is usually clearer: write the
 content between the component's tags, or in a
@@ -31,7 +31,7 @@ content between the component's tags, or in a
 component treats that content as one of its inputs. See
 [Slots](/concepts/slots/).
 
-## Use the surrounding template's data
+## Use the caller's data
 
 The markup can use expressions and component tags, like the rest of the
 template. Its names come from the template you write it in, not from the
@@ -49,7 +49,7 @@ component that receives it:
 Here `user` and `help_topic` come from the component whose template contains
 `<c-Card>`, not from `Card`.
 
-## Render the input in the receiving component
+## Render the markup
 
 The receiving component gets a [`CitryRender`][citry.CitryRender], not a
 plain string. Insert it with `{{ ... }}`. That keeps the markup unescaped and
@@ -74,7 +74,7 @@ class Card(Component):
 The input is not a slot. The component decides where, and whether, to
 render it.
 
-## When you can leave out the fragment markers { #when-the-fragment-markers-are-optional }
+## Leave out the markers { #when-the-fragment-markers-are-optional }
 
 Citry also reads a value as markup without `<>...</>` when the value, with
 surrounding spaces removed:
@@ -114,7 +114,7 @@ An HTML comment on its own also needs the markers:
 Use `<>...</>` whenever you write new code. It makes the choice visible and
 works for any value.
 
-## Less common rules for markup in attributes
+## Less common rules
 
 - `<>` and `</>` must wrap the whole value, apart from surrounding spaces.
 - A value starting with `<` and a space, or with `<<`, also needs the

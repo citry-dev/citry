@@ -16,7 +16,7 @@ Vue's own attributes, such as `@click` and `v-show`, on the HTML in the
 template, and define the component's browser data with `$component({...})` in
 the component's `js`.
 
-## Add a browser-side counter
+## Add a browser counter
 
 Define the values the browser keeps in Vue's `data()` option:
 
@@ -39,7 +39,7 @@ The template can read and change `count` directly:
 
 Each copy of the component on the page keeps its own `count`.
 
-## Start Vue data from Python
+## Set data from Python
 
 To start the browser data from a Python value, return it from
 [`Component.js_data()`][citry.Component.js_data]. Each top-level key becomes
@@ -94,7 +94,7 @@ See Vue's
 [template syntax guide](https://vuejs.org/guide/essentials/template-syntax.html){: target="_blank" rel="noopener"}
 for every directive and modifier.
 
-## Keep Python and Vue expressions apart
+## Tell Python from Vue
 
 Citry runs `{{ ... }}` and `c-*` values as Python on the server. Vue runs
 directive values as JavaScript in the browser. Both can sit in one template:
@@ -127,7 +127,7 @@ the browser data has its own `item`: then every item shows that one value,
 and nothing fails. When Vue needs the value too, for example in a `v-show`
 that changes later, send it with `js_data()` or loop with Vue's `v-for`.
 
-## Choose `v-for` or `<c-for>`
+## Choose a loop
 
 Use `v-for` and `v-if` for HTML that the browser adds, removes, or repeats
 inside one component:
@@ -142,7 +142,7 @@ Use `<c-for>` and `<c-if>` when the loop or condition creates Citry
 components. Only Python creates Citry components, so a `v-for` cannot repeat
 one.
 
-## Combine `:class` and `:style` with `c-class` and `c-style`
+## Combine class bindings { #combine-class-and-style-with-c-class-and-c-style }
 
 `:class` adds to an element's classes rather than replacing them. Vue joins
 it with `class`, and Citry joins it with `c-class` the same way:
@@ -173,7 +173,7 @@ Keep only `c-title` when Python decides the value. Keep only `:title` when
 the browser should change it later, and send the starting value with
 `js_data()`.
 
-## Use Vue directives on a component tag
+## Use on component tags { #use-vue-directives-on-a-component-tag }
 
 A Citry component tag accepts these Vue directives:
 
@@ -186,7 +186,7 @@ A Citry component tag accepts these Vue directives:
 | `v-show` | Hides or shows the child's root element. |
 | A custom directive | Runs on the child's root element. |
 
-### Pass browser data to a child
+### Pass data to a child
 
 A child component has its own browser data. Pass it a value from the parent
 with a Vue prop:
@@ -203,7 +203,7 @@ and slots.
 Content you pass into a child's slot still reads the data of the component
 that wrote it. A slot's fallback content reads the child's data.
 
-### Add or remove a component in the browser
+### Show or hide a child
 
 `v-if` works on a component tag as on an element, and one chain can mix
 both:
@@ -218,7 +218,7 @@ Python still renders every component in the chain, so the browser can switch
 between them without asking the server. When Python should decide whether a
 component exists at all, use `<c-if>`.
 
-### Bind a value with `v-model`
+### Bind with `v-model`
 
 `v-model` on a component tag passes the value as the `modelValue` prop. It
 updates the value when the child emits `update:modelValue`:
@@ -255,7 +255,7 @@ Here the child declares `title` and `titleModifiers`, and emits
 `update:title`. Vue applies `.trim` and `.number` itself. For `.lazy` or a
 modifier of your own, the child reads the modifiers prop and decides.
 
-### Apply `v-show` or a custom directive to the child
+### Use `v-show` on a child
 
 `v-show` and custom directives act on the element at the root of the child's
 template:
@@ -288,7 +288,7 @@ the spelling when nothing happens.
 The child's template must have exactly one root element. Wrap it in one
 element, or put the directive on an element around the component tag.
 
-## Repeat a component with `<c-for>`, not `v-for`
+## Repeat a component
 
 A natural first attempt at a list of components is `v-for`:
 
@@ -310,11 +310,11 @@ each item's data as a Python input:
 </c-for>
 ```
 
-## Vue features that Citry does not support
+## What is not supported
 
 Each of these fails, except where noted below.
 
-### Event modifiers that Vue does not have
+### Unknown modifiers
 
 Vue has no `.outside`, `.window`, `.document`, `.debounce`, or `.throttle`
 event modifier. It would read one as a key name and the listener would never
@@ -336,13 +336,13 @@ The template fails when it loads. Compute a fixed value once in `data()`. To
 keep an element's contents as the server first rendered them, use
 [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
 
-### `<Teleport>`, `<Transition>`, `<Suspense>`, and `<KeepAlive>`
+### Vue helper components
 
 When the page uses Vue, `serialize()` or `str()` on the render raises
 `ValueError` with an "unsupported Vue helper" message. On a page without
 Vue, the tag is written out as plain HTML and does nothing.
 
-## Pass Vue content into a group component such as `CTabs` { #keep-vue-bound-group-content-inside-the-groups-tag }
+## Fill group components { #keep-vue-bound-group-content-inside-the-groups-tag }
 
 Some Citry UI components, such as `CTabs`, collect the content you put inside
 them and render it in their own layout. The page stops with an error when
@@ -385,9 +385,9 @@ place, as if the page had written it inside the group's tag.
 Content that shows only Python values, such as `{{ title }}`, works from a
 separate component.
 
-## Less common rules for Vue on component tags
+## Less common rules
 
-### Directives a component tag rejects
+### Rejected directives
 
 The template fails to compile when a component tag has one of these:
 
@@ -404,7 +404,7 @@ The template fails to compile when a component tag has one of these:
 It also fails when `v-if`, `v-else-if`, `v-show`, or `v-model` has no
 expression, or when `v-else` has one.
 
-### Directives from `c-bind` or with a `c-` prefix
+### Directives via `c-bind`
 
 A directive from `c-bind`, or written with a `c-` prefix such as `c-v-if`,
 fails when the page renders. Its expression must be written in the template.
@@ -427,7 +427,7 @@ around the slot, or `v-show` on an element around it:
 </template>
 ```
 
-### When `v-show` or a custom directive cannot find one root element
+### Several root elements
 
 The render fails, with an error naming the directive and the child, when the
 child's template has several top-level elements, a top-level `v-for`,

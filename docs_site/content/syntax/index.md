@@ -32,7 +32,7 @@ Citry runs the Python in this template on the server, before the HTML reaches
 the browser. It inserts the heading, adds the `has-books` class, and writes
 one paragraph for every book.
 
-## Find the syntax you need
+## Find the syntax
 
 | You want to | Write | Read |
 |---|---|---|
@@ -47,7 +47,7 @@ one paragraph for every book.
 | Leave a comment or keep text unchanged | `{# ... #}`, `<c-raw>` | [Comments and literal text](/syntax/comments/) |
 | Pass a piece of markup as an input | `c-body="<>...</>"` | [Markup in attributes](/syntax/nested-templates/) |
 
-## Know where each part runs
+## Where each part runs
 
 Two kinds of code can appear in a template:
 
@@ -60,7 +60,7 @@ Use Python to decide what the page contains. Use Vue when part of the page
 should change straight away in response to the user. Start with
 [Vue in templates](/syntax/vue/) for that.
 
-## Set an attribute from Python
+## Set an attribute
 
 An ordinary attribute holds fixed text. Put `c-` in front of the name to make
 the value a Python expression. Citry evaluates it and removes the `c-`:
@@ -82,7 +82,7 @@ The browser receives:
 braces as literal text. [Attributes](/syntax/dynamic-attributes/) covers
 classes, styles, and passing values to components.
 
-## Write tags the way Citry expects
+## Write valid tags
 
 Opening and closing tags must match; the match ignores case. Void elements
 such as `<input>` and `<br>` need no closing tag. Any other tag may close
@@ -107,7 +107,7 @@ component tag, it passes the Python value `True`:
 Attribute values may use double quotes, single quotes, or no quotes. Quote
 every `c-*` expression, so spaces and operators stay inside the value.
 
-## Write the `c-` prefix and built-in tag names in lowercase
+## Use lowercase `c-`
 
 Citry syntax always starts with a lowercase `c-`. The component name after it
 ignores case, so `<c-StatusBadge>` and `<c-statusbadge>` find the same
@@ -116,7 +116,7 @@ component.
 Built-in tags such as `<c-if>`, `<c-for>`, and `<c-slot>` must be written
 in lowercase. `<c-If>` is an error.
 
-## Write text that Citry passes through unchanged
+## Pass text through
 
 HTML comments, `<!doctype html>`, and processing instructions pass through to
 the output unchanged.

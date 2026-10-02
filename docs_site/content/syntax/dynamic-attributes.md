@@ -14,7 +14,7 @@ expression. This page starts with that, then covers classes and styles,
 applying many attributes at once with `c-bind`, and the special `:c-*`,
 `#c-key`, and `#c-ignore` attributes.
 
-## Set an attribute from Python { #c-dynamic-attributes }
+## Set an attribute { #c-dynamic-attributes }
 
 An ordinary attribute holds fixed text. With `c-` in front, Citry evaluates
 the value as a Python [expression](/syntax/expressions/) and removes the `c-`
@@ -46,7 +46,7 @@ Write the expression without `{{ }}`: `c-title="user.name"`, not
 Citry HTML-escapes attribute names and values. To insert a value without
 escaping, see [Insert HTML you trust](/syntax/expressions/#insert-html-you-trust).
 
-## Turn an attribute on or off with `True` and `False` { #html-elements }
+## Toggle an attribute { #html-elements }
 
 On an HTML element, `True` renders a bare attribute, and `False` or `None`
 leaves the attribute out:
@@ -81,7 +81,7 @@ including when the state is false:
     `disabled` on an `input` element, stay bare either way. In CSS and
     JavaScript, test `[data-open]` or `hasAttribute("data-open")`.
 
-## Pass Python values to a component
+## Pass component inputs
 
 On a component tag, each attribute is one of the
 [component's inputs](/concepts/inputs-and-validation/). A plain attribute
@@ -108,7 +108,7 @@ UserBadge(
 Unlike on HTML elements, `False` and `None` are passed to the component
 like any other value.
 
-## Build the `class` attribute
+## Build `class` values
 
 `c-class` accepts more than a string. You can give it:
 
@@ -146,7 +146,7 @@ Citry leaves the attribute out:
 <!-- Result: <div></div> -->
 ```
 
-## Build the `style` attribute
+## Build `style` values
 
 `c-style` accepts a string, a dictionary of CSS properties, or a list of
 them. Write property names in kebab-case:
@@ -194,9 +194,9 @@ later `None` leaves the earlier value alone. An empty style is left out:
     The joining above happens only on HTML elements, including
     [`<c-element>`][c-element]. On a component tag, `class` and `style` are
     inputs like any other, and the component decides where to put them. See
-    [Pass arbitrary HTML attributes explicitly](/concepts/client-interactivity/#pass-arbitrary-html-attributes-explicitly).
+    [Pass HTML attributes](/concepts/client-interactivity/#pass-arbitrary-html-attributes-explicitly).
 
-## Apply several attributes at once with `c-bind` { #c-bind-spread }
+## Apply many with `c-bind` { #c-bind-spread }
 
 When the attributes come from a dictionary, apply them all with `c-bind`:
 
@@ -251,7 +251,7 @@ Keys are used exactly as written. Unlike a `c-` attribute, a key named
 <!-- Result: <button c-title="My Title"> -->
 ```
 
-### Combine `c-bind` with other attributes
+### Combine with others
 
 You can use `c-bind` more than once and mix it with other attributes. Citry
 applies them from left to right. A later value replaces an earlier one, except
@@ -277,7 +277,7 @@ includes `id` together with `c-id`. The exceptions are `class` with
 `c-class` and `style` with `c-style` on HTML elements, and repeated
 `c-bind`.
 
-### Forward extra attributes to an element inside a component
+### Forward attributes
 
 A component often accepts extra HTML attributes, such as `id` or `data-*`,
 and puts them on one of its own elements. Vue calls these
@@ -323,7 +323,7 @@ class Card(Component):
 
 See [Forward HTML attributes](/advanced/html-attributes/) for more.
 
-## Pass Vue props and listeners to a component
+## Pass props and events
 
 Attributes that start with `:` or `@` are Vue syntax. They run in the browser
 and pass reactive values and event listeners to a child component:
@@ -375,7 +375,7 @@ class Panel(Component):
     """
 ```
 
-## Bind a form field to server State with `:c-*`
+## Bind a field to State
 
 A component's [`State`][citry.Component.State] holds values the server keeps
 between event calls. A `:c-*` attribute shows a State field in a form field
@@ -430,7 +430,7 @@ Read [Bind controls to State](/events/bindings/#bind-controls-to-state) for
 which input types are supported in which direction, and
 [Event state](/events/state/) for declaring State.
 
-## Keep list items matched across renders with `#c-key` { #c-key }
+## Keep items matched { #c-key }
 
 When an event handler renders a list again, Vue matches old and new items by
 position. If the list was reordered, an open panel or a half-typed field can
@@ -480,7 +480,7 @@ in the component's own template:
 See [Keep list items matched to their records](/events/actions/#keep-list-items-matched-to-their-records)
 for how keys behave when a handler renders the list again.
 
-## Keep contents that a library manages with `#c-ignore` { #c-ignore-keep-contents-that-a-library-manages }
+## Keep library contents { #c-ignore-keep-contents-that-a-library-manages }
 
 A chart, map, or rich-text editor library changes the elements you give it.
 When an event handler renders the component again, Vue resets those elements
@@ -535,9 +535,9 @@ On a page without Vue, `#c-ignore` does nothing and the element renders as
 written. The rules still apply, so the template keeps working if the page
 later uses Vue.
 
-## Less common attribute rules
+## Less common rules
 
-### Output an attribute whose name starts with `c-`
+### Keep a `c-` prefix
 
 Citry removes exactly one leading `c-`. To output an attribute named
 `c-feature`, add a second `c-`, or set the name through `c-bind`, which keeps
@@ -550,7 +550,7 @@ keys as written:
 <!-- Both render: <div c-feature></div> -->
 ```
 
-### Attribute names ignore case on HTML elements
+### Names ignore case
 
 HTML attribute names ignore case, so `ID` and `id` are the same attribute.
 When two `c-bind` mappings set `ID` and `id`, the later value wins, and the
@@ -563,14 +563,14 @@ This applies to HTML elements and `<c-element>`, where `IS`, `c-IS`, and a
 keyword arguments, so their names keep their case. `<c-component>` requires
 lowercase `is` or `c-is`.
 
-### `c-bind` on built-in tags
+### `c-bind` on built-ins
 
 Most built-in tags, including [`<c-if>`][c-if] and [`<c-for>`][c-for], do
 not accept `c-bind`. Put it on the HTML element or component tag inside.
 `<c-slot>` and `<c-fill>` accept it to choose a slot and pass its data; see
-[Spread slot and fill settings](/concepts/slots/#spread-slot-and-fill-settings).
+[Bind slot settings](/concepts/slots/#spread-slot-and-fill-settings).
 
-### `:c-*` and the input `type`
+### `:c-*` and `type`
 
 When the input's `type` comes from `c-type` or `c-bind`, Citry checks the
 binding against the rendered `type`, and the render fails if the binding
@@ -579,7 +579,7 @@ type and reports an error for one it cannot bind. The editor also reports
 unsupported elements it can see in the template. See
 [Which elements you can bind](/events/bindings/#which-elements-you-can-bind).
 
-### Where `#c-ignore` is not allowed
+### Where `#c-ignore` fails
 
 Each of these fails with a message that says what to change:
 

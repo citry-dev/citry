@@ -21,7 +21,7 @@ value when it renders the component on the server:
 This page covers which names a template can use, what Python you can write,
 how values turn into HTML, and how to insert HTML you trust.
 
-## Use expressions between tags, not inside them
+## Where expressions go
 
 `{{ ... }}` works only in the content between tags. To set an attribute from
 Python, put `c-` in front of the attribute name and write the expression
@@ -41,7 +41,7 @@ without braces (see [Attributes](/syntax/dynamic-attributes/)):
 Braces written elsewhere inside a tag also stay as literal text. A tag name
 cannot be an expression: `<{{ tag }}>` is a parse error.
 
-## Make values available to the template
+## Make values available
 
 Every field of a component's [`Kwargs`][citry.Component.Kwargs] is available
 by name:
@@ -88,7 +88,7 @@ return {
 
 A name the template cannot find raises `KeyError`.
 
-## Write Python expressions
+## Write expressions
 
 Any Python expression that produces a value works:
 
@@ -110,7 +110,7 @@ filters, and `|` is Python's
 Comprehensions and lambdas work too, but they make a template harder to read.
 Compute complicated values in `template_data()` instead.
 
-## Give the template functions such as `len()`
+## Add helper functions
 
 Python builtins such as `len()`, `range()`, `str()`, and `sum()` are not
 available in a template. This fails with `KeyError: 'len'`:
@@ -131,9 +131,9 @@ return {
 
 To give every template the same helper, add it once to the
 `template_globals` of your [`Citry`][citry.Citry] instance. See
-[Add values for one whole render](/concepts/rendering/#add-values-for-one-whole-render).
+[Add render-wide values](/concepts/rendering/#add-values-for-one-whole-render).
 
-## How values appear in the HTML
+## How values render
 
 | Value | What Citry inserts |
 |--|--|
@@ -214,7 +214,7 @@ itself, so its documentation applies.
     extend-markup-names = ["citry.Markup"]
     ```
 
-### Keep trusted HTML complete on pages that use Vue
+### Keep HTML complete
 
 When any component on the page, or in an HTML fragment you insert into a
 page, runs in the browser (it has its own `js`, or uses Vue syntax such as
@@ -228,7 +228,7 @@ Otherwise the render fails with "A Markup value (trusted HTML from Python)
 is not a complete HTML fragment". On pages without browser behavior, Citry
 inserts the value unchanged.
 
-## Add a comment inside an expression
+## Add a comment
 
 Inside `{{ ... }}` or a `c-*` attribute, `#` starts a Python comment:
 
@@ -241,7 +241,7 @@ Inside `{{ ... }}` or a `c-*` attribute, `#` starts a Python comment:
 The comment ends at the end of the line or at the end of the expression,
 whichever comes first. See [Comments and literal text](/syntax/comments/).
 
-## What the sandbox blocks
+## Sandbox limits
 
 Every template expression runs in a sandbox that blocks code which could
 reach outside the template:
@@ -257,7 +257,7 @@ A blocked operation raises [`SecurityError`][citry.SecurityError]. Read
 [Security](/security/) for the full sandbox rules and the settings that
 control it.
 
-## Less common expression rules
+## Less common rules
 
 - A Python string may contain `}}`. Citry still finds the real end of the
   expression, so `{{ "a }} b" }}` prints `a }} b`.

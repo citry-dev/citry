@@ -14,7 +14,7 @@ Each has two forms:
 - An attribute, such as `c-if` or `c-for`, on the one tag it controls.
 - A tag, such as `<c-if>` or `<c-for>`, around a larger block.
 
-## Show an element only when a condition is true
+## Add a condition
 
 Put `c-if` on the element:
 
@@ -37,7 +37,7 @@ For several cases, add `c-elif` and `c-else` on the elements right after it:
 Citry renders the first branch whose condition is true and skips the rest.
 `c-else` takes no value.
 
-## Wrap several elements in a condition
+## Wrap several elements
 
 When a branch holds several elements, use the tag form. Write the condition
 in `cond`, without `{{ }}`:
@@ -54,7 +54,7 @@ in `cond`, without `{{ }}`:
 
 `<c-elif>` also takes `cond`. `<c-else>` takes nothing.
 
-## Repeat an element for each item
+## Repeat an element
 
 Put `c-for` on the element to repeat. Add a `c-empty` element right after it
 for the case when there are no items:
@@ -95,7 +95,7 @@ When each item needs several elements, use `<c-for>` and write the loop in
 </c-empty>
 ```
 
-## Unpack and filter values
+## Unpack and filter { #unpack-and-filter-values }
 
 The loop is written like the `for` part of a Python list comprehension. You
 can unpack each item:
@@ -139,7 +139,7 @@ then unpack them in the loop:
 </p>
 ```
 
-## Combine a condition and a loop
+## Loop with a condition
 
 `c-if` and `c-for` can share an element:
 
@@ -165,7 +165,7 @@ a loop, and an empty message, nest the tags:
 </c-if>
 ```
 
-## Keep branches next to each other
+## Keep branches together { #keep-branches-next-to-each-other }
 
 Each `elif`, `else`, or `empty` branch must come right after the branch
 before it. Whitespace and [template comments](/syntax/comments/) between
@@ -180,7 +180,7 @@ them are fine, because they render nothing:
 Anything that renders breaks the chain and is an error: text, an HTML
 comment, an expression, or another element.
 
-## Less common rules for conditions and loops
+## Less common rules
 
 - The names a loop creates exist only inside the loop.
 - A loop name must not reuse a name the template already has. If the

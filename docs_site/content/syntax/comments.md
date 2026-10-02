@@ -10,7 +10,7 @@ it or for someone reading the page source in the browser. It also shows how to
 display text that looks like template syntax, such as a code sample with
 `{{ name }}`, exactly as written.
 
-## Leave a note that stays in the template
+## Write a hidden note
 
 A Citry comment starts with `{#` and ends with `#}`. Citry removes it while
 rendering, so the browser never receives it:
@@ -34,9 +34,9 @@ It also works between attributes:
 
 A Citry comment may sit between an `if` branch and its `else` branch, because
 it renders nothing. See
-[Keep branches next to each other](/syntax/control-flow/#keep-branches-next-to-each-other).
+[Keep branches together](/syntax/control-flow/#keep-branches-next-to-each-other).
 
-## Leave a note in the page source
+## Write an HTML comment
 
 An HTML comment passes through to the browser:
 
@@ -49,7 +49,7 @@ Use it for notes meant for someone reading the page source. Because it is
 part of the output, an HTML comment cannot sit between an `if` branch and its
 `else` branch.
 
-## Comment inside a Python expression
+## Comment an expression
 
 Inside `{{ ... }}` or a `c-*` attribute, `#` starts a Python comment:
 
@@ -63,7 +63,7 @@ The comment ends at the end of the line, or earlier at the end of the
 expression: the closing `}}` or the attribute's closing quote. A `#` inside a
 Python string stays part of the string.
 
-## Show template syntax as plain text { #pass-template-looking-text-through-unchanged }
+## Show syntax as text { #pass-template-looking-text-through-unchanged }
 
 Wrap text in `<c-raw>` when Citry must not read the expressions, component
 tags, or comments inside it:
@@ -87,7 +87,7 @@ first closing tag ends the block.
     template. To show text from a user, insert it with `{{ ... }}`, which
     escapes it.
 
-## Keep raw HTML complete on pages that use Vue
+## Keep raw HTML complete
 
 When any component on the page, or in an HTML fragment you insert into a
 page, runs in the browser (it has its own `js`, or uses Vue syntax such as
@@ -103,7 +103,7 @@ block's line and column and says it "is not a complete HTML fragment":
 Void elements such as `<br>` and `<img>` need no closing tag. On pages
 without browser behavior, Citry copies the content unchanged.
 
-## Less common comment and raw-text rules
+## Less common rules
 
 - Inside `{{ ... }}`, `{# ... #}` is not a comment. It is a parse error.
 - Inside a plain attribute value, `{# ... #}` and `#` are ordinary text:
@@ -111,7 +111,7 @@ without browser behavior, Citry copies the content unchanged.
 - `#` is ordinary text everywhere outside a Python expression, including
   [markup passed in an attribute](/syntax/nested-templates/).
 - To pass an HTML comment to a component input, see
-  [When you can leave out the fragment markers](/syntax/nested-templates/#when-the-fragment-markers-are-optional).
+  [Leave out the markers](/syntax/nested-templates/#when-the-fragment-markers-are-optional).
 - When a `<c-raw>` block sits at the top level of a component's template,
   the HTML tags at its top level count as the component's top-level
   elements, so Citry marks them as belonging to that component.
