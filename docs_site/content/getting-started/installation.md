@@ -65,7 +65,7 @@ If you added Citry with `uv`, run `uv run python hello.py` instead.
 The command prints `Hello from Citry!` inside an HTML `<p>` element. Python
 can now import Citry and render a component.
 
-!!! note
+!!! note "The output has an extra attribute"
 
     Citry adds an attribute to the opening tag, and its value can change
     each time. That extra text is expected.
@@ -78,7 +78,8 @@ and the file probably used different Python environments.
 If pip reports that no compatible package is available, check your Python
 version first.
 
-If pip tries to compile the core package and the build fails,
+If pip tries to build Citry's compiled core package (`citry-core`) from
+source and the build fails,
 see [Compatibility](/about/compatibility/#building-from-source) for the
 platform and Rust requirements.
 
