@@ -62,15 +62,13 @@ html = rendered.serialize(deps_strategy="simple")
   it adds that too.
 - `"simple"` inserts the components' JavaScript and CSS and their
   [dependency files](/advanced/dependency-files/), but not the browser
-  runtime. Use it for output with no Citry browser behavior.
+  runtime. Use it for output with no Citry browser behavior:
+  `$component()`, server events, and `js_data()` do not work, while
+  `css_data()` does, because it is ordinary CSS.
 - `"fragment"` is for HTML that you insert into a page that is already
   open. See [HTML fragments](/advanced/html-fragments/).
 - `"ignore"` inserts no tags. Use it when something else adds every file
   the components need.
-
-With `"simple"`, `$component()`, server events, and anything else that
-needs the runtime do not work, and `js_data()` values are not sent. CSS
-from `css_data()` still works, because it is ordinary CSS.
 
 With `"ignore"`, the HTML can look right in tests but have no styles or
 browser behavior if nothing else adds the files.
