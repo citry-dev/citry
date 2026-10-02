@@ -11,7 +11,9 @@ the user typed. In this step you build an email form that Python checks: it
 rejects addresses outside `@example.com` and shows the error under the
 field.
 
-Replace `components.py` with:
+Replace `components.py` with this version. The signup form takes the
+choice picker's place on the page; keep `citry_setup.py` and `app.py` as
+they are:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step11.py" language="citry" />
 
