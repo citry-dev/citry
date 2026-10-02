@@ -47,7 +47,8 @@ If you create your own `Citry()`, mount that one. Components registered on
 one instance are not visible to another.
 
 The `prefix` is the URL path where Citry's routes live. It must start with
-`/`, or the call raises `ValueError` before it changes your app. A
+`/`: `mount()`, `urlpatterns()`, and `set_mounted_prefix()` raise
+`ValueError` otherwise, before they change your app. A
 trailing slash is ignored, so `"/citry/"` works like `"/citry"`.
 
 For complete, runnable apps, see the
@@ -72,7 +73,8 @@ Call it from your app's own startup code, as the examples below show. A
 mounted ASGI sub-app does not reliably receive startup events, so mounting
 Citry does not initialize it for you. See
 [Component discovery and startup](/advanced/component-discovery/#initialize-before-starting-worker-threads)
-for what happens when initialization fails or runs twice.
+for what happens when initialization fails, runs twice, or starts from
+two threads at once.
 
 ## FastAPI and Starlette
 
