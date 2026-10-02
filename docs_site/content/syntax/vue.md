@@ -354,26 +354,41 @@ separate component.
 
 ## Vue features that Citry does not support
 
-These fail with an error that says what to use instead:
+Each of these fails with an error that says what to use instead.
 
-- **`.outside`, `.window`, `.document`, `.debounce`, `.throttle` event
-  modifiers.** Vue has none of these. It would read one as a key name and the
-  listener would never run, so the template fails when it loads. For a click
-  outside, add a `click` listener to `document` in `mounted()` and remove it
-  in `unmounted()`. For a Python event handler, `@c-*` attributes accept
-  `.debounce` and `.throttle`; see [Bind events in templates](/events/bindings/).
-- **`v-once` and `v-memo`.** The template fails when it loads. Compute a fixed
-  value once in `data()`. To keep an element's contents as the server first
-  rendered them, use
-  [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
-- **`<Teleport>`, `<Transition>`, `<Suspense>`, and `<KeepAlive>`.** When the
-  page uses Vue, `serialize()` or `str()` on the render raises `ValueError`
-  with an "unsupported Vue helper" message. On a page without Vue, the tag is
-  written out as plain HTML and does nothing.
+### Event modifiers that Vue does not have
+
+Vue has no `.outside`, `.window`, `.document`, `.debounce`, or `.throttle`
+event modifier. It would read one as a key name and the listener would never
+run, so the template fails when it loads:
+
+```citry-html
+{# Fails: Vue has no .outside modifier #}
+<div @click.outside="open = false;">...</div>
+```
+
+For a click outside, add a `click` listener to `document` in `mounted()` and
+remove it in `unmounted()`. For a Python event handler, `@c-*` attributes
+accept `.debounce` and `.throttle`; see
+[Bind events in templates](/events/bindings/).
+
+### `v-once` and `v-memo`
+
+The template fails when it loads. Compute a fixed value once in `data()`. To
+keep an element's contents as the server first rendered them, use
+[`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
+
+### `<Teleport>`, `<Transition>`, `<Suspense>`, and `<KeepAlive>`
+
+When the page uses Vue, `serialize()` or `str()` on the render raises
+`ValueError` with an "unsupported Vue helper" message. On a page without
+Vue, the tag is written out as plain HTML and does nothing.
 
 ## Less common rules for Vue on component tags
 
-A component tag rejects these forms when the template compiles:
+### Directives a component tag rejects
+
+The template fails to compile when a component tag has one of these:
 
 | Instead of | Write |
 | --- | --- |
@@ -385,21 +400,24 @@ A component tag rejects these forms when the template compiles:
 | `v-once`, `v-memo` | Nothing: they are not supported on elements either |
 | `v-If` or another capitalized built-in name | The lowercase name |
 
-The template also fails to compile when `v-if`, `v-else-if`, `v-show`, or
-`v-model` has no expression, or when `v-else` has one. A directive from
-`c-bind`, or written with a `c-` prefix such as `c-v-if`, fails when the
-page renders, because its expression must be written in the template.
+It also fails when `v-if`, `v-else-if`, `v-show`, or `v-model` has no
+expression, or when `v-else` has one.
 
-Some built-in tags differ:
+### Directives from `c-bind` or with a `c-` prefix
 
-- `<c-element>` renders a plain HTML element, so every Vue directive works on
-  it.
-- A tag that renders only its content, such as `<c-provide>`, accepts no Vue
-  syntax.
-- `<c-slot>` accepts no Vue syntax. Its attributes other than `name` and
-  `required` become data that Python passes to the slot content, so a `v-if` there would never reach the
-  browser. Put `v-if` on a `<template>` around the slot, or `v-show` on an
-  element around it:
+A directive from `c-bind`, or written with a `c-` prefix such as `c-v-if`,
+fails when the page renders. Its expression must be written in the template.
+
+### Vue on built-in tags
+
+`<c-element>` renders a plain HTML element, so every Vue directive works on
+it. A built-in tag that renders only its content, such as `<c-provide>`,
+accepts no Vue syntax.
+
+`<c-slot>` accepts no Vue syntax either. Its attributes other than `name`
+and `required` become data that Python passes to the slot content, so a
+`v-if` there would never reach the browser. Put `v-if` on a `<template>`
+around the slot, or `v-show` on an element around it:
 
 ```citry-html
 <template v-if="expanded">
@@ -407,10 +425,10 @@ Some built-in tags differ:
 </template>
 ```
 
-!!! note "When `v-show` or a custom directive cannot find one root element"
+### When `v-show` or a custom directive cannot find one root element
 
-    The render fails, with an error naming the directive and the child, when
-    the child's template has several top-level elements, a top-level
-    `v-for`, `<c-for>`, or `<c-slot>`, only text, or top-level HTML from
-    `<c-raw>`. When the child's root is another component with such a
-    template, the browser reports the error instead.
+The render fails, with an error naming the directive and the child, when the
+child's template has several top-level elements, a top-level `v-for`,
+`<c-for>`, or `<c-slot>`, only text, or top-level HTML from `<c-raw>`. When
+the child's root is another component with such a template, the browser
+reports the error instead.
