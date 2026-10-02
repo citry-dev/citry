@@ -350,7 +350,8 @@ from secrets import token_urlsafe
 
 # 128 random bits, as the CSP specification recommends
 nonce = token_urlsafe(16)
-serialized = Page().render().serialize_result(csp_nonce=nonce)
+page = Page()
+serialized = page.render().serialize_result(csp_nonce=nonce)
 
 policy = (
     "default-src 'self'; "
@@ -422,7 +423,8 @@ from secrets import token_urlsafe
 app = Citry(security_csp="strict")
 
 nonce = token_urlsafe(16)
-html = Page().render().serialize(csp_nonce=nonce)
+page = Page()
+html = page.render().serialize(csp_nonce=nonce)
 ```
 
 | Mode | What happens |
@@ -469,7 +471,8 @@ serialization:
 ```python
 app = Citry(security_javascript="forbid")
 
-email_html = Page().render().serialize(
+page = Page()
+email_html = page.render().serialize(
     security_javascript="omit",
 )
 ```
@@ -527,7 +530,8 @@ hashes to put in your CSP header:
 ```python
 app = Citry(security_script_integrity="citry")
 
-serialized = Page().render().serialize_result()
+page = Page()
+serialized = page.render().serialize_result()
 html = serialized.html
 script_sources = " ".join(
     serialized.security.csp_script_hashes,

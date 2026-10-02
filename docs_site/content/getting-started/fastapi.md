@@ -133,8 +133,9 @@ and returns it as HTML:
 ```python
 @app.get("/")
 def home() -> HTMLResponse:
-    page = str(TutorialPage())
-    return HTMLResponse(page)
+    page = TutorialPage()
+    html = str(page)
+    return HTMLResponse(html)
 ```
 
 `HTMLResponse` tells FastAPI and the browser that the string is an HTML

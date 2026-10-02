@@ -49,7 +49,8 @@ class Page(Component):
     """
 
 
-str(Page())
+page = Page()
+str(page)
 ```
 
 The error names the whole chain:
@@ -308,13 +309,14 @@ To read exactly what a component produced, save it to a file. `str()` on a
 component renders it and returns the HTML:
 
 ```python
-html = str(HomePage())
+page = HomePage()
+html = str(page)
 with open("result.html", "w", encoding="utf-8") as f:
     f.write(html)
 ```
 
 To choose where JavaScript and CSS go, render and serialize in two steps:
-`HomePage().render().serialize()` returns the same HTML and takes the
+`page.render().serialize()` returns the same HTML and takes the
 options described in [Asset placement](/advanced/asset-placement/).
 
 ## Ask an AI agent

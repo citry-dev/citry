@@ -240,7 +240,8 @@ class Page(Component):
     """
 
 
-html = Page().render().serialize(ssr=False)
+page = Page()
+html = page.render().serialize(ssr=False)
 ```
 
 `ssr_element_threshold` must be a non-negative `int`. Creating `Citry`
@@ -252,7 +253,8 @@ with another type raises `TypeError`, and with a negative value raises
 Pass the request's nonce when you serialize the page:
 
 ```python
-html = Page().render().serialize(csp_nonce=request_nonce)
+page = Page()
+html = page.render().serialize(csp_nonce=request_nonce)
 ```
 
 Citry adds the nonce to the scripts and styles it places, including those

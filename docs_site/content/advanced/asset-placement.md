@@ -51,7 +51,8 @@ uses `"document"`. To choose another, render first and pass
 `deps_strategy` to `serialize()`:
 
 ```python
-rendered = Page().render()
+page = Page()
+rendered = page.render()
 html = rendered.serialize(deps_strategy="simple")
 ```
 
@@ -80,7 +81,8 @@ that receives it decides where it goes. It works with the `"document"` and
 `"simple"` strategies:
 
 ```python
-html = Page().render().serialize(
+page = Page()
+html = page.render().serialize(
     deps_strategy="document",
     deps_position="append",
 )

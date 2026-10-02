@@ -28,7 +28,8 @@ class Greeting(Component):
     """
 
 
-html = str(Greeting(name="Ada"))
+greeting = Greeting(name="Ada")
+html = str(greeting)
 ```
 
 `str(...)` runs all the rendering steps below with their default options.
@@ -76,7 +77,8 @@ class AccountPage(Component):
     """
 
 
-rendered = AccountPage().render(
+account_page = AccountPage()
+rendered = account_page.render(
     template_globals={"site_name": "Citry"},
 )
 html = rendered.serialize()
@@ -129,7 +131,8 @@ need the same Python object, such as the request, but it should not become
 a template variable:
 
 ```python
-rendered = AccountPage().render(
+account_page = AccountPage()
+rendered = account_page.render(
     provides={"request": request},
 )
 ```
@@ -145,7 +148,8 @@ the HTML goes somewhere else, call `serialize()` yourself and choose a
 `deps_strategy`:
 
 ```python
-rendered = Greeting(name="Ada").render()
+greeting = Greeting(name="Ada")
+rendered = greeting.render()
 
 html = rendered.serialize(deps_strategy="ignore")
 ```
@@ -179,7 +183,8 @@ A `CitryRender` is one finished result. You can serialize it as often as you
 like, and you get the same HTML each time:
 
 ```python
-rendered = Greeting(name="Ada").render()
+greeting = Greeting(name="Ada")
+rendered = greeting.render()
 
 assert rendered.serialize() == rendered.serialize()
 ```

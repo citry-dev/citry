@@ -118,12 +118,11 @@ the extra attributes Citry generates. Save this as `check_page.py`:
 ```python
 from page import ReadingPage
 
-html = str(
-    ReadingPage(
-        current_books=["Kindred"],
-        next_books=[],
-    )
+page = ReadingPage(
+    current_books=["Kindred"],
+    next_books=[],
 )
+html = str(page)
 
 assert "My reading shelf" in html
 assert "Kindred" in html

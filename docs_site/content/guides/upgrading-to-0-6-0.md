@@ -311,10 +311,8 @@ and target it by name:
 ```
 
 ```python
-return actions.Render(
-    CartBadge(count=cart.count),
-    target="mark:cart-badge",
-)
+badge = CartBadge(count=cart.count)
+return actions.Render(badge, target="mark:cart-badge")
 ```
 
 A `mark:` or `render:` target accepts only `swap="morph"`. A 0.5.1

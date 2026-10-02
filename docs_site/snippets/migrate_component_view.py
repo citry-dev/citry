@@ -66,10 +66,8 @@ class NamedContactForm(Component):
 
     class Events:
         def submit(self, data: ContactIn):
-            return actions.Render(
-                ThankYouMessage(name=data.name),
-                target="mark:result",
-            )
+            message = ThankYouMessage(name=data.name)
+            return actions.Render(message, target="mark:result")
 
     def template_data(self, kwargs, slots) -> dict[str, Any]:
         return {"submit_url": self.events.url("submit")}
@@ -117,15 +115,17 @@ class FragmentLoader(Component):
     class Events:
         @event(methods=("GET",))
         def preview(self):
+            fragment = LoadedFragment(kind="preview")
             return actions.Render(
-                LoadedFragment(kind="preview"),
+                fragment,
                 target="mark:fragment-target",
             )
 
         @event(methods=("GET",))
         def details(self):
+            fragment = LoadedFragment(kind="details")
             return actions.Render(
-                LoadedFragment(kind="details"),
+                fragment,
                 target="mark:fragment-target",
             )
 

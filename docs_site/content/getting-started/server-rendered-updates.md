@@ -24,7 +24,8 @@ Submit an invalid address to check that validation still works, then submit
 ## Return a new component
 
 ```python
-return actions.Render(Confirmation(email=email))
+confirmation = Confirmation(email=email)
+return actions.Render(confirmation)
 ```
 
 [`actions.Render`][citry.ext.events.actions.Render] renders `Confirmation`

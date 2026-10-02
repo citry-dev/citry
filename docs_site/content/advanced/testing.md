@@ -41,7 +41,8 @@ def test_greeting():
           <p>Hello {{ name }}!</p>
         """
 
-    html = str(Greeting(name="World"))
+    greeting = Greeting(name="World")
+    html = str(greeting)
 
     assert "Hello World!" in html
 ```
@@ -66,7 +67,8 @@ def app():
 Check the text, attributes, and order that matter:
 
 ```python
-html = str(Badge(label="Ready", tone="success"))
+badge = Badge(label="Ready", tone="success")
+html = str(badge)
 
 assert ">Ready<" in html
 assert 'class="badge badge--success"' in html
@@ -121,19 +123,19 @@ def test_notice_requires_a_message():
           </aside>
         """
 
+    notice = Notice()
     with pytest.raises(TypeError):
-        str(Notice())
+        str(notice)
 ```
 
 Fill slots with the `slots` mapping:
 
 ```python
-html = str(
-    Notice(
-        message="Saved",
-        slots={"actions": "Undo"},
-    )
+notice = Notice(
+    message="Saved",
+    slots={"actions": "Undo"},
 )
+html = str(notice)
 
 assert "Saved" in html
 assert "Undo" in html
@@ -175,7 +177,8 @@ def test_profile_card_contains_the_avatar():
           </article>
         """
 
-    html = str(ProfileCard(name="Ada"))
+    card = ProfileCard(name="Ada")
+    html = str(card)
 
     assert 'class="avatar"' in html
     assert ">Ada</h2>" in html

@@ -22,8 +22,9 @@ app = FastAPI(lifespan=lifespan)
 # New in this step: render a Citry page from a regular route.
 @app.get("/")
 def home() -> HTMLResponse:
-    page = str(TutorialPage())
-    return HTMLResponse(page)
+    page = TutorialPage()
+    html = str(page)
+    return HTMLResponse(html)
 
 
 # New in this step: add Citry's browser and event routes.

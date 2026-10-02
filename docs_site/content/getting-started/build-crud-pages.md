@@ -151,12 +151,11 @@ def filter_tasks(self, data: FilterTasksIn):
     visible_tasks = load_tasks(
         hide_completed=data.hide_completed,
     )
-    return actions.Render(
-        TaskList(
-            tasks=visible_tasks,
-            hide_completed=data.hide_completed,
-        )
+    task_list = TaskList(
+        tasks=visible_tasks,
+        hide_completed=data.hide_completed,
     )
+    return actions.Render(task_list)
 ```
 
 The new `TaskList` replaces the old one, because its handler ran. Passing

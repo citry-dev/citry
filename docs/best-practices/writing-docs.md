@@ -126,6 +126,28 @@ generated scaffolds follow
 - Show the smallest fragment that makes the point. A template fragment
   often says more than a full component class.
 
+### One call per line
+
+In code blocks, put one constructor or call on each line. Build each
+component in its own statement and store it in a named variable, then
+pass that variable to the next component, to `str(...)`, to
+`actions.Render(...)`, or to `.render()`:
+
+```python
+# Hard to read: three calls packed into one line
+html = str(PageFrame(body=Welcome(name="Ada")))
+
+# Easy to read: one step per line
+welcome = Welcome(name="Ada")
+page = PageFrame(body=welcome)
+html = str(page)
+```
+
+Write each step as its own statement, and do not split a nested call
+across several lines. A named variable tells the reader what each value
+is. Calling a method chain on a named variable, such as
+`page.render().serialize()`, is fine.
+
 ### Empty Kwargs and Slots
 
 Leave out an empty `Kwargs` when the component neither uses nor discusses

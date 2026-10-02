@@ -780,8 +780,8 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "render",
         "label": "Render",
-        "lines": (98, 103),
-        "anchor": "str(ProductCard",
+        "lines": (98, 104),
+        "anchor": "html = str(card)",
         "title": "Rendering is a function call",
         "text": (
             "Rendering returns ordinary HTML. This makes components "

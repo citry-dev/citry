@@ -173,7 +173,8 @@ component class bound to your `Citry` instance, look it up on the value
 
 ```python
 Badge = installed[AcmeBadge]
-html = str(Badge(label="Ready"))
+badge = Badge(label="Ready")
+html = str(badge)
 ```
 
 ## Show it in the editor

@@ -198,12 +198,11 @@ class TaskList(Component):
             visible_tasks = load_tasks(
                 hide_completed=data.hide_completed,
             )
-            return actions.Render(
-                TaskList(
-                    tasks=visible_tasks,
-                    hide_completed=data.hide_completed,
-                )
+            task_list = TaskList(
+                tasks=visible_tasks,
+                hide_completed=data.hide_completed,
             )
+            return actions.Render(task_list)
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
         return {"tasks": kwargs.tasks}

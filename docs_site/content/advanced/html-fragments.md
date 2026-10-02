@@ -20,7 +20,8 @@ for you. See [Event actions](/events/actions/).
 Render the component, then serialize it with `deps_strategy="fragment"`:
 
 ```python
-html = Card(title="Welcome").render().serialize(
+card = Card(title="Welcome")
+html = card.render().serialize(
     deps_strategy="fragment",
 )
 ```
@@ -115,7 +116,8 @@ class Notice(Component):
     """
 
 
-html = Notice().render().serialize(
+notice = Notice()
+html = notice.render().serialize(
     deps_strategy="fragment",
 )
 ```
@@ -133,7 +135,8 @@ the content has not changed:
 
 ```python
 # Wrong: every request returns the same rendered fragment.
-saved_html = Card(title="Welcome").render().serialize(
+card = Card(title="Welcome")
+saved_html = card.render().serialize(
     deps_strategy="fragment",
 )
 
@@ -145,7 +148,8 @@ def card_fragment():
 ```python
 def card_fragment():
     # Right: render a new fragment for each request.
-    return Card(title="Welcome").render().serialize(
+    card = Card(title="Welcome")
+    return card.render().serialize(
         deps_strategy="fragment",
     )
 ```

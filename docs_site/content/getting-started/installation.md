@@ -51,7 +51,8 @@ class Hello(Component):
       <p>Hello from Citry!</p>
     """
 
-print(Hello())
+hello = Hello()
+print(hello)
 ```
 
 Run the file:

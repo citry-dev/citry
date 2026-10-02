@@ -144,7 +144,8 @@ Pass `provides` to `render()` when every component in the page may need the
 value:
 
 ```python
-rendered = Page().render(
+page = Page()
+rendered = page.render(
     provides={"request": request},
 )
 ```
@@ -158,10 +159,11 @@ does not see the values from the page around it. Pass them again:
 ```python
 def template_data(self, kwargs, slots):
     request = self.inject("request")
-    summary = Summary().render(
+    summary = Summary()
+    rendered = summary.render(
         provides={"request": request},
     )
-    return {"summary": summary}
+    return {"summary": rendered}
 ```
 
 ## Which provider wins

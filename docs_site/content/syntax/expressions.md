@@ -149,16 +149,18 @@ text from users cannot add tags to the page.
 
 !!! warning "A component turned into a string shows up as escaped text"
 
-    `str(Card(...))` produces an ordinary string. Inserting that string into
+    `str(table)` produces an ordinary string. Inserting that string into
     another template escapes it, so the page shows `&lt;table&gt;...` as
     text. Pass the component itself, not its string:
 
     ```python
     # Escaped: the template receives a plain string
-    return {"table": str(Table(rows=rows))}
+    table = Table(rows=rows)
+    return {"table": str(table)}
 
     # Rendered: the template receives the component
-    return {"table": Table(rows=rows)}
+    table = Table(rows=rows)
+    return {"table": table}
     ```
 
 ## Insert HTML you trust

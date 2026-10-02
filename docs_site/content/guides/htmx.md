@@ -36,7 +36,8 @@ from fastapi.responses import HTMLResponse
     response_class=HTMLResponse,
 )
 def contact_detail(contact_id: int) -> HTMLResponse:
-    component = ContactDetail(contact=get_contact(contact_id))
+    contact = get_contact(contact_id)
+    component = ContactDetail(contact=contact)
     html = component.render().serialize(deps_strategy="fragment")
     return HTMLResponse(html)
 ```

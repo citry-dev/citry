@@ -130,14 +130,16 @@ If you leave out `books`, Citry reports the missing option when the component
 renders:
 
 ```python
-print(ReadingList())
+reading_list = ReadingList()
+print(reading_list)
 # TypeError: ReadingList.Kwargs.__init__() missing ... 'books'
 ```
 
 A misspelled option is also rejected:
 
 ```python
-print(ReadingList(books=[], heding="Typo"))
+reading_list = ReadingList(books=[], heding="Typo")
+print(reading_list)
 # TypeError: ReadingList.Kwargs.__init__() got an unexpected
 # keyword argument 'heding'. Did you mean 'heading'?
 ```

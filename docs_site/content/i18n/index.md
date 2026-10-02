@@ -110,7 +110,8 @@ from citry.ext.i18n import make_context
 def render_account_page(locale: str):
     context = make_context(app, locale=locale)
 
-    return AccountPage().render(
+    account_page = AccountPage()
+    return account_page.render(
         provides={"citry_i18n": context},
     )
 ```

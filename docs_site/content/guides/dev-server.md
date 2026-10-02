@@ -210,13 +210,15 @@ class Greeting(Component):
         return {"name": "Ada"}
 
 
+greeting = Greeting()
+
 # The first render reads greeting.html and stores it.
-print(str(Greeting()))
+print(greeting)
 
 # After you edit greeting.html, drop the stored copy.
 # The next render reads the file again.
 engine.invalidate_file(BASE_DIR / "components" / "greeting.html")
-print(str(Greeting()))
+print(greeting)
 ```
 
 The second `print` shows your edited text. `invalidate_file` accepts a

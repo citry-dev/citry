@@ -211,14 +211,13 @@ When Python code builds the component, pass the fills in a `slots`
 mapping:
 
 ```python
-html = str(
-    Modal(
-        slots={
-            "default": "Your export is ready.",
-            "actions": "Download",
-        },
-    )
+modal = Modal(
+    slots={
+        "default": "Your export is ready.",
+        "actions": "Download",
+    },
 )
+html = str(modal)
 ```
 
 Citry escapes plain strings, so they appear as text. A `None` value leaves

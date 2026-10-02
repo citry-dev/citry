@@ -88,7 +88,8 @@ or affect any other request.
 Provide the context under the key `citry_i18n` when you render the page:
 
 ```python
-rendered = Page().render(
+page = Page()
+rendered = page.render(
     provides={"citry_i18n": context},
 )
 ```
@@ -106,10 +107,11 @@ class Summary(Component):
 
     def template_data(self, kwargs, slots):
         context = self.i18n.context
-        detail = Detail().render(
+        detail = Detail()
+        rendered = detail.render(
             provides={"citry_i18n": context},
         )
-        return {"detail": detail}
+        return {"detail": rendered}
 ```
 
 This keeps each render's output determined by what you pass to it. See

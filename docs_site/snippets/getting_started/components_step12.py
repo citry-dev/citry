@@ -61,7 +61,8 @@ class SignupForm(Component):
                     fields={"email": "Use an @example.com address."},
                 )
             # New in this step: put Confirmation in place of this form.
-            return actions.Render(Confirmation(email=email))
+            confirmation = Confirmation(email=email)
+            return actions.Render(confirmation)
 
     template = """
       <section class="signup-form">

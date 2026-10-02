@@ -156,7 +156,8 @@ class CardList(Component):
       </c-Card>
     """
 
-print(CardList())
+card_list = CardList()
+print(card_list)
 ```
 
 Run `python two_cards.py`. Both cards use the same HTML and CSS, but one is
@@ -167,19 +168,19 @@ blue and the other orange, each with its own text.
 If you forget the color, Citry cannot render the card:
 
 ```python
-str(Card(slots={"default": "Where is my color?"}))
+card = Card(slots={"default": "Where is my color?"})
+str(card)
 # TypeError: Card.Kwargs.__init__() missing ... 'accent'
 ```
 
 Add `accent` and the card renders:
 
 ```python
-str(
-    Card(
-        accent="#8250df",
-        slots={"default": "Now the card has everything it needs."},
-    )
+card = Card(
+    accent="#8250df",
+    slots={"default": "Now the card has everything it needs."},
 )
+str(card)
 ```
 
 Leaving out the default slot fails the same way. The error appears when the

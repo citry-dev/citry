@@ -93,7 +93,8 @@ names are absent. Its type annotations are not checked when the page runs:
 
 ```python
 # The name is valid, so a plain Kwargs class accepts 42.
-html = str(Button(label=42))
+button = Button(label=42)
+html = str(button)
 ```
 
 The annotations still help readers, editors, and type checkers. Do not rely

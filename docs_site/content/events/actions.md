@@ -33,7 +33,8 @@ the browser updates the component whose handler ran, in place:
 class Events:
     def add(self, data: TaskIn):
         create_task(data.title)
-        return TaskList(tasks=load_tasks())
+        tasks = load_tasks()
+        return TaskList(tasks=tasks)
 ```
 
 Returning `TaskList(...)` is the same as returning
@@ -114,10 +115,8 @@ name:
 Then render into it with `target="mark:<name>"`:
 
 ```python
-return actions.Render(
-    CartBadge(count=cart.count),
-    target="mark:cart-badge",
-)
+badge = CartBadge(count=cart.count)
+return actions.Render(badge, target="mark:cart-badge")
 ```
 
 The name is looked up in the template of the component whose handler ran. To
@@ -217,11 +216,9 @@ own link:
 class Events:
     def open_task(self, data: TaskRef):
         task = load_task(data.id)
+        detail = TaskDetail(task=task)
         return [
-            actions.Render(
-                TaskDetail(task=task),
-                target="mark:detail",
-            ),
+            actions.Render(detail, target="mark:detail"),
             actions.PushUrl(f"/tasks/{task.id}/"),
         ]
 ```
