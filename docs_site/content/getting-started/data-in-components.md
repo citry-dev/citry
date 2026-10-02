@@ -46,7 +46,7 @@ longer.
 The file's last line, a bare `reading_list`, is what the **Try live** button
 shows. Python ignores it when you run the file.
 
-## Give options default values
+## Declare the options and their defaults
 
 `Kwargs` lists the named options people can give your component:
 
@@ -142,7 +142,7 @@ print(ReadingList(books=[], heding="Typo"))
 # keyword argument 'heding'. Did you mean 'heading'?
 ```
 
-!!! note
+!!! note "Type annotations do not check values at runtime"
 
     The type annotations help your editor and type checker, but Citry does
     not check value types while the program runs. Validate values from
