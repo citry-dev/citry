@@ -13,6 +13,7 @@ from docs_site._internal.components.doc_page import DocPage
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.nav import SCOPE_SITE, NavArea, NavGroup, NavItem, NavTree
 from docs_site._internal.pipeline import render_page
+from docs_site._internal.toc import merge_html_headings_into_toc
 
 # Read repository files from this file's location rather than the working
 # directory, so the tests pass however pytest is launched.
@@ -584,6 +585,80 @@ def test_toc_preserves_and_marks_every_heading_depth() -> None:
         four_item = document.xpath(f'{container}//a[@href="#four"]/ancestor::li[1]')[0]
         assert three_item.xpath('.//a[@href="#four"]')
         assert four_item.xpath('.//a[@href="#five"]')
+
+
+def _toc_links(rendered: str, heading_id: str) -> list:
+    document = lxml_html.document_fromstring(rendered)
+    return [
+        *document.xpath(f'//aside[@id="djc-toc"]//a[@href="#{heading_id}"]'),
+        *document.xpath(f'//details[contains(@class, "djc-toc-mobile")]//a[@href="#{heading_id}"]'),
+    ]
+
+
+def test_toc_label_escapes_code_span_text_once() -> None:
+    # The toc extension hands over its text already escaped; escaping it again
+    # showed "&lt;c-if&gt; blocks" in the rail instead of "<c-if> blocks".
+    rendered = render_page("# Page\n\n## `<c-if>` blocks & more { #wrap }\n").html
+
+    assert "&amp;lt;" not in rendered
+    links = _toc_links(rendered, "wrap")
+    assert len(links) == 2
+    for link in links:
+        assert link.text_content().strip() == "<c-if> blocks & more"
+        # The code span keeps its code styling in the rail.
+        assert [code.text for code in link.xpath("./code")] == ["<c-if>"]
+
+
+def test_toc_label_keeps_only_code_markup_from_a_heading() -> None:
+    # Raw HTML and links in a heading reach the rail as text, never as markup.
+    rendered = render_page(
+        '# Page\n\n## <b onclick="x()">Bold</b>  <em> [link](/x/)</em> `a<b`<script>x()</script> { #mixed }\n'
+    ).html
+
+    links = _toc_links(rendered, "mixed")
+    assert len(links) == 2
+    for link in links:
+        # Script text is not visible heading text, so it stays out of the label.
+        assert link.text_content().strip() == "Bold link a<b"
+        assert [child.tag for child in link.iterdescendants()] == ["code"]
+
+
+def test_toc_name_collapses_whitespace_across_element_boundaries() -> None:
+    # ``name`` feeds the plain-text aria-label, where a doubled space would survive.
+    tokens = [{"level": 2, "id": "a", "name": "", "html": "foo <em> bar</em> <code>x </code> baz", "children": []}]
+
+    merged = merge_html_headings_into_toc("", tokens)
+
+    assert merged[0]["name"] == "foo bar x baz"
+    assert merged[0]["label"] == [("foo bar ", False), ("x ", True), ("baz", False)]
+
+
+def test_toc_label_uses_the_data_toc_label_override_as_plain_text() -> None:
+    rendered = render_page('# Page\n\n## `long` heading { #short data-toc-label="<i>Short</i> & sweet" }\n').html
+
+    links = _toc_links(rendered, "short")
+    assert len(links) == 2
+    for link in links:
+        assert link.text_content().strip() == "Short & sweet"
+        assert not list(link.iterdescendants())
+
+
+def test_toc_label_of_a_raw_html_heading_keeps_its_code_span() -> None:
+    # Raw headings that opt in with toc-heading reach the rail through the HTML
+    # merge in toc.py, which must produce the same once-escaped label.
+    source = (
+        "# Page\n\n## Markdown `<c-for>` { #md }\n\n"
+        '<h2 id="raw" class="toc-heading">Raw <code>&lt;c-if&gt;</code> &amp; text</h2>\n'
+    )
+    rendered = render_page(source).html
+
+    assert "&amp;lt;" not in rendered
+    for heading_id, text, codes in (("md", "Markdown <c-for>", ["<c-for>"]), ("raw", "Raw <c-if> & text", ["<c-if>"])):
+        links = _toc_links(rendered, heading_id)
+        assert len(links) == 2
+        for link in links:
+            assert link.text_content().strip() == text
+            assert [code.text for code in link.xpath("./code")] == codes
 
 
 def test_chrome_header_and_footer() -> None:

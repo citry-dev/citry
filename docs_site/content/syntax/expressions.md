@@ -241,7 +241,7 @@ Inside `{{ ... }}` or a `c-*` attribute, `#` starts a Python comment:
 ```
 
 The comment ends at the end of the line or at the end of the expression,
-whichever comes first. See [Comments and literal text](/syntax/comments/).
+whichever comes first. See [Comments](/syntax/comments/#comment-an-expression).
 
 ## Sandbox limits
 

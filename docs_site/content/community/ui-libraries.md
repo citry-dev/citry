@@ -5,10 +5,8 @@ description: Find installable libraries of reusable Citry UI components.
 
 # Community UI libraries
 
-You want ready-made components instead of building every button and
-dialog yourself. A UI library is a package of reusable components that you
-register with your own Citry instance. Each library below shows who
-maintains it: "Citry maintained" or "Community maintained".
+A UI library is a package of reusable components, such as buttons and
+dialogs, that you register with your own Citry instance.
 
 <c-community-packages category="ui_library" />
 

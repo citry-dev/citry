@@ -282,7 +282,7 @@ not evaluate expressions or component tags inside `<c-raw>`.
 --8<-- "docs_site/snippets/builtin_raw.html"
 ```
 
-[Comments and literal text](/syntax/comments/#pass-template-looking-text-through-unchanged)
+[Literal text](/syntax/raw/)
 covers what is trusted and the exact rules.
 
 [dependencies-guide]: /advanced/asset-placement/
