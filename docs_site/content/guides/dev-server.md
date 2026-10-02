@@ -10,7 +10,7 @@ or CSS file to show up when you reload the page, without restarting the
 server. Turn on Citry's hot reload: when such a file changes, Citry forgets
 its stored copy, and the next render reads the file again.
 
-## What reloads, and what still needs a restart
+## What reloads
 
 Hot reload covers the files a component loads: the ones named by
 `template_file`, `js_file`, and `css_file`, and file entries in its
@@ -25,7 +25,7 @@ has to be imported.
 The two work together: your framework restarts for Python edits, and Citry
 reloads template and asset files in place, which is faster than a restart.
 
-## Turn on hot reload in Django
+## Enable in Django
 
 Call `enable_hot_reload` once at startup, from your app config's `ready()`.
 It uses the reloader that Django's `runserver` already runs, so you install
@@ -64,9 +64,9 @@ handling.
     the app directories loader, each app's `templates/` folder). An edit
     to a component file outside those directories does not show up. Move
     the files into a template directory, or use
-    [`citry.reload.watch`](#turn-on-hot-reload-in-any-other-app) instead.
+    [`citry.reload.watch`](#enable-in-any-other-app) instead.
 
-## Turn on hot reload in FastAPI or Starlette
+## Enable in FastAPI
 
 Add `reload_lifespan` to your app's lifespan. Initialize Citry first, then
 start the watcher inside it:
@@ -95,7 +95,7 @@ app = FastAPI(lifespan=lifespan)
 Citry. Use the watcher only in development, and keep `engine.initialize()`
 in production too.
 
-## Turn on hot reload in any other app
+## Enable in any other app
 
 For any other stack, start the watcher from your development entry point
 with `watch()`. It runs in the background and returns a handle you can wait
@@ -118,7 +118,7 @@ except KeyboardInterrupt:
 - `watcher=`: the file-watching backend (see the next section);
 - `on_reload=`: a function to call after each batch of changes.
 
-## Install a faster file watcher
+## Use a faster watcher
 
 Citry can notice file changes three ways, and uses the best one installed:
 
@@ -137,7 +137,7 @@ pip install "citry[watcher-watchfiles]"
 To pick a backend yourself, pass an instance from `citry.reload`, such as
 `watch(engine, watcher=WatchfilesWatcher())`.
 
-## Reload from the `citry watch` command
+## Use `citry watch`
 
 The `citry` command (see the [CLI reference](/cli/)) has a `watch`
 subcommand. It reloads files only inside its own process, so it suits a
@@ -169,7 +169,7 @@ The name in parentheses is the component Citry reset. It reads
 `(no loaded component)` when no component has rendered from that file in
 this process yet.
 
-## Connect your own file watcher
+## Use your own watcher
 
 Every helper above ends in one call on the [Citry][citry.Citry] instance:
 `invalidate_file(path)`. If your app already runs a file watcher, call it
@@ -221,7 +221,7 @@ Two related calls help when one path is not enough:
 - `get_components_for_file(path)` returns the components that loaded a
   file without resetting them, so your handler can decide what to do.
 
-## Use hot reload with one process, in development only
+## One process, dev only
 
 A reload clears only the process it runs in. With several worker
 processes, each keeps its own copy, so an edit shows up one worker at a
