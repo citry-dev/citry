@@ -22,7 +22,7 @@ with:
 
 You can switch to your framework after you finish the tutorial.
 
-## Install FastAPI and Uvicorn
+## Install FastAPI
 
 FastAPI defines the application and its routes.
 [Uvicorn](https://uvicorn.dev/){: target="_blank" rel="noopener"} runs that
@@ -38,7 +38,7 @@ Or, with pip:
 python -m pip install fastapi uvicorn
 ```
 
-## Create one Citry instance for the app
+## Set up Citry
 
 A `Citry` instance holds your app's components and settings. Create a new
 folder for this small app, and save this inside it as `citry_setup.py`:
@@ -103,7 +103,7 @@ Citry meet.
 
 The next three sections walk through those places.
 
-### Initialize Citry when FastAPI starts
+### Initialize at startup
 
 ```python
 @asynccontextmanager
@@ -125,7 +125,7 @@ Importing `TutorialPage` at the top of `app.py` runs the class definitions in
 `components.py`, so every component already belongs to `citry_app` when
 `initialize()` runs.
 
-### Return the page from a route
+### Return the page
 
 `home` is an ordinary FastAPI route. It renders `TutorialPage` to a string
 and returns it as HTML:
@@ -141,7 +141,7 @@ def home() -> HTMLResponse:
 document. If you returned the plain string, FastAPI would send it as JSON.
 Your existing routes can return Citry pages the same way.
 
-### Add Citry's routes to the app
+### Add Citry's routes
 
 The last line adds Citry's own routes to the FastAPI app:
 

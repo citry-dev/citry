@@ -24,7 +24,7 @@ Try a two-character title in one row, then save another row. The first row
 keeps its error. Click either “Hide completed tasks” button: the server
 returns two rows, and both buttons change to “Show all tasks.”
 
-## Make each row its own component
+## One component per row
 
 ```citry-html
 <c-for each="task in tasks">
@@ -43,7 +43,7 @@ loading status, and errors, so one row's error does not affect another.
 to tell which row is which. Use a database id or another value that stays
 the same for the same record.
 
-## Remember which record a row edits
+## Remember the record
 
 The row keeps its task id in State, and the new title comes from the form:
 
@@ -68,7 +68,7 @@ to know which task to update.
     changed `task_id`. Either way, keep sensitive values on the server and
     check in the handler that the user may edit that task.
 
-## Show each row's error and success message
+## Show row messages
 
 ```citry-html
 <p
@@ -108,7 +108,7 @@ $component({
 `onEvent` hears only events from this row's own Python handlers, so the
 other rows do not show the message.
 
-## Connect the filter buttons to the list
+## Connect the filters
 
 `TaskFilterToggle` is a button that receives two props and sends a `select`
 event, as in [Connect components in the
@@ -141,7 +141,7 @@ to both buttons. When either button sends `select`,
 [`$sendEvent`][$sendEvent] calls the list's Python `filter_tasks` handler
 with the opposite filter.
 
-## Re-render the list from Python
+## Re-render the list
 
 The handler loads the matching tasks and returns a new `TaskList`:
 
@@ -164,7 +164,7 @@ The new `TaskList` replaces the old one, because its handler ran. Passing
 filter, so both buttons show it. The row keys let Vue keep the rows that are
 still there, and remove or add the others.
 
-## Split larger pages into smaller components
+## Split larger pages
 
 On a larger page, split it into smaller components that each have their own
 `Events`. A handler's `actions.Render` then replaces only its own component,

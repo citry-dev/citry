@@ -20,7 +20,7 @@ they are:
 Submit `ada@elsewhere.test` to see the field error, then submit
 `ada@example.com` to see the accepted address.
 
-## Send the form to a Python handler
+## Send the form
 
 ```citry-html
 <form @c-submit.prevent="submit">
@@ -45,7 +45,7 @@ class Events:
 The `data: SignupIn` annotation tells Citry which class to build from the
 form.
 
-## Reject a value with a field error
+## Reject a value
 
 ```python
 raise EventError(
@@ -58,7 +58,7 @@ Raising [`EventError`][citry.ext.events.EventError] stops the handler and
 sends the errors to the browser. The key in `fields` is the field name: it
 matches both `SignupIn.email` and `name="email"`.
 
-## Show the error and progress in the form
+## Show error and progress
 
 The template reads the error with `$error('submit')` and the progress with
 `$loading('submit')`. Both refer to this component's `submit` handler:
@@ -81,7 +81,7 @@ The template reads the error with `$error('submit')` and the progress with
 The error stays until the next call to `submit` succeeds. The page does not
 reload, so the input keeps what the user typed.
 
-## Show the accepted value
+## Show the valid address
 
 When the address is valid, the handler sends a browser event with it:
 

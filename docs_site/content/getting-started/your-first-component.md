@@ -29,7 +29,7 @@ Save this as `component.py`:
 
 The next sections go through it one piece at a time.
 
-## Mark where the content goes
+## Add a content slot
 
 The [`template`][citry.Component.template] is ordinary HTML with one Citry
 tag:
@@ -52,7 +52,7 @@ content appears. When you write this:
 Citry puts the paragraph where `<c-slot />` is. A place like this is called
 a **slot**. This one has no name, so it is the **default slot**.
 
-## Declare what the card accepts
+## Declare the inputs
 
 The two short classes near the top of `Card` list what you can change each
 time you use it:
@@ -79,7 +79,7 @@ reads it.
 Give component classes distinctive names so they do not style something else
 by accident.
 
-## Use the card in a template
+## Use it in a template
 
 Inside another component's template, the card looks like this:
 
@@ -95,7 +95,7 @@ Inside another component's template, the card looks like this:
 `accent` makes the top border purple. The heading and paragraph go inside the
 card because they sit between its opening and closing tags.
 
-## Use the card in Python
+## Use it in Python
 
 You can also create the card directly in Python. Save this as `render.py`
 next to `component.py`:
@@ -134,7 +134,7 @@ looks like this:
 The real HTML has a few extra attributes that Citry uses. You do not need to
 write them.
 
-## Give each card its own color
+## Give each card a color
 
 Several cards on one page share the same CSS rules, but each card keeps the
 color you gave it.
@@ -162,7 +162,7 @@ print(CardList())
 Run `python two_cards.py`. Both cards use the same HTML and CSS, but one is
 blue and the other orange, each with its own text.
 
-## See what happens when an input is missing
+## Leave out an input
 
 If you forget the color, Citry cannot render the card:
 

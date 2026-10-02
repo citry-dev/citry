@@ -10,7 +10,7 @@ knows how to run and test your project. Give it two things: the link to
 Citry's documentation index, and a project instructions file. You do not
 need to install a Citry skill or plugin.
 
-## Point the agent to `llms.txt`
+## Point to `llms.txt`
 
 [llms.txt](/llms.txt) is an index of this site's guides and API references,
 with a link to a plain Markdown version of each page. An agent reads the
@@ -28,7 +28,7 @@ Add a filter to the project list using a Python Citry Event.
 Check the result in a browser and run the project tests.
 ```
 
-## Add project instructions
+## Add instructions
 
 Many agents, such as Codex, read an `AGENTS.md` file in the project root at
 the start of each session. Create one, or add this section to yours:
@@ -89,7 +89,7 @@ If it cannot fetch the documentation, give it the relevant Markdown pages
 directly. After the change, review its test results and try the browser
 interactions that matter to your app yourself.
 
-## Match the docs to your installed version
+## Match your version
 
 The docs describe one Citry version, and your project may use another. Check
 the installed version in the same environment that runs the app:
@@ -103,7 +103,7 @@ that your installation lacks, check the installed package and the
 [release notes](/releases/) before changing dependencies, and keep the
 project's lockfile and version constraints in mind.
 
-## Use `llms-full.txt` for a single file
+## Use `llms-full.txt`
 
 [llms-full.txt](/llms-full.txt) puts the whole documentation in one text
 file. Use it when your tool works better with an attached document or needs

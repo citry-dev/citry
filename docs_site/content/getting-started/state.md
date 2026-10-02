@@ -52,7 +52,7 @@ Keep the two classes separate when some inputs should not go to the browser.
 When names differ or a value must be computed, fill State with
 `state_data()`, as [Event state](/events/state/) shows.
 
-## Read and change State in a handler
+## Read and change State
 
 ```python
 class Events:
@@ -69,7 +69,7 @@ The handler receives State through its `state` parameter. The first call
 gets zero, loads batch zero, and sets the value to one. Citry sends the
 changed State back with the response, so the next call gets one.
 
-## Show State in the browser
+## Show State on the page
 
 The template reads State through `$state`:
 
@@ -93,7 +93,7 @@ the browser's current choice on its next call.
     does not let the browser change. See
     [`$state`](/reference/browser-apis/#state) for the full rules.
 
-## Keep secrets out of State
+## Keep secrets out
 
 State is signed, not secret. Citry signs it with `CITRY_SECRET` so it can
 tell when someone has changed it, but anyone who opens the page can read the

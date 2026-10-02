@@ -32,7 +32,7 @@ python reading_panel.py
 The first panel ends with “No action needed.” The second ends with a “Start
 reading” button.
 
-## Mark where outside content goes
+## Place the slots
 
 Inside `ReadingPanel`, each [`<c-slot>`](/reference/builtins/#c-slot)
 marks a place where content from outside goes. The arrows show where the
@@ -80,7 +80,7 @@ Each `<c-fill>` passes content to the slot with the same name. The button
 replaces “No action needed.” When nothing fills the `footer` slot, that text
 stays as the fallback.
 
-## Declare which slots are required
+## Declare the slots
 
 [`Slots`][citry.Component.Slots] gives those two places names in Python:
 
@@ -97,7 +97,7 @@ when it is empty.
 [`SlotInput`][citry.SlotInput] accepts any kind of slot content: HTML, text,
 another component, or a function that produces content.
 
-## Fill one slot or several
+## Fill the slots
 
 When you only fill the default slot, put the content directly inside the
 component tag:

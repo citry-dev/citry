@@ -8,7 +8,7 @@ description: Install Citry in a Python environment, then render a small componen
 Install Citry, then render one small component to confirm it works. You do
 not need a web framework or a server yet.
 
-## Check your Python version
+## Check Python version
 
 Citry supports Python 3.10 through 3.14. Check the version you are about to
 use:
@@ -70,7 +70,7 @@ can now import Citry and render a component.
     Citry adds an attribute to the opening tag, and its value can change
     each time. That extra text is expected.
 
-## Fix installation problems
+## Fix install problems
 
 If running `hello.py` reports `No module named 'citry'`, the install command
 and the file probably used different Python environments.

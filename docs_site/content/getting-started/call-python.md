@@ -22,7 +22,7 @@ Replace `components.py` with this version:
 Keep `citry_setup.py` and `app.py` as they are. Open
 `http://127.0.0.1:8000/` and click “Load choices.”
 
-## Send the click to Python
+## Send clicks to Python
 
 ```citry-html
 <button type="button" @c-click="load_choices">Load choices</button>
@@ -39,7 +39,7 @@ with an `@c-` prefix, as [Bind events in templates](/events/bindings/) shows.
     route, so treat everything it receives as untrusted. Check who the
     user is and what they may do inside the handler.
 
-## Send the result back to the browser
+## Send the result back
 
 The handler loads the choices and returns a browser event that carries them:
 
@@ -59,7 +59,7 @@ fire an event with that name, and attach the dictionary as the event's
 component's name, as in `ChoicePicker:loaded`, so it does not clash with
 events from other components.
 
-## Listen for the result in the component
+## Listen for the result
 
 The component listens for that event in its JavaScript:
 
@@ -111,7 +111,7 @@ From there, the browser does the rest, as in the earlier steps: the
     it. Event names that start with `citry:` are reserved for Citry's own
     events, and `actions.Dispatch` rejects them.
 
-## Show progress while Python works
+## Show progress
 
 `$loading('load_choices')` is true while the call is running:
 

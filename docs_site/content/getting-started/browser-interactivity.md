@@ -14,7 +14,7 @@ Citry uses [Vue](https://vuejs.org/){: target="_blank" rel="noopener"} for
 browser behavior. You write Vue attributes in the template, and Python gives
 each component its starting browser data.
 
-## Build independent counters
+## Build the counters
 
 Save this example as `click_counters.py`:
 
@@ -29,7 +29,7 @@ python click_counters.py > click_counters.html
 Both buttons start at zero. Click Ada's button: Ada changes to one, and Grace
 stays at zero.
 
-## Update the page when the user clicks
+## Update on click
 
 Two Vue attributes, called directives, connect the button to its data:
 
@@ -41,7 +41,7 @@ Two Vue attributes, called directives, connect the button to its data:
 When Citry sees Vue directives in a template, it adds its browser code to the
 page. You do not need a separate JavaScript entry file or Vue setup.
 
-## Give each component its starting browser data
+## Set starting data
 
 [`js_data()`][citry.Component.js_data] returns the data the component starts
 with in the browser:
@@ -55,7 +55,7 @@ The values must be JSON-serializable. Vue watches each top-level key, and
 when one changes, it updates the parts of the page that show it. Each counter
 gets its own copy, so clicking Ada cannot change Grace.
 
-## Add methods and other Vue options
+## Add Vue options
 
 When a component needs more than data, such as methods, props, emitted
 events, or code that runs when it first appears on the page, pass Vue

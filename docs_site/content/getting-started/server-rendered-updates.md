@@ -21,7 +21,7 @@ Replace `components.py` with:
 Submit an invalid address to check that validation still works, then submit
 `ada@example.com`. The form becomes a bordered confirmation.
 
-## Return the new component from the handler
+## Return a new component
 
 ```python
 return actions.Render(Confirmation(email=email))
@@ -39,7 +39,7 @@ shows.
 The swap happens only in the open browser tab. Reloading the page shows the
 form again, because `TutorialPage` still renders `SignupForm`.
 
-## Announce the change to screen readers
+## Announce the change
 
 `TutorialPage` wraps the form in an `aria-live` region:
 
@@ -53,7 +53,7 @@ The region belongs to `TutorialPage`, which stays on the page. When
 `Confirmation` takes the form's place inside it, screen readers announce the
 confirmation.
 
-## Give the new component its browser data
+## Set its browser data
 
 `Confirmation` has its own [`js_data()`][citry.Component.js_data]:
 
@@ -75,7 +75,7 @@ Vue can use `email` as soon as the new component is on the page:
 
 The text Python rendered shows until Vue starts. Then `v-text` replaces it.
 
-## Load the new component's CSS and JavaScript
+## Load its CSS and JS
 
 `TutorialPage` now places `<c-css />` in the head and `<c-js />` at the end
 of the body. These tags mark where Citry puts the CSS and JavaScript that the

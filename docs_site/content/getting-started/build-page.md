@@ -71,7 +71,7 @@ python page.py
 The page contains one list with two books and another with the message
 “Choose your next book.”
 
-## Import the components a page uses
+## Import the components
 
 This line matters even though the Python code below it never mentions
 `ReadingList`:
@@ -91,7 +91,7 @@ when it renders the page.
     classes, then [Component discovery](/advanced/component-discovery/)
     for automatic imports.
 
-## Pass fixed text or Python values
+## Pass text or values
 
 The first list receives two options:
 
@@ -110,7 +110,7 @@ for fixed text and the `c-` form for Python values.
 The child receives only the values you pass. It cannot read other variables
 from the page around it, so it behaves the same wherever you use it.
 
-## Check the rendered page
+## Check the page
 
 A quick check can confirm the page shows the right text, without matching
 the extra attributes Citry generates. Save this as `check_page.py`:

@@ -46,7 +46,7 @@ longer.
 The file's last line, a bare `reading_list`, is what the **Try live** button
 shows. Python ignores it when you run the file.
 
-## Declare the options and their defaults
+## Declare the options
 
 `Kwargs` lists the named options people can give your component:
 
@@ -75,7 +75,7 @@ ReadingList(
 )
 ```
 
-## Compute new values for the template
+## Compute new values
 
 By default, the template can use each `Kwargs` field by its own name. That is
 how `{{ heading }}` inserts the heading.
@@ -102,7 +102,7 @@ def template_data(
 Once you define `template_data()`, the template sees only the names it
 returns. That is why it returns the `Kwargs` fields too.
 
-## Show, repeat, and set attributes from data
+## Show data in the HTML
 
 The template uses four small tools:
 
@@ -124,7 +124,7 @@ If `books` is empty, the `c-empty` item appears instead:
 [Attributes](/syntax/dynamic-attributes/) cover the other forms when you
 need them.
 
-## Catch missing and misspelled options
+## Catch wrong options
 
 If you leave out `books`, Citry reports the missing option when the component
 renders:

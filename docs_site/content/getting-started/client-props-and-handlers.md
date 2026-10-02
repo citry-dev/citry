@@ -15,7 +15,7 @@ In this step you build a choice button whose label comes from its parent.
 Clicking the button tells the parent, the parent changes its choice, and the
 new label shows in the button.
 
-## Build the parent and child
+## Build parent and child
 
 Save this as `connected_components.py`:
 
@@ -28,7 +28,7 @@ python connected_components.py > connected_components.html
 The picker starts at “Ocean.” Each click switches between “Forest” and
 “Ocean.”
 
-## Declare what the child accepts and sends
+## Set props and events
 
 `ChoiceButton` declares a `label` prop and a `select` event in its Vue
 options:
@@ -58,7 +58,7 @@ change without another Python render. Vue's guides cover
 and [component events](https://vuejs.org/guide/components/events.html){: target="_blank" rel="noopener"}
 in more depth.
 
-## Pass the value down and handle the event in the parent
+## Connect the parent
 
 `ChoicePicker` uses the button like this:
 
