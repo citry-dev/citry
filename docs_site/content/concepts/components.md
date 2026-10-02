@@ -66,6 +66,11 @@ slots, and type checking.
 A component without `Kwargs` also passes its keyword arguments to the
 template, but accepts any name.
 
+!!! note "`slots` is a reserved keyword argument"
+
+    `Modal(slots={...})` passes content for the component's slots, not an
+    input named `slots`. See [Slots](/concepts/slots/#fill-slots-from-python).
+
 ## Calculate a value for the template
 
 When the template needs a value that is not an input as written, override
@@ -194,17 +199,16 @@ elements first and render it once at the end. You can also render the same
 element several times, or insert it in several places.
 [Rendering](/concepts/rendering/) covers the steps in detail.
 
-!!! note "`slots` is a reserved keyword argument"
+## Less common component setups
 
-    `Modal(slots={...})` passes content for the component's slots, not an
-    input named `slots`. See [Slots](/concepts/slots/#fill-slots-from-python).
+### Leave out the template
 
-!!! note "Components without a template"
+A component does not need a template. Without one it renders nothing by
+default. This suits a base class that other components extend, or a
+component whose [`on_render()`][citry.Component.on_render] hook produces
+the complete output.
 
-    A component does not need a template. Without one it renders nothing by
-    default. This suits a base class that other components extend, or a
-    component whose [`on_render()`][citry.Component.on_render] hook produces
-    the complete output.
+### Render small display components faster
 
 For small display-only components that do not need hooks or their own
 instance, [Simple components](/performance/simple-components/) render with
