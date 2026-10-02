@@ -101,8 +101,7 @@ Any Python expression that produces a value works:
 {{ score > 0 and account.is_active }}
 ```
 
-Statements do not: `import`, `return`, `del`, `def`, and assignment with `=`
-are rejected. `await`, async comprehensions, and `yield` are not supported.
+Statements are rejected: `import`, `return`, `del`, `def`, and assignment with `=`. `await`, async comprehensions, and `yield` are not supported.
 
 These are Python expressions, not Django or Jinja ones. There are no template
 filters, and `|` is Python's
@@ -217,8 +216,9 @@ itself, so its documentation applies.
 
 ### Keep trusted HTML complete on pages that use Vue
 
-When anything on the page or fragment runs in the browser, such as a Vue
-directive or `$component`, each `Markup` value must be complete HTML:
+When any component on the page, or in an HTML fragment you insert into a
+page, runs in the browser (it has its own `js`, or uses Vue syntax such as
+`@click`), each `Markup` value must be complete HTML:
 
 - close every element it opens;
 - do not self-close an element that needs a closing tag, such as `<span/>`;
