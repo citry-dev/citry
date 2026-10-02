@@ -60,7 +60,8 @@ def make_js_component(citry_instance: Citry) -> type[Component]:
         """
         Mark where Citry puts the ``<script>`` tags for the page's components.
 
-        The tag takes no attributes and no body. When a page has several,
+        Without it, the scripts go at the end of ``<body>``. Passing an
+        attribute or a body raises ``ValueError``. When a page has several,
         the first one gets the scripts and the others render nothing.
         """
 
@@ -80,7 +81,8 @@ def make_css_component(citry_instance: Citry) -> type[Component]:
         """
         Mark where Citry puts the stylesheet tags for the page's components.
 
-        The tag takes no attributes and no body. When a page has several,
+        Without it, the stylesheets go at the end of ``<head>``. Passing an
+        attribute or a body raises ``ValueError``. When a page has several,
         the first one gets the stylesheets and the others render nothing.
         """
 

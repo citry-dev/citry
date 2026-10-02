@@ -261,7 +261,7 @@ def make_trans_component(citry_instance: Citry) -> type[Component]:
         Render a translated message that contains HTML, such as a link or a component.
 
         ``message`` (required) is the message id. ``values`` maps the
-        message's plain placeholders to values, and each ``<c-fill>``
+        message's variables to values, and each ``<c-fill>``
         supplies the HTML for the placeholder with the same name, so the
         translator decides where the link goes. ``attr`` picks one
         attribute of the message instead of its main text. Citry escapes

@@ -24,7 +24,8 @@ def make_cache_component(citry_instance: Citry) -> type[Component]:
         ``key`` share saved HTML, so list in ``vary`` every value that can
         change the output, such as the user id or the locale: each
         combination gets its own saved copy. ``ttl`` is how many seconds a
-        copy stays saved; with ``None`` it never expires, and
+        copy stays saved (by default, the app's cache setting); with
+        ``None`` it never expires, and
         ``0`` turns caching off. Change ``version`` to stop reusing the
         copies saved under the old value, for example after you change what
         the wrapped part shows. ``enabled=False`` also turns caching off.

@@ -101,14 +101,14 @@ class Events(ExtensionConfig, Generic[StateT]):
                 none.
 
         Returns:
-            The URL path of the handler, for example
-            `"/citry/ext/events/e/Signup_a1b2c3/submit"`.
+            The handler's URL path with `query` and `fragment` added, for
+            example `"/citry/ext/events/e/Signup_a1b2c3/submit"`.
 
         Raises:
             ValueError: When the component has no handler named `name`.
             RuntimeError: When no web framework integration is mounted, so
                 the URL would point nowhere, or when you call `url()` on an
-                `Events` class you created yourself instead of on
+                `Events` object you created yourself instead of on
                 `self.events` of a component.
 
         Example:
