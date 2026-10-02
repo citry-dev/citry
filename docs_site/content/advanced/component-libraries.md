@@ -215,12 +215,12 @@ Registering the same manifest again returns the existing installation. To
 install a changed or reloaded version under the same name, call
 [`Citry.clear()`][citry.Citry.clear] and run your normal application
 startup again. Without the clear, `register_library()` raises
-`LibraryManifestChanged`.
+[`LibraryManifestChanged`][citry.LibraryManifestChanged].
 
 ### Old installation handles stop working
 
-After `Citry.clear()`, or after a newer version replaces the library, the
-old value returned by `register_library()` no longer gives out classes.
+After `Citry.clear()`, the value `register_library()` returned earlier no
+longer gives out classes.
 Looking one up raises
 [`LibraryInstallationStale`][citry.LibraryInstallationStale], so you never
 get a class from a library that is no longer installed.
