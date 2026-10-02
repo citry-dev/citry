@@ -995,3 +995,47 @@ def test_simple_vue_leaf_from_python_expression_gets_interactive_occurrences() -
     occurrences = json.loads(block.group(1))["manifest"]["occurrences"]
     leaf_ids = {item["renderId"] for item in occurrences if item["typeKey"].startswith("Leaf_")}
     assert len(leaf_ids) == 4
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [{"css": []}, {"js": []}, {"css": {"print": []}}, {"css": (), "js": ()}],
+    ids=["css-list", "js-list", "css-media", "both-tuples"],
+)
+def test_simple_vue_accepts_empty_dependencies_like_none(declared: dict[str, Any]) -> None:
+    # An empty Dependencies list declares no entry, so it renders exactly like
+    # a class without Dependencies, for CSS and JS alike.
+    app = Citry()
+    dependencies = type("Dependencies", (), declared)
+    declares_empty = type(
+        "DeclaresEmpty",
+        (Component,),
+        {"citry": app, "simple": "vue", "template": "<span>leaf</span>", "Dependencies": dependencies},
+    )
+    plain = type("Plain", (Component,), {"citry": app, "simple": "vue", "template": "<span>leaf</span>"})
+
+    def _without_ids(html: str) -> str:
+        return re.sub(r'data-cid-\w+=""', "", html)
+
+    assert _without_ids(declares_empty().render().serialize()) == _without_ids(plain().render().serialize())
+
+
+@pytest.mark.parametrize(
+    ("declared", "message"),
+    [
+        ({"css": ["/x.css"]}, "secondary CSS dependencies are unsupported"),
+        ({"js": ["/x.js"]}, "secondary JavaScript dependencies are unsupported"),
+    ],
+    ids=["css", "js"],
+)
+def test_simple_vue_rejects_nonempty_dependencies(declared: dict[str, Any], message: str) -> None:
+    app = Citry()
+    dependencies = type("Dependencies", (), declared)
+    root = type(
+        "Root",
+        (Component,),
+        {"citry": app, "simple": "vue", "template": "<span>leaf</span>", "Dependencies": dependencies},
+    )
+
+    with pytest.raises(TypeError, match=message):
+        root().render()

@@ -500,6 +500,19 @@ class TestStrategiesAndPositions:
         page = _page(c, template="<main>m</main>")
         assert page().render().serialize(deps_strategy="fragment") == '<main data-cid-c1="">m</main>'
 
+    @pytest.mark.parametrize("deps_strategy", ["fragment", "document", "simple"])
+    @pytest.mark.parametrize(
+        "declared",
+        [{"css": []}, {"js": []}, {"css": {"print": []}}, {"css": (), "js": ()}],
+        ids=["css-list", "js-list", "css-media", "both-tuples"],
+    )
+    def test_empty_dependencies_render_like_no_dependencies(self, declared, deps_strategy):
+        # An empty Dependencies list declares no asset, so an unmounted
+        # fragment needs no integration and every strategy emits no tags.
+        c = Citry()
+        page = _page(c, template="<main>m</main>", deps=type("Dependencies", (), declared))
+        assert page().render().serialize(deps_strategy=deps_strategy) == '<main data-cid-c1="">m</main>'
+
     def test_invalid_values_raise(self):
         c = Citry()
         page = _page(c)

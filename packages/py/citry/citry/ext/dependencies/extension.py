@@ -94,7 +94,10 @@ class CitryDependencies:
         return CitryDependencies(js=js, css=css)
 
     def __bool__(self) -> bool:
-        return bool(self.js) or bool(self.css)
+        # A media type with no entries emits nothing, so it must not make the
+        # set count as present: an empty declaration behaves like no
+        # declaration everywhere this truth value is checked.
+        return bool(self.js) or any(self.css.values())
 
 
 @dataclass(frozen=True, slots=True)
@@ -469,6 +472,10 @@ class DependenciesExtension(Extension):
             media_type: dedupe(entry for raw in raw_entries for entry in _resolve_entry(raw, comp_cls, source_class))
             for media_type, raw_entries in css_entries.items()
         }
+        # `css = []` (or a media type mapped to an empty list) declares nothing,
+        # so drop the empty media types: the result then equals the one for an
+        # absent `css`, and callers testing `dependencies.css` see no entries.
+        css = {media_type: entries for media_type, entries in css.items() if entries}
         return CitryDependencies(js=js, css=css)
 
 
