@@ -161,7 +161,7 @@ class MyAppConfig(AppConfig):
 `citry.contrib.django` also has `DjangoCache`, which lets Citry store its
 data in a Django cache (`Citry(cache=DjangoCache(caches["default"]))`), and
 `enable_hot_reload`, which shows edits to component files without a
-restart (see [Hot reload](/guides/dev-server/#django)).
+restart (see [Hot reload](/guides/dev-server/#turn-on-hot-reload-in-django)).
 
 ## Bare ASGI and WSGI
 
