@@ -59,13 +59,18 @@ fills its default slot. `Card` checks its own
 [`Kwargs`][citry.Component.Kwargs] and [`Slots`][citry.Component.Slots] as
 it would anywhere else.
 
-`c-is` can also give a [`Component`][citry.Component] class instead of a
-name:
+The expression can also return a [`Component`][citry.Component] class
+instead of a name:
 
 ```python
 def template_data(self, kwargs, slots):
     return {"chosen_component": Card}
 ```
+
+`<c-component>` adds no wrapper HTML around the result. The chosen
+component may render one root element, several, text, or nothing. Values
+from [provide and inject](/concepts/provide-and-inject/) reach it as
+usual.
 
 ## Choose an HTML tag
 
@@ -101,7 +106,7 @@ class Heading(Component):
 ```
 
 Attributes follow the same rules as on a tag you write by hand: `class` and
-`style` are normalized, a `False` or `None` value leaves the attribute out,
+`style` values are combined into one string, a `False` or `None` value leaves the attribute out,
 and values are escaped unless they provide trusted HTML through
 `__html__()`.
 
@@ -130,10 +135,6 @@ together with the other inputs:
 Citry applies `c-bind` in source order with the other attributes. If more
 than one of them sets `is`, the last one wins.
 
-Neither tag adds wrapper HTML around the result. The chosen component may
-render one root element, several, text, or nothing. Values from
-[provide and inject](/concepts/provide-and-inject/) reach it as usual.
-
 To show or hide content rather than change a whole tag, use
 [control flow](/syntax/control-flow/).
 
@@ -151,7 +152,7 @@ The value must be a registered component name, such as `"card"`, or a
   `Card(title="Hi")`, raises `TypeError`. Insert it with `{{ ... }}`
   instead, or pass its class.
 
-### Browser bindings stay browser bindings
+### Vue bindings on `<c-component>` are not Python inputs
 
 Vue bindings on `<c-component>` follow the usual rules for a component
 tag. They do not become Python inputs. See
