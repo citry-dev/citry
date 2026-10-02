@@ -17,19 +17,20 @@ needs the same end.
 
 ## Stop endless recursion
 
-A node listed among its own children never reaches a leaf. Citry stops
+A node that appears again inside its own children never reaches a leaf. Citry stops
 such a render with a `RecursionError` once components are nested more
-than 2,000 levels deep. The message names the component that repeats:
+than 2,000 levels deep. The message starts with the component that
+repeats:
 
 ```text
 Component TreeNode is nested more than 2000 components deep
 (TreeNode > TreeNode > ... > TreeNode > TreeNode > TreeNode).
 ```
 
-An error boundary such as `<c-error-fallback>` does not catch this
-error; the whole render fails. Fix the data so every branch ends in a
-leaf. If your page really nests
-deeper than 2,000 components, raise the limit with the
+[`<c-error-fallback>`](/concepts/error-boundaries/) does not catch this
+error, so the whole render fails. Fix the data so every branch ends in a
+leaf. If your page really nests deeper than 2,000 components, raise the
+limit with the
 [`max_component_depth`][citry.CitrySettings.max_component_depth]
 setting:
 

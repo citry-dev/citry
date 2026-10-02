@@ -418,19 +418,19 @@ class CitrySettings:
             and zero or a negative value raises ``ValueError`` when the
             settings are created.
         max_component_depth: How many components deep a page may nest before
-            rendering stops with ``RecursionError``. A component that renders
-            itself, such as a tree node rendering its children, needs data
-            that ends; data that contains itself would otherwise nest forever,
-            using more memory until the process runs out. The error names the
-            component and the chain of components above it, and error
-            boundaries cannot catch it. The default, ``2000``, is far deeper
-            than real pages nest, so it stops only runaway recursion; raise it
-            for a page that really nests deeper. A component rendered from a
-            ``{{ ... }}`` expression or through ``<c-component>`` starts a
-            new count; Python's own recursion limit stops that kind of
-            recursion much earlier. Must be a positive ``int``: another type
-            raises ``TypeError`` and zero or a negative value raises
-            ``ValueError`` when the settings are created.
+            rendering stops with ``RecursionError``. The default, ``2000``, is
+            far deeper than real pages nest, so it only stops a component
+            that keeps rendering itself, such as a tree node whose data lists
+            the node among its own children. Without the limit that render
+            would run until the process runs out of memory. The error names
+            the chain of components, and ``<c-error-fallback>`` cannot catch
+            it. Must be a positive ``int``: another type raises ``TypeError``
+            and zero or less raises ``ValueError`` when the settings are
+            created. A component rendered from a ``{{ ... }}`` expression or
+            through ``<c-component>`` starts a new count. Python's own
+            recursion limit stops that kind of recursion much earlier, with
+            an ordinary ``RecursionError`` that ``<c-error-fallback>`` can
+            catch, so avoid wrapping such a recursion in one.
         id_generator: A function returning the per-render id stamped on each
             component instance (``component.id``; static output also writes it
             into each component root's ``data-cid-<id>`` attribute). Given as

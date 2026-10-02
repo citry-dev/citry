@@ -246,7 +246,11 @@ lists a node twice among its own children would render exponentially many
 components. The depth is counted per loop: a nested loop (slot text from
 `str(slot)`, a component placed in a `{{ ... }}` expression, the target of a
 `<c-component>`) runs inside a Python call, so Python's own recursion limit
-already bounds that nesting. A cache hit places a stored subtree without
+already bounds that nesting. That limit raises an ordinary `RecursionError`,
+which an error boundary can catch, so the exponential case above is still open
+for recursion through those paths (known gap; carrying the depth across nested
+loops does not close it, because Python's limit fires after about 90 levels,
+long before the setting). A cache hit places a stored subtree without
 counting its levels; that subtree was rendered once, so it cannot nest forever.
 
 Marker ordering (section 6) is a separate, serialize-time concern; it does not

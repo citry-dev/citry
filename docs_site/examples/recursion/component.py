@@ -1,7 +1,7 @@
 """A self-rendering tree, used as a live example in the docs.
 
 TreeNode renders one node's label and then renders itself for each
-child, so a nested structure is drawn with one component, however deep.
+child, so one component draws the whole nested structure.
 """
 
 from __future__ import annotations
