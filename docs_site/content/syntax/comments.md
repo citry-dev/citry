@@ -12,7 +12,8 @@ comment by who should see it and where it goes:
 - A Citry comment, `{# ... #}`, stays in the template. The browser never
   receives it.
 - An HTML comment, `<!-- ... -->`, reaches the browser with the page.
-- A Python comment, `# ...`, explains one expression.
+- A Python comment, `# ...`, explains one expression inside `{{ ... }}`
+  or a `c-*` attribute. The browser never receives it.
 
 ## Citry `{# #}` comments { #write-a-hidden-note }
 
