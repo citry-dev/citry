@@ -20,7 +20,7 @@ and at runtime.
 | --- | --- | --- |
 | VS Code, Cursor, and other VS Code forks | Errors as you type, completion, hover, go to definition, type checking, formatting, and template coloring | [VS Code](/ide/vscode/) |
 | PyCharm | The same errors, completion, hover, and navigation, without Citry coloring | [PyCharm](/ide/pycharm/) |
-| Any editor | `citry check` in a terminal | [Check from the command line](#check-from-a-terminal) |
+| Any editor | `citry check` in a terminal | [Check from a terminal](#check-from-a-terminal) |
 
 VS Code has the most complete support. The editor help comes from a separate
 program, the Citry language server (`citry-lsp` on PyPI), which the VS Code
@@ -42,7 +42,8 @@ also reports unknown component tags, wrong inputs and slots, and template
 variables that come from nowhere.
 
 When the project cannot be imported, for example in a CI job without its
-dependencies, check template syntax only:
+dependencies, run the checks that do not need your components, such as
+template syntax:
 
 ```console
 citry check --static
