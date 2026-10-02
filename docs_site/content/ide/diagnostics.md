@@ -1,22 +1,24 @@
 ---
 title: Diagnostic reference
-description: Stable Citry diagnostic codes, messages, severities, and the tools that report them.
+description: Look up a Citry error or warning code to see what went wrong, how to fix it, and which tools report it.
 ---
 
 # Diagnostic reference
 
-Citry-owned diagnostics use stable codes across the parser, `citry check`, the
-language server, and editor formatting. The code identifies the condition even
-when a message includes source-specific detail.
+Every error and warning Citry reports has a code, such as
+`citry.template.unknown-variable`. The editor shows it next to the message,
+and `citry check` prints it with each finding. Find the code below to see what
+went wrong and how to fix it.
 
-The entries below are rendered directly from the versioned
-[`diagnostics/v1` catalog]({{ repo_url }}/tree/main/packages/protocol/diagnostics/v1).
-Changing a code, message template, or documentation link requires changing that
-catalog and regenerating its language bindings.
+The code always names the same mistake in every tool: the editor, `citry
+check`, `citry format`, and the template parser. The message can add details,
+such as the name you misspelled.
 
-The editor may display a source label such as `citry` next to the code. The
-source identifies the reporting tool; the code identifies the condition.
-Each entry's **Reported by** line names the commands, APIs, or editor feature
-that can produce it.
+Some rules can be made stricter or turned off. Those entries say "Your
+application can change this severity". For the template lint rules, see
+[Template linting](/ide/template-linting/#change-how-strict-a-rule-is).
+
+Codes that start with `citry.python.` or `citry.typescript.` come from the
+Python and TypeScript type checkers. They are listed at the end of this page.
 
 <c-diagnostic-catalog />

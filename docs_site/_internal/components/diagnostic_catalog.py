@@ -49,7 +49,8 @@ class DiagnosticCatalog(Component):
             [
                 '<div class="diagnostic-catalog">',
                 *blocks,
-                '<h2 id="provider-owned-diagnostics" class="toc-heading">Provider-owned diagnostics</h2>',
+                # The id stays stable for existing links; the text names the source plainly.
+                '<h2 id="provider-owned-diagnostics" class="toc-heading">Codes from the type checkers</h2>',
                 *external,
                 "</div>",
             ]
@@ -66,16 +67,21 @@ def _diagnostic_block(item: dict[str, Any]) -> str:
     severity = escape(item["defaultSeverity"])
     reported_by = ", ".join(_SURFACE_LABELS[surface] for surface in item["surfaces"])
     when = escape(item["when"])
-    configurable = " The application can configure this severity." if item.get("configurableSeverity") else ""
+    # A reader arrives with an error on screen, so the entry follows their
+    # questions in order: what went wrong, what it looks like, how to fix it,
+    # and only then the exact conditions and which tools report it.
+    fix = f"<p><strong>Fix:</strong> {escape(item['fix'])}</p>" if item.get("fix") else ""
+    configurable = " Your application can change this severity." if item.get("configurableSeverity") else ""
     return (
         f'<section class="diagnostic-reference" aria-labelledby="{code}">'
         f'<h2 id="{code}" class="toc-heading"><code>{code}</code></h2>'
         f"<p><strong>{title}.</strong> {summary}</p>"
-        f"<p><strong>When this appears:</strong> {when}</p>"
-        f"<p><strong>Default severity:</strong> <code>{severity}</code>.{configurable}</p>"
         f"{_messages_block(item['messages'])}"
         f"{_examples_block(item.get('examples', []))}"
-        f"<p><strong>Reported by:</strong> {reported_by}.</p>"
+        f"{fix}"
+        f"<p><strong>When this appears:</strong> {when}</p>"
+        f"<p><strong>Default severity:</strong> <code>{severity}</code>.{configurable}"
+        f" <strong>Reported by:</strong> {reported_by}.</p>"
         "</section>"
     )
 
@@ -133,6 +139,6 @@ def _external_prefix_block(item: dict[str, Any]) -> str:
     return (
         '<section class="diagnostic-reference">'
         f"<h3><code>{prefix}*</code></h3>"
-        f"<p><strong>Provider:</strong> {provider}. {summary}</p>"
+        f"<p><strong>Reported by:</strong> {provider}. {summary}</p>"
         "</section>"
     )

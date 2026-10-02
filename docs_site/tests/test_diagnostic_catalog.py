@@ -12,7 +12,7 @@ def test_diagnostic_catalog_component_populates_toc_and_provider_prefix() -> Non
 
     assert 'id="citry.template.unknown-variable"' in rendered
     assert "citry.python.*" in rendered
-    assert "Provider:</strong> ty" in rendered
+    assert "Reported by:</strong> ty" in rendered
     assert 'class="djc-toc"' in rendered
     assert 'href="#citry.template.unknown-variable"' in rendered
     assert any(item["id"] == "citry.template.unknown-variable" for item in result.toc_tokens)
@@ -43,6 +43,8 @@ def test_diagnostic_block_explains_reporting_conditions_without_internal_placeho
     assert "Default severity:</strong> <code>warning</code>" in rendered
     assert "Reported by:</strong> <code>citry check</code>, the Citry VS Code extension" in rendered
     assert "When this appears:</strong> A focused test triggers the condition." in rendered
+    # Without a fix, the entry shows no empty Fix line.
+    assert "Fix:" not in rendered
     assert "default" not in rendered
     assert "{detail}" not in rendered
     assert "&lt;c-missing /&gt;" in rendered
@@ -60,3 +62,21 @@ def test_diagnostic_messages_render_as_code_blocks() -> None:
     assert "A long diagnostic message that should not use inline code.</code></pre></div>" in rendered
     assert "<p><code>" not in rendered
     assert "{detail}" not in rendered
+
+
+def test_diagnostic_block_shows_the_fix_before_the_exact_conditions() -> None:
+    rendered = _diagnostic_block(
+        {
+            "code": "citry.example.failure",
+            "title": "Example failure",
+            "summary": "Something failed.",
+            "when": "A focused test triggers the condition.",
+            "fix": "Change <the> input.",
+            "defaultSeverity": "error",
+            "surfaces": ["check"],
+            "messages": {"default": "Example message."},
+        }
+    )
+
+    assert "Fix:</strong> Change &lt;the&gt; input.</p>" in rendered
+    assert rendered.index("Example message.") < rendered.index("Fix:") < rendered.index("When this appears:")

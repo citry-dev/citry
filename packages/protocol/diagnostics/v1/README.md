@@ -10,6 +10,11 @@ TypeScript constant that stores the diagnostic code, so product code imports a
 generated symbol instead of repeating a raw string. It is not shown in the
 public diagnostic reference.
 
+The public reference at `/ide/diagnostics/` renders each entry for a reader
+who has the diagnostic on screen. Write `summary` as the mistake and what the
+reader sees, the optional `fix` as what they change, and `when` as the exact
+conditions under which Citry reports it.
+
 Run `python scripts/generate_diagnostic_catalog.py` after changing the catalog.
 Repository validation rejects stale generated language bindings, duplicate or
 invalid entries, and Citry-owned diagnostic codes that are absent from the

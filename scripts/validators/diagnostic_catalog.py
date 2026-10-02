@@ -100,7 +100,7 @@ def _validate_catalog(catalog: Any, problems: list[str]) -> tuple[set[str], tupl
         "messages",
         "documentationPath",
     }
-    optional = {"configurableSeverity", "examples"}
+    optional = {"configurableSeverity", "examples", "fix"}
     for index, raw in enumerate(raw_diagnostics):
         label = f"diagnostics[{index}]"
         if type(raw) is not dict:
@@ -126,6 +126,8 @@ def _validate_catalog(catalog: Any, problems: list[str]) -> tuple[set[str], tupl
         for field in ("title", "summary", "when"):
             if type(raw[field]) is not str or not raw[field].strip():
                 problems.append(f"{label}.{field} must be a non-empty string")
+        if "fix" in raw and (type(raw["fix"]) is not str or not raw["fix"].strip()):
+            problems.append(f"{label}.fix must be a non-empty string")
         if raw["defaultSeverity"] not in SEVERITIES:
             problems.append(f"{label}.defaultSeverity is invalid")
         if "configurableSeverity" in raw and type(raw["configurableSeverity"]) is not bool:
