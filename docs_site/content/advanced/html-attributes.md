@@ -194,9 +194,16 @@ than a bare `data-open`. See [Toggle an attribute](/syntax/dynamic-attributes/#h
 ## Keep Vue in templates
 
 An attribute mapping carries plain HTML attributes only. Citry never runs
-a name from the mapping, such as `:title` or `@click`, as Vue code. On an
-element that Vue renders, such a name raises `TypeError`. Write Vue
-bindings and event listeners directly on the element in the template.
+a name from the mapping as Vue code. A name that starts with `v-`, `@`,
+`:`, `.`, `^`, or `#`, in any letter case, such as `:title` or `@click`,
+is Vue syntax. On a page that uses Vue, such a name on an HTML element
+raises `TypeError`, unless its value is `None` or `False`. It fails even
+when the template writes the same binding on the element. Write Vue
+bindings and event listeners directly on the element in the template,
+and remove them from the mapping.
+
+Citry's own `@c-` and `:c-` Events bindings are the exception: a mapping
+may set them. See [Bind events in templates](/events/bindings/).
 
 Vue bindings written on a component tag, such as `@click` on
 `<c-ActionButton>`, do not reach the component's Python `attrs` input. Vue

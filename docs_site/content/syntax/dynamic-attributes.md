@@ -354,10 +354,28 @@ accepts.
     template. Citry never turns a Python value into browser code, so the
     browser code stays visible in the template.
 
-    On a page that uses Vue, a `c-` attribute such as `c-:class` or
-    `c-v-on`, or a `c-bind` key that starts with `v-`, `@`, or `:`, raises
-    `TypeError` when the render is turned into HTML, unless its value is
-    `None` or `False`. A `v-on` value containing `{{ ... }}` fails too.
+    A name that starts with `v-`, `@`, `:`, `.`, `^`, or `#`, in any
+    letter case, is Vue syntax. When Python supplies such a name, through
+    a `c-bind` key or a `c-` attribute such as `c-:class` or `c-v-on`, the
+    render fails:
+
+    - On a component tag such as `<c-ActionButton>`, rendering the
+      template that writes the tag raises `RuntimeError`, even for a
+      `None` value. A name that starts with `^` or an uppercase `V-`
+      reaches the component as a plain attribute instead.
+    - On an HTML element, on a page that uses Vue, the render raises
+      `TypeError`, unless the value is `None` or `False`. It fails even
+      when the template writes the same binding on the element, such as
+      `@click` beside a `c-bind` mapping with an `'@click'` key: remove
+      the key from the mapping. You see the error when you turn the
+      render into HTML, for example with `str()`. In an Events response,
+      the call fails with a server error and the log shows the
+      `TypeError`. On a page without Vue, the name is written as a plain
+      attribute.
+
+    Citry's own `@c-` and `:c-` Events bindings are the exception: a
+    `c-bind` key may set them. See [Bind events in templates](/events/bindings/).
+    A `v-on` value containing `{{ ... }}` fails too.
 
 To give Vue a value from Python, return it from `js_data()` and read it in
 the binding:
