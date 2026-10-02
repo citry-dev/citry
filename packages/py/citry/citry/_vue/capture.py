@@ -13,7 +13,7 @@ from inspect import getattr_static
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from citry.attrs import _html_attr_identity, merge_attrs
+from citry.attrs import _html_attr_identity, is_vue_directive_name, merge_attrs
 from citry.citry_render import (
     CitryRender,
     SimpleVueRecord,
@@ -1101,19 +1101,6 @@ class PreparedElementCloseNode(Node):
 
     def render(self, context: CitryContext) -> PreparedElementClose:  # noqa: ARG002
         return self._prepared
-
-
-# Vue reads a name starting with one of these as a directive or binding:
-# `v-if`, `v-bind:x`, `:x`, `.x` (sets a DOM property), `^x` (forces an
-# attribute), `@x` (listener) and `#x` (slot).
-_VUE_DIRECTIVE_PREFIXES = ("v-", ":", ".", "^", "@", "#")
-
-
-def is_vue_directive_name(name: str) -> bool:
-    """Return whether Vue would treat an attribute name as a directive or binding."""
-    # Python-resolved names are data. Vue must never read one as code, and
-    # HTML names are case-insensitive, so `V-ON:click` must not slip past.
-    return name.casefold().startswith(_VUE_DIRECTIVE_PREFIXES)
 
 
 def _reject_executable_dynamic_attrs(attrs: Mapping[str, object], *, tag: str) -> None:

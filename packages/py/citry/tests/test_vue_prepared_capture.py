@@ -1086,6 +1086,43 @@ def test_plain_spread_keeps_vue_syntax_rejection_strict() -> None:
         render_prepared(UnsafeSpread())
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<button @click="save" c-bind="attrs">x</button>',
+        '<button c-bind="attrs" @click="save">x</button>',
+        '<button c-bind="attrs" :title="label">x</button>',
+    ],
+)
+def test_spread_vue_key_written_on_the_same_tag_is_rejected(source: str) -> None:
+    # The merge keeps only one of the two attributes, so whichever order the
+    # tag uses, the c-bind key must fail instead of vanishing or winning.
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class Shadowed(Component):
+        citry = registry
+        template = source
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"@click": "other", ":title": "other"}, "label": "x"}
+
+    with pytest.raises(TypeError, match=r"c-bind on <button> sets the Vue binding '[@:]\w+'"):
+        Shadowed().render()
+
+
+def test_spread_vue_key_set_to_none_beside_written_binding_is_allowed() -> None:
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class Removed(Component):
+        citry = registry
+        template = '<button c-bind="attrs" @click="save">x</button>'
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"@click": None}}
+
+    Removed().render()
+
+
 def test_runtime_attr_hook_may_remove_but_not_replace_authored_vue_source() -> None:
     class RemoveVue(Extension):
         name = "remove_vue"

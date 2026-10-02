@@ -77,8 +77,10 @@ from citry._i18n_directives import looks_like_i18n_binding
 from citry.attrs import (
     _format_resolved_attrs_to_str,
     _has_default_attr_formatting,
+    _html_attr_identity,
     _merge_resolved_attrs,
     format_attrs,
+    is_vue_directive_name,
     merge_attrs,
     validate_html_attr_name,
 )
@@ -1113,6 +1115,12 @@ class ElementAttrsNode(Node):
     def _resolve_with_spread(self, context: CitryContext) -> dict[str, Any]:
         """Resolve the general path used when a dynamic ``c-bind`` is present."""
         items: list[tuple[str, Any]] = []
+        # A spread key that Vue reads as a binding (`@click`) and a binding
+        # written on the same tag share one attribute slot, so the merge below
+        # would keep one and silently drop the other. Collect both sides to
+        # reject that pair before the merge hides it.
+        spread_vue_keys: dict[str, str] = {}
+        authored_identities: set[str] = set()
         for attr, compiled_key in zip(self.attrs, self._resolved_keys, strict=True):
             if attr.key == "c-bind":
                 value = const_value(attr.resolve(context))
@@ -1129,6 +1137,10 @@ class ElementAttrsNode(Node):
                     )
                     raise TypeError(msg)
                 for key, item in value.items():
+                    # None and False remove an attribute instead of setting
+                    # one, so only a live value can carry Vue syntax.
+                    if type(key) is str and is_vue_directive_name(key) and item is not None and item is not False:
+                        spread_vue_keys.setdefault(_html_attr_identity(key), key)
                     # Only bounded exact strings can share validation across
                     # renders. Values and user-defined key behavior stay live.
                     cacheable_key = type(key) is str and len(key) <= 256
@@ -1155,7 +1167,21 @@ class ElementAttrsNode(Node):
             else:
                 if attr.key.startswith("c-"):
                     _reject_reserved_events_attr(compiled_key, tag_name=self.tag_name)
+                elif isinstance(attr, StaticHtmlAttr):
+                    authored_identities.add(_html_attr_identity(compiled_key))
                 items.append((compiled_key, const_value(attr.resolve(context))))
+        # A Vue binding written in the template makes this a Vue page, where a
+        # Vue binding from Python is always an error. Without this check a
+        # binding written after the c-bind would silently drop its key, and
+        # one written before it would be silently replaced until a later step.
+        for identity, key in spread_vue_keys.items():
+            if identity in authored_identities:
+                msg = (
+                    f"c-bind on <{self.tag_name}> sets the Vue binding {key!r}, which the template also "
+                    "writes on this tag. A c-bind mapping cannot introduce Vue syntax, because Vue bindings "
+                    f"must stay visible in the template. Remove {key!r} from the c-bind mapping."
+                )
+                raise TypeError(msg)
         return _merge_resolved_attrs(items)
 
     def _format(

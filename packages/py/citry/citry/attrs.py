@@ -58,6 +58,19 @@ _ASCII_LOWER_TRANSLATION = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefgh
 _INVALID_HTML_ATTR_NAME_CHARS = frozenset(" \t\n\r=/><")
 
 
+# Vue reads a name starting with one of these as a directive or binding:
+# `v-if`, `v-bind:x`, `:x`, `.x` (sets a DOM property), `^x` (forces an
+# attribute), `@x` (listener) and `#x` (slot).
+_VUE_DIRECTIVE_PREFIXES = ("v-", ":", ".", "^", "@", "#")
+
+
+def is_vue_directive_name(name: str) -> bool:
+    """Return whether Vue would treat an attribute name as a directive or binding."""
+    # Python-resolved names are data. Vue must never read one as code, and
+    # HTML names are case-insensitive, so `V-ON:click` must not slip past.
+    return name.casefold().startswith(_VUE_DIRECTIVE_PREFIXES)
+
+
 def _html_attr_identity(name: str) -> str:
     """Return HTML identity without erasing case-sensitive Citry payloads."""
     if type(name) is str and len(name) <= 256:
