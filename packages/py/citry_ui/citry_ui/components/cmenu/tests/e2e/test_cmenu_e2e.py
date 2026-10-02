@@ -2083,7 +2083,12 @@ def test_correlated_rerender_preserves_open_tree_and_focus_across_non_open_confi
     page.wait_for_function("document.querySelectorAll('#configuration-menu [role=menu]:popover-open').length === 2")
     page.get_by_role("menuitem", name="First leaf").focus()
 
-    page.locator(".change-menu-configuration").evaluate("element => element.click()")
+    # The open menus and the focus are already in place before the click, so
+    # waiting for them alone can pass before the server's re-render arrives.
+    # Wait for the event response, then two frames for Vue to apply it.
+    with page.expect_response(lambda response: "/ext/events/" in response.url):
+        page.locator(".change-menu-configuration").evaluate("element => element.click()")
+    page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
     page.wait_for_function("document.querySelectorAll('#configuration-menu [role=menu]:popover-open').length === 2")
     page.wait_for_function(
         "[...document.querySelectorAll('[role=menuitem]')].some(item => "
@@ -2099,7 +2104,7 @@ def test_correlated_rerender_preserves_open_tree_and_focus_across_non_open_confi
             "elements => elements.every(element => element.dataset.size === 'lg')"
         )
     elif config_case == "placement":
-        assert surface.get_attribute("data-placement") == "top-end"
+        page.wait_for_function("document.querySelector('#configuration-menu').dataset.placement === 'top-end'")
     elif config_case == "match_width":
         assert surface.get_attribute("data-match-width") == ""
     elif config_case == "loop":
