@@ -29,6 +29,7 @@ from docs_site._internal.guards import (
     blog,
     blog_feed,
     builtin_tags,
+    citry_highlight,
     code_lang,
     community_packages,
     component_fence,
@@ -86,6 +87,7 @@ __all__ = [
 SOURCE_GUARDS: list[Guard] = [
     fence_validator.check,
     lexer_alias.check,
+    citry_highlight.check,
     live_code.check,
     code_lang.check,
     component_fence.check,

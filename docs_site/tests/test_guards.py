@@ -22,6 +22,7 @@ from docs_site._internal.guards import (
     blog,
     blog_feed,
     builtin_tags,
+    citry_highlight,
     component_fence,
     crossref,
     example_contract,
@@ -323,6 +324,35 @@ def test_component_fence_ignores_plain_python_fragments_and_citry_fences(tmp_pat
     (tmp_path / "p.md").write_text(source, encoding="utf-8")
 
     assert list(component_fence.check(_content_ctx(tmp_path))) == []
+
+
+def test_citry_highlight_warns_on_an_error_token_at_its_line(tmp_path: Path) -> None:
+    source = (
+        "# Doc\n\n"
+        "```citry-html\n<c-Card c-body=\"<><a c-href='ok'>x</a></>\" />\n```\n\n"
+        "- item\n\n"
+        '    ```citry-html\n    <c-Card\n      c-body="<><a c-href="bad">x</a></>"\n    />\n    ```\n'
+    )
+    (tmp_path / "page.md").write_text(source, encoding="utf-8")
+
+    results = list(citry_highlight.check(_content_ctx(tmp_path)))
+
+    assert [(r.severity, r.source, r.line) for r in results] == [(Severity.WARNING, "page.md", 11)]
+
+
+def test_citry_highlight_lexes_included_snippets_and_skips_foreign_lexers(tmp_path: Path) -> None:
+    (tmp_path / "bad.html").write_text('<c-A c-x="<><b c-y="z">q</b></>" />\n', encoding="utf-8")
+    source = (
+        '```citry-html\n--8<-- "bad.html"\n```\n\n'
+        '```citry-html\n--8<-- "missing.html"\n```\n\n'
+        "```citry-html\n--8<--\nbad.html:section\n--8<--\n```\n\n"
+        '```html\n<c-A c-x="<><b c-y="z">q</b></>" />\n```\n'
+    )
+    (tmp_path / "page.md").write_text(source, encoding="utf-8")
+
+    results = list(citry_highlight.check(_content_ctx(tmp_path)))
+
+    assert [(r.line, "bad.html" in r.message) for r in results] == [(2, True), (11, True)]
 
 
 def test_frontmatter_flags_unknown_key(tmp_path: Path) -> None:
