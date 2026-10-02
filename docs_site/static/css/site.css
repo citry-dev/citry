@@ -2510,6 +2510,9 @@ body.djc-drawer-open .djc-drawer-overlay {
   --bench-gap: 0.75rem;
   --bench-top: 1.6rem;
   --bench-axis: 1.6rem;
+  /* Group headings, framework names, and totals share one size so a
+     heading does not look larger than the rows under it. */
+  --bench-label: 0.8125rem;
   margin: 1.5rem 0 2.5rem;
   font-size: 0.875rem;
 }
@@ -2597,7 +2600,7 @@ body.djc-drawer-open .djc-drawer-overlay {
   width: var(--bench-name);
   padding: 0.6rem 0 0.1rem;
   color: var(--c-fg);
-  font-size: 0.8125rem;
+  font-size: var(--bench-label);
   font-weight: 700;
   text-align: right;
 }
@@ -2613,6 +2616,7 @@ body.djc-drawer-open .djc-drawer-overlay {
 /* Long names wrap onto a second line on a phone rather than being cut off. */
 .bench-chart__name {
   color: var(--c-fg);
+  font-size: var(--bench-label);
   line-height: 1.2;
   text-align: right;
 }
@@ -2645,6 +2649,7 @@ body.djc-drawer-open .djc-drawer-overlay {
 
 .bench-chart__total {
   color: var(--c-fg);
+  font-size: var(--bench-label);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   white-space: nowrap;
