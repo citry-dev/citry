@@ -5,13 +5,18 @@ description: Choose where Citry inserts collected assets and which dependency st
 
 # Place JavaScript and CSS
 
-After a page renders, Citry has the JavaScript and CSS required by every
-component that appeared. You can mark where those tags belong or let Citry
-choose sensible document locations.
+When a page renders, Citry collects the JavaScript and CSS that its
+components need. By default it puts the CSS at the end of `<head>` and the
+JavaScript at the end of `<body>`, which suits most pages.
 
-## Mark the positions in a page
+Read on when you need the tags somewhere else, or when the HTML is not a
+whole page: an email, a piece of HTML that another system places, or a page
+whose scripts you load yourself.
 
-Put `<c-css />` in `<head>` and `<c-js />` near the end of `<body>`:
+## Mark where the tags go
+
+Put `<c-css />` where the CSS should go and `<c-js />` where the JavaScript
+should go:
 
 ```citry
 from citry import Component
@@ -22,6 +27,7 @@ class Page(Component):
       <html>
         <head>
           <c-css />
+          <link rel="stylesheet" href="/static/overrides.css">
         </head>
         <body>
           <c-Chart c-points="[1, 2, 3]" />
@@ -31,49 +37,49 @@ class Page(Component):
     """
 ```
 
-The tags are placeholders. They are self-closing and accept no attributes or
-body. If a placeholder appears more than once, the first one in document
-order receives the collected tags and the others insert nothing.
+Here the component styles come before `overrides.css`, so the overrides
+win. Each tag takes no attributes and no content.
 
-When the placeholders are absent, the default document strategy inserts CSS
-before the first `</head>` and JavaScript before the last `</body>`. If those
-end tags are absent too, Citry inserts CSS at the start and JavaScript at the
-end.
+Without these tags, Citry inserts CSS before the first `</head>` and
+JavaScript before the last `</body>`. When the HTML has no `</head>` or
+`</body>`, CSS goes at the start of the output and JavaScript at the end.
 
 ## Choose a dependency strategy
 
-Calling `str(component)` uses the default document strategy. For explicit
-control, render first and pass `deps_strategy` to `serialize()`:
+The dependency strategy decides which tags Citry inserts. `str(component)`
+uses `"document"`. To choose another, render first and pass
+`deps_strategy` to `serialize()`:
 
 ```python
 rendered = Page().render()
-html = rendered.serialize(deps_strategy="document")
+html = rendered.serialize(deps_strategy="simple")
 ```
 
 [`DepsStrategy`][citry.DepsStrategy] accepts four values:
 
-- `"document"` inserts all required tags. Citry also adds its browser runtime
-  and initialization data when the rendered page needs them.
-- `"simple"` inserts component and dependency tags without the Citry browser
-  runtime or initialization calls.
-- `"fragment"` describes new dependencies for insertion into a page that
-  already loaded Citry. See [HTML fragments](/advanced/html-fragments/).
-- `"ignore"` inserts no dependency tags.
+- `"document"` inserts every tag the page needs. When a component needs
+  Citry's browser runtime (the JavaScript that runs Vue and server events),
+  it adds that too.
+- `"simple"` inserts the components' JavaScript and CSS and their
+  [dependency files](/advanced/dependency-files/), but not the browser
+  runtime. Use it for output with no Citry browser behavior.
+- `"fragment"` is for HTML that you insert into a page that is already
+  open. See [HTML fragments](/advanced/html-fragments/).
+- `"ignore"` inserts no tags. Use it when something else adds every file
+  the components need.
 
-The simple strategy is for output with no Citry browser behavior. It can still
-insert ordinary component JavaScript, so do not use it with `$component()`,
-server events, or anything else that expects the Citry runtime. It also skips
-per-render JavaScript data. CSS data still works because its custom properties
-are ordinary CSS.
+With `"simple"`, `$component()`, server events, and anything else that
+needs the runtime do not work, and `js_data()` values are not sent. CSS
+from `css_data()` still works, because it is ordinary CSS.
 
-The ignore strategy assumes something else supplies every required asset.
-Components may look correct in the returned HTML but have no styles or browser
-behavior.
+With `"ignore"`, the HTML can look right in tests but have no styles or
+browser behavior if nothing else adds the files.
 
-## Override the position without placeholders
+## Put the tags before or after the output
 
-For the document and simple strategies, `deps_position` accepts
-[`DepsPosition`][citry.DepsPosition]:
+Use `deps_position` when the output is not a whole HTML page and the code
+that receives it decides where it goes. It works with the `"document"` and
+`"simple"` strategies:
 
 ```python
 html = Page().render().serialize(
@@ -82,28 +88,24 @@ html = Page().render().serialize(
 )
 ```
 
-The positions are:
+[`DepsPosition`][citry.DepsPosition] accepts three values:
 
-- `"smart"`, the default, uses `<c-css />` and `<c-js />` when present and
-  otherwise uses the document locations described above;
-- `"prepend"` puts the collected tags before the rendered HTML; and
-- `"append"` puts them after the rendered HTML.
+- `"smart"`, the default, uses `<c-css />` and `<c-js />`, or the locations
+  described in [Mark where the tags go](#mark-where-the-tags-go);
+- `"prepend"` puts all the tags before the HTML;
+- `"append"` puts all the tags after the HTML.
 
-Use smart placement for normal pages. Prepend and append are useful when the
-rendered output is not a complete HTML document and its host decides where the
-combined result will go.
+!!! note "A page that repeats a placement tag"
 
-## Keep each decision in the right place
+    When the page has more than one CSS or JavaScript placement tag, only
+    the first of each kind receives the tags. The others insert nothing.
 
-Placement answers where the final tags go. Other pages cover the remaining
-asset jobs:
+## Next steps
 
-- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) defines
-  behavior, styles, and per-render browser data owned by a component.
+- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) adds
+  code and styles to one component.
 - [Dependency files](/advanced/dependency-files/) adds libraries and shared
   files.
-- [Component hooks](/advanced/hooks/) adjusts the tags contributed by one
-  component.
-- [Extensions](/advanced/extensions/) can adjust the collected component
-  dependency lists across an application. Citry may still add required core
-  runtime and initialization tags after that extension hook.
+- [Component hooks](/advanced/hooks/) changes the tags one component adds.
+- [Extensions](/advanced/extensions/) changes the tags for every page in an
+  application.
