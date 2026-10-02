@@ -51,8 +51,8 @@ one paragraph for every book.
 
 Two kinds of code can appear in a template:
 
-- **Python**, in `{{ ... }}` and `c-*` attributes. It runs once on the server
-  while Citry renders the page.
+- **Python**, in `{{ ... }}` and `c-*` attributes. It runs on the server each
+  time Citry renders the component.
 - **JavaScript**, in Vue attributes such as `@click` and `:title`. It runs in
   the browser after the page loads, without asking the server to render again.
 
@@ -107,7 +107,7 @@ component tag, it passes the Python value `True`:
 Attribute values may use double quotes, single quotes, or no quotes. Quote
 every `c-*` expression, so spaces and operators stay inside the value.
 
-## Spell `c-` tags in lowercase
+## Write the `c-` prefix and built-in tag names in lowercase
 
 Citry syntax always starts with a lowercase `c-`. The component name after it
 ignores case, so `<c-StatusBadge>` and `<c-statusbadge>` find the same
@@ -116,7 +116,7 @@ component.
 Built-in tags such as `<c-if>`, `<c-for>`, and `<c-slot>` must be written
 in lowercase. `<c-If>` is an error.
 
-## Text that Citry leaves alone
+## Write text that Citry passes through unchanged
 
 HTML comments, `<!doctype html>`, and processing instructions pass through to
 the output unchanged.
