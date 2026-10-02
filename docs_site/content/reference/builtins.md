@@ -184,8 +184,8 @@ markup and nested boundaries.
 
 <c-builtin tag="mark" c-level="3" />
 
-An event handler on the component can then replace just that part of the
-page by returning `actions.Render(..., target="mark:<name>")`:
+To update the marked part, return
+`actions.Render(..., target="mark:<name>")` from an event handler:
 
 ```citry-html
 <c-mark name="summary">
@@ -193,9 +193,9 @@ page by returning `actions.Render(..., target="mark:<name>")`:
 </c-mark>
 ```
 
-Write `name` as a plain attribute. A computed `c-name` raises
-`ValueError` when the component renders, and so does a name that breaks
-the rules above. Put the content directly in the tag body.
+Write `name` as a plain attribute. A computed `c-name`, or a name that
+breaks the rules above, raises `ValueError` when the component renders.
+`<c-mark>` takes no `<c-fill>`; put the content directly inside it.
 
 See [Update part of the page](/events/actions/#update-one-part-of-the-page).
 
