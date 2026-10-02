@@ -38,7 +38,8 @@ class State:
 [`Kwargs`][citry.Component.Kwargs] are the inputs for one render.
 [`State`][citry.Component.State] holds the values that event handlers
 receive on each call. On the first render, Citry fills each State field from
-the input with the same name, and falls back to the State default.
+the input with the same name. A field with no matching input uses its own
+default.
 
 When every input should be kept, make `State` inherit from `Kwargs` instead:
 
@@ -49,7 +50,7 @@ class State(Kwargs):
 
 Keep the two classes separate when some inputs should not go to the browser.
 When names differ or a value must be computed, fill State with
-`state_data()`, as [Keep State between calls](/events/state/) shows.
+`state_data()`, as [Event state](/events/state/) shows.
 
 ## Read and change State in a handler
 
@@ -82,23 +83,24 @@ changes State, `$state.batches_loaded` updates, and Vue shows the new value.
 The list of choices stays in ordinary Vue data, because Python does not need
 the browser's current choice on its next call.
 
-!!! warning "State is signed, not secret"
-
-    Citry signs State with `CITRY_SECRET` so it can tell when someone has
-    changed it. Signing does not hide the values, identify the user, or
-    grant permission. Never put passwords or API keys in State, and check
-    access inside each event handler. In production, every worker needs
-    the same `CITRY_SECRET`.
-
 !!! note "Changing State from the browser"
 
     Browser code can also assign a whole field, as in
     `$state.batches_loaded = 0`. The page shows the new value at once, but
     the assignment does not send a request: Citry sends the value with the
-    component's next event call (except a GET request). You cannot assign
-    a nested value, or a field that `State` does not let the browser
-    change. See [`$state`](/reference/browser-apis/#state) for the full
-    rules.
+    component's next event call (calls sent as GET requests are the
+    exception). You cannot assign a nested value, or a field that `State`
+    does not let the browser change. See
+    [`$state`](/reference/browser-apis/#state) for the full rules.
+
+## Keep secrets out of State
+
+State is signed, not secret. Citry signs it with `CITRY_SECRET` so it can
+tell when someone has changed it, but anyone who opens the page can read the
+values. Signing also does not identify the user or grant permission.
+
+Never put passwords or API keys in State, and check access inside each event
+handler. In production, every worker needs the same `CITRY_SECRET`.
 
 ## Next steps
 
