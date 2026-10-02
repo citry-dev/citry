@@ -16,9 +16,9 @@ leaves others to you:
 | A template expression reaches dangerous Python | Runs expressions in a sandbox | Put only safe objects in the template context |
 | Injected scripts on the page | Nothing until you opt in | Send a Content Security Policy with a nonce |
 
-The first three rows apply to every app that uses
-[server events](/events/). The Content Security Policy (CSP) sections
-later on are optional hardening.
+The first two rows apply to every app that uses
+[server events](/events/), and the third to every app. The Content
+Security Policy (CSP) sections later on are optional hardening.
 
 ## Treat State as input { #treat-state-as-client-input }
 
@@ -26,8 +26,8 @@ An event handler receives its [State](/events/state/) from the browser, so
 treat it like any other form input. With the default storage, every State
 value is visible in the page source. Citry signs the values, so a user
 cannot change them silently, but it does not encrypt them. Fields listed in
-`State._public` (every field, by default) can also be changed on purpose
-through `$state` and two-way `:c-*` bindings.
+`State._model` (every public field, by default) can also be changed on
+purpose through `$state` and two-way `:c-*` bindings.
 
 Keep secrets out of State. Store a small record id instead, then load the
 record and check the current user's permission in every handler:
@@ -63,7 +63,8 @@ Citry then keeps the values in its configured cache and sends only a lookup
 key. This hides only the fields left out of `_public`: public fields are
 still sent as plain values, so list the fields the browser needs in
 `_public`. With several server processes, the cache must be shared between
-them.
+them. Server storage does not replace the permission check either: still
+authorize every use of the restored values.
 
 ## Authorize every event
 
@@ -115,9 +116,9 @@ framework's own request object.
 
 A cross-site request forgery (CSRF) is another site making the user's
 browser call your app with the user's cookies. Citry rejects these calls on
-every event route, and your framework's CSRF token check runs on top.
+every event route. Under Django, Django's own CSRF token check also runs.
 
-A rejected call fails with status 403 and the message "The call failed the
+When Citry's own check rejects a call, it fails with status 403 and the message "The call failed the
 CSRF check; reload the page and try again."
 
 ### What Citry always checks
@@ -166,7 +167,7 @@ Citry.events.configure({
 
 The same hidden input also works for a normal HTML form post.
 
-### Other frameworks
+### Use your own token { #other-frameworks }
 
 FastAPI, Starlette, Flask, and plain ASGI or WSGI apps have no standard
 CSRF token. If your app uses one, check it with a function set as `_csrf`
@@ -258,8 +259,8 @@ try:
     # eval is blocked even under another name
     compiled({"f": eval})
 except SecurityError as e:
-    # Error in call: SecurityError: function
-    # '<built-in function eval>' is unsafe
+    # The message starts with: Error in call: SecurityError:
+    # function '<built-in function eval>' is unsafe
     print(e)
 ```
 
@@ -287,7 +288,7 @@ See [Expressions](/syntax/expressions/) for more.
 ### What it does not stop { #what-the-sandbox-does-not-protect }
 
 The sandbox checks names. It does not know what your code does, and it is
-not a proven complete jail:
+not guaranteed to block every way out:
 
 - **Your objects expose every public method.** An expression can call any
   attribute or method of a context object whose name does not start with
@@ -344,7 +345,7 @@ the browser refuses to run it.
 Generate the nonce, pass it to Citry when you serialize the page, and put
 the same value in the header:
 
-```citry
+```python
 from secrets import token_urlsafe
 
 # 128 random bits, as the CSP specification recommends
@@ -376,8 +377,9 @@ render several times with different nonces.
 
 Your policy never needs `'unsafe-eval'` for Citry. Citry compiles Vue
 templates on the server, so the browser never evaluates directive strings,
-and you can write any JavaScript in Vue expressions. Vue replaces a page
-under a CSP instead of reusing its server HTML; see
+and you can write any JavaScript in Vue expressions. Under a CSP, Vue
+rebuilds the page in the browser instead of reusing the server HTML, so
+focus and text typed before Vue starts are lost; see
 [Replaced pages](/advanced/vue-runtime/#pages-vue-replaces-instead-of-adopting).
 
 Citry does not add the nonce to a `<script>` or `<style>` tag written
@@ -391,7 +393,7 @@ directly in a template, so the browser blocks it. Move that code to
     one unit. Cached HTML served with a new header carries the wrong nonce,
     and the browser blocks its scripts.
 
-### HTML fragments
+### Nonces in fragments { #html-fragments }
 
 Citry's browser code reads the page's nonce when the page loads. When an
 [HTML fragment](/advanced/html-fragments/) arrives later, it puts that nonce
@@ -414,7 +416,7 @@ Once you send a CSP header, markup that the policy blocks fails silently in
 the browser. `security_csp` makes Citry find that markup when it
 serializes the page:
 
-```citry
+```python
 from secrets import token_urlsafe
 
 app = Citry(security_csp="strict")
@@ -451,8 +453,8 @@ render. Any other value raises `ValueError`, both in `Citry(...)` and in
 `serialize()`.
 
 The Citry editor extension and `citry check` report the same problems at
-their place in your source files, where they can tell from the source
-alone.
+their place in your source files, when the problem is visible in the
+source file.
 
 Citry checks only what it renders. Your app owns the response header, the
 nonce, layouts, third-party resources, and every other CSP directive.
@@ -464,7 +466,7 @@ static export. `security_javascript` controls how much JavaScript Citry
 sends. It is separate from CSP. Set it on the app, or override it for one
 serialization:
 
-```citry
+```python
 app = Citry(security_javascript="forbid")
 
 email_html = Page().render().serialize(
@@ -477,7 +479,7 @@ email_html = Page().render().serialize(
 | `"allow"` (default) | Normal interactive output. |
 | `"warn"` | The same output, with one `RuntimeWarning` listing what needs JavaScript in the browser. |
 | `"omit"` | Leaves out the scripts Citry manages: the Vue runtime, the Events client, component JavaScript, and the data that starts Vue. The HTML and CSS stay. |
-| `"forbid"` | Raises when the rendered output needs JavaScript, even when `deps_strategy="simple"` or `"ignore"` would hide the script tags. |
+| `"forbid"` | Raises `ValueError` when the rendered output needs JavaScript, even when `deps_strategy="simple"` or `"ignore"` would hide the script tags. |
 
 Any other value raises `ValueError`.
 
@@ -506,8 +508,8 @@ CSS stays in every mode. An `"omit"` fragment includes its CSS directly,
 so it needs no Citry route and no Citry runtime on the page.
 `deps_strategy="ignore"` still leaves out collected CSS too.
 
-When a structured stylesheet or a data-only script carries an executable
-attribute, `"omit"` removes that attribute and keeps the CSS or data. It
+When a structured stylesheet or a data-only script carries an event
+attribute such as `onload`, `"omit"` removes that attribute and keeps the CSS or data. It
 removes a dependency that renders its own HTML, because Citry cannot tell
 what tag it creates.
 
@@ -522,7 +524,7 @@ bytes match a hash. With `security_script_integrity="citry"`, Citry
 computes SHA-384 hashes for the scripts it outputs and gives you the
 hashes to put in your CSP header:
 
-```citry
+```python
 app = Citry(security_script_integrity="citry")
 
 serialized = Page().render().serialize_result()
@@ -533,7 +535,7 @@ script_sources = " ".join(
 ```
 
 Citry adds an `integrity` attribute to external scripts it serves, and
-hashes inline scripts after wrapping them. `csp_script_hashes` lists the
+hashes each inline script in the exact form it is sent. `csp_script_hashes` lists the
 hashes, quoted, ready to add to `script-src`.
 `serialized.security.scripts` holds one record per script. Citry does not
 build the whole CSP header, because your app also owns layouts, analytics,
