@@ -90,13 +90,42 @@ def test_inline_code_closes_only_at_a_backtick_run_of_the_same_length() -> None:
 
 
 def test_inline_code_does_not_cross_a_paragraph_or_block_boundary() -> None:
-    for source in ("`{{ a\n\nb }}`", "`{{ a\n# b }}`", "- `{{ a\n- b }}`", "`{{ a\n```\nb }}`"):
-        assert "<c-raw>`" not in protect_fences(source), source
+    # A blank line, a heading, the next list item, and an admonition body's
+    # end each close the paragraph, so neither backtick has a partner.
+    for source in ("`{{ a\n\nb }}`", "`{{ a\n# b }}`", "- `{{ a\n- b }}`", "!!! note\n    `{{ a\nb }}`"):
+        assert protect_fences(source) == source, source
+    # A fence also ends the paragraph; only the fence itself is wrapped.
+    assert protect_fences("`{{ a\n```\nb }}`") == "`{{ a\n<c-raw>\n```\nb }}`\n</c-raw>"
+
+
+def test_block_like_lines_inside_a_paragraph_continue_its_code_span() -> None:
+    # Markdown starts a list, table, or admonition only after a blank line, so
+    # inside a paragraph these lines are more of its text.
+    for marker in ("- b", "1. b", "| b", "!!! note b"):
+        html = render_page(f"Para `<c-a\n{marker}/>` z\n", wrap_in_layout=False).html
+        assert _code_texts(html) == [f"<c-a {marker}/>"], marker
+
+
+def test_paragraph_that_starts_with_an_inline_tag_still_protects_its_code() -> None:
+    # Only a block-level tag or a comment makes a raw HTML block; <b> starts
+    # an ordinary paragraph whose code spans Markdown still reads.
+    html = render_page('<b>Note:</b> `<c-Button\n@click="go">`\n', wrap_in_layout=False).html
+
+    assert _code_texts(html) == ['<c-Button @click="go">']
+
+
+def test_lazy_continuation_line_keeps_the_list_item_open() -> None:
+    # The second line is indented less than the item body, which Markdown
+    # still reads as the item's text, so the fence after it is in the item.
+    source = '1. Install:\n  more\n\n    ```html\n    <c-if cond="x">{{ y }}</c-if>\n    ```\n'
+
+    assert "<c-raw>\n    ```html" in protect_fences(source)
 
 
 def test_backtick_in_a_raw_html_block_does_not_pair_with_a_later_line() -> None:
-    # Markdown passes a block that starts with a tag or comment through as raw
-    # HTML, so its backticks open no code span and the <h1> must still render.
+    # Markdown passes a block that starts with a comment or a block-level tag
+    # through as raw HTML, so its backticks open no code span and the <h1>
+    # must still render.
     source = "<!-- `\n-->\n<h1>Title</h1>\n`\n"
 
     assert protect_fences(source) == source

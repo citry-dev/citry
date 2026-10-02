@@ -15,7 +15,8 @@ Inline code spans follow Markdown's rules: a span opens with a run of backticks
 and closes at the next run of exactly the same length, and it may continue onto
 the next line of the same paragraph (Markdown shows that line break as a
 space). So the pass collects each paragraph's lines and protects its spans as a
-whole; a span split per line would leave half a tag for citry to parse.
+whole; protecting each line separately would leave half a tag for citry to
+parse.
 
 Indentation means code only relative to the block a line belongs to. The body
 of an admonition (``!!! note``), a collapsible block (``??? note``), a content
@@ -23,13 +24,14 @@ tab (``=== "Tab"``), or a list item is indented by four spaces, yet it is prose:
 its inline code spans are protected like those of a top-level paragraph, and a
 line counts as indented code only when it is indented four more spaces than
 that body. As in Markdown, a four-space-indented paragraph straight after a
-list item belongs to that item, so it is prose rather than code, and a deeper
-indented line inside a paragraph continues that paragraph rather than starting
-code.
+list item belongs to that item, so it is prose rather than code, and a more
+deeply indented line inside a paragraph continues that paragraph rather than
+starting code.
 
-A block that starts with an HTML tag or comment is raw HTML to Markdown, which
-finds no code spans in it. Its lines are checked one at a time, so a backtick
-inside a comment never pairs with one on a later line.
+A block that starts with an HTML comment, a block-level HTML tag (such as
+``<div>``), or a citry component tag is raw HTML to Markdown, which finds no
+code spans in it. Its lines are checked one at a time, so a backtick inside a
+comment never pairs with one on a later line.
 
 One limitation: a code region whose text is itself ``<c-raw>`` (or a whole
 ``<c-raw>...</c-raw>``) cannot be protected by wrapping, because the wrapper's
@@ -43,6 +45,8 @@ angle brackets on its own.
 from __future__ import annotations
 
 import re
+
+from markdown.util import BLOCK_LEVEL_ELEMENTS
 
 # Opening of a fenced block: optional indent, then 3+ backticks or tildes.
 _FENCE_OPEN = re.compile(r"^(\s*)(```+|~~~+)")
@@ -61,9 +65,22 @@ _CONTAINER_OPEN = re.compile(r"^(?:!!!|\?\?\?\+?|===)\s|^(?:[-*+]|\d+\.)\s")
 # A horizontal rule such as `* * *` starts like a list item but opens no block.
 _THEMATIC_BREAK = re.compile(r"^(?:[-*_][ \t]*){3,}$")
 
-# An ATX heading or a table row. Markdown reads the inline code of each such
-# line on its own, so it never shares a code span with a neighboring line.
-_SINGLE_LINE_BLOCK = re.compile(r"^(?:#{1,6}(?:\s|$)|\|)")
+# A `#` heading. It ends a paragraph even without a blank line before it, so
+# no code span continues from the line above into it.
+_HEADING = re.compile(r"^#{1,6}(?:\s|$)")
+
+# A table row. Markdown reads each row's inline code on its own, but only when
+# the row starts a block; inside a paragraph it is ordinary text.
+_TABLE_ROW = re.compile(r"^\|")
+
+# The start of a block that Markdown passes through as raw HTML: a comment, a
+# block-level tag such as `<div>`, or a citry component tag, which Pass 1
+# turns into such HTML. The docs pipeline also treats `<button>` as
+# block-level. An inline tag such as `<b>` starts an ordinary paragraph.
+_RAW_HTML_BLOCK_OPEN = re.compile(
+    r"^(?:<!--|<c-|</?(?:" + "|".join([*BLOCK_LEVEL_ELEMENTS, "button"]) + r")(?=[\s/>]|$))",
+    re.IGNORECASE,
+)
 
 # Python-Markdown nests block content four spaces deeper than its opener.
 _CONTAINER_STEP = 4
@@ -85,14 +102,15 @@ def protect_fences(source: str) -> str:
     fence_char = ""
     fence_len = 0
     # The body indent of each open admonition, tab, or list item, innermost
-    # last. Indentation inside a body is measured from its body indent.
-    containers: list[int] = []
+    # last, with whether it is a list item. Indentation inside a body is
+    # measured from its body indent.
+    containers: list[tuple[int, bool]] = []
     # The prose lines of the paragraph being read. Its inline code is
     # protected once the paragraph ends, since a span may cross its lines.
     paragraph: list[str] = []
-    # Whether the current block began with an HTML tag or comment. Markdown
-    # passes such a block through as raw HTML and finds no code spans in it,
-    # so a backtick there must not pair with one on a later line.
+    # Whether the current block began as raw HTML (see _RAW_HTML_BLOCK_OPEN).
+    # Markdown finds no code spans in it, so a backtick there must not pair
+    # with one on a later line.
     in_html_block = False
 
     def flush_paragraph() -> None:
@@ -111,9 +129,16 @@ def protect_fences(source: str) -> str:
                 out.append(line)
                 continue
             # A line indented less than a body has left that block.
-            while containers and indent < containers[-1]:
+            while containers and indent < containers[-1][0]:
+                if containers[-1][1] and paragraph:
+                    # A list item's paragraph takes less indented lines as
+                    # its own (lazy continuation), so the item stays open.
+                    break
                 containers.pop()
-            body_indent = containers[-1] if containers else 0
+                # An admonition or tab body has no lazy continuation, so its
+                # paragraph ends with it.
+                flush_paragraph()
+            body_indent = containers[-1][0] if containers else 0
             # Markdown treats four more spaces (or a tab) than the enclosing
             # body as code. Check it before fence discovery so an indented ```
             # line is not mistaken for a fenced-block opener. Indented code
@@ -127,10 +152,18 @@ def protect_fences(source: str) -> str:
                 out.append(line)
                 continue
             if _CONTAINER_OPEN.match(stripped):
+                is_list = stripped[0] not in "!?="
+                in_list = bool(containers) and containers[-1][1]
+                if paragraph and not (is_list and in_list):
+                    # Markdown starts a list or admonition only after a blank
+                    # line; inside a paragraph this line is more of its text.
+                    # In a list, a new marker starts the next item instead.
+                    paragraph.append(line)
+                    continue
                 # A new block starts here, so the previous paragraph has ended.
                 flush_paragraph()
-                containers.append(indent + _CONTAINER_STEP)
-                if stripped[0] in "!?=":
+                containers.append((indent + _CONTAINER_STEP, is_list))
+                if not is_list:
                     # An admonition or tab title is one line; its body starts below.
                     out.append(_protect_inline_code(line))
                 else:
@@ -148,12 +181,13 @@ def protect_fences(source: str) -> str:
                 out.append(line)
                 in_fence = True
                 continue
-            if _SINGLE_LINE_BLOCK.match(stripped):
+            if _HEADING.match(stripped) or (not paragraph and _TABLE_ROW.match(stripped)):
                 flush_paragraph()
                 out.append(_protect_inline_code(line))
                 continue
-            if in_html_block or (not paragraph and stripped.startswith("<")):
-                # Markdown reads no code span across raw HTML lines, so check each alone.
+            if in_html_block or (not paragraph and _RAW_HTML_BLOCK_OPEN.match(stripped)):
+                # Markdown finds no code spans in raw HTML, so protect each
+                # line on its own and never pair backticks across lines.
                 in_html_block = True
                 out.append(_protect_inline_code(line))
                 continue
