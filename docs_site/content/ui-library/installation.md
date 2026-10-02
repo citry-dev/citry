@@ -41,7 +41,7 @@ If a component renders through an instance that does not have the
 library, rendering fails with a `NotRegistered` error such as
 `No component registered as 'cbutton'`.
 
-## Use a component in a template
+## Use in a template { #use-a-component-in-a-template }
 
 Write the component's tag in a template:
 
@@ -57,7 +57,7 @@ class SaveActions(Component):
     """
 ```
 
-## Create a component in Python
+## Create it in Python { #compose-a-component-from-python }
 
 You can also import a component class, create it in Python, and pass it
 to a template:
@@ -83,7 +83,7 @@ class SaveActions(Component):
     """
 ```
 
-### Render it outside a template
+### Render it standalone { #render-a-library-component-outside-a-template }
 
 Inside a template, Citry renders `save_button` with the template's
 `Citry` instance. To render it on its own, pass the instance with
