@@ -113,15 +113,14 @@ An HTML comment on its own also needs the markers:
 Use `<>...</>` whenever you write new code. It makes the choice visible and
 works for any value.
 
-!!! note "Less common rules for markup in attributes"
+## Less common rules for markup in attributes
 
-    - `<>` and `</>` must wrap the whole value, apart from surrounding
-      spaces.
-    - A value starting with `<` and a space, or with `<<`, also needs the
-      markers.
-    - These attributes always take a Python expression, never markup:
-      `c-bind`, `c-if`, `c-elif`, `c-for`, `c-is` on the built-in dynamic
-      component, `c-name` on `<c-slot>` and `<c-fill>`, and `c-required` on
-      `<c-slot>`. To pass rendered content there, prepare it in Python.
-    - The rule above covers only those built-in uses. Your own component can
-      have a `name` or `required` input that accepts markup.
+- `<>` and `</>` must wrap the whole value, apart from surrounding spaces.
+- A value starting with `<` and a space, or with `<<`, also needs the
+  markers.
+- These attributes always take a Python expression, never markup:
+  `c-bind`, `c-if`, `c-elif`, `c-for`, `c-is` on the built-in dynamic
+  component, `c-name` on `<c-slot>` and `<c-fill>`, and `c-required` on
+  `<c-slot>`. To pass rendered content there, prepare it in Python.
+- That rule covers only those built-in uses. Your own component can have a
+  `name` or `required` input that accepts markup.
