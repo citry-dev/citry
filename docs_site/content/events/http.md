@@ -5,52 +5,26 @@ description: Call Citry event handlers through GET requests, native forms, htmx,
 
 # Use event routes directly
 
-Every Citry event handler has an HTTP route. The browser runtime normally calls
-it for you, but the same route can serve a read-only request, a native form, an
-htmx request, or a dedicated file download.
+Every event handler has its own URL. Citry's browser code calls it for you,
+but you can also call it yourself: from a plain HTML form that must work
+without JavaScript, from htmx, from other code that reads data with a GET
+request, or to download a file.
 
-## Expose a typed read endpoint
+## Protect every handler like an HTTP endpoint
 
-Opt a handler into GET when it is read-only. It gets a real per-event URL that
-browser code, host middleware, and the Events OpenAPI command can use:
+Anyone can send a request to a handler's URL, with any arguments. Check the
+current user's permissions in every handler, and load records by id rather
+than trusting values from the browser. State is signed, so it cannot be
+forged, but anyone can read it, and fields the browser may change can hold
+any value.
 
-```citry
-from citry.ext.events import event
-
-
-class Stats(Component):
-    citry = citry_app
-
-    class Events:
-        @event(methods=("GET",))
-        def summary(self) -> dict:
-            return {
-                "users": count_users(),
-                "active_today": count_active(),
-            }
-```
-
-Build a URL during rendering with `self.events.url("summary")`, or outside a
-component with [`get_event_url()`][citry.ext.events.get_event_url]. GET handlers
-must not mutate server state. Their flat query format accepts scalar strings,
-booleans, finite numbers, and non-empty arrays of those values.
-
-A handler can declare `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and
-`OPTIONS`, the methods its per-event URL accepts. Declaring any other method,
-such as `PURGE`, raises `ValueError` when the component class is defined,
-because a request with that method could never reach the handler's URL. On
-that URL, a request with a method the handler did not declare gets a `405`
-response whose `Allow` header lists the methods it did declare.
-
-The browser runtime cannot call a handler whose first declared method is
-`HEAD` or `OPTIONS`. It raises an error before sending anything, and the
-component's pending State edits stay unsent. Call such a handler with a
-server-side HTTP client instead.
+Set up your web framework's CSRF protection as described in
+[Security](/security/#protect-event-posts-from-csrf).
 
 ## Keep a form working without JavaScript
 
-The same per-event route accepts a native form post. Use the component's URL
-builder as a dynamic `action` attribute:
+Point a plain form's `action` at the handler's URL. `self.events.url()` builds
+it while the component renders:
 
 ```citry
 from citry.ext.events import actions
@@ -79,15 +53,14 @@ class Signup(Component):
     """
 ```
 
-A native post receives HTML for a render result, a real HTTP redirect for a
-redirect result, or JSON for a data result. Host CSRF middleware still applies.
-htmx can post to the same URL and consume the fragment response.
+The response depends on what the handler returns: HTML for a component, a
+real HTTP redirect for `actions.Redirect`, or JSON for data. htmx can post to
+the same URL and swap in the returned HTML.
 
 ## Download a file from one event
 
-A download uses its event's own HTTP response. Declare the handler with
-`@event(bundle=False)` so the browser sends each call alone, to the
-handler's own URL. Return the download by itself:
+Return [`actions.Download`][citry.ext.events.actions.Download] on its own, and
+mark the handler with `@event(bundle=False)`:
 
 ```python
 from citry.ext.events import actions, event
@@ -103,17 +76,49 @@ class Events:
         )
 ```
 
-Call the handler normally from `@c-*`, `$sendEvent`, or
-[`Citry.events.send`][Citry.events.send]. The returned promise resolves with
-`undefined` after the browser save starts. A download cannot share a return
-list with other actions. Its handler must also leave Citry
-State unchanged, because a file response cannot also carry the new signed
-State token and public State values.
+The file is the whole HTTP response. By default, the browser may send several
+calls in one request; `bundle=False` makes it send this call on its own.
 
-## Protect every handler like an HTTP endpoint
+Call the handler as usual, from `@c-*`, `$sendEvent`, or
+[`Citry.events.send`][Citry.events.send]. The Promise resolves with
+`undefined` once the browser starts saving the file.
 
-State signatures stop tampering with the server-minted value, but State remains
-visible browser input and writable public fields are deliberately changeable.
-Reload records by id, authorize the current user, and validate what the action
-is allowed to do on every call. Configure host CSRF protection as described in
-[Security](/security/#protect-event-posts-from-csrf).
+A download cannot be combined with other actions in a list, and its handler
+must not change State. The file response has no room for the new State.
+
+## Expose a read-only GET endpoint
+
+Allow GET on a handler that only reads data. Browser code, server
+middleware, and the Events OpenAPI command can then use its URL:
+
+```citry
+from citry.ext.events import event
+
+
+class Stats(Component):
+    citry = citry_app
+
+    class Events:
+        @event(methods=("GET",))
+        def summary(self) -> dict:
+            return {
+                "users": count_users(),
+                "active_today": count_active(),
+            }
+```
+
+Build the URL while rendering with `self.events.url("summary")`, or elsewhere
+with [`get_event_url()`][citry.ext.events.get_event_url]. A GET handler must
+not change anything on the server. Its arguments arrive in the query string,
+which holds strings, booleans, numbers, and non-empty lists of those.
+
+!!! note "Which HTTP methods a handler accepts"
+
+    `methods` accepts `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and
+    `OPTIONS`. Any other method raises `ValueError` when the class is
+    defined. A request with a method the handler does not accept gets a
+    `405` response that lists the accepted ones.
+
+    Citry's browser code cannot call a handler whose first method is `HEAD`
+    or `OPTIONS`; it raises an error before sending. Call such a handler
+    from a server-side HTTP client.
