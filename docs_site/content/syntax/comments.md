@@ -5,10 +5,10 @@ description: Choose whether a comment reaches the browser, and use c-raw when te
 
 # Comments and literal text
 
-This page covers two jobs. The first is leaving a note in a template, either
-for the next person who edits it or for someone reading the page source in
-the browser. The second is showing text that looks like template syntax,
-such as a code sample with `{{ name }}`, exactly as written.
+Use this page to leave a note in a template, for the next person who edits
+it or for someone reading the page source in the browser. It also shows how to
+display text that looks like template syntax, such as a code sample with
+`{{ name }}`, exactly as written.
 
 ## Leave a note that stays in the template
 
@@ -89,8 +89,9 @@ first closing tag ends the block.
 
 ## Keep raw HTML complete on pages that use Vue
 
-When anything on the page or fragment runs in the browser, such as a Vue
-directive or `$component`, the content of `<c-raw>` must be complete HTML.
+When any component on the page, or in an HTML fragment you insert into a
+page, runs in the browser (it has its own `js`, or uses Vue syntax such as
+`@click`), the content of `<c-raw>` must be complete HTML.
 Vue takes over that part of the page and needs to know where the raw HTML
 starts and ends. Otherwise the render fails with an error that gives the
 block's line and column and says it "is not a complete HTML fragment":
@@ -113,5 +114,4 @@ without browser behavior, Citry copies the content unchanged.
   [When you can leave out the fragment markers](/syntax/nested-templates/#when-the-fragment-markers-are-optional).
 - When a `<c-raw>` block sits at the top level of a component's template,
   the HTML tags at its top level count as the component's top-level
-  elements. On a page without browser behavior, Citry adds the component's
-  `data-cid-<id>` attribute to them, as it does to every top-level element.
+  elements, so Citry marks them as belonging to that component.
