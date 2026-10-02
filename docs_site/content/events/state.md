@@ -1,6 +1,6 @@
 ---
 title: Keep State between calls
-description: Choose the small values a Citry component carries through the browser and rebuild each event render from explicit inputs.
+description: Keep the values your Citry event handlers need between calls, and pass every input when a handler renders the component again.
 ---
 
 # Keep State between calls
@@ -56,7 +56,7 @@ class ProjectPanel(Component):
 The handler then loads the project again from `project_id`, as the next
 section shows.
 
-## Build every event render from explicit inputs
+## Pass every input when a handler renders again
 
 When a handler returns a component, Citry renders it from scratch, using
 only the inputs you pass. The original kwargs and slot fills are not kept.
@@ -93,7 +93,7 @@ it in.
 ## Connect an input to State
 
 A `:c-<field>` attribute shows a State field in a form control. Give it a
-handler name, and each edit updates the field and calls the handler. This
+handler name, and edits update the field and call the handler. This
 live search sends the query 300 ms after the user stops typing:
 
 ```citry
@@ -158,8 +158,9 @@ class State:
 - `_public` lists the fields browser code can read.
 - `_model` lists the public fields browser code can change.
 
-The browser can only replace a whole field. To change one item inside a list
-or object field, copy the value, change the copy, and assign it back.
+The browser can only replace a whole field. Changing an item in place, such
+as `$state.tags.push(tag)`, throws an error. Copy the value, change the copy,
+and assign it back.
 
 These settings limit what your templates can do. They do not hide anything.
 The signed State is visible to anyone who opens the page, and a field the
