@@ -44,8 +44,9 @@ one paragraph for every book.
 | Call a Python event handler from the page | `@c-click="save"` | [Events](/events/) |
 | Keep a form field in step with server data | `:c-query="refresh"` | [Bind events in templates](/events/bindings/) |
 | Place a component or a built-in tag | `<c-Card>`, `<c-slot>` | [Components](/concepts/components/), [Built-in tags](/reference/builtins/) |
-| Leave a comment or keep text unchanged | `{# ... #}`, `<c-raw>` | [Comments and literal text](/syntax/comments/) |
 | Pass a piece of markup as an input | `c-body="<>...</>"` | [Markup in attributes](/syntax/nested-templates/) |
+| Leave a comment | `{# ... #}` | [Comments](/syntax/comments/) |
+| Show template-looking text unchanged | `<c-raw>` | [Literal text](/syntax/raw/) |
 
 ## Where each part runs
 

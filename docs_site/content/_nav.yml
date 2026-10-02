@@ -42,8 +42,9 @@ areas:
           - { title: Attributes, path: /syntax/dynamic-attributes/ }
           - { title: Conditions and loops, path: /syntax/control-flow/, needs_review: true }
           - { title: Vue, path: /syntax/vue/, needs_review: true }
-          - { title: Comments and literal text, path: /syntax/comments/, needs_review: true }
           - { title: Markup in attributes, path: /syntax/nested-templates/, needs_review: true }
+          - { title: Comments, path: /syntax/comments/, needs_review: true }
+          - { title: Literal text, path: /syntax/raw/, needs_review: true }
 
       - label: Concepts
         collapsible: true
