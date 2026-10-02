@@ -44,7 +44,9 @@ class ContactForm(Component):
             return ThankYouMessage(name=data.name)
 
     def template_data(self, kwargs, slots) -> dict[str, Any]:
-        submit_url = self.citry.build_url(f"ext/events/e/{type(self).class_id}")
+        # The verb route ends at the component's class id.
+        class_id = type(self).class_id
+        submit_url = self.citry.build_url(f"ext/events/e/{class_id}")
         return {"submit_url": submit_url}
 
     template = """
