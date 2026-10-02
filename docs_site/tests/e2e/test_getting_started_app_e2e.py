@@ -142,7 +142,7 @@ def test_step11_form_shows_the_field_error_then_the_accepted_address(
     assert errors == []
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="type-changing Render, #164")
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason="component-changing Render, #164")
 def test_step12_python_replaces_the_form_with_a_confirmation(page: Any, getting_started_urls: dict[str, str]) -> None:
     errors = _open(page, getting_started_urls["12"])
     _submit_email(page, "ada@elsewhere.test")
