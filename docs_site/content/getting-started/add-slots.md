@@ -90,7 +90,7 @@ class Slots:
     footer: SlotInput | None = None
 ```
 
-The default slot has no default value, so it is required. The footer
+`default` has no `= ...` value after its type, so it is required. The footer
 defaults to `None`, so it is optional and the template's fallback text shows
 when it is empty.
 
