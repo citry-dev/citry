@@ -10,8 +10,8 @@ task. Find the task you have, copy the code, and adapt it.
 
 Every example page has three tabs: **Component** shows the component,
 **Page** shows a complete page that uses it, and **Live demo** shows the
-result. The docs build runs and tests each example, so the code works as
-shown.
+result. Each example has its own tests, and the docs build runs it to make
+the live demo, so the code works as shown.
 
 ## Components
 
@@ -36,7 +36,7 @@ shown.
 
 ## Try an example live { #try-an-example }
 
-This module uses component State and a Python event handler. Select
+This example uses component State and a Python event handler. Select
 **Try live** to edit it, run it in your browser, and use the result.
 
 <c-live-code
