@@ -487,9 +487,9 @@ fn compile_template_body_with_mode(
 /// Class and style values also merge across attributes, so the runtime needs
 /// to see the whole attribute set at once rather than one value at a time.
 ///
-/// So when any ordinary attribute is dynamic, the compiler emits one
-/// `ElementAttrsNode` that carries every ordinary attribute of the tag, the
-/// static ones included, in source order. Each attribute is wrapped in its
+/// So when any attribute other than a `#c-*` flag is dynamic, the compiler
+/// emits one `ElementAttrsNode` that carries every such attribute of the
+/// tag, the static ones included, in source order. Each attribute is wrapped in its
 /// `StaticHtmlAttr()`, `ExprHtmlAttr()`, or `TemplateHtmlAttr()` call. The
 /// tag name and the closing `>` stay literal strings around it.
 ///
@@ -500,9 +500,9 @@ fn compile_template_body_with_mode(
 ///     # Beginning
 ///     """<div""",
 ///     # The whole attribute region, resolved at render time
-///     ElementAttrsNode(source, (0, 47), (
-///         StaticHtmlAttr(source, (5, 23), """style""", """color: red""", ()),
-///         ExprHtmlAttr(source, (24, 46), """c-class""", """base + 'foo'""", ("base",)),
+///     ElementAttrsNode(source, (0, 47,), (
+///         StaticHtmlAttr(source, (5, 23,), """style""", """color: red""", ()),
+///         ExprHtmlAttr(source, (24, 46,), """c-class""", """base + 'foo'""", ("base",)),
 ///     ), ("base",)),
 ///     # Ending part
 ///     """>""",
