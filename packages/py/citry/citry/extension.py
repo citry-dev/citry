@@ -881,6 +881,10 @@ class Extension:
         Called after a component (and its children) rendered. Return a new
         ``CitryRender`` / ``str`` to replace the output, raise to replace the
         error, or return ``None`` to keep the original.
+
+        HTML you serialize inside the hook, such as ``str(ctx.render)``, does
+        not carry the component's own ``data-cid-*`` attribute; Citry adds it
+        to the HTML you return.
         """
 
     def on_slot_rendered(self, ctx: OnSlotRenderedContext) -> RenderPart | None:

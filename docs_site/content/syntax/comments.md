@@ -92,10 +92,11 @@ Citry removes the `<c-raw>` wrapper and copies its body to the rendered output
 without interpreting it. In this example, `{{ this_stays_as_text }}` is not
 evaluated and `<c-Card>` is not rendered as a Citry component.
 
-A raw block at the top level of a component's template still produces that
-component's top-level elements. In output with no browser behavior, Citry
-adds the component's `data-cid-<id>` attribute to them, as it does to every
-other top-level element of a component.
+When a raw block sits at the top level of a component's template, the HTML
+tags at its top level are that component's top-level elements. In output
+with no browser behavior, Citry adds the component's `data-cid-<id>`
+attribute to them, as it does to every other top-level element of a
+component. Citry reads the raw HTML only to find those top-level tags.
 
 Raw output is not HTML-escaped. The browser will still interpret any HTML in
 the copied body. Use `<c-raw>` only for text written and trusted by the template

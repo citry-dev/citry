@@ -89,8 +89,8 @@ class TestDocumentEmission:
     )
     def test_identical_assets_of_two_classes_emit_once_on_a_static_page(self, deps_strategy, with_js, mounted):
         # Two different components whose assets are byte-identical share one
-        # sheet (and one script) on a static page. The sheet names both owning
-        # classes instead of raising a conflicting-attributes error.
+        # sheet (and one script) on a static page, and the sheet names both
+        # owning classes.
         c = Citry()
         if mounted:
             c.set_mounted_prefix("/citry")

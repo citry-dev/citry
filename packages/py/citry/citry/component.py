@@ -1323,6 +1323,10 @@ class Component(metaclass=ComponentMeta):
         Because ``None`` means "no replacement", return ``""`` to output
         literally nothing.
 
+        HTML you serialize inside the hook, such as ``str(result)`` after a
+        yield, does not carry this component's own ``data-cid-*`` attribute;
+        Citry adds it to the HTML you return.
+
         Everything the hook needs is on ``self``: ``kwargs``, ``slots``,
         ``parent``, ``inject()``. To pass data to the template, use
         ``template_data``; this hook is for replacing output. If the hook

@@ -97,8 +97,8 @@ _VALUE_CONTEXT: ContextVar[CitryContext | None] = ContextVar("citry_value_contex
 # component's root output again, and the final serialization marks its root
 # tags then. So while those hooks run, serializing that same render must leave
 # the component's own root markers off, or the page would carry each marker
-# twice on one tag (and on tags that are no longer roots, when the hook wraps
-# the result). This holds the render id of the component whose hooks run.
+# twice on one tag (and on tags that are not roots of the returned HTML, when
+# the hook wraps the result). This holds the render id of the component whose hooks run.
 _AFTER_RENDER_HOOKS_RENDER_ID: ContextVar[str | None] = ContextVar(
     "citry_after_render_hooks_render_id",
     default=None,
