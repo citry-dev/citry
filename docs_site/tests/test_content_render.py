@@ -94,6 +94,15 @@ def test_inline_code_does_not_cross_a_paragraph_or_block_boundary() -> None:
         assert "<c-raw>`" not in protect_fences(source), source
 
 
+def test_backtick_in_a_raw_html_block_does_not_pair_with_a_later_line() -> None:
+    # Markdown passes a block that starts with a tag or comment through as raw
+    # HTML, so its backticks open no code span and the <h1> must still render.
+    source = "<!-- `\n-->\n<h1>Title</h1>\n`\n"
+
+    assert protect_fences(source) == source
+    assert "<h1>Title</h1>" in render_page(source, wrap_in_layout=False).html
+
+
 def test_backslash_escaped_backtick_does_not_open_a_span() -> None:
     assert protect_fences("A \\` b `{{ c }}`") == "A \\` b <c-raw>`{{ c }}`</c-raw>"
 

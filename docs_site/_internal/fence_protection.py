@@ -27,6 +27,10 @@ list item belongs to that item, so it is prose rather than code, and a deeper
 indented line inside a paragraph continues that paragraph rather than starting
 code.
 
+A block that starts with an HTML tag or comment is raw HTML to Markdown, which
+finds no code spans in it. Its lines are checked one at a time, so a backtick
+inside a comment never pairs with one on a later line.
+
 One limitation: a code region whose text is itself ``<c-raw>`` (or a whole
 ``<c-raw>...</c-raw>``) cannot be protected by wrapping, because the wrapper's
 own tag collides with the inner one. A page that shows raw citry syntax that
@@ -86,6 +90,10 @@ def protect_fences(source: str) -> str:
     # The prose lines of the paragraph being read. Its inline code is
     # protected once the paragraph ends, since a span may cross its lines.
     paragraph: list[str] = []
+    # Whether the current block began with an HTML tag or comment. Markdown
+    # passes such a block through as raw HTML and finds no code spans in it,
+    # so a backtick there must not pair with one on a later line.
+    in_html_block = False
 
     def flush_paragraph() -> None:
         if paragraph:
@@ -99,6 +107,7 @@ def protect_fences(source: str) -> str:
             if not stripped:
                 # A blank line ends the paragraph, and no code span crosses it.
                 flush_paragraph()
+                in_html_block = False
                 out.append(line)
                 continue
             # A line indented less than a body has left that block.
@@ -141,6 +150,11 @@ def protect_fences(source: str) -> str:
                 continue
             if _SINGLE_LINE_BLOCK.match(stripped):
                 flush_paragraph()
+                out.append(_protect_inline_code(line))
+                continue
+            if in_html_block or (not paragraph and stripped.startswith("<")):
+                # Markdown reads no code span across raw HTML lines, so check each alone.
+                in_html_block = True
                 out.append(_protect_inline_code(line))
                 continue
             paragraph.append(line)
