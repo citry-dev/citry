@@ -5,20 +5,21 @@ description: Choose a component or an HTML tag at render time with c-component a
 
 # Dynamic components and elements
 
-Sometimes data decides what to show. A dashboard may choose one of several
-cards, while an article may choose whether a heading is an `h2` or an `h3`.
+Sometimes your data decides what to render. A dashboard picks one of
+several card components for each widget. An article picks whether a heading
+is an `h2` or an `h3`.
 
-Use `<c-component>` to choose a Citry component. Use `<c-element>` to choose a
-plain HTML tag. In both cases, `c-is` contains the Python expression that
-selects the result.
+Citry has two built-in tags for this:
 
-Their component-name suffix is case-insensitive, so `<c-Component>` and
-`<c-Element>` are equivalent spellings. The framework prefix must still be
-the exact lowercase `c-`.
+- `<c-component>` renders the Citry component you choose;
+- `<c-element>` renders the plain HTML tag you choose.
+
+On both, `c-is` holds the Python expression that makes the choice.
 
 ## Choose a component
 
-This page chooses a component by its registered name:
+Pass a registered component name to `c-is`. Every other attribute becomes
+an input of the chosen component, and the body fills its slots:
 
 ```citry
 from citry import Component, SlotInput
@@ -53,39 +54,23 @@ class Page(Component):
     """
 ```
 
-`c-is` selects `Card`. The Python input `c-title` becomes its `title` kwarg,
-and the body fills its default slot. The selected component checks its own
-[`Kwargs`][citry.Component.Kwargs] and
-[`Slots`][citry.Component.Slots] declarations as usual.
+`c-is` chooses `Card`, `c-title` becomes its `title` input, and the body
+fills its default slot. `Card` checks its own
+[`Kwargs`][citry.Component.Kwargs] and [`Slots`][citry.Component.Slots] as
+it would anywhere else.
 
-Browser-side bindings follow the usual component-boundary rules. They do not
-become Python kwargs. See
-[Client interactivity](/concepts/client-interactivity/) for native Vue props,
-child events, and Citry server-event handlers.
-
-### What `c-is` accepts
-
-For `<c-component>`, the expression must produce either:
-
-- a registered component name, such as `"card"`; or
-- a [`Component`][citry.Component] subclass, such as `Card`.
-
-To pass a class directly, return it from `template_data()`:
+`c-is` can also give a [`Component`][citry.Component] class instead of a
+name:
 
 ```python
 def template_data(self, kwargs, slots):
     return {"chosen_component": Card}
 ```
 
-A component instance is not accepted. Insert an existing
-[`CitryElement`][citry.CitryElement] with `{{ ... }}`, or pass its class and
-let `<c-component>` create it. An unknown name raises
-[`NotRegistered`][citry.NotRegistered]. Citry never treats an unknown
-component name as an HTML tag.
-
 ## Choose an HTML tag
 
-Use `<c-element>` when only the HTML tag changes:
+Use `<c-element>` when only the tag name changes. Every other attribute
+becomes an HTML attribute, and the body becomes the element's content:
 
 ```citry
 from citry import Component
@@ -109,49 +94,32 @@ class Heading(Component):
     """
 ```
 
-`Heading(level=3, text="Details")` inserts:
+`Heading(level=3, text="Details")` renders:
 
 ```html
 <h3 class="heading">Details</h3>
 ```
 
-The tag name must start with a letter. The remaining characters may be
-letters, digits, hyphens, underscores, or dots. Custom elements such as
-`my-widget` and SVG names such as `clipPath` are valid. HTML void-element
-identity is ASCII-case-insensitive, so selecting `BR` produces compact
-`<BR/>` output and rejects children just like selecting `br`.
+Attributes follow the same rules as on a tag you write by hand: `class` and
+`style` are normalized, a `False` or `None` value leaves the attribute out,
+and values are escaped unless they provide trusted HTML through
+`__html__()`.
 
-`<c-element>` also applies HTML attribute identity to its selector. `IS`,
-`c-IS`, and an `Is` key supplied by `c-bind` therefore mean the same thing as
-`is` / `c-is`. `<c-component>` inputs remain case-sensitive and use the exact
-lowercase selector spellings.
+If the tag never changes, write it directly. `<h2>` is clearer than
+`<c-element is="h2">`.
 
-Other attributes use the normal HTML formatting rules. `class` and `style`
-are normalized, and `False` and `None` leave an attribute out. Values are
-escaped unless they explicitly provide trusted HTML through `__html__()`.
-Native Vue props belong to component boundaries and are not valid on an HTML
-element.
+## Write the choice in the template or compute it
 
-### Limits of `c-element`
+Use `is` for a choice written directly in the template, and `c-is` for a
+Python expression:
 
-- Void elements such as `br` and `img` cannot have a body.
-- Only the default slot is accepted. A named `<c-fill>` written in the
-  template is a template error (`SyntaxError`). A fill whose name is
-  computed at render time, such as `<c-fill c-name="...">`, raises
-  `ValueError`.
-- A dynamic attribute cannot produce a template fragment. Precompute a plain
-  value in `template_data()` instead.
+```citry-html
+<c-component is="card" />
+<c-component c-is="chosen_component" />
+```
 
-When you already know the tag, write that HTML tag directly. It is clearer
-than asking `<c-element>` to select a fixed name.
-
-## Use a fixed or calculated target
-
-Use `is="card"` when the target is written directly in the template. Use
-`c-is="chosen_component"` when a Python expression calculates it.
-
-You can also include `is` in a
-[`c-bind` mapping](/syntax/dynamic-attributes/):
+You can also put `is` in a [`c-bind` mapping](/syntax/dynamic-attributes/),
+together with the other inputs:
 
 ```citry-html
 <c-component
@@ -159,13 +127,63 @@ You can also include `is` in a
 />
 ```
 
-`c-bind` is applied in source order with the other attributes. If more than
-one value supplies `is`, the rightmost one wins.
+Citry applies `c-bind` in source order with the other attributes. If more
+than one of them sets `is`, the last one wins.
 
-Neither built-in adds wrapper HTML. A selected component may have one root,
-several roots, text, or no output. Values from
-[Provide and inject](/concepts/provide-and-inject/) continue through the
-selection normally.
+Neither tag adds wrapper HTML around the result. The chosen component may
+render one root element, several, text, or nothing. Values from
+[provide and inject](/concepts/provide-and-inject/) reach it as usual.
 
-For choosing content without changing the whole tag, see
-[Control flow](/syntax/control-flow/).
+To show or hide content rather than change a whole tag, use
+[control flow](/syntax/control-flow/).
+
+## Errors and less common cases
+
+### What `c-is` accepts on `<c-component>`
+
+The value must be a registered component name, such as `"card"`, or a
+`Component` subclass, such as `Card`.
+
+- An unknown name raises [`NotRegistered`][citry.NotRegistered]. Citry
+  never treats an unknown component name as an HTML tag; use `<c-element>`
+  for that.
+- An already created [`CitryElement`][citry.CitryElement], such as
+  `Card(title="Hi")`, raises `TypeError`. Insert it with `{{ ... }}`
+  instead, or pass its class.
+
+### Browser bindings stay browser bindings
+
+Vue bindings on `<c-component>` follow the usual rules for a component
+tag. They do not become Python inputs. See
+[Client interactivity](/concepts/client-interactivity/) for Vue props,
+child events, and server-event handlers.
+
+### Which tag names `<c-element>` accepts
+
+A tag name starts with a letter, followed by letters, digits, hyphens,
+underscores, or dots. Custom elements such as `my-widget` and SVG names
+such as `clipPath` work. Any other value raises `ValueError`.
+
+Void elements are recognized in any letter case, so `BR` renders compact
+`<BR/>` and rejects a body, just like `br`.
+
+### Letter case of `is`
+
+`<c-element>` treats its selector like an HTML attribute, so `IS`, `c-IS`,
+and an `Is` key in `c-bind` all work. `<c-component>` passes inputs with
+their exact names, so there you must write `is` or `c-is` in lowercase.
+
+The tag names themselves ignore letter case after the prefix:
+`<c-Component>` and `<c-Element>` work too. The `c-` prefix must be
+lowercase.
+
+### What `<c-element>` cannot do
+
+- A void element such as `br` or `img` cannot have a body.
+- It accepts only the default slot. A named `<c-fill>` written in the
+  template raises `SyntaxError`. A fill whose name is computed at render
+  time, such as `<c-fill c-name="...">`, raises `ValueError`.
+- An attribute value cannot be a nested template. Compute a plain value in
+  `template_data()` instead.
+- Vue props belong on component tags, so they are not valid on the HTML
+  element.
