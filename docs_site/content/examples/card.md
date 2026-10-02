@@ -5,28 +5,30 @@ description: Build a reusable Card with an input, a slot, and component CSS.
 
 # Card
 
-Make a card with a colored top border. Choose the color with `accent`, then put
-a heading, text, or any other HTML inside `<c-Card>`. You can run this example
+Use this pattern for a piece of markup you repeat across pages, such as a
+card, a panel, or a badge. The Card takes an `accent` color, wraps
+whatever HTML you put inside `<c-Card>`, and brings its own CSS. It runs
 with Citry alone; no web framework is needed.
 
 <c-example name="card" />
 
-The Card works in both light and dark themes. The lines to notice are simple:
-`accent` chooses the border color, and everything between `<c-Card>` and
-`</c-Card>` appears inside it. Each Card keeps its own color, so several Cards
-on one page do not have to match.
+The lines to notice:
 
-The styles in `Card.css` are added automatically. They can affect anything on
-the page named `.demo-card`, which is why the example uses a specific class
-name rather than a broad name such as `.card`.
+- `accent` sets the top border color. `css_data()` passes it to the CSS
+  as `var(--accent)`, so each Card on a page can have its own color.
+- Everything between `<c-Card>` and `</c-Card>` appears where the
+  template has `<c-slot />`.
+- `<c-css />` in the page adds the Card's styles. Those styles apply to
+  anything on the page with the `demo-card` class, so the example uses
+  that specific name rather than a broad one such as `.card`.
 
-Try the same code in your project with another accent color. If you leave out
-the color or the content, Citry tells you what is missing when it renders the
-Card. The `accent: str` annotation helps your editor and type checker, but it
-does not check the value while your program runs.
+If you leave out `accent` or the content, rendering the Card fails with
+an error that names what is missing. The `accent: str` annotation helps
+your editor and type checker, but Citry does not check at runtime that
+the value is a string.
 
 For a guided walkthrough, read
-[Your first component](/getting-started/your-first-component/). When you want
-more detail, read about [component inputs][citry.Component.Kwargs],
-[component slots][citry.Component.Slots], [SlotInput][citry.SlotInput], and
+[Your first component](/getting-started/your-first-component/). For
+details, see [component inputs][citry.Component.Kwargs],
+[slots][citry.Component.Slots], [SlotInput][citry.SlotInput], and
 [component CSS][citry.Component.css].
