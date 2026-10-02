@@ -41,7 +41,7 @@ Returning `TaskList(...)` is the same as returning
 its options, such as `target` (below).
 
 The new render gets only the inputs you pass. See
-[Build every event render from explicit inputs](/events/state/#build-every-event-render-from-explicit-inputs).
+[Pass every input when a handler renders again](/events/state/#pass-every-input-when-a-handler-renders-again).
 
 ## Keep list items matched to their records
 
@@ -63,8 +63,8 @@ Use a value that identifies the record and stays the same between renders,
 such as a database id or a slug. Keys must be unique within the list. Put the
 key on the component or element that should follow the record.
 
-A key keeps an item matched only while it stays in the same place in the
-template. It does not carry an item into a different parent or wrapper.
+A key works only among items under the same parent. It cannot move an item
+into a different parent or wrapper element.
 
 ## Swap in a different component
 
@@ -96,7 +96,7 @@ After the swap:
     The component your Python code renders for the page (or for an HTML
     fragment you insert) cannot be swapped for a different one. The call
     fails with an error that names both components, and the page keeps the
-    old one. Move the part that changes into a child component, or wrap it in
+    old one. With an `@c-*` call, the error appears in the browser console. Move the part that changes into a child component, or wrap it in
     a `<c-mark>` region as described next.
 
 ## Update one part of the page
@@ -120,8 +120,9 @@ return actions.Render(
 ```
 
 The name is looked up in the template of the component whose handler ran. To
-update another component instead, use `target="render:<id>"` with that
-component's render ID.
+update another component instead, use `target="render:<id>"`. The render ID
+is the value of that component's `id` in the browser; see
+[Browser APIs](/reference/browser-apis/).
 
 ## Notify browser code that something happened
 
@@ -204,8 +205,9 @@ the page. To show something first, give the Redirect a delay and
 
     You can update several separate parts of the page in one response by
     returning several Renders next to each other in the list. They must not
-    use `delay` or `wait=False`, target the same place twice, or target both
-    a component and something inside it. Otherwise the call fails and nothing
+    have another action between them, use `delay` or `wait=False`, target
+    the same place twice, or target both a component and something inside
+    it. Otherwise the call fails and nothing
     on the page changes, although the handler has already run.
 
 !!! note "A Dispatch before or after a Render reaches different listeners"
@@ -213,6 +215,8 @@ the page. To show something first, give the Redirect a delay and
     When a response re-renders the component that listens, a Dispatch placed
     before the Render reaches the listeners of the old render. A Dispatch
     placed after it reaches the listeners that `onServerRender` added for
-    the new render. When the Render targets a component that contains the
-    one whose handler ran, put the Dispatch before the Render, without
-    `delay` or `wait=False`, or the call fails.
+    the new render.
+
+    If the Render replaces a component that contains the one whose handler
+    ran, put the Dispatch first and do not give it `delay` or `wait=False`.
+    Otherwise the call fails.

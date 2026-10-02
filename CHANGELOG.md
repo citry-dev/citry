@@ -61,7 +61,7 @@ walks through every step.
   different component; move the part that changes into a child component
   or a `<c-mark>` region. Replacing any other calling component still
   works, and the old component's browser state is still lost
-  ([docs](https://citry.dev/events/actions/#replace-the-calling-component-with-a-different-component)).
+  ([docs](https://citry.dev/events/actions/#swap-in-a-different-component)).
 - **Page scripts and selectors:** `Citry.alpine`, `Citry.manager`, and
   `Citry.i18n` are removed, and Vue-rendered elements carry no
   `data-cid-*` or `data-citry-key` attributes
