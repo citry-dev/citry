@@ -60,7 +60,7 @@ Use Python to decide what the page contains. Use Vue when part of the page
 should change straight away in response to the user. Start with
 [Vue in templates](/syntax/vue/) for that.
 
-## Set an attribute
+## `c-*` attributes { #set-an-attribute }
 
 An ordinary attribute holds fixed text. Put `c-` in front of the name to make
 the value a Python expression. Citry evaluates it and removes the `c-`:
