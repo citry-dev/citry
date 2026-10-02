@@ -7,6 +7,8 @@ The static-`is` forms compile away (covered by the Rust compiler tests in
 here exercise them end to end plus the full runtime (dynamic) paths.
 """
 
+import re
+
 import pytest
 
 from citry import Citry, Component, Const, Extension
@@ -389,7 +391,7 @@ class TestDynamicElement:
             def template_data(self, kwargs, slots):
                 return {"tag": "BR"}
 
-        assert str(Page()) == '<BR class="x" data-cid-c1="">'
+        assert str(Page()) == '<BR class="x" data-cid-c1=""/>'
 
     def test_spread_is_identity_is_ascii_case_insensitive(self):
         c = Citry()
@@ -401,7 +403,7 @@ class TestDynamicElement:
             def template_data(self, kwargs, slots):
                 return {"attrs": {"IS": "BR", "CLASS": "x"}}
 
-        assert str(Page()) == '<BR CLASS="x" data-cid-c1="">'
+        assert str(Page()) == '<BR CLASS="x" data-cid-c1=""/>'
 
     def test_static_is_then_c_bind_selects_spread_tag(self):
         c = Citry()
@@ -475,7 +477,7 @@ class TestDynamicElement:
             def template_data(self, kwargs, slots):
                 return {"tag": "hr"}
 
-        assert str(Page()) == '<hr id="el1" class="a b" disabled data-cid-c1="">'
+        assert str(Page()) == '<hr id="el1" class="a b" disabled data-cid-c1=""/>'
 
     def test_attribute_case_variants_follow_html_merge_in_source_order(self):
         c = Citry()
@@ -536,7 +538,7 @@ class TestDynamicElement:
                     "dynamic_style": {"height": "2px"},
                 }
 
-        assert str(Page()).strip() == (f'<hr class="{expected_class}" style="{expected_style}" data-cid-c1="">')
+        assert str(Page()).strip() == (f'<hr class="{expected_class}" style="{expected_style}" data-cid-c1=""/>')
 
     def test_attr_values_are_escaped(self):
         c = Citry()
@@ -598,6 +600,36 @@ class TestDynamicElement:
         dynamic = assembly.compile_inputs[root.definition_id].dynamic_elements[0]
 
         assert dynamic["tag"] == "BR"
+
+    @pytest.mark.parametrize(
+        ("static_template", "dynamic_template", "expected"),
+        [
+            ('<c-element is="br" />', "<c-element c-is=\"'br'\" />", "<br/>"),
+            (
+                '<c-element is="img" class="a" />',
+                '<c-element c-is="\'img\'" class="a" />',
+                '<img class="a"/>',
+            ),
+            ('<c-element is="div" />', "<c-element c-is=\"'div'\" />", "<div></div>"),
+            (
+                '<c-element is="div">hi</c-element>',
+                "<c-element c-is=\"'div'\">hi</c-element>",
+                "<div>hi</div>",
+            ),
+        ],
+    )
+    def test_static_and_dynamic_is_write_the_same_tag(self, static_template, dynamic_template, expected):
+        # A void tag stays compact and a non-void one gets a closing tag,
+        # whichever way the template names the element.
+        for template in (static_template, dynamic_template):
+            c = Citry()
+
+            class Page(Component):
+                citry = c
+
+            Page.template = template
+            # The component id differs between the two renders, so drop it.
+            assert re.sub(r' data-cid-\w+=""', "", str(Page())) == expected, template
 
     def test_void_element_with_body_raises(self):
         c = Citry()

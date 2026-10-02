@@ -3059,7 +3059,9 @@ def _ignored_contents_html(
                 out.append(f"</{part.tag}>")
             elif isinstance(part, PreparedDynamicElementOpen):
                 formatted = str(format_attrs(part.attrs))
-                out.append(f"<{part.tag}{' ' + formatted if formatted else ''}>")
+                # Match the page serializer: a selected void tag stays compact.
+                ending = "/>" if part.is_void else ">"
+                out.append(f"<{part.tag}{' ' + formatted if formatted else ''}{ending}")
             elif type(part) is CitryRender and not part.frame.is_component_root and not part.frame.is_transparent_root:
                 # A `<c-if>` or `<c-for>` body renders as a nested part of the
                 # same component, so its markup belongs to these contents.

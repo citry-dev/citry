@@ -1067,7 +1067,9 @@ def _append_frame_parts(
             if isinstance(part, PreparedDynamicElementOpen):
                 formatted = str(format_attrs(part.attrs))
                 suffix = f" {formatted}" if formatted else ""
-                out.append(f"<{part.tag}{suffix}>")
+                # A selected void tag stays compact (``<br/>``), as the static
+                # ``<c-element is="br" />`` spelling compiles to.
+                out.append(f"<{part.tag}{suffix}{'/>' if part.is_void else '>'}")
                 continue
             if isinstance(part, PreparedDynamicElementClose):
                 out.append(f"</{part.tag}>")
@@ -1267,7 +1269,9 @@ def _append_frame_parts_with_fallback_tracking(
             if isinstance(part, PreparedDynamicElementOpen):
                 formatted = str(format_attrs(part.attrs))
                 suffix = f" {formatted}" if formatted else ""
-                out.append(f"<{part.tag}{suffix}>")
+                # A selected void tag stays compact (``<br/>``), as the static
+                # ``<c-element is="br" />`` spelling compiles to.
+                out.append(f"<{part.tag}{suffix}{'/>' if part.is_void else '>'}")
                 activate_for_element(part.tag)
                 if tracker is not None:
                     tracker.push_prepared(part.tag, is_void=part.is_void)
