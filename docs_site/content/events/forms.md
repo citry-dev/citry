@@ -5,17 +5,18 @@ description: Turn named form controls into typed Python data and show server val
 
 # Handle and validate forms
 
-On a form submit, Citry can collect named controls into a typed Python object.
-If validation fails, the form stays in place and Vue can show the returned
-errors beside the relevant fields.
+When a user submits a form, you want its fields as typed Python values, and
+when something is wrong, you want the error next to the field without losing
+what the user typed. Citry does both: it turns the named controls into a
+Python object for your handler, and shows the errors your handler raises.
 
 Start with [Server events](/events/) if you have not called a Python handler
 from a component yet.
 
 ## Receive typed form data
 
-Declare the fields the handler accepts, then annotate its `data` parameter
-with that class:
+Write a class with the fields the form sends, and use it as the type of the
+handler's `data` parameter:
 
 ```citry
 from citry import Component
@@ -31,8 +32,6 @@ class ContactForm(Component):
     citry = citry_app
 
     class Kwargs:
-        name: str = ""
-        email: str = ""
         sent: bool = False
 
     class Events:
@@ -45,11 +44,7 @@ class ContactForm(Component):
                     },
                 )
             send_contact_email(data.name, data.email)
-            return ContactForm(
-                name=data.name,
-                email=data.email,
-                sent=True,
-            )
+            return ContactForm(sent=True)
 
     def template_data(self, kwargs, slots):
         return {"sent": kwargs.sent}
@@ -76,26 +71,34 @@ class ContactForm(Component):
     """
 ```
 
-The control names match `ContactIn.name` and `ContactIn.email`. Citry converts
-and validates those values before calling `submit`.
+`@c-submit.prevent` collects the form's named controls and calls `submit`
+instead of letting the browser submit the form. The `name` attributes match
+the fields of `ContactIn`. Citry checks each value against its type before
+the handler runs. A value of the wrong type fails the call with an error for
+that field, and `submit` does not run.
 
-Raise [`EventError`][citry.ext.events.EventError] to return a human message and
-per-field errors. A failed call does not render anything, so the browser keeps
-what the user typed. This also avoids maintaining a second validation schema
-in JavaScript.
+## Show validation errors
 
-## Show errors and loading state
+Raise [`EventError`][citry.ext.events.EventError] with a message and an error
+per field. When a call fails, nothing re-renders, so the form keeps what the
+user typed.
 
-[`$error('submit')`][$error] exposes this handler's retained error. Its
-`fieldErrors` object uses the names passed to `EventError`:
+[`$error('submit')`][$error] returns the last error from the `submit` handler,
+or `null`. Its `fieldErrors` uses the field names you passed to `EventError`:
 
 ```citry-html
 <span v-text="$error('submit')?.fieldErrors?.email"></span>
 ```
 
-[`$loading('submit')`][$loading] covers this handler's time waiting in the
-queue as well as the network request, so it is suitable for disabling the
-submit button:
+A later successful `submit` call clears the error. Errors from other
+handlers in the same component are separate, so two forms in one component
+show their own errors. To show one banner for the whole component, call
+`$error()` without a name: it returns the newest error from any handler.
+
+## Disable the button while the form is sending
+
+[`$loading('submit')`][$loading] is true from the moment the submit is queued
+until the response arrives:
 
 ```citry-html
 <button type="submit" :disabled="$loading('submit')">
@@ -103,18 +106,16 @@ submit button:
 </button>
 ```
 
-A successful `submit` call clears only its own error. Other handlers in the
-same component keep their errors, so independent forms can show independent
-feedback. Call `$error()` without a name when a component-wide banner should
-show the newest retained error.
+## Related pages
 
-A well-formed server `ok: false` result, including `invalid_args`, is recorded
-for `$error(...)` and consumed by a declarative `@c-*` binding. Imperative
-`$sendEvent(...)` keeps ordinary Promise semantics: catch its rejection when
-the caller handles a server failure. Client-side argument expressions that
-cannot be encoded as JSON, malformed Events protocol responses, and render or
-lifecycle failures still surface as runtime errors.
+- [Bind events in templates](/events/bindings/) covers the other modifiers
+  and the loading and error helpers.
+- [Use event routes directly](/events/http/#keep-a-form-working-without-javascript)
+  shows how to make the same form work without JavaScript.
 
-The [event bindings guide](/events/bindings/) covers submit modifiers and the
-other loading and error helpers. [Use event routes directly](/events/http/)
-when the same form must also work without JavaScript.
+!!! note "Errors when you call a handler from JavaScript"
+
+    An `@c-*` attribute handles a failed call for you: the error appears in
+    `$error()` and nothing else happens. When your own code calls a handler
+    with `$sendEvent(...)`, a failed call also rejects the returned Promise,
+    so catch it with `try`/`catch` or `.catch(...)`.
