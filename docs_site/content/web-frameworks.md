@@ -23,7 +23,7 @@ A full page without server events works without a mount. Its scripts and
 styles are then written into the page itself, so the browser cannot cache
 them between pages.
 
-## Mount Citry on your framework
+## Mount Citry
 
 Each framework has a small adapter in `citry.contrib`:
 
@@ -54,7 +54,7 @@ For complete, runnable apps, see the
 [starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}
 for FastAPI, Django, Flask, bare ASGI, and bare WSGI.
 
-## Initialize Citry at startup
+## Initialize at startup
 
 Mounting adds the routes, but it does not import your component modules.
 Call [`initialize()`][citry.Citry.initialize] once at startup, after you
@@ -161,7 +161,7 @@ class MyAppConfig(AppConfig):
 `citry.contrib.django` also has `DjangoCache`, which lets Citry store its
 data in a Django cache (`Citry(cache=DjangoCache(caches["default"]))`), and
 `enable_hot_reload`, which shows edits to component files without a
-restart (see [Hot reload](/guides/dev-server/#turn-on-hot-reload-in-django)).
+restart (see [Hot reload](/guides/dev-server/#enable-in-django)).
 
 ## Bare ASGI and WSGI
 
@@ -208,7 +208,7 @@ citry.initialize()
 Both sub-apps answer `404 Not Found` for a path they do not serve and
 `405 Method Not Allowed` for a method the route does not accept.
 
-## Share the cache between worker processes
+## Share the cache { #share-the-cache-between-worker-processes }
 
 With several worker processes, an interactive page can show its HTML but
 never start: the browser console shows 404 responses for component code or
@@ -231,7 +231,7 @@ A single process without a configured cache keeps this code in memory, up
 to the `vue_asset_max_bytes` setting; see
 [Limit memory for interactive page assets](/performance/cache-backends/#limit-memory-for-interactive-page-assets).
 
-## Build URLs in a process that does not serve requests
+## Render-only workers
 
 A background worker may render fragments that your web process later
 serves. That worker never mounts Citry, so tell it where the web process
@@ -244,7 +244,7 @@ from citry import citry
 citry.set_mounted_prefix("/citry")
 ```
 
-## URLs that Citry serves
+## URLs Citry serves
 
 Under the prefix, Citry serves:
 
