@@ -77,10 +77,9 @@ rather than on its wrapper.
 
 ## Decide whether the page or the component wins
 
-In `merge_attrs()`, a later mapping replaces an earlier one, except for
-`class` and `style`, which combine. In the example above, the page's
-mapping comes last, so a page can replace `type` while the component's
-`action-button` class stays.
+In the example above, the page's mapping comes last in `merge_attrs()`,
+so a page can replace `type` while the component's `action-button` class
+stays.
 
 Put the component's mapping last when the page must not change an
 attribute:
@@ -121,7 +120,7 @@ predictable.
 ## Build class and style values
 
 [`normalize_class()`][citry.normalize_class] turns a string, a mapping,
-or a list of those (nested lists work too) into one class string. In a
+or a list or tuple of those (nested ones work too) into one class string. In a
 mapping, a class with a true value is kept. A later false value removes a
 class added earlier:
 
@@ -189,14 +188,14 @@ It follows the same rules as attributes in a template:
   method, which is inserted as trusted HTML.
 
 When Vue renders an interactive component, a `True` value on an attribute
-that is not a boolean HTML attribute, such as `data-open`, reads as
-`"true"`. See [HTML elements](/syntax/dynamic-attributes/#html-elements).
+that is not a boolean HTML attribute renders as `data-open="true"` rather
+than a bare `data-open`. See [HTML elements](/syntax/dynamic-attributes/#html-elements).
 
 ## Keep browser bindings in the template
 
 An attribute mapping carries plain HTML attributes only. Citry never runs
 a name from the mapping, such as `:title` or `@click`, as Vue code. On an
-element that Vue renders, such a name raises `ValueError`. Write Vue
+element that Vue renders, such a name raises `TypeError`. Write Vue
 bindings and event listeners directly on the element in the template.
 
 Vue bindings written on a component tag, such as `@click` on
