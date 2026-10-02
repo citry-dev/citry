@@ -261,7 +261,7 @@ provide it from that component's `$component` options.
 
 ## Fix unexpected values
 
-### Field not shown
+### Not a template variable
 
 A provided field named `mode` does not change what `{{ mode }}` reads.
 Provided values are not template variables. Call `inject()` in a data

@@ -127,7 +127,7 @@ Python.
 You can also use a `@dataclass` or a `NamedTuple` as `Kwargs`. Like a plain
 class, these check names but not value types.
 
-## Set fresh defaults
+## Default a list or dict
 
 A list, dictionary, or set written directly as a default would be shared by
 every render, so Citry rejects it when Python defines the class:
