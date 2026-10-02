@@ -51,7 +51,9 @@ class Counter(Component):
       $component({
         methods: {
           async addOne() {
-            const result = await this.$sendEvent("increment", { amount: 1 });
+            const result = await this.$sendEvent("increment", {
+              amount: 1,
+            });
             return result.count;
           },
         },
@@ -83,7 +85,10 @@ class TaskEditor(Component):
                     {"taskId": data.task_id},
                 ),
                 actions.Render(
-                    TaskEditor(task_id=data.task_id, status="complete"),
+                    TaskEditor(
+                        task_id=data.task_id,
+                        status="complete",
+                    ),
                 ),
             ]
 
