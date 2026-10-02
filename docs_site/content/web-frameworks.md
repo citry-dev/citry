@@ -229,7 +229,7 @@ them while such pages are still in use.
 
 A single process without a configured cache keeps this code in memory, up
 to the `vue_asset_max_bytes` setting; see
-[Limit memory for interactive page assets](/performance/cache-backends/#limit-memory-for-interactive-page-assets).
+[Limit asset memory](/performance/cache-backends/#limit-memory-for-interactive-page-assets).
 
 ## Render-only workers
 

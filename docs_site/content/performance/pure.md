@@ -14,7 +14,7 @@ for each distinct set of template data and reuse that HTML for the other
 copies on the same page. Use it only when the template's output depends
 on nothing but its template data.
 
-## Reuse a repeated component's HTML
+## Reuse repeated HTML
 
 Set the flag on the class:
 
@@ -42,7 +42,7 @@ top-level render call such as `str(Page())`. The next page render starts
 empty. To reuse output across requests, see
 [Cache rendered output](/performance/caching/).
 
-## Know what still runs for every copy
+## What still runs
 
 `pure = True` reuses only the HTML that the template itself produces.
 Citry still does the rest for every copy:
@@ -56,7 +56,7 @@ Citry still does the rest for every copy:
 The saving is therefore largest for a component whose template does
 most of its work itself.
 
-## Check that the template keeps the promise
+## Check the template
 
 `pure = True` is a promise that rendering the template always produces
 the same HTML for the same template data and changes nothing else. Do not
@@ -74,7 +74,7 @@ appears once, or receives different data every time, gains nothing.
 
 ## Edge cases
 
-### Subclasses and later changes
+### Later class changes
 
 `pure` is not inherited, and you cannot reassign it after the class is
 defined. A subclass must declare `pure = True` itself,

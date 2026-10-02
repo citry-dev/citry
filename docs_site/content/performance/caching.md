@@ -69,7 +69,7 @@ By default the key contains every input in `Kwargs`, after defaults and
 validation. That works well when the inputs are plain values such as IDs
 and strings.
 
-## Build the key from stable values
+## Build a stable key
 
 When an input is an object, or only part of it affects the output,
 define `Cache.vary()` and return the values that matter:
@@ -129,7 +129,7 @@ Return only plain values of these exact types:
 
 Subclasses such as enums, named tuples, or `OrderedDict` are rejected.
 
-## Cache one region of a template
+## Cache a region
 
 `<c-cache>` caches part of a template and adds no HTML of its own. Give
 it a fixed `key` that names the region (the name is shared across the
@@ -171,7 +171,7 @@ string, which Citry rejects.
 When you omit `ttl`, the entry uses the app's default, 300 seconds unless
 you change it. Reusing an entry does not restart its expiry time.
 
-## Keep private output out of shared entries
+## Protect private output
 
 Two calls with the same key get the same HTML. Before you enable a
 cache:
@@ -191,7 +191,7 @@ cache:
 Citry stores keys as hashes, so logs do not show the raw values or region
 names. The stored entries themselves still need protection.
 
-## Know what a cached call still runs
+## What still runs
 
 When Citry finds a stored entry, a cached component skips its data methods, render hooks,
 template, child components, and slots. A `<c-cache>` region skips its
@@ -205,7 +205,7 @@ When an outer entry is reused, the cache lookups nested inside it are
 skipped too. Give the outer entry an expiry no longer than any content
 inside it can tolerate.
 
-## Update or remove entries
+## Update or remove { #update-or-remove-entries }
 
 When the output changes for all entries of one component or region,
 raise its `version`:
@@ -251,7 +251,7 @@ default in-memory one. The shared adapters do not clear the whole store.
 To invalidate entries on every worker at once, change the deployment
 generation.
 
-## Cache a component that receives slot content
+## Cache with slots
 
 Citry cannot tell what passed-in slot content will render. With the
 default key, a component that receives slot content raises
@@ -282,7 +282,7 @@ class PersonalizedPanel(Component):
     """
 ```
 
-## Handle a cache that misses or fails
+## Handle cache failures
 
 When an entry is missing, damaged, in an incompatible format, too
 large, or impossible to reuse, Citry treats it as if no entry existed.

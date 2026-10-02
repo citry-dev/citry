@@ -16,7 +16,7 @@ turns its inputs into HTML. Citry then renders its template as part of
 the component around it and skips that setup. The component gives up the
 features that need an instance, such as hooks and its own JavaScript.
 
-## Render a display component without an instance
+## Skip the instance
 
 Set the flag on the class:
 
@@ -56,7 +56,7 @@ Citry raises an error when the class uses one of these, so a
 `simple = True` component never silently renders the slow way. The component's template can still
 use other components, and those keep all their features.
 
-## Prepare template data in a static method
+## Use a static method
 
 By default the template receives the component's inputs. To compute
 other values, write `template_data` as a static method that takes
@@ -107,7 +107,7 @@ generators, and other callable objects are rejected. Any other helper
 method on the class must be static too; instance methods, class methods,
 and properties are not supported.
 
-## Accept content in the default slot
+## Accept slot content
 
 A `simple = True` template can show content the caller passes in, through
 one plain `<c-slot />`:
@@ -147,7 +147,7 @@ The slot rules are strict:
   `default`, with a default of `None`, and no custom constructor or
   factory.
 
-## Know what a `simple = True` component shares with its caller
+## What it shares
 
 A `simple = True` call has no component instance, Vue component, or
 hooks of its own, and no render ID (the value that identifies a
@@ -162,7 +162,7 @@ part of the nearest ordinary component above it. That has three effects:
 Its template can still use HTML attributes, `c-bind` spreads,
 expressions, `c-if`, `c-for`, and Vue bindings.
 
-## Give a simple component its own Vue state
+## Add Vue state { #give-a-simple-component-its-own-vue-state }
 
 `simple = True` gives the component no browser state of its own. Any Vue
 binding in its template, such as `@click`, runs in the scope of the
@@ -236,7 +236,7 @@ applies, Citry renders `simple = "vue"` components the ordinary way:
 The page shows the same HTML and the data method still runs once per
 call; the component only loses its speed advantage.
 
-## Call other components from a `simple = "vue"` template
+## Call other components
 
 A `simple = "vue"` template can call other components. Each child renders
 the way its own class says: an ordinary child still gets its instance,
@@ -312,7 +312,7 @@ receives the values provided above that component.
 Error messages still show the whole path, for example
 `Page > Row > Details`.
 
-## Find which check rejects an unsupported feature
+## Find the failing check
 
 Citry checks a simple component at three points and raises an error at
 the first problem:
@@ -325,7 +325,7 @@ the first problem:
 
 ## Edge cases
 
-### Inherited and empty declarations
+### Empty declarations
 
 The restrictions apply to everything the class inherits. An empty string
 still counts as a declaration, so `css = ""` on a `simple = True` class
@@ -338,7 +338,7 @@ subclass can set `simple = False` to become an ordinary component.
 [`LibraryComponent`][citry.LibraryComponent] accepts the flag too; Citry
 checks the class when the library is loaded into an app.
 
-### Changing the class after definition
+### Later class changes
 
 You cannot reassign `simple` or the nested `Kwargs` and `Slots` classes
 after the class is defined. A `simple = True` class also rejects changes
@@ -346,30 +346,30 @@ to its other declarations. A `simple = "vue"` class allows them, and
 Citry checks the class again on its next render. When hot reload or a
 template reset reloads the template, Citry checks the new template too.
 
-### When the data method runs
+### Data method timing
 
 For a component tag, the data method runs at the same point in the
 render as an ordinary component's. For a value inserted from Python, it
 runs when the expression that inserts it runs.
 
-### Rendering a `simple = True` component on its own
+### Rendering it alone
 
 Rendering a `simple = True` component as the whole page still costs the
 setup that every page render has. The saving comes from many calls
 inside a larger page.
 
-### Choosing a simple class with `<c-component>`
+### With `<c-component>`
 
 `<c-component>` can choose a simple class. The `<c-component>` tag itself
 keeps its own instance and hooks, and the chosen class still follows its
 simple rules.
 
-### Translations in a simple template
+### Translations
 
 A simple template cannot use `$c-tr`, even when its caller has a
 translation catalog active.
 
-### Combining with `pure = True`
+### Combining with `pure`
 
 A component can declare both `simple = True` and
 [`pure = True`][citry.Component.pure] when both promises hold. Its data

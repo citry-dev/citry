@@ -37,7 +37,7 @@ Citry's DiskCache and Redis classes wrap a client you create, so install
 `diskcache` or `redis` in your application. `DjangoCache` uses Django's
 own cache framework.
 
-## Use the default in-memory store
+## Use the memory store
 
 Every [`Citry`][citry.Citry] instance gets its own in-memory store unless
 you pass another backend:
@@ -62,7 +62,7 @@ app = Citry(cache=backend)
 `ValueError`. The limit counts every value in the store, not only
 rendered output.
 
-## Share one store between workers
+## Share a store
 
 Use Redis when workers run on different hosts:
 
@@ -107,7 +107,7 @@ Citry output. This matters most for
 for a fragment's files may reach a different worker from the one that
 rendered it.
 
-## Share cached output between workers
+## Share cached output { #share-cached-output-between-workers }
 
 A shared store alone does not let workers reuse each other's cached
 output. Each `Citry` instance keeps its rendered-output entries separate
@@ -144,7 +144,7 @@ Both values are needed. A namespace alone still keeps entries separate
 for each `Citry` instance. A generation without a namespace, or an empty
 string for either, raises `ValueError` when you create `Citry`.
 
-## Limit memory for interactive page assets
+## Limit asset memory { #limit-memory-for-interactive-page-assets }
 
 An interactive page loads its compiled component code and styles from
 URLs after the HTML arrives, and a page that stays open may request one
@@ -170,7 +170,7 @@ When you pass a backend, Citry stores these files there without an
 expiry, and `vue_asset_max_bytes` has no effect. Give the backend enough
 room that it does not drop them while pages are still open.
 
-## Limit the size of one stored render
+## Limit render size { #limit-the-size-of-one-stored-render }
 
 Citry does not store a single rendered result larger than 1,000,000
 bytes by default. Change the limit with `max_entry_bytes`:
@@ -206,7 +206,7 @@ To invalidate every worker after a deploy, change the generation. To
 remove a single rendered entry, build its key as shown in
 [Cache rendered output](/performance/caching/#update-or-remove-entries).
 
-## Write an adapter for another store
+## Write an adapter { #write-an-adapter-for-another-store }
 
 Any object with these four synchronous methods works as a backend; the
 [`CitryCache`][citry.CitryCache] protocol describes them:
@@ -245,7 +245,7 @@ application needs that.
 
 ## Edge cases
 
-### A dropped file can return 404 for up to a minute
+### Temporary 404s
 
 Each process checks whether a shared backend still holds a file at most
 once a minute, not on every render. If the backend drops a file, the

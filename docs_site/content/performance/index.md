@@ -15,7 +15,7 @@ option below that skips it. Most options ask you to promise something
 about your code that Citry cannot fully check, so turn them on only
 where the measurement shows a gain.
 
-## Match a slow page to an option
+## Find the right option
 
 - **A page with many small components renders slowly**, and most of them
   only turn inputs into HTML: make them
@@ -31,7 +31,7 @@ where the measurement shows a gain.
 - **Several workers or hosts should share that cached output**: give
   them a shared [cache backend](/performance/cache-backends/).
 
-## Compare what each option skips
+## What each one skips
 
 | Option | What it skips | What you promise | How long the saving lasts |
 | --- | --- | --- | --- |
@@ -44,7 +44,7 @@ The first three options still load data and render child components on
 every call. Cache the rendered output when that is the work you want to
 skip.
 
-## Know what each option costs
+## What each one costs
 
 - **Simple components** have no Python instance and no lifecycle hooks.
   With `simple = True` they also have no named slots and no JavaScript,

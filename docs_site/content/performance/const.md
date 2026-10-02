@@ -15,7 +15,7 @@ prepares the template parts that depend only on constant values once,
 and reuses them in later renders. Measure a real page first, and mark
 only values that repeat.
 
-## Mark an input that never changes
+## Mark a fixed input
 
 Wrap the value where you pass it to the component:
 
@@ -52,7 +52,7 @@ Inside the component, `label` is a plain string. Citry removes the
 change it afterwards. If you change a marked list or object in place, the
 page can show the old output.
 
-## Mark values that repeat
+## Mark repeated values
 
 Each [`Citry`][citry.Citry] instance keeps the prepared templates for
 the 512 most recently used combinations of component and constant
@@ -63,7 +63,7 @@ choices, and site-wide settings. Do not mark a value that differs on
 almost every render, such as `Const(user.id)`. Each new value adds an
 entry that is never reused and pushes out useful ones.
 
-## See which template parts Citry prepares once
+## See what runs once
 
 Citry prepares a template part in advance when every value it uses is
 constant:
@@ -84,7 +84,7 @@ advance.
 Keep template expressions free of side effects. Citry may evaluate a
 constant expression in a branch that the current render does not show.
 
-## Let values written in the template count as constant
+## Use template literals
 
 A value written directly on a component tag is the same in every render,
 so Citry treats it as constant without `Const`:
@@ -102,7 +102,7 @@ Citry marks the result as a whole. In `c-total="add(1, 2)"`, the child's
 `total` input is constant when `add` is a constant value too; the
 arguments `1` and `2` stay ordinary integers inside the call.
 
-## Make a default value constant
+## Mark a default
 
 Wrap a default in `Const` so calls that omit the input get the same
 benefit:
@@ -125,7 +125,7 @@ class Grid(Component):
 `Grid()` uses the constant default. `Grid(columns=4)` passes an ordinary
 value, unless the caller writes `Const(4)`.
 
-## Keep values constant through `template_data()`
+## Keep values constant
 
 With the default `template_data()`, every constant input stays constant
 in the template, unless the `Kwargs` class converts or copies it. The
@@ -160,30 +160,30 @@ def template_data(self, kwargs, slots):
 
 ## Edge cases
 
-### `Const(True)` and `Const(1)` are different
+### `True` is not `1`
 
 Values of different types never share a stored entry, even when Python
 considers them equal, as it does `True` and `1`.
 
-### Recomputed values can count as the same object
+### Recomputed values
 
 Because Citry uses the `is` test, a recomputed value that Python happens
 to reuse, such as a small integer or a short string, counts as the same
 object and keeps its mark.
 
-### Do not mark a generator
+### Skip generators
 
 Preparing the template can use it up and leave
 later work with an empty iterator. Pass a list or tuple.
 
-### Constant defaults in your own schema classes
+### Custom schemas
 
 Citry keeps `Const` defaults and default factories constant on the
 `Kwargs` dataclasses it generates. It does not assume anything about
 default factories in schema classes you write yourself, so mark their
 results with `Const(...)` in `template_data()` when needed.
 
-### Using a marked value in your own code
+### Using marked values
 
 Before Citry receives it, `Const(value)` is a wrapper object that stands
 in for the value. An API that needs the real built-in object, or checks
@@ -200,7 +200,7 @@ if is_const(marked):
     plain = const_value(marked)
 ```
 
-### Markers inside lists and dictionaries
+### Nested markers
 
 Citry removes nested markers only when the outer value is marked:
 `Const([Const(1)])` reaches the component as `[1]`. It looks inside
@@ -235,7 +235,7 @@ unchanged.
 A marker that contains itself raises `ValueError`. A marked tuple or
 frozenset that contains itself can raise it too.
 
-### Values that cannot be hashed
+### Unhashable values
 
 A marked value that cannot be hashed, such as an unhashable custom
 object, renders normally without the speed-up.
