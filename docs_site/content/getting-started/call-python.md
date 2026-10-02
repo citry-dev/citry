@@ -55,9 +55,9 @@ class Events:
 
 [`actions.Dispatch`][citry.ext.events.actions.Dispatch] tells the browser to
 fire an event with that name, and attach the dictionary as the event's
-details. Start the name with the component's name, as in
-`ChoicePicker:loaded`, so it does not clash with events from other
-components.
+`detail`. The dictionary must be JSON-serializable. Start the name with the
+component's name, as in `ChoicePicker:loaded`, so it does not clash with
+events from other components.
 
 ## Listen for the result in the component
 
@@ -74,10 +74,10 @@ onServerRender({ component, onEvent }) {
 ```
 
 [`onServerRender`][onServerRender] is a `$component` option. Citry runs it
-when the component mounts and again each time the server renders the
-component anew. It receives [`onEvent`][onEvent], which listens only for
-events dispatched by this component's own Python handlers, and passes your
-callback the event's details.
+when the component first appears on the page, and again each time Python
+sends new HTML for the component. It receives [`onEvent`][onEvent], which
+listens only for events dispatched by this component's own Python handlers, and passes your
+callback the event's `detail`.
 
 `loadChoices` stores the list and selects the first choice:
 
@@ -99,6 +99,18 @@ From there, the browser does the rest, as in the earlier steps: the
 `<c-ChoiceButton>` child shows the current choice through `:label`, and its
 `select` event moves to the next choice. Python does not render new HTML.
 
+!!! note "Other ways to get a result back"
+
+    `@c-click` does not give your JavaScript the handler's return value.
+    When component code needs a value back, call
+    [`$sendEvent`][$sendEvent] and return
+    [`actions.Data`][citry.ext.events.actions.Data] from the handler.
+
+    The dispatched event also bubbles up the page from the component's
+    first element, so page scripts outside the component can listen for
+    it. Event names that start with `citry:` are reserved for Citry's own
+    events, and `actions.Dispatch` rejects them.
+
 ## Show progress while Python works
 
 `$loading('load_choices')` is true while the call is running:
@@ -114,20 +126,8 @@ From there, the browser does the rest, as in the earlier steps: the
 <span v-show="$loading('load_choices')">Loading...</span>
 ```
 
-The button is disabled and shows its loading text only while this
-component's `load_choices` call is running.
-
-!!! note "Other ways to get a result back"
-
-    `@c-click` does not give your JavaScript the handler's return value.
-    When component code needs a value back, call
-    [`$sendEvent`][$sendEvent] and return
-    [`actions.Data`][citry.ext.events.actions.Data] from the handler.
-
-    The dispatched event also bubbles up the page from the component's
-    first element, so page scripts outside the component can listen for
-    it. Event names that start with `citry:` are reserved for Citry's own
-    events, and `actions.Dispatch` rejects them.
+While this component's `load_choices` call runs, the button is disabled
+and the “Loading...” text shows.
 
 ## Next steps
 
