@@ -98,12 +98,17 @@ forms for listening to events and setting attributes:
 | `:disabled="busy"` | Short for `v-bind:disabled="busy"`. |
 
 Modifiers stay in the attribute name. `@keydown.enter.prevent="submit()"`
-listens for Enter and stops the browser's default action.
+listens for Enter and stops the browser's default action. A key name such
+as `.enter` works only on `keydown`, `keyup`, and `keypress`; on another
+event, such as `@click.enter`, the template fails when it loads, because
+that event has no key and the listener would never run.
 
-Write directive names in lowercase. On an HTML element, `V-IF` or `v-If`
-does not work, and the element always shows: Vue reads `V-IF` as a plain
-attribute, and `v-If` as a custom directive named `If`. On a component
-tag, both fail when the template loads.
+Write the `v-` prefix and Vue's own directive names in lowercase.
+`V-IF` and `v-If` fail when the
+template loads, on HTML elements and component tags alike, because Vue
+would read `V-IF` as a plain attribute and `v-If` as a custom directive
+named `If`. Names that start with `v-c-` or `v-citry-` fail too, because
+Citry keeps them for its own use.
 
 See Vue's
 [template syntax guide](https://vuejs.org/guide/essentials/template-syntax.html){: target="_blank" rel="noopener"}
@@ -321,8 +326,8 @@ class OrderPanel(Component):
     """
 ```
 
-If nothing registers the name, Vue skips the directive silently, so check
-the spelling when nothing happens.
+If nothing registers the name, the page's Vue app stops and the browser
+console shows an error that names the directive and the component.
 
 The child's template must have exactly one root element. Wrap it in one
 element, or put the directive on an element around the component tag.
@@ -454,11 +459,13 @@ The template fails when it loads. Compute a fixed value once in `data()`. To
 keep an element's contents as the server first rendered them, use
 [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
 
-### Vue helper components
+### Vue built-in components
 
-When the page uses Vue, `serialize()` or `str()` on the render raises
-`ValueError` with an "unsupported Vue helper" message. On a page without
-Vue, the tag is written out as plain HTML and does nothing.
+`<Transition>`, `<TransitionGroup>`, `<KeepAlive>`, `<Teleport>`, and
+`<Suspense>`, in any spelling such as `<KeepAlive>` or `<keep-alive>`,
+fail when the template loads,
+on every page. The error says what to use instead, such as a CSS
+transition or the HTML `<dialog>` element.
 
 ## Fill group components { #keep-vue-bound-group-content-inside-the-groups-tag }
 
