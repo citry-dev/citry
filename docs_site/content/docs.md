@@ -5,11 +5,10 @@ description: Learn to build fully typed web interfaces in Python with reusable c
 
 # Build with Citry
 
-Citry lets you build web interfaces in Python. You write components: Python
-classes that render HTML. One component keeps its HTML, CSS, browser
-behavior, translations, and Python event handlers together, so you do not
-need a separate frontend application or build step. Citry is fully typed and
-is inspired by Vue and Livewire.
+Citry is a fully typed frontend framework for Python with server events and
+Vue. One component holds its server-rendered HTML, browser behavior, CSS,
+translations, and Python event handlers. No second frontend application or
+separate build. It is inspired by Vue and Livewire.
 
 New to Citry? [Install Citry](/getting-started/installation/), then
 [build your first component](/getting-started/your-first-component/). The
@@ -37,7 +36,7 @@ Follow it in order, or start with the part you need:
    [give it Python data](/getting-started/data-in-components/).
 2. **Build a page from smaller pieces:**
    [compose components](/getting-started/build-page/) and
-   [let them accept flexible content](/getting-started/add-slots/).
+   [add slots for flexible content](/getting-started/add-slots/).
 3. **Add behavior in the browser:**
    [use Vue](/getting-started/browser-interactivity/) and
    [connect parent and child components](/getting-started/client-props-and-handlers/).
@@ -55,13 +54,13 @@ The server steps use FastAPI so they can show complete, runnable code.
 Citry also works with Django, Flask, Starlette, and other
 [ASGI and WSGI applications](/web-frameworks/).
 
-## Try Citry in the browser
+## Try it in the browser
 
 - [Playground](/playground/): write Python components and render them in
   the browser.
 - [Examples](/examples/): copy a working recipe or run it in the browser.
 
-## Learn each part in depth
+## Learn each part
 
 - [Template syntax](/syntax/) explains how to insert Python values, set HTML
   attributes from Python, show or repeat content, use built-in tags, and add
@@ -91,7 +90,7 @@ When a project needs more control, read how to ship
 [caching rendered output](/performance/caching/), and
 [test components](/advanced/testing/).
 
-## Use ready-made components with Citry UI
+## Use Citry UI
 
 [Citry UI](/ui-library/) is Citry's own library of styled components. It
 provides accessible buttons, fields, forms, tabs, dialogs, comboboxes, tables,

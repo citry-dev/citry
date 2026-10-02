@@ -147,5 +147,5 @@ into pytest tests and add browser or framework coverage for larger projects.
 ## Next steps
 
 You now have a complete page made from smaller pieces, and you have checked what
-it shows. Next, [add flexible content with named areas and useful
-fallbacks](/getting-started/add-slots/).
+it shows. Next, [add slots](/getting-started/add-slots/): named areas for
+content, with useful fallbacks.

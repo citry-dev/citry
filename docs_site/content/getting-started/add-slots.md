@@ -1,9 +1,9 @@
 ---
-title: Add flexible content
+title: Add slots
 description: Give a Citry component a main content area, a named area, and fallback content that appears when nothing is supplied.
 ---
 
-# Add flexible content
+# Add slots
 
 Options like `heading` work well for short values. When the person using a
 component should be able to pass whole pieces of HTML, such as a paragraph

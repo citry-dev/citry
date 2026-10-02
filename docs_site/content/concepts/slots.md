@@ -15,7 +15,7 @@ component can insert content. The content that goes into a slot is called
 a fill.
 
 If you have not used a slot yet, start with
-[Add flexible content](/getting-started/add-slots/).
+[Add slots](/getting-started/add-slots/).
 
 ## Add slots to a component
 
