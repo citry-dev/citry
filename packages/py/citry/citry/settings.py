@@ -126,6 +126,12 @@ class LintSettings:
             is absent from the proven component namespace. The default is
             ``"error"``. A schema that explicitly allows extra fields caps
             this rule at ``"warning"``.
+        rule_i18n_missing_param_type: Severity for a translation message
+            variable that has no ``@param`` comment giving its type, when
+            the variable is used only as plain text on the server. Variables
+            used in a selector, a formatting function, a browser call, or as a
+            ``Slot`` always need a type, whatever this setting says. The
+            default is ``"warning"``.
         template_variables: Extra variables known to template analysis but not
             injected at runtime. Values are annotations. Use
             ``Annotated[T, "description"]`` to attach concise documentation.
