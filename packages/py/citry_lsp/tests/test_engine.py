@@ -4110,18 +4110,18 @@ def test_vue_show_hover_is_available_on_component_tags():
         ('<c-if cond="ready"></c-if>', "cond", "/syntax/control-flow/"),
         ('<c-for each="item in items"></c-for>', "each", "/syntax/control-flow/"),
         ('<c-slot name="body"></c-slot>', "name", "/concepts/slots/"),
-        ('<c-slot c-name="slot_name"></c-slot>', "c-name", "/concepts/slots/#dynamic-slot-names"),
+        ('<c-slot c-name="slot_name"></c-slot>', "c-name", "/concepts/slots/#compute-slot-names"),
         (
             '<c-card><c-fill name="body" data="{ item }"></c-fill></c-card>',
             "data",
-            "/concepts/slots/#scoped-slots-passing-data-to-the-fill",
+            "/concepts/slots/#pass-data-from-the-component-to-the-fill",
         ),
         (
             '<c-card><c-fill name="body" fallback="has_fallback"></c-fill></c-card>',
             "fallback",
-            "/concepts/slots/#wrapping-the-fallback",
+            "/concepts/slots/#wrap-the-fallback-instead-of-replacing-it",
         ),
-        ('<c-slot name="body" required></c-slot>', "required", "/concepts/slots/#supply-fallback-content"),
+        ('<c-slot name="body" required></c-slot>', "required", "/concepts/slots/#require-a-slot-conditionally"),
         (
             '<c-slot name="body" c-required="required"></c-slot>',
             "c-required",
