@@ -1830,7 +1830,16 @@
 
   function typeOptions(appId, typeKey, userOptions) {
     userOptions = userOptions || {};
-    if (userOptions.mixins || userOptions.extends) throw new Error("mixins and extends are unsupported by the js_data collision proof");
+    // Citry must see every name the component defines to keep them apart
+    // from its js_data keys, and names from a mixin or base are not visible.
+    if (userOptions.mixins || userOptions.extends) {
+      throw new Error(
+        "$component() options for " + typeKey + " use " + (userOptions.mixins ? "mixins" : "extends") +
+        ", which Citry does not support: it cannot check that names from a mixin or base component " +
+        "do not clash with js_data keys. Define those data, methods, and computed values directly " +
+        "in the $component() options.",
+      );
+    }
     const callback = userOptions.onServerRender;
     const userData = userOptions.data;
     const userSetup = userOptions.setup;
@@ -1850,10 +1859,14 @@
     const eventPublicNames = ["$loading", "$error", "$state", "$sendEvent", "$onEvent"];
     for (const name of eventPublicNames) if (propsKeys.includes(name) || injectedKeys.includes(name) ||
         own(userOptions.methods || {}, name) || own(userOptions.computed || {}, name))
-      throw new Error("reserved Events public name collision: " + name);
+      throw new Error("$component() options for " + typeKey + " define " + JSON.stringify(name) +
+        ", a name the Events helpers already use. Rename that prop, inject, method, or computed value.");
     for (const name of pluginContextNames) {
       if (propsKeys.includes(name) || injectedKeys.includes(name) || own(userOptions.methods || {}, name) ||
-          own(userOptions.computed || {}, name)) throw new Error("browser plugin template context collision: " + name);
+          own(userOptions.computed || {}, name)) {
+        throw new Error("$component() options for " + typeKey + " define " + JSON.stringify(name) +
+          ", a name a browser plugin already adds to templates. Rename that prop, inject, method, or computed value.");
+      }
     }
     const reservedOptionKeys = new Set([
       ...Object.keys(userOptions.methods || {}), ...Object.keys(userOptions.computed || {}), ...injectedKeys,
@@ -1870,18 +1883,25 @@
       const value = userData ? userData.call(this) : {};
       plain(value, "data() result");
       for (const key of Object.keys(value)) if (reservedPublicNames.has(key))
-        throw new Error("reserved public data() collision: " + key);
-      for (const key of Object.keys(occurrence.serverData)) if (own(value, key) || reservedOptionKeys.has(key)) throw new Error("js_data/local collision: " + key);
+        throw new Error("data() for " + typeKey + " returns " + JSON.stringify(key) +
+          ", a name that Citry or a browser plugin already uses. Rename that key.");
+      for (const key of Object.keys(occurrence.serverData)) if (own(value, key) || reservedOptionKeys.has(key)) {
+        throw new Error("js_data() for " + typeKey + " returns " + JSON.stringify(key) +
+          ", which the $component() options also define in data, methods, computed, inject, or a browser plugin. " +
+          "Rename one of them.");
+      }
       return value;
     };
     if (userSetup) options.setup = function (props, context) {
       const value = userSetup(props, context);
       if (value === undefined) return undefined;
       if (typeof value === "function" || value instanceof Promise)
-        throw new TypeError("setup must synchronously return a plain bindings object or undefined");
+        throw new TypeError("setup() for " + typeKey + " must return a plain object of bindings or undefined, " +
+          "not a render function or a Promise. Move async work into a lifecycle hook.");
       plain(value, "setup() result");
       for (const key of Object.keys(value)) if (reservedPublicNames.has(key))
-        throw new Error("reserved public setup() collision: " + key);
+        throw new Error("setup() for " + typeKey + " returns " + JSON.stringify(key) +
+          ", a name that Citry or a browser plugin already uses. Rename that key.");
       return value;
     };
     options.beforeCreate = function () {

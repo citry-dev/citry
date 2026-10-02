@@ -928,3 +928,31 @@ test("a replacement-only component gets its tag once a later caller names it", a
   // The caller now names Done itself, so the occurrence is no longer a replacement.
   assert.deepEqual([...app.replacedTypeIds], []);
 });
+
+test("$component() options that Citry cannot check fail with a message naming the fix", () => {
+  const { citryRuntime, realm } = runtime();
+  citryRuntime.configure(
+    realm({
+      protocol: "citry-vue-prepared/1",
+      appId: "app",
+      revision: 0,
+      rootId: "root",
+      markers: [],
+      occurrences: [occurrence("root", "Parent", "parent-def", null)],
+    }),
+  );
+  // A mixin hides names from the js_data clash check, so the type is rejected.
+  assert.throws(
+    () => citryRuntime.defineType("app", "Card_abc123", { mixins: [{}] }),
+    /\$component\(\) options for Card_abc123 use mixins.*Define those data, methods, and computed values directly/,
+  );
+  assert.throws(
+    () => citryRuntime.defineType("app", "Card_abc124", { extends: {} }),
+    /\$component\(\) options for Card_abc124 use extends/,
+  );
+  // An Events helper name is taken; the message says which option to rename.
+  assert.throws(
+    () => citryRuntime.defineType("app", "Card_abc125", { methods: { $loading() {} } }),
+    /\$component\(\) options for Card_abc125 define "\$loading", a name the Events helpers already use/,
+  );
+});
