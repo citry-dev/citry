@@ -5,8 +5,8 @@ description: Compute HTML attributes and component inputs with Python, including
 
 # Attributes
 
-A button should be disabled while a form saves, a row should get a `selected`
-class, a component needs a Python object as input. In each case an attribute
+Sometimes a button should be disabled while a form saves, a row should get a
+`selected` class, or a component needs a Python object as input. In each case an attribute
 value comes from your data rather than from fixed text.
 
 Put `c-` in front of the attribute name to make its value a Python
@@ -40,7 +40,8 @@ The browser receives:
 
 Write the expression without `{{ }}`: `c-title="user.name"`, not
 `c-title="{{ user.name }}"`. A `c-` attribute needs a value, so `c-title` and
-`c-title=""` are errors.
+`c-title=""` are errors. Only the `c-else` and `c-empty` markers from
+[Conditions and loops](/syntax/control-flow/) take no value.
 
 Citry HTML-escapes attribute names and values. To insert a value without
 escaping, see [Insert HTML you trust](/syntax/expressions/#insert-html-you-trust).
@@ -282,8 +283,8 @@ A component often accepts extra HTML attributes, such as `id` or `data-*`,
 and puts them on one of its own elements. Vue calls these
 [fallthrough attributes](https://vuejs.org/guide/components/attrs){: target="_blank" rel="noopener"}.
 
-A component without a `Kwargs` class accepts any input. Apply them all with
-`c-bind`:
+A component without a `Kwargs` class accepts any input. Pass all of `kwargs`
+to `c-bind`:
 
 ```citry
 class Card(Component):
@@ -501,9 +502,10 @@ component JavaScript through that element, for example
 `this.$refs.chart.querySelector("canvas")`.
 
 The contents are rendered once as plain HTML. They can hold HTML, `{{ }}`
-expressions, `<c-if>`, `<c-for>`, and `<c-raw>`. A component, a slot, a Vue
-binding, or a `ref` inside would never run, so the template fails when it
-loads:
+expressions, `<c-if>`, `<c-for>`, and `<c-raw>`. A component, a slot, or a
+Vue binding inside would never run, and a `ref` inside would never connect,
+so the template fails when it loads. Put the `ref` on the `#c-ignore`
+element and find the child from there:
 
 ```citry-html
 {# Fails: @click would never run inside #c-ignore #}
@@ -571,10 +573,10 @@ not accept `c-bind`. Put it on the HTML element or component tag inside.
 ### `:c-*` and the input `type`
 
 When the input's `type` comes from `c-type` or `c-bind`, Citry checks the
-binding against the rendered `type`. When it comes from a Vue `:type`, the
-browser checks it each time the type changes. An unsupported type never
-leaves a half-working binding. The editor also reports unsupported
-elements it can see in the template. See
+binding against the rendered `type`, and the render fails if the binding
+cannot use it. When it comes from a Vue `:type`, the browser checks each new
+type and reports an error for one it cannot bind. The editor also reports
+unsupported elements it can see in the template. See
 [Which elements you can bind](/events/bindings/#which-elements-you-can-bind).
 
 ### Where `#c-ignore` is not allowed
