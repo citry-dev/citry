@@ -2010,7 +2010,12 @@ directive sites need a separate source-aware implementation. The current
 annotation cannot be treated as a validator for untrusted or arbitrary input.
 
 The ordinary helper target uses a strict emitted-helper allowlist. Static
-nodes, cached constructs, and unqualified helpers are rejected. Native Vue
+nodes, cached constructs, and unqualified helpers are rejected. Vue's
+built-in components (`<Transition>`, `<TransitionGroup>`, `<KeepAlive>`,
+`<Teleport>`, `<Suspense>`, in either spelling) would need helpers outside
+the allowlist; the template parser rejects them when the template loads,
+on every page, and the allowlist stays as a second guard. Native Vue
+
 slot handling remains responsible for fallback selection and slot behavior;
 the qualified generated dynamic slots permit full reconciliation. General
 control flow, slot topology, and mixed rendering targets still require tests.

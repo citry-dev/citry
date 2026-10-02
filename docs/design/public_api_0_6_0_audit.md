@@ -681,7 +681,7 @@ written" is accurate.
 | Vue directives on elements (`v-*`, `:x`, `@x`, `v-model`, `v-for` with `:key`, `<template v-if>`, ...) | `docs_site/content/syntax/vue.md` | new | |
 | Vue bindings on component tags (`:prop`, `v-bind`, `@event`, `v-on`, `v-if` chains, `v-model`, `v-show`, custom directives, `ref`) | `P/client_directives.py:315-360` | new | |
 | Parse errors with hints for unsupported directives | `parser.rs:1865, 1969` | new | The `v-once`/`v-memo` hint on a component tag no longer suggests moving the directive to an element (`90d1b663`). |
-| Rejected Vue helpers (`<Teleport>`, `<Transition>`, `<Suspense>`, `<KeepAlive>`) | `P/_vue/compiler.py` | new | `v-once` on an element fails with "unsupported raw-text or cached construct" (decision 6.14). |
+| Rejected Vue built-in components (`<Teleport>`, `<Transition>`, `<TransitionGroup>`, `<Suspense>`, `<KeepAlive>`) | `parser.rs` (`validate_vue_builtin_component_tag`), with `P/_vue/compiler.py` as a second guard | new | `v-once` on an element fails with "unsupported raw-text or cached construct" (decision 6.14). |
 | `<c-mark name="...">` | `P/components/mark.py` | new | |
 | `citry.vue.python-variable` lint | `P/_diagnostic_catalog.py:22` | new | |
 

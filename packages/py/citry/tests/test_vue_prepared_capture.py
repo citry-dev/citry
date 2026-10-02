@@ -2459,6 +2459,42 @@ def test_compiler_names_once_and_memo_when_they_reach_the_vue_template() -> None
     assert "put '#c-ignore' on the element" in str(excinfo.value)
 
 
+@pytest.mark.parametrize(
+    ("tag", "component"),
+    [
+        ("Transition", "Transition"),
+        ("transition-group", "TransitionGroup"),
+        ("keep-alive", "KeepAlive"),
+        ("Teleport", "Teleport"),
+        ("suspense", "Suspense"),
+    ],
+)
+@pytest.mark.parametrize("page_template", ["<main>{}</main>", '<main :class="cls">{}</main>'])
+def test_vue_builtin_component_fails_when_the_template_loads(tag, component, page_template) -> None:
+    app = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = app
+        template = page_template.format(f"<{tag}><p>x</p></{tag}>")
+
+    # The static page (no Vue binding) and the interactive page fail with the
+    # same parse error, before the Vue compiler sees the template.
+    with pytest.raises(SyntaxError) as excinfo:
+        str(Page())
+    message = str(excinfo.value)
+    # Columns count from 1, and the name starts one character after the '<'.
+    column = page_template.index("{}") + 2
+    assert f"'<{tag}>' (line 1, column {column}) is Vue's built-in '{component}' component" in message
+    assert "which Citry templates do not support." in message
+
+
+def test_compiler_still_rejects_vue_builtin_components_it_receives() -> None:
+    # The parser rejects these tags first; the compiler's helper check stays as
+    # a second guard for a template that reaches it another way.
+    with pytest.raises(ValueError, match="UNSUPPORTED_HELPER"):
+        NativeCompiler().compile("<Teleport to='#x'><p>x</p></Teleport>", type_key="Page")
+
+
 def test_raw_and_markup_placement_errors_say_what_to_write() -> None:
     app = Citry(autodiscover=False)
 

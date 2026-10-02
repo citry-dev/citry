@@ -1651,6 +1651,7 @@ fn validate_node(
     validate_ignored_element_contents(node, tag_stack, context)?;
     validate_vue_listener_modifiers(node, context)?;
     validate_element_once_memo(node, context)?;
+    validate_vue_builtin_component_tag(node, context)?;
     validate_vue_binding_python_conflicts(node, context)?;
     validate_attribute_conflicts(node, context)?;
     validate_attribute_values(node, context)?;
@@ -2187,6 +2188,52 @@ fn validate_element_once_memo(node: &Node, context: &ParserContext) -> Result<()
     }
     Ok(())
 }
+
+/// Reject Vue's built-in components (`<Transition>`, `<Teleport>`, ...) when
+/// the template loads.
+///
+/// On an interactive page Vue's compiler would turn the tag into a helper that
+/// Citry's compiler output does not allow, so rendering would fail with a
+/// message about compiler helpers. On a static page the browser would show it
+/// as an unknown element. Rejecting it here gives one clear message on every
+/// page, and `citry check` and the editor report it too. Vue matches the
+/// PascalCase and kebab-case spellings; any letter case is matched here,
+/// because no HTML element uses these names.
+fn validate_vue_builtin_component_tag(
+    node: &Node,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let name = &node.start_tag().name;
+    let tag_name = name.content.as_str();
+    let (component, hint) = match tag_name.to_ascii_lowercase().as_str() {
+        "transition" => ("Transition", VUE_TRANSITION_HINT),
+        "transition-group" | "transitiongroup" => ("TransitionGroup", VUE_TRANSITION_HINT),
+        "keep-alive" | "keepalive" => (
+            "KeepAlive",
+            "To keep a child's state while it is out of view, leave it rendered and hide it with 'v-show'.",
+        ),
+        "teleport" => (
+            "Teleport",
+            "To show content above the rest of the page, such as a dialog or popover, use the HTML '<dialog>' element or the 'popover' attribute, or Citry UI's '<c-CDialog>' and '<c-CPopover>' components.",
+        ),
+        "suspense" => (
+            "Suspense",
+            "To show a placeholder while data loads, keep a loading flag in the component's data and switch between the two with 'v-if' and 'v-else'.",
+        ),
+        _ => return Ok(()),
+    };
+    let (line, col) = name.line_col;
+    Err(context.error_from_token(
+        name,
+        format!(
+            "'<{tag_name}>' (line {line}, column {col}) is Vue's built-in '{component}' component, which Citry templates do not support. {hint}"
+        ),
+    ))
+}
+
+/// Shared by `<Transition>` and `<TransitionGroup>`, which both animate
+/// elements as they enter and leave.
+const VUE_TRANSITION_HINT: &str = "To animate an element, give it a CSS transition or animation and change its class with ':class'.";
 
 /// The attribute a Vue binding (`:name` or `v-bind:name`) sets, and whether
 /// it carries modifiers such as `.prop`. `None` for anything else, including

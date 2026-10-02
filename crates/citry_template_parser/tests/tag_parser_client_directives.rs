@@ -416,4 +416,51 @@ mod tests {
             "'v-memo' on <li> (line 1, column 5)",
         );
     }
+
+    #[test]
+    fn vue_builtin_components_are_rejected_in_both_spellings() {
+        assert_parse_error(
+            r#"<div><Transition><p>x</p></Transition></div>"#,
+            "'<Transition>' (line 1, column 7) is Vue's built-in 'Transition' component, which Citry templates do not support. To animate an element, give it a CSS transition or animation and change its class with ':class'.",
+        );
+        for (input, component) in [
+            ("<transition><p>x</p></transition>", "Transition"),
+            ("<TransitionGroup></TransitionGroup>", "TransitionGroup"),
+            ("<transition-group></transition-group>", "TransitionGroup"),
+            ("<KeepAlive></KeepAlive>", "KeepAlive"),
+            ("<keep-alive></keep-alive>", "KeepAlive"),
+            (r##"<Teleport to="#x"></Teleport>"##, "Teleport"),
+            ("<teleport />", "Teleport"),
+            ("<Suspense></Suspense>", "Suspense"),
+            ("<suspense></suspense>", "Suspense"),
+        ] {
+            assert_parse_error(
+                input,
+                &format!("is Vue's built-in '{component}' component, which Citry templates do not support."),
+            );
+        }
+        assert_parse_error(
+            "<KeepAlive></KeepAlive>",
+            "leave it rendered and hide it with 'v-show'",
+        );
+        assert_parse_error(
+            "<Teleport></Teleport>",
+            "use the HTML '<dialog>' element or the 'popover' attribute",
+        );
+        assert_parse_error(
+            "<Suspense></Suspense>",
+            "keep a loading flag in the component's data",
+        );
+    }
+
+    #[test]
+    fn names_that_only_resemble_vue_builtin_components_still_parse() {
+        for input in [
+            "<transition-panel></transition-panel>",
+            "<c-Transition />",
+            "<my-teleport></my-teleport>",
+        ] {
+            parse_template(input, None, None).unwrap();
+        }
+    }
 }
