@@ -5,18 +5,24 @@ description: Test rendered HTML, input contracts, server behavior, and browser i
 
 # Testing components
 
-Test each behavior at the smallest useful layer. Python tests are quick and
-good at checking component input and rendered HTML. A host framework's test
-client checks HTTP integration. A browser test proves that Vue, Citry's
-client runtime, and real DOM events work together.
+Most component tests render the component in Python and check the HTML.
+These tests are fast and need no server or browser. Reach for slower tests
+only for what Python rendering cannot show:
+
+- a plain Python test checks inputs, slots, and the rendered HTML;
+- your web framework's test client checks routes and server events over
+  HTTP;
+- a browser test checks clicks, Vue, and other behavior that runs in the
+  page.
 
 ## Give each test its own Citry instance
 
-A component registers when Python defines its class. If tests define temporary
-components on the shared default engine, their names remain registered for
-later tests and may collide.
+Defining a component registers it with a [`Citry`][citry.Citry] instance.
+If a test defines a component on the shared default instance, the second
+run of that code, such as the next case of a parametrized test, raises
+`AlreadyRegistered`.
 
-Create a fresh [`Citry`][citry.Citry] instance instead:
+Create a new `Citry` instance in each test instead:
 
 ```citry
 from citry import Citry, Component
@@ -26,10 +32,10 @@ def test_greeting():
     app = Citry(autodiscover=False)
 
     class Greeting(Component):
+        citry = app
+
         class Kwargs:
             name: str
-
-        citry = app
 
         template = """
           <p>Hello {{ name }}!</p>
@@ -40,11 +46,10 @@ def test_greeting():
     assert "Hello World!" in html
 ```
 
-Set `autodiscover=False` when the test defines every component it needs. This
-keeps the test independent of project directories and imports.
+`autodiscover=False` stops Citry from importing your project's component
+files, so the test uses only the components it defines.
 
-For several tests, put the engine in a fixture and let each test define the
-components it needs on that engine:
+To share the setup across tests, put the instance in a fixture:
 
 ```python
 import pytest
@@ -56,9 +61,9 @@ def app():
     return Citry(autodiscover=False)
 ```
 
-## Assert the result the reader can observe
+## Check what a user would see
 
-Prefer focused checks for text, attributes, and ordering:
+Check the text, attributes, and order that matter:
 
 ```python
 html = str(Badge(label="Ready", tone="success"))
@@ -67,12 +72,12 @@ assert ">Ready<" in html
 assert 'class="badge badge--success"' in html
 ```
 
-Citry may add attributes needed by its browser runtime. Those attributes are
-implementation details, so avoid exact comparisons against the entire HTML
-string unless the exact serialization is the behavior under test.
+Avoid comparing the whole HTML string. Citry adds attributes for its
+browser code, and those can change between versions. Compare the full
+string only when the exact output is what you are testing.
 
-An HTML parser can make structural assertions easier when whitespace and
-attribute order do not matter:
+An HTML parser helps when whitespace and attribute order should not
+matter:
 
 ```python
 from bs4 import BeautifulSoup
@@ -84,13 +89,13 @@ assert badge is not None
 assert badge.get_text(strip=True) == "Ready"
 ```
 
-Use whichever parser your application already depends on. Citry does not
-require Beautiful Soup for tests.
+Any parser works. Citry does not need Beautiful Soup.
 
 ## Test inputs and slots
 
-Render representative values, defaults, and boundary cases. Also check that
-invalid calls fail in the way your public component contract promises:
+Render typical values, defaults, and edge values. Also check that a wrong
+call fails the way you expect. Here a missing required input raises
+`TypeError`:
 
 ```citry
 import pytest
@@ -101,13 +106,13 @@ def test_notice_requires_a_message():
     app = Citry(autodiscover=False)
 
     class Notice(Component):
+        citry = app
+
         class Kwargs:
             message: str
 
         class Slots:
             actions: SlotInput | None = None
-
-        citry = app
 
         template = """
           <aside>
@@ -120,7 +125,7 @@ def test_notice_requires_a_message():
         str(Notice())
 ```
 
-Test slot content through the public `slots` mapping:
+Fill slots with the `slots` mapping:
 
 ```python
 html = str(
@@ -134,11 +139,11 @@ assert "Saved" in html
 assert "Undo" in html
 ```
 
-## Test several components together
+## Test components that use each other
 
-A component can render registered children only when they belong to the same
-engine. Define the small component family on one test engine and render the
-outer component:
+A component's template can use only components registered with the same
+`Citry` instance. Define the parent and its children on one test instance,
+then render the parent:
 
 ```citry
 from citry import Citry, Component
@@ -148,20 +153,20 @@ def test_profile_card_contains_the_avatar():
     app = Citry(autodiscover=False)
 
     class Avatar(Component):
+        citry = app
+
         class Kwargs:
             name: str
-
-        citry = app
 
         template = """
           <span class="avatar">{{ name[:1] }}</span>
         """
 
     class ProfileCard(Component):
+        citry = app
+
         class Kwargs:
             name: str
-
-        citry = app
 
         template = """
           <article>
@@ -176,28 +181,28 @@ def test_profile_card_contains_the_avatar():
     assert ">Ada</h2>" in html
 ```
 
-This checks composition, input forwarding, template lookup, and final output
-without depending on an HTTP server.
+This checks that `ProfileCard` finds `Avatar`, passes it the name, and
+renders both, all without an HTTP server.
 
-## Choose the right test for interactive behavior
+## Test interactive behavior
 
-Rendering in Python proves which HTML, bindings, and assets Citry produces. It
-does not execute Vue or Citry's browser runtime.
+A Python render shows the HTML, bindings, and assets Citry sends to the
+browser. It does not run Vue or Citry's browser code, so it cannot show
+what happens after a click.
 
-- Use a Python render test for component inputs and initial HTML.
-- Use your framework's test client for mounted Citry routes, event requests,
-  response status, and returned actions.
-- Use a browser test for clicks, reactive state, focus, DOM updates, and event
-  bubbling.
+- Use a Python render test for inputs and the first HTML.
+- Use your framework's test client for Citry routes, server event
+  requests, response status codes, and the actions a handler returns.
+- Use a browser test for clicks, reactive state, focus, and page updates.
 
-For server events, keep the handler's business logic in ordinary Python
-functions when practical. Test those functions directly, then add a smaller
-integration test for the Citry event boundary. See
-[Events](/events/) and [Web frameworks](/web-frameworks/).
+For [server events](/events/), keep the business logic in ordinary Python
+functions and test those directly. Then add one smaller test that calls
+the event over HTTP. [Web frameworks](/web-frameworks/) shows how Citry
+routes are added to each framework.
 
-For browser behavior, exercise the page as a person would: click the visible
-control and assert the visible result. Avoid reaching into Citry's internal DOM
-attributes or JavaScript registries.
+In a browser test, act as a person would: click the visible control, then
+check the visible result. Do not depend on Citry's own DOM attributes or
+JavaScript objects, which can change between versions.
 
 ## Related reference
 
