@@ -9,7 +9,7 @@ A page made of many small components, such as a status label in every
 table row, can spend more time setting up each component than producing
 its HTML. For every ordinary component, Citry creates a Python object for
 it (the component instance that `self` refers to), runs its lifecycle
-hooks, and gives it its own place in the browser.
+hooks, and creates a separate Vue component for it in the browser.
 
 Declare [`simple = True`][citry.Component.simple] on a component that only
 turns its inputs into HTML. Citry then renders its template as part of
@@ -46,13 +46,14 @@ again. To reuse output, see [Pure components](/performance/pure/) and
 A `simple = True` component cannot have:
 
 - lifecycle hooks or instance methods;
-- its own `js`, `css`, `js_data`, or translation messages;
+- `transparent = True`;
+- its own `js`, `css`, `js_data`, `css_data`, or translation messages;
 - nested configuration such as `State`, `Events`, `Cache`,
   `Dependencies`, or `I18n`;
 - named slots or slot fallback content.
 
-Citry raises an error when the class uses one of these, so a component
-never silently renders the slow way. The component's template can still
+Citry raises an error when the class uses one of these, so a
+`simple = True` component never silently renders the slow way. The component's template can still
 use other components, and those keep all their features.
 
 ## Prepare template data in a static method
@@ -80,7 +81,7 @@ class UpperLabel(Component):
     """
 ```
 
-Citry calls it on every call. With a `Kwargs` or `Slots` class it receives
+Citry runs it each time the component renders. With a `Kwargs` or `Slots` class it receives
 a new instance of that class; without one, it receives a plain mapping.
 Citry validates the inputs and the returned data as it does for an
 ordinary component.
@@ -146,6 +147,21 @@ The slot rules are strict:
   `default`, with a default of `None`, and no custom constructor or
   factory.
 
+## Know what a `simple = True` component shares with its caller
+
+A `simple = True` call has no component instance, Vue component, or
+hooks of its own, and no render ID (the value that identifies a
+component in the browser). Its HTML becomes
+part of the nearest ordinary component above it. That has three effects:
+
+- Vue bindings in its template run in that ordinary component's scope.
+- Component tags in its template get that ordinary component as their
+  parent.
+- Content passed into its slot keeps the caller's Vue scope.
+
+Its template can still use HTML attributes, `c-bind` spreads,
+expressions, `c-if`, `c-for`, and Vue bindings.
+
 ## Give a simple component its own Vue state
 
 `simple = True` gives the component no browser state of its own. Any Vue
@@ -194,27 +210,31 @@ A `simple = "vue"` component can use:
 - its own `js` and `css`, and static `js_data` and `css_data` methods;
 - calls to other components, as described in the next section.
 
-It cannot use slots, `transparent = True`, provide and inject, lifecycle
-hooks, translation messages, nested configuration such as `State`,
-`Events`, `Cache`, or `I18n`, or `js` and `css` entries in `Dependencies`.
+It cannot use:
+
+- slots, `transparent = True`, or `pure = True`;
+- [provide and inject](/concepts/provide-and-inject/), lifecycle hooks,
+  or translation messages;
+- nested configuration such as `State`, `Events`, `Cache`, or `I18n`, or
+  `js` and `css` entries in `Dependencies`.
+
 Values that its template expressions produce must be JSON-like: strings,
-numbers, booleans, lists, and dictionaries. Citry raises an error for an
+numbers, booleans, lists, and dictionaries. The class must stay
+registered with its `Citry` instance. Citry raises an error for an
 unsupported class or value instead of rendering the component the
 ordinary way.
 
-!!! note "Settings that make a Vue simple component render at ordinary speed"
+Some app-wide features need a component instance. While any of them
+applies, Citry renders `simple = "vue"` components the ordinary way:
 
-    Some app-wide features need a component instance. While any of them
-    applies, Citry renders `simple = "vue"` components the ordinary way:
+- translation (i18n) settings passed to `Citry`;
+- translation messages declared on any other registered component;
+- an extension that handles component data or lifecycle hooks;
+- an extension that changes element attributes through the
+  `on_attrs_resolved` hook, used by this template.
 
-    - translation (i18n) settings passed to `Citry`;
-    - translation messages declared on any registered component;
-    - an extension that handles component data or lifecycle hooks;
-    - an extension that changes element attributes through the
-      `on_attrs_resolved` hook, used by this template.
-
-    The page shows the same HTML and the data method still runs once per
-    call; the component only loses its speed advantage.
+The page shows the same HTML and the data method still runs once per
+call; the component only loses its speed advantage.
 
 ## Call other components from a `simple = "vue"` template
 
@@ -276,32 +296,23 @@ child:
 <c-Label c-text="row['title']" />
 ```
 
+Make `Label` an ordinary or `simple = "vue"` component, or call it from
+an ordinary component.
+
 Calls outside `c-if` and `c-for` are the fastest. Citry builds the browser
-template once and reuses it for every row, unless the parent defines
+template (the template Citry sends to Vue) once and reuses it for every row, unless the parent defines
 `css_data`. Calls inside `c-if` or `c-for` work too, but Citry builds the
 browser template for each row from that row's values, so turning the page
 into HTML takes longer.
 
-An ordinary child has no Python parent in the `simple = "vue"` component,
-so its `self.parent` is the nearest ordinary component above it, and it
-receives the values provided above that component. Error messages still
-show the whole path, for example `Page > Row > Details`.
+An ordinary child has no Python parent in the `simple = "vue"` component.
+Its `self.parent` is the nearest ordinary component above, and it
+receives the values provided above that component.
 
-## How a `simple = True` component fits into its caller
+Error messages still show the whole path, for example
+`Page > Row > Details`.
 
-A `simple = True` call has no component instance, render ID, Vue
-component, component hooks, or slot hooks of its own. Its HTML becomes
-part of the nearest ordinary component above it. That has three effects:
-
-- Vue bindings in its template run in that ordinary component's scope.
-- Component tags in its template get that ordinary component as their
-  parent.
-- Content passed into its slot keeps the caller's Vue scope.
-
-Its template can still use HTML attributes, `c-bind` spreads,
-expressions, `c-if`, `c-for`, and Vue bindings.
-
-## Errors for unsupported features
+## Find which check rejects an unsupported feature
 
 Citry checks a simple component at three points and raises an error at
 the first problem:
@@ -310,7 +321,7 @@ the first problem:
 | --- | --- |
 | The class is defined | A `simple` value other than `False`, `True`, or `"vue"`; instance data methods or lifecycle hooks. With `simple = True`, also `js`, `css`, messages, and `State`, `Events`, `Cache`, `Dependencies`, or `I18n`. |
 | The template is loaded | With `simple = True`, named or fallback slots and unsupported custom tags, even inside a `c-if` branch that never runs. With `simple = "vue"`, a child call that passes content, a `c-bind` spread, Vue bindings, or `#c-ignore`. Both modes reject `$c-tr` translation bindings. |
-| Each call | With `simple = True`, `<c-fill>`, Vue bindings or `#c-key`/`#c-ignore` on the component tag, and unsupported slot names from Python. With `simple = "vue"`, a call to a `simple = True`, transparent, or dynamic component. Both modes reject invalid inputs, invalid returned data, and `$c-tr` keys passed through a `c-bind` spread. |
+| Each call | With `simple = True`, `<c-fill>`, Vue bindings or `#c-key`/`#c-ignore` on the component tag, and unsupported slot names from Python. With `simple = "vue"`, a call to a `simple = True` component, a transparent component, or a `<c-component>` that uses `c-is`. Both modes reject invalid inputs, invalid returned data, and `$c-tr` keys passed through a `c-bind` spread. |
 
 ## Edge cases
 
@@ -341,16 +352,17 @@ For a component tag, the data method runs at the same point in the
 render as an ordinary component's. For a value inserted from Python, it
 runs when the expression that inserts it runs.
 
-### Rendering a simple component on its own
+### Rendering a `simple = True` component on its own
 
-Rendering a simple component as the whole page still costs the normal
-page setup, because Citry creates an owner for the page. The saving
-comes from many calls inside a larger page.
+Rendering a `simple = True` component as the whole page still costs the
+setup that every page render has. The saving comes from many calls
+inside a larger page.
 
 ### Choosing a simple class with `<c-component>`
 
 `<c-component>` can choose a simple class. The `<c-component>` tag itself
-keeps its own instance and hooks.
+keeps its own instance and hooks, and the chosen class still follows its
+simple rules.
 
 ### Translations in a simple template
 
@@ -363,6 +375,8 @@ A component can declare both `simple = True` and
 [`pure = True`][citry.Component.pure] when both promises hold. Its data
 method still runs on every call. A `simple = True` body that contains
 `<c-slot />` renders again on every call, even with `pure = True`.
+`simple = "vue"` cannot be combined with `pure = True`; every call
+raises an error.
 
 ## Related pages
 
