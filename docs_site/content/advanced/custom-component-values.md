@@ -47,8 +47,8 @@ enough for Citry to treat it as a [`ComponentLike`][citry.ComponentLike]
 value.
 
 Look the component up on the `citry` argument, as above. Do not use a
-component class from another `Citry` instance, such as one imported from
-another application.
+component class bound to the default instance or to another application's
+`Citry`; Citry raises `ValueError`.
 
 ## Insert the object in a template
 
@@ -80,8 +80,9 @@ because that is when Citry supplies the `citry` argument. It has no
 `.render()` method of its own. To render it on its own, choose the `Citry`
 instance yourself and build the component directly.
 
-Library components are the exception: their calls also have
-`render(citry=app)`. See [Component libraries](/advanced/component-libraries/).
+Library components are the exception: calling one, such as
+`AcmeBadge(label="Ready")`, returns a value with a `render(citry=app)`
+method. See [Component libraries](/advanced/component-libraries/).
 
 ## Errors from `__citry_element__()`
 
@@ -91,6 +92,9 @@ Citry checks what the method returns:
   `TypeError`;
 - a component from a different `Citry` instance than the one rendering the
   page raises `ValueError`.
+
+Rendering the object while no component is rendering, for example by
+calling a `Slot` that holds it from plain Python, raises `RuntimeError`.
 
 ## Related reference
 
