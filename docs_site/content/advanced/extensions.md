@@ -29,8 +29,8 @@ from citry.ext.debug import Debug
 app = Citry(extensions=[Debug])
 ```
 
-Citry always installs its built-in `cache`, `dependencies`, and `events`
-extensions. Other bundled extensions are opt-in, such as
+Citry always installs its built-in `cache`, `dependencies`, `events`,
+and `i18n` extensions. Other bundled extensions are opt-in, such as
 [`Debug`][citry.ext.debug.Debug], which helps when you
 [investigate rendered output](/guides/troubleshooting/), and
 `PreviewExtension`, which adds the commands for
@@ -96,7 +96,7 @@ context. Hooks cover component classes and registration, component inputs
 and data, rendered components and slots, attributes, serialization,
 templates, JavaScript, and CSS.
 
-!!! warning "Leave the Vue host and Citry's runtime script in `on_serialize()`"
+!!! warning "Keep Citry's Vue element and runtime script in `on_serialize()` output"
 
     The example above fails with `ValueError` on an interactive page (one
     where a component uses Vue or server events). On such a page, Citry
@@ -199,8 +199,6 @@ Do not keep this data in a dictionary on the extension itself. One
 extension instance serves many renders, possibly from several threads at
 once.
 
-A later hook does not run if an earlier step raises.
-
 ## Add scripts and stylesheets to a page
 
 The `on_dependencies()` hook runs each time Citry serializes a render, after
@@ -271,9 +269,10 @@ extension keeps. Return that data as plain JSON values from
 describe the changes to make, without changing anything yet. Citry applies
 them only after every extension accepts the cached entry.
 
-`"stateless"` and `"payload"` require a positive `render_cache_version`.
-Changing the mode or the version decides whether entries cached earlier
-can still be reused, so treat it as a compatibility decision. The [`Extension` reference][citry.Extension] documents the
+`"stateless"` and `"payload"` require a positive `render_cache_version`;
+without one, creating the `Citry` instance raises `ValueError`. Increase
+`render_cache_version` whenever your extension changes what it adds to a
+render, so Citry stops reusing entries cached by the older version. The [`Extension` reference][citry.Extension] documents the
 cache methods.
 
 ## Serve extension routes
