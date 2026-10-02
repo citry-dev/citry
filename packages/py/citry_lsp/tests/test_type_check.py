@@ -1192,3 +1192,32 @@ def test_js_data_inference_does_nothing_without_ty(tmp_path, monkeypatch):
 
     # A ty that cannot run is not asked, and the sources are not scanned for it.
     assert scanned == []
+
+
+@pytest.mark.parametrize("locked_attempts", [2, 10_000])
+def test_a_locked_check_folder_is_retried_and_never_raises(monkeypatch, locked_attempts):
+    # Windows can keep a killed `tsc`'s working folder locked briefly; the
+    # runner retries removing it and never reports cleanup as the result.
+    from citry_lsp import typescript as typescript_module
+
+    real_rmtree = typescript_module.shutil.rmtree
+    calls: list[bool] = []
+
+    def flaky_rmtree(path, *args, **kwargs):
+        calls.append(kwargs.get("ignore_errors", False))
+        if not kwargs.get("ignore_errors") and len(calls) <= locked_attempts:
+            raise PermissionError("[WinError 32] in use")
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(typescript_module.shutil, "rmtree", flaky_rmtree)
+    monkeypatch.setattr(typescript_module, "_CHECK_FOLDER_REMOVE_STEP", 0)
+    with typescript_module._check_folder() as folder:
+        (folder / "file.js").write_text("", encoding="utf-8")
+
+    if locked_attempts == 2:
+        assert not folder.exists()
+        assert calls[:3] == [False, False, False]
+    else:
+        # Every attempt failed: the runner gives up quietly after its retries.
+        assert len(calls) == typescript_module._CHECK_FOLDER_REMOVE_ATTEMPTS + 1
+        real_rmtree(folder, ignore_errors=True)

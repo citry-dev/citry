@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -47,7 +48,7 @@ from citry_lsp.project_check import ProjectTypeFinding, project_documents
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import AsyncIterator, Iterable, Iterator, Mapping, Sequence
 
     from citry_lsp.engine import DocumentState, ProjectionSourceMapping, TypeCheckProjection
     from citry_lsp.project import ProjectState
@@ -367,8 +368,8 @@ def run_typescript_compiler(
     """
     if not files:
         return ()
-    with tempfile.TemporaryDirectory(prefix="citry-type-check-") as directory:
-        folder, names = _write_check_folder(Path(directory), files)
+    with _check_folder() as directory:
+        folder, names = _write_check_folder(directory, files)
         try:
             result = subprocess.run(
                 _tsc_arguments(command),
@@ -404,8 +405,8 @@ async def run_typescript_compiler_async(
     """
     if not files:
         return ()
-    with tempfile.TemporaryDirectory(prefix="citry-type-check-") as directory:
-        folder, names = _write_check_folder(Path(directory), files)
+    async with _async_check_folder() as directory:
+        folder, names = _write_check_folder(directory, files)
         try:
             process = await asyncio.create_subprocess_exec(
                 *_tsc_arguments(command),
@@ -432,6 +433,53 @@ async def run_typescript_compiler_async(
             raise
     output = f"{stdout.decode('utf-8', 'replace')}\n{stderr.decode('utf-8', 'replace')}"
     return _tsc_findings(command, process.returncode or 0, output, names)
+
+
+# On Windows a killed `tsc` can hold its working folder for a moment after it
+# exits, so removing the folder is retried for about two seconds before giving up.
+_CHECK_FOLDER_REMOVE_ATTEMPTS = 40
+_CHECK_FOLDER_REMOVE_STEP = 0.05
+
+
+def _try_remove_check_folder(folder: Path) -> bool:
+    """Remove `folder`; return whether it is gone."""
+    try:
+        shutil.rmtree(folder)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+@contextlib.contextmanager
+def _check_folder() -> Iterator[Path]:
+    """Yield a fresh folder for one `tsc` run and remove it afterwards."""
+    folder = Path(tempfile.mkdtemp(prefix="citry-type-check-"))
+    try:
+        yield folder
+    finally:
+        for _attempt in range(_CHECK_FOLDER_REMOVE_ATTEMPTS):
+            if _try_remove_check_folder(folder):
+                break
+            time.sleep(_CHECK_FOLDER_REMOVE_STEP)
+        # A folder that is still locked is left in the temp directory rather
+        # than replacing the check's own result or error with a cleanup error.
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+@contextlib.asynccontextmanager
+async def _async_check_folder() -> AsyncIterator[Path]:
+    """Like `_check_folder`, but waits without blocking the language server."""
+    folder = Path(tempfile.mkdtemp(prefix="citry-type-check-"))
+    try:
+        yield folder
+    finally:
+        for _attempt in range(_CHECK_FOLDER_REMOVE_ATTEMPTS):
+            if _try_remove_check_folder(folder):
+                break
+            await asyncio.sleep(_CHECK_FOLDER_REMOVE_STEP)
+        shutil.rmtree(folder, ignore_errors=True)
 
 
 def _write_check_folder(
