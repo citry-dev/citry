@@ -66,6 +66,15 @@ def test_code_nested_in_an_admonition_stays_literal() -> None:
         assert '<c-if cond="x">{{ y }}</c-if>' in text
 
 
+def test_horizontal_rule_does_not_hide_the_indented_code_after_it() -> None:
+    # `* * *` looks like a list item but is a rule, so the next indented
+    # block is still top-level code and must stay literal.
+    html = render_page('Para.\n\n* * *\n\n    <c-if cond="x">{{ y }}</c-if>\n', wrap_in_layout=False).html
+
+    text = html_module.unescape(re.sub(r"<[^>]+>", "", html))
+    assert '<c-if cond="x">{{ y }}</c-if>' in text
+
+
 def test_events_bindings_in_code_are_armored_then_restored() -> None:
     source = '```html\n<button @c-click="save" :c-query="refresh">Save</button>\n```'
     protected = protect_fences(source)

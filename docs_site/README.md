@@ -177,8 +177,8 @@ them.
 - Only Python, `citry`, `citry-html`, HTML, JavaScript, TypeScript, CSS, and
   JSON blocks change. Other languages, such as `text`, `console`, `diff`,
   Markdown, YAML, Fluent, and shell, keep every blank line.
-- Blank lines inside a Python or JavaScript string stay, because they are part
-  of the string's value. In a Citry component this covers the `template`,
+- Blank lines inside a string literal stay (Python, JavaScript, and HTML
+  attribute values), because they are part of the string's value. In a Citry component this covers the `template`,
   `js`, `css`, and `messages` strings.
 - Count `hl_lines` and landing walkthrough line ranges in source-file lines.
   The site moves them to the matching displayed lines.

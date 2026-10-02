@@ -21,8 +21,9 @@ Two kinds of text keep every blank line:
 - String literals. A blank line inside a Python or JavaScript string is part of
   the value, so removing it would change the code a reader copies or runs. For
   a Citry component that includes the ``template``, ``js``, ``css`` and
-  ``messages`` strings. HTML has no strings, so a run inside ``<pre>`` or
-  ``<textarea>`` in an HTML block is still shortened.
+  ``messages`` strings. HTML text has no string literals, so a run inside
+  ``<pre>`` or ``<textarea>`` in an HTML block is still shortened (attribute
+  values and ``<script>`` strings keep theirs).
 
 Line numbers written against the source file (a Markdown fence's ``hl_lines``,
 the landing walkthrough's line ranges) are translated with
@@ -184,8 +185,8 @@ def _lexer_for(language: str) -> Lexer | None:
 def _string_newline_offsets(text: str, lexer: Lexer) -> set[int]:
     """Return the offsets of newlines that sit inside a string literal."""
     # The Citry lexer colours a component's template, js and css strings in
-    # their own languages, so its tokens no longer say where those strings
-    # are. The plain Python lexer still sees them as Python strings.
+    # their own languages, so its tokens do not mark where those
+    # strings start and end. The plain Python lexer still sees them as Python strings.
     reader = PythonLexer() if "citry" in lexer.aliases else lexer
     offsets: set[int] = set()
     # get_tokens_unprocessed keeps offsets into the raw text, unlike

@@ -56,7 +56,8 @@ def test_display_code_without_collapsing_maps_every_line_to_itself(lexer: Lexer 
 def test_line_numbers_outside_the_source() -> None:
     shown = display_code("a\n\n\nb", _PYTHON)
 
-    # A single line clamps so a bad range still lands somewhere visible.
+    # display_line clamps a number outside the block so a bad range still
+    # lands somewhere visible.
     assert shown.display_line(0) == 1
     assert shown.display_line(99) == 3
     # hl_lines past the end are dropped, as Pygments drops them.

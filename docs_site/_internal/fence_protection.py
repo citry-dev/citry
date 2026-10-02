@@ -16,7 +16,8 @@ of an admonition (``!!! note``), a collapsible block (``??? note``), a content
 tab (``=== "Tab"``), or a list item is indented by four spaces, yet it is prose:
 its inline code spans are protected like those of a top-level paragraph, and a
 line counts as indented code only when it is indented four more spaces than
-that body.
+that body. As in Markdown, a four-space-indented paragraph straight after a
+list item belongs to that item, so it is prose rather than code.
 
 One limitation: a code region whose text is itself ``<c-raw>`` (or a whole
 ``<c-raw>...</c-raw>``) cannot be protected by wrapping, because the wrapper's
@@ -39,7 +40,10 @@ _CITRY_IN_INLINE = re.compile(r"`[^`]*(<|\{\{|\{#)[^`]*`")
 
 # A line that opens a block whose body is indented four spaces: an admonition,
 # a collapsible block, a content tab, or a list item.
-_CONTAINER_OPEN = re.compile(r"^(?:!!!|\?\?\?\+?|===)\s|^(?:[-*+]|\d+[.)])\s")
+_CONTAINER_OPEN = re.compile(r"^(?:!!!|\?\?\?\+?|===)\s|^(?:[-*+]|\d+\.)\s")
+
+# A horizontal rule such as `* * *` starts like a list item but opens no block.
+_THEMATIC_BREAK = re.compile(r"^(?:[-*_][ \t]*){3,}$")
 
 # Python-Markdown nests block content four spaces deeper than its opener.
 _CONTAINER_STEP = 4
@@ -79,7 +83,7 @@ def protect_fences(source: str) -> str:
             if stripped and indent - body_indent >= _CONTAINER_STEP:
                 out.append(_protect_indented_code(line))
                 continue
-            if _CONTAINER_OPEN.match(stripped):
+            if _CONTAINER_OPEN.match(stripped) and not _THEMATIC_BREAK.match(stripped):
                 containers.append(indent + _CONTAINER_STEP)
             match = _FENCE_OPEN.match(line)
             if match:
