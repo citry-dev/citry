@@ -5,19 +5,23 @@ description: Find installable libraries of reusable Citry UI components.
 
 # Community UI libraries
 
-UI libraries package reusable components that applications can register with
-their own Citry instance. Ownership badges distinguish Citry-maintained
-libraries from independent community projects.
+You want ready-made components instead of building every button and
+dialog yourself. A UI library is a package of reusable components that you
+register with your own Citry instance. Each library below shows who
+maintains it: "Citry maintained" or "Community maintained".
 
 <c-community-packages category="ui_library" />
 
 ## Publish a UI library
 
-See [Component libraries](/advanced/component-libraries/) for the manifest and
-installation contract. To request a listing, add an entry to
-[`community_packages.yml`](https://github.com/citry-dev/citry/edit/main/docs_site/data/community_packages.yml){: target="_blank" rel="noopener"}
-and open a pull request. The package does not need a `citry-` prefix, but it
-must have public source and document the Citry versions it supports.
+[Component libraries](/advanced/component-libraries/) explains how to
+package a library and how applications install one.
 
-Independent packages are reviewed for directory fit, not audited or supported
-by the Citry project.
+To get your library listed here, add an entry to
+[`community_packages.yml`](https://github.com/citry-dev/citry/edit/main/docs_site/data/community_packages.yml){: target="_blank" rel="noopener"}
+and open a pull request. The package name does not need a `citry-` prefix,
+but the package must have public source code and state which Citry
+versions it supports.
+
+Citry maintainers review community libraries for whether they fit this
+list. They do not audit or support them.
