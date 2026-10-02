@@ -265,7 +265,7 @@ instance, but the frames inside it still use each component's page
 layout. If your layout leaves out `{{ item.content }}` or writes it
 twice, the page shows exactly that.
 
-## Preview a simple component
+## Wrap simple components
 
 A component with `simple = True` cannot have its own `Preview` class. To
 preview one, write an ordinary component with previews that uses the

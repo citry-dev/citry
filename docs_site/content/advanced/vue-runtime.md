@@ -247,7 +247,7 @@ html = Page().render().serialize(ssr=False)
 with another type raises `TypeError`, and with a negative value raises
 `ValueError`.
 
-## Use Content Security Policy
+## Add a CSP nonce { #use-content-security-policy }
 
 Pass the request's nonce when you serialize the page:
 
