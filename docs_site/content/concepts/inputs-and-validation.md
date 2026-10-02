@@ -35,7 +35,7 @@ class Button(Component):
 ```
 
 `label` is required because it has no default. `variant` is optional and is
-`"primary"` when the caller leaves it out. The template can read both by
+`"primary"` when a template or Python code leaves it out. The template can read both by
 name.
 
 Without a `Kwargs` class, a component accepts any keyword name. To accept no
@@ -56,9 +56,9 @@ class Divider(Component):
 
 ## See where a wrong input is reported
 
-A mistake in a component tag that you wrote out in a template is reported
-when Citry first compiles that template, on its first render. A misspelled
-name or a missing required input raises `SyntaxError`:
+A mistake in a `<c-*>` tag written in a template raises `SyntaxError` the
+first time that template renders. This covers a misspelled name and a
+missing required input:
 
 ```citry-html
 <!-- Wrong: "lable" is not a Button input. -->
@@ -165,7 +165,7 @@ component `None`, not the default.
 
 ## Declare the slots a component accepts
 
-A slot is a place in the component's template where the caller can insert
+A slot is a place in the component's template where each use of the component can insert
 its own content. List the accepted slots in a nested
 [`Slots`][citry.Component.Slots] class, and annotate each one with
 [`SlotInput`][citry.SlotInput]:
@@ -189,8 +189,9 @@ class Panel(Component):
 
 The `default` slot is required. `actions` is optional because it defaults to
 `None`. A missing required slot or an unknown slot name is reported at the
-same points as a wrong keyword input. [Slots](/concepts/slots/) covers the
-rest.
+same points as a wrong keyword input. A slot can also pass data to its
+fill with `SlotInput[...]`; see
+[Slots](/concepts/slots/#pass-data-from-the-component-to-the-fill).
 
 ## Check the data a component returns
 
