@@ -145,7 +145,9 @@ def test_authored_native_ownership_marker_is_reserved() -> None:
         citry = registry
         template = "<input v-citry-vue-owned=\"'value'\">"
 
-    with pytest.raises(ValueError, match="reserved compiler output"):
+    # The parser rejects the reserved name when the template loads; the render
+    # check below it still covers a name that arrives through `c-bind`.
+    with pytest.raises(SyntaxError, match="uses a name Citry reserves"):
         render_prepared(Forged())
 
 
@@ -847,7 +849,7 @@ def test_authored_template_cannot_impersonate_event_timing_directive(
 
         template = f"<button {directive} {timed_binding}>Save</button>"
 
-    with pytest.raises(ValueError, match="reserved compiler output"):
+    with pytest.raises(SyntaxError, match="uses a name Citry reserves"):
         render_prepared(Button())
 
 
@@ -2517,6 +2519,30 @@ def test_key_name_on_a_non_keyboard_event_fails_when_the_template_loads(listener
         return
     # Vue would read the modifier as a key name, and a click has no key.
     with pytest.raises(SyntaxError, match=r"on the 'click' event\. Vue reads a modifier it does not know"):
+        str(Page())
+
+
+@pytest.mark.parametrize(
+    ("element", "problem"),
+    [
+        ('<div V-IF="open">x</div>', "Vue reads a directive only when its 'v-' prefix is lowercase."),
+        ('<div v-If="open">x</div>', "Vue would look up 'v-If' as a custom directive named 'If'. Write 'v-if'."),
+        ('<div v-citry-control="a">x</div>', "uses a name Citry reserves"),
+        ("<div v-show>x</div>", "needs a Vue expression, for example 'v-show=\"open\"'."),
+        ('<div v-show.lazy="open">x</div>', "takes no argument or modifiers."),
+    ],
+)
+@pytest.mark.parametrize("page_template", ["<main>{}</main>", '<main :class="cls">{}</main>'])
+def test_misspelled_element_directive_fails_when_the_template_loads(element, problem, page_template) -> None:
+    app = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = app
+        template = page_template.format(element)
+
+    # Before this check, the static page wrote these as plain attributes and the
+    # interactive page failed at render without naming the directive.
+    with pytest.raises(SyntaxError, match=re.escape(problem)):
         str(Page())
 
 

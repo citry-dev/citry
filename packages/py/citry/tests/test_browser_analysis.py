@@ -333,7 +333,7 @@ def test_citry_slot_channels_do_not_create_native_vue_bindings():
 
 def test_browser_hosts_capture_csp_element_attribute_and_evaluator_context():
     source = (
-        '<main><span V-TEXT="open"></span></main>'
+        '<main><span v-text="open"></span></main>'
         '<c-card @click="save()" @c-save="save({ id: item.id })" />'
         '<button @C-CLICK="save(() => 1)"></button>'
     )
@@ -351,7 +351,7 @@ def test_browser_hosts_capture_csp_element_attribute_and_evaluator_context():
     assert [
         encoded[item.attribute_start_index : item.attribute_end_index].decode()  # type: ignore[index]
         for item in expressions
-    ] == ["V-TEXT", "@click", "@c-save", "@C-CLICK"]
+    ] == ["v-text", "@click", "@c-save", "@C-CLICK"]
 
 
 def test_case_variant_dynamic_element_uses_vue_precompiled_evaluator_context():

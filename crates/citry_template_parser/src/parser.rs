@@ -1651,6 +1651,7 @@ fn validate_node(
     validate_ignored_element_contents(node, tag_stack, context)?;
     validate_vue_listener_modifiers(node, context)?;
     validate_element_once_memo(node, context)?;
+    validate_element_vue_directives(node, context)?;
     validate_vue_builtin_component_tag(node, context)?;
     validate_vue_binding_python_conflicts(node, context)?;
     validate_attribute_conflicts(node, context)?;
@@ -2202,6 +2203,88 @@ fn validate_element_once_memo(node: &Node, context: &ParserContext) -> Result<()
                 META_ATTR_IGNORE
             ),
         ));
+    }
+    Ok(())
+}
+
+/// Reject Vue directives on an HTML element that Vue would not run as written.
+///
+/// Vue reads a directive only when it is spelled exactly: an uppercase `V-`
+/// prefix (`V-IF`) makes a plain attribute, so the element always shows, and
+/// a built-in name in another case (`v-If`) makes a custom directive named
+/// `If`. Citry's own browser runtime owns `v-c-*` and `v-citry-*`. `v-show`,
+/// `v-if`, `v-else-if`, `v-for`, and `v-model` need an expression, and
+/// `v-show` takes no argument or modifiers; without these checks the page
+/// would fail at render with a message that does not name the directive.
+/// Component tags and `<c-slot>` report the same mistakes through their own
+/// checks. A custom directive may use any case (`v-Tooltip`), because Vue
+/// looks it up by that exact name.
+fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    if has_citry_component_prefix(tag_name) && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+        return Ok(());
+    }
+    for attr in node.attrs() {
+        if attr.kind == HtmlAttrKind::Meta {
+            continue;
+        }
+        let name = attr.key.content.as_str();
+        let (line, col) = attr.token.line_col;
+        let fail = |problem: String| {
+            Err(context.error_from_token(
+                &attr.token,
+                format!("'{name}' on <{tag_name}> (line {line}, column {col}) {problem}"),
+            ))
+        };
+        let (prefix, rest) = match (name.strip_prefix("v-"), name.strip_prefix("V-")) {
+            (Some(rest), _) => ("v-", rest),
+            (None, Some(rest)) => ("V-", rest),
+            _ => continue,
+        };
+        let split = rest.find([':', '.']).unwrap_or(rest.len());
+        let (directive, suffix) = rest.split_at(split);
+        let lowercase = directive.to_ascii_lowercase();
+        let built_in = VUE_BUILT_IN_DIRECTIVES.contains(&lowercase.as_str());
+        if prefix == "V-" {
+            // A built-in name is lowercased in the fix too; a custom name
+            // keeps its case, because Vue looks it up as written.
+            let fixed = if built_in {
+                lowercase.as_str()
+            } else {
+                directive
+            };
+            return fail(format!(
+                "is not a Vue directive, because Vue reads a directive only when its 'v-' prefix is lowercase. Vue would write it as a plain attribute. Write 'v-{fixed}{suffix}'."
+            ));
+        }
+        if built_in && directive != lowercase {
+            return fail(format!(
+                "uses a Vue directive name in the wrong case. Vue's own directives are lowercase, and Vue would look up 'v-{directive}' as a custom directive named '{directive}'. Write 'v-{lowercase}{suffix}'."
+            ));
+        }
+        if lowercase.starts_with("c-") || lowercase.starts_with("citry-") {
+            return fail(
+                "uses a name Citry reserves: 'v-c-*' and 'v-citry-*' belong to Citry's own browser runtime. Give the directive another name.".to_string(),
+            );
+        }
+        if directive == "show" && !suffix.is_empty() {
+            return fail("takes no argument or modifiers. Write 'v-show=\"...\"'.".to_string());
+        }
+        let example = match directive {
+            "show" => "v-show=\"open\"",
+            "if" => "v-if=\"open\"",
+            "else-if" => "v-else-if=\"open\"",
+            "for" => "v-for=\"item in items\"",
+            "model" => "v-model=\"query\"",
+            _ => continue,
+        };
+        let has_value = attr
+            .inner_value
+            .as_ref()
+            .is_some_and(|value| !value.content.trim().is_empty());
+        if !has_value {
+            return fail(format!("needs a Vue expression, for example '{example}'."));
+        }
     }
     Ok(())
 }

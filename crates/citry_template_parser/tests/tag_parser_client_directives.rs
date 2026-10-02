@@ -448,6 +448,74 @@ mod tests {
     }
 
     #[test]
+    fn element_directives_in_the_wrong_case_are_rejected() {
+        assert_parse_error(
+            r#"<div V-IF="open">x</div>"#,
+            "'V-IF' on <div> (line 1, column 6) is not a Vue directive, because Vue reads a directive only when its 'v-' prefix is lowercase. Vue would write it as a plain attribute. Write 'v-if'.",
+        );
+        assert_parse_error(r#"<div V-focus:x.y="a">x</div>"#, "Write 'v-focus:x.y'.");
+        assert_parse_error(
+            r#"<div v-If="open">x</div>"#,
+            "'v-If' on <div> (line 1, column 6) uses a Vue directive name in the wrong case. Vue's own directives are lowercase, and Vue would look up 'v-If' as a custom directive named 'If'. Write 'v-if'.",
+        );
+        assert_parse_error(r#"<input v-MODEL.trim="q" />"#, "Write 'v-model.trim'.");
+    }
+
+    #[test]
+    fn element_directives_with_reserved_names_are_rejected() {
+        for input in [
+            r#"<div v-citry-control="a">x</div>"#,
+            r#"<div v-c-tr="a">x</div>"#,
+            r#"<c-element c-is="tag" v-Citry-x="a">x</c-element>"#,
+        ] {
+            assert_parse_error(
+                input,
+                "uses a name Citry reserves: 'v-c-*' and 'v-citry-*' belong to Citry's own browser runtime. Give the directive another name.",
+            );
+        }
+    }
+
+    #[test]
+    fn element_directives_without_an_expression_are_rejected() {
+        assert_parse_error(
+            r#"<div v-show>x</div>"#,
+            "'v-show' on <div> (line 1, column 6) needs a Vue expression, for example 'v-show=\"open\"'.",
+        );
+        for (input, example) in [
+            (r#"<div v-show="  ">x</div>"#, r#"v-show="open""#),
+            (r#"<div v-if>x</div>"#, r#"v-if="open""#),
+            (
+                r#"<div v-if="a">x</div><div v-else-if>y</div>"#,
+                r#"v-else-if="open""#,
+            ),
+            (r#"<li v-for>x</li>"#, r#"v-for="item in items""#),
+            (r#"<input v-model:title />"#, r#"v-model="query""#),
+        ] {
+            assert_parse_error(
+                input,
+                &format!("needs a Vue expression, for example '{example}'."),
+            );
+        }
+        assert_parse_error(
+            r#"<div v-show.lazy="open">x</div>"#,
+            "'v-show.lazy' on <div> (line 1, column 6) takes no argument or modifiers.",
+        );
+    }
+
+    #[test]
+    fn element_directives_spelled_as_vue_reads_them_still_parse() {
+        for input in [
+            r#"<div v-show="open" v-Tooltip="tip" v-my-dir:Arg.Mod="x">x</div>"#,
+            r#"<template v-if="a"><p>x</p></template><p v-else>y</p>"#,
+            r#"<li v-for="item in items" :key="item">x</li>"#,
+            r#"<p v-html="html" v-text="text"></p>"#,
+            r#"<div data-V-flag="x">x</div>"#,
+        ] {
+            parse_template(input, None, None).unwrap();
+        }
+    }
+
+    #[test]
     fn once_and_memo_on_an_element_name_the_directive() {
         assert_parse_error(
             r#"<p v-once>hi</p>"#,

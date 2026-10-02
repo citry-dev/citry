@@ -1252,6 +1252,18 @@ model value. A transparent child (such as `<c-provide>`) renders
 its content in place and has no Vue component to receive any of these, so
 any Vue binding on its tag fails the render.
 
+An HTML element (or `<c-element>`) accepts Vue directives other than
+`v-once` and `v-memo`, but the parser rejects the spellings Vue would not
+run as written, with a message that names the directive: an uppercase `V-`
+prefix, a built-in name with capitals, `v-c-*` and `v-citry-*`, a `v-show`
+with an argument or modifiers, and a `v-show`, `v-if`, `v-else-if`, `v-for`,
+or `v-model` without an expression. A custom directive keeps its case
+(`v-Tooltip`), because Vue looks it up by that exact name and the browser
+reports a name nobody registered. On a static, non-keyboard event name
+(anything but `keydown`, `keyup`, and `keypress`), the parser also rejects a
+modifier outside the set Vue's `compiler-dom` handles on any event, because
+Vue would read it as a key name and the event has no key.
+
 #### Conditions on a call
 
 `v-if`, `v-else-if`, and `v-else` compile exactly like a `<template v-if>`
