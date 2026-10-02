@@ -139,7 +139,7 @@ then unpack them in the loop:
 </p>
 ```
 
-## Loop with a condition
+## Combine `c-if` and `c-for`
 
 `c-if` and `c-for` can share an element:
 

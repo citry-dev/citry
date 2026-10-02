@@ -127,7 +127,7 @@ the browser data has its own `item`: then every item shows that one value,
 and nothing fails. When Vue needs the value too, for example in a `v-show`
 that changes later, send it with `js_data()` or loop with Vue's `v-for`.
 
-## Choose a loop
+## Choose `v-for` or `<c-for>`
 
 Use `v-for` and `v-if` for HTML that the browser adds, removes, or repeats
 inside one component:
@@ -173,7 +173,7 @@ Keep only `c-title` when Python decides the value. Keep only `:title` when
 the browser should change it later, and send the starting value with
 `js_data()`.
 
-## Use on component tags { #use-vue-directives-on-a-component-tag }
+## Vue on component tags { #use-vue-directives-on-a-component-tag }
 
 A Citry component tag accepts these Vue directives:
 
@@ -203,7 +203,7 @@ and slots.
 Content you pass into a child's slot still reads the data of the component
 that wrote it. A slot's fallback content reads the child's data.
 
-### Show or hide a child
+### Add or remove a child
 
 `v-if` works on a component tag as on an element, and one chain can mix
 both:

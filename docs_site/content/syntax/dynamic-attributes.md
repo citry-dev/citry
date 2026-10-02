@@ -196,7 +196,7 @@ later `None` leaves the earlier value alone. An empty style is left out:
     inputs like any other, and the component decides where to put them. See
     [Pass HTML attributes](/concepts/client-interactivity/#pass-arbitrary-html-attributes-explicitly).
 
-## Apply many with `c-bind` { #c-bind-spread }
+## Apply a dict with `c-bind` { #c-bind-spread }
 
 When the attributes come from a dictionary, apply them all with `c-bind`:
 
