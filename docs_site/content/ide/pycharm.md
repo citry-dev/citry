@@ -34,19 +34,18 @@ and HTML help inside nested templates is missing. For those, use
 4. Open **Settings → Languages & Frameworks → Language Servers**, add a
    language server, open the template selector, and choose
    **Import from custom template…**. Select the downloaded `citry` folder.
-5. Tell Citry where your application is, as the next section shows.
+5. If your virtual environment is not in `.venv`, change the server command.
+   The template starts it from there:
+
+    ```text
+    macOS/Linux: $PROJECT_DIR$/.venv/bin/citry-lsp
+    Windows:     $PROJECT_DIR$/.venv/Scripts/citry-lsp.exe
+    ```
+
+6. Tell Citry where your application is, as the next section shows.
 
 Then open a component module or a template file. One Citry server handles
 both kinds of file for the project.
-
-The template starts the server from a virtual environment in `.venv`:
-
-```text
-macOS/Linux: $PROJECT_DIR$/.venv/bin/citry-lsp
-Windows:     $PROJECT_DIR$/.venv/Scripts/citry-lsp.exe
-```
-
-If your environment lives elsewhere, change the command after importing.
 
 ## Connect your app
 
@@ -79,7 +78,7 @@ These keys go in the same initialization options:
 | `envFile` | A dotenv file to load before importing `app`, relative to the project root | None |
 | `typeCheck` | Report TypeScript errors in component JavaScript and templates | `true` |
 | `standardFormatting` | Let PyCharm format standalone `*.citry-html` files with Citry | `true` |
-| `protocolVersion` | The settings format version. Keep it at `1` | `1` |
+| `protocolVersion` | The settings format version | Required. Keep it at `1` |
 
 Use `envFile` when importing your application needs environment variables,
 such as Django settings:
@@ -121,8 +120,8 @@ Use `citry check --static` when the project cannot be imported. See
   PyCharm's normal Python string color, and `*.citry-html` files get no
   Citry coloring either.
 - **No HTML, JavaScript, or CSS help inside nested templates.** Citry's own
-  checks and completion still work in nested templates and `<c-element>`,
-  but PyCharm's HTML, JavaScript, and CSS help does not reach them, as it
+  checks and completion still work in nested templates, the markup you
+  write inside an attribute value, but PyCharm's HTML, JavaScript, and CSS help does not reach them, as it
   does in VS Code.
 - **No status message when the application fails to import.** You see the
   standard editor warning instead, and Citry checks syntax only until the
