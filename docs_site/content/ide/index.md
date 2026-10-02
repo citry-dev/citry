@@ -22,11 +22,13 @@ and at runtime.
 | PyCharm | The same errors, completion, hover, and navigation, without Citry coloring | [PyCharm](/ide/pycharm/) |
 | Any editor | `citry check` in a terminal | [Check from a terminal](#check-from-a-terminal) |
 
-VS Code has the most complete support. The editor help comes from a separate
-program, the Citry language server (`citry-lsp` on PyPI), which the VS Code
-extension starts for you. It uses the standard Language Server Protocol, so
-another editor can use it too, once that editor is set up to start it for
-Python and Citry template files.
+!!! note
+
+    VS Code has the most complete support. The editor help comes from a
+    separate program, the Citry language server (`citry-lsp` on PyPI), which
+    the VS Code extension starts for you. It uses the standard Language
+    Server Protocol, so another editor can use it too, once that editor is
+    set up to start it for Python and Citry template files.
 
 ## Check from a terminal
 
@@ -64,4 +66,6 @@ To look up an error code such as `citry.template.unknown-variable`, see the
 [diagnostic reference](/ide/diagnostics/).
 
 To color Citry code in documentation or other tools built on Pygments, install
-the separate `pygments-citry` package.
+the separate
+[`pygments-citry`](https://pypi.org/project/pygments-citry/){: target="_blank" rel="noopener"}
+package.
