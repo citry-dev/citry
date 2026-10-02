@@ -35,6 +35,37 @@ def test_indented_code_with_citry_syntax_renders_as_literal_code() -> None:
     assert "hi" in html
 
 
+def _note(body: str) -> str:
+    """Render one admonition whose body is the given indented lines."""
+    return render_page(f"!!! note\n{body}\n", wrap_in_layout=False).html
+
+
+def test_inline_code_in_an_admonition_is_shown_verbatim() -> None:
+    # An admonition body is indented like code but is prose, so its inline
+    # code must be protected exactly as in a top-level paragraph.
+    html = _note("    Use `<span/>`, `<div>` and `<c-raw>` with <b>bold</b>.")
+
+    assert "<code>&lt;span/&gt;</code>" in html
+    assert "<code>&lt;div&gt;</code>" in html
+    assert "<code>&lt;c-raw&gt;</code>" in html
+    assert "<b>bold</b>" in html
+
+
+def test_inline_code_in_a_list_continuation_is_shown_verbatim() -> None:
+    html = render_page("- item\n    more `<span/>` text\n", wrap_in_layout=False).html
+
+    assert "<code>&lt;span/&gt;</code>" in html
+
+
+def test_code_nested_in_an_admonition_stays_literal() -> None:
+    indented = _note('    Text.\n\n        <c-if cond="x">{{ y }}</c-if>')
+    fenced = _note('    ```html\n    <c-if cond="x">{{ y }}</c-if>\n    ```')
+
+    for html in (indented, fenced):
+        text = html_module.unescape(re.sub(r"<[^>]+>", "", html))
+        assert '<c-if cond="x">{{ y }}</c-if>' in text
+
+
 def test_events_bindings_in_code_are_armored_then_restored() -> None:
     source = '```html\n<button @c-click="save" :c-query="refresh">Save</button>\n```'
     protected = protect_fences(source)

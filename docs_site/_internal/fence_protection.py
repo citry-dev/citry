@@ -11,6 +11,13 @@ it into ``<pre>``/``<code>`` (escaping the angle brackets there).
 Handles fenced code blocks (``` and ~~~), four-space or tab-indented code, and
 inline code spans that contain citry-parseable syntax.
 
+Indentation means code only relative to the block a line belongs to. The body
+of an admonition (``!!! note``), a collapsible block (``??? note``), a content
+tab (``=== "Tab"``), or a list item is indented by four spaces, yet it is prose:
+its inline code spans are protected like those of a top-level paragraph, and a
+line counts as indented code only when it is indented four more spaces than
+that body.
+
 One limitation: a code region whose text is itself ``<c-raw>`` (or a whole
 ``<c-raw>...</c-raw>``) cannot be protected by wrapping, because the wrapper's
 own tag collides with the inner one. A page that shows raw citry syntax that
@@ -30,6 +37,13 @@ _FENCE_OPEN = re.compile(r"^(\s*)(```+|~~~+)")
 # An inline backtick span that holds citry syntax: a tag/expression/comment.
 _CITRY_IN_INLINE = re.compile(r"`[^`]*(<|\{\{|\{#)[^`]*`")
 
+# A line that opens a block whose body is indented four spaces: an admonition,
+# a collapsible block, a content tab, or a list item.
+_CONTAINER_OPEN = re.compile(r"^(?:!!!|\?\?\?\+?|===)\s|^(?:[-*+]|\d+[.)])\s")
+
+# Python-Markdown nests block content four spaces deeper than its opener.
+_CONTAINER_STEP = 4
+
 # Events compiles @c-* and :c-* by scanning template source before the parser
 # sees <c-raw>. Replace only their leading sigil while code is protected, then
 # restore it after the Citry render. Private-use characters keep the armored
@@ -46,15 +60,27 @@ def protect_fences(source: str) -> str:
     fence_indent = ""
     fence_char = ""
     fence_len = 0
+    # The body indent of each open admonition, tab, or list item, innermost
+    # last. Indentation inside a body is measured from its body indent.
+    containers: list[int] = []
 
     for line in lines:
         if not in_fence:
-            # Markdown treats four-space and tab indentation as code. Check it
-            # before fence discovery so an indented ``` line is not mistaken
-            # for a fenced-block opener by the template-protection pass.
-            if line.startswith(("    ", "\t")):
+            stripped = line.lstrip(" \t")
+            indent = _indent_width(line)
+            if stripped:
+                # A line indented less than a body has left that block.
+                while containers and indent < containers[-1]:
+                    containers.pop()
+            body_indent = containers[-1] if containers else 0
+            # Markdown treats four more spaces (or a tab) than the enclosing
+            # body as code. Check it before fence discovery so an indented ```
+            # line is not mistaken for a fenced-block opener.
+            if stripped and indent - body_indent >= _CONTAINER_STEP:
                 out.append(_protect_indented_code(line))
                 continue
+            if _CONTAINER_OPEN.match(stripped):
+                containers.append(indent + _CONTAINER_STEP)
             match = _FENCE_OPEN.match(line)
             if match:
                 fence_indent = match.group(1)
@@ -90,6 +116,19 @@ def protect_fences(source: str) -> str:
 def restore_protected_code(source: str) -> str:
     """Restore binding sigils armored for the Citry template pass."""
     return source.replace(_EVENT_AT_SENTINEL, "@").replace(_STATE_BIND_SENTINEL, ":")
+
+
+def _indent_width(line: str) -> int:
+    """Return the indentation width of a line, counting a tab as four spaces."""
+    width = 0
+    for char in line:
+        if char == " ":
+            width += 1
+        elif char == "\t":
+            width += _CONTAINER_STEP
+        else:
+            break
+    return width
 
 
 def _protect_inline_code(line: str) -> str:
