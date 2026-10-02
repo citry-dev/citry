@@ -76,6 +76,18 @@ class TestFlaskMount:
         assert host.wsgi_app is original
         assert c.mounted_prefix is None
 
+    def test_root_prefix_is_rejected_and_leaves_the_app_unchanged(self):
+        # A root mount would take every request away from the Flask app.
+        from citry.contrib.flask import mount
+
+        c = Citry()
+        host = _FakeWsgiHost()
+        original = host.wsgi_app
+        with pytest.raises(ValueError, match="needs a prefix below the root"):
+            mount(host, c, prefix="/")
+        assert host.wsgi_app is original
+        assert c.mounted_prefix is None
+
 
 class TestDjangoAdapter:
     @pytest.fixture(autouse=True)

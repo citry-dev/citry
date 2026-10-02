@@ -146,7 +146,8 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
 
     # Check the prefix up front, but record it only after every route has
     # been accepted, so a rejected async handler leaves the instance untouched.
-    mounted_prefix = normalize_mount_prefix(prefix) if prefix is not None else None
+    if prefix is not None:
+        normalize_mount_prefix(prefix)
 
     patterns = []
     for full_path, route in flatten_routes(citry_instance.urls):
@@ -174,8 +175,8 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
         else:
             patterns.append(django_path(full_path, _make_view(route), name=route.name))
 
-    if mounted_prefix is not None:
-        citry_instance.set_mounted_prefix(mounted_prefix)
+    if prefix is not None:
+        citry_instance.set_mounted_prefix(prefix)
     return patterns
 
 

@@ -605,6 +605,13 @@ class TestDjangoAdapter:
             urlpatterns(engine, prefix="/citry")
         assert engine.mounted_prefix is None
 
+    def test_root_prefix_is_recorded_as_the_host_root(self):
+        from citry.contrib.django import urlpatterns
+
+        engine = _engine(URLRoute("plain", handler=lambda _request: RouteResponse(content="ok")))
+        urlpatterns(engine, prefix="/")
+        assert engine.mounted_prefix == ""
+
     def test_route_with_an_async_twin_mounts_and_runs_the_plain_handler(self):
         # The twin is for adapters with an event loop; the synchronous Django
         # views mount the route table unchanged and run the plain handler.

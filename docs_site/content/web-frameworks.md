@@ -74,9 +74,11 @@ matches your stack.
 | Bare WSGI | `citry.contrib.wsgi.wsgi_app(citry)` |
 
 Pass a `prefix` that starts with `/`, such as `"/citry"`. A trailing slash is
-dropped, so `"/citry/"` serves the same paths. Every entry point and
-`set_mounted_prefix()` rejects a prefix without the leading `/` with a
-`ValueError`, before it changes your app or the Citry instance.
+dropped, so `"/citry/"` serves the same paths. `mount()`, `urlpatterns()`,
+and `set_mounted_prefix()` reject a prefix without the leading `/` with a
+`ValueError`, before they change your app or the Citry instance. Flask's
+`mount()` also rejects the root prefix `"/"`, because every request would
+then go to Citry and none to your Flask routes.
 
 If you would rather run and copy a complete application, the
 [starter project matrix]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}

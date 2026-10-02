@@ -43,6 +43,8 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     """
     # Check the prefix before handing it to Starlette, whose own check fails
     # with a bare AssertionError that does not name the Citry setting.
-    prefix = normalize_mount_prefix(prefix)
-    app.mount(prefix, asgi_app(citry_instance))
+    # set_mounted_prefix() checks the caller's prefix again, so it gets the
+    # original: the normalized root prefix "" would fail that check.
+    mount_path = normalize_mount_prefix(prefix)
+    app.mount(mount_path, asgi_app(citry_instance))
     citry_instance.set_mounted_prefix(prefix)

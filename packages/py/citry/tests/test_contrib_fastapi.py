@@ -54,6 +54,15 @@ class TestMount:
         assert c.mounted_prefix == "/citry"
         assert TestClient(app).get("/citry/citry.js").status_code == 200
 
+    def test_root_prefix_mounts_at_the_host_root(self):
+        # "/" normalizes to "", which set_mounted_prefix() would reject if
+        # mount() passed it on, after Starlette had already added the route.
+        c = Citry()
+        app = fastapi.FastAPI()
+        mount(app, c, prefix="/")
+        assert c.mounted_prefix == ""
+        assert TestClient(app).get("/citry.js").status_code == 200
+
     def test_invalid_prefix_raises_citry_error_before_mounting(self):
         # Citry checks the prefix itself, so the user sees a ValueError that
         # names the mount prefix rather than Starlette's bare AssertionError.
