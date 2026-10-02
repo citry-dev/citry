@@ -133,8 +133,9 @@ These include the checks that catch most mistakes in a component change:
   JavaScript fails the test. It needs the Node tools from
   `pnpm install`, and skips without them.
 - `test_asset_budgets.py` fails when the CSS or JavaScript of all
-  components together, raw or compressed, grows past a fixed size limit. When the growth is
-  intended, raise the limit in the test and say why in your pull request.
+  components together, raw or compressed, grows past a fixed size limit.
+  When the growth is intended, raise the limit in the test and say why in
+  your pull request.
 - `test_i18n_catalog.py` checks the translation catalog and the
   translation keys in `api.yml`.
 
