@@ -5,27 +5,28 @@ description: Put a Citry component behind a FastAPI route and connect the browse
 
 # Serve pages with FastAPI
 
-The components you have built so far can render without a web server. Now you
-will put the choice picker from the last step behind [FastAPI](https://fastapi.tiangolo.com/){: target="_blank" rel="noopener"}. Its browser
-behavior will keep working, and Citry will gain a place to receive the [server
-events](/events/) in the next steps.
+So far you rendered components to a file. A real app serves pages from a web
+server, and a server is also what lets a click in the browser run Python. In
+this step you serve the choice picker from the last step with
+[FastAPI](https://fastapi.tiangolo.com/){: target="_blank" rel="noopener"}.
+Its browser behavior keeps working, and Citry gets the routes it needs for
+the [server events](/events/) in the next steps.
 
-This tutorial uses FastAPI to keep the setup concrete.
-Citry comes with integrations for:
+This tutorial uses FastAPI to keep the setup concrete. Citry also works
+with:
 
 - [FastAPI / Starlette](/web-frameworks/#fastapi-and-starlette)
 - [Django](/web-frameworks/#django)
 - [Flask](/web-frameworks/#flask)
 - Other [ASGI or WSGI applications](/web-frameworks/#bare-asgi-and-wsgi).
 
-You can switch to your framework after you finish this journey.
+You can switch to your framework after you finish the tutorial.
 
-## Install the packages
+## Install FastAPI and Uvicorn
 
-Inside an existing `uv` project, add
-[FastAPI](https://fastapi.tiangolo.com/){: target="_blank" rel="noopener"}
-and
-[Uvicorn](https://uvicorn.dev/){: target="_blank" rel="noopener"}:
+FastAPI defines the application and its routes.
+[Uvicorn](https://uvicorn.dev/){: target="_blank" rel="noopener"} runs that
+application as a local web server. Inside an existing `uv` project, add both:
 
 ```sh
 uv add fastapi uvicorn
@@ -37,27 +38,20 @@ Or, with pip:
 python -m pip install fastapi uvicorn
 ```
 
-FastAPI provides the application and its routes. Uvicorn runs that application
-as a local web server.
+## Create one Citry instance for the app
 
-## Create the Citry instance
-
-Create a new folder for this small app. Inside it, save the following as
-`citry_setup.py`:
+A `Citry` instance holds your app's components and settings. Create a new
+folder for this small app, and save this inside it as `citry_setup.py`:
 
 <c-include-file path="docs_site/snippets/getting_started/citry_setup.py" language="citry" />
 
-The other files in this small app import the same
-[`Citry`][citry.Citry] instance. That keeps its components, rendered pages,
-and mounted browser routes together.
+Every other file in the app imports this same
+[`Citry`][citry.Citry] instance, so the components, the rendered pages, and
+Citry's browser routes all use the same settings.
 
-The secret lets Citry detect changes to data that travels through the browser.
-You will use that feature when you add [`State`][citry.Component.State].
-
-!!! warning
-
-    Keep the secret outside of your
-    source code so it does not end up in version control.
+The secret lets Citry detect when someone changes data that passes through
+the browser. You need it once you add [`State`][citry.Component.State] in a
+later step.
 
 Create a random development secret in your current terminal:
 
@@ -73,70 +67,42 @@ In PowerShell, use:
 $env:CITRY_SECRET = python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Use a stable secret from your deployment's secret store in production. All
-workers for the same app need the same value.
+!!! warning "Keep the secret out of your source code"
+
+    Read the secret from the environment so it never ends up in version
+    control. In production, use a stable secret from your deployment's
+    secret store, and give every worker of the app the same value.
 
 ## Create the page
 
-Save this next file as `components.py`:
-
-Look for the `New in this step` comments. Compared with the browser-only
-version, this file now:
-
-- imports the shared `citry_app` and assigns it to every component; and
-- exposes `TutorialPage`, the full page that the FastAPI route will render.
+Save this as `components.py`:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step8.py" language="citry" />
 
-## Connect components with Citry
-
-The complete file above repeats one new line on every component. Here is the
-same change with the unchanged parts folded away:
+The `New in this step` comments mark what changed from the browser-only
+version. Each component now has one new line:
 
 ```citry
 class ChoiceButton(Component):
     citry = citry_app
     ...
-
-class ChoicePicker(Component):
-    citry = citry_app
-    ...
-
-class TutorialPage(Component):
-    citry = citry_app
-    ...
 ```
 
-[`Component.citry`][citry.Component.citry] tells each class which Citry
-instance owns it. `ChoiceButton` and `ChoicePicker` keep the browser behavior
-you already built. `TutorialPage` gives the FastAPI route one complete page to
-return.
+[`Component.citry`][citry.Component.citry] tells the class which Citry
+instance it belongs to. The new `TutorialPage` component is the complete
+HTML page that FastAPI will return.
 
 ## Create the FastAPI app
 
-Save this as `app.py` beside the other two files:
-
-This whole file is new. Its `New in this step` comments mark the three
-connections between FastAPI and Citry.
+Save this as `app.py` beside the other two files. The whole file is new, and
+its `New in this step` comments mark the three places where FastAPI and
+Citry meet.
 
 <c-include-file path="docs_site/snippets/getting_started/app.py" language="citry" />
 
-## Load the components
+The next three sections walk through those places.
 
-The two local imports in the file above connect the page to the same Citry instance:
-
-```python
-from citry_setup import citry_app
-from components import TutorialPage
-```
-
-Importing `TutorialPage` runs the class definitions in `components.py`. Those
-classes register with `citry_app`, so they are present before the application
-starts serving requests.
-
-## Initialize Citry when FastAPI starts
-
-FastAPI calls the [lifespan](https://fastapi.tiangolo.com/advanced/events/){: target="_blank" rel="noopener"} function once when the application starts:
+### Initialize Citry when FastAPI starts
 
 ```python
 @asynccontextmanager
@@ -147,14 +113,21 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(lifespan=lifespan)
 ```
 
-[`citry_app.initialize()`][citry.Citry.initialize] prepares the registered
-components before requests can arrive. The `yield` hands control back to
-FastAPI so it can run the application.
+FastAPI runs this
+[lifespan](https://fastapi.tiangolo.com/advanced/events/){: target="_blank" rel="noopener"}
+function once when the app starts.
+[`citry_app.initialize()`][citry.Citry.initialize] gets the components ready
+before the first request arrives. The `yield` hands control back to FastAPI
+so it can serve requests.
 
-## Define the FastAPI endpoint
+Importing `TutorialPage` at the top of `app.py` runs the class definitions in
+`components.py`, so every component already belongs to `citry_app` when
+`initialize()` runs.
 
-`home` is a regular FastAPI route. Inside it, we build `TutorialPage`,
-render it to a string, and return that string as HTML:
+### Return the page from a route
+
+`home` is an ordinary FastAPI route. It renders `TutorialPage` to a string
+and returns it as HTML:
 
 ```python
 @app.get("/")
@@ -163,37 +136,29 @@ def home() -> HTMLResponse:
     return HTMLResponse(page)
 ```
 
-A larger application can render a Citry
-page from its existing routes in the same way. `HTMLResponse` tells FastAPI and
-the browser that the returned string is an HTML document. Returning the plain
-string directly would make FastAPI encode it as a JSON string.
+`HTMLResponse` tells FastAPI and the browser that the string is an HTML
+document. If you returned the plain string, FastAPI would send it as JSON.
+Your existing routes can return Citry pages the same way.
 
-## Mount Citry's routes
+### Add Citry's routes to the app
 
-The final line gives Citry its own routes inside the FastAPI application:
+The last line adds Citry's own routes to the FastAPI app:
 
 ```python
 mount(app, citry_app)
 ```
 
-[`mount(app, citry_app)`][citry.contrib.fastapi.mount] uses `/citry` by
-default. The rendered page uses those routes to load Citry's browser code. Passing the same
-`citry_app` keeps those routes connected to the components you initialized.
-
-In the next steps, the browser uses these routes to call the components'
-Python event handlers.
+[`mount(app, citry_app)`][citry.contrib.fastapi.mount] puts them under
+`/citry` by default. The page loads Citry's browser code from these routes,
+and in the next steps, clicks use them to call Python.
 
 ## Start the app
 
-Run Uvicorn from the folder containing the three files:
+Run Uvicorn from the folder that holds the three files:
 
 ```sh
 uv run uvicorn app:app --reload
 ```
-
-In `app:app`, the first `app` names `app.py` and the second names the FastAPI
-object inside that file. `--reload` restarts the local server when you save a
-change.
 
 If you installed with pip, run:
 
@@ -201,17 +166,21 @@ If you installed with pip, run:
 python -m uvicorn app:app --reload
 ```
 
-Visit `http://127.0.0.1:8000/`. You should see the choice picker inside the
-“Reading room” page. Click its button and watch “Ocean” change to “Forest,”
-just as it did without a server.
+In `app:app`, the first `app` is the file `app.py`, and the second is the
+FastAPI object inside it. `--reload` restarts the server when you save a
+change.
 
-You can also visit `http://127.0.0.1:8000/citry/citry.js`. Seeing JavaScript at
-that address confirms that the Citry routes are mounted.
+Visit `http://127.0.0.1:8000/`. You see the choice picker on the
+“Reading room” page. Click its button, and “Ocean” changes to “Forest,” just
+as it did without a server.
 
-The [Web frameworks](/web-frameworks/) guide shows the matching setup for
-Django, Flask, Starlette, and bare ASGI or WSGI apps.
+To confirm that Citry's routes work, visit
+`http://127.0.0.1:8000/citry/citry.js`. You should see JavaScript.
 
 ## Next steps
 
-The page and Citry now share one running server. Next, [call
-Python from a click](/getting-started/call-python/).
+The page and Citry now run on one server. Next, [call Python from a
+click](/getting-started/call-python/).
+
+To use another framework, the [Web frameworks](/web-frameworks/) guide shows
+the matching setup for Django, Flask, Starlette, and plain ASGI or WSGI apps.
