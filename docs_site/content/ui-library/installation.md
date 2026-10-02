@@ -41,7 +41,7 @@ If a component renders through an instance that does not have the
 library, rendering fails with a `NotRegistered` error such as
 `No component registered as 'cbutton'`.
 
-## Use in a template { #use-a-component-in-a-template }
+## Use it in a template { #use-a-component-in-a-template }
 
 Write the component's tag in a template:
 
