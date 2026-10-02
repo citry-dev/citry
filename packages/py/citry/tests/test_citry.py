@@ -111,6 +111,35 @@ class TestCitryInstance:
         with pytest.raises(error, match="ssr_element_threshold"):
             CitrySettings(ssr_element_threshold=value)
 
+    def test_max_component_depth_defaults_and_stores_valid_limits(self):
+        # The default leaves room for any real page while stopping runaway
+        # recursion quickly.
+        assert Citry().settings.max_component_depth == 2000
+        assert CitrySettings().max_component_depth == 2000
+        for value in (1, 50_000):
+            assert Citry(max_component_depth=value).settings.max_component_depth == value
+            assert CitrySettings(max_component_depth=value).max_component_depth == value
+
+    @pytest.mark.parametrize(
+        ("value", "error"),
+        [
+            # A bool is an int subclass but not a limit; a float, a string,
+            # or None would compare wrongly or fail later inside a render.
+            (True, TypeError),
+            (100.0, TypeError),
+            ("100", TypeError),
+            (None, TypeError),
+            # A limit below 1 means nothing: the root component alone is 1 deep.
+            (0, ValueError),
+            (-1, ValueError),
+        ],
+    )
+    def test_invalid_max_component_depth_is_rejected(self, value, error):
+        with pytest.raises(error, match="max_component_depth"):
+            Citry(max_component_depth=value)
+        with pytest.raises(error, match="max_component_depth"):
+            CitrySettings(max_component_depth=value)
+
     def test_lint_settings_are_typed_copied_and_stored(self):
         variables = {"request": Annotated[str, "Current request."]}
         vue_variables = {"$featureFlags": Annotated[dict[str, bool], "Feature flags."]}

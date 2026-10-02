@@ -24,7 +24,9 @@ result is cached per component class and per set of ``Const`` values, so
 repeat renders skip that work. See docs/design/component_constness.md and
 citry/constness.py.
 
-Rendering is deferred and stack-driven (no recursion limit on nesting depth),
+Rendering is deferred and stack-driven, so nesting depth is not tied to
+Python's recursion limit; ``CitrySettings.max_component_depth`` bounds it
+instead, so a component that renders itself forever fails fast. Rendering also
 collects each component's JS/CSS dependencies, and drives the ``on_render``
 hook; see docs/design/component_rendering_defer.md and component_on_render.md. Django's
 context snapshotting is deliberately not ported: a component receives only
@@ -753,15 +755,19 @@ def _defer_simple_vue_calls(
         )
 
 
-def _simple_vue_child_tasks(record: SimpleVueRecord, parent_context: CitryContext) -> list[_RenderTask]:
-    """Queue the children a ``simple='vue'`` occurrence called, in template order."""
+def _simple_vue_child_tasks(
+    record: SimpleVueRecord,
+    parent_context: CitryContext,
+    depth: int,
+) -> list[_RenderTask]:
+    """Queue the children a ``simple='vue'`` occurrence called, in template order, at ``depth``."""
     children = record.leaf.call_children
     if children is None:
         return []
     # The children's dependencies go where the record's own dependency
     # record went: the context of the nearest enclosing render.
     return [
-        _RenderTask(part, _DeferredComponentPosition(children.parts, index, parent_context))
+        _RenderTask(part, _DeferredComponentPosition(children.parts, index, parent_context), depth)
         for index, part in enumerate(children.parts)
         if isinstance(part, DeferredComponent)
     ]
@@ -878,7 +884,10 @@ def _render_tree(
     ``DeferredComponent``. This function then renders those children one at a
     time, working through a list instead of calling itself, so a deeply nested
     page never hits Python's recursion limit (see
-    docs/design/component_rendering_defer.md).
+    docs/design/component_rendering_defer.md). The list has no natural end
+    when a component renders itself forever, so each task carries its nesting
+    depth and the loop raises ``RecursionError`` past
+    ``CitrySettings.max_component_depth``.
 
     A component's after-render hooks run once everything inside that component
     has been rendered (so children run before their parents): first its own
@@ -943,6 +952,17 @@ def _settle_render(
     # everything inside it finish before we run the parent's _FinalizeTask. (This
     # is the approach django-components uses, but on objects instead of HTML
     # strings.)
+    #
+    # Each task also carries its component's nesting depth (the root is 1), so
+    # data that contains itself, which would nest forever, stops at
+    # max_component_depth. The depth is relative to this loop: a nested
+    # _settle_render (slot text, an element in an expression, the target of a
+    # <c-component>) runs inside a Python call, so Python's own recursion
+    # limit already bounds that nesting. A cache hit places a stored subtree
+    # without counting its levels; it was rendered once already, so it cannot
+    # nest forever. Without a root component here, the components directly
+    # inside root_render start at depth 1.
+    child_depth = 2 if finalize_root else 1
     stack: list[_RenderTask | _FinalizeTask | _ContextMergeTask] = []
     if finalize_root:
         stack.append(
@@ -952,7 +972,7 @@ def _settle_render(
                 root_generator,
             )
         )
-    stack.extend(reversed(_scan_deferred(root_render)))
+    stack.extend(reversed(_scan_deferred(root_render, child_depth)))
 
     root_result = root_render
 
@@ -995,15 +1015,18 @@ def _settle_render(
         )
         if task.position is not None:
             _replace_in_parts(task.position.parts, task.position.idx, old, new_render)
+        # The replacement is still this component's output, so it keeps the
+        # component's depth and its children sit one level below it.
         stack.append(
             _FinalizeTask(
                 new_render,
                 task.position,
                 generator,
                 direct_parent_execution=task.direct_parent_execution,
+                depth=task.depth,
             )
         )
-        stack.extend(reversed(_scan_deferred(new_render)))
+        stack.extend(reversed(_scan_deferred(new_render, task.depth + 1)))
 
     def settle(task: _FinalizeTask, error: Exception | None) -> CitryRender | None:
         # Settle a component whose subtree has finished rendering (or, when
@@ -1112,6 +1135,13 @@ def _settle_render(
         # may swallow the error by producing replacement output, which ends
         # the unwind. Otherwise the error continues to the next ancestor, and
         # out of render_impl at the root.
+        #
+        # The nesting-depth error skips this: an error boundary inside the
+        # recursion would swallow it and let the next sibling recurse again,
+        # so data that contains itself twice would still render exponentially
+        # many components. Ending the whole render is the only bounded answer.
+        if getattr(error, "_citry_nesting_limit", False):
+            raise error
         while stack:
             task = stack.pop()
             if isinstance(task, _ContextMergeTask):
@@ -1141,6 +1171,12 @@ def _settle_render(
         # Case: Render nested component
         if isinstance(task, _RenderTask):
             try:
+                # Checked before any work for the child, so a runaway recursion
+                # stops after max_component_depth renders instead of growing
+                # memory until the process dies. bubble() raises it straight
+                # out of the render; no ancestor hook can swallow it.
+                if task.depth > task.deferred.element.comp_cls.citry.settings.max_component_depth:
+                    raise _nesting_depth_error(task)
                 from citry._vue.direct import direct_execution_scope  # noqa: PLC0415
 
                 with direct_execution_scope(task.deferred.direct_parent_execution):
@@ -1165,11 +1201,15 @@ def _settle_render(
                 # Render the children it called next, before its later
                 # siblings, as an ordinary parent's children would be.
                 if simple_record.leaf.call_children is not None:
-                    stack.extend(reversed(_simple_vue_child_tasks(simple_record, task.position.parent_context)))
+                    stack.extend(
+                        reversed(_simple_vue_child_tasks(simple_record, task.position.parent_context, task.depth + 1))
+                    )
                 continue
             if child is None:
                 raise AssertionError("ordinary deferred rendering did not produce a result")
             if child.cache_hit:
+                # A stored subtree is finished; its depth is not counted
+                # (see the comment at the top of this function).
                 _replace_in_parts(task.position.parts, task.position.idx, task.deferred, child.render)
                 _merge_dependencies(task.position.parent_context, child.render.context)
                 continue
@@ -1180,9 +1220,10 @@ def _settle_render(
                     task.position,
                     child.generator,
                     direct_parent_execution=task.deferred.direct_parent_execution,
+                    depth=task.depth,
                 )
             )
-            stack.extend(reversed(_scan_deferred(child.render)))
+            stack.extend(reversed(_scan_deferred(child.render, task.depth + 1)))
         # Case: Finalize nested component
         else:
             try:
@@ -1209,6 +1250,9 @@ class _RenderTask(NamedTuple):
 
     deferred: DeferredComponent
     position: _DeferredComponentPosition
+    # How many components deep the child sits (the root component is 1);
+    # checked against CitrySettings.max_component_depth before it renders.
+    depth: int
 
 
 class _FinalizeTask(NamedTuple):
@@ -1220,6 +1264,9 @@ class _FinalizeTask(NamedTuple):
     # with the settled result when this task runs (None for most components).
     generator: OnRenderGenerator | None = None
     direct_parent_execution: DirectExecutionFrame | None = None
+    # The component's nesting depth, so when its on_render replaces the
+    # output, the new children queue one level below it.
+    depth: int = 1
 
 
 class _ContextMergeTask(NamedTuple):
@@ -1241,8 +1288,9 @@ def _scan_deferred_parts(
     parts: list[RenderPart],
     parent_context: CitryContext,
     tasks: list[_RenderTask | _ContextMergeTask],
+    depth: int,
 ) -> bool:
-    """Append child work in source order, merging contexts after their children."""
+    """Append child work in source order at ``depth``, merging contexts after their children."""
     initial_count = len(tasks)
     stack: list[tuple[Iterator[tuple[int, RenderPart]], list[RenderPart], CitryContext, int]] = [
         (iter(enumerate(parts)), parts, parent_context, initial_count)
@@ -1261,12 +1309,13 @@ def _scan_deferred_parts(
         if type(part) is str:
             continue
         if isinstance(part, DeferredComponent):
-            tasks.append(_RenderTask(part, _DeferredComponentPosition(current_parts, i, context)))
+            tasks.append(_RenderTask(part, _DeferredComponentPosition(current_parts, i, context), depth))
         elif type(part) is SimpleVueRecord:
             # A root simple='vue' render holds its called children in its
-            # leaf; they share the enclosing context.
+            # leaf; they share the enclosing context. The record is already
+            # rendered at this level, so its children are one level below.
             if part.leaf.call_children is not None:
-                tasks.extend(_simple_vue_child_tasks(part, context))
+                tasks.extend(_simple_vue_child_tasks(part, context, depth + 1))
         else:
             unwrapped = part
             if isinstance(unwrapped, CitryRender):
@@ -1274,9 +1323,12 @@ def _scan_deferred_parts(
     return len(tasks) > initial_count
 
 
-def _scan_deferred(render: CitryRender) -> list[_RenderTask | _ContextMergeTask]:
+def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _ContextMergeTask]:
     """
     Find the child components inside ``render`` that still need rendering.
+
+    ``depth`` is the nesting depth the found children render at, one more
+    than the depth of the component that owns ``render``.
 
     Returns one ``_RenderTask`` per ``DeferredComponent``, descending into
     every nested ``CitryRender``. Most nested renders share this component's
@@ -1293,7 +1345,7 @@ def _scan_deferred(render: CitryRender) -> list[_RenderTask | _ContextMergeTask]
     dependencies belong (see docs/design/component_slots.md section 8).
     """
     tasks: list[_RenderTask | _ContextMergeTask] = []
-    _scan_deferred_parts(render.parts, render.context, tasks)
+    _scan_deferred_parts(render.parts, render.context, tasks, depth)
     return tasks
 
 
@@ -1463,6 +1515,36 @@ def _component_path(component: Component | None) -> list[str]:
         component = component.parent
     names.reverse()
     return names
+
+
+def _nesting_depth_error(task: _RenderTask) -> RecursionError:
+    """
+    Build the error for a child that would sit deeper than ``max_component_depth``.
+
+    Only called once, on failure, so walking the whole parent chain here costs
+    nothing on ordinary renders. The chain is shortened to its two outermost
+    and three innermost names: the innermost ones show which components
+    repeat, and the full chain can be thousands of names long.
+    """
+    element = task.deferred.element
+    limit = element.comp_cls.citry.settings.max_component_depth
+    metadata = element.prepared_call_metadata
+    callers = metadata.simple_vue_callers if type(metadata) is _PreparedCallMetadata else ()
+    names = [*_component_path(task.deferred.parent), *callers, element.comp_cls.__name__]
+    if len(names) > 6:
+        names = [*names[:2], "...", *names[-3:]]
+    chain = " > ".join(names)
+    msg = (
+        f"Component {element.comp_cls.__name__} is nested more than {limit} components deep "
+        f"({chain}). This usually means a component keeps rendering itself, for example a tree "
+        "node whose data lists the node among its own children. Make sure the recursion ends, "
+        "or pass a larger max_component_depth to Citry() if the page really nests this deep."
+    )
+    error = RecursionError(msg)
+    # Users see a plain RecursionError; the flag lets bubble() tell this one
+    # apart so no error boundary can swallow it.
+    error._citry_nesting_limit = True  # type: ignore[attr-defined]
+    return error
 
 
 def _render_one_traced(

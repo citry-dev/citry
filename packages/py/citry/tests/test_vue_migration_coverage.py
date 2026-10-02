@@ -1071,7 +1071,7 @@ def test_component_render_tree_walkers_handle_deferred_cross_context_and_cycles(
         frame=selected.frame,
         render_target="prepared",
     )
-    tasks = _scan_deferred(root)
+    tasks = _scan_deferred(root, 1)
     assert len(tasks) == 1
     assert _contains_deferred(root)
     assert _render_ids(root) == {selected.frame.render_id}

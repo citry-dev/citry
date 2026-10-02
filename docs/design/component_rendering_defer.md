@@ -1,7 +1,7 @@
-# Design: deferred rendering (infinite depth, top-down passes, component-id markers)
+# Design: deferred rendering (deep nesting, top-down passes, component-id markers)
 
 **Status (2026-06-09): Phase A and Phase B built.** This document specifies how
-citry renders a component tree without recursion limits, in a top-down order, and
+citry renders a component tree without Python's recursion limit, in a top-down order, and
 how it tags each component's root element(s) with a component-id marker. It is the
 citry port of the two django-components features: infinite render depth and the
 multi-pass render that powers per-instance JS/CSS attribute passing. Phase A (the
@@ -106,13 +106,13 @@ handle multiple roots, the exact capability DJC gets from
 cover multi-root and nested cases. So the markers can be built by reusing this
 crate, with no compiler change.
 
-## 4. Phase A: the deferred render queue (infinite render depth)
+## 4. Phase A: the deferred render queue (deep nesting)
 
 Phase A is pure Python in the `citry` package. It touches no grammar, AST,
 compiler output, `LangImpl`, or PyO3 surface, so it is outside the plan-mode and
-prior-art gate in [`/CLAUDE.md`](../../CLAUDE.md). It delivers unbounded render
-depth and the children-first `on_component_rendered` finalization, with no
-markers. The serialize-time marker ordering (section 6) is independent of it.
+prior-art gate in [`/CLAUDE.md`](../../CLAUDE.md). It frees render depth from
+Python's recursion limit and delivers the children-first `on_component_rendered`
+finalization, with no markers. The serialize-time marker ordering (section 6) is independent of it.
 
 ### 4.1 A new render part: `DeferredComponent`
 
@@ -228,9 +228,26 @@ without waiting for the whole page and without counting children. Adding
 which the dependency de-duplication relies on. The result is the same hook order
 as the old approach where one component rendered the next directly
 (`on_component_input` -> `on_component_data` -> `on_component_rendered`, children
-before parents); the only difference is the depth limit is gone. Checking the
-remembered index first and otherwise scanning the list keeps the position correct
-even if user code or an extension edited `.parts` in between.
+before parents); the only difference is that Python's recursion limit no longer
+caps the depth. Checking the remembered index first and otherwise scanning the
+list keeps the position correct even if user code or an extension edited `.parts`
+in between.
+
+The stack has no natural end when a component renders itself forever, for
+example a tree node given data that lists the node among its own children. So
+each `Render` and `Finalize` item carries its component's nesting depth (the
+root is 1, its children 2), and the loop raises `RecursionError` before
+rendering a child deeper than `CitrySettings.max_component_depth` (2000 by
+default). Its message names the component and a shortened chain of its
+ancestors. The error skips the usual unwind: no ancestor's `on_render` or
+`on_component_rendered` can swallow it. Otherwise an error boundary inside the
+recursion would catch it, the next sibling would recurse again, and data that
+lists a node twice among its own children would render exponentially many
+components. The depth is counted per loop: a nested loop (slot text from
+`str(slot)`, a component placed in a `{{ ... }}` expression, the target of a
+`<c-component>`) runs inside a Python call, so Python's own recursion limit
+already bounds that nesting. A cache hit places a stored subtree without
+counting its levels; that subtree was rendered once, so it cannot nest forever.
 
 Marker ordering (section 6) is a separate, serialize-time concern; it does not
 depend on this drive order. The drive's job is only to produce a fully-resolved,
@@ -436,7 +453,7 @@ stacks the `data-cid` markers automatically. It is rejected because:
 1. **Phase A (built).** `DeferredComponent`, the `_render_one`/`render_impl`
    split, the `_RenderTask`/`_FinalizeTask` drive loop, the finalize-time dep
    merge, and the children-first `on_component_rendered` (section 7). Pure Python.
-   Delivers infinite depth. Tests cover deep nesting (600 levels, well past the
+   Frees render depth from Python's recursion limit. Tests cover deep nesting (600 levels, well past the
    old recursion limit), loop-variable kwargs resolved correctly under deferral,
    deps bubbling to root `extra`, children-first and sibling-source-order
    finalize, the serialize-time unresolved-deferred guard, and nested

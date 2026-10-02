@@ -311,8 +311,8 @@ rest.
 |---|---|---|---|---|
 | 177 other names in `citry.__all__` | `P/__init__.py` | same | unchanged | Same signatures and public members. |
 | `citry.TemplateNode` (also `citry.nodes.TemplateNode`) | `P/nodes/__init__.py` | not defined | removed | The template compiler never generated it. An extension that built one should add the markup to the template source in `on_template_loaded`. Decision 6.18. |
-| `citry.Citry(...)` | `P/citry.py:130` | `P/citry.py:130, 170-171` | changed-compatible | Adds keyword params `ssr=True`, `ssr_element_threshold=0`. Methods unchanged. |
-| `citry.CitrySettings` | `P/settings.py` | `P/settings.py` | changed-compatible | Gains `ssr`, `ssr_element_threshold`. |
+| `citry.Citry(...)` | `P/citry.py:130` | `P/citry.py:130, 174-177` | changed-compatible | Adds keyword params `ssr=True`, `ssr_element_threshold=0`, `max_component_depth=2000`. Methods unchanged. |
+| `citry.CitrySettings` | `P/settings.py` | `P/settings.py` | changed-compatible | Gains `ssr`, `ssr_element_threshold`, `max_component_depth`. |
 | `citry.CitryRender.serialize()` / `serialize_result()` | `P/citry_render.py:236, 309` | `P/citry_render.py:364, 441` | changed-compatible | New keyword `ssr`. Constructor gains keyword-only `render_target`, `owner_citry`. |
 | `citry.CitryTemplate` | `P/citry_template.py:47` | same | changed-compatible | New fields `prepared_generate` (inserted after `generate`), `prepared_standalone_bodies`. Built by the engine. |
 | `citry.RenderFrame` | `P/citry_render.py:158` | `P/citry_render.py:229` | changed-compatible | New trailing field `prepared_occurrence`. |
@@ -431,6 +431,7 @@ changes:
 | Per-call `serialize(security_csp=..., security_javascript=...)` | `P/citry_render.py:236` | `P/_vue/serialization.py:1113-1120` | changed-incompatible | On an Events page a differing override raises. In CHANGELOG. |
 | `ssr=True` | none | `P/settings.py:386` | new | |
 | `ssr_element_threshold=0` | none | `P/settings.py:387` | new | |
+| `max_component_depth=2000` | none | `P/settings.py:494` | new | Rendering raises `RecursionError` past this many nested components; 0.5.1 had no limit, and data that contains itself rendered forever. |
 
 No 0.5.1 default changed.
 

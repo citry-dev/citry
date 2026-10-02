@@ -33,6 +33,9 @@ _ALLOWED_MODES: tuple[str, ...] = get_args(Mode)
 # 64 MiB: generous, so an app with many components and stylesheets rarely
 # drops one an open page still needs.
 DEFAULT_VUE_ASSET_MAX_BYTES = 64 * 1024 * 1024
+# Deep enough for any real page, low enough that data which contains itself
+# fails within a fraction of a second instead of exhausting memory.
+DEFAULT_MAX_COMPONENT_DEPTH = 2000
 LintSeverity = Literal["ignore", "warning", "error"]
 _ALLOWED_LINT_SEVERITIES: tuple[str, ...] = get_args(LintSeverity)
 SecurityCspMode = Literal["off", "warn", "strict"]
@@ -414,6 +417,20 @@ class CitrySettings:
             positive ``int`` or ``None``: another type raises ``TypeError``
             and zero or a negative value raises ``ValueError`` when the
             settings are created.
+        max_component_depth: How many components deep a page may nest before
+            rendering stops with ``RecursionError``. A component that renders
+            itself, such as a tree node rendering its children, needs data
+            that ends; data that contains itself would otherwise nest forever,
+            using more memory until the process runs out. The error names the
+            component and the chain of components above it, and error
+            boundaries cannot catch it. The default, ``2000``, is far deeper
+            than real pages nest, so it stops only runaway recursion; raise it
+            for a page that really nests deeper. A component rendered from a
+            ``{{ ... }}`` expression or through ``<c-component>`` starts a
+            new count; Python's own recursion limit stops that kind of
+            recursion much earlier. Must be a positive ``int``: another type
+            raises ``TypeError`` and zero or a negative value raises
+            ``ValueError`` when the settings are created.
         id_generator: A function returning the per-render id stamped on each
             component instance (``component.id``; static output also writes it
             into each component root's ``data-cid-<id>`` attribute). Given as
@@ -474,6 +491,7 @@ class CitrySettings:
     ssr: bool = True
     ssr_element_threshold: int = 0
     vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES
+    max_component_depth: int = DEFAULT_MAX_COMPONENT_DEPTH
 
     def __post_init__(self) -> None:
         # Copy every input into its immutable stored shape, so a direct
@@ -511,6 +529,16 @@ class CitrySettings:
                 )
             if self.vue_asset_max_bytes <= 0:
                 raise ValueError(f"Citry vue_asset_max_bytes must be greater than 0, got {self.vue_asset_max_bytes}.")
+        # The renderer compares every component's depth with this number, so
+        # it must be a real count: an exact int check keeps True/False and
+        # floats out, and a limit below 1 means nothing, since the root
+        # component alone is 1 deep.
+        if type(self.max_component_depth) is not int:
+            raise TypeError(
+                f"Citry max_component_depth must be an int, got {type(self.max_component_depth).__name__}."
+            )
+        if self.max_component_depth < 1:
+            raise ValueError(f"Citry max_component_depth must be 1 or greater, got {self.max_component_depth}.")
 
         # Extensions are copied into a tuple of their own.
         object.__setattr__(self, "extensions", tuple(self.extensions))

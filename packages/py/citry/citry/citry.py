@@ -68,6 +68,7 @@ from citry.constness import ConstBodyCache
 from citry.extension import ExtensionManager
 from citry.introspection import _new_engine_id
 from citry.settings import (
+    DEFAULT_MAX_COMPONENT_DEPTH,
     DEFAULT_VUE_ASSET_MAX_BYTES,
     CitrySettings,
     LintSettings,
@@ -173,6 +174,7 @@ class Citry:
         ssr: bool = True,
         ssr_element_threshold: int = 0,
         vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES,
+        max_component_depth: int = DEFAULT_MAX_COMPONENT_DEPTH,
     ) -> None:
         self._engine_id = _new_engine_id()
         # CitrySettings.__post_init__ copies every field into its immutable
@@ -200,6 +202,7 @@ class Citry:
             ssr=ssr,
             ssr_element_threshold=ssr_element_threshold,
             vue_asset_max_bytes=vue_asset_max_bytes,
+            max_component_depth=max_component_depth,
             secret=secret,
             event_result_resolvers=event_result_resolvers,
             event_payload_codecs=event_payload_codecs,

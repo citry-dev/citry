@@ -28,7 +28,7 @@ def test_deep_interior_scan_merges_contexts_after_their_children() -> None:
         contexts.append(context)
         render = CitryRender(["before", render, "after"], context)
 
-    tasks = _scan_deferred(render)
+    tasks = _scan_deferred(render, 1)
     assert len(tasks) == len(contexts)
     assert isinstance(tasks[0], _RenderTask)
     assert tasks[0].deferred is pending
@@ -43,7 +43,7 @@ def test_deep_completed_interiors_serialize_in_source_order() -> None:
     for index in range(1100):
         render = CitryRender([f"<div>{index}:", render, "</div>"], context)
 
-    assert _scan_deferred(render) == []
+    assert _scan_deferred(render, 1) == []
     assert render.serialize() == (
         "".join(f"<div>{index}:" for index in reversed(range(1100))) + "end" + "</div>" * 1100
     )

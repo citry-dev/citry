@@ -103,7 +103,7 @@ The render-output model (the three-phase `CitryElement` -> `CitryRender` ->
 HTML pipeline, the `CitryContext` render-scoped state, and the JS/CSS dependency
 flow that drives the struct shape) is captured separately in
 [`component_rendering.md`](component_rendering.md). It is built: `.render()` returns a
-`CitryRender`, rendering is deferred (depth-unbounded, stack-driven), and
+`CitryRender`, rendering is deferred (stack-driven, so depth is not tied to Python's recursion limit), and
 `serialize()` stamps the per-component `data-cid-<id>` markers. Placing
 collected JS/CSS dependencies into `<head>`/`<body>` at serialize time is
 built (the five dependency-rendering phases in
