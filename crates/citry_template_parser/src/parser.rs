@@ -2131,6 +2131,38 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
     Ok(())
 }
 
+/// The modifiers Vue handles itself on any event: event options,
+/// propagation and target checks, modifier-key checks, and mouse buttons.
+/// The list matches `resolveModifiers` in Vue's `compiler-dom` (3.5).
+/// Citry's Vue compiler (vize, `codegen/props/events.rs`) wraps every other
+/// modifier in a check of `event.key`, whatever the event.
+const VUE_NON_KEY_MODIFIERS: [&str; 14] = [
+    "stop", "prevent", "self", "capture", "once", "passive", "ctrl", "shift", "alt", "meta",
+    "exact", "left", "right", "middle",
+];
+
+/// Whether a static event name is a keyboard event, where key-name modifiers
+/// work. The name must match exactly: on an element, Citry's Vue compiler
+/// listens for an event spelled `KeyDown` as written, and the browser never
+/// sends one.
+fn is_vue_keyboard_event(event: &str) -> bool {
+    matches!(event, "keydown" | "keyup" | "keypress")
+}
+
+/// What to write instead of a modifier that is not a key name on a
+/// non-keyboard event: the usual mistakes get their own advice.
+fn non_key_modifier_hint(modifier: &str) -> String {
+    match modifier {
+        "native" => "Vue 3 has no '.native' modifier: a listener on a component tag already hears the child's root element events that the child does not declare. Remove '.native'.".to_string(),
+        "trim" | "lazy" | "number" => format!(
+            "'.{modifier}' is a 'v-model' modifier. Put it on 'v-model', or remove it from the listener."
+        ),
+        _ => format!(
+            "Remove '.{modifier}', or listen to 'keydown' or 'keyup' to react to a key."
+        ),
+    }
+}
+
 /// What to write instead of an Alpine event modifier that Vue does not have,
 /// or `None` for a modifier Vue accepts (including every key name).
 ///
@@ -2467,7 +2499,17 @@ fn validate_vue_binding_python_conflicts(
     Ok(())
 }
 
-/// Reject Alpine-only modifiers on a Vue listener (`@event` or `v-on:event`).
+/// Reject event modifiers that would stop a Vue listener (`@event` or
+/// `v-on:event`) from ever running.
+///
+/// Citry's Vue compiler wraps every modifier outside `VUE_NON_KEY_MODIFIERS`
+/// in a check that lets the listener run only when the event's `key`
+/// matches. That works for keyboard events, but a `click` has no `key`, so
+/// `@click.enter` would never run. Two
+/// kinds of modifier are rejected: Alpine modifiers that Vue lacks, on any
+/// event, and key names on an event whose static name is not a keyboard
+/// event. A dynamic event name (`@[name]`) is checked only for Alpine
+/// modifiers, because its event is known only in the browser.
 ///
 /// A '@c-*' binding is a Citry Events binding with its own modifiers, such as
 /// '.debounce', so it is left to the Events compiler.
@@ -2485,24 +2527,44 @@ fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Resu
         }
         // A dynamic event name (`@[name]`) may itself contain dots, so the
         // modifiers start after its closing bracket.
-        let modifiers = if listener.starts_with('[') {
-            listener
-                .find(']')
-                .map_or("", |close| &listener[close + 1..])
+        let (event, modifiers) = if listener.starts_with('[') {
+            (
+                None,
+                listener
+                    .find(']')
+                    .map_or("", |close| &listener[close + 1..]),
+            )
         } else {
-            listener.find('.').map_or("", |dot| &listener[dot..])
+            match listener.find('.') {
+                Some(dot) => (Some(&listener[..dot]), &listener[dot..]),
+                None => (Some(listener), ""),
+            }
         };
+        let (line, col) = attr.token.line_col;
         for modifier in modifiers.split('.').skip(1) {
             // Vue compares modifiers case-sensitively, so `.OUTSIDE` is an
             // unknown modifier too and the listener would never run.
-            let Some(hint) = alpine_only_modifier_hint(&modifier.to_ascii_lowercase()) else {
+            if let Some(hint) = alpine_only_modifier_hint(&modifier.to_ascii_lowercase()) {
+                return Err(context.error_from_token(
+                    &attr.token,
+                    format!(
+                        "'{name}' (line {line}, column {col}) uses '.{modifier}', which is not a Vue event modifier. Vue would read '.{modifier}' as a key name, so the listener would never run. {hint}"
+                    ),
+                ));
+            }
+            // Only a static, non-keyboard event name can be judged here; a
+            // keyboard event accepts any key name, including custom ones.
+            let Some(event) = event.filter(|event| !is_vue_keyboard_event(event)) else {
                 continue;
             };
-            let (line, col) = attr.token.line_col;
+            if VUE_NON_KEY_MODIFIERS.contains(&modifier) {
+                continue;
+            }
             return Err(context.error_from_token(
                 &attr.token,
                 format!(
-                    "'{name}' (line {line}, column {col}) uses '.{modifier}', which is not a Vue event modifier. Vue would read '.{modifier}' as a key name, so the listener would never run. {hint}"
+                    "'{name}' (line {line}, column {col}) uses '.{modifier}' on the '{event}' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so the listener would never run. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. {}",
+                    non_key_modifier_hint(modifier)
                 ),
             ));
         }

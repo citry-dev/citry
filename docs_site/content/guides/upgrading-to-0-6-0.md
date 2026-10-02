@@ -144,6 +144,12 @@ listener to `document` in `mounted()` and remove it in `unmounted()`.
 To slow down calls to the server, the `@c-*` Events bindings still accept
 `.debounce` and `.throttle`; see [Bind events in templates](/events/bindings/).
 
+A key modifier such as `.enter` works only on `keydown`, `keyup`, and
+`keypress` listeners. On another event, such as `@click.enter` or
+`@input.enter`, the template fails to load, because that event has no key
+and the listener would never run. Remove the modifier, or listen to
+`keydown` if you meant the key.
+
 ### End statements with `;`
 
 **What you see:** the render stops with a Vue compile error, "Error parsing

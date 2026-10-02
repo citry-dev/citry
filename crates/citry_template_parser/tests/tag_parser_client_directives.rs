@@ -406,11 +406,52 @@ mod tests {
     }
 
     #[test]
-    fn key_names_on_any_event_still_parse() {
+    fn key_names_on_a_non_keyboard_event_are_rejected() {
+        assert_parse_error(
+            r#"<button @click.enter="go();"></button>"#,
+            "'@click.enter' (line 1, column 9) uses '.enter' on the 'click' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so the listener would never run. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. Remove '.enter', or listen to 'keydown' or 'keyup' to react to a key.",
+        );
+        for (input, modifier, event) in [
+            (r#"<button @click.foo="go();"></button>"#, "foo", "click"),
+            (
+                r#"<button v-on:click.prevent.esc="go();"></button>"#,
+                "esc",
+                "click",
+            ),
+            (r#"<input @input.trim="go();" />"#, "trim", "input"),
+            (
+                r#"<form @submit.Prevent="go();"></form>"#,
+                "Prevent",
+                "submit",
+            ),
+            (r#"<c-child @select.enter="go();" />"#, "enter", "select"),
+            // Citry's Vue compiler listens for `KeyDown` as written, which
+            // the browser never sends, so it is not a keyboard event.
+            (r#"<input @KeyDown.enter="go();" />"#, "enter", "KeyDown"),
+        ] {
+            assert_parse_error(
+                input,
+                &format!("uses '.{modifier}' on the '{event}' event."),
+            );
+        }
+    }
+
+    #[test]
+    fn model_and_native_modifiers_on_a_listener_name_their_own_fix() {
+        assert_parse_error(
+            r#"<input @input.trim="go();" />"#,
+            "'.trim' is a 'v-model' modifier. Put it on 'v-model', or remove it from the listener.",
+        );
+        assert_parse_error(
+            r#"<c-child @click.native="go();" />"#,
+            "Vue 3 has no '.native' modifier",
+        );
+    }
+
+    #[test]
+    fn key_names_on_keyboard_and_dynamic_events_still_parse() {
         for input in [
             r#"<input @keydown.enter="go();" @keyup.page-down="go();" @keypress.a="go();" />"#,
-            // Vue drops a key modifier on an event that has no key.
-            r#"<button @click.enter="go();" @input.trim="go();"></button>"#,
             r#"<div @[name].enter="go();"></div>"#,
             r#"<button @click.ctrl.shift.alt.meta.exact.left.right.middle="go();"></button>"#,
             r#"<div @scroll.passive.capture.once.self.stop.prevent="go();"></div>"#,
