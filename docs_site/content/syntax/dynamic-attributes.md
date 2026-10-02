@@ -75,10 +75,10 @@ including when the state is false:
     On a page that uses Vue, the same `True` can read differently in the
     browser. Python writes a bare attribute, so `data-open` reads as `""`.
     When Vue renders or updates the component, it writes `"true"` on any
-    attribute the element does not treat as a boolean, such as `data-open`
-    or `disabled` on a `<div>`. Real boolean attributes, such as `disabled`
-    on an `<input>`, stay bare either way. In CSS and JavaScript, test
-    `[data-open]` or `hasAttribute("data-open")`.
+    attribute the element does not treat as a boolean, such as `data-open`,
+    or `disabled` on a `div` element. Real boolean attributes, such as
+    `disabled` on an `input` element, stay bare either way. In CSS and
+    JavaScript, test `[data-open]` or `hasAttribute("data-open")`.
 
 ## Pass Python values to a component
 
@@ -358,21 +358,21 @@ accepts.
     `TypeError` when the render is turned into HTML, unless its value is
     `None` or `False`. A `v-on` value containing `{{ ... }}` fails too.
 
-    To give Vue a value from Python, return it from `js_data()` and read it
-    in the binding:
+To give Vue a value from Python, return it from `js_data()` and read it in
+the binding:
 
-    ```citry
-    class Panel(Component):
-        class JsData:
-            open: bool
+```citry
+class Panel(Component):
+    class JsData:
+        open: bool
 
-        def js_data(self, kwargs, slots):
-            return {"open": True}
+    def js_data(self, kwargs, slots):
+        return {"open": True}
 
-        template = """
-          <div :class="{ open: open }"></div>
-        """
-    ```
+    template = """
+      <div :class="{ open: open }"></div>
+    """
+```
 
 ## Bind a form field to server State with `:c-*`
 
@@ -533,19 +533,6 @@ On a page without Vue, `#c-ignore` does nothing and the element renders as
 written. The rules still apply, so the template keeps working if the page
 later uses Vue.
 
-!!! note "Where `#c-ignore` is not allowed"
-
-    Each of these fails with a message that says what to change:
-
-    - A component tag: put `#c-ignore` on an element in the component's
-      template.
-    - `<c-element>`: write a plain HTML tag.
-    - On or inside `<svg>` or `<math>`: put it on an HTML element around it.
-    - `<table>`, `<thead>`, `<tbody>`, `<tfoot>`, `<tr>`, or `<colgroup>`:
-      put it on a `<div>` around the table, or on a `<td>` or `<th>`.
-    - An element with no child elements to keep, such as `<br>`,
-      `<textarea>`, `<script>`, `<style>`, or `<title>`: remove it.
-
 ## Less common attribute rules
 
 ### Output an attribute whose name starts with `c-`
@@ -589,3 +576,16 @@ browser checks it each time the type changes. An unsupported type never
 leaves a half-working binding. The editor also reports unsupported
 elements it can see in the template. See
 [Which elements you can bind](/events/bindings/#which-elements-you-can-bind).
+
+### Where `#c-ignore` is not allowed
+
+Each of these fails with a message that says what to change:
+
+- A component tag: put `#c-ignore` on an element in the component's
+  template.
+- `<c-element>`: write a plain HTML tag.
+- On or inside `<svg>` or `<math>`: put it on an HTML element around it.
+- `<table>`, `<thead>`, `<tbody>`, `<tfoot>`, `<tr>`, or `<colgroup>`: put
+  it on a `<div>` around the table, or on a `<td>` or `<th>`.
+- An element with no child elements to keep, such as `<br>`,
+  `<textarea>`, `<script>`, `<style>`, or `<title>`: remove it.
