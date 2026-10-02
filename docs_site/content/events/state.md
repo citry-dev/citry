@@ -5,84 +5,34 @@ description: Choose the small values a Citry component carries through the brows
 
 # Keep State between calls
 
-[`State`][citry.Component.State] holds the small values that a later server
-call needs. Citry restores those values for the next handler and keeps the
-browser's copy in sync. When a call from a component changes State, the
-response sends the new values of the fields the browser can read (see
-[`$state`](/reference/browser-apis/#state)), even when the handler returns
-`None` or data, or re-renders only part of the component.
+An event handler often needs values from the component it was called from:
+which project it shows, which page of results, what the user typed. It does
+not receive the component's original inputs. Keep those values in
+[`State`][citry.Component.State]: Citry sends them to the browser with the
+rendered component, and the browser sends them back with the next call.
 
 Start with [Server events](/events/) if you have not called a Python handler
 from a component yet.
 
-## Add live search with one State binding
+## Store the values the next call needs
 
-Use `:c-query` to connect a control to a public State field. Giving the
-attribute a handler name makes it two-way: the edit and the named call travel
-together, so the handler receives the latest State.
-
-```citry
-class LiveSearch(Component):
-    citry = citry_app
-
-    class Kwargs:
-        query: str = ""
-
-    class State(Kwargs):
-        pass
-
-    class Events:
-        def refresh(self, state):
-            return LiveSearch(query=state.query)
-
-    def template_data(self, kwargs, slots):
-        results = find_products(kwargs.query) if kwargs.query else []
-        return {"results": results}
-
-    template = """
-      <div>
-        <input
-          type="search"
-          placeholder="Search..."
-          :c-query.debounce.300ms="refresh"
-        >
-        <ul :class="{ searching: $loading() }">
-          <c-for each="item in results">
-            <li>{{ item.name }}</li>
-          </c-for>
-        </ul>
-      </div>
-    """
-```
-
-The data flow is explicit:
-
-1. `query` starts as a component input.
-2. `class State(Kwargs)` makes that field part of the round trip.
-3. `:c-query` displays the State value in the input.
-4. `.debounce.300ms="refresh"` waits for 300 ms of quiet, then sends the
-   pending value and calls `refresh` once.
-5. `refresh` builds a new `LiveSearch` from the updated State.
-6. `template_data` performs the search for that new render.
-7. Vue updates the result list in place, and the focused input keeps its
-   focus and caret.
-
-## Choose what survives in State
-
-`Kwargs` describes one render. `State` describes only the small,
-JSON-serializable values needed by later calls. Keep database ids, short
-filters, page numbers, and editing flags there. Reload records and permission
-facts in the handler.
-
-For a leaf component whose inputs are already the right State, inherit the
-schema:
+When the component's inputs are already the values you need, make `State`
+inherit from `Kwargs`:
 
 ```python
+class Kwargs:
+    count: int = 0
+
 class State(Kwargs):
     pass
 ```
 
-For richer inputs, declare a smaller State and derive it at render time:
+A handler receives them through its `state` parameter, and any change it makes
+is kept for the next call.
+
+Keep State small: ids, filters, page numbers, flags such as "editing". The
+values must be JSON-serializable. When the inputs hold larger objects, declare
+a smaller State and fill it from the inputs with `state_data()`:
 
 ```citry
 class ProjectPanel(Component):
@@ -103,48 +53,26 @@ class ProjectPanel(Component):
         }
 ```
 
-All State fields are public and writable by default. Narrow the client surface
-only when needed:
-
-```python
-class State:
-    project_id: int
-    page: int = 1
-    can_delete: bool = False
-
-    _public = ("page", "can_delete")
-    _model = ("page",)
-```
-
-`_public` selects which fields client expressions may read. `_model` selects
-which public fields they may write through `$state` or a two-way binding.
-The client may replace a writable top-level field. Objects and arrays read from
-`$state` are read-only views, so changing their nested members is rejected. To
-update a nested value, copy the object or array, edit the copy, and replace the
-whole top-level State field.
-
-These lists are capability controls, not secrecy controls. Signed State travels
-through the browser and must be treated as client input. Server-held State
-keeps its values out of the token, but client-writable fields are still client
-input. See [Security](/security/#treat-state-as-client-input).
+The handler then loads the project again from `project_id`, as the next
+section shows.
 
 ## Build every event render from explicit inputs
 
-A handler's render is a fresh component tree. It does not retain the original
-component's kwargs or slot fills.
+When a handler returns a component, Citry renders it from scratch, using
+only the inputs you pass. The original kwargs and slot fills are not kept.
 
-The natural first attempt fails because `self` is the per-call Events object,
-not the rendered component:
+The natural first attempt is to read the original inputs from `self`. That
+fails, because `self` in a handler is not the rendered component:
 
 ```python
 class Events:
     def refresh(self):
-        # Wrong: the original component inputs do not exist here.
+        # Wrong: self has no kwargs from the original render.
         return ProjectPanel(project=self.kwargs.project)
 ```
 
-Carry the durable id in State, reload the authorized object, and pass every
-input explicitly:
+Instead, keep the id in State, load the record for the current user, and pass
+every input explicitly:
 
 ```python
 class Events:
@@ -159,21 +87,101 @@ class Events:
         )
 ```
 
-This is the golden rule for Events rendering: if a later render needs a value,
-the handler must obtain it and pass it to the new tree.
+The rule: if the new render needs a value, the handler must get it and pass
+it in.
 
-## Put data in State, js_data, or Vue data deliberately
+## Connect an input to State
 
-| Data kind | Put it in | Lifetime |
+A `:c-<field>` attribute shows a State field in a form control. Give it a
+handler name, and each edit updates the field and calls the handler. This
+live search sends the query 300 ms after the user stops typing:
+
+```citry
+class LiveSearch(Component):
+    citry = citry_app
+
+    class Kwargs:
+        query: str = ""
+
+    class State(Kwargs):
+        pass
+
+    class Events:
+        def refresh(self, state):
+            return LiveSearch(query=state.query)
+
+    def template_data(self, kwargs, slots):
+        if kwargs.query:
+            results = find_products(kwargs.query)
+        else:
+            results = []
+        return {"results": results}
+
+    template = """
+      <div>
+        <input
+          type="search"
+          placeholder="Search..."
+          :c-query.debounce.300ms="refresh"
+        >
+        <ul :class="{ searching: $loading() }">
+          <c-for each="item in results">
+            <li>{{ item.name }}</li>
+          </c-for>
+        </ul>
+      </div>
+    """
+```
+
+`refresh` renders a new `LiveSearch` for the updated query. Vue updates the
+list in place, so the input keeps its focus and cursor position.
+
+[Bind events in templates](/events/bindings/#bind-controls-to-state) lists
+every control you can bind and the Python type each one sends.
+
+## Limit what the browser can read and change
+
+By default, browser code can read every State field and change it, through
+the `$state` object in templates or a `:c-*` binding. Two settings narrow
+that:
+
+```python
+class State:
+    project_id: int
+    page: int = 1
+    can_delete: bool = False
+
+    _public = ("page", "can_delete")
+    _model = ("page",)
+```
+
+- `_public` lists the fields browser code can read.
+- `_model` lists the public fields browser code can change.
+
+The browser can only replace a whole field. To change one item inside a list
+or object field, copy the value, change the copy, and assign it back.
+
+These settings limit what your templates can do. They do not hide anything.
+The signed State is visible to anyone who opens the page, and a field the
+browser can change may arrive with any value. Validate it in the handler like
+any other user input. See [Security](/security/#treat-state-as-client-input).
+
+## Choose between State, js_data, and Vue data
+
+| Data | Put it in | How long it lives |
 |---|---|---|
-| Small values a later server call needs, or values used by `:c-*` | `State` | Survives calls and self-renders; signed storage travels through the browser. |
-| Large or derived browser values | `js_data()` | Recomputed for each render. Each component instance gets its own copy. |
-| Client-only UI state such as an open accordion | Vue `data()` | Owned by the current Vue component instance. |
+| Small values a later server call needs, or values bound with `:c-*` | `State` | Kept across calls. |
+| Larger or computed values the browser code reads | `js_data()` | Recomputed on each render. |
+| Browser-only UI state, such as whether a panel is open | Vue `data()` | Kept by the Vue component in the browser. |
 
-`js_data()` is not persistent Events State. Citry copies its top-level keys
-onto the component's Vue instance as reactive members, and a server rerender
-replaces them with the new values, removing keys the new render no longer
-returns. Put ongoing browser-only values in Vue `data()` and behavior in
-`methods`; put values needed by later server calls in Events `State`. See
-[Client interactivity](/concepts/client-interactivity/) for the complete
-component boundary and Component.js contract.
+Each server render replaces the `js_data()` values, so do not use them for
+values that must survive a call. See
+[Client interactivity](/concepts/client-interactivity/) for how Python and
+browser code share a component.
+
+!!! note "The browser gets State changes even without a re-render"
+
+    When a handler changes State, the response always carries the new values
+    of the fields the browser can read (see
+    [`$state`](/reference/browser-apis/#state)). This holds when the handler
+    returns `None`, returns data, or re-renders only part of the component.
