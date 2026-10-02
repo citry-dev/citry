@@ -16,7 +16,7 @@ turns its inputs into HTML. Citry then renders its template as part of
 the component around it and skips that setup. The component gives up the
 features that need an instance, such as hooks and its own JavaScript.
 
-## Skip the instance
+## Set `simple = True`
 
 Set the flag on the class:
 
@@ -147,7 +147,7 @@ The slot rules are strict:
   `default`, with a default of `None`, and no custom constructor or
   factory.
 
-## What it shares
+## Uses the caller's scope
 
 A `simple = True` call has no component instance, Vue component, or
 hooks of its own, and no render ID (the value that identifies a

@@ -31,7 +31,7 @@ where the measurement shows a gain.
 - **Several workers or hosts should share that cached output**: give
   them a shared [cache backend](/performance/cache-backends/).
 
-## What each one skips
+## What each option skips
 
 | Option | What it skips | What you promise | How long the saving lasts |
 | --- | --- | --- | --- |
@@ -44,7 +44,7 @@ The first three options still load data and render child components on
 every call. Cache the rendered output when that is the work you want to
 skip.
 
-## What each one costs
+## What each option costs
 
 - **Simple components** have no Python instance and no lifecycle hooks.
   With `simple = True` they also have no named slots and no JavaScript,

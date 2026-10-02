@@ -84,7 +84,7 @@ advance.
 Keep template expressions free of side effects. Citry may evaluate a
 constant expression in a branch that the current render does not show.
 
-## Use template literals
+## Values written in tags
 
 A value written directly on a component tag is the same in every render,
 so Citry treats it as constant without `Const`:
