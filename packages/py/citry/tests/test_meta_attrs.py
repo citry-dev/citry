@@ -736,7 +736,7 @@ class TestTemplateAuthoredOnly:
             RuntimeError,
             match=r"'#c-key' arrived on <c-row> through an attribute spread or a dynamic attribute\. "
             r"'#c-\*' framework attributes are template-authored only: "
-            r"write the attribute directly on the component tag in the template\.",
+            r"write the attribute in the template itself, where Citry checks that the tag allows it\.",
         ):
             Page().render().serialize()
 

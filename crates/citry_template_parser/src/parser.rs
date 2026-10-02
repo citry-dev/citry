@@ -2059,11 +2059,21 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
                 // contents the browser keeps. The author writes the plain
                 // tag instead.
                 if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+                    // Name the tag the author picked when the static form
+                    // says it, so the suggested rewrite is the one to type.
+                    let example_tag = node
+                        .attrs()
+                        .iter()
+                        .find(|candidate| candidate.key.content == "is")
+                        .and_then(|candidate| candidate.inner_value.as_ref())
+                        .map(|value| value.content.as_str())
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or("div");
                     return Err(context.error_from_token(
                         &attr.token,
                         format!(
-                            "'{}' is not supported on '<{}>' (line {}, column {}). Write the element as a plain HTML tag, such as <div {}>, to keep its contents as the server first rendered them.",
-                            META_ATTR_IGNORE, tag_name, line, col, META_ATTR_IGNORE
+                            "'{}' is not supported on '<{}>' (line {}, column {}). Write the element as a plain HTML tag, such as <{} {}>, to keep its contents as the server first rendered them.",
+                            META_ATTR_IGNORE, tag_name, line, col, example_tag, META_ATTR_IGNORE
                         ),
                     ));
                 }

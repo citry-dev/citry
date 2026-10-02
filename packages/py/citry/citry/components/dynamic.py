@@ -201,6 +201,8 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
 
                 is_void = tag.lower() in HTML_VOID_ELEMENTS
                 metadata = self._element_morph_metadata
+                # The parser rejects '#c-ignore' on <c-element>, so only a
+                # node tree built by hand can carry it here; fail the same way.
                 if metadata is not None and metadata.morph_mode is not None:
                     msg = (
                         f"'#c-ignore' is not supported on <c-element> (rendered as <{tag}>). Write the"

@@ -1905,7 +1905,7 @@ class ComponentNode(Node):
                 msg = (
                     f"{kwarg_key!r} arrived on <c-{self.name}> through an attribute spread or a "
                     "dynamic attribute. '#c-*' framework attributes are template-authored only: "
-                    "write the attribute directly on the component tag in the template."
+                    "write the attribute in the template itself, where Citry checks that the tag allows it."
                 )
                 raise RuntimeError(msg)
         from citry.client_directives import authenticated_component_tag_client_binding  # noqa: PLC0415

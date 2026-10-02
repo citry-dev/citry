@@ -130,15 +130,21 @@ mod tests {
     fn test_meta_ignore_rejected_on_element_tag_in_both_forms() {
         // The static form compiles to a plain tag, so the parser is the only
         // place that still sees it was written as `<c-element>`.
-        for input in [
-            r#"<c-element c-is="tag" #c-ignore />"#,
-            r#"<c-element is="div" #c-ignore>x</c-element>"#,
-            r#"<c-Element is="div" #c-key="k" #c-ignore>x</c-Element>"#,
+        for (input, example) in [
+            (r#"<c-element c-is="tag" #c-ignore />"#, "<div #c-ignore>"),
+            (
+                r#"<c-element is="section" #c-ignore>x</c-element>"#,
+                "<section #c-ignore>",
+            ),
+            (
+                r#"<c-Element is="div" #c-key="k" #c-ignore>x</c-Element>"#,
+                "<div #c-ignore>",
+            ),
         ] {
             assert_parse_error(input, "'#c-ignore' is not supported on '<");
             assert_parse_error(
                 input,
-                "Write the element as a plain HTML tag, such as <div #c-ignore>",
+                &format!("Write the element as a plain HTML tag, such as {example}"),
             );
         }
         // `#c-key` keeps working on both forms.
