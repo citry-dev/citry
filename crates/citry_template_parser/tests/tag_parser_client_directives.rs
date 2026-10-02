@@ -406,6 +406,48 @@ mod tests {
     }
 
     #[test]
+    fn key_names_on_a_non_keyboard_event_are_rejected() {
+        assert_parse_error(
+            r#"<button @click.enter="go();"></button>"#,
+            "'@click.enter' (line 1, column 9) uses '.enter' on the 'click' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so the listener would never run. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. To react to a key, listen to 'keydown' or 'keyup' instead.",
+        );
+        for (input, modifier, event) in [
+            (r#"<button @click.foo="go();"></button>"#, "foo", "click"),
+            (
+                r#"<button v-on:click.prevent.esc="go();"></button>"#,
+                "esc",
+                "click",
+            ),
+            (r#"<input @input.trim="go();" />"#, "trim", "input"),
+            (
+                r#"<form @submit.Prevent="go();"></form>"#,
+                "Prevent",
+                "submit",
+            ),
+            (r#"<c-child @select.enter="go();" />"#, "enter", "select"),
+        ] {
+            assert_parse_error(
+                input,
+                &format!("uses '.{modifier}' on the '{event}' event."),
+            );
+        }
+    }
+
+    #[test]
+    fn key_names_on_keyboard_and_dynamic_events_still_parse() {
+        for input in [
+            r#"<input @keydown.enter="go();" @keyup.page-down="go();" @keypress.a="go();" />"#,
+            r#"<input @KeyDown.my-key="go();" />"#,
+            r#"<div @[name].enter="go();"></div>"#,
+            r#"<button @click.ctrl.shift.alt.meta.exact.left.right.middle="go();"></button>"#,
+            r#"<div @scroll.passive.capture.once.self.stop.prevent="go();"></div>"#,
+            r#"<button @c-click.enter="save"></button>"#,
+        ] {
+            parse_template(input, None, None).unwrap();
+        }
+    }
+
+    #[test]
     fn once_and_memo_on_an_element_name_the_directive() {
         assert_parse_error(
             r#"<p v-once>hi</p>"#,

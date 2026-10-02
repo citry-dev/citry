@@ -2495,6 +2495,31 @@ def test_compiler_still_rejects_vue_builtin_components_it_receives() -> None:
         NativeCompiler().compile("<Teleport to='#x'><p>x</p></Teleport>", type_key="Page")
 
 
+@pytest.mark.parametrize(
+    ("listener", "allowed"),
+    [
+        ('@click.enter="go()"', False),
+        ('v-on:click.foo="go()"', False),
+        ('@keydown.enter="go()"', True),
+        ('@keyup.page-down="go()"', True),
+        ('@click.ctrl.left.prevent="go()"', True),
+    ],
+)
+def test_key_name_on_a_non_keyboard_event_fails_when_the_template_loads(listener, allowed) -> None:
+    app = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = app
+        template = f"<main><button {listener}>go</button></main>"
+
+    if allowed:
+        assert "<button" in str(Page())
+        return
+    # Vue would read the modifier as a key name, and a click has no key.
+    with pytest.raises(SyntaxError, match=r"on the 'click' event\. Vue reads a modifier it does not know"):
+        str(Page())
+
+
 def test_raw_and_markup_placement_errors_say_what_to_write() -> None:
     app = Citry(autodiscover=False)
 
