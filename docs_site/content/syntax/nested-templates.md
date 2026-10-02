@@ -19,8 +19,17 @@ right in the `c-*` attribute. Wrap it in `<>` and `</>`:
 />
 ```
 
-`<>` and `</>` mark the value as markup rather than Python. Citry renders the
+`<>` and `</>`, called fragment markers, mark the value as markup rather than
+Python. Citry renders the
 markup and passes the result to `Card` as its `footer` input.
+
+## Choose between a markup attribute and a slot
+
+For content that the caller provides, a slot is usually clearer: write the
+content between the component's tags, or in a
+[`<c-fill>`](/reference/builtins/#c-fill). Use markup in an attribute when the
+component treats that content as one of its inputs. See
+[Slots](/concepts/slots/).
 
 ## Use the surrounding template's data
 
@@ -64,14 +73,6 @@ class Card(Component):
 
 The input is not a slot. The component decides where, and whether, to
 render it.
-
-## Choose between a markup attribute and a slot
-
-For content that the caller provides, a slot is usually clearer: write the
-content between the component's tags, or in a
-[`<c-fill>`](/reference/builtins/#c-fill). Use markup in an attribute when the
-component treats that content as one of its inputs. See
-[Slots](/concepts/slots/).
 
 ## When you can leave out the fragment markers { #when-the-fragment-markers-are-optional }
 
@@ -119,8 +120,8 @@ works for any value.
 - A value starting with `<` and a space, or with `<<`, also needs the
   markers.
 - These attributes always take a Python expression, never markup:
-  `c-bind`, `c-if`, `c-elif`, `c-for`, `c-is` on the built-in dynamic
-  component, `c-name` on `<c-slot>` and `<c-fill>`, and `c-required` on
-  `<c-slot>`. To pass rendered content there, prepare it in Python.
+  `c-bind`, `c-if`, `c-elif`, `c-for`, `c-is` on `<c-component>`, `c-name`
+  on `<c-slot>` and `<c-fill>`, and `c-required` on `<c-slot>`. To pass
+  rendered content there, prepare it in Python.
 - That rule covers only those built-in uses. Your own component can have a
   `name` or `required` input that accepts markup.
