@@ -45,9 +45,10 @@ around it still renders.
 
 ## Show markup in the fallback
 
-The `fallback` attribute is plain text. For a fallback with markup, put the
-content in two fills: the guarded content in the `default` fill, and the
-fallback in the `fallback` fill:
+Citry escapes the `fallback` text, including a value from
+`c-fallback="message"`, so HTML tags in it show as text. For a fallback with
+markup, put the content in two fills: the guarded content in the `default`
+fill, and the fallback in the `fallback` fill:
 
 ```citry-html
 <c-error-fallback>
@@ -69,8 +70,11 @@ fallback in the `fallback` fill:
 exception details to readers in production. Leave out `data` when you do
 not need the exception.
 
-Use either the `fallback` attribute or a `fallback` fill, not both. Using
-both raises `RuntimeError`.
+Never turn text from users or other untrusted sources into markup in a
+fallback.
+
+Use either the `fallback` attribute (or its expression form `c-fallback`)
+or a `fallback` fill, not both. Using both raises `RuntimeError`.
 
 ## Nest boundaries
 
@@ -91,19 +95,12 @@ outer section renders normally.
 An error raised by a fallback itself goes to the next boundary out. Keep an
 outer fallback small and simple so that it does not fail too.
 
-!!! note "Fallback text is escaped"
+## When no boundary catches an error
 
-    Citry escapes the `fallback` text, including a value from
-    `c-fallback="message"`. If the text contains HTML tags, the reader sees
-    the tags as text. To show markup, use a `fallback` fill,
-    and never turn text from users or other untrusted sources into markup.
+A render error that no boundary catches reaches your web framework's view
+or route, like any other exception. Its message includes the path of
+components that led to the failing one.
 
-!!! note "An error with no boundary around it"
-
-    A render error that no boundary catches reaches your web framework's
-    view or route, like any other exception. Its message includes the path
-    of components that led to the failing one.
-
-The name `error-fallback` is reserved, so you cannot register your own
-component under it. For the rules behind the two fills, see
-[Slots](/concepts/slots/).
+The name `error-fallback` is reserved for this built-in, so you cannot
+register your own component under it. For the rules behind the two fills,
+see [Slots](/concepts/slots/).
