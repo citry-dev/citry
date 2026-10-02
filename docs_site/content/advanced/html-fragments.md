@@ -77,8 +77,9 @@ nodes. The script then loads Citry, which starts the fragment.
 ## Serve Citry's files
 
 A fragment with JavaScript or CSS loads it by URL, and an interactive
-fragment loads Citry's runtime by URL too. Mount one of Citry's
-[web framework integrations](/web-frameworks/) so those URLs work.
+fragment loads Citry's runtime by URL too. Add one of Citry's
+[web framework integrations](/web-frameworks/) to your app so those URLs
+work.
 
 This applies when the fragment has any of these:
 
@@ -89,7 +90,7 @@ This applies when the fragment has any of these:
 - browser data from Python, such as `js_data()`.
 
 Serializing such a fragment raises `RuntimeError` when no integration is
-mounted and no prefix is recorded (below), so it never returns broken
+added and no prefix is recorded (below), so it never returns broken
 URLs.
 
 A worker that renders fragments but does not serve Citry's routes can
@@ -165,7 +166,7 @@ different worker from the one that rendered the fragment. Configure a
 shared cache backend so that every worker can serve those files. See
 [Cache backends](/performance/cache-backends/).
 
-Use the same mounted prefix and cache configuration in the processes that
+Use the same URL prefix and cache configuration in the processes that
 render and the processes that serve.
 
 ## How a fragment includes its dependencies
@@ -176,7 +177,7 @@ according to how you declared it:
 - A URL stays a URL, and the browser loads it.
 - A local file is included in the fragment by default.
 - With `Dependencies.local_files = "serve"`, a local file becomes a URL
-  served by the mounted integration.
+  served by the web framework integration.
 - An object that provides only finished HTML through `__html__` raises
   `TypeError`. Declare a `Script`, `Style`, or URL instead.
 
