@@ -1,22 +1,28 @@
 ---
 title: Build CRUD pages
-description: Keep repeated event-driven rows independent and rerender their owning list.
+description: Give each row of a list its own event handlers, errors, and status, and re-render the whole list from Python.
 ---
 
 # Build CRUD pages
 
-A CRUD page often has one event-driven component per record and shared
-controls around the collection. This example gives each task row independent
-loading, validation, and success state, while `TaskList` owns two synchronized
-filter controls.
+Admin pages often show a list of records where you can edit each row and
+filter the whole list. CRUD stands for create, read, update, and delete. In
+this step you build a task list that combines the earlier steps:
+
+- Each task row is its own component, with its own form, errors, and
+  "Saved" message.
+- Two filter buttons, above and below the list, ask Python for a filtered
+  list and both show the current filter.
+
+Replace `components.py` with:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step13.py" language="citry" />
 
-Try a two-character title in one row, then save another row. The first row's
-error remains. Select either “Hide completed tasks” control: the server returns
-two rows and both controls change to “Show all tasks.”
+Try a two-character title in one row, then save another row. The first row
+keeps its error. Click either “Hide completed tasks” button: the server
+returns two rows, and both buttons change to “Show all tasks.”
 
-## Keep rows independent
+## Make each row its own component
 
 ```citry-html
 <c-for each="task in tasks">
@@ -28,13 +34,16 @@ two rows and both controls change to “Show all tasks.”
 </c-for>
 ```
 
-Each `TaskRow` is a separate instance with its own State, loading status, and
-handler errors. `#c-key` gives each row a key that Vue uses to recognize the
-same row when the list renders again. Use a database key or another value that
-stays the same for the same record.
+Each `TaskRow` has its own State, loading status, and errors, so one row's
+error does not affect another.
 
-The task ID lives in signed State while the edited title comes from the named
-form control:
+`#c-key` gives each row a key. When the list renders again, Vue uses the key
+to tell which row is which. Use a database id or another value that stays
+the same for the same record.
+
+## Remember which record a row edits
+
+The row keeps its task id in State, and the new title comes from the form:
 
 ```python
 class State:
@@ -45,11 +54,9 @@ class Events:
         ...
 ```
 
-An alternative is a hidden `name="task_id"` control and a matching field on
-`RenameTaskIn`. Keep sensitive or authoritative values on the server and check
-permissions in the handler.
+The handler reads `state.task_id` to know which task to update.
 
-## Show row-local status
+## Show each row's error and success message
 
 ```citry-html
 <p
@@ -60,11 +67,10 @@ permissions in the handler.
 <output v-text="saveStatus"></output>
 ```
 
-After a successful save, Python dispatches `TaskRow:saved` from that row. As
-in the earlier steps, the event name starts with the component's name. The
-same row listens for it with [`onEvent`][onEvent] in
-[`onServerRender`][onServerRender], the option that runs after the row
-mounts and again after each server render:
+`$error('save')` reads only this row's error. After a successful save, Python
+dispatches `TaskRow:saved` from that row. The row listens for it with
+[`onEvent`][onEvent] in [`onServerRender`][onServerRender], as the form did
+in the earlier step:
 
 ```js
 $component({
@@ -87,12 +93,14 @@ $component({
 });
 ```
 
-`onEvent` hears only events from this component's own Python handlers, so
-sibling rows do not receive it.
+`onEvent` hears only events from this row's own Python handlers, so the
+other rows do not show the message.
 
-## Give the filter child props and an event
+## Connect the filter buttons to the list
 
-`TaskFilterToggle` declares its inputs and output:
+`TaskFilterToggle` is a button that receives two props and sends a `select`
+event, as in [Connect components in the
+browser](/getting-started/client-props-and-handlers/):
 
 ```js
 $component({
@@ -104,8 +112,7 @@ $component({
 });
 ```
 
-The button emits `select`. `TaskList` binds both copies to the same parent data
-and handler:
+`TaskList` uses it twice, with the same props and handler:
 
 ```citry-html
 <c-TaskFilterToggle
@@ -117,13 +124,14 @@ and handler:
 />
 ```
 
-`hideCompleted` is seeded by `TaskList.js_data()`. Vue updates both child props
-from the same parent value. `$sendEvent` calls the parent component's Python
-`filter_tasks` handler when either child emits `select`.
+`TaskList.js_data()` provides `hideCompleted`, and Vue passes the same value
+to both buttons. When either button sends `select`,
+[`$sendEvent`][$sendEvent] calls the list's Python `filter_tasks` handler
+with the opposite filter.
 
-## Rerender the calling list
+## Re-render the list from Python
 
-The handler loads the requested rows and returns a new `TaskList`:
+The handler loads the matching tasks and returns a new `TaskList`:
 
 ```python
 # TaskList.Events.filter_tasks
@@ -139,12 +147,24 @@ def filter_tasks(self, data: FilterTasksIn):
     )
 ```
 
-With no `target`, the Render action updates the calling `TaskList`.
-Passing `hide_completed` gives the new list's `js_data()` the chosen mode, so
-`hideCompleted` starts with that value and both filter controls show it.
-Stable row keys let the renderer match surviving rows while removing or
-adding the others.
+The new `TaskList` replaces the old one, because its handler ran. Passing
+`hide_completed` lets the new list's `js_data()` start with the chosen
+filter, so both buttons show it. The row keys let Vue keep the rows that are
+still there, and remove or add the others.
 
-For larger pages, split the page into smaller components that each declare
-their own `Events` handlers. A Render with no `target` then updates only the component
-whose handler ran.
+!!! note "Design choices for larger pages"
+
+    The row could also send its id in a hidden `name="task_id"` input,
+    with a matching field on `RenameTaskIn`. The user can change a hidden
+    input, while Citry signs State. Either way, check in the handler that
+    the user may edit that task.
+
+    On a larger page, split it into smaller components that each have their
+    own `Events`. A handler's `actions.Render` then replaces only its own
+    component, not the whole page.
+
+## Next steps
+
+You have finished the tutorial. The [Server events](/events/) guide covers
+each part in more depth, and the [Examples](/examples/) show complete
+recipes you can copy.
