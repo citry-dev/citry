@@ -84,6 +84,13 @@ Importing the module defines the component class, and that tells Citry the
 `<c-ReadingList>` tag exists. Without the import, Citry cannot find the tag
 when it renders the page.
 
+!!! note "Find components without importing each one"
+
+    Larger projects can import component modules automatically. Read
+    [Registration](/concepts/registration/) for how tag names map to
+    classes, then [Component discovery](/advanced/component-discovery/)
+    for automatic imports.
+
 ## Pass fixed text or Python values
 
 The first list receives two options:
@@ -97,8 +104,8 @@ The first list receives two options:
 
 `heading="Reading now"` passes those exact words. The `c-` prefix on
 `c-books` tells Citry to evaluate `current_books`, the page's own input,
-as a Python expression and pass the resulting list. Use a plain attribute for fixed text and the
-`c-` form for Python values.
+as a Python expression and pass the resulting list. Use a plain attribute
+for fixed text and the `c-` form for Python values.
 
 The child receives only the values you pass. It cannot read other variables
 from the page around it, so it behaves the same wherever you use it.
@@ -136,13 +143,6 @@ generated attribute changes. It needs no extra package.
 
 [Testing components](/advanced/testing/) shows how to turn checks like this
 into pytest tests and add browser or framework coverage for larger projects.
-
-!!! note "Find components without importing each one"
-
-    Larger projects can import component modules automatically. Read
-    [Registration](/concepts/registration/) for how tag names map to
-    classes, then [Component discovery](/advanced/component-discovery/)
-    for automatic imports.
 
 ## Next steps
 
