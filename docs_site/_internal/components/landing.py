@@ -733,7 +733,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "js",
         "label": "Script",
-        "lines": (68, 75),
+        "lines": (68, 77),
         "anchor": "$component",
         "title": "Advanced setup scoped to this component",
         "text": (
@@ -745,7 +745,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "css",
         "label": "Style",
-        "lines": (77, 85),
+        "lines": (79, 87),
         "anchor": "var(--accent)",
         "title": "Styles reading Python values",
         "text": (
@@ -757,7 +757,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "messages",
         "label": "Messages",
-        "lines": (87, 89),
+        "lines": (89, 91),
         "anchor": "messages =",
         "title": "Write translation keys as Fluent syntax",
         "text": (
@@ -768,7 +768,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "deps",
         "label": "Assets",
-        "lines": (91, 93),
+        "lines": (93, 95),
         "anchor": "class Dependencies",
         "title": "Third-party scripts and styles",
         "text": (
@@ -779,7 +779,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "render",
         "label": "Render",
-        "lines": (96, 101),
+        "lines": (98, 103),
         "anchor": "str(ProductCard",
         "title": "Rendering is a function call",
         "text": (

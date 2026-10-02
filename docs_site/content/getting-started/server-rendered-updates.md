@@ -20,10 +20,20 @@ return actions.Render(Confirmation(email=email))
 ```
 
 With no explicit target, [`actions.Render`][citry.ext.events.actions.Render]
-updates the component instance whose handler was called. `Confirmation` is a
-fresh component tree, so its HTML, browser data, and CSS travel in the fragment
-response. This public default avoids coupling a component handler to an
-arbitrary page selector.
+updates the component instance whose handler was called, and here puts a
+different component in its place. `Confirmation` is a fresh component tree,
+so its HTML, browser data, and CSS travel in the response. Another component
+or a `<c-mark>` region can be addressed with `target="render:<id>"` or
+`target="mark:<name>"`, but the calling component is the default, so the
+handler needs no address at all.
+
+`Confirmation` takes the form's place inside the `aria-live` region. That
+region belongs to `TutorialPage`, which stays on the page, so screen readers
+announce the confirmation. The swap happens only in the open browser tab:
+reloading the page shows the form again, because `TutorialPage` still
+renders `SignupForm`. [Replace the calling component with a different
+component](/events/actions/#replace-the-calling-component-with-a-different-component)
+lists what the new component does not inherit from the old one.
 
 ## Browser data in the new component
 

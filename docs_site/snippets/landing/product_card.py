@@ -67,7 +67,9 @@ class ProductCard(Component):
 
     js = """
       $component({
-        data() { return {open: false}; },
+        data() {
+          return { open: false };
+        },
         onServerRender: ({ component }) => {
           animateLikes(component.$el, component.likes);
         },

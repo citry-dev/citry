@@ -51,6 +51,7 @@ from docs_site._internal.community_packages import (
 # <c-include-file>, <c-people>, <c-search-modal>, <c-version-picker>, and
 # <c-youtube-video> by name.
 from docs_site._internal.components import (  # noqa: F401
+    benchmark_chart,
     blog,
     builtin,
     community_packages,

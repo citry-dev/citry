@@ -1,106 +1,105 @@
 ---
 title: Benchmarks
-description: Compare optimized Citry rendering with Django, django-components and Jinja2.
+description: How long a page with 1,400 rendered outputs takes to become usable in Citry and eleven other frameworks.
 ---
 
 # Benchmarks
 
-The chart compares a large project-management page rendered with Citry,
-django-components, Django templates and Jinja2 macros. Citry uses the documented
-performance optimizations described below. The chart shows one controlled run
-from 2026-09-10. Lower bars mean less rendering time.
+We built the same project page in twelve frameworks and timed how long
+each page takes to become usable: from the moment the browser asks for
+the page until its scripts are ready to respond to the reader and the
+browser has had its next chance to lay the page out. The page shows
+1,400 outputs, each a repeated block of content with its own data, so
+framework overhead adds up instead of hiding behind a small page.
 
-<c-image src="/static/img/benchmark.png" alt="First, second and warmed render times for optimized Citry, Django, django-components and Jinja2" width="720" />
+Each bar splits that time into phases, such as the server building the
+page and the browser running scripts. Shorter bars are faster. The
+dashed line marks Citry's total, so a bar that ends left of it finished
+sooner than Citry in this run, and one that ends right of it finished
+later.
 
-\* Citry uses `simple` and `pure` optimizations. See the
-[performance optimization guide](/performance/).
+## How Citry compares in this run
 
-| Configuration | First render | Second render | Warmed render |
-| --- | ---: | ---: | ---: |
-| Django | 19.67 ms | 11.79 ms | 11.67 ms |
-| django-components | 68.27 ms | 48.11 ms | 54.69 ms |
-| Jinja2 | 66.10 ms | 6.77 ms | 7.21 ms |
-| Citry* | 64.19 ms | 25.02 ms | 24.62 ms |
+Each bar is a single measurement, so read the results in broad bands
+rather than as a ranking.
 
-## What the Citry result includes
+On the first load, Citry takes 359 ms. Nuxt finishes about 90 ms
+sooner. The three Django template stacks with HTMX and Alpine, Tetra
+and Next.js finish within about 50 ms of Citry, all of them sooner.
+Reflex, django-components, django-unicorn, FastHTML and ReactPy take
+clearly longer, from about 40 ms to more than 450 ms.
 
-Button, Icon and HeroIcon are declared as
-[simple components](/performance/simple-components/). Their data callbacks stay
-live, but they give up independent instances, hooks and browser identity.
-HeroIcon and ProjectOutputBadge also retain the scenario's existing `pure`
-declarations. The page constructs 146 ordinary instances and emits 989,431 bytes,
-including dependencies, browser runtimes, and the data that tells the browser
-which component rendered each part of the page. It takes about 55%
-less time than django-components once warm.
+On the second load Citry takes 304 ms. Nuxt again finishes about 90 ms
+sooner. The Django template stacks, Tetra and Next.js all finish within
+about 25 ms of Citry, on either side. The same five frameworks again take
+clearly longer.
 
-These optimizations are explicit application choices with documented contracts.
-The [repository benchmark guide](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md)
-also retains the ordinary Citry measurements and the paired comparison that
-isolates the effect of opting the three classes into simple mode.
+Citry spends more time on the server than most frameworks here (161 ms
+on the first load), and less time in the browser than any of them except
+Nuxt. Each framework reports its own server time, so the work it covers
+can differ a little between them. On these numbers, server time is where
+Citry trails most of the other frameworks.
 
-## Compare with template engines
+"Rusty" in the charts is
+[Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates),
+an experimental Rust implementation of Django's template engine.
 
-The warmed Citry page takes about 2.11 times Django's render time. Jinja2 is the
-fastest warmed engine here. Its first render compiles the macro library.
+## First load
 
-These engines produce different output and perform different framework work.
-Django emits 456,422 bytes, django-components 309,837 bytes and Jinja2 151,789
-bytes. The Django scenario still uses django-components' HTML-attribute helper;
-Jinja2 represents the component templates as macros. The chart compares these
-workloads, not equivalent implementations of every Citry feature.
+<c-benchmark-chart
+  load="first"
+  title="First load: time until usable, 1,400 outputs"
+/>
 
-## How the run is measured
+## Second load
 
-The run uses Apple M4, CPython 3.14.3 and the release Citry Core extension,
-with Django 6.0.6, django-components 0.152.0 and Jinja2 3.1.6. Citry 0.5.0 is
-measured with the Core 1.7.0 release wheel. Citry 0.5.0 ran Alpine.js in the
-browser, so the Citry byte counts above describe that release's browser output,
-not the Vue runtime Citry uses now.
+The second load requests the page again in a fresh browser context in
+the same browser, so nothing comes from the browser cache, but the
+server has already rendered the page once.
 
-The underlying run also measured ordinary Citry as a control; the chart shows
-four configurations. Ten blocks each start a fresh process for every configuration, balancing
-execution position and before/after order. Each process renders six initial
-outputs and 80 warmed outputs, with normal garbage collection enabled, and
-keeps all output strings alive until timing finishes. Loading the scenario
-and preparing application data happen outside the render timer.
+<c-benchmark-chart
+  load="second"
+  title="Second load: time until usable, 1,400 outputs"
+/>
 
-First and second columns are medians of the corresponding observations.
-The warmed column is the median of each process's mean of 80 renders.
-A warmed average can be higher than one second-render observation because
-it includes a longer execution period and garbage collection.
+## What the phases mean
 
-After timing, the runner checks every timed Citry output. It removes the
-markers Citry adds to show which component rendered each part of the page,
-replaces generated IDs with stable ones, and compares the result with the
-expected content. It also checks the data Citry sends to the browser. After
-each Citry process's timed loop, the runner renders once more to count
-callbacks and those component markers. The other engines keep output hashes
-and sizes; their scenario content tests run separately.
+- **Server builds the page**: the time the server reports for producing
+  the page, including rendering.
+- **Page download**: the time the browser spends receiving the page.
+- **Before the page request** and **Other request time**: the wait
+  before the browser sends the request, and the rest of the request
+  time: the connection, plus any server work that the server's own
+  timing does not cover. Both are usually a few milliseconds or less.
+- **Browser work and later requests**: everything after the page
+  arrives until its scripts are ready: loading scripts, styles and
+  data, running them, and attaching to the HTML.
+- **Wait for the next layout**: after the scripts are ready, the time
+  until the browser's next chance to lay out the page. The totals
+  include this wait.
 
-These results are relative to this workload and machine. Use them to compare
-rows within this run, then measure the components and data in your application.
+## How the numbers were taken
 
-## Reproduce it
+Each bar is one measurement, taken on 2026-09-27 on an Apple M4 Mac
+with Chromium 151, over a local connection with no compression and an
+empty browser cache. Next.js was measured in a separate run early on
+2026-09-28, after its first build failed the benchmark's correctness
+check at 1,400 outputs. With one measurement per bar,
+treat a gap of a few tens of milliseconds as noise.
 
-The measurement runner and its experiment helpers are retained in the
-[performance research archive](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/RESEARCH.md).
-Use that checkout with the documented dependencies and a release Core extension
-to repeat the measurement.
-
-The main checkout keeps the compact chart data and image generator:
-
-```sh
-uv run --no-project --with matplotlib python benchmarks/plot.py
-```
-
-The [benchmark repository guide]({{ repo_url }}/blob/{{ repo_edit_branch }}/benchmarks/README.md)
-contains dependency setup, detailed methodology and links to raw observations.
-The extension must be built in release mode; a debug build does not provide
-comparable Citry timings.
+Citry ran as an unreleased build from its working tree, compiled with
+release optimizations, using its Vue runtime and default settings, with
+[`simple="vue"`](/performance/simple-components/) on the repeated
+component. The server renders the full page and Vue attaches to that
+HTML in the browser. Reflex's bars come from an earlier run on
+2026-09-24, because in this run Reflex failed the benchmark's
+correctness check before timing. The benchmark run also measured apps
+that build the page in the browser from a JSON API; they are left out
+here because this page compares pages rendered on the server.
 
 ## Related pages
 
 - [Performance overview](/performance/) compares simple rendering,
   `Const`, pure component bodies, and rendered output caching.
-- [Simple components](/performance/simple-components/) explains the opt-in
-  contract used by the Citry result.
+- [Simple components](/performance/simple-components/) explains how to
+  render repeated components with less overhead.

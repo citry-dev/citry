@@ -82,6 +82,6 @@ expiry no longer than any content inside it can tolerate.
 
 ## Related pages
 
-- [Benchmarks](/about/benchmarks/) shows render times for a large page that
-  uses `simple` and `pure`.
+- [Benchmarks](/about/benchmarks/) compares how long a large page takes
+  to become usable in Citry and other frameworks.
 - [Rendering](/concepts/rendering/) explains the full render process.

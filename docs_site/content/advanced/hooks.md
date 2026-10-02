@@ -117,7 +117,9 @@ After the yield, you may:
 Do not call `str(result)` merely to inspect it. The render still carries live
 relationships between components and slot content, and it may not be safe to
 serialize from inside this hook. If you return serialized HTML, you also take
-responsibility for replacing the live result with that string.
+responsibility for replacing the live result with that string. HTML you
+serialize inside the hook does not carry this component's own `data-cid-*`
+attribute; Citry adds it to the HTML you return.
 
 You can yield replacement content and receive another `(result, error)` pair,
 which supports multi-stage rendering. The generated

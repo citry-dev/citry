@@ -321,4 +321,5 @@ how much time it spends producing its HTML.
 - [Performance overview](/performance/) compares simple rendering,
   `Const`, pure bodies, and rendered output caching.
 - [Component hooks](/advanced/hooks/) covers ordinary instance behavior.
-- [Benchmarks](/about/benchmarks/) describes the measured workloads.
+- [Benchmarks](/about/benchmarks/) compares page-load times with other
+  frameworks.
