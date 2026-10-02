@@ -58,7 +58,7 @@ Citry is still young and there is a lot to build.
    [run the checks](/community/development/#running-the-checks).
 4. Open a pull request.
 
-The same setup and workflow is in
+A short version of this setup is in
 [CONTRIBUTING.md]({{ repo_url }}/blob/{{ repo_edit_branch }}/CONTRIBUTING.md){: target="_blank" rel="noopener"}
 in the repository. For how the codebase fits together (the Rust crates, the
 language bindings, and how releases work), see

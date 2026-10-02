@@ -6,9 +6,9 @@ The full guide is the
 site (source:
 [`docs_site/content/community/development.md`](docs_site/content/community/development.md)).
 It covers the tools to install, every check, the docs preview, and how CI
-and releases work. How the codebase fits together lives in
-[`docs/codebase.md`](docs/codebase.md), and the rules for contributors and
-AI agents are in [`CLAUDE.md`](CLAUDE.md).
+and releases work. [`docs/codebase.md`](docs/codebase.md) explains how the
+codebase fits together, and [`CLAUDE.md`](CLAUDE.md) holds the rules for
+contributors and AI agents.
 
 ## Getting set up
 
@@ -30,7 +30,7 @@ pnpm install
 failure together. It only checks; it never edits your files.
 
 ```sh
-# While you work: no coverage threshold, skips the slow stress tests
+# While you work: no coverage, skips the slow stress tests
 python scripts/check.py --profile fast
 
 # Before a pull request: the default profile, and what CI runs
