@@ -29,8 +29,8 @@ You need to act if your project has any of these:
 - an extension that adds page dependencies or routes, or a tool that reads
   `citry.analysis` results;
 - `citry-ui` components or the `citry-lsp` language server;
-- `#c-ignore` on a component tag, or around content that holds
-  components or Vue bindings;
+- `#c-ignore` on a component tag or `<c-element>`, or around content that
+  holds components or Vue bindings;
 - several worker processes that serve interactive pages, or a proxy or CDN
   in front of Citry's files.
 
@@ -260,7 +260,9 @@ itself:
 On a component tag, `#c-ignore` fails when the template loads. Move it
 onto the element inside the component's template that the library
 manages. On `<table>`, `<tbody>`, `<tr>`, and the other table row
-elements it fails too; wrap the table in a `<div #c-ignore>` instead. See
+elements it fails too; wrap the table in a `<div #c-ignore>` instead. On
+`<c-element>` it fails in both the `is` and `c-is` forms; write the
+element as a plain tag, such as `<section #c-ignore>`. See
 [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
 
 ## Write Vue bindings in the template, not in Python
@@ -622,7 +624,7 @@ the limit or configure a cache. See
 8. Check component tags for `:x`, `v-*`, and `ref` attributes the child read
    as kwargs, and for `x-on:`.
 9. Keep `#c-ignore` only on HTML elements whose contents a library
-   manages, and move it off component tags.
+   manages, and move it off component tags and `<c-element>`.
 10. Replace `data`, `scope`, `props`, `graph`, `effect`, `reactive`,
     `provide`, `inject`, and `unprovide` in `$component` callbacks.
 11. Replace `$provide`, `$inject`, and `$unprovide` with Vue `provide` and
