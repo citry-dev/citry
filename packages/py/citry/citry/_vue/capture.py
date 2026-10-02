@@ -42,6 +42,10 @@ _DIRECT_PREPARED_RENDER: ContextVar[bool] = ContextVar("citry_vue_direct_prepare
 _VUE_RENDER: ContextVar[bool] = ContextVar("citry_vue_render_target", default=False)
 
 
+class UnsupportedPreparedView(TypeError):
+    """Raised when a render cannot be turned into the HTML and Vue template that the browser runs."""
+
+
 def include_prepared_attribute(value: object) -> bool:
     """Omit absent HTML attributes while retaining presence metadata."""
     return value is not None and value is not False
@@ -1117,8 +1121,10 @@ class PreparedElementCloseNode(Node):
 
 def _reject_executable_dynamic_attrs(attrs: Mapping[str, object], *, tag: str) -> None:
     for name in attrs:
+        # The same mistake caught later, while the render is turned into
+        # HTML, raises this type, so a caller catches one type on every path.
         if is_vue_directive_name(name):
-            raise ValueError(
+            raise UnsupportedPreparedView(
                 f"Python-resolved attribute {name!r} on <{tag}> cannot introduce Vue syntax; "
                 "Vue directives and bindings must be authored statically in the template. Remove "
                 f"{name!r} from the c-bind mapping or c-* attribute that sets it."

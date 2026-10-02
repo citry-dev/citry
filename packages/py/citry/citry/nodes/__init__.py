@@ -991,6 +991,16 @@ class ElementAttrsNode(Node):
         self._resolved_keys = tuple(attr.key.removeprefix("c-") for attr in attrs)
         self._has_spread = any(attr.key == "c-bind" for attr in attrs)
         self._validated_spread_keys: set[str] = set()
+        # The names of the Vue bindings written on this tag (`@click`), in the
+        # form `_html_attr_identity` gives them (lowercase, except Citry's
+        # case-sensitive `@c-`/`:c-` names). A c-bind key with one of these
+        # names collides with the written binding. The template never
+        # changes, so the names are collected once when the node is built.
+        self._written_vue_identities = frozenset(
+            _html_attr_identity(attr.key)
+            for attr in attrs
+            if isinstance(attr, StaticHtmlAttr) and not attr.key.startswith("c-") and is_vue_directive_name(attr.key)
+        )
         self._has_runtime_events_candidate = self._has_spread or any(
             attr.key.startswith(("@c-", ":c-"))
             or attr.key.lower().startswith("data-cev-")
@@ -1130,10 +1140,13 @@ class ElementAttrsNode(Node):
         items: list[tuple[str, Any]] = []
         # A spread key that Vue reads as a binding (`@click`) and a binding
         # written on the same tag share one attribute name, so the merge below
-        # keeps one value and the other disappears. Collect both sides so the
-        # caller can still see that the c-bind mapping set a Vue binding.
-        spread_vue_keys: dict[str, str] = {}
-        authored_identities: set[str] = set()
+        # keeps one value and the other disappears. Report such keys so the
+        # caller can still see that the c-bind mapping set a Vue binding. Only
+        # `PreparedElementOpenNode.render`, which builds the opening tag for
+        # the Vue path, passes a set, and only a tag with a written Vue
+        # binding can collide, so every other render skips the per-key check.
+        written_vue = self._written_vue_identities
+        report_to = shadowed_vue_keys if written_vue else None
         for attr, compiled_key in zip(self.attrs, self._resolved_keys, strict=True):
             if attr.key == "c-bind":
                 value = const_value(attr.resolve(context))
@@ -1152,8 +1165,17 @@ class ElementAttrsNode(Node):
                 for key, item in value.items():
                     # None and False remove an attribute instead of setting
                     # one, so only a live value can carry Vue syntax.
-                    if type(key) is str and is_vue_directive_name(key) and item is not None and item is not False:
-                        spread_vue_keys.setdefault(_html_attr_identity(key), key)
+                    if (
+                        report_to is not None
+                        # A str subclass (a StrEnum member) names the same
+                        # attribute, so it must not slip past the check.
+                        and isinstance(key, str)
+                        and item is not None
+                        and item is not False
+                        and is_vue_directive_name(key)
+                        and _html_attr_identity(key) in written_vue
+                    ):
+                        report_to.add(key)
                     # Only bounded exact strings can share validation across
                     # renders. Values and user-defined key behavior stay live.
                     cacheable_key = type(key) is str and len(key) <= 256
@@ -1180,17 +1202,11 @@ class ElementAttrsNode(Node):
             else:
                 if attr.key.startswith("c-"):
                     _reject_reserved_events_attr(compiled_key, tag_name=self.tag_name)
-                elif isinstance(attr, StaticHtmlAttr):
-                    authored_identities.add(_html_attr_identity(compiled_key))
                 items.append((compiled_key, const_value(attr.resolve(context))))
-        # Whether the page uses Vue is decided only when the render is turned
-        # into HTML, so report the pair instead of raising. The typed opening
-        # then treats the attribute as Python-resolved, and the Vue check
-        # rejects it there; a page without Vue keeps writing it as text.
-        if shadowed_vue_keys is not None:
-            shadowed_vue_keys.update(
-                key for identity, key in spread_vue_keys.items() if identity in authored_identities
-            )
+        # Whether the page uses Vue is not known while attributes resolve, so
+        # the keys above are reported, not raised. The Vue check in the
+        # prepared opening tag rejects them; a page without Vue keeps
+        # writing them as text.
         return _merge_resolved_attrs(items)
 
     def _format(

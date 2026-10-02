@@ -2190,7 +2190,7 @@ def test_dynamic_element_rejects_tag_dependent_vue_directives() -> None:
         def template_data(self, kwargs, slots):
             return {"tag": "input"}
 
-    with pytest.raises(TypeError, match="tag-dependent or executable"):
+    with pytest.raises(UnsupportedPreparedView, match="tag-dependent or executable"):
         render_prepared_direct(App())
 
 

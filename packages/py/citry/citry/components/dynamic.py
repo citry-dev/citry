@@ -195,6 +195,7 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
             if prepared_render_active():
                 from citry._vue.capture import (  # noqa: PLC0415
                     PreparedDynamicElementClose,
+                    UnsupportedPreparedView,
                     is_vue_directive_name,
                     prepared_dynamic_element_open,
                 )
@@ -221,8 +222,9 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
                         retained_bindings.append(binding)
                         resolved_attrs.pop(binding.key)
                 executable = [name for name in resolved_attrs if isinstance(name, str) and is_vue_directive_name(name)]
+                # Raise the same type as every other Vue-syntax rejection, so callers catch one type.
                 if executable:
-                    raise TypeError(
+                    raise UnsupportedPreparedView(
                         "prepared dynamic <c-element> does not support tag-dependent or executable Vue "
                         f"attributes: {', '.join(executable)}"
                     )

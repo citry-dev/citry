@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import sys
+import warnings
 from html import unescape
 
 import pytest
@@ -562,7 +563,7 @@ def test_prepared_open_rejects_dynamic_vue_syntax_and_keeps_morph_metadata() -> 
         (),
     )
     assert node.render(CitryContext(variables={"attrs": {"v-show": "danger"}}))
-    with typed_render_scope(vue=True), pytest.raises(ValueError, match="cannot introduce Vue syntax"):
+    with typed_render_scope(vue=True), pytest.raises(UnsupportedPreparedView, match="cannot introduce Vue syntax"):
         node.render(CitryContext(variables={"attrs": {"v-show": "danger"}}))
     # `#c-ignore` metadata reaches the typed opening, where the Vue assembler
     # finds the element whose contents the browser keeps.
@@ -1082,8 +1083,69 @@ def test_plain_spread_keeps_vue_syntax_rejection_strict() -> None:
         def template_data(self, kwargs, slots):
             return {"attrs": {"v-show": "open"}}
 
-    with pytest.raises(ValueError, match="cannot introduce Vue syntax"):
+    with pytest.raises(UnsupportedPreparedView, match="cannot introduce Vue syntax"):
         render_prepared(UnsafeSpread())
+
+
+class _AttrName(str):
+    """A str subclass, as a StrEnum member or a library's name type would be."""
+
+    __slots__ = ()
+
+
+def _spread_component(source: str, attrs: dict[str, object]) -> Component:
+    """Build one component whose template spreads ``attrs`` with c-bind."""
+    registry = Citry(autodiscover=False)
+
+    class Spread(Component):
+        citry = registry
+        template = source
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": attrs, "label": "x"}
+
+    return Spread()
+
+
+def _compiled_browser_template(component: Component) -> str:
+    """Return the Vue template that the browser compiles for ``component``."""
+    assembly = assemble_typed_render(
+        render_prepared(component),
+        revision=0,
+        tag_for_type=lambda type_key: f"c-{type_key.split('_', 1)[0].lower()}",
+    )
+    return assembly.compile_inputs[assembly.view.occurrences[0].definition_id].template
+
+
+@pytest.mark.parametrize(
+    ("source", "attrs"),
+    [
+        # The template's binding comes first and the c-bind value wins.
+        ('<button @click="save" c-bind="attrs">x</button>', {"@click": "other"}),
+        # Same value: the merged attribute matches the template's source, so
+        # only the reported key stops it from passing as template source.
+        ('<button @click="save" c-bind="attrs">x</button>', {"@click": "save"}),
+        # The template's binding comes last and replaces the c-bind value.
+        ('<button c-bind="attrs" @click="save">x</button>', {"@click": "other"}),
+        ('<button c-bind="attrs" @click="save">x</button>', {"@click": "save"}),
+        ('<button c-bind="attrs" :title="label">x</button>', {":title": "other"}),
+        # HTML attribute names ignore case, so a differently cased key is the
+        # same attribute and must fail the same way.
+        ('<button @click="save" c-bind="attrs">x</button>', {"@CLICK": "save"}),
+        ('<button c-bind="attrs" @click="save">x</button>', {"@CLICK": "save"}),
+        ('<button @CLICK="save" c-bind="attrs">x</button>', {"@click": "save"}),
+        # A str subclass names the same attribute as the plain string.
+        ('<button c-bind="attrs" @click="save">x</button>', {_AttrName("@click"): "other"}),
+    ],
+)
+def test_spread_vue_key_written_on_the_same_tag_is_rejected(source: str, attrs: dict[str, object]) -> None:
+    # The merge keeps only one of the two attributes, so whichever order the
+    # tag uses, the c-bind key must fail instead of vanishing or winning.
+    with pytest.raises(
+        UnsupportedPreparedView,
+        match=r"on <button> cannot introduce Vue syntax.*Remove them from the c-bind mapping",
+    ):
+        str(_spread_component(source, attrs).render())
 
 
 @pytest.mark.parametrize(
@@ -1091,37 +1153,76 @@ def test_plain_spread_keeps_vue_syntax_rejection_strict() -> None:
     [
         '<button @click="save" c-bind="attrs">x</button>',
         '<button c-bind="attrs" @click="save">x</button>',
-        '<button c-bind="attrs" :title="label">x</button>',
     ],
 )
-def test_spread_vue_key_written_on_the_same_tag_is_rejected(source: str) -> None:
-    # The merge keeps only one of the two attributes, so whichever order the
-    # tag uses, the c-bind key must fail instead of vanishing or winning.
-    registry = Citry(autodiscover=False)
-
-    class Shadowed(Component):
-        citry = registry
-        template = source
-
-        def template_data(self, kwargs, slots):
-            name = "@click" if "@click" in source else ":title"
-            return {"attrs": {name: "other"}, "label": "x"}
-
-    with pytest.raises(TypeError, match=r"\['[@:]\w+'\] on <button> cannot introduce Vue syntax"):
-        str(Shadowed().render())
+def test_events_response_render_rejects_spread_vue_key_with_the_same_type(source: str) -> None:
+    # An Events response renders through render_prepared_direct, which checks
+    # while rendering; it must raise the type that serialization raises.
+    with pytest.raises(
+        UnsupportedPreparedView,
+        match=r"'@click' on <button> cannot introduce Vue syntax.*Remove '@click' from the c-bind mapping",
+    ):
+        render_prepared_direct(_spread_component(source, {"@click": "save"}))
 
 
-def test_spread_vue_key_set_to_none_beside_written_binding_is_allowed() -> None:
-    registry = Citry(autodiscover=False)
+@pytest.mark.parametrize(
+    ("source", "kept"),
+    [
+        ('<button @click="save" c-bind="attrs">x</button>', '@click="other"'),
+        ('<button c-bind="attrs" @click="save">x</button>', '@click="save"'),
+    ],
+)
+@pytest.mark.parametrize(
+    "serialize_kwargs",
+    [{"deps_strategy": "ignore"}, {"security_javascript": "omit"}],
+)
+def test_spread_vue_key_on_a_page_without_vue_is_written_as_text(
+    source: str,
+    kept: str,
+    serialize_kwargs: dict[str, str],
+) -> None:
+    # Without Vue nothing reads the name as code, so the ordinary merge
+    # applies and the later of the two attributes is written as plain text.
+    rendered = _spread_component(source, {"@click": "other"}).render()
+    with warnings.catch_warnings():
+        # Omitting JavaScript warns that the button's handler has no fallback.
+        warnings.simplefilter("ignore", RuntimeWarning)
+        html = rendered.serialize(**serialize_kwargs)
+    assert kept in html
+    assert "citry-vue-" not in html
 
-    class Removed(Component):
-        citry = registry
-        template = '<button c-bind="attrs" @click="save">x</button>'
 
-        def template_data(self, kwargs, slots):
-            return {"attrs": {"@click": None}}
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ('<button title="a" c-bind="attrs" @click="save">x</button>', 'title="b"'),
+        ('<button c-bind="attrs" title="a" @click="save">x</button>', 'title="a"'),
+    ],
+)
+def test_spread_plain_key_beside_written_vue_binding_merges_later_wins(source: str, expected: str) -> None:
+    # Only Vue names are checked; a plain name keeps the ordinary merge.
+    html = str(_spread_component(source, {"title": "b"}).render())
+    assert "citry-vue-" in html
+    assert f"<button {expected}>" in html
 
-    str(Removed().render())
+
+@pytest.mark.parametrize("removed", [None, False])
+def test_spread_vue_key_removed_before_written_binding_keeps_the_binding(removed: object) -> None:
+    # None and False remove an attribute, so they carry no Vue syntax, and
+    # the binding written after the c-bind still reaches the browser.
+    source = '<button c-bind="attrs" @click="save">x</button>'
+    assert "citry-vue-" in str(_spread_component(source, {"@click": removed}).render())
+    assert '@click="save"' in _compiled_browser_template(_spread_component(source, {"@click": removed}))
+
+
+@pytest.mark.parametrize("removed", [None, False])
+def test_spread_vue_key_removed_after_written_binding_removes_the_binding(removed: object) -> None:
+    # A later None or False removes the attribute written before it, as for
+    # any other name, so the button renders without a listener.
+    component = _spread_component('<button @click="save" c-bind="attrs">x</button>', {"@click": removed})
+    html = str(component.render())
+    assert "@click" not in html
+    assert "citry-vue-" not in html
 
 
 def test_runtime_attr_hook_may_remove_but_not_replace_authored_vue_source() -> None:
@@ -1159,7 +1260,7 @@ def test_runtime_attr_hook_may_remove_but_not_replace_authored_vue_source() -> N
     assert "v-show" not in compiled.template
     assert 'v-bind="$citryPrepared.citryAttrs' in compiled.template
 
-    with pytest.raises(ValueError, match="cannot introduce Vue syntax"):
+    with pytest.raises(UnsupportedPreparedView, match="cannot introduce Vue syntax"):
         render_prepared(component(Citry(autodiscover=False, extensions=[ReplaceVue]))())
 
 
@@ -2299,7 +2400,7 @@ def test_python_attrs_cannot_use_any_vue_directive_spelling(name: str) -> None:
         def template_data(self, kwargs, slots):
             return {"attrs": {name: "window.__pwned = 1"}}
 
-    with pytest.raises(ValueError, match="cannot introduce Vue syntax"):
+    with pytest.raises(UnsupportedPreparedView, match="cannot introduce Vue syntax"):
         render_prepared(UnsafeSpread())
 
 

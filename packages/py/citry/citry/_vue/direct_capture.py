@@ -39,6 +39,7 @@ from .capture import (
     PreparedTrustedHtmlValue,
     PreparedVerbatimHtml,
     StaticRunOpening,
+    UnsupportedPreparedView,
     conflicting_attribute_targets,
     format_prepared_element_attrs,
     is_authenticated_browser_binding,
@@ -126,10 +127,6 @@ class AssembledView:
     occurrences: tuple[PreparedOccurrence, ...]
     definitions: tuple[_AssembledDefinition, ...]
     markers: tuple[PreparedMarker, ...] = ()
-
-
-class UnsupportedPreparedView(TypeError):
-    pass
 
 
 @dataclass(frozen=True, slots=True)
