@@ -45,7 +45,7 @@ pub(super) fn emit_props_object(
     let skip_key = if_key.is_some() || cx.suppress_template_for_child_key;
     let keep_template_if_static_key = if_key.is_some() && cx.template_if_branch_root;
     if suppress_once_cache_dynamic {
-        reserve_skipped_once_helpers(cx, pieces)?;
+        reserve_skipped_once_helpers(cx, pieces, is_plain_element)?;
     }
     let visible: StdVec<&Piece<'_>> = pieces
         .iter()
@@ -88,7 +88,7 @@ pub(super) fn emit_props_object(
         && (force_multiline
             || (if_key.is_some() && !visible.is_empty())
             || v_for_merge_arg_multiline
-            || (!for_item && pieces_have_inline_on(cx, pieces))
+            || (!for_item && pieces_have_inline_on(cx, pieces, is_plain_element))
             || (!for_item
                 && (visible.len() + extra > 1
                     || pieces_have_named(pieces, "class")
@@ -222,10 +222,11 @@ fn skip_once_cache_piece(piece: &Piece<'_>) -> bool {
 fn reserve_skipped_once_helpers(
     cx: &mut EmitCx<'_>,
     pieces: &[Piece<'_>],
+    is_plain_element: bool,
 ) -> Result<(), EmitError> {
     for piece in pieces {
         if let Piece::On(on) = piece {
-            on::reserve_skipped_once_helpers(cx, on)?;
+            on::reserve_skipped_once_helpers(cx, on, is_plain_element)?;
         }
     }
     Ok(())
@@ -256,13 +257,13 @@ pub(super) fn pieces_have_static_attr(pieces: &[Piece<'_>], name: &str) -> bool 
 
 /// The shipped scan reads the node's content — the padded attribute
 /// value — so `@click=" go "` is an inline handler by its spaces alone.
-fn pieces_have_inline_on(cx: &EmitCx<'_>, pieces: &[Piece<'_>]) -> bool {
+fn pieces_have_inline_on(cx: &EmitCx<'_>, pieces: &[Piece<'_>], is_plain_element: bool) -> bool {
     pieces.iter().any(|piece| match piece {
         // `has_inline_handler`'s first arm: a handler the lane will cache
         // spells a `_cache[n] || (…)` slot, which the shipped layout
         // always breaks onto its own line.
         Piece::On(event) => on::caches_handler(cx, event)
-            || on::forces_inline_on(event)
+            || on::forces_inline_on(event, is_plain_element)
             || matches!(event.handler, Some(ExprRef::Js(js)) if on::is_inline_handler_source(
                 super::prefix::node_content(cx.source, js.source, js.span).text.as_str()
             ))

@@ -42,7 +42,8 @@ pub(super) fn admit_on(on: &OnOp<'_>) -> Result<(), EmitError> {
         return super::on_dynamic::admit(on);
     }
     static_on_name(on)?;
-    classify(on)?;
+    // Only the modifier check matters here; the element kind does not change it.
+    classify(on, true)?;
     match on.handler {
         None | Some(ExprRef::Js(_)) => Ok(()),
         Some(ExprRef::Opaque(opaque)) if opaque.reason == OpaqueReason::MultiStatement => Ok(()),
@@ -92,7 +93,7 @@ pub(super) fn event_key(raw: &str, is_plain_element: bool) -> String {
 }
 
 pub(super) fn event_key_for(on: &OnOp<'_>, is_plain_element: bool) -> Result<String, EmitError> {
-    let classified = classify(on)?;
+    let classified = classify(on, is_plain_element)?;
     let mut key = event_key(
         remapped_name(static_on_name(on)?, &classified.event),
         is_plain_element,
@@ -103,6 +104,9 @@ pub(super) fn event_key_for(on: &OnOp<'_>, is_plain_element: bool) -> Result<Str
     Ok(key)
 }
 
+/// Callers ask only for a plain element's listener. Citry: the click fast
+/// path follows Vue's rule on the handler key (`onClick`) alone, because a
+/// key modifier on a click is dropped (see `classify_modifiers`).
 pub(super) fn needs_hydration(key: &str, on: &OnOp<'_>) -> bool {
     if super::on_dynamic::is_dynamic_on_name(on) {
         return false;
@@ -113,14 +117,14 @@ pub(super) fn needs_hydration(key: &str, on: &OnOp<'_>) -> bool {
     if has_native_modifier(on) {
         return true;
     }
-    key != "onClick" || classify(on).is_ok_and(|classified| !classified.keys.is_empty())
+    key != "onClick"
 }
 
-pub(super) fn forces_inline_on(on: &OnOp<'_>) -> bool {
+pub(super) fn forces_inline_on(on: &OnOp<'_>, is_plain_element: bool) -> bool {
     if super::on_dynamic::is_dynamic_on_name(on) {
         return super::on_dynamic::forces_inline(on);
     }
-    classify(on).is_ok_and(|classified| {
+    classify(on, is_plain_element).is_ok_and(|classified| {
         has_native_modifier(on) || !classified.event.is_empty() || !classified.keys.is_empty()
     })
 }
@@ -154,18 +158,19 @@ pub(super) fn emit_on_value(
     if super::on_dynamic::is_dynamic_on_name(on) {
         return super::on_dynamic::emit_value(cx, on, is_plain_element);
     }
-    let classified = classify(on)?;
+    let classified = classify(on, is_plain_element)?;
     emit_wrapped_handler(cx, on, &classified, is_plain_element)
 }
 
 pub(super) fn reserve_skipped_once_helpers(
     cx: &mut EmitCx<'_>,
     on: &OnOp<'_>,
+    is_plain_element: bool,
 ) -> Result<(), EmitError> {
     if super::on_dynamic::is_dynamic_on_name(on) {
         return Ok(());
     }
-    let classified = classify(on)?;
+    let classified = classify(on, is_plain_element)?;
     if !classified.keys.is_empty() {
         cx.buf.use_with_keys();
     }
@@ -175,30 +180,60 @@ pub(super) fn reserve_skipped_once_helpers(
     Ok(())
 }
 
-fn classify<'a>(on: &'a OnOp<'a>) -> Result<Classified<'a>, EmitError> {
+fn classify<'a>(on: &'a OnOp<'a>, is_plain_element: bool) -> Result<Classified<'a>, EmitError> {
     let name = static_on_name(on)?;
-    Ok(classify_modifiers(name, on.modifiers.iter().copied()))
+    Ok(classify_modifiers(
+        name,
+        is_plain_element,
+        on.modifiers.iter().copied(),
+    ))
 }
 
 pub(super) fn classify_dynamic_modifiers<'a>(
     modifiers: impl IntoIterator<Item = &'a str>,
 ) -> Classified<'a> {
-    classify_modifier_buckets(false, false, modifiers)
+    classify_modifier_buckets(EventKind::Dynamic, false, modifiers)
+}
+
+/// Citry: Vue's compiler-dom calls an event a keyboard event when its handler
+/// key, lowercased, is `onkeyup`, `onkeydown`, or `onkeypress`. So `key-down`
+/// counts, and a plain element's case-preserving `on:keyDown` key does not.
+fn is_keyboard_event(name: &str, is_plain_element: bool) -> bool {
+    matches!(
+        event_key(name, is_plain_element)
+            .to_ascii_lowercase()
+            .as_str(),
+        "onkeyup" | "onkeydown" | "onkeypress"
+    )
 }
 
 fn classify_modifiers<'a>(
     name: &str,
+    is_plain_element: bool,
     modifiers: impl IntoIterator<Item = &'a str>,
 ) -> Classified<'a> {
-    classify_modifier_buckets(
-        matches!(name, "keydown" | "keyup" | "keypress"),
-        true,
-        modifiers,
-    )
+    let kind = if is_keyboard_event(name, is_plain_element) {
+        EventKind::Keyboard
+    } else {
+        EventKind::Other
+    };
+    classify_modifier_buckets(kind, true, modifiers)
+}
+
+/// What Vue knows about the event when it sorts the modifiers.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EventKind {
+    Keyboard,
+    /// A static name that is not a keyboard event: it has no key, so Vue
+    /// drops key modifiers and leaves the handler unwrapped.
+    Other,
+    /// `@[name]`: either kind at run time, so `left`/`right` are checked
+    /// both as mouse buttons and as keys, and key modifiers are kept.
+    Dynamic,
 }
 
 fn classify_modifier_buckets<'a>(
-    keyboard: bool,
+    kind: EventKind,
     keep_options: bool,
     modifiers: impl IntoIterator<Item = &'a str>,
 ) -> Classified<'a> {
@@ -211,9 +246,14 @@ fn classify_modifier_buckets<'a>(
             "native" => {}
             "capture" | "once" | "passive" if keep_options => options.push(modifier),
             "capture" | "once" | "passive" => {}
-            "left" | "right" if keyboard => keys.push(modifier),
+            "left" | "right" if kind == EventKind::Keyboard => keys.push(modifier),
+            "left" | "right" if kind == EventKind::Dynamic => {
+                keys.push(modifier);
+                event.push(modifier);
+            }
             "stop" | "prevent" | "self" | "ctrl" | "shift" | "alt" | "meta" | "middle"
             | "exact" | "left" | "right" => event.push(modifier),
+            _ if kind == EventKind::Other => {}
             _ => keys.push(modifier),
         }
     }

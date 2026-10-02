@@ -45,8 +45,8 @@ SOURCE_ROOT: Final = PACKAGE_ROOT / "citry_core"
 PYODIDE_CONFIG: Final = PACKAGE_ROOT / "pyodide-build.json"
 SMOKE_SCRIPT: Final = REPO_ROOT / "scripts" / "smoke_citry_core.py"
 VENDORED_VIZE_CRATES: Final = {
-    "vize_atelier_core": "0.420.0+citry.2",
-    "vize_s1_to_s2": "0.420.0+citry.2",
+    "vize_atelier_core": "0.420.0+citry.3",
+    "vize_s1_to_s2": "0.420.0+citry.3",
 }
 LICENSE_FILES: Final = {
     "LICENSE": PACKAGE_ROOT / "LICENSE",
