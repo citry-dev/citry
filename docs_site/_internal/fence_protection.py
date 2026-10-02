@@ -11,13 +11,21 @@ it into ``<pre>``/``<code>`` (escaping the angle brackets there).
 Handles fenced code blocks (``` and ~~~), four-space or tab-indented code, and
 inline code spans that contain citry-parseable syntax.
 
+Inline code spans follow Markdown's rules: a span opens with a run of backticks
+and closes at the next run of exactly the same length, and it may continue onto
+the next line of the same paragraph (Markdown shows that line break as a
+space). So the pass collects each paragraph's lines and protects its spans as a
+whole; a span split per line would leave half a tag for citry to parse.
+
 Indentation means code only relative to the block a line belongs to. The body
 of an admonition (``!!! note``), a collapsible block (``??? note``), a content
 tab (``=== "Tab"``), or a list item is indented by four spaces, yet it is prose:
 its inline code spans are protected like those of a top-level paragraph, and a
 line counts as indented code only when it is indented four more spaces than
 that body. As in Markdown, a four-space-indented paragraph straight after a
-list item belongs to that item, so it is prose rather than code.
+list item belongs to that item, so it is prose rather than code, and a deeper
+indented line inside a paragraph continues that paragraph rather than starting
+code.
 
 One limitation: a code region whose text is itself ``<c-raw>`` (or a whole
 ``<c-raw>...</c-raw>``) cannot be protected by wrapping, because the wrapper's
@@ -35,8 +43,12 @@ import re
 # Opening of a fenced block: optional indent, then 3+ backticks or tildes.
 _FENCE_OPEN = re.compile(r"^(\s*)(```+|~~~+)")
 
-# An inline backtick span that holds citry syntax: a tag/expression/comment.
-_CITRY_IN_INLINE = re.compile(r"`[^`]*(<|\{\{|\{#)[^`]*`")
+# Text inside an inline code span that citry would parse: a tag, an
+# expression, or a comment. A span holding none of these is left untouched.
+_CITRY_INLINE_MARKERS = ("<", "{{", "{#")
+
+# A run of backticks; its length decides which later run closes the span.
+_BACKTICK_RUN = re.compile(r"`+")
 
 # A line that opens a block whose body is indented four spaces: an admonition,
 # a collapsible block, a content tab, or a list item.
@@ -45,6 +57,10 @@ _CONTAINER_OPEN = re.compile(r"^(?:!!!|\?\?\?\+?|===)\s|^(?:[-*+]|\d+\.)\s")
 # A horizontal rule such as `* * *` starts like a list item but opens no block.
 _THEMATIC_BREAK = re.compile(r"^(?:[-*_][ \t]*){3,}$")
 
+# An ATX heading or a table row. Markdown reads the inline code of each such
+# line on its own, so it never shares a code span with a neighboring line.
+_SINGLE_LINE_BLOCK = re.compile(r"^(?:#{1,6}(?:\s|$)|\|)")
+
 # Python-Markdown nests block content four spaces deeper than its opener.
 _CONTAINER_STEP = 4
 
@@ -52,8 +68,8 @@ _CONTAINER_STEP = 4
 # sees <c-raw>. Replace only their leading sigil while code is protected, then
 # restore it after the Citry render. Private-use characters keep the armored
 # source inert without changing what the Markdown code block ultimately shows.
-_EVENT_AT_SENTINEL = "\ue000"
-_STATE_BIND_SENTINEL = "\ue001"
+_EVENT_AT_SENTINEL = ""
+_STATE_BIND_SENTINEL = ""
 
 
 def protect_fences(source: str) -> str:
@@ -67,26 +83,54 @@ def protect_fences(source: str) -> str:
     # The body indent of each open admonition, tab, or list item, innermost
     # last. Indentation inside a body is measured from its body indent.
     containers: list[int] = []
+    # The prose lines of the paragraph being read. Its inline code is
+    # protected once the paragraph ends, since a span may cross its lines.
+    paragraph: list[str] = []
+
+    def flush_paragraph() -> None:
+        if paragraph:
+            out.extend(_protect_inline_code("\n".join(paragraph)).split("\n"))
+            paragraph.clear()
 
     for line in lines:
         if not in_fence:
             stripped = line.lstrip(" \t")
             indent = _indent_width(line)
-            if stripped:
-                # A line indented less than a body has left that block.
-                while containers and indent < containers[-1]:
-                    containers.pop()
+            if not stripped:
+                # A blank line ends the paragraph, and no code span crosses it.
+                flush_paragraph()
+                out.append(line)
+                continue
+            # A line indented less than a body has left that block.
+            while containers and indent < containers[-1]:
+                containers.pop()
             body_indent = containers[-1] if containers else 0
             # Markdown treats four more spaces (or a tab) than the enclosing
             # body as code. Check it before fence discovery so an indented ```
-            # line is not mistaken for a fenced-block opener.
-            if stripped and indent - body_indent >= _CONTAINER_STEP:
+            # line is not mistaken for a fenced-block opener. Indented code
+            # cannot interrupt a paragraph, so inside one the line is prose.
+            if not paragraph and indent - body_indent >= _CONTAINER_STEP:
                 out.append(_protect_indented_code(line))
                 continue
-            if _CONTAINER_OPEN.match(stripped) and not _THEMATIC_BREAK.match(stripped):
+            if _THEMATIC_BREAK.match(stripped):
+                # A rule is a whole block on one line and ends any paragraph.
+                flush_paragraph()
+                out.append(line)
+                continue
+            if _CONTAINER_OPEN.match(stripped):
+                # A new block starts here, so the previous paragraph has ended.
+                flush_paragraph()
                 containers.append(indent + _CONTAINER_STEP)
+                if stripped[0] in "!?=":
+                    # An admonition or tab title is one line; its body starts below.
+                    out.append(_protect_inline_code(line))
+                else:
+                    # A list item's text continues onto the lines below it.
+                    paragraph.append(line)
+                continue
             match = _FENCE_OPEN.match(line)
             if match:
+                flush_paragraph()
                 fence_indent = match.group(1)
                 marker = match.group(2)
                 fence_char = marker[0]
@@ -95,7 +139,11 @@ def protect_fences(source: str) -> str:
                 out.append(line)
                 in_fence = True
                 continue
-            out.append(_protect_inline_code(line))
+            if _SINGLE_LINE_BLOCK.match(stripped):
+                flush_paragraph()
+                out.append(_protect_inline_code(line))
+                continue
+            paragraph.append(line)
         else:
             out.append(_armor_preparse_bindings(line))
             stripped = line.lstrip()
@@ -110,6 +158,8 @@ def protect_fences(source: str) -> str:
                 out.append("</c-raw>")
                 in_fence = False
 
+    # The last paragraph has no blank line after it to end it.
+    flush_paragraph()
     # An unclosed fence: close the raw block so the page still renders.
     if in_fence:
         out.append("</c-raw>")
@@ -135,30 +185,61 @@ def _indent_width(line: str) -> int:
     return width
 
 
-def _protect_inline_code(line: str) -> str:
-    """Wrap inline backtick spans that contain citry syntax in ``<c-raw>``."""
-    if not _CITRY_IN_INLINE.search(line):
-        return line
+def _protect_inline_code(text: str) -> str:
+    """
+    Wrap the inline code spans in ``text`` that contain citry syntax in ``<c-raw>``.
+
+    ``text`` is one paragraph, possibly several lines. A span opens at a run of
+    backticks that no backslash escapes and closes at the next run of exactly
+    the same length, even on a later line. A run with no such closer is plain
+    text, as in Markdown.
+    """
+    # Most paragraphs hold no code or no citry syntax; skip the scan for them.
+    if "`" not in text or not any(marker in text for marker in _CITRY_INLINE_MARKERS):
+        return text
 
     result: list[str] = []
-    i = 0
-    while i < len(line):
-        if line[i] == "`":
-            end = line.find("`", i + 1)
-            if end == -1:
-                result.append(line[i:])
-                break
-            span = line[i + 1 : end]
-            if "<" in span or "{{" in span or "{#" in span:
-                result.append(f"<c-raw>`{_armor_preparse_bindings(span)}`</c-raw>")
-            else:
-                result.append(f"`{span}`")
-            i = end + 1
-        else:
-            result.append(line[i])
-            i += 1
+    copied = 0
+    search_from = 0
+    while (opener := _BACKTICK_RUN.search(text, search_from)) is not None:
+        start, after_opener = opener.span()
+        if _is_backslash_escaped(text, start):
+            # An escaped backtick is literal; the rest of its run may still open a span.
+            search_from = start + 1
+            continue
+        width = after_opener - start
+        closer = _find_closing_run(text, after_opener, width)
+        if closer is None:
+            # Markdown shows an unmatched run as literal backticks.
+            search_from = after_opener
+            continue
+        span = text[after_opener:closer]
+        if any(marker in span for marker in _CITRY_INLINE_MARKERS):
+            ticks = "`" * width
+            result.append(text[copied:start])
+            result.append(f"<c-raw>{ticks}{_armor_preparse_bindings(span)}{ticks}</c-raw>")
+            copied = closer + width
+        search_from = closer + width
 
+    result.append(text[copied:])
     return "".join(result)
+
+
+def _is_backslash_escaped(text: str, index: int) -> bool:
+    """Return whether an odd number of backslashes sits right before ``index``."""
+    backslashes = 0
+    while index - backslashes > 0 and text[index - backslashes - 1] == "\\":
+        backslashes += 1
+    return backslashes % 2 == 1
+
+
+def _find_closing_run(text: str, start: int, width: int) -> int | None:
+    """Return where the first backtick run of exactly ``width`` starts, searching from ``start``."""
+    # A longer or shorter run inside the span is part of its text, not a closer.
+    for run in _BACKTICK_RUN.finditer(text, start):
+        if run.end() - run.start() == width:
+            return run.start()
+    return None
 
 
 def _protect_indented_code(line: str) -> str:

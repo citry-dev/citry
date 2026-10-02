@@ -57,6 +57,47 @@ def test_inline_code_in_a_list_continuation_is_shown_verbatim() -> None:
     assert "<code>&lt;span/&gt;</code>" in html
 
 
+def _code_texts(html: str) -> list[str]:
+    """Return the text of every inline ``<code>`` element, whitespace collapsed."""
+    return [
+        " ".join(html_module.unescape(code).split()) for code in re.findall(r"<code>(.*?)</code>", html, re.DOTALL)
+    ]
+
+
+def test_inline_code_wrapped_across_lines_in_a_paragraph_is_shown_verbatim() -> None:
+    # Markdown lets a code span continue on the next line of its paragraph and
+    # shows the line break as a space; protecting each line on its own would
+    # hand citry half a tag.
+    html = render_page('Wrap `<c-Button\n@click="go">` here.\n', wrap_in_layout=False).html
+
+    assert _code_texts(html) == ['<c-Button @click="go">']
+
+
+def test_inline_code_wrapped_across_lines_in_admonition_and_list_bodies() -> None:
+    in_note = _note('    Wrap `<c-Button\n    @click="go">` here.')
+    in_list = render_page('- Wrap `<c-Button\n  @click="go">` here.\n', wrap_in_layout=False).html
+    deeper = render_page('Wrap `<c-Button\n        @click="go">` here.\n', wrap_in_layout=False).html
+
+    for html in (in_note, in_list, deeper):
+        assert _code_texts(html) == ['<c-Button @click="go">']
+
+
+def test_inline_code_closes_only_at_a_backtick_run_of_the_same_length() -> None:
+    # A shorter run inside a double-backtick span is code text, not a closer.
+    assert protect_fences("A ``x ` <c-y/>`` z") == "A <c-raw>``x ` <c-y/>``</c-raw> z"
+    # An unmatched run is literal and does not swallow the span after it.
+    assert protect_fences("A ``` b `{{ c }}` d") == "A ``` b <c-raw>`{{ c }}`</c-raw> d"
+
+
+def test_inline_code_does_not_cross_a_paragraph_or_block_boundary() -> None:
+    for source in ("`{{ a\n\nb }}`", "`{{ a\n# b }}`", "- `{{ a\n- b }}`", "`{{ a\n```\nb }}`"):
+        assert "<c-raw>`" not in protect_fences(source), source
+
+
+def test_backslash_escaped_backtick_does_not_open_a_span() -> None:
+    assert protect_fences("A \\` b `{{ c }}`") == "A \\` b <c-raw>`{{ c }}`</c-raw>"
+
+
 def test_code_nested_in_an_admonition_stays_literal() -> None:
     indented = _note('    Text.\n\n        <c-if cond="x">{{ y }}</c-if>')
     fenced = _note('    ```html\n    <c-if cond="x">{{ y }}</c-if>\n    ```')
