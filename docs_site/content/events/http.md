@@ -85,8 +85,9 @@ htmx can post to the same URL and consume the fragment response.
 
 ## Download a file from one event
 
-A download uses its event's HTTP response, so its handler must opt out of
-bundling and return the download by itself:
+A download uses its event's own HTTP response. Declare the handler with
+`@event(bundle=False)` so the browser sends each call alone, to the
+handler's own URL. Return the download by itself:
 
 ```python
 from citry.ext.events import actions, event
@@ -105,9 +106,9 @@ class Events:
 Call the handler normally from `@c-*`, `$sendEvent`, or
 [`Citry.events.send`][Citry.events.send]. The returned promise resolves with
 `undefined` after the browser save starts. A download cannot share a return
-list with actions or ride a batch request. Its handler must also leave Citry
-State unchanged, because the file response has no result envelope in which to
-refresh the signed State token.
+list with other actions. Its handler must also leave Citry
+State unchanged, because a file response cannot also carry the new signed
+State token and public State values.
 
 ## Protect every handler like an HTTP endpoint
 

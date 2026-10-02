@@ -18,20 +18,32 @@ class WelcomeCard(Component):
         def welcome(self, state):
             state.greetings += 1
             return actions.Dispatch(
-                "welcome-card:welcomed",
+                "WelcomeCard:welcomed",
                 {"greetings": state.greetings},
             )
 
-    def state_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, int]:
+    def state_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, int]:
         return {"greetings": kwargs.greetings}
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, str | int]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, str | int]:
         return {
             "greetings": kwargs.greetings,
             "name": kwargs.name.strip().title(),
         }
 
-    def css_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, str]:
+    def css_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, str]:
         return {"accent": kwargs.accent}
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, int]:
@@ -40,7 +52,7 @@ class WelcomeCard(Component):
     template = """
       <article
         class="welcome-card"
-        @welcome-card:welcomed="greetings = $event.detail.greetings"
+        @WelcomeCard:welcomed="greetings = $event.detail.greetings"
       >
         <p>Welcome, <strong>{{ name }}</strong>.</p>
         <button

@@ -149,7 +149,9 @@ uv run pytest
 # Rust tests
 # Use `-p <crate_name>`, so cargo skips Ruff's crates
 cargo test -p citry_core_py -p citry_html_transform \
-           -p citry_template_parser -p python_safe_eval
+           -p citry_i18n -p citry_template_formatter \
+           -p citry_template_parser -p citry_vue_compiler \
+           -p python_safe_eval
 
 # Formatting and linting
 cargo fmt
@@ -185,7 +187,7 @@ uv run maturin develop
 Both `maturin develop` and the `uv sync` build produce a debug (unoptimized)
 extension. That is fine for tests, but it makes the Rust-backed paths several
 times slower, so pass `--release` before running any
-[benchmark](/advanced/performance/):
+[benchmark](/about/benchmarks/):
 
 ```sh
 uv run maturin develop --release
@@ -238,9 +240,11 @@ The [Built-in tags](/reference/builtins/) page is the exception. Not all Citry `
 
 - Tags that are Python components (inherit `Component`) - their source of truth is their `Component` subclass:
     - `<c-component>`, `<c-element>`
+    - `<c-mark>`
     - `<c-provide>`
     - `<c-cache>`
     - `<c-error-fallback>`
+    - `<c-i18n>`, `<c-trans>`
     - `<c-css>`, `<c-js>`
 - Tags with no Python equivalent - source of truth is in `builtins.md`:
     - `<c-if>`, `<c-elif>`, `<c-else>`
@@ -250,9 +254,9 @@ The [Built-in tags](/reference/builtins/) page is the exception. Not all Citry `
 
 The [Browser APIs](/reference/browser-apis/) page is manual too. It covers everything that runs in the browser:
 
-- `$component`
-- dependency manager
-- Events runtime
+- `$component` and its server-render callbacks
+- `Citry.vue`
+- the Events helpers, such as `$sendEvent` and `Citry.events`
 
 Declare each linkable name and stable anchor in
 `docs_site/reference.yml`, then document that anchor in
@@ -323,23 +327,25 @@ def render(
 
 ## Releases
 
-Releases are per-package and triggered by pushing a git tag named for the
-package and version:
+Each package has its own version and its own git tag, named for the package
+and version:
 
 - `citry@X.Y.Z` for the Python package
 - `citry-core@X.Y.Z` for the Rust-backed bindings
+- `citry-lsp@X.Y.Z` for the language server
+- `citry-ui@X.Y.Z` for the Citry UI component library
 - `pygments-citry@X.Y.Z` for the Pygments lexer package
+- `vscode-citry@X.Y.Z` for the VS Code extension
 
-The tagged version must match the package's `pyproject.toml`;
-the publish workflow checks this and fails the release on a
-mismatch.
+Maintainers do not push these tags by hand. A release starts when a pull
+request that changes a package version is merged into `main`. The
+**Prepare release candidate** workflow then builds and tests every package
+whose version has no tag yet. A maintainer inspects that run and passes its
+run ID to the **Release qualified packages** workflow. That workflow publishes
+the packages in dependency order (for example, `citry-core` before `citry`),
+checks the published files, and creates the tags and GitHub Releases.
 
-The packages version and release independently. Because `citry` depends on
-`citry-core`, when you bump both, publish `citry-core` first and let it reach
-PyPI before tagging `citry`. `pygments-citry` has no cross-package release
-ordering requirement.
-
-Publishing uses
+Publishing to PyPI uses
 [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/){: target="_blank" rel="noopener"} (OIDC),
 so there is no stored API token. See `docs/codebase.md` for the full release flow.
 
@@ -350,9 +356,9 @@ and cross-OS breadth on top of it.
 
 | Workflow | What it runs | When |
 | --- | --- | --- |
-| `repo--check.yml` | The full gate (`python scripts/check.py`) on Python 3.13 with the Rust nightly toolchain and Node for the pyright and citry-client phases | Every push and pull request, no path filters |
-| `rust--tests.yml` | Rust crate tests (`cargo test -p ...`) on Ubuntu and Windows | Changes under `crates/`, `third_party/`, `.github/`, or `.gitmodules` |
-| `py--tests.yml` | Python tests: `uv sync --locked --all-packages`, then `uv run --no-sync pytest`, across Python 3.10 to 3.14 on Ubuntu and Windows plus a macOS smoke pair | Changes under `packages/py/`, `crates/`, `third_party/`, `.github/`, or `.gitmodules` |
+| `repo--check.yml` | The full gate (`python scripts/check.py`) on Python 3.14 with the Rust nightly toolchain and Node for the Node-based phases: pyright, the browser client, the CodeMirror Fluent language, the Events protocol JavaScript, the docs playground, the VS Code extension, the Citry UI asset check, and Vue render parity | Every pull request and every push to `main` or `dev`, no path filters |
+| `rust--tests.yml` | Rust crate tests (`cargo test -p ...`) on Ubuntu, Windows, and macOS | Changes under `crates/` or `third_party/`, to the Cargo files, or to `rust-toolchain.toml` or `.gitmodules` |
+| `py--tests.yml` | Python tests: `uv sync --locked --all-packages`, then `uv run --no-sync pytest`, across Python 3.10 to 3.14 on Ubuntu and Windows plus a macOS smoke pair | Changes under `packages/py/`, `packages/js/citry-client/`, `packages/protocol/`, `crates/`, or `third_party/`, and to the lockfiles and build scripts |
 | `repo--docs-check.yml` | The docs gate (`python -m docs_site build-check`) plus the docs-site unit tests | Changes under `docs_site/`, `packages/py/`, `crates/`, and related paths |
 | `repo--docs-deploy.yml` | Builds and publishes the docs site to GitHub Pages | Pushes to `main` |
 | `repo--ruff-upstream.yml` | Checks stable Ruff releases for changes in the internal crates Citry uses, then opens one tracking issue | Monthly or manual |

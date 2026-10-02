@@ -13,6 +13,8 @@ class Task:
     completed: bool = False
 
 
+# This represents the "database" of tasks.
+# In a real app, this would be stored in a database.
 TASKS = [
     Task(id=1, title="Review the draft", completed=True),
     Task(id=2, title="Send the invitation"),
@@ -40,23 +42,32 @@ class TaskRow(Component):
     class Slots:
         pass
 
+    # Remember the task ID in State so we don't have
+    # to send it with each event.
     class State:
         task_id: int
 
     class Events:
+        # Update the task title in TASKS.
+        # Send the row a browser event so it can show a message.
         def save(self, data: RenameTaskIn, state: "TaskRow.State"):
             title = data.title.strip()
             if len(title) < 3:
                 raise EventError(
                     "Give the task a longer title.",
-                    fields={"title": "Use at least three characters."},
+                    fields={
+                        "title": "Use at least three characters.",
+                    },
                 )
+
+            # Perform a "database" update.
             for task in TASKS:
                 if task.id == state.task_id:
                     task.title = title
                     break
+
             return actions.Dispatch(
-                "task-row:saved",
+                "TaskRow:saved",
                 {"taskId": state.task_id, "title": title},
             )
 
@@ -68,9 +79,18 @@ class TaskRow(Component):
         <form @c-submit.prevent="save">
           <label>
             Task {{ task_id }}
-            <input name="title" c-value="title" required />
+            <input
+              name="title"
+              c-value="title"
+              required
+            />
           </label>
-          <button type="submit" :disabled="$loading('save')">Save</button>
+          <button
+            type="submit"
+            :disabled="$loading('save')"
+          >
+            Save
+          </button>
           <p
             role="alert"
             v-show="$error('save')"
@@ -82,19 +102,24 @@ class TaskRow(Component):
     """
 
     js = """
+      // Display a message when this row's task title
+      // is successfully saved.
       $component({
         data() {
           return { saveStatus: '' };
         },
         methods: {
           showSaved(detail) {
-            this.saveStatus = `Saved task ${detail.taskId}: ${detail.title}`;
+            this.saveStatus =
+              `Saved task ${detail.taskId}: ${detail.title}`;
           },
         },
-        onServerRender({ component }) {
-          const receiveSaved = (event) => component.showSaved(event.detail);
-          component.$el.addEventListener('task-row:saved', receiveSaved);
-          return () => component.$el.removeEventListener('task-row:saved', receiveSaved);
+        onServerRender({ component, onEvent }) {
+          // Citry removes this listener before onServerRender
+          // runs again and when the component unmounts.
+          onEvent('TaskRow:saved', (detail) => {
+            component.showSaved(detail);
+          });
         },
       });
     """
@@ -136,7 +161,9 @@ class TaskFilterToggle(Component):
       <button
         type="button"
         :disabled="loading"
-        v-text="hideCompleted ? 'Show all tasks' : 'Hide completed tasks'"
+        v-text="
+          hideCompleted ? 'Show all tasks' : 'Hide completed tasks'
+        "
         @click="$emit('select')"
       ></button>
     """
@@ -168,7 +195,9 @@ class TaskList(Component):
 
     class Events:
         def filter_tasks(self, data: FilterTasksIn):
-            visible_tasks = load_tasks(hide_completed=data.hide_completed)
+            visible_tasks = load_tasks(
+                hide_completed=data.hide_completed,
+            )
             return actions.Render(
                 TaskList(
                     tasks=visible_tasks,
@@ -187,7 +216,9 @@ class TaskList(Component):
         <c-TaskFilterToggle
           :hideCompleted="hideCompleted"
           :loading="$loading('filter_tasks')"
-          @select="$sendEvent('filter_tasks', { hide_completed: !hideCompleted })"
+          @select="$sendEvent('filter_tasks', {
+            hide_completed: !hideCompleted,
+          })"
         />
 
         <ul class="task-rows">
@@ -197,7 +228,9 @@ class TaskList(Component):
         <c-TaskFilterToggle
           :hideCompleted="hideCompleted"
           :loading="$loading('filter_tasks')"
-          @select="$sendEvent('filter_tasks', { hide_completed: !hideCompleted })"
+          @select="$sendEvent('filter_tasks', {
+            hide_completed: !hideCompleted,
+          })"
         />
       </section>
     """

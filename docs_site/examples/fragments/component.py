@@ -61,5 +61,6 @@ class FragmentWidget(Component):
 
 
 # The docs build renders each component listed here as a separate HTML
-# fragment, at examples/fragments/demo/<name>/, for the page to fetch.
+# fragment, at examples/fragments/demo/<name>/, for the page to fetch,
+# and writes the component's JavaScript and CSS files beside it.
 FRAGMENTS = {"widget": FragmentWidget}

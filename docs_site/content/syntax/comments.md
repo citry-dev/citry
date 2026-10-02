@@ -71,8 +71,9 @@ an ordinary Python comment:
 </div>
 ```
 
-The comment ends at the end of the line, just as it does in Python. A `#`
-inside a Python string remains part of the string.
+The comment ends at the end of the line, as it does in Python, or earlier
+at the end of the expression: the closing `}}` or the attribute's closing
+quote. A `#` inside a Python string remains part of the string.
 
 Outside a Python expression, `#` is ordinary text. That includes plain
 template text, static attribute values, and markup passed through a nested
@@ -88,17 +89,17 @@ tags, or comments inside it:
 ```
 
 Citry removes the `<c-raw>` wrapper and copies its body to the rendered output
-verbatim. In this example, `{{ this_stays_as_text }}` is not evaluated and
-`<c-Card>` is not rendered as a Citry component.
+without interpreting it. In this example, `{{ this_stays_as_text }}` is not
+evaluated and `<c-Card>` is not rendered as a Citry component.
 
 Raw output is not HTML-escaped. The browser will still interpret any HTML in
 the copied body. Use `<c-raw>` only for text written and trusted by the template
 author. It is not a safe way to display HTML supplied by a user.
 
-Events binding syntax is safe to show inside the block. Citry compiles only
-attributes that the template parser identified on real elements, so
-`@c-click="save"` and `:c-query` text inside `<c-raw>` remains byte-for-byte
-literal.
+Events binding syntax is safe to show inside the block. Citry turns
+`@c-click="save"` and `:c-query` into server event bindings only on elements
+written in the template itself, so inside `<c-raw>` they stay ordinary
+attribute text.
 
 `<c-raw>` has a deliberately small syntax:
 

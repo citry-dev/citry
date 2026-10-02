@@ -84,24 +84,25 @@ The component name after it is case-insensitive, so `<c-StatusBadge>` and
 
 ## Expressions
 
-The `{{ ... }}` Python expressions are allowed only
-outside of tags:
+Citry evaluates `{{ ... }}` only in the content between tags, never inside
+a tag. Use a [`c-*` attribute](#python-attributes) to set an attribute from
+Python:
 
 ```citry-html
-{# ✅ Valid #}
+{# ✅ Evaluated #}
 <p title="Some title">
   {{ content }}
 </p>
 
-{# ❌ Invalid #}
+{# ❌ Not evaluated: the title is the literal text #}
 <p title="{{ content }}">
 </p>
 
-{# ❌ Invalid #}
+{# ❌ Not evaluated: the braces stay in the tag #}
 <p title="Some title" {{ content }}>
 </p>
 
-{# ❌ Invalid #}
+{# ❌ Parse error: a closing tag name cannot be an expression #}
 <{{ tag }} title="Some title">
 </{{ tag }}>
 ```
@@ -148,7 +149,7 @@ the same spelling passes the Python value `True`:
 <c-Button compact />
 ```
 
-## Other
+## Text Citry leaves unchanged
 
 HTML comments, declarations such as `<!doctype html>`, and processing
 instructions remain part of the output. Citry does not use Django or Jinja

@@ -8,7 +8,7 @@ description: Render presentation components without creating an independent comp
 A label, icon or wrapper may only turn inputs into HTML. Declare
 [`simple = True`][citry.Component.simple] when that component does not need
 its own instance, lifecycle hooks or browser identity. Citry renders its
-template under the surrounding component's ownership and skips that setup.
+template as part of the surrounding component and skips that setup.
 
 ```citry
 from citry import Component
@@ -48,7 +48,7 @@ class Toggle(Component):
         label: str
 
     @staticmethod
-    def template_data(kwargs, _slots):
+    def template_data(kwargs, slots):
         return {"label": kwargs.label}
 
     template = """
@@ -74,8 +74,9 @@ and do not declare `transparent = True`. Its template may use text, `c-if`,
 `c-for`, fixed `c-*` attributes, safe `c-bind` objects, authored Vue
 bindings, and calls to child components, described below. Authored
 component JS/CSS and static `js_data`/`css_data` callbacks are supported.
-Slots, provide/inject, instance hooks/configuration, component messages, and
-secondary dependency lists are unsupported. Evaluated
+Slots, provide/inject, instance hooks, `Events`, `Cache`, `I18n`, and `State`
+configuration, component messages, and any `js` or `css` entry in
+`Dependencies` are unsupported. Evaluated
 template values must be JSON-like values such as strings, numbers, booleans,
 lists and dictionaries. Citry calls the callback once per call. An unsupported
 class shape fails before it runs. An unsafe returned value raises an error;
@@ -89,10 +90,10 @@ behavior; `simple = True` remains unchanged.
 Some app-wide settings need the component instance: i18n settings passed to
 `Citry`, messages declared on any other registered component, an extension
 that handles component data or lifecycle hooks, or an extension that changes
-element attributes (`on_attrs_resolved`) used by this template. While one of them applies, Citry renders the
-`simple = "vue"` component as an ordinary component instead. The page shows the
-same HTML and the data callback still runs once per call, but that component
-renders at ordinary speed.
+element attributes (`on_attrs_resolved`) used by this template. While one of
+them applies, Citry renders the `simple = "vue"` component as an ordinary
+component instead. The page shows the same HTML and the data callback still
+runs once per call, but that component renders at ordinary speed.
 
 ## Call child components from a `simple = "vue"` template
 
@@ -157,8 +158,8 @@ the whole path, for example `Page > Row > Details`.
 
 A child whose HTML must become part of its caller's own template cannot
 be called this way: a `simple = True` component, a transparent component,
-or a `<c-component>` that picks its target with `c-is`. Rendering the parent raises an error that names the
-child:
+or a `<c-component>` that picks its target with `c-is`. Rendering the
+parent raises an error that names the child:
 
 ```citry-html
 <!-- Fails when Row is simple = "vue" and Label is simple = True -->
@@ -253,13 +254,13 @@ constructors, factories and additional fields are unsupported.
 Simple templates can call ordinary child components and supply named fills
 to those children. Those children keep their own instances and hooks.
 
-## Understand the ownership change
+## Know what a `simple = True` component shares with its caller
 
 With `simple = True`, an invocation gets no separate Python or Vue component
-instance, render ID, component hooks, or slot hooks of its own. Its HTML is rendered into the
-surrounding ordinary component instance. Component tags authored inside its
-template use that ordinary component as their parent; supplied content keeps
-the caller's Vue scope.
+instance, render ID, component hooks, or slot hooks of its own. Its HTML is
+rendered into the surrounding ordinary component instance. Component tags
+authored inside its template use that ordinary component as their parent;
+supplied content keeps the caller's Vue scope.
 
 Ordinary HTML attributes, `c-bind` spreads, expressions, branches, loops and
 native Vue bindings remain available to `simple = True`. Those Vue expressions
@@ -317,7 +318,7 @@ how much time it spends producing its HTML.
 
 ## Related pages
 
-- [Performance](/advanced/performance/) compares simple rendering,
-  `Const` and pure bodies.
+- [Performance overview](/performance/) compares simple rendering,
+  `Const`, pure bodies, and rendered output caching.
 - [Component hooks](/advanced/hooks/) covers ordinary instance behavior.
 - [Benchmarks](/about/benchmarks/) describes the measured workloads.

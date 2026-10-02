@@ -48,7 +48,7 @@ def js_data(self, kwargs: Kwargs, slots: Slots):
 
 `js_data()` must return a dictionary containing JSON-serializable values.
 Citry makes each top-level key reactive in that component instance. Each
-counter gets its own data graph, so clicking Ada cannot change Grace.
+counter gets its own copy of that data, so clicking Ada cannot change Grace.
 
 Use [`$component`][$component] when a component also needs Vue Options such as
 methods, props, emitted events, or lifecycle work:

@@ -14,6 +14,7 @@ register or import them.
 - **Slots:** [`<c-slot>`](#c-slot) and [`<c-fill>`](#c-fill)
 - **Dynamic output:** [`<c-component>`](#c-component) and
   [`<c-element>`](#c-element)
+- **Targeted updates:** [`<c-mark>`](#c-mark)
 - **Data and resilience:** [`<c-provide>`](#c-provide),
   [`<c-cache>`](#c-cache), and
   [`<c-error-fallback>`](#c-error-fallback)
@@ -130,12 +131,14 @@ and the difference between component names and HTML tag names.
 
 <c-builtin tag="mark" c-level="3" />
 
-Use `<c-mark>` to name a default-body region for an Events update. Its only
-attribute is the required `name`, supplied as a static literal matching
-`[A-Za-z][A-Za-z0-9_-]*`; names are case-sensitive and unique within a
-component. The marker accepts default body content only. An Events handler can
-return `actions.Render(element, target="mark:summary")` to address it relative
-to the component handling the event. See [Events actions](/events/actions/).
+Use `<c-mark>` to name part of a component's template so that an event
+handler can replace just that part in the browser. Its only attribute is the
+required `name`, written as a literal string (not a `c-name` expression) that
+matches `[A-Za-z][A-Za-z0-9_-]*`. Names are case-sensitive and must be unique
+within a component. Put the content directly in the tag body; `<c-mark>` has
+no named slots. A handler on the component whose template contains the
+mark can return `actions.Render(element, target="mark:summary")` to replace
+the region marked `<c-mark name="summary">`. See [Events actions](/events/actions/).
 
 Because `<c-mark>` is built in, your own component cannot use the name
 `mark`. A class named `Mark`, or one registered as `mark`, fails when it is
@@ -162,8 +165,9 @@ your templates.
 <c-builtin tag="i18n" c-level="3" />
 
 Use it to provide a locale to one subtree. Add a real `tag` when the subtree
-needs `lang` and `dir`, or enable its browser service with the bare `client`
-attribute.
+needs `lang` and `dir`. To let browser code in the subtree translate and
+format text, add the bare `client` attribute together with `tag`. A
+`<c-i18n>` nested inside a `client` one also needs `tag`.
 See [Locales and context](/i18n/locale-context/) and
 [Browser i18n](/i18n/browser/).
 

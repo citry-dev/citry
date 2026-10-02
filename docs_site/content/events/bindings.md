@@ -64,9 +64,10 @@ though the child receives the event. If the child should run a callback from
 its own template, declare a native Vue function prop and pass the callback
 through that prop. See
 [Client interactivity](/concepts/client-interactivity/#listen-to-child-events)
-for component-boundary isolation. Debounce and throttle are currently supported
-only on `@c-*` bindings attached to HTML elements; a timed binding on a child
-component is rejected rather than sharing timing state between child placements.
+for component-boundary isolation. Debounce and throttle work only on `@c-*`
+bindings attached to HTML elements. A component tag has no element to time
+the event on, so a timed binding on a child component tag makes
+`serialize()` or `str()` on the render raise `TypeError`.
 
 ## Bind controls to State
 
@@ -236,7 +237,8 @@ class Events:
 ### What Citry writes into the control
 
 Citry applies the field to every bound control in the browser and re-applies it
-after each update, so a one-way binding keeps showing the server's value:
+after each update, including a response that only changes State, so a
+one-way binding keeps showing the server's value:
 
 | Control | Written as |
 |---|---|
@@ -282,10 +284,10 @@ the queued State update with the `save` call.
 
 ## Read call state from Vue
 
-These magics are available in Vue expressions inside an interactive Citry
+These helpers are available in Vue expressions inside an interactive Citry
 component:
 
-| Magic | Use |
+| Helper | Use |
 |---|---|
 | [`$state`][$state] | Read reactive public State or replace a field allowed by `_model`. A write rides the next non-GET browser call from this component. |
 | [`$loading()`][$loading] | Test whether any call from this component is queued or running. |
@@ -328,13 +330,15 @@ a Promise instead; handle its rejection with `await` and `try`/`catch` or with
 malformed Events protocol responses, and render or lifecycle failures still
 surface as runtime errors.
 
-## Polling status
+## Call a handler on a timer
 
 Use `@c-poll.<seconds>s` on an ordinary DOM element to call a server handler at
 a fixed cadence. The first call starts after one complete interval:
 
 ```citry-html
-<output @c-poll.30s="refresh({projectId})">Waiting for an update</output>
+<output @c-poll.30s="refresh({projectId})">
+  Waiting for an update
+</output>
 ```
 
 Each live element owns its polling lifetime. Citry skips a tick while that
@@ -344,6 +348,8 @@ lifetime and starts a fresh complete interval. A revision in an unrelated
 subtree does not reset the timer. A hidden page pauses polling; returning to it
 starts a fresh complete interval, without catch-up calls.
 
-Polling currently requires a literal binding on an ordinary DOM element.
-Component-boundary `@c-poll` and polling introduced through `c-bind` are not
-supported by the Vue runtime.
+Put `@c-poll` on an HTML element. A component tag has no element to poll
+from, so `@c-poll` on a child component tag makes `serialize()` or `str()`
+on the render raise `TypeError`. A `c-bind` spread
+may add `@c-poll` to an element, but only with a bare handler name such as
+`"refresh"`; an argument expression there is an error.

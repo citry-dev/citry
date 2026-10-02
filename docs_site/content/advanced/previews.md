@@ -51,7 +51,7 @@ class Button(Component):
                 variant(
                     slug="disabled",
                     label="Saving",
-                    description="The action is temporarily unavailable.",
+                    description="The action is paused while saving.",
                     params={"label": "Saving...", "disabled": True},
                 ),
             ]

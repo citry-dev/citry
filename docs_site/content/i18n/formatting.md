@@ -77,8 +77,10 @@ app = Citry(
 ```
 
 Profile names are application-defined. They must use ASCII letters, digits,
-`-`, or `_`. An unknown profile or a profile stored under the wrong category
-raises an error.
+`-`, or `_`; any other name raises `ValueError` when you create the registry.
+A profile stored under the wrong category, such as a `PercentFormat` under
+`number`, raises `TypeError` there too. A call that names an unknown profile
+raises `ValueError` when it runs.
 
 The registry accepts new names under the supported categories. It is not a
 plugin registry for arbitrary formatter implementations. The profile types
@@ -93,8 +95,14 @@ partial display without copying browser-specific formatter options:
 ```python
 calendar_formats = FormatRegistry(
     date={
-        "calendar-heading": DateFormat(fields="year_month", length="long"),
-        "calendar-weekday": DateFormat(fields="weekday", length="medium"),
+        "calendar-heading": DateFormat(
+            fields="year_month",
+            length="long",
+        ),
+        "calendar-weekday": DateFormat(
+            fields="weekday",
+            length="medium",
+        ),
         "calendar-day": DateFormat(fields="day", length="short"),
         "calendar-date-label": DateFormat(
             fields="year_month_day_weekday",
@@ -148,6 +156,7 @@ Templates receive the shorter `fmt` facade:
 Outside a component, use the service bound to an explicit locale context:
 
 ```python
+i18n = app.extensions.get_extension("i18n")
 formatted = i18n.for_context(context).format.number(
     Decimal("1234.50"),
     format="measurement",
@@ -164,12 +173,13 @@ formatted = i18n.for_context(context).format.number(
 | `date` | exact Python `date` | Uses the locale's selected calendar and profile length |
 | `time` | zone-free Python `time` | Represents wall-clock fields, not an instant |
 | `datetime` | aware Python `datetime` | Converts the instant into the context's explicit time zone |
-| `relative_time` | exact number plus `unit="day"` | The current checked profile supports relative days |
+| `relative_time` | exact number plus `unit="day"` | Days are the only supported unit |
 | `list` | list or tuple of non-empty strings | Formats a conjunction or disjunction and isolates every item |
 | `unit` | exact number plus a unit identifier | The unit stays explicit application data |
 
-Citry rejects floats for exact numeric profiles. Convert application amounts to
-`Decimal` before formatting when decimal precision matters.
+Citry rejects floats for exact numeric profiles with `TypeError`. Convert
+application amounts to `Decimal` before formatting when decimal precision
+matters.
 
 ## Keep percent values in one domain
 
@@ -197,7 +207,11 @@ date or zone. A datetime formatter receives an aware instant and converts it
 to the time zone in the context:
 
 ```python
-context = i18n.make_context(
+from citry.ext.i18n import make_context
+
+i18n = app.extensions.get_extension("i18n")
+context = make_context(
+    app,
     locale="cs-CZ",
     time_zone="Europe/Prague",
 )
@@ -209,9 +223,9 @@ text = formatter.datetime(
 )
 ```
 
-Calling `datetime()` without a context time zone is an error. Calling `time()`
-with a zone-aware Python `time` is also an error, because a zone offset can
-depend on the missing date.
+Calling `datetime()` without a context time zone raises `ValueError`. Calling
+`time()` with a zone-aware Python `time` also raises `ValueError`, because a
+zone offset can depend on the missing date.
 
 ## Use the same names in the browser
 

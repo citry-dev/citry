@@ -407,7 +407,9 @@ lists the rest.
   value that is not plain JSON such as `undefined`, or an array with gaps
   such as `[a, , b]`, with a `ProtocolValueError` (a `TypeError`), before it
   applies any action. Remove the extra fields from actions your page code
-  builds or forwards.
+  builds or forwards. A `state` action you build, for `applyActions` or in
+  an `on_event_result` hook, must now include `publicState`, the
+  component's public State values.
 - **Forward `request.headers` from a custom transport.** Citry now calls
   `send(envelope, request)`. A 0.5.1 transport that sends only the envelope
   fails every handler that returns a render, with "Vue Events requires
@@ -442,7 +444,7 @@ lists the rest.
 
 | Removed | What to use |
 | --- | --- |
-| `Citry.alpine.beforeStart(fn)` | [`Citry.vue.use(plugin)`](/reference/browser-apis/#citry-vue-use) called from a `defer` script in `<head>` or an extension's `before_manifest` script. An Alpine plugin has no direct replacement. |
+| `Citry.alpine.beforeStart(fn)` | [`Citry.vue.use(plugin)`](/reference/browser-apis/#citry-vue-use) called from a `defer` script in `<head>` or a script an extension adds to `ctx.early_scripts`. An Alpine plugin has no direct replacement. |
 | `Citry.manager.*` (`loadJs`, `loadCss`, `callComponent`, ...) | Declare assets on the component with `Component.js`, `Component.css`, or `Dependencies`. Interactive fragments load their own assets. |
 | `Citry.i18n.provider` | `component.$i18n` or `this.$i18n`; see [Browser i18n](/i18n/browser/). |
 | `window.Alpine`, `alpine:init` | The `citry:ready` event on `document`. |
@@ -496,12 +498,11 @@ Also check these settings and hooks:
   [Keep the CORS header when a proxy or CDN serves Citry's files](/security/#keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files).
 - **Scripts on an interactive page must be classic JavaScript.** This
   covers a component's `Dependencies` scripts and an extension's
-  `ctx.scripts` and `ctx.before_manifest`. A `type="module"` or JSON data
+  `ctx.scripts` and `ctx.early_scripts`. A `type="module"` or JSON data
   script, or a script marked `async`, `defer`, or `nomodule`, raises
   `ValueError` when the page or an Events response is serialized, because Citry loads these
-  scripts itself, one after another in list order. `before_manifest`
-  now works on interactive pages too, and its scripts load before
-  `ctx.scripts`.
+  scripts itself, one after another in list order. Scripts in
+  `ctx.early_scripts` load before `ctx.scripts`.
 - **`@event(methods=...)` and `Events._methods`** accept only GET, HEAD,
   POST, PUT, PATCH, DELETE, and OPTIONS. Any other method raises
   `ValueError` when the class is defined.
@@ -524,6 +525,11 @@ Also check these settings and hooks:
   these contexts with positional arguments, such as an extension test,
   now fails or passes values to the wrong fields. Build them with
   keyword arguments.
+- **`OnDependenciesContext.before_manifest` is now `early_scripts`.**
+  Rename `ctx.before_manifest` to `ctx.early_scripts` in your
+  `on_dependencies()` hooks; the scripts it holds still run before
+  `ctx.scripts`. The old name has no alias, so a hook that still uses it
+  raises `AttributeError`, naming `early_scripts`, when the hook runs.
 - **Ownership APIs** are removed: the `citry.ownership` and
   `citry.ownership_manifest` modules and the `ownership` parameters of
   `CitryContext` and `CitryElement`. Delete imports of these modules and
@@ -575,7 +581,7 @@ the limit or configure a cache. See
   [Send page content in the served HTML](/advanced/vue-runtime/#send-page-content-in-the-served-html).
 - `simple = "vue"` gives a component its own Vue state and assets without a
   Python component instance; see
-  [Simple components](/advanced/simple-components/#choose-the-components-browser-identity).
+  [Simple components](/performance/simple-components/#choose-the-components-browser-identity).
 - A component tag accepts `v-if`, `v-model`, `v-show`, and custom
   directives; see
   [Use Vue directives on a component tag](/syntax/vue/#use-vue-directives-on-a-component-tag).
@@ -620,12 +626,14 @@ the limit or configure a cache. See
 16. Update `citry:events:stale` listeners that check for `cancelled` or
     `timeout`, code that reads `data-citry-events` script tags, calls
     that pass `wait: false` or unknown options, and action lists passed
-    to `Citry.events.applyActions`.
+    to `Citry.events.applyActions`, including `publicState` in any `state`
+    action you build.
 17. Remove uses of `Citry.alpine`, `Citry.manager`, and `Citry.i18n`.
 18. Rename the Alpine lint settings and diagnostic codes.
 19. Check that dependency scripts on interactive pages are classic
     JavaScript, build `OnSerializeContext` and `OnDependenciesContext`
-    with keyword arguments, and remove `citry.ownership` imports and
+    with keyword arguments, rename `ctx.before_manifest` to
+    `ctx.early_scripts`, and remove `citry.ownership` imports and
     `ownership=` arguments.
 20. Pass `URLRoute(methods=...)` as a tuple of uppercase names, and read
     `parameters` from `citry.analysis` results starting at index 0.

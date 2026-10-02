@@ -1,64 +1,9 @@
 ---
-title: Performance
-description: Reduce component setup or reuse stable template work when repeated rendering becomes measurable.
+title: Constant values
+description: Mark component inputs that never change so Citry can prepare the template work that depends on them once.
 ---
 
-# Performance
-
-Citry provides three explicit rendering optimizations:
-
-- [`simple = True`][citry.Component.simple] renders a presentation component
-  without its own instance, hooks or browser identity.
-- [`Const`][citry.Const] marks an individual value that will not change, so
-  template work depending only on that value can be prepared once.
-- `pure = True` marks an entire component class whose body is deterministic
-  and side-effect-free, so equal occurrences within one root render can reuse
-  the settled body strings.
-
-Start without them, measure a real repeated-render workload, and choose the
-contract that fits the component.
-
-## Skip independent setup with simple components
-
-Use `simple = True` for a presentation component that only needs to turn
-inputs and optional default content into HTML:
-
-```citry
-from citry import Component
-
-
-class StatusLabel(Component):
-    simple = True
-
-    class Kwargs:
-        text: str
-
-    template = """
-      <span class="status">{{ text }}</span>
-    """
-```
-
-The surrounding component owns the output. Inputs and data callbacks remain
-live on every invocation; equal inputs are not required. Citry rejects
-declarations or calls that need an independent instance, including component
-hooks, own JS/CSS, named outlets and component-level client bindings.
-Use a static `template_data(kwargs, slots)` method if data needs preparation.
-
-The [Simple components](/advanced/simple-components/) guide explains the
-supported content, inheritance and error rules. This changes the component's
-contract, so it is useful only where independent identity and hooks are
-unnecessary.
-
-| Choice | What it avoids | What your code promises |
-| --- | --- | --- |
-| `simple = True` | Independent component setup and ownership records | The component fits the restricted presentation contract |
-| `Const(value)` | Repeating template work based only on that value | The marked value will not change |
-| `pure = True` | Repeating safe body work for equal data within one root render | The template is deterministic and side-effect-free |
-
-You can combine simple and pure declarations when both contracts apply.
-The data callback still runs. Simple bodies with default outlets remain live.
-
-## Reuse stable values with `Const`
+# Constant values
 
 Use [`Const`][citry.Const] when the same component input appears across many
 renders and never changes. Citry can then finish the template work that
@@ -66,10 +11,13 @@ depends on that input once and reuse the result.
 
 This is useful for repeated rows with the same label, components with stable
 layout choices, and application-wide presentation settings. It is a focused
-rendering optimization, not a general cache for component output.
+rendering optimization, not a general cache for component output. Start
+without it, measure a real repeated-render workload, and mark values only
+where the measurement shows repeated template work.
 
-`Const(...)` describes one value. For a whole component body, see
-[Reuse a pure component body](#reuse-a-pure-component-body).
+`Const(...)` describes one value. To reuse a whole component body, see
+[Pure components](/performance/pure/). To compare `Const` with the other
+options, see the [Performance overview](/performance/).
 
 ## Mark a stable input
 
@@ -141,7 +89,7 @@ of that expression's variables are known constant.
 Citry evaluates an expression before marking its complete result as the child
 input. In `c-total="add(1, 2)"`, the arguments remain ordinary integers. When
 every referenced variable, including `add`, is known constant, Citry marks the
-evaluated result at the child-input root.
+evaluated result as a whole, so the child's `total` input counts as constant.
 
 ## Make a default constant
 
@@ -288,51 +236,11 @@ renders.
 Different types remain different cache inputs. `Const(True)` and `Const(1)`
 do not share an entry, even though Python considers those values equal.
 
-## Reuse a pure component body
-
-When a small component appears many times with repeated data, it can opt into
-render-local body memoization:
-
-```citry
-from citry import Component
-
-
-class StatusIcon(Component):
-    pure = True
-
-    class Kwargs:
-        state: str
-
-    template = """
-      <span c-class="state">{{ state }}</span>
-    """
-```
-
-This is a class-level promise: rendering the template body must be a
-deterministic, side-effect-free function of its template variables. Citry
-still creates each ordinary component instance, runs its data and lifecycle
-hooks, and gives it a fresh render ID. A component also declared simple keeps
-the simple contract described above. Within one root render, a later equal body can
-reuse the first body's immutable strings and transparent control-flow shape.
-When a body also renders a child or a slot, that live content still renders
-again while safe work beside it can be reused. The memo is discarded when the
-root render ends.
-
-Do not declare a component pure when its template expressions mutate state,
-consume one-shot iterators, read ambient values not present in template data,
-or rely on a per-element extension hook running for every occurrence. Body
-items that create child components, slot or ownership records, or i18n
-capture remain live even when safe sibling items are reused. A subclass must
-state `pure = True` again because it can add new behavior.
-
-Purity pays only when equal instances repeat within the same tree. A component
-that appears once, or whose inputs are unique every time, should remain on the
-ordinary path. Use `Const(...)` when only selected values are stable; use
-`pure = True` only when the complete body satisfies the stronger promise.
-
 ## Related pages
 
-- [Cache rendered output](/advanced/caching/) for reusing a complete rendered
-  subtree.
+- [Pure components](/performance/pure/) for reusing a whole component body
+  within one render.
+- [Cache rendered output](/performance/caching/) for reusing a complete
+  rendered subtree.
 - [Rendering](/concepts/rendering/) for the full render and serialization
   process.

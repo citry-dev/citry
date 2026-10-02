@@ -48,13 +48,15 @@ renders a bare attribute, while `False` and `None` leave it out:
 <!-- Result: <input required> -->
 ```
 
-On an interactive page the browser can report a different value for the same
-`True`. Python's HTML writes the bare attribute, so a `data-open` set to `True`
-reads as `""`. When Vue renders or updates the component, it writes `True` as
-the text `"true"` on any attribute that the element does not treat as a
-boolean, so the same `data-open` reads as `"true"`. A boolean attribute on an
-element that supports it, such as `required` or `disabled` on an `<input>`,
-stays bare in both cases. On an element without that attribute, such as
+A page is interactive when one of its components needs Citry's browser
+runtime, for example because it has its own `js` or uses Vue syntax such as
+`@click`. On an interactive page the browser can report a different value for
+the same `True`. Python's HTML writes the bare attribute, so a `data-open`
+set to `True` reads as `""`. When Vue renders or updates the component, it
+writes `True` as the text `"true"` on any attribute that the element does
+not treat as a boolean, so the same `data-open` reads as `"true"`. A
+boolean attribute on an element that supports it, such as `required` or
+`disabled` on an `<input>`, stays bare in both cases. On an element without that attribute, such as
 `disabled` on a `<div>`, Vue writes `"true"` too. To test a flag in CSS or
 JavaScript, check whether the attribute is present (`[data-open]` or
 `hasAttribute("data-open")`) rather than comparing its value.
@@ -112,10 +114,11 @@ How to read the above:
 
 `False` and `None` are still passed to the component; they are not omitted.
 
-### Vue
+### Vue bindings are written in the template
 
-Vue expressions must remain statically authored template source. Pass their
-values through strict-JSON `js_data`, then write the binding directly:
+Write each Vue binding directly in the template. When Python should supply the
+value, return it from `js_data()` as data that converts to JSON and read it
+from the binding:
 
 ```citry
 class Panel(Component):
@@ -130,9 +133,11 @@ class Panel(Component):
     """
 ```
 
-`c-:class` cannot turn a Python-rendered string into executable Vue source.
-This keeps browser code reviewable and prevents runtime data from becoming
-code.
+A `c-` attribute cannot create a Vue binding. On an interactive page,
+`c-:class="..."` makes serialization (`serialize()` or `str()` on the render)
+raise `TypeError` when its value is not `None` or `False`, because Citry never
+turns a Python value into browser code. This keeps the browser code visible
+in the template and stops runtime data from becoming code.
 
 Read
 [Vue in templates](/syntax/vue/) for browser-side attributes and
@@ -213,7 +218,7 @@ You can access `$event` inside the expression:
 
 ```citry-html
 <c-ActionButton
-  @click="doSomething($event.target.detail)"
+  @click="doSomething($event)"
 />
 ```
 
@@ -407,13 +412,14 @@ strings and, on HTML elements, valid attribute names. The value of `c-bind`
 itself is always an expression.
 
 When `c-bind` evaluates to `None`, it does
-nothing. Any other non-mapping value raises `TypeError`. 
+nothing. Any other non-mapping value raises `TypeError`.
 
 Accepted keys are used exactly as written: a key named `c-title` stays
 `c-title`. Only a directly authored dynamic attribute loses one `c-` prefix.
-In a prepared Vue template, generated `v-*`, `@*`, and `:*` keys are rejected:
-Python-rendered strings do not become authenticated Vue source. Author those
-bindings directly in the template instead.
+On an interactive page, a key that starts with `v-`, `@`, or `:` makes
+serialization raise `TypeError` unless its value is `None` or `False`,
+because Citry never turns a Python value into browser code.
+Write those bindings directly in the template instead.
 
 ```citry-html
 <button c-bind="{ 'c-title': title }">
@@ -572,7 +578,7 @@ First, consider this example with a [dynamic attribute](#c-dynamic-attributes) `
 ```
 
 - The `query` is taken from `template_data` or `Kwargs`.
-- One-way binding - you have to handle to user input yourself.
+- One-way binding - you have to handle user input yourself.
 
 If you want to take the value from `State` instead of `Kwargs`, you can use the special `:c-*` attribute. The remainder of the attribute name after the `:c-` is the State field, eg `:c-query` connects the field `State.query`.
 
@@ -621,8 +627,10 @@ To enable two-way binding, add a value part to the `:c-` attribute, <br/>eg `:c-
 ```
 
 The `:c-` attribute needs an element that holds a value: an `<input>`, `<textarea>`,
-`<select>`, or a custom element. Anything else is an error when the template
-loads. The editor also reports statically known unsupported targets.
+`<select>`, or a custom element. For a two-way binding on a custom element, name
+the event it fires when its value changes with the `.on:<event>` modifier.
+Anything else is an error when the template loads. The editor also reports
+unsupported elements it can identify from the template.
 
 `<select multiple>` is supported in both directions. Its State field is a
 `list[str]`; Citry reads every selected option and writes the list back by

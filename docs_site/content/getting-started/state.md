@@ -49,7 +49,7 @@ class Events:
         choices = load_choices_from_database(state.batches_loaded)
         state.batches_loaded += 1
         return actions.Dispatch(
-            "choice-picker:loaded",
+            "ChoicePicker:loaded",
             {"choices": choices},
         )
 ```
@@ -67,7 +67,8 @@ A component with public State can read it through `$state`:
 ```
 
 The server-rendered fallback starts at the same value. After each successful
-non-GET event response, the reactive `$state.batches_loaded` value updates.
+event response that changes State, the reactive `$state.batches_loaded` value
+updates.
 Assignments to a whole public field are allowed in Vue and are queued for the
 next non-GET request; they do not send a request by themselves. Nested values,
 undeclared fields, and readonly State cannot be assigned. See [Browser APIs](/reference/browser-apis/#state).

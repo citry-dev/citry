@@ -41,7 +41,7 @@ class TreeNode(Component):
         node = kwargs.node
         children = node.get("children", [])
         has_children = len(children) > 0
-        # An open-folder arrow marks a node with children, a dot a
+        # A down arrow marks a node with children; a dot marks a
         # leaf.
         icon = "▾" if has_children else "•"
         return {

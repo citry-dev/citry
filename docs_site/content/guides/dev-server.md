@@ -193,7 +193,7 @@ watcher straight to this method and skip citry's watcher entirely.
 
 Take a [Component][citry.Component] whose template lives in a file:
 
-```html
+```citry-html
 <!-- components/greeting.html -->
 <p>Hello, {{ name }}!</p>
 ```
@@ -249,7 +249,9 @@ Two related calls help when a single path is not enough:
   do not run `citry watch` and do not add the framework helper; leaving them out
   is all it takes.
 
-For how Citry reuses rendered work, see
-[Performance](/advanced/performance/) and
-[Cache rendered output](/advanced/caching/). For loading JavaScript and CSS
+For how Citry reuses rendered work, see the
+[Performance overview](/performance/),
+[Constant values](/performance/const/),
+[Pure components](/performance/pure/), and
+[Cache rendered output](/performance/caching/). For loading JavaScript and CSS
 from files, see [Dependency files](/advanced/dependency-files/).

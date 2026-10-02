@@ -35,25 +35,32 @@ class Events:
     def load_choices(self):
         choices = load_choices_from_database()
         return actions.Dispatch(
-            "choice-picker:loaded",
+            "ChoicePicker:loaded",
             {"choices": choices},
         )
 ```
 
-[`actions.Dispatch`][citry.ext.events.actions.Dispatch] fires a bubbling
-`CustomEvent` from the calling component's first live root. Its JSON detail is
-available at `$event.detail`. The picker installs an instance listener in
-`onServerRender`:
+[`actions.Dispatch`][citry.ext.events.actions.Dispatch] asks the browser to
+fire an event with that name and JSON detail. Start the name with the
+component's name, as in `ChoicePicker:loaded`, so it does not clash with events
+from other components. Citry rejects names that start with `citry:`, because
+its own browser events use that prefix.
+
+The event fires on the calling component's first element and bubbles up the
+page, so ordinary page scripts can listen for it too. Inside the component,
+listen with [`onEvent`][onEvent] instead. Citry passes that function to
+[`onServerRender`][onServerRender], a `$component` option that runs after the
+component mounts and again after each server render. `onEvent` hears only
+events that this component's own Python handlers dispatch, and passes your
+callback the event detail:
 
 ```js
-onServerRender({ component }) {
-  const receiveChoices = (event) => {
-    component.loadChoices(event.detail.choices);
-  };
-  component.$el.addEventListener('choice-picker:loaded', receiveChoices);
-  return () => {
-    component.$el.removeEventListener('choice-picker:loaded', receiveChoices);
-  };
+onServerRender({ component, onEvent }) {
+  // Citry removes this listener before onServerRender
+  // runs again and when the component unmounts.
+  onEvent('ChoicePicker:loaded', (detail) => {
+    component.loadChoices(detail.choices);
+  });
 }
 ```
 
@@ -73,9 +80,9 @@ $component({
 });
 ```
 
-Citry runs the returned cleanup before the hook runs again and on unmount.
-The child receives the selected label through `:label` and emits `select` to
-ask the parent to advance it. No HTML replacement is needed.
+In `components.py` above, the `<c-ChoiceButton>` child receives the selected
+choice through `:label` and emits `select` to ask the picker to advance it.
+Neither step needs Python to render new HTML.
 
 `@c-click` starts the call without exposing its Promise result. When component
 code needs a returned [`actions.Data`][citry.ext.events.actions.Data] value,

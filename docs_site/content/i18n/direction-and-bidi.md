@@ -121,7 +121,8 @@ Browser-owned text and accessibility outputs need equivalent-language coverage
 for every selectable locale. Their call sites cannot safely attach a hidden
 fallback language after `$i18n.switchLocale()`.
 
-Wrapperless rich messages have the same requirement. See
+Rich messages, which have no element around the whole message, have the
+same requirement. See
 [Rich messages](/i18n/rich-messages/) for why `<c-trans>` rejects a
 cross-language fallback.
 

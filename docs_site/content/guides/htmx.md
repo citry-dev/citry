@@ -30,10 +30,14 @@ Render the component in a framework route and serialize it with
 from fastapi.responses import HTMLResponse
 
 
-@app.get("/fragments/contacts/{contact_id}", response_class=HTMLResponse)
+@app.get(
+    "/fragments/contacts/{contact_id}",
+    response_class=HTMLResponse,
+)
 def contact_detail(contact_id: int) -> HTMLResponse:
     component = ContactDetail(contact=get_contact(contact_id))
-    return HTMLResponse(component.render().serialize(deps_strategy="fragment"))
+    html = component.render().serialize(deps_strategy="fragment")
+    return HTMLResponse(html)
 ```
 
 The response contains the component's HTML plus the information Citry needs to
@@ -98,8 +102,8 @@ on the page.
 
 Put a plain `<div>` or `<section>` around each complete Vue app that HTMX will
 update. Keep the wrapper outside the HTML returned by the route. `innerHTML`
-then replaces the old app and its fragment manifest while leaving the wrapper
-on the page. For a list, render the list wrapper on the server and serialize
+then replaces the old app, together with the data Citry uses to start it,
+while leaving the wrapper on the page. For a list, render the list wrapper on the server and serialize
 each interactive row independently. Insert those trusted final fragment
 strings as HTML; never compile serialized fragment HTML as Vue template source.
 
@@ -130,7 +134,7 @@ HTMX file you deploy, and check that:
   expected;
 - authenticated changes reject bad CSRF tokens and unauthorized users;
 - a component inserted later receives its CSS and JavaScript;
-- interactive Vue fragments release their app-owned styles when the app is replaced;
+- a replaced Vue app releases the styles it loaded;
 - static fragment dependency tags remain attached to the inserted HTML, while
   repeated URL fetches use the browser cache; and
 - the browser console and network log stay free of unexpected errors.

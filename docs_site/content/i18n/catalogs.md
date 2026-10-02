@@ -34,8 +34,16 @@ my_app_i18n/
     └── link.json
 ```
 
-The `_compiled` files are generated for production. During development Citry
-can read the `.ftl` files directly.
+The `_compiled` files are generated for production. With
+`Citry(mode="development")`, Citry reads the `.ftl` files directly. `Citry()`
+runs in production mode by default, and production mode refuses to load a
+package without its `_compiled` files, so either compile the package or set
+`mode="development"` while you edit translations.
+
+A development engine still checks an existing `_compiled/manifest.json`
+against the current `.ftl` files. After you edit a package that already has
+compiled files, startup fails with a "does not match its installed FTL
+sources" error until you run the compile command again.
 
 The descriptor contains exactly three fields:
 
@@ -228,11 +236,11 @@ context.
 
 A component library authors family-specific source text in each component's
 `messages` block and shared text in standalone source-locale FTL. Its build can
-collect those source units into a dedicated catalog package. Give the
-`ComponentLibrary` and catalog descriptor the same stable owner name; when an
-application configures that package, Citry uses the checked package artifact
-instead of loading the exported component block a second time as an application
-override.
+collect those source units into a dedicated catalog package. Set the
+descriptor's `owner` to the same value as the library's
+`ComponentLibrary.name`; when an application configures that package, Citry
+uses the checked package artifact instead of loading the exported component
+block a second time as an application override.
 
 The application adds that package to `catalogs` and may place an application
 catalog later in the sequence to override selected public messages.

@@ -898,7 +898,7 @@ _DEPTH_CASES: tuple[dict[str, Any], ...] = (
             "</div>",
         ),
         "file": "product_card.py",
-        "doc": "advanced/caching.md",
+        "doc": "performance/caching.md",
         "code": (
             "class ProductCard(Component):\n"
             "    class Kwargs:\n"
@@ -1115,7 +1115,7 @@ _DEPTH_CASES: tuple[dict[str, Any], ...] = (
             "</div>",
         ),
         "file": "dashboard.py",
-        "doc": "advanced/performance.md",
+        "doc": "performance/const.md",
         "code": (
             "from citry import Const\n\n# The parts that never vary are rendered once and reused\nCard(cols=Const(3))"
         ),

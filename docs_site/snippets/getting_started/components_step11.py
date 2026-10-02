@@ -29,7 +29,7 @@ class SignupForm(Component):
                     fields={"email": "Use an @example.com address."},
                 )
             return actions.Dispatch(
-                "signup:sent",
+                "SignupForm:sent",
                 {"email": email},
             )
 
@@ -68,14 +68,16 @@ class SignupForm(Component):
     js = """
       $component({
         data() {
+          // Nothing is accepted until Python answers.
           return { acceptedEmail: '' };
         },
-        onServerRender({ component }) {
-          const receiveSignup = (event) => {
-            component.acceptedEmail = event.detail.email;
-          };
-          component.$el.addEventListener('signup:sent', receiveSignup);
-          return () => component.$el.removeEventListener('signup:sent', receiveSignup);
+        onServerRender({ component, onEvent }) {
+          // Citry removes this listener before onServerRender
+          // runs again and when the component unmounts.
+          onEvent('SignupForm:sent', (detail) => {
+            // Show the email that Python sent with the event.
+            component.acceptedEmail = detail.email;
+          });
         },
       });
     """

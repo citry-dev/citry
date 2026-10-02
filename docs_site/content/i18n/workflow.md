@@ -184,8 +184,8 @@ hover, and navigates to definitions from:
 - Python `self.i18n.tr()` and `Component.I18n.client_messages`;
 - Vue `$i18n.tr()` inside a client-enabled provider;
 - checked `$c-tr` bindings in component templates;
-- component JavaScript calls and bounded `i18n.bind()` registrations through
-  the injected `i18n` service; and
+- component JavaScript calls on `component.$i18n` or `this.$i18n`,
+  including `bind()` calls written with an object literal; and
 - public message references inside Fluent.
 
 The extension also colors inline `messages` blocks and standalone `.ftl`

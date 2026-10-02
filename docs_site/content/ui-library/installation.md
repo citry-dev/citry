@@ -12,18 +12,23 @@ uv add citry-ui
 ```
 
 Register the library once with the [`Citry`][citry.Citry] instance that renders your
-application:
+application. Components use the default `citry` instance unless they set a
+`citry` class attribute to another instance, so most applications register
+the library there:
 
 ```python
 import citry_ui
-from citry import Citry
+from citry import citry
 
-app = Citry()
-app.register_library(citry_ui)
+citry.register_library(citry_ui)
 ```
 
 Registration makes tags such as [`<c-CButton>`](/ui-library/components/button/) and [`<c-CTabs>`](/ui-library/components/tabs/) available to
-components owned by that `Citry` instance.
+every component that renders through that `Citry` instance. If your
+application creates its own instance, such as `app = Citry()`, call
+`app.register_library(citry_ui)` instead. A component that renders through
+an instance without the library fails with a `NotRegistered` error that
+says `No component registered as 'cbutton'`.
 
 While working on Citry UI templates without a host application, select the
 library manifest directly in VS Code:
@@ -77,15 +82,20 @@ class SaveActions(Component):
     """
 ```
 
-!!! note
+!!! note "Render a library component outside a template"
 
-    To render library components in Python, you need to pass a `Citry` instance:
-    
-    ```py
+    Inside a template, Citry renders `save_button` through the component's
+    own `Citry` instance. To render it on its own, pass the instance
+    explicitly. Without it, Citry raises `LibraryComponentContextError`:
+
+    ```python
+    from citry import citry
+    from citry_ui import CButton
+
     save_button = CButton(
         type="submit",
         slots={"default": "Save changes"},
     )
 
-    html = save_button.render(citry)
+    html = str(save_button.render(citry=citry))
     ```

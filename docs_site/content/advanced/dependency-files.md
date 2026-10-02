@@ -6,8 +6,9 @@ description: Add libraries and shared JavaScript or CSS files to a Citry compone
 # Dependency files
 
 A component may rely on code it does not own: a charting library, a shared
-theme, or a vendored script. Declare those assets in a nested `Dependencies`
-class. Citry includes them only on pages that render the component.
+theme, or a third-party script copied into your project. Declare those assets
+in a nested `Dependencies` class. Citry includes them only on pages that render
+the component.
 
 Keep code that belongs to the component in its own `js`, `css`, `js_file`, or
 `css_file`. See
@@ -50,11 +51,10 @@ class Editor(Component):
         js = [
             Script(
                 url="https://cdn.example.com/editor.js",
-                attrs={"defer": True},
+                attrs={"crossorigin": "anonymous"},
             ),
             Script(
                 content="window.EDITOR_THEME = 'dark';",
-                attrs={"type": "module"},
             ),
         ]
         css = [
@@ -84,6 +84,37 @@ Script(
 
 Module scripts, import maps, and other non-classic script types are never
 wrapped, regardless of `wrap`.
+
+## Use classic scripts on interactive pages
+
+A page becomes interactive when one of its components needs Citry's browser
+runtime, for example because it has its own `js` or uses Vue syntax such as
+`@click`. Citry then loads every dependency script itself, one after another,
+so each script must be a classic script that runs in order.
+
+Citry checks dependencies when it serializes the render, that is, when you
+call `serialize()` or `str()` on it. On an interactive page, serialization
+raises `ValueError` for a `Script` with `async`, `defer`, or `nomodule`,
+with a `type` other than JavaScript (such as `type="module"`), or with a
+`nonce` when you pass no `csp_nonce`. A subclass of `Script` or `Style`
+raises `TypeError` there; use the classes themselves:
+
+```python
+# Breaks once any component on the page is interactive.
+Script(
+    url="https://cdn.example.com/editor.js",
+    attrs={"type": "module"},
+)
+
+# Works on every page.
+Script(url="https://cdn.example.com/editor.umd.js")
+```
+
+Pages without the runtime, and the `"simple"` dependency strategy (see
+[Place JavaScript and CSS](/advanced/asset-placement/)), write these scripts as
+ordinary tags, so these attributes work there. One check applies on every
+page: a `nonce` that differs from the `csp_nonce` you pass raises
+`ValueError`.
 
 ## Add a local file
 
@@ -133,13 +164,15 @@ c = Citry(
 ```
 
 Without a mounted web integration, `"serve"` safely falls back to inline
-content. See [Web frameworks](/web-frameworks/) for mounting.
+content. See [Web frameworks](/web-frameworks/) for mounting. If a component
+that lists a local file sets any other value than `"inline"` or `"serve"`,
+serialization raises `ValueError`.
 
 ## Group styles by media type
 
 Use a mapping when stylesheets need different `media` attributes:
 
-```citry
+```python
 class Dependencies:
     css = {
         "all": ["base.css"],
@@ -158,10 +191,14 @@ A dependency entry may also be:
 - a callable, evaluated when Citry resolves the dependencies; or
 - a trusted object with `__html__()`, inserted as a ready-made tag.
 
-Prefer `Script` and `Style` when possible. Citry can describe those objects to
-the browser during a fragment update, while it cannot safely decompose an
-opaque ready-made tag for a fragment. Citry trusts the HTML returned by
-`__html__()`, so accept these objects only from code you trust.
+Prefer `Script` and `Style` when possible. Citry's browser runtime can load
+`Script` and `Style` objects itself, but it cannot do that with a ready-made
+tag. A ready-made tag works only where Citry writes dependencies as ordinary
+tags. On an interactive page or
+[HTML fragment](/advanced/html-fragments/), or when serialization uses a CSP
+nonce or script integrity, serialization raises `TypeError`.
+Citry trusts the HTML returned by `__html__()`, so accept these objects only
+from code you trust.
 
 ## Understand ordering and duplicates
 
@@ -170,9 +207,13 @@ child. [Subclassing components](/advanced/subclassing/) explains how to extend
 or replace inherited declarations.
 
 Citry considers two scripts or styles the same when they have the same URL or
-the same inline content. The first entry wins completely, including its
-attributes. If a script needs different attributes, change the first
-declaration rather than adding a duplicate later.
+the same inline content. For scripts, the first entry wins completely,
+including its attributes. If a script needs different attributes, change the
+first declaration rather than adding a duplicate later. Within one
+component, including what it inherits from base classes, the first
+stylesheet also wins. Two components that declare the same stylesheet with different attributes, or one
+stylesheet listed under two `media` keys, make serialization raise
+`ValueError`. Give the stylesheets distinct URLs instead.
 
 After collection, Citry places the resulting tags according to the page's
 dependency strategy. Continue with

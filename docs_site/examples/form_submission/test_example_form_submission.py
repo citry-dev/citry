@@ -23,8 +23,8 @@ def _prepared_definition_source(page_html: str) -> str:
 
 def test_form_submission_example_page_renders() -> None:
     html = str(get_example_registry()["form_submission"].page_cls())
-    # The interactive shell carries the prepared Vue definition; the server
-    # intentionally leaves its descendants for that definition to mount.
+    # The page's script carries the compiled Vue template, and the server
+    # also renders the form for the first paint.
     source = _prepared_definition_source(html)
     assert 'placeholder: "Ada Lovelace"' in source
     assert 'class: "contact-form__button"' in source

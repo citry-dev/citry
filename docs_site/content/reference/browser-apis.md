@@ -54,7 +54,9 @@ $component({
     if (!(root instanceof HTMLElement)) return;
 
     const controller = connectWidget(root);
-    const stop = onEvent("cart:changed", (detail) => refreshBadge(detail));
+    const stop = onEvent("Cart:changed", (detail) => {
+      refreshBadge(detail);
+    });
     console.log("rendered revision", revision);
     return () => {
       stop();
@@ -148,9 +150,9 @@ never runs, because only the component's own server handlers dispatch these
 events and it has none:
 
 ```js
-$component(({ component, onEvent }) => {
-  onEvent("cart:changed", (detail) => {
-    component.$el.dataset.items = String(detail.count);
+$component(({ els, onEvent }) => {
+  onEvent("Cart:changed", (detail) => {
+    els[0]?.setAttribute("data-items", String(detail.count));
   });
 });
 ```
@@ -247,9 +249,10 @@ Three places work:
   <script defer src="/static/vue-plugins.js"></script>
   ```
 
-- A script an extension adds to `ctx.before_manifest` in
-  `on_dependencies()`. On an interactive page the app loads it first,
-  before it creates the Vue app.
+- A script an extension adds to `ctx.early_scripts` in
+  `on_dependencies()`. These scripts run after the Vue runtime loads and
+  before any component's JavaScript, so on an interactive page the app
+  loads them before it creates the Vue app.
 - A component's own JavaScript, when the component is in the page's
   first app. The app loads it before creating the Vue app, and the plugin
   then applies to the whole app, not only to that component.
@@ -280,6 +283,10 @@ State is client input and must be validated on the server. Nested values and
 public fields that are not declared client-writable are read-only. Non-public
 State names are unavailable. Invalid assignments throw synchronously and leave
 the prior value unchanged.
+
+When a handler changes State, its response updates these fields even if the
+component is not rendered again. A field the browser has assigned but not yet
+sent keeps the browser's value.
 
 ```citry-html
 <button @click="$state.count += 1">Add one</button>
@@ -341,7 +348,7 @@ and the error names it.
 Subscribe to a server-dispatched event for this component instance:
 
 ```js
-const stop = this.$onEvent("cart:changed", (detail) => {
+const stop = this.$onEvent("Cart:changed", (detail) => {
   refreshBadge(detail);
 });
 ```
@@ -365,23 +372,105 @@ and returns a `stop()` that does nothing.
 Use the page-wide API from ordinary scripts or other browser integrations:
 
 ```js
-const stop = Citry.events.on("cart:changed", (detail) => {
-  refreshHeader(detail);
-});
 await Citry.events.send("render_abc123", "refresh", {page: 2});
 ```
 
-`send(target, name, args?, opts?)` accepts a current render ID or an Element
-inside its mounted component. The returned Promise has the same data and
-error behavior as `$sendEvent`, and `opts` takes the same
-[options](#send-event). The other methods are:
+The object has five methods, described below.
 
-| Method | Purpose |
+<h4 class="doc-heading" id="citry-events-send"><code>Citry.events.send</code></h4>
+
+Call a server event on any mounted component:
+
+```js
+Citry.events.send(target, name, args?, opts?)
+```
+
+`target` is a current render ID or an Element inside the mounted component.
+The returned Promise has the same data and error behavior as
+[`$sendEvent`](#send-event), and `opts` takes the same
+[options](#send-event). The Promise rejects when no mounted component
+matches `target`, or when more than one does. An unknown handler name, or
+`args` that is not a plain object, also rejects the Promise, as it does for
+`$sendEvent`.
+
+<h4 class="doc-heading" id="citry-events-on"><code>Citry.events.on</code></h4>
+
+Listen page-wide for a server-dispatched event:
+
+```js
+const stop = Citry.events.on("Cart:changed", (detail) => {
+  updateHeader(detail);
+});
+```
+
+The callback receives the event's `detail`, and the returned function removes
+the listener. Unlike [`$onEvent`](#on-event), this listener hears the event
+from every component on the page. An empty event name or a callback that is
+not a function throws a `TypeError`.
+
+<h4 class="doc-heading" id="citry-events-configure"><code>Citry.events.configure</code></h4>
+
+Set page-wide defaults for event calls:
+
+```js
+Citry.events.configure({
+  timeout: 45_000,
+  transport: "bridge",
+});
+```
+
+| Option | Meaning |
 | --- | --- |
-| `on(name, callback)` | Listen page-wide for a server-dispatched event; the callback receives its detail. |
-| `configure({csrf, timeout, url, transport})` | Set defaults used by current and future event calls. |
-| `registerTransport(name, {send})` | Register a transport that returns a Citry event result envelope. See [custom transports](#custom-event-transports). |
-| `applyActions(actions)` | Apply a validated result action list from an intercepted or custom transport. |
+| `csrf` | Where the CSRF token comes from: `{token}` with a string or a function that returns one, or `{cookie}` with a cookie name. `header` names the request header, `X-CSRFToken` by default. |
+| `timeout` | Milliseconds before a call rejects. The default is `30000`. A call's own `timeout` option wins. |
+| `transport` | The name of a transport added with [`registerTransport`](#citry-events-register-transport). The default is `"fetch"`. |
+| `url` | The Events route base URL. Citry normally reads it from the page. |
+
+Each call merges its options into the earlier ones, and Citry reads them when
+it sends each call, so later calls use the new values. A new `csrf` value
+replaces the earlier one as a whole. The argument and its `csrf` value must
+be plain objects, or the call throws a `TypeError`. Citry ignores an unknown
+option. When `transport` names a transport that was never registered, each
+later event call fails with "Citry Events transport is not registered".
+
+By default Citry reads the `csrftoken` cookie for every transport. Once you
+pass `csrf` to `configure`, Citry reads `csrf.cookie` only for the built-in
+`fetch` transport, and a custom transport gets a token only from
+`csrf.token`.
+
+<h4 class="doc-heading" id="citry-events-register-transport"><code>Citry.events.registerTransport</code></h4>
+
+Add a transport under a name, then select it with
+[`configure`](#citry-events-configure):
+
+```js
+Citry.events.registerTransport("bridge", {
+  send: (envelope, request) => sendThroughHost(envelope, request),
+});
+```
+
+The transport's `send` method receives one Citry event envelope and a
+description of the HTTP request, and returns the result envelope or a Promise
+for it. Registering a name again replaces the earlier transport. An empty
+name, or an object without a `send` function, throws a `TypeError`.
+[Custom event transports](#custom-event-transports) shows a complete
+example.
+
+<h4 class="doc-heading" id="citry-events-apply-actions"><code>Citry.events.applyActions</code></h4>
+
+Apply the `actions` array from a result envelope to the current page:
+
+```js
+await Citry.events.applyActions(result.actions);
+```
+
+Citry validates the array, applies its actions in order, and returns a
+Promise. This is useful for custom transports, integration tests, and hosts
+that intercept Citry event responses. The Promise rejects when the array is
+not a valid action list, when an action targets a component that is no
+longer on the page, or when the actions target components in different Vue
+apps. A `state` action must include `publicState`, the component's public
+State values; without it the Promise rejects with a `TypeError`.
 
 #### Custom event transports
 
@@ -422,6 +511,8 @@ component the browser is showing. Without them, the call fails with "Vue
 Events requires current app, occurrence, and revision headers." A server
 bridge that calls `EventsDispatcher.dispatch` itself passes these headers in
 `TransportContext.headers`.
+
+#### Events fired around each call
 
 Event calls also emit bubbling `citry:events:before`, `after`, `error`,
 `swapped`, and `stale` events. Their detail always includes `instance`,

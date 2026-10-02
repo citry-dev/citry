@@ -19,7 +19,11 @@ class ChoiceButton(Component):
         pass
 
     template = """
-      <button class="choice-button" type="button" @click="$emit('select')">
+      <button
+        class="choice-button"
+        type="button"
+        @click="$emit('select')"
+      >
         Choose
         <span
           class="choice-button__label"
@@ -55,7 +59,7 @@ class ChoicePicker(Component):
             # Tell the client to dispatch a custom browser event
             # with the loaded choices.
             return actions.Dispatch(
-                "choice-picker:loaded",
+                "ChoicePicker:loaded",
                 {"choices": choices},
             )
 
@@ -109,14 +113,12 @@ class ChoicePicker(Component):
             this.choice = newChoices[0];
           },
         },
-        onServerRender({ component }) {
-          const receiveChoices = (event) => {
-            component.loadChoices(event.detail.choices);
-          };
-          component.$el.addEventListener('choice-picker:loaded', receiveChoices);
-          return () => {
-            component.$el.removeEventListener('choice-picker:loaded', receiveChoices);
-          };
+        onServerRender({ component, onEvent }) {
+          // Citry removes this listener before onServerRender
+          // runs again and when the component unmounts.
+          onEvent('ChoicePicker:loaded', (detail) => {
+            component.loadChoices(detail.choices);
+          });
         },
       });
     """

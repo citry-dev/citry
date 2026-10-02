@@ -98,6 +98,7 @@ text = self.i18n.tr(
 Outside a component, use a service with an explicit context:
 
 ```python
+i18n = app.extensions.get_extension("i18n")
 service = i18n.for_context(context)
 text = service.tr("my-app-account-greeting", name="Ada")
 ```
@@ -133,15 +134,19 @@ Request an attribute explicitly:
 
 ```citry-html
 <button
-  aria-label="{{ tr(
+  c-aria-label="tr(
     'my-app-account-actions',
     attr='aria-label',
     name=account.name,
-  ) }}"
+  )"
 >
   {{ tr("my-app-account-actions") }}
 </button>
 ```
+
+Use a `c-` attribute, whose value Citry evaluates as a Python expression, to
+put a translation into an HTML attribute. A `{{ }}`
+expression inside a plain attribute value stays literal text.
 
 The `@param` declarations above the message apply to its value and all its
 attributes. Fluent does not attach a comment to an individual attribute. Do
@@ -160,8 +165,8 @@ The declaration syntax is:
 my-app-account-greeting = Welcome, { $name }.
 ```
 
-The description is optional but useful to translators. The current accepted
-types are:
+The description is optional but useful to translators. The accepted types
+are:
 
 | Type | Accepted value |
 |---|---|
@@ -186,7 +191,7 @@ blocks; changing a name or type in that repeat is still an error.
 
 With a configured `citry.app`, the editor uses these declarations as the
 message-call interface. Hover an argument name in template or Python `tr()`,
-browser `$i18n.tr()`, injected component JavaScript `i18n.tr()`, or a literal
+browser `$i18n.tr()`, component JavaScript `component.$i18n.tr()`, or a literal
 `<c-trans>` value or fill to see its type and description. Go to definition
 opens the exact `@param` line, even when the message belongs to another
 component, file, or catalog package.

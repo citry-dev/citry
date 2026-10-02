@@ -124,7 +124,12 @@ Return only stable plain values:
 - exact built-in lists, tuples, or dictionaries containing those values.
 
 Dictionary keys must be exact strings. The complete value may be at most 32
-containers deep, 10,000 nodes, and 64 KiB in Citry's canonical key format.
+containers deep, contain at most 10,000 items in total, and take at most
+64 KiB once Citry encodes it for the key. Every list, tuple, and dictionary
+counts as one item, and so does each value inside it and each dictionary
+key. A value that breaks these rules
+raises [`CacheKeyError`][citry.ext.cache.CacheKeyError] when the component
+renders.
 
 A custom variation is a correctness promise. Include every input that can
 change the output. Use a database ID instead of an object's `str()` or
@@ -214,9 +219,9 @@ Input hooks, defaults, factories, coercion, validation, and a custom
 
 On a component hit, Citry skips its data methods, render hooks, template
 nodes, child components, and slot rendering. On a `<c-cache>` hit, it skips
-the entire body. A live outer hit also suppresses every cache lookup nested
-inside it, so the outer TTL must satisfy the strictest freshness requirement
-inside that region.
+the entire body. A hit on an outer entry also skips every cache lookup
+nested inside it, so the outer TTL must satisfy the strictest freshness
+requirement inside that region.
 
 Component and slot highlighting from the Debug extension bypasses rendered
 output caching. This keeps the development overlay accurate.
@@ -234,7 +239,8 @@ Increase a component or fragment `version` when one family of output changes:
 The new version makes old entries unreachable; it does not delete them. They
 remain until their backend expiry or eviction.
 
-To remove one exact variation, build its physical key and delete it:
+To remove one exact variation, build the key the backend stores it under
+and delete it:
 
 ```python
 from citry.ext.cache import (
@@ -274,7 +280,7 @@ succeeds, but is not stored.
 
 Exceptions raised by the backend's `get()` or `set()` methods propagate.
 Choose or wrap a backend with the failure policy your application needs.
-[Cache backends](/advanced/cache-backends/) covers capacity, shared stores,
+[Cache backends](/performance/cache-backends/) covers capacity, shared stores,
 and deployment settings.
 
 ## Check privacy before enabling a cache
@@ -291,14 +297,17 @@ Before caching rendered output:
 6. Apply suitable access controls and retention. Cached values can contain
    private HTML, protected Events state, and dependency data.
 
-Physical backend keys use opaque digests instead of raw variation values and
-authored fragment names. This reduces accidental disclosure in logs; it does
+The keys Citry writes to the backend contain a hash instead of the raw
+variation values or fragment names. This reduces accidental disclosure in logs; it does
 not make the stored artifact safe to expose.
 
 ## Related pages
 
-- [Cache backends](/advanced/cache-backends/) for in-process and shared
+- [Performance overview](/performance/) compares caching with the other
+  rendering optimizations.
+- [Cache backends](/performance/cache-backends/) for in-process and shared
   storage.
-- [Performance](/advanced/performance/) for reusing stable values and pure
+- [Constant values](/performance/const/) and
+  [Pure components](/performance/pure/) for reusing stable values and
   component bodies inside an ordinary render.
 - [Security](/security/) for template and Events trust boundaries.

@@ -27,7 +27,11 @@ class ChoiceButton(Component):
         pass
 
     template = """
-      <button class="choice-button" type="button" @click="$emit('select')">
+      <button
+        class="choice-button"
+        type="button"
+        @click="$emit('select')"
+      >
         Choose
         <span
           class="choice-button__label"
@@ -70,7 +74,7 @@ class ChoicePicker(Component):
             state.batches_loaded += 1
 
             return actions.Dispatch(
-                "choice-picker:loaded",
+                "ChoicePicker:loaded",
                 {
                     "choices": choices,
                 },
@@ -88,6 +92,10 @@ class ChoicePicker(Component):
         <span v-show="$loading('load_choices')">Loading...</span>
 
         {# New in this step: show the counter from Python. #}
+        {# Python renders the starting count inside <output>. #}
+        {# `$state` is State in the browser; it updates after #}
+        {# each successful Python call, and Vue shows the new #}
+        {# value. #}
         <p>
           Sets loaded:
           <output v-text="$state.batches_loaded">
@@ -132,14 +140,12 @@ class ChoicePicker(Component):
             ];
           },
         },
-        onServerRender({ component }) {
-          const receiveChoices = (event) => {
-            component.loadChoices(event.detail.choices);
-          };
-          component.$el.addEventListener('choice-picker:loaded', receiveChoices);
-          return () => {
-            component.$el.removeEventListener('choice-picker:loaded', receiveChoices);
-          };
+        onServerRender({ component, onEvent }) {
+          // Citry removes this listener before onServerRender
+          // runs again and when the component unmounts.
+          onEvent('ChoicePicker:loaded', (detail) => {
+            component.loadChoices(detail.choices);
+          });
         },
       });
     """

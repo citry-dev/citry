@@ -101,7 +101,9 @@ The method returns every name this template uses.
 
 !!! note
 
-    For a component that only needs its `Kwargs` fields, leave the `template_data()` out and Citry supplies those fields automatically. Like we did in [Your first component](/getting-started/your-first-component#create-the-card).
+    For a component that only needs its `Kwargs` fields, leave
+    `template_data()` out and Citry supplies those fields automatically, as
+    in [Your first component](/getting-started/your-first-component#create-the-card).
 
 ## Template syntax
 
@@ -140,7 +142,8 @@ A misspelled option is also rejected:
 
 ```python
 print(ReadingList(books=[], heding="Typo"))
-# TypeError: ReadingList.Kwargs got unexpected keyword 'heding'
+# TypeError: ReadingList.Kwargs.__init__() got an unexpected
+# keyword argument 'heding'. Did you mean 'heading'?
 ```
 
 The annotations help your editor and type checker, but they do not check the

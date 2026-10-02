@@ -103,23 +103,25 @@ that handler's map to Vue, while the existing form stays in the DOM with
 everything the user typed. A later successful `save` call clears that error
 without clearing errors retained for other handlers.
 
-Django `Form` and `ModelForm` convenience wiring is a later addition. Today,
-run the form in the handler and translate `form.errors` yourself:
+Citry has no built-in wiring for Django `Form` and `ModelForm`. Run the form
+in the handler and translate `form.errors` yourself:
 
 ```python
 if not form.is_valid():
     raise EventError(
         "Please fix the errors.",
-        fields={name: errors[0] for name, errors in form.errors.items()},
+        fields={
+            name: errors[0]
+            for name, errors in form.errors.items()
+        },
     )
 ```
 
 ## Replace server-selected JavaScript calls with browser events
 
-django-unicorn can queue a named JavaScript function from Python:
-
-When `showToast` has been added to Unicorn's `ALLOWED_JS_CALL_LIST`, an
-existing component may call it from Python:
+django-unicorn can queue a named JavaScript function from Python. When
+`showToast` has been added to Unicorn's `ALLOWED_JS_CALL_LIST`, an existing
+component may call it like this:
 
 ```python
 def save(self):
@@ -136,7 +138,10 @@ then let page JavaScript decide how it appears:
 
 Listen with `$onEvent("Preferences:saved", callback)` in Vue or
 Component.js, or with ordinary `addEventListener`. This keeps Python from
-selecting and invoking arbitrary client functions.
+selecting and invoking arbitrary client functions. Prefix the event name with
+the component name, as in `Preferences:saved`; `actions.Dispatch` rejects
+names that start with `citry:` because the runtime uses them for its own
+events.
 
 Local-only interactions stay in Vue. For example,
 `@click="$state.expanded = !$state.expanded"` changes writable State locally,
@@ -147,14 +152,15 @@ and the next server call carries the queued update.
 Citry evaluates Python in text interpolation, but ordinary HTML attribute
 values remain literal strings:
 
-```html
-<!-- Wrong in a Citry template: the browser receives {{ profile_url }}. -->
+```citry-html
+<!-- Wrong in a Citry template: the browser receives
+     {{ profile_url }}. -->
 <a href="{{ profile_url }}">Profile</a>
 ```
 
 Use the `c-` dynamic-attribute prefix:
 
-```html
+```citry-html
 <!-- Right: profile_url is evaluated during rendering. -->
 <a c-href="profile_url">Profile</a>
 ```
@@ -192,8 +198,9 @@ typed data, and record loading inside the handler.
 
 Dirty-input styling can be built from Vue state and lifecycle events when a
 form needs it. Offline call queues are left to application-specific code
-because replaying a mutation across a deployment is rarely safe. Multipart
-uploads are not part of Events v1. A file-producing handler can use
+because replaying a mutation across a deployment is rarely safe. Citry's
+built-in payload codecs do not parse multipart uploads; a custom payload codec
+can pass `UploadedFile` values to the handler. A file-producing handler can use
 `actions.Download(...)` when it is marked `@event(bundle=False)` and called
 through its per-event route; check the
 [parity matrix](/guides/events-migration-parity/) before porting upload flows.
@@ -211,5 +218,5 @@ Before shipping a migrated component, check that:
 
 Continue with [State](/events/state/), [event bindings](/events/bindings/), and
 [event actions](/events/actions/) for the full Citry workflow. The
-[Events migration parity matrix](/guides/events-migration-parity/) tracks
-which broader django-unicorn capabilities are available now or planned later.
+[Events migration parity matrix](/guides/events-migration-parity/) shows
+how Citry handles the broader django-unicorn capabilities.

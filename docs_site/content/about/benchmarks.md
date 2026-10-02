@@ -13,7 +13,7 @@ from 2026-09-10. Lower bars mean less rendering time.
 <c-image src="/static/img/benchmark.png" alt="First, second and warmed render times for optimized Citry, Django, django-components and Jinja2" width="720" />
 
 \* Citry uses `simple` and `pure` optimizations. See the
-[performance optimization guide](/advanced/performance/).
+[performance optimization guide](/performance/).
 
 | Configuration | First render | Second render | Warmed render |
 | --- | ---: | ---: | ---: |
@@ -25,11 +25,12 @@ from 2026-09-10. Lower bars mean less rendering time.
 ## What the Citry result includes
 
 Button, Icon and HeroIcon are declared as
-[simple components](/advanced/simple-components/). Their data callbacks stay
+[simple components](/performance/simple-components/). Their data callbacks stay
 live, but they give up independent instances, hooks and browser identity.
 HeroIcon and ProjectOutputBadge also retain the scenario's existing `pure`
 declarations. The page constructs 146 ordinary instances and emits 989,431 bytes,
-including dependencies, browser runtimes and ownership data. It takes about 55%
+including dependencies, browser runtimes, and the data that tells the browser
+which component rendered each part of the page. It takes about 55%
 less time than django-components once warm.
 
 These optimizations are explicit application choices with documented contracts.
@@ -51,7 +52,10 @@ workloads, not equivalent implementations of every Citry feature.
 ## How the run is measured
 
 The run uses Apple M4, CPython 3.14.3 and the release Citry Core extension,
-with Django 6.0.6, django-components 0.152.0 and Jinja2 3.1.6. Citry 0.5.0 is measured with the qualified Core 1.7.0 release wheel.
+with Django 6.0.6, django-components 0.152.0 and Jinja2 3.1.6. Citry 0.5.0 is
+measured with the Core 1.7.0 release wheel. Citry 0.5.0 ran Alpine.js in the
+browser, so the Citry byte counts above describe that release's browser output,
+not the Vue runtime Citry uses now.
 
 The underlying run also measured ordinary Citry as a control; the chart shows
 four configurations. Ten blocks each start a fresh process for every configuration, balancing
@@ -65,11 +69,13 @@ The warmed column is the median of each process's mean of 80 renders.
 A warmed average can be higher than one second-render observation because
 it includes a longer execution period and garbage collection.
 
-Every timed Citry output is checked after timing using a projection that
-removes ownership markers and normalizes generated IDs; its browser manifests
-are validated too. Callback and ownership counts come from a separate observed
-render after each Citry process's timed loop. The other engines retain output
-hashes and sizes; their scenario content tests run separately.
+After timing, the runner checks every timed Citry output. It removes the
+markers Citry adds to show which component rendered each part of the page,
+replaces generated IDs with stable ones, and compares the result with the
+expected content. It also checks the data Citry sends to the browser. After
+each Citry process's timed loop, the runner renders once more to count
+callbacks and those component markers. The other engines keep output hashes
+and sizes; their scenario content tests run separately.
 
 These results are relative to this workload and machine. Use them to compare
 rows within this run, then measure the components and data in your application.
@@ -94,7 +100,7 @@ comparable Citry timings.
 
 ## Related pages
 
-- [Performance](/advanced/performance/) compares simple rendering, `Const`
-  and pure component bodies.
-- [Simple components](/advanced/simple-components/) explains the opt-in
+- [Performance overview](/performance/) compares simple rendering,
+  `Const`, pure component bodies, and rendered output caching.
+- [Simple components](/performance/simple-components/) explains the opt-in
   contract used by the Citry result.

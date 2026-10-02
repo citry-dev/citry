@@ -36,12 +36,18 @@ def test_tabs_example_page_renders() -> None:
     assert server_data["activeIndex"] == 0
     assert server_data["idPrefix"] == f"demo-tabs-{tabs['renderId']}"
     assert [tab["label"] for tab in server_data["tabs"]] == ["Overview", "Details", "Notes"]
-    # Tabs and panels are bound for assistive technology, and the shipped script
+    # Tabs and panels are connected for assistive technology, and the shipped script
     # supports the standard horizontal-tab keyboard controls.
     assert "aria-selected" in source
     assert "aria-controls" in source
     assert "aria-labelledby" in source
     assert "ArrowRight:" in html
     assert "Home:" in html
+    # The first tab renders active; the non-active panels render hidden.
+    document = lxml_html.document_fromstring(html)
+    tab_states = [(tab.get("aria-selected"), tab.get("tabindex")) for tab in document.xpath('//*[@role="tab"]')]
+    assert tab_states == [("true", "0"), ("false", "-1"), ("false", "-1")]
+    panel_styles = [panel.get("style") for panel in document.xpath('//*[@role="tabpanel"]')]
+    assert panel_styles == [None, "display: none;", "display: none;"]
     # Focus moves to the button stored under the target index.
     assert "this.tabButtons.get(nextIndex)" in html

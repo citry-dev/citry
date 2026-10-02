@@ -97,10 +97,11 @@ context = make_context(
 )
 ```
 
-An unknown or empty locale raises an error. An invalid IANA time-zone name also
-raises an error. Omitting `locale` selects the configured `default_locale` or
-the inferred source-mode default; omitting `time_zone` creates a zone-free
-context.
+An empty locale, or one outside the configured `locales` (or the inferred
+source-mode locales), raises `ValueError`. An invalid or unknown IANA time-zone
+name also raises `ValueError`. Omitting `locale` selects the configured
+`default_locale` or the inferred source-mode default; omitting `time_zone`
+creates a zone-free context.
 
 `make_context()` returns a new immutable value. It does not change the engine's
 default context and does not affect another request.
@@ -159,6 +160,9 @@ The provider accepts `locale`, `direction`, and `time_zone` overrides. Omitted
 fields inherit. When the locale changes and direction is omitted, Citry derives
 the new direction from the locale.
 
+A locale that the application does not allow, a `direction` other than `ltr`
+or `rtl`, or an unknown time zone raises `ValueError` during the render.
+
 Client-enabled providers need a real `tag` because the browser uses that
 element as the subtree boundary. See [Browser i18n](/i18n/browser/).
 
@@ -168,6 +172,7 @@ Inside components, use `self.i18n`. Outside components, use
 `i18n.for_context(context)`:
 
 ```python
+i18n = app.extensions.get_extension("i18n")
 service = i18n.for_context(context)
 
 heading = service.tr("my-app-account-title")

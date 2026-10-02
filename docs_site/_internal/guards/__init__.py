@@ -33,6 +33,7 @@ from docs_site._internal.guards import (
     community_packages,
     component_fence,
     cross_version_link,
+    crossref,
     example_contract,
     fence_validator,
     frontmatter,
@@ -97,6 +98,7 @@ SOURCE_GUARDS: list[Guard] = [
     builtin_tags.check,
     authored_reference.check,
     api_symbols.check,
+    crossref.check,
 ]
 
 POST_BUILD_GUARDS: list[Guard] = [

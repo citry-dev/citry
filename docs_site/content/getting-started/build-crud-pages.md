@@ -28,9 +28,10 @@ two rows and both controls change to “Show all tasks.”
 </c-for>
 ```
 
-Each `TaskRow` is a separate instance with its own State, activity state, loading counters, and handler errors. `#c-key` gives Vue a stable application
-identity for each row as the collection changes. Use a database key or another
-stable domain identifier.
+Each `TaskRow` is a separate instance with its own State, loading status, and
+handler errors. `#c-key` gives each row a key that Vue uses to recognize the
+same row when the list renders again. Use a database key or another value that
+stays the same for the same record.
 
 The task ID lives in signed State while the edited title comes from the named
 form control:
@@ -59,8 +60,11 @@ permissions in the handler.
 <output v-text="saveStatus"></output>
 ```
 
-After a successful save, Python dispatches `task-row:saved` from that row. The
-same row installs an instance listener in `onServerRender`:
+After a successful save, Python dispatches `TaskRow:saved` from that row. As
+in the earlier steps, the event name starts with the component's name. The
+same row listens for it with [`onEvent`][onEvent] in
+[`onServerRender`][onServerRender], the option that runs after the row
+mounts and again after each server render:
 
 ```js
 $component({
@@ -69,18 +73,22 @@ $component({
   },
   methods: {
     showSaved(detail) {
-      this.saveStatus = `Saved task ${detail.taskId}: ${detail.title}`;
+      this.saveStatus =
+        `Saved task ${detail.taskId}: ${detail.title}`;
     },
   },
-  onServerRender({ component }) {
-    const receiveSaved = (event) => component.showSaved(event.detail);
-    component.$el.addEventListener('task-row:saved', receiveSaved);
-    return () => component.$el.removeEventListener('task-row:saved', receiveSaved);
+  onServerRender({ component, onEvent }) {
+    // Citry removes this listener before onServerRender
+    // runs again and when the component unmounts.
+    onEvent('TaskRow:saved', (detail) => {
+      component.showSaved(detail);
+    });
   },
 });
 ```
 
-Because the event starts at the calling row, sibling rows do not receive it.
+`onEvent` hears only events from this component's own Python handlers, so
+sibling rows do not receive it.
 
 ## Give the filter child props and an event
 
@@ -103,7 +111,9 @@ and handler:
 <c-TaskFilterToggle
   :hideCompleted="hideCompleted"
   :loading="$loading('filter_tasks')"
-  @select="$sendEvent('filter_tasks', { hide_completed: !hideCompleted })"
+  @select="$sendEvent('filter_tasks', {
+    hide_completed: !hideCompleted,
+  })"
 />
 ```
 
@@ -116,6 +126,7 @@ from the same parent value. `$sendEvent` calls the parent component's Python
 The handler loads the requested rows and returns a new `TaskList`:
 
 ```python
+# TaskList.Events.filter_tasks
 def filter_tasks(self, data: FilterTasksIn):
     visible_tasks = load_tasks(
         hide_completed=data.hide_completed,
@@ -128,10 +139,12 @@ def filter_tasks(self, data: FilterTasksIn):
     )
 ```
 
-With no selector target, the Render action updates the calling `TaskList`.
-Passing `hide_completed` seeds the replacement's browser state, so both filter
-controls show the new mode. Stable row keys let the renderer match surviving
-rows while removing or adding the others.
+With no `target`, the Render action updates the calling `TaskList`.
+Passing `hide_completed` gives the new list's `js_data()` the chosen mode, so
+`hideCompleted` starts with that value and both filter controls show it.
+Stable row keys let the renderer match surviving rows while removing or
+adding the others.
 
-For larger pages, split ownership into smaller event components so a default
-Render updates only the region that owns the handler.
+For larger pages, split the page into smaller components that each declare
+their own `Events` handlers. A Render with no `target` then updates only the component
+whose handler ran.

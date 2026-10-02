@@ -98,17 +98,16 @@ Syntax-only mode recognizes direct module-level `Component` and
 `LibraryComponent` imports that remain unshadowed before the class. It checks
 direct literal `template` assignments on undecorated, unambiguous component
 candidates whose base template language is known. It skips computed values,
-inherited declarations, and file templates; file ownership remains
-registry-backed in this first version. This mode validates base template syntax
-but does not report an unknown component from an incomplete static view.
+inherited declarations, and file templates; only the registry-backed check
+reads file templates. This mode validates base template syntax but does not
+report an unknown component, because it cannot see the complete registry.
 
 Bare `citry check` is rejected so a successful result always identifies which
 level of checking ran. `--static` cannot be combined with `--app`.
 
-Unknown-component checks cover ordinary retained template bodies. They do not
-yet inspect template-valued attributes, whose public parser kind arrives with
-the next IDE-analysis contract; this avoids mistaking expression strings for
-template source.
+Unknown-component checks cover the tags in template bodies. They do not look
+inside attribute values that hold template source, so an unknown tag there is
+not reported.
 
 The checker reads authored template text directly. It does not run template
 transform hooks, because transformed diagnostics cannot be placed back onto
@@ -116,9 +115,16 @@ authored text without a source mapping. The command reports this capability
 limit once and continues checking the base Citry syntax.
 
 Each parser failure includes the parser's annotated template excerpt and an
-origin naming the file or component. The excerpt's line and column are local to
-the template body; exact Python-file ranges arrive with the structured
-diagnostic work described in the IDE integration design.
+origin naming the component, such as `myapp.card.Card.template`, or the
+template file. With `--static`, the origin is the file's full path
+followed by the attribute, such as
+`/home/me/proj/myapp/card.py (Card.template)`. The excerpt's line and
+column count from the start of the template body, not from the start of the
+Python file.
+
+Add `--format json` to print one JSON report instead of text lines. Each
+finding carries its `origin`, `code`, `severity`, `message`, and `range`
+(`null` when the finding has no position).
 
 The exit status is:
 
@@ -219,46 +225,58 @@ citry format path/to/components \
   --css-provider biome:/absolute/path/to/native/biome
 ```
 
-The path must name Biome's self-contained platform-native binary. Every
-interpreter script and npm/pnpm or Windows command launcher is rejected because
-its effective dependencies cannot be isolated and fingerprinted.
+The path must name Biome's self-contained platform-native binary. Citry
+rejects interpreter scripts and npm, pnpm, or Windows command launchers,
+because it cannot hash everything such a launcher loads.
 
 `--embedded=available` (the default) formats regions whose provider is
 configured and reports the rest without failing the file.
 `--embedded=required` makes a missing provider an error and writes none of the
 affected file; `--embedded=off` disables embedded providers and does not even
-probe provider paths supplied alongside it. The initial
-adapter formats expression-free `<script>` and `<style>` bodies. Bodies that
-contain Citry interpolation stay unchanged until a context-safe placeholder
-adapter is available. Bodies with multiline quoted/template literals,
-line continuations, multiline block comments, or start-sensitive hashbang,
-`@charset`, and BOM bytes also stay unchanged until a language-aware source
-map can preserve their exact lexical whitespace. Explicit `{# fmt: off #}`
+probe provider paths supplied alongside it. Explicit `{# fmt: off #}`
 suppression remains an opt-out and does not count as a missing provider in
 required mode.
 
-Citry selects the nearest `biome.json` or `biome.jsonc` for each asset and
-includes its exact bytes in the reported per-target provider fingerprint.
-The initial adapter rejects configurations that use `extends` or `plugins`
-(including override plugins), because it cannot yet fingerprint those external
-dependencies. Symlinked configuration files are rejected so config-relative
-paths cannot disagree with the exact bytes being hashed. It also ignores
-`BIOME_*`, editorconfig, and VCS-derived options so the same reported
-fingerprint means the same provider inputs.
+With a provider configured, Biome formats component `js` and `css` assets,
+standalone `.js` and `.css` files, and the bodies of `<script>` and
+`<style>` elements in templates. In a template, Citry leaves these bodies
+unchanged and reports them:
 
-Citry hashes the selected executable and runs a secured copy from its private
-per-user executable cache. It passes an isolated copy of the nearest Biome
-configuration—or an explicit empty configuration when none exists—so config
-discovery cannot change during the run. Config-relative source paths are
-preserved. Configurations using external `extends` or `plugins` remain
-unsupported because their dependency bytes cannot yet be included in the
-fingerprint.
+- a body that contains Citry interpolation such as `{{ value }}` or a
+  `{# ... #}` comment;
+- a body whose language is not plain JavaScript or CSS, or is set by an
+  expression;
+- a body with a multiline string or template literal, a line continuation,
+  or a multiline block comment, whose exact whitespace Citry must keep;
+- a body that starts with a hashbang (`#!`), `@charset`, or a byte order
+  mark.
 
-`--check` and `--diff` do not write. `--verbose` reports every active
-capability and provider identity. Citry never searches `PATH`, invokes a shell,
+Citry identifies each provider by a fingerprint: a hash of the Biome
+binary and of the exact bytes of the configuration it used. Provider error
+messages include it. Two runs with the same fingerprint used the same
+inputs. To make sure of that, Citry:
+
+- uses the nearest `biome.json` or `biome.jsonc` for each asset, and passes
+  Biome a private copy of it, or an empty configuration when none exists,
+  so Biome cannot find a different file during the run. File patterns in
+  the configuration still match each file's path relative to the
+  configuration;
+- rejects a configuration that uses `extends` or `plugins` (including
+  override plugins), because the files those settings load are not part of
+  the fingerprint;
+- rejects a symlinked configuration file, so the file Citry hashes is the
+  file Biome reads;
+- ignores `BIOME_*` environment variables, `.editorconfig`, and options
+  derived from version control;
+- hashes the selected executable and runs a copy of it from a private
+  per-user cache.
+
+`--check` and `--diff` do not write. `--verbose` also reports which
+formatters are active, including the Biome version for each language. Citry never searches `PATH`, invokes a shell,
 or asks Biome to write the target file. Provider output has one 8 MiB bound
 across stdout and stderr, and the provider process tree is stopped after 15
-seconds. App selection and `--static` are not formatter modes.
+seconds. Formatting reads source files only, so `citry format` rejects
+`--app` and `--static` with exit status 2.
 
 ## List registered components
 
@@ -346,8 +364,8 @@ watcher.
 citry --app myproject.engine:app ext list
 ```
 
-Every engine includes `cache`, `dependencies`, and `events`. Extensions added
-by the application appear after them.
+Every engine includes `cache`, `dependencies`, `events`, and `i18n`.
+Extensions added by the application appear after them.
 
 ## Run an extension command
 

@@ -42,6 +42,6 @@ for people to find Citry and write components correctly the first time.
 
 ## Requesting a change
 
-We update the allow-list on a rolling basis as new well-behaved crawlers appear.
-To request that a specific bot be added or removed,
+Every well-behaved crawler is allowed by default. To ask for a specific bot to
+be blocked, or to report a crawler that ignores `robots.txt`,
 [file an issue]({{ repo_issues_url }}){: target="_blank" rel="noopener"}.

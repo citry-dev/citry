@@ -277,7 +277,7 @@ provides a replacement value under the same key.
 
 - [Slots](/concepts/slots/) explains how fills keep the surrounding template's
   scope while they follow the rendered path.
-- [Client interactivity](/concepts/client-interactivity/) covers component
-  ownership, setup, props, and lifecycle helpers.
+- [Client interactivity](/concepts/client-interactivity/) covers browser
+  data, local Vue state, props, and reacting after a server render.
 - [Browser APIs](/reference/browser-apis/) lists the exact client helper and
   Vue runtime contracts.

@@ -58,10 +58,10 @@ Vue modifiers stay in the attribute name. For example,
 `@keydown.enter.prevent="submit()"` listens for Enter and prevents the
 browser's default action.
 
-Alpine had event modifiers that Vue does not, such as `.outside`,
-`.window`, `.document`, `.debounce`, and `.throttle`. Vue would read one
-as a key name, and the listener would never run, so the template fails
-when it loads with a message that names the Vue way to do the same thing:
+Vue has no `.outside`, `.window`, `.document`, `.debounce`, or `.throttle`
+event modifier. Vue would read one as a key name, and the listener would
+never run, so the template fails when it loads with a message that names
+the Vue way to do the same thing:
 
 ```citry-html
 {# Fails: Vue has no .outside modifier #}
@@ -79,8 +79,10 @@ target="_blank" rel="noopener"} for directive forms and modifiers.
 A few Vue features do not work in a `Component.template`:
 
 - Vue's built-in helper components `<Teleport>`, `<Transition>`,
-  `<Suspense>`, and `<KeepAlive>` stop the template with an
-  unsupported-helper diagnostic.
+  `<Suspense>`, and `<KeepAlive>` are not supported. When the page
+  loads Vue, `serialize()` or `str()` on the render raises `ValueError`
+  with an "unsupported Vue helper" message. On a page without Vue, the tag
+  is written out as plain HTML and does nothing.
 - `v-once` and `v-memo` make the template fail when it loads. Keep a
   value fixed by not changing it, or compute it once in `data()`. To keep
   an element's contents as the server first rendered them, use
@@ -142,8 +144,8 @@ while `dragging` is true. The classes from `class` and `c-class` come
 first. `:style` works the same way with `style` and `c-style`, and the
 bound style is applied last, so it wins for a property both set.
 
-Any other attribute has one owner. Setting the same attribute from Python
-and from Vue, such as `c-title` together with `:title`, fails when the
+Any other attribute must be set in one place. Setting the same attribute
+from Python and from Vue, such as `c-title` together with `:title`, fails when the
 template loads, and `citry check` reports it:
 
 ```citry-html

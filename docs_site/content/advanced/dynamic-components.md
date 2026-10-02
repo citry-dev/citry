@@ -93,8 +93,8 @@ from citry import Component
 
 class Heading(Component):
     class Kwargs:
-        level: int = 2
         text: str
+        level: int = 2
 
     def template_data(self, kwargs: Kwargs, slots):
         return {
@@ -135,7 +135,10 @@ element.
 ### Limits of `c-element`
 
 - Void elements such as `br` and `img` cannot have a body.
-- Only the default slot is accepted. A named fill raises `ValueError`.
+- Only the default slot is accepted. A named `<c-fill>` written in the
+  template is a template error (`SyntaxError`). A fill whose name is
+  computed at render time, such as `<c-fill c-name="...">`, raises
+  `ValueError`.
 - A dynamic attribute cannot produce a template fragment. Precompute a plain
   value in `template_data()` instead.
 

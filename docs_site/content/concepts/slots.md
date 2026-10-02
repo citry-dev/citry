@@ -50,8 +50,10 @@ slot. A field without a default must be filled when the component is used;
 `SlotInput | None = None` makes that field optional.
 
 Without a `Slots` class, a component accepts any slot name. Declaring one gives
-the component a closed, checked interface: Citry rejects undeclared outlets
-and fills.
+the component a closed, checked interface: Citry rejects a fill, or a
+`<c-slot name="...">` tag in the component's own template, whose name the
+class does not declare. This page calls a `<c-slot>` tag an outlet: the place
+where a fill appears.
 
 ## Choose one way to fill a component
 
@@ -182,7 +184,7 @@ component that defines the slot and uses that component's variables.
 </c-ProfileCard>
 ```
 
-The same ownership rule applies to Vue expressions. See
+The same scope rule applies to Vue expressions. See
 [Understand slot scope](/concepts/client-interactivity/#understand-slot-scope)
 for the browser side.
 
@@ -269,7 +271,7 @@ grammar and errors, see [`<c-fill>`](/reference/builtins/#c-fill).
 Pass a `slots` mapping when Python, rather than another template, assembles
 the component:
 
-```citry
+```python
 html = str(
     Modal(
         slots={
@@ -305,10 +307,14 @@ This table creates one outlet per column:
 
 The template using the component can fill `header-name`, `header-age`, or any
 other name produced by the expression. `<c-fill c-name="...">` can compute
-fill names too.
+fill names too. Names with dashes, like these, work only when the component
+does not declare `Slots`, because a Python field name cannot contain a dash.
 
-A computed name must still appear in the component's declared `Slots` schema.
-If two dynamic fills resolve to the same name, Citry raises `RuntimeError`.
+A computed fill name must still appear in the component's declared `Slots`
+schema; an undeclared one raises `TypeError` when the component renders. Citry
+does not check a computed `<c-slot>` name against the schema. If it is not
+declared, no fill can reach it, so the outlet always shows its fallback. If
+two dynamic fills resolve to the same name, Citry raises `RuntimeError`.
 Prefer literal names when the interface is fixed; they are easier to discover
 and check.
 
@@ -372,7 +378,7 @@ slot's fallback at that point.
 
 - [Provide and inject](/concepts/provide-and-inject/) passes data through a
   whole rendered subtree.
-- [Client interactivity](/concepts/client-interactivity/) explains ownership
-  when slots contain Vue expressions.
+- [Client interactivity](/concepts/client-interactivity/) explains which
+  component's data a Vue expression inside a fill reads.
 - [Inputs and validation](/concepts/inputs-and-validation/) covers typed
   component inputs in more depth.

@@ -85,7 +85,7 @@ run data methods, the template, slots, or `on_render()` again.
 
 If a hook's result depends on something outside the declared component inputs,
 that value must also vary the cache key. Otherwise a cached result can outlive
-the condition that produced it. See [Caching](/advanced/caching/).
+the condition that produced it. See [Caching](/performance/caching/).
 
 ## Observe completion or recover from an error
 
@@ -136,7 +136,7 @@ lists include:
 
 - the component's own `js` and `css`;
 - entries from its nested `Dependencies` class; and
-- values generated from `js_data()` and `css_data()`.
+- the stylesheet Citry generates from `css_data()`.
 
 Mutate the lists, or return a `(scripts, styles)` pair to replace them. Return
 `None` to leave them unchanged.
@@ -169,21 +169,22 @@ class Chart(Component):
 ```
 
 This hook runs before Citry removes duplicates across components. When two
-entries share a URL or inline content, the first one wins, including any
-attributes the hook added.
+scripts share a URL or inline content, the first one wins, including any
+attributes the hook added. Two stylesheets that share a URL or inline content
+must carry the same attributes; otherwise serialization raises `ValueError`.
 
 Removing a component's own script can stop its browser behavior. Drop an
 entry only when the same behavior is supplied somewhere else.
 
 An extension `on_dependencies()` hook can adjust the collected component
-lists after duplicates are removed. Citry may add its required browser
-runtime and initialization tags afterward, so this hook is not a complete
-document-level CSP surface. See [Extensions](/advanced/extensions/) for the
-application-wide hook.
+lists after duplicates are removed. Citry adds its own browser runtime after
+that hook returns, so the hook does not see every script on the page. See
+[Extensions](/advanced/extensions/) for the application-wide hook.
 
-The extension hook's context also has a `before_manifest` list for scripts
+The extension hook's context also has an `early_scripts` list for scripts
 that must run before the others. Static output writes them as tags before
-the dependency scripts; an interactive page loads them first. See
+the dependency scripts; an interactive page (one that uses Citry's browser
+runtime) loads them first. See
 [Extensions](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page).
 
 ## Next steps
