@@ -161,6 +161,20 @@ walks through every step.
 - An `on_render` or `on_component_rendered` hook that returns
   `str(result)` with extra HTML no longer writes the component's
   `data-cid-*` attribute twice on one tag.
+- An attribute that an `on_dependencies()` hook adds to a script or
+  stylesheet in one render no longer appears in later renders of the same
+  component.
+- `self.events.url()` now type-checks under mypy and pyright and has an
+  entry in the API reference.
+- `enable_hot_reload(engine, mode="restart")` from `citry.contrib.django`
+  now restarts the Django dev server when a component file changes, and
+  both modes now notice component files under `Citry(dirs=...)` outside
+  Django's template folders.
+- A component that keeps rendering itself, such as a tree node whose data
+  lists the node among its own children, now fails quickly with a
+  `RecursionError` naming the component instead of running until the
+  process runs out of memory. Pass `Citry(max_component_depth=...)`
+  (default 2000) if a page really nests deeper.
 
 ## v0.5.1
 
