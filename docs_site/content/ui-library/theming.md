@@ -45,7 +45,7 @@ provide a toggle. Your application does that.
 ## Style one component { #customize-one-component }
 
 Every component accepts `class_` and `style`, which Citry puts on the
-component's outer element. The underscore in `class_` makes it a valid
+element that the component's page lists as its root. The underscore in `class_` makes it a valid
 Python name; use the same name in a template:
 
 ```citry-html
