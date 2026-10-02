@@ -259,17 +259,19 @@ When the browser needs a server value, return it from
 [`js_data()`][citry.Component.js_data] as JSON-compatible data, then
 provide it from that component's `$component` options.
 
-!!! note "Provided values are not template variables"
+## When an injected value is not what you expect
 
-    A provided field named `mode` does not change what `{{ mode }}` reads.
-    To use a provided value in a template, call `inject()` in a data method
-    and return the value.
+### The template does not show a provided field
 
-!!! note "A component cannot inject the value it provides"
+A provided field named `mode` does not change what `{{ mode }}` reads.
+Provided values are not template variables. Call `inject()` in a data
+method and return the value the template needs.
 
-    A component's own `provide()` call affects only the components inside
-    it. If the component calls `inject()` with the same key, it gets the
-    value from a provider above it, if there is one.
+### A component reads an old value, not the one it provides
+
+A component's own `provide()` call affects only the components inside it.
+If the component calls `inject()` with the same key, it gets the value
+from a provider above it, if there is one.
 
 ## Next steps
 
