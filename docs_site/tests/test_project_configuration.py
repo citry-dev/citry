@@ -141,8 +141,10 @@ def test_ui_catalog_groups_drive_sidebar_order_and_breadcrumbs() -> None:
         ("Navigation", 6, True),
         ("Feedback and status", 5, True),
         ("Overlays and disclosure", 12, True),
+        ("Development", 1, False),
     ]
-    for group in area.groups[1:]:
+    # Only the catalog groups sit between the authored first and last groups.
+    for group in area.groups[1:-1]:
         titles = [item.title for item in group.items]
         assert titles == sorted(titles, key=str.casefold), group.label
     assert tree.find_breadcrumbs("/ui-library/components/tree/") == [
