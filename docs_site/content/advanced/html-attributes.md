@@ -15,7 +15,7 @@ Instead, the component accepts the attributes as one mapping and decides
 which element receives them. This page shows how, and how to combine
 `class` and `style` values from several places.
 
-## Accept and apply an attribute mapping
+## Accept attributes
 
 Give the component an `attrs` input. In `template_data()`, combine it with
 the component's own attributes, then apply the result to the element with
@@ -75,7 +75,7 @@ You choose the element. A component with two root elements can accept two
 mappings, and a form field can put the attributes on its inner `<input>`
 rather than on its wrapper.
 
-## Decide whether the page or the component wins
+## Choose who wins
 
 In the example above, the page's mapping comes last in `merge_attrs()`,
 so a page can replace `type` while the component's `action-button` class
@@ -93,7 +93,7 @@ button_attrs = merge_attrs(
 
 Now a page can add classes, but `type` is always `button`.
 
-## Merge mappings from left to right
+## Merge mappings
 
 [`merge_attrs()`][citry.merge_attrs] keeps the last value for each
 attribute name. For `class` and `style` it keeps every value and combines
@@ -117,7 +117,7 @@ Each attribute keeps the position where it first appeared, even when a
 later mapping replaces its value, so the order in the HTML stays
 predictable.
 
-## Build class and style values
+## Build class and style
 
 [`normalize_class()`][citry.normalize_class] turns a string, a mapping,
 or a list or tuple of those (nested ones work too) into one class string. In a
@@ -158,7 +158,7 @@ To read inline CSS as a dictionary, use
 comments, keeps semicolons inside functions such as `url(...)`, and skips a
 declaration without a colon.
 
-## Turn a mapping into HTML
+## Format as HTML
 
 When you need the attributes as text rather than through `c-bind`,
 [`format_attrs()`][citry.format_attrs] turns a mapping into an escaped HTML
@@ -191,7 +191,7 @@ When Vue renders an interactive component, a `True` value on an attribute
 that is not a boolean HTML attribute renders as `data-open="true"` rather
 than a bare `data-open`. See [HTML elements](/syntax/dynamic-attributes/#html-elements).
 
-## Keep browser bindings in the template
+## Keep Vue in templates
 
 An attribute mapping carries plain HTML attributes only. Citry never runs
 a name from the mapping, such as `:title` or `@click`, as Vue code. On an
@@ -209,16 +209,16 @@ for the component-boundary rules, and
 [Attributes](/syntax/dynamic-attributes/) for static, dynamic, and spread
 values in templates.
 
-## Errors and trusted values
+## Less common cases
 
-### Invalid attribute names
+### Invalid names
 
 An attribute name must be a string. Any other key raises `TypeError`. A
 name that is empty or contains whitespace, `=`, `/`, `>`, `<`, or `{#`
 raises `ValueError`. `c-bind` checks names the same way when it adds a
 mapping to an element.
 
-### Values that skip escaping
+### Unescaped values
 
 A value with an `__html__()` method is inserted without escaping. Pass one
 only when the code that produced it is trusted and escapes its own

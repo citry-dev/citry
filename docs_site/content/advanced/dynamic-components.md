@@ -113,7 +113,7 @@ and values are escaped unless they provide trusted HTML through
 If the tag never changes, write it directly. `<h2>` is clearer than
 `<c-element is="h2">`.
 
-## Write the choice in the template or compute it
+## Compute the choice
 
 Use `is` for a choice written directly in the template, and `c-is` for a
 Python expression:
@@ -138,9 +138,9 @@ than one of them sets `is`, the last one wins.
 To show or hide content rather than change a whole tag, use
 [control flow](/syntax/control-flow/).
 
-## Errors and less common cases
+## Less common cases
 
-### What `c-is` accepts on `<c-component>`
+### What `c-is` accepts
 
 The value must be a registered component name, such as `"card"`, or a
 `Component` subclass, such as `Card`.
@@ -152,14 +152,14 @@ The value must be a registered component name, such as `"card"`, or a
   `Card(title="Hi")`, raises `TypeError`. Insert it with `{{ ... }}`
   instead, or pass its class.
 
-### Vue bindings on `<c-component>` are not Python inputs
+### Vue bindings stay Vue
 
 Vue bindings on `<c-component>` follow the usual rules for a component
 tag. They do not become Python inputs. See
 [Client interactivity](/concepts/client-interactivity/) for Vue props,
 child events, and server-event handlers.
 
-### Which tag names `<c-element>` accepts
+### Valid tag names
 
 A tag name starts with a letter, followed by letters, digits, hyphens,
 underscores, or dots. Custom elements such as `my-widget` and SVG names
@@ -178,7 +178,7 @@ The tag names themselves ignore letter case after the prefix:
 `<c-Component>` and `<c-Element>` work too. The `c-` prefix must be
 lowercase.
 
-### What `<c-element>` cannot do
+### `<c-element>` limits
 
 - A void element such as `br` or `img` cannot have a body.
 - It accepts only the default slot. A named `<c-fill>` written in the

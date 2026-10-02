@@ -36,7 +36,7 @@ and `i18n` extensions. Other bundled extensions are opt-in, such as
 `PreviewExtension`, which adds the commands for
 [component previews](/advanced/previews/).
 
-## Run code for every component with a hook
+## Add a hook
 
 Subclass [`Extension`][citry.Extension], give it a lowercase `name`, and
 define only the hooks you need:
@@ -113,7 +113,7 @@ templates, JavaScript, and CSS.
 - raise to replace the error with your own;
 - return `None` to let the error continue.
 
-## Give components extension settings
+## Add component settings
 
 An extension can define default settings, and each component can override
 them in a nested class. The nested class is named after the extension:
@@ -178,7 +178,7 @@ Citry takes each setting from the first place that sets it:
 component class. Override it, as above, to reject misspelled or unknown
 settings. By default it accepts any setting.
 
-## Keep data from one hook to the next
+## Store data per render
 
 Each component gets its own copy of every installed extension's config,
 for that render. Store data there to read it in a later hook:
@@ -199,7 +199,7 @@ Do not keep this data in a dictionary on the extension itself. One
 extension instance serves many renders, possibly from several threads at
 once.
 
-## Add scripts and stylesheets to a page
+## Add scripts and styles { #add-scripts-and-stylesheets-to-a-page }
 
 The `on_dependencies()` hook runs each time Citry serializes a render, after
 it has collected the scripts and stylesheets of every rendered component.
@@ -242,7 +242,7 @@ there must be classic JavaScript: a `type="module"` or
 To install a Vue plugin on the page's Vue apps, add an early script that
 calls `Citry.vue.use(plugin)`. It runs before Citry creates the app.
 
-## Let Citry cache renders your extension affects
+## Support caching
 
 Citry can cache a component's rendered output and reuse it later
 ([Caching](/performance/caching/)). If your extension's hooks affect a
@@ -329,7 +329,7 @@ citry --app myproject.engine:app ext run events openapi
 See [Command line](/cli/) for defining arguments and running extension
 commands.
 
-## Describe components to tools
+## Describe components
 
 Tools can ask Citry to describe the registered components with
 `inspect_components()`. An extension can add its own entry to that
@@ -358,7 +358,7 @@ Return a plain `dict` of JSON values, or `None` when the component has no
 entry. Return the same result every time: do not render, load assets,
 change registration, or read the current request.
 
-## Call your own hook from application code
+## Call your own hook
 
 To let extensions react to an event in your application, call a hook by
 name through the extension manager:
@@ -378,9 +378,9 @@ at the first result that is not `None`, and `result="map"` passes each
 result on to the next extension through a named context field. See
 [`ExtensionManager.emit()`][citry.ExtensionManager.emit].
 
-## Name and install extensions in other ways
+## Name and install
 
-### Choose an extension name
+### Choose a name
 
 `name` must be a lowercase Python identifier. Names of built-in extensions
 and names that would clash with the public `Component` API are reserved.
@@ -388,7 +388,7 @@ Citry turns the name into the nested settings class name, so `audit_log`
 becomes `AuditLog`. Set `class_name` only when your package needs a
 different valid class name.
 
-### Install by import path or as an instance
+### Install other ways
 
 When you pass a class, Citry creates a new instance of it, and the instance
 reaches its `Citry` instance through `self.citry`. You can also pass a

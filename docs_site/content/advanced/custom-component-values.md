@@ -14,7 +14,7 @@ writes `{{ status }}`.
 When the page already knows which component it wants, call that component
 directly. It is clearer.
 
-## Turn an object into a component
+## Make an object render
 
 Add a `__citry_element__(citry)` method to the class. Citry calls it with
 the [`Citry`][citry.Citry] instance that is rendering the page. Use that
@@ -50,7 +50,7 @@ Look the component up on the `citry` argument, as above. Do not use a
 component class bound to the default instance or to another application's
 `Citry`; Citry raises `ValueError`.
 
-## Insert the object in a template
+## Use it in a template
 
 Pass the object to the template like any other value:
 
@@ -73,7 +73,7 @@ Each time the template inserts `status`, Citry calls `__citry_element__()`
 once and renders the returned component in that place. The same works when
 you pass the object as slot content.
 
-## Render the object outside a template
+## Render it elsewhere
 
 The object knows which component to build only while a page is rendering,
 because that is when Citry supplies the `citry` argument. It has no
@@ -84,7 +84,7 @@ Library components are the exception: calling one, such as
 `AcmeBadge(label="Ready")`, returns a value with a `render(citry=app)`
 method. See [Component libraries](/advanced/component-libraries/).
 
-## Errors from `__citry_element__()`
+## Return value errors
 
 Citry checks what the method returns:
 

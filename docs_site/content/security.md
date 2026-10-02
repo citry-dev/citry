@@ -55,7 +55,7 @@ the template. Put trusted scripts and styles in `Component.js`,
 Your policy never needs `'unsafe-eval'` for Citry, and `"strict"` places no
 limit on the JavaScript you write in Vue expressions. A page under a Content
 Security Policy is sent with HTML that Vue replaces instead of adopting; see
-[Pages Vue replaces instead of adopting](/advanced/vue-runtime/#pages-vue-replaces-instead-of-adopting).
+[Replaced pages](/advanced/vue-runtime/#pages-vue-replaces-instead-of-adopting).
 
 Per-render mode overrides are enforced during serialization. The Citry editor
 and `citry check` report template and dependency problems at authored source

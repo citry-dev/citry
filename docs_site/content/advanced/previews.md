@@ -18,7 +18,7 @@ The preview extension adds two commands:
 - `serve` runs a local web server with a gallery of your previews.
 - `render` saves a PNG screenshot of each preview with Playwright.
 
-## Add examples to a component
+## Add examples
 
 Install the extra dependencies:
 
@@ -86,7 +86,7 @@ To preview a component with its default inputs only, write
 no `Preview` content gets no preview. Set `enabled = False` to turn off
 previews that a component inherits from its base class.
 
-## Browse previews in the gallery
+## Browse the gallery
 
 Start the preview server:
 
@@ -125,7 +125,7 @@ directories, a named component must also be inside one of the directories.
 The command fails when a filter matches nothing, a named component has no
 previews, or a named variant does not exist.
 
-## Save screenshots as PNG files
+## Save screenshots
 
 Install Chromium for Playwright once, then run `render`:
 
@@ -164,7 +164,7 @@ routes, sessions, and test data setup are not there, so each example must
 supply what it needs. Fixed clocks, random values, and outside data are
 also up to you, if you want the same screenshot on every run.
 
-## Wrap an example in a template
+## Wrap an example
 
 By default a variant renders the component alone with its `params`. Give
 `Preview` a `template` to build the example yourself, for example to place
@@ -199,7 +199,7 @@ starts from the file that declares the `Preview` class, also when a
 subclass inherits it. Set `template` or `template_file`, not both. A
 missing or unreadable file makes that preview fail.
 
-## Choose the size and frame of each example
+## Set size and frame
 
 Import `Viewport` and `Layout` from `citry.ext.preview`. A viewport sets the
 width and height an example renders at. Set one for the component, or pass
@@ -229,7 +229,7 @@ Give a layout exactly one source: `template`, `template_file`, or
 `Citry` instance, accept `preview` in its `Kwargs`, and accept a `content`
 slot.
 
-## Share defaults across components
+## Share defaults
 
 Set defaults for every component on the `Citry` instance:
 
@@ -250,7 +250,7 @@ A relative layout file set here starts from the working directory at the
 time the extension is created, so use an absolute path if you run the
 command from different directories.
 
-## Build a custom gallery page
+## Build a custom gallery
 
 A custom `page_layout` can list the examples itself. `preview.components`
 holds one group per component, with `component` details and `items`. Each

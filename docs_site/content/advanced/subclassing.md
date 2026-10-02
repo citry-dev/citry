@@ -17,7 +17,7 @@ A subclass inherits every future change to its parent. When the two
 should change independently, render one inside the other's template
 instead.
 
-## Reuse inputs and behavior
+## Inherit behavior
 
 A child inherits its parent's inputs, methods, template, JavaScript, and
 CSS. Override only the method that differs:
@@ -101,7 +101,7 @@ class FreeformMessage(Message):
 overrides `template_data()`, because the inherited one reads
 `kwargs.text`, which no longer exists.
 
-## Replace the template, JavaScript, or CSS
+## Replace inherited code
 
 A component's template, JavaScript, and CSS can each be written inline or
 loaded from a file:
@@ -158,7 +158,7 @@ class StaticCard(BaseCard):
 
 `StaticCard` has no JavaScript. Leaving `js` out would inherit it.
 
-## Add scripts and stylesheets in a child
+## Extend dependencies
 
 The nested `Dependencies` class lists extra script and stylesheet files a
 component needs. A child's `Dependencies` adds to its parents' lists rather
@@ -205,9 +205,9 @@ parents'.
 [Dependency files](/advanced/dependency-files/) covers the forms an entry
 can take, local files, URLs, and how the files are served.
 
-## Errors and duplicate entries
+## Less common cases
 
-### Mixing schema styles across a family
+### Mixing schema styles
 
 Plain classes, dataclasses, named tuples, Pydantic models, and the other
 supported schema styles do not all combine the same way. Citry raises an
@@ -216,13 +216,13 @@ cannot be combined. See
 [Inputs and validation](/concepts/inputs-and-validation/) before mixing
 them.
 
-### Setting both members of a pair
+### Conflicting pairs
 
 Setting both `template` and `template_file` to non-empty values on the
 same class raises `ValueError` when the class is defined. The same applies
 to `js` and `js_file`, and `css` and `css_file`.
 
-### Listing the same dependency twice
+### Duplicate entries
 
 A dependency listed more than once is loaded once, at its first position.
 For a script, the first entry's tag attributes are used, and a later

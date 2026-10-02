@@ -44,7 +44,7 @@ Without these tags, Citry inserts CSS before the first `</head>` and
 JavaScript before the last `</body>`. When the HTML has no `</head>` or
 `</body>`, CSS goes at the start of the output and JavaScript at the end.
 
-## Choose a dependency strategy
+## Choose a strategy { #choose-a-dependency-strategy }
 
 The dependency strategy decides which tags Citry inserts. `str(component)`
 uses `"document"`. To choose another, render first and pass
@@ -73,7 +73,7 @@ html = rendered.serialize(deps_strategy="simple")
 With `"ignore"`, the HTML can look right in tests but have no styles or
 browser behavior if nothing else adds the files.
 
-## Put the tags before or after the output
+## Put tags around output
 
 Use `deps_position` when the output is not a whole HTML page and the code
 that receives it decides where it goes. It works with the `"document"` and

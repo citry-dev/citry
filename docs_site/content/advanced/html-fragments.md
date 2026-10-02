@@ -15,7 +15,7 @@ If the update comes from a Python [event handler](/events/), you do not need
 this page: return the component from the handler and Citry updates the page
 for you. See [Event actions](/events/actions/).
 
-## Render a component as a fragment
+## Render a fragment
 
 Render the component, then serialize it with `deps_strategy="fragment"`:
 
@@ -33,7 +33,7 @@ JavaScript, CSS, or browser behavior comes back as plain HTML.
 JavaScript and CSS, and [Rendering](/concepts/rendering/) explains the
 `render()` and `serialize()` steps.
 
-## Insert into a page that already loaded Citry
+## Insert with Citry
 
 Load Citry's runtime once in the page, then insert the response wherever
 you like:
@@ -63,7 +63,7 @@ Insert the whole response in one step. Do not split it into separate swaps,
 because the fragment's HTML and the data block that describes its
 components must arrive together.
 
-## Insert into a page without Citry
+## Insert without Citry
 
 When the page has not loaded Citry, the fragment brings a small script that
 loads the runtime. That script must run, and a `<script>` added through
@@ -123,7 +123,7 @@ html = Notice().render().serialize(
 Call it before serializing, because the URLs are written into the HTML at
 that point.
 
-## Render a fresh fragment for each insertion
+## Render fresh each time
 
 If a second insertion of the same fragment loses its styling or browser
 behavior, check whether your endpoint returns HTML it serialized earlier.
@@ -153,13 +153,13 @@ def card_fragment():
 A static demo that ships one pre-rendered fragment can insert it once, then
 reload the page to let the reader try again.
 
-## Keep fragments intact in production
+## Keep fragments intact
 
 HTML optimizers and sanitizers must not remove or change the data block a
 fragment carries, or the Citry runtime on the page that reads it. See
-[Preserve interactive HTML](/advanced/vue-runtime/#preserve-interactive-html).
+[Preserve page HTML](/advanced/vue-runtime/#preserve-interactive-html).
 
-## Render fragments on several workers
+## Use several workers
 
 The browser's request for a fragment's JavaScript or CSS may reach a
 different worker from the one that rendered the fragment. Configure a
@@ -169,7 +169,7 @@ shared cache backend so that every worker can serve those files. See
 Use the same URL prefix and cache configuration in the processes that
 render and the processes that serve.
 
-## How a fragment includes its dependencies
+## How assets load
 
 A fragment includes each [dependency](/advanced/dependency-files/)
 according to how you declared it:

@@ -16,7 +16,7 @@ shared file, see [Dependency files](/advanced/dependency-files/). To choose
 where the tags go in the page, see
 [Place JavaScript and CSS](/advanced/asset-placement/).
 
-## Add JavaScript and CSS to a component
+## Add JS and CSS
 
 ```citry
 from citry import Component
@@ -81,7 +81,7 @@ variables do not clash with other scripts on the page.
 [Browser APIs](/reference/browser-apis/#component) lists everything that
 `$component()` and `onServerRender` accept.
 
-## Send data from Python to JavaScript
+## Send data to JS
 
 Return a mapping from [`js_data()`][citry.Component.js_data] to give one
 render's values to its JavaScript. Each key becomes a field on `component`:
@@ -127,7 +127,7 @@ these rules:
 - every value can be turned into JSON, and numbers are finite (`NaN` and
   infinity are rejected).
 
-## Send values from Python to CSS
+## Send values to CSS
 
 Return a mapping from [`css_data()`][citry.Component.css_data] to give one
 render's values to its CSS. Each key becomes a CSS custom property that
@@ -174,7 +174,7 @@ top-level `;` or a `</style` end tag.
     Citry delivers these values as a stylesheet at a URL. Anyone who has
     the URL can download it, so never put a secret in `css_data()`.
 
-## Check the data that a data method returns
+## Check the data
 
 Declare a nested `JsData` or `CssData` class to have Citry check the names
 that `js_data()` or `css_data()` returns. A missing or unexpected name then
@@ -194,7 +194,7 @@ A plain annotated class checks names, not the type of each value. See
 [Inputs and validation](/concepts/inputs-and-validation/) for schema styles
 that also check types.
 
-## Keep the code in separate files
+## Use separate files
 
 Use `js_file` and `css_file` to keep the code in files next to the
 component:
@@ -213,7 +213,7 @@ Citry finds these files the same way it finds `template_file`. Set either
 `js` or `js_file`, not both, and either `css` or `css_file`. Setting both
 raises `ValueError` when the class is defined.
 
-## Highlight inline code in your editor
+## Highlight inline code
 
 JetBrains editors highlight a string in the language named by a comment
 just above it:

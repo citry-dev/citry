@@ -15,7 +15,7 @@ only for what Python rendering cannot show:
   returns;
 - a browser test checks clicks, reactive state, focus, and page updates.
 
-## Give each test its own Citry instance
+## Isolate each test
 
 Defining a component registers it with a [`Citry`][citry.Citry] instance.
 If a test defines a component on the shared default instance, the second
@@ -61,7 +61,7 @@ def app():
     return Citry(autodiscover=False)
 ```
 
-## Check what a user would see
+## Check what users see
 
 Check the text, attributes, and order that matter:
 
@@ -139,7 +139,7 @@ assert "Saved" in html
 assert "Undo" in html
 ```
 
-## Test components that use each other
+## Test nested components
 
 A component's template can use only components registered with the same
 `Citry` instance. Define the parent and its children on one test instance,
@@ -184,7 +184,7 @@ def test_profile_card_contains_the_avatar():
 This checks that `ProfileCard` finds `Avatar`, passes it the name, and
 renders both, all without an HTTP server.
 
-## Test interactive behavior
+## Test browser behavior
 
 A Python render shows the HTML, bindings, and assets Citry sends to the
 browser. It does not run Vue or Citry's browser code, so it cannot show

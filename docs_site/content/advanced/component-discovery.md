@@ -16,7 +16,7 @@ components. In a web app, also call
 [`initialize()`][citry.Citry.initialize] at startup, so that a broken
 component fails before the first request rather than during it.
 
-## Point Citry at your component directory
+## Set the component dirs
 
 Create one [`Citry`][citry.Citry] instance in a module that every component
 can import, and pass it your component directory in `dirs`:
@@ -73,7 +73,7 @@ Build them from `__file__`, as above, or call `Path(...).resolve()`.
 Citry also looks in `dirs` for files that components name, such as a
 `template_file`, after looking next to the component's own module.
 
-## Let discovery run on first use
+## Discover on first use
 
 You do not need to start discovery yourself. Citry runs it the first time
 it needs the full list of components, for example when a template uses a
@@ -101,7 +101,7 @@ Importing a module only registers its classes. Citry does not render the
 components or read their template, JavaScript, or CSS files until a page
 needs them.
 
-## Initialize before starting worker threads
+## Initialize at startup { #initialize-before-starting-worker-threads }
 
 Call [`initialize()`][citry.Citry.initialize] once at startup, before your
 server starts handling requests:
@@ -148,7 +148,7 @@ modules = app.autodiscover(["plugins/components"])
 This does not change `app.settings.dirs`, and it does not count as the
 automatic first-use discovery, which still searches the configured `dirs`.
 
-## Recover from an import error
+## Fix an import error
 
 Discovery stops at the first module that fails to import and raises that
 module's exception. Components from modules imported before it stay
@@ -156,7 +156,7 @@ registered. Components that the failing module registered before the error
 are removed, so after you fix the module, calling discovery again imports
 it cleanly.
 
-## List which components use each other
+## List component usage
 
 Tools such as linters or documentation generators sometimes need to know
 which components use which. Call

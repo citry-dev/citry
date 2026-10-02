@@ -21,7 +21,7 @@ A component has two hooks:
 To change every component in an application at once, write an
 [`Extension`][citry.Extension] instead.
 
-## Replace the output with `on_render()`
+## Replace the output
 
 Citry calls `on_render()` after it prepares the component's data and before
 it renders the template. Return `None` to render the template as usual.
@@ -77,7 +77,7 @@ use [`template_data()`][citry.Component.template_data] instead.
     user input. Put user values in a template or a component input, where
     Citry escapes them.
 
-## Show a message when the component fails
+## Show a failure message
 
 For most error handling, wrap the part that may fail in the built-in
 `<c-error-fallback>` tag; see
@@ -108,7 +108,7 @@ After the `yield`, you can:
 - return `None` to keep a successful result, or to let the error continue
   to the components around this one.
 
-## Change the tags a component adds
+## Change component tags
 
 `on_dependencies()` receives the script and style tags that one rendered
 component adds to the page. Those are its own `js` and `css`, the files in
@@ -150,9 +150,9 @@ HTML, once for each time the component appears on the page.
 Removing the component's own script stops its browser code from running.
 Remove an entry only when the same code reaches the page another way.
 
-## Handle caching, repeated yields, and page-wide tags
+## Less common cases
 
-### A cached render skips `on_render()`
+### Cached renders
 
 When [component caching](/performance/caching/) finds a stored result,
 Citry reuses it and does not run the data methods, the template, or
@@ -160,7 +160,7 @@ Citry reuses it and does not run the data methods, the template, or
 component's inputs, make that value part of the cache key, or the stored
 result outlives the condition that produced it.
 
-### Avoid turning the result into a string inside the hook
+### Avoid `str(result)`
 
 Do not call `str(result)` just to look at the HTML. The render is still
 linked to the components and slot content around it, and turning it into a
@@ -168,27 +168,27 @@ string inside the hook may fail. If you do return serialized HTML, it
 replaces the result, and Citry adds this component's marker attribute to
 it.
 
-### Try several outputs by yielding more than once
+### Yield more than once
 
 Instead of a bare `yield`, you can yield new content. Citry renders it and
 sends back a new `(result, error)` pair, so one hook can try several
 outputs in turn. The [`on_render()` reference][citry.Component.on_render]
 describes every step.
 
-### Duplicate tags after `on_dependencies()` runs
+### Duplicate tags
 
 The hook runs before Citry removes tags that several components share.
 When two components add the same script, the first one wins, together with
 any attribute the hook added. Stylesheets follow stricter rules; see
-[Order files and handle duplicates](/advanced/dependency-files/#order-files-and-handle-duplicates).
+[Order the files](/advanced/dependency-files/#order-files-and-handle-duplicates).
 
-### Change the tags for the whole page
+### Change page-wide tags
 
 The hook sees only this component's tags. An extension's
 `on_dependencies()` hook sees the tags of every component on the page, and
 can also add scripts that run before all others. Citry adds its own
 browser runtime after that hook, so neither hook sees it. See
-[Add scripts and stylesheets to a page](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page).
+[Add scripts and styles](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page).
 
 ## Next steps
 

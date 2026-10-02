@@ -15,7 +15,7 @@ library.
 Code that belongs to the component itself goes in its `js` and `css`. See
 [Component JavaScript and CSS](/advanced/js-and-css-dependencies/).
 
-## Add a library from a URL
+## Add a library URL
 
 List JavaScript URLs in `js` and stylesheet URLs in `css`:
 
@@ -37,7 +37,7 @@ A JavaScript URL becomes a `<script src="...">` tag, and a CSS URL becomes
 a `<link rel="stylesheet">` tag. Files load in the order you list them.
 When several components on a page list the same URL, Citry adds it once.
 
-## Add a file from your project
+## Add a project file
 
 A string that does not start with `http://`, `https://`, or `/` can name a
 file. Citry looks for it next to the Python module that declares the
@@ -97,7 +97,7 @@ c = Citry(
 )
 ```
 
-## Add attributes or inline code to a tag
+## Customize the tag
 
 Use [`Script`][citry.ext.dependencies.Script] or
 [`Style`][citry.ext.dependencies.Style] when the tag needs HTML attributes,
@@ -147,7 +147,7 @@ Script(
 
 A script with a `type` such as `module` or `importmap` is never wrapped.
 
-## Load a stylesheet only for print or another media type
+## Load print styles
 
 Use a mapping to give stylesheets a `media` attribute:
 
@@ -162,7 +162,7 @@ class Dependencies:
 Each key other than `"all"` becomes the `media` value of its stylesheets.
 Stylesheets under `"all"` get no `media` attribute.
 
-## Use plain scripts on interactive pages
+## Use plain scripts
 
 A page is interactive when one of its components needs Citry's browser
 runtime, the JavaScript that Citry adds to run Vue and server events. That
@@ -197,7 +197,7 @@ write ordinary tags, so these attributes work there. On every page, a
 Use `Script` and `Style` themselves, not subclasses of them. A subclass
 raises `TypeError` on an interactive page.
 
-## Order files and handle duplicates
+## Order the files { #order-files-and-handle-duplicates }
 
 Entries from a base component come first, then the child's own entries.
 [Subclassing components](/advanced/subclassing/) shows how to extend or
@@ -215,7 +215,7 @@ the same URL or the same inline content, and adds that file once:
   component lists it under two `media` keys, serialization raises
   `ValueError`. Give such stylesheets different URLs.
 
-## Use other kinds of entries
+## Use other entries
 
 Besides URLs, file paths, `Script`, and `Style`, an entry can be one of
 these:

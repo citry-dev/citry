@@ -37,7 +37,7 @@ Add Citry as a normal package dependency. If a component loads its
 template, JavaScript, or CSS from a file, include those files in the built
 distribution as package data.
 
-## Define a library component
+## Define a component
 
 Subclass [`LibraryComponent`][citry.LibraryComponent] instead of
 `Component`. You write it exactly like a component, but defining it does
@@ -70,7 +70,7 @@ class AcmeBadge(LibraryComponent):
 Do not set `citry` on a library component. Each application that installs
 the library gets its own copy of the class, bound to its own instance.
 
-## List the components in a manifest
+## Write the manifest
 
 The manifest is a [`ComponentLibrary`][citry.ComponentLibrary] object that
 names the library and lists its components, in the order Citry should
@@ -100,7 +100,7 @@ __citry_library__ = ComponentLibrary(
 )
 ```
 
-## Install and use the library
+## Install the library
 
 An application passes the package, or its manifest, to
 [`register_library()`][citry.Citry.register_library]:
@@ -119,7 +119,7 @@ The components then work in templates like any other registered component:
 <c-acme-badge label="Ready" tone="success" />
 ```
 
-## Use a library component from Python
+## Use it from Python
 
 Calling a library component records its inputs. Citry builds the actual
 component when a template inserts the value, using the `Citry` instance
@@ -165,7 +165,7 @@ of that call, because its signature accepts any keyword arguments.
 Your own Python objects can turn into components the same way. See
 [Custom component values](/advanced/custom-component-values/).
 
-## Get the component class for one application
+## Get the bound class
 
 Templates and library calls cover most code. When you need the actual
 component class bound to your `Citry` instance, look it up on the value
@@ -176,7 +176,7 @@ Badge = installed[AcmeBadge]
 html = str(Badge(label="Ready"))
 ```
 
-## Show the library's components in the editor
+## Show it in the editor
 
 The Citry VS Code extension can read the manifest directly. Point
 `citry.app` at it:
@@ -192,9 +192,9 @@ components, but nothing from an application. If the manifest lists
 `required_extensions`, point `citry.app` at a configured `Citry` instance
 that installs the library instead.
 
-## Rules for publishing and installing
+## Publishing rules
 
-### Finish changing the classes before creating the manifest
+### Edit classes first
 
 Creating the manifest locks its components. Setting or deleting a class
 attribute afterwards raises `AttributeError`. Values stored inside an
@@ -202,14 +202,14 @@ attribute, such as a list, are not locked, so treat the whole component
 as read-only from then on. Apply class decorators before you create the
 manifest.
 
-### A failed install leaves nothing behind
+### Failed installs
 
 If validation, a name clash, or an extension hook raises during
 `register_library()`, Citry removes every component the call had
 registered. It cannot undo side effects outside Citry, such as a file an
 import or a hook wrote.
 
-### Installing the same library again
+### Installing again
 
 Registering the same manifest again returns the existing installation. To
 install a changed or reloaded version under the same name, call
@@ -217,7 +217,7 @@ install a changed or reloaded version under the same name, call
 startup again. Without the clear, `register_library()` raises
 [`LibraryManifestChanged`][citry.LibraryManifestChanged].
 
-### Old installation handles stop working
+### Old handles expire
 
 After `Citry.clear()`, the value `register_library()` returned earlier no
 longer gives out classes.

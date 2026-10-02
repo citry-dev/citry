@@ -17,7 +17,7 @@ Policy, and what your deployment must leave untouched. To learn how to add
 Vue behavior to a component, start with
 [Client interactivity](/concepts/client-interactivity/).
 
-## Add Vue behavior without creating a Vue app
+## Add Vue behavior
 
 Give the component browser state and methods in its JavaScript:
 
@@ -52,9 +52,9 @@ which is the Vue build the page already loaded.
 
 To run code each time the server renders the component again, such as
 redrawing a chart, use the `onServerRender` option. See
-[React after a server render](/concepts/client-interactivity/#react-after-a-server-render).
+[React to a re-render](/concepts/client-interactivity/#react-after-a-server-render).
 
-## Use `<c-if>` and `<c-for>` to create components
+## Use Citry control flow
 
 Use Vue's `v-if` and `v-for` for plain HTML inside one component, and give
 each repeated item a stable `:key`.
@@ -63,7 +63,7 @@ Use `<c-if>` and `<c-for>` when the branch or loop creates Citry
 components. Components are created in Python on the server, and Vue cannot
 create them in the browser.
 
-## Keep what the user typed across renders
+## Keep typed input { #keep-what-the-user-typed-across-renders }
 
 A text input, `<textarea>`, or `<select>` keeps the user's edit when its
 component renders again, as long as the value the template gives it has not
@@ -98,7 +98,7 @@ follows `v-model` or `c-checked` as usual.
 When a server render reorders keyed rows, each row keeps its elements, and
 the field the user is typing in keeps its focus and caret.
 
-## Names Citry reserves on the component instance
+## Reserved names { #names-citry-reserves-on-the-component-instance }
 
 Citry adds a few names to each component's Vue instance. Do not define a
 `data()` key, `setup()` value, method, computed value, or injection with one
@@ -129,7 +129,7 @@ A `js_data()` key that matches a prop, `data()` key, `setup()` value,
 method, computed value, or injection of the same component is caught only
 in the browser: the component fails when it first appears.
 
-## Send page content in the served HTML
+## Server-render the page { #send-page-content-in-the-served-html }
 
 The HTML the server sends for an interactive page already contains the
 page's content. Search engines, link previews, and readers without
@@ -160,7 +160,7 @@ Citry writes this HTML from the compiled templates and the data the
 browser receives. It does not run Vue on the server, and it does not
 offer general-purpose Vue server-side rendering.
 
-### What a hydrated page shows before Vue starts
+### Before Vue starts { #what-a-hydrated-page-shows-before-vue-starts }
 
 Until the browser has loaded and started Vue, the page is plain HTML:
 
@@ -186,7 +186,7 @@ Until the browser has loaded and started Vue, the page is plain HTML:
   Citry's mounted routes links its component stylesheets in `<head>`, and a
   standalone page includes them there.
 
-### Wrap a browser-only part in its own element
+### Wrap browser parts
 
 Some content depends on values that exist only in the browser, such as
 text from `data()` or a `v-if` that reads it. The server cannot write it
@@ -207,7 +207,7 @@ so that its siblings are still adopted:
 
 If no element surrounds the part, Vue replaces the whole page instead.
 
-### Send a page without its content
+### Skip server content
 
 Two settings send an empty Vue host and let Vue build the page in the
 browser. Use them only for pages that search engines and readers without
@@ -269,9 +269,9 @@ browser console.
 
 A page with a Content Security Policy is sent with HTML that Vue replaces
 rather than adopts. See
-[Pages Vue replaces instead of adopting](#pages-vue-replaces-instead-of-adopting).
+[Replaced pages](#pages-vue-replaces-instead-of-adopting).
 
-## Send a page without JavaScript
+## Send no JavaScript
 
 Set `security_javascript="omit"` for output that should stay static, such
 as an email. Citry keeps the server-rendered HTML and CSS, and sends no
@@ -282,7 +282,7 @@ Set `security_javascript="forbid"` to make serialization fail when the
 output needs browser behavior. See
 [Choose how much JavaScript Citry may deliver](/security/#choose-how-much-javascript-citry-may-deliver).
 
-## Preserve interactive HTML
+## Preserve page HTML { #preserve-interactive-html }
 
 For an interactive page, Citry keeps your page's `<html>`, `<head>`, and
 `<body>`, and moves the body's content into the generated Vue host. It
@@ -310,7 +310,7 @@ drops the header leaves the page showing its HTML while its components
 never start. See
 [Keep the CORS header when a proxy or CDN serves Citry's files](/security/#keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files).
 
-## Diagnose a runtime failure
+## Diagnose failures
 
 Start with the first `[Citry]` error in the browser console. Later errors
 are often caused by the first one. Common causes:
@@ -323,13 +323,13 @@ are often caused by the first one. Common causes:
 [Troubleshooting](/guides/troubleshooting/) covers the wider server and
 browser investigation.
 
-## Cases where Vue rebuilds the server HTML
+## When Vue rebuilds HTML { #cases-where-vue-rebuilds-the-server-html }
 
 The sections below list the exact cases in which Vue does not adopt the
 server's HTML. Read them when a page loses focus or typed text as Vue
 starts, or when the browser console reports a mismatch.
 
-### Pages Vue replaces instead of adopting
+### Replaced pages { #pages-vue-replaces-instead-of-adopting }
 
 Vue replaces the whole page's server HTML when the page:
 
@@ -370,7 +370,7 @@ HTML fragments are always built in the browser.
     allows. To avoid the reports, allow `'unsafe-hashes'` with the style
     hashes, or move the styles to component CSS.
 
-### Parts Vue builds in the browser
+### Browser-built parts { #parts-vue-builds-in-the-browser }
 
 Vue sets event listeners, bound attributes such as `:aria-expanded` or
 `:hidden`, an input's `value`, and `v-show` itself while it hydrates, so
@@ -415,7 +415,7 @@ browser would run or load twice, such as a `<script>`, an `<iframe>`,
 `onerror`, or an `autofocus` or `autoplay` attribute. A `<textarea>` or
 `<title>` whose text depends on browser state is sent empty too.
 
-### What differs on a hydrated page
+### Hydration differences
 
 After hydration, the page is the same as a page Vue built in the browser,
 except for details a script might notice:
