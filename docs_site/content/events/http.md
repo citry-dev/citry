@@ -1,6 +1,6 @@
 ---
 title: Use event routes directly
-description: Call Citry event handlers through GET requests, native forms, htmx, and dedicated download responses.
+description: Call Citry event handlers by URL from plain HTML forms, htmx, GET requests, and file downloads.
 ---
 
 # Use event routes directly
@@ -80,16 +80,19 @@ The file is the whole HTTP response. By default, the browser may send several
 calls in one request; `bundle=False` makes it send this call on its own.
 
 Call the handler as usual, from `@c-*`, `$sendEvent`, or
-[`Citry.events.send`][Citry.events.send]. The Promise resolves with
-`undefined` once the browser starts saving the file.
+[`Citry.events.send`][Citry.events.send]. With `$sendEvent` or
+`Citry.events.send`, the Promise resolves with `undefined` once the browser
+starts saving the file.
 
 A download cannot be combined with other actions in a list, and its handler
-must not change State. The file response has no room for the new State.
+must not change State, because the file response has no room for the new
+State. Either mistake makes the call fail.
 
 ## Expose a read-only GET endpoint
 
-Allow GET on a handler that only reads data. Browser code, server
-middleware, and the Events OpenAPI command can then use its URL:
+Allow GET on a handler that only reads data. Browser code and other servers
+can then call its URL, and Citry's
+[OpenAPI export](/cli/#run-an-extension-command) describes it:
 
 ```citry
 from citry.ext.events import event
