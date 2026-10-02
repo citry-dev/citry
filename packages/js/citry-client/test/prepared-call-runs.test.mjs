@@ -953,6 +953,6 @@ test("$component() options that Citry cannot check fail with a message naming th
   // An Events helper name is taken; the message says which option to rename.
   assert.throws(
     () => citryRuntime.defineType("app", "Card_abc125", { methods: { $loading() {} } }),
-    /\$component\(\) options for Card_abc125 define "\$loading", a name the Events helpers already use/,
+    /\$component\(\) options for Card_abc125 define "\$loading", a name Citry's event helpers/,
   );
 });

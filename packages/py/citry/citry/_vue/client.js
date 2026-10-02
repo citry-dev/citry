@@ -1860,7 +1860,8 @@
     for (const name of eventPublicNames) if (propsKeys.includes(name) || injectedKeys.includes(name) ||
         own(userOptions.methods || {}, name) || own(userOptions.computed || {}, name))
       throw new Error("$component() options for " + typeKey + " define " + JSON.stringify(name) +
-        ", a name the Events helpers already use. Rename that prop, inject, method, or computed value.");
+        ", a name Citry's event helpers ($loading, $error, $state, $sendEvent, $onEvent) already use. " +
+        "Rename that prop, inject, method, or computed value.");
     for (const name of pluginContextNames) {
       if (propsKeys.includes(name) || injectedKeys.includes(name) || own(userOptions.methods || {}, name) ||
           own(userOptions.computed || {}, name)) {
@@ -1887,8 +1888,7 @@
           ", a name that Citry or a browser plugin already uses. Rename that key.");
       for (const key of Object.keys(occurrence.serverData)) if (own(value, key) || reservedOptionKeys.has(key)) {
         throw new Error("js_data() for " + typeKey + " returns " + JSON.stringify(key) +
-          ", which the $component() options also define in data, methods, computed, inject, or a browser plugin. " +
-          "Rename one of them.");
+          ", which data(), methods, computed, inject, or a browser plugin also defines. Rename one of them.");
       }
       return value;
     };
@@ -1917,7 +1917,8 @@
       if (currentInstance?.proxy) instanceRecords.set(currentInstance.proxy, record);
       if (currentInstance?.ctx) instanceRecords.set(currentInstance.ctx, record);
       for (const key of record.serverKeys) {
-        if (reservedOptionKeys.has(key) || key in this) throw new Error("js_data/public instance collision: " + key);
+        if (reservedOptionKeys.has(key) || key in this) throw new Error("js_data() returns " + JSON.stringify(key) +
+          ", which is also a prop, method, computed value, or other name on the component. Rename one of them.");
         installServerKey(this, record, key);
       }
       // Generated templates read the values Python computed for each occurrence through `$citryPrepared`. The `$citry`
@@ -4421,7 +4422,8 @@
       const nextKeys = new Set(Object.keys(action.serverData));
       const serverShapeChanged = mounted ? signatureKey([...nextKeys].sort()) !==
         signatureKey([...mounted.record.serverKeys].sort()) : false;
-      if (mounted && !typeChanged) for (const key of nextKeys) if (!mounted.record.serverKeys.has(key) && (key in mounted.component || key.startsWith("$") || key.startsWith("_"))) throw new Error("later js_data/public collision: " + key);
+      if (mounted && !typeChanged) for (const key of nextKeys) if (!mounted.record.serverKeys.has(key) && (key in mounted.component || key.startsWith("$") || key.startsWith("_"))) throw new Error("js_data() returned the new key " +
+        JSON.stringify(key) + ", which is already a name on the mounted component or starts with $ or _. Rename it.");
       // Only an occurrence the server did not list as updated must keep its prior payload, so only
       // those payloads are serialized and compared.
       if (!updatedIds.has(action.id) && (added || JSON.stringify(prepared.serverData) !== JSON.stringify(action.serverData) ||
