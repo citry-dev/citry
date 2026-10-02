@@ -13,7 +13,8 @@ Citry is a Rust and Python monorepo. The core lives in Rust crates under
 `crates/`. The `citry-core` package exposes them to Python, and the
 pure-Python `citry` package sits on top.
 
-For how the pieces fit together, see `docs/codebase.md` in the repository.
+For how the pieces fit together, see
+[`docs/codebase.md`]({{ repo_url }}/blob/{{ repo_edit_branch }}/docs/codebase.md){: target="_blank" rel="noopener"}.
 For a shorter overview of ways to help, see the
 [contributing guide](/community/contributing/).
 
@@ -112,7 +113,8 @@ uv run python confirm_setup.py
 
 ## Run the checks { #running-the-checks }
 
-One command runs every check CI runs and reports all the results together:
+One command runs the same checks as the main CI job, `repo--check.yml`,
+and reports all the results together:
 
 ```sh
 python scripts/check.py
@@ -202,7 +204,9 @@ a new file in that directory; `scripts/validate.py` finds and runs it.
   internal refactors and tooling. Each package keeps its own changelog: the
   root `CHANGELOG.md` is for the `citry` package, and other packages keep
   theirs in their own directory.
-- **Read `CLAUDE.md` before touching the template language.** The grammar,
+- **Read [`CLAUDE.md`]({{ repo_url }}/blob/{{ repo_edit_branch }}/CLAUDE.md){: target="_blank" rel="noopener"}
+  before touching the template language.** It holds the repository's rules
+  for contributors and AI agents. The grammar,
   the parsed template structures, and the compiler output are shared by
   every host-language binding. `CLAUDE.md` lists the extra steps a change to
   them needs.
