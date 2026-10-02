@@ -6,7 +6,7 @@ description: Use Citry's managed Vue runtime and preserve interactive component 
 # Vue runtime
 
 When a component on the page uses Vue, Citry loads Vue in the browser,
-starts it over the HTML the server sent, and applies each new server render
+starts Vue on the HTML the server sent, and applies each new server render
 to the live page. You write Vue directives and `$component({...})` options;
 there is no Vue application to create and no build step.
 
@@ -41,9 +41,9 @@ Then use them in the template:
 <p v-show="open">Ships within two working days.</p>
 ```
 
-Citry starts Vue for this component, and also for data seeded from Python
-with `js_data()`, Vue props and events, and the State of
-[server events](/events/). Complete pages and
+Citry also starts Vue for a component that has its own JavaScript, uses
+`js_data()`, uses Vue props or events, or keeps
+[server-event](/events/) `State`. Complete pages and
 [HTML fragments](/advanced/html-fragments/) work the same way.
 
 Citry creates the Vue app itself, so do not mount another Vue app over
@@ -168,7 +168,8 @@ Until the browser has loaded and started Vue, the page is plain HTML:
   visible, and an `aria-expanded` bound to browser state is missing.
 - Submitting a form does an ordinary browser submission, because handlers
   such as `@submit.prevent` are not attached yet.
-- Text typed into an input is replaced by the value the component renders.
+- Text typed into an input before Vue starts is replaced by the rendered
+  value when Vue starts.
 - An element filled only by `v-text` shows its text when the value comes
   from `js_data()` and is a string, a whole number, `True` or `False`
   (shown as `true` and `false`), or `None` (shown as nothing). Other
@@ -332,10 +333,11 @@ starts, or when the browser console reports a mismatch.
 
 Vue replaces the whole page's server HTML when the page:
 
-- uses a Content Security Policy, a `security_javascript` mode other than
-  `"allow"`, script integrity, or a configured i18n extension;
-- has custom `on_dependencies` methods, or extension dependency,
-  serialization, or browser hooks;
+- uses a Content Security Policy, `security_javascript="warn"`, script
+  integrity, or a configured i18n extension;
+- has a component with its own `on_dependencies()` method, or an extension
+  that defines `on_dependencies()`, `on_serialize()`, `on_js_loaded()`, or
+  a browser hook;
 - places assets with a `deps_position` other than the default;
 - has a browser-only part with no element around it, such as a `v-if` at
   the top level of the page component's template;
@@ -350,8 +352,8 @@ text selection, and text typed earlier are lost, and an `<iframe>` or
 
 Some of these pages are sent with an empty Vue host instead:
 
-- a page with a `security_javascript` mode other than `"allow"`, because
-  the check would report every Vue attribute in the HTML;
+- a page with `security_javascript="warn"`, because the warning would list
+  every Vue attribute left in the HTML;
 - a page under a Content Security Policy that would reject its HTML, such
   as an `onclick` attribute or a `javascript:` link;
 - a page whose body contains a `<script>`, for example inside `<c-raw>`,
