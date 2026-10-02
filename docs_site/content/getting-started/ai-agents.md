@@ -94,7 +94,7 @@ interactions that matter to your app yourself.
 The docs describe one Citry version, and your project may use another. Check
 the installed version in the same environment that runs the app:
 
-```console
+```sh
 python -c "from importlib.metadata import version; print(version('citry'))"
 ```
 
