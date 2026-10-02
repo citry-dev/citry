@@ -5,11 +5,12 @@ description: Import your Citry components, use them as tags inside a page, pass 
 
 # Build a page from components
 
-Small components become much more useful when you put them together. In this
-step, you will use two reading lists inside one complete HTML page.
+Real pages are made of many smaller components. In this step you put two
+reading lists inside one complete HTML page, pass each one different data,
+and add a quick check that the page renders what you expect.
 
-Keep `reading_list.py` from [Use data in a
-component](/getting-started/data-in-components/) in the same folder.
+Keep `reading_list.py` from [Use data in
+components](/getting-started/data-in-components/) in the same folder.
 
 ## Create the page
 
@@ -70,29 +71,22 @@ python page.py
 The page contains one list with two books and another with the message
 “Choose your next book.”
 
-## Import components
+## Import the components a page uses
 
-This line matters even though `ReadingList` is not mentioned in the Python
-code below it:
+This line matters even though the Python code below it never mentions
+`ReadingList`:
 
 ```python
 from reading_list import ReadingList
 ```
 
-Importing the module creates the component class and tells Citry that the
-`<c-ReadingList>` tag exists. If you remove the import, Citry cannot find that
-tag when it renders the page.
+Importing the module defines the component class, and that tells Citry the
+`<c-ReadingList>` tag exists. Without the import, Citry cannot find the tag
+when it renders the page.
 
-Larger projects can discover component modules automatically. For now, an
-ordinary import keeps the setup visible. Read
-[Registration](/concepts/registration/) for tag names and Citry instances,
-then
-[Component discovery](/advanced/component-discovery/) for automatic imports
-and startup.
+## Pass fixed text or Python values
 
-## Pass component inputs
-
-The first list receives two kinds of options:
+The first list receives two options:
 
 ```citry-html
 <c-ReadingList
@@ -102,23 +96,17 @@ The first list receives two kinds of options:
 ```
 
 `heading="Reading now"` passes those exact words. The `c-` prefix on
-`c-books` tells Citry to evaluate `current_books` from the page's Python data
-and pass the resulting list.
+`c-books` tells Citry to evaluate `current_books`, the page's own input,
+as a Python expression and pass the resulting list. Use a plain attribute for fixed text and the
+`c-` form for Python values.
 
-Use a plain option for fixed text. Use the `c-` form when the value is a Python
-expression:
+The child receives only the values you pass. It cannot read other variables
+from the page around it, so it behaves the same wherever you use it.
 
-```citry-html
-<c-ReadingList heading="Fixed words" c-books="books_from_python" />
-```
+## Check the rendered page
 
-The child receives only the values you pass. It cannot silently read other
-variables from the page around it, which makes the component safe to reuse.
-
-## Add a render check
-
-You can test the useful result without matching Citry's generated attributes.
-Save this as `check_page.py`:
+A quick check can confirm the page shows the right text, without matching
+the extra attributes Citry generates. Save this as `check_page.py`:
 
 ```python
 from page import ReadingPage
@@ -143,14 +131,21 @@ Run it:
 python check_page.py
 ```
 
-This check describes what a reader should see, and it does not need another
-package. It will keep working when an unimportant generated attribute changes.
+The check looks only for text a reader would see, so it keeps passing when a
+generated attribute changes. It needs no extra package.
 
 [Testing components](/advanced/testing/) shows how to turn checks like this
 into pytest tests and add browser or framework coverage for larger projects.
 
+!!! note "Find components without importing each one"
+
+    Larger projects can import component modules automatically. Read
+    [Registration](/concepts/registration/) for how tag names map to
+    classes, then [Component discovery](/advanced/component-discovery/)
+    for automatic imports.
+
 ## Next steps
 
-You now have a complete page made from smaller pieces, and you have checked its
-meaningful output. Next, [add flexible content with named areas and useful
+You now have a complete page made from smaller pieces, and you have checked what
+it shows. Next, [add flexible content with named areas and useful
 fallbacks](/getting-started/add-slots/).
