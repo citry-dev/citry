@@ -147,9 +147,9 @@ replaces it:
   it and builds the page when it starts, in one step, so the browser never
   shows an empty page in between.
 
-Most pages are adopted.
+Most pages are adopted. The
 [When Vue rebuilds HTML](#cases-where-vue-rebuilds-the-server-html)
-lists when Vue replaces a page or builds part of it in the browser.
+section lists when Vue replaces a page or builds part of it in the browser.
 
 Vue starts after the browser has read the whole page, so the content can
 appear first. Your own `defer` and module scripts placed before Citry's

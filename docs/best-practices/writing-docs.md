@@ -106,7 +106,9 @@ cut-off end is still obvious.
 
 When you shorten a heading that other pages link to, keep its old anchor
 by writing it in braces after the heading, as in
-`## Swap in a component { #swap-in-a-different-component }`.
+`## Swap in a component { #swap-in-a-different-component }`. Then update
+any link text elsewhere that quotes the old heading, so a reader who
+follows the link finds the title they clicked.
 
 The `heading_length` check, which runs with the other docs checks in
 `python -m docs_site build-check`, lists every `##` and `###` heading over

@@ -496,7 +496,7 @@ inside the group's tag. The error appears when a separate component writes
 that content and the page passes that component in. Move the content
 inside the group's tag, or set `transparent = True` on the component that
 writes it, so it renders its content in place. See
-[Pass Vue content into a group component](/syntax/vue/#keep-vue-bound-group-content-inside-the-groups-tag).
+[Fill group components](/syntax/vue/#keep-vue-bound-group-content-inside-the-groups-tag).
 
 ## Check `#c-ignore` { #check-your-c-ignore-markers }
 
