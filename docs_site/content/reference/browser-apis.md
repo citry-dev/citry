@@ -50,6 +50,14 @@ The object accepts `props`, `inject`, `data()`, a synchronous `setup()`,
 `methods`, `computed`, and lifecycle hooks, with Vue's usual rules. Citry
 combines them with its own component code.
 
+The callback form is short for [`onServerRender`](#on-server-render):
+
+```js
+$component(({ component, revision, onEvent }) => {
+  console.log(component, revision, onEvent);
+});
+```
+
 Citry rejects:
 
 - `mixins` and `extends`;
@@ -59,14 +67,6 @@ Citry rejects:
   must return a plain object of bindings, or `undefined`;
 - a public name that is also a [`js_data()`](#js-data-members) key or an
   [Events helper](#component-events-helpers).
-
-The callback form is short for [`onServerRender`](#on-server-render):
-
-```js
-$component(({ component, revision, onEvent }) => {
-  console.log(component, revision, onEvent);
-});
-```
 
 <h3 class="doc-heading" id="on-server-render"><code>onServerRender</code></h3>
 
@@ -104,9 +104,9 @@ The callback receives one object with these members:
 | Name | Value |
 | --- | --- |
 | `component` | The live Vue instance of this component. |
-| `revision` | The server revision the component now shows. |
+| `revision` | A number that identifies the server render the component now shows. It changes when a server render updates the page. |
 | [`onEvent(name, handler)`](#on-server-render-on-event) | Listens for an event this component's server handler dispatches. Returns a function that stops listening. |
-| `id` | The component's current render ID, the value `Citry.events.send()` accepts and the `instance` in `citry:events:*` details. `null` when the component has none. Read-only. |
+| `id` | The render ID: the ID Citry gives this rendered component on the page. It is the value `Citry.events.send()` accepts and the `instance` in `citry:events:*` details. `null` when the component has none. Read-only. |
 | `els` | The component's top-level elements on the page, as an array. |
 | `state` | The same object as [`component.$state`](#state), or `null` when the component declares no `Events`. |
 | `sendEvent(name, args?, opts?)` | Calls [`component.$sendEvent`](#send-event). |
@@ -145,11 +145,10 @@ $component({
 returns a rejected Promise that says the component declares no `Events`
 class.
 
-**`els` updates.** `els` is the same array for the component's whole life.
-Citry refills it after each server render, and each time you read `els`
-from the callback's object, so an `els` you saved earlier still follows
-server renders. It does not follow a change made only in the browser, such
-as a `v-if` toggle, until the next refill.
+**`els` updates.** `els` stays one array for the component's whole life.
+Citry refills it after each server render, so an `els` you saved earlier
+stays current. A change made only in the browser, such as a `v-if` toggle,
+shows up in `els` after the next server render.
 
 **`init`.** `init` is another name for `onServerRender` in the object form
 and receives the same object. A definition that names both throws an error
@@ -164,7 +163,7 @@ $component({
 });
 ```
 
-<h4 class="doc-heading" id="on-server-render-on-event"><code>onEvent</code> in the callback context</h4>
+<h4 class="doc-heading" id="on-server-render-on-event"><code>onEvent</code> in the callback</h4>
 
 Listen for an event that this component's server handler dispatches, for
 as long as the current callback run lasts. It takes the same arguments as
@@ -222,7 +221,9 @@ not a `GET`. Validate it on the server like any user input.
 
 - Nested values, and fields not listed as browser-writable, are read-only.
 - Fields that are not public do not appear on `$state`.
-- An invalid assignment throws at once and keeps the old value.
+- Assigning an unknown field, a field that is not browser-writable, or a
+  nested value throws an `Error` at once. A value that is not plain JSON
+  data throws a `TypeError`. Either way the old value stays.
 
 When a handler changes State, its response updates these fields even if
 the component does not render again. A field the browser changed but has
@@ -231,7 +232,8 @@ not sent yet keeps the browser's value.
 <h3 class="doc-heading" id="loading"><code>$loading</code></h3>
 
 Check whether a server call is waiting or running, for example to disable
-a button. Pass a handler name to check only that handler. An unknown
+a button. Returns `true` or `false`. Pass a handler name to check only that
+handler. An unknown
 handler name throws an error.
 
 ```citry-html
@@ -255,6 +257,13 @@ throws an error. A successful call clears its own handler's error.
 
 Call a server handler from JavaScript when your code needs the result. When
 it does not, use an `@c-*` binding in the template instead.
+
+```text
+$sendEvent(name, args?, opts?)
+```
+
+`args` must be a plain object; anything else rejects the Promise. For
+example:
 
 ```js
 const result = await this.$sendEvent("preview", {page: 2});
@@ -324,11 +333,12 @@ The object has five methods.
 
 Call a server handler on any mounted component:
 
-```js
+```text
 Citry.events.send(target, name, args?, opts?)
 ```
 
-`target` is a current render ID, or an element inside the mounted
+`target` is a current render ID (the `id` in the
+[`onServerRender`](#on-server-render) callback), or an element inside the mounted
 component. The Promise and `opts` work as for
 [`$sendEvent`](#send-event). The Promise rejects when no mounted component
 matches `target`, when more than one does, when the handler name is
@@ -392,8 +402,10 @@ Citry.events.registerTransport("bridge", {
 });
 ```
 
-`send` receives the call's message (the envelope) and a description of the
-HTTP request, and returns the result envelope or a Promise for it.
+`send` receives the envelope, the JSON object Citry would post to the
+event route, and a description of the HTTP request. It returns the JSON
+object the server would answer with (the result envelope), or a Promise
+for it.
 Registering a name again replaces the earlier transport. An empty name, or
 an object without a `send` function, throws a `TypeError`.
 [Custom event transports](#custom-event-transports) shows a complete
