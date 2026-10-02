@@ -5,16 +5,31 @@ description: Move django-unicorn state, actions, validation, and browser calls t
 
 # Migrate from django-unicorn
 
-If a component sends every public attribute on each interaction, it becomes
-hard to tell which values are truly part of the client contract. In Citry,
-render inputs live in `Kwargs`, round-trip values live in an explicit `State`,
-and browser calls reach only methods declared in `Events`.
+This guide is for django-unicorn users porting components to Citry. It
+shows where each part of a `UnicornView` goes: its attributes, its methods,
+its validation, and the JavaScript calls it makes.
 
-The template vocabulary remains familiar. The important shift is from an
-implicit mutable view object to a small declared State plus a fresh component
-tree returned by each handler that changes the page.
+Much of the template vocabulary carries over. `unicorn:click` becomes
+`@c-click`, `unicorn:model` becomes a `:c-*` binding with matching debounce
+and lazy modifiers, and loading states, errors, and polling all have direct
+equivalents. An `@c-*` attribute calls a Python handler when a browser
+event fires, and a `:c-*` attribute connects a form control to a State
+field.
 
-The Citry examples assume the configured `citry_app` from
+What changes most is where values live. django-unicorn sends every public
+attribute back and forth and re-renders the component after each method
+call. In Citry, two places hold those values, and a third piece changes them:
+
+- `Kwargs` are the inputs a component is rendered with. See
+  [Inputs and validation](/concepts/inputs-and-validation/).
+- [`State`][citry.Component.State] lists only the values a later call needs.
+  Citry sends them to the browser with the rendered component and gets them
+  back with the next call. See [Event state](/events/state/).
+- A **handler** is a public method in the component's nested `class Events`.
+  The browser calls it by name, and the handler returns the new render
+  itself. See [Server events](/events/).
+
+The Citry examples assume the `citry_app` instance configured in
 [Server events](/events/#configure-a-signing-secret-before-using-state)
 and these imports:
 
@@ -25,10 +40,56 @@ from citry import Component
 from citry.ext.events import EventError, actions
 ```
 
-## Move bound attributes into State
+## Syntax mapping
 
-A django-unicorn search commonly puts the query directly on the view and lets
-the framework re-render after the method call:
+| django-unicorn | Citry |
+|---|---|
+| Public view attribute | A `State` field if a later call needs it; otherwise `Kwargs` |
+| Method on `UnicornView` | Public method inside `class Events` |
+| `unicorn:click="save"` | `@c-click="save"` |
+| `unicorn:click="rate(5)"` | `@c-click="rate({ stars: 5 })"` with a typed `data` class |
+| `unicorn:model="query"` | `:c-query` to show it, `:c-query="refresh"` to update and call |
+| `.debounce-300` | `.debounce.300ms` |
+| `.lazy`, `.prevent`, `.stop` | Same names |
+| Automatic re-render | Return a new component from the handler |
+| `ValidationError` | `raise EventError(..., fields=...)` |
+| `unicorn.errors` | `$error("save").fieldErrors` |
+| Loading attributes | `$loading()` or `$loading("save")` |
+| `unicorn:poll` | `@c-poll.2s="refresh"` |
+| `self.call("fn", ...)` | `actions.Dispatch(name, detail)` plus a browser listener |
+| `Unicorn.call(...)` | `$sendEvent(name, args)` or `Citry.events.send(...)` |
+| Component `key` | `#c-key` on repeated items |
+
+The sections below show the common rows in context.
+
+## Fix dynamic attributes
+
+When you copy a template over, check its attributes first. Citry evaluates
+Python in text between tags, but an ordinary HTML attribute value stays a
+literal string:
+
+```citry-html
+<!-- Wrong in a Citry template: the browser receives
+     {{ profile_url }}. -->
+<a href="{{ profile_url }}">Profile</a>
+```
+
+Prefix the attribute with `c-`, and Citry evaluates its value as a Python
+expression:
+
+```citry-html
+<!-- Right: profile_url is evaluated during rendering. -->
+<a c-href="profile_url">Profile</a>
+```
+
+The same applies to `action`, `src`, `class`, and any other attribute. Text
+between tags still uses `{{ expression }}`. See
+[Attributes](/syntax/dynamic-attributes/#c-dynamic-attributes).
+
+## Bind values to State
+
+A django-unicorn live search usually keeps the query on the view and
+re-renders after the method call:
 
 ```python
 class LiveSearchView(UnicornView):
@@ -43,68 +104,61 @@ class LiveSearchView(UnicornView):
 <button unicorn:click="refresh">Search</button>
 ```
 
-In Citry, `query` is both an initial render input and a value needed by later
-calls, so `State` inherits it from `Kwargs`. The binding names the handler that
-receives the updated value:
+In Citry, `query` is both a render input and a value the next call needs, so
+`State` inherits it from `Kwargs`. The binding names the handler to call when
+the value changes:
 
 ```citry
 --8<-- "docs_site/snippets/migrate_unicorn.py:live-search"
 ```
 
-`:c-query.debounce.300ms="refresh"` waits for 300 ms of quiet, sends the
-declared field update alongside the current signed State token, and calls
-`refresh`. The token contains the full declared State. The handler builds a new
-`LiveSearch` explicitly. Focus, the input value, and the caret survive the
-update.
+`:c-query.debounce.300ms="refresh"` waits until the user stops typing for
+300 ms, writes the new text into `state.query`, and calls `refresh`. The
+handler returns a new `LiveSearch` for that query. The input keeps its focus,
+text, and cursor position through the update.
 
-If several handlers render the same component, add an author-defined helper
-to the State class if it makes the repeated constructor clearer:
+By default, Citry signs State before sending it to the browser, so the
+server can detect a changed value. Anyone can still read it in the page
+source. Keep State small, and keep secrets out of it.
 
-```python
-class State(Kwargs):
-    def render(self):
-        return LiveSearch(query=self.query)
-```
+## Pass call arguments
 
-`render()` is ordinary application code, not a State method supplied by
-Citry.
-
-## Replace wire expressions with typed handlers
-
-django-unicorn accepts Python-like call strings and direct property setters:
+django-unicorn accepts Python-like call strings and property assignments in
+the template:
 
 ```html
 <button unicorn:click="rate(5)">Five stars</button>
 <button unicorn:click="rating=0">Clear</button>
 ```
 
-Citry uses one Vue object expression as event data, then validates it
-against the handler's declared input:
+In Citry, a call passes one object. The handler's `data` parameter receives
+it, checked against the class you annotate it with:
 
 ```citry
 --8<-- "docs_site/snippets/migrate_unicorn.py:rating"
 ```
 
-This makes each mutation a greppable method with one schema. Load models from
-validated ids inside the handler and repeat authorization there.
+Every change to the component is now a named method with one input type.
+When the input carries a database id, load the record inside the handler and
+check the current user's permission there.
 
-## Return field errors without replacing the form
+## Return field errors
 
-In django-unicorn, form integration or a `ValidationError` populates the
-component error collection during its automatic re-render. Citry makes the
-failed-call behavior explicit: raise `EventError` and do not render.
+In django-unicorn, a `ValidationError` fills the component's error collection
+during the automatic re-render. In Citry, the handler raises `EventError` and
+returns no render:
 
 ```citry
 --8<-- "docs_site/snippets/migrate_unicorn.py:validation"
 ```
 
-The response carries status 422 and the field map. `$error("save")` exposes
-that handler's map to Vue, while the existing form stays in the DOM with
-everything the user typed. A later successful `save` call clears that error
-without clearing errors retained for other handlers.
+The browser receives a `422` response with the field messages.
+`$error("save")` holds them for the `save` handler, and the form stays on the
+page with everything the user typed. The next successful `save` call clears
+that error. Errors from other handlers stay until their own next success.
 
-Citry has no built-in wiring for Django `Form` and `ModelForm`. Run the form
-in the handler and translate `form.errors` yourself:
+Citry does not connect Django `Form` or `ModelForm` for you. Run the form in
+the handler and pass its errors on:
 
 ```python
 if not form.is_valid():
@@ -117,11 +171,12 @@ if not form.is_valid():
     )
 ```
 
-## Replace server-selected JavaScript calls with browser events
+[Handle and validate forms](/events/forms/) covers typed form data in full.
 
-django-unicorn can queue a named JavaScript function from Python. When
-`showToast` has been added to Unicorn's `ALLOWED_JS_CALL_LIST`, an existing
-component may call it like this:
+## Replace self.call
+
+django-unicorn can ask the browser to run a named JavaScript function. With
+`showToast` in Unicorn's `ALLOWED_JS_CALL_LIST`, a component might do this:
 
 ```python
 def save(self):
@@ -129,94 +184,83 @@ def save(self):
     self.call("showToast", "Preferences saved")
 ```
 
-Citry handlers return a closed set of actions. Dispatch a named browser event,
-then let page JavaScript decide how it appears:
+A Citry handler cannot name a JavaScript function to run. Instead, it returns
+`actions.Dispatch`, which fires a named browser event, and JavaScript on the
+page decides what to show:
 
 ```citry
 --8<-- "docs_site/snippets/migrate_unicorn.py:browser-event"
 ```
 
-Listen with `$onEvent("Preferences:saved", callback)` in Vue or
-Component.js, or with ordinary `addEventListener`. This keeps Python from
-selecting and invoking arbitrary client functions. Prefix the event name with
-the component name, as in `Preferences:saved`; `actions.Dispatch` rejects
-names that start with `citry:` because the runtime uses them for its own
-events.
+In the component's JavaScript, listen with the `onEvent` function that
+`onServerRender` receives (see
+[Event actions](/events/actions/#notify-browser-code-that-something-happened)),
+or with `addEventListener` on an element above it. Start the name with the component's name, as here. Names that start
+with `citry:` are reserved, and `actions.Dispatch` rejects them.
+[Event actions](/events/actions/) lists everything a handler can return.
 
-Local-only interactions stay in Vue. For example,
-`@click="$state.expanded = !$state.expanded"` changes writable State locally,
-and the next server call carries the queued update.
+## Change State locally
 
-## Translate dynamic HTML attributes
-
-Citry evaluates Python in text interpolation, but ordinary HTML attribute
-values remain literal strings:
+Citry components are also Vue components, so a change that needs no Python
+can stay in the browser. `$state` is a Vue object that holds the component's
+State:
 
 ```citry-html
-<!-- Wrong in a Citry template: the browser receives
-     {{ profile_url }}. -->
-<a href="{{ profile_url }}">Profile</a>
+<button @click="$state.expanded = !$state.expanded">
+  Toggle
+</button>
 ```
 
-Use the `c-` dynamic-attribute prefix:
+The click makes no request. The next server call from this component sends
+the new value along, unless that call uses GET. See
+[Keep rapid local changes in the browser](/events/bindings/#keep-rapid-local-changes-in-the-browser).
 
-```citry-html
-<!-- Right: profile_url is evaluated during rendering. -->
-<a c-href="profile_url">Profile</a>
-```
+## Plan for differences
 
-The same rule applies to dynamic `action`, `src`, `class`, and other HTML
-attributes. Keep `{{ expression }}` for element text.
+### Declare State fields
 
-## Syntax mapping
+Citry has no public-by-default attributes, dotted property setters, or
+Python call expressions in the template. It also does not turn an id into a
+model instance for you. Declare State fields, named handlers, and typed
+`data` classes, and load records inside the handler. To control which State
+fields browser code may read or change, see
+[Limit what the browser can read and change](/events/state/#limit-what-the-browser-can-read-and-change).
 
-| django-unicorn | Citry Events |
-|---|---|
-| Public view attribute | A declared `State` field if it must round-trip; otherwise `Kwargs` or derived template data |
-| `unicorn:click="save"` | `@c-click="save"` |
-| `unicorn:click="rate(5)"` | `@c-click="rate({ stars: 5 })"` with typed `data` |
-| `unicorn:model="query"` | `:c-query` for display, or `:c-query="refresh"` for update plus call |
-| `.debounce-300` | `.debounce.300ms` |
-| `.lazy` | `.lazy` |
-| `.prevent` / `.stop` | `.prevent` / `.stop` |
-| Method on `UnicornView` | Public method inside `class Events` |
-| Automatic re-render | Return a fresh component or `state.render()` helper you define |
-| `ValidationError` / `unicorn.errors` | `EventError(..., fields=...)` / `$error("save").fieldErrors` |
-| Loading attributes | `$loading()` or `$loading("save")` in a Vue expression |
-| `unicorn:poll` | `@c-poll.2s="refresh"` |
-| `self.call("fn", ...)` | `actions.Dispatch(name, detail)` plus a browser listener |
-| `Unicorn.call(...)` | `$sendEvent(name, args)` or `Citry.events.send(...)` |
-| Component `key` | `#c-key` on reorderable or interactive children |
+### Build dirty markers
 
-## Keep State explicit and small
+There is no equivalent of `unicorn:dirty`. When a form needs one, build it
+from Vue state and the
+[events Citry fires around each call](/reference/browser-apis/#events-fired-around-each-call).
 
-Citry intentionally has no public-by-default attribute bag, dotted property
-setter, ORM-primary-key revival, or Python call-expression parser on the wire.
-Those features blur data, routing, and authorization into one input language.
-The replacement is a short explicit list: State fields, named Events methods,
-typed data, and record loading inside the handler.
+### Handle offline calls
 
-Dirty-input styling can be built from Vue state and lifecycle events when a
-form needs it. Offline call queues are left to application-specific code
-because replaying a mutation across a deployment is rarely safe. Citry's
-built-in payload codecs do not parse multipart uploads; a custom payload codec
-can pass `UploadedFile` values to the handler. A file-producing handler can use
-`actions.Download(...)` when it is marked `@event(bundle=False)` and called
-through its per-event route; check the
-[parity matrix](/guides/events-migration-parity/) before porting upload flows.
+Citry does not queue calls while the browser is offline. Replaying a change
+after a deployment is rarely safe, so it is left to application code.
+
+### Accept file uploads
+
+Citry does not read multipart file uploads by default. To accept files,
+register a custom payload codec, a class that turns the request body into
+handler input, and have it produce `UploadedFile` values. A handler marked
+`@event(bundle=False)` can return `actions.Download(...)`; see
+[Event actions](/events/actions/).
+Check the [parity matrix](/guides/events-migration-parity/) before porting an
+upload flow.
 
 ## Finish the port
 
 Before shipping a migrated component, check that:
 
-- only values needed by a later call are in State;
-- `_public` and `_model` narrow client access where the default is too broad;
+- State holds only values a later call needs;
+- `_public` and `_model` narrow browser access where the default is too
+  broad;
 - every handler returns the render or action that should happen;
-- validation failures raise `EventError` without destroying the form;
-- every database id from State or `data` is authorized again; and
-- reorderable interactive children carry stable `#c-key` values.
+- validation failures raise `EventError` and leave the form in place;
+- every database id from State or `data` is checked against the current
+  user; and
+- repeated interactive items carry a stable `#c-key`.
 
-Continue with [State](/events/state/), [event bindings](/events/bindings/), and
-[event actions](/events/actions/) for the full Citry workflow. The
-[Events migration parity matrix](/guides/events-migration-parity/) shows
-how Citry handles the broader django-unicorn capabilities.
+The [Events migration parity matrix](/guides/events-migration-parity/)
+compares the rest of django-unicorn's features with Citry.
+[Event state](/events/state/), [Bind events in templates](/events/bindings/),
+and [Event actions](/events/actions/) cover the full workflow.
