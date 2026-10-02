@@ -5,30 +5,43 @@ description: Send a click to a Python event handler and show its answer without 
 
 # Call Python from a click
 
-Now add a button that reaches a Python handler through Citry's mounted routes.
-Python will load the picker choices without reloading the page.
+Some clicks need the server: load records from a database, save a change,
+check a permission. In this step a "Load choices" button runs a Python
+method, and the picker shows the choices Python sends back, without
+reloading the page.
+
+A Python method that the browser can call this way is an **event handler**.
+You put event handlers in a nested `class Events` on the component.
+
+## Replace the components
 
 Replace `components.py` with this version:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step9.py" language="citry" />
 
-Keep `citry_setup.py` and `app.py` unchanged. Open
-`http://127.0.0.1:8000/` and select “Load choices.”
+Keep `citry_setup.py` and `app.py` as they are. Open
+`http://127.0.0.1:8000/` and click “Load choices.”
 
-## Send the click to Python
+## Send clicks to Python
 
 ```citry-html
 <button type="button" @c-click="load_choices">Load choices</button>
 ```
 
-`@click` handles a browser interaction in Vue. Citry reserves `@c-*` bindings
-for [server events](/events/bindings/). Here `@c-click` sends a request to the
-mounted Citry route and calls `ChoicePicker.Events.load_choices`.
+Vue's `@click` runs code in the browser. Citry's `@c-click` sends the click
+to the server and runs the event handler with that name,
+`ChoicePicker.Events.load_choices`. Other browser events work the same way
+with an `@c-` prefix, as [Bind events in templates](/events/bindings/) shows.
 
-Treat all event input as untrusted. Authenticate the caller and check
-permissions in the handler just as you would in any route.
+!!! warning "Check permissions in every event handler"
 
-## Return a browser event
+    Anyone can send a request to an event handler, just as they can to any
+    route, so treat everything it receives as untrusted. Check who the
+    user is and what they may do inside the handler.
+
+## Send the result back
+
+The handler loads the choices and returns a browser event that carries them:
 
 ```python
 class Events:
@@ -40,19 +53,15 @@ class Events:
         )
 ```
 
-[`actions.Dispatch`][citry.ext.events.actions.Dispatch] asks the browser to
-fire an event with that name and JSON detail. Start the name with the
-component's name, as in `ChoicePicker:loaded`, so it does not clash with events
-from other components. Citry rejects names that start with `citry:`, because
-its own browser events use that prefix.
+[`actions.Dispatch`][citry.ext.events.actions.Dispatch] tells the browser to
+fire an event with that name, and attach the dictionary as the event's
+`detail`. The dictionary must be JSON-serializable. Start the name with the
+component's name, as in `ChoicePicker:loaded`, so it does not clash with
+events from other components.
 
-The event fires on the calling component's first element and bubbles up the
-page, so ordinary page scripts can listen for it too. Inside the component,
-listen with [`onEvent`][onEvent] instead. Citry passes that function to
-[`onServerRender`][onServerRender], a `$component` option that runs after the
-component mounts and again after each server render. `onEvent` hears only
-events that this component's own Python handlers dispatch, and passes your
-callback the event detail:
+## Listen for the result
+
+The component listens for that event in its JavaScript:
 
 ```js
 onServerRender({ component, onEvent }) {
@@ -64,7 +73,13 @@ onServerRender({ component, onEvent }) {
 }
 ```
 
-The method stores the list and first choice:
+[`onServerRender`][onServerRender] is a `$component` option. Citry runs it
+when the component first appears on the page, and again each time Python
+sends new HTML for the component. It receives [`onEvent`][onEvent], which
+listens only for events dispatched by this component's own Python handlers, and passes your
+callback the event's `detail`.
+
+`loadChoices` stores the list and selects the first choice:
 
 ```js
 $component({
@@ -80,20 +95,40 @@ $component({
 });
 ```
 
-In `components.py` above, the `<c-ChoiceButton>` child receives the selected
-choice through `:label` and emits `select` to ask the picker to advance it.
-Neither step needs Python to render new HTML.
+From there, the browser does the rest, as in the earlier steps: the
+`<c-ChoiceButton>` child shows the current choice through `:label`, and its
+`select` event moves to the next choice. Python does not render new HTML.
 
-`@c-click` starts the call without exposing its Promise result. When component
-code needs a returned [`actions.Data`][citry.ext.events.actions.Data] value,
-call [`$sendEvent`][$sendEvent] instead.
+!!! note "Other ways to get a result back"
 
-## Loading state
+    `@c-click` does not give your JavaScript the handler's return value.
+    When component code needs a value back, call
+    [`$sendEvent`][$sendEvent] and return
+    [`actions.Data`][citry.ext.events.actions.Data] from the handler.
 
-`:disabled="$loading('load_choices')"` disables the button during the call,
-and `v-show="$loading('load_choices')"` shows its progress text. Both values
-are scoped to this component instance.
+    The dispatched event also bubbles up the page from the component's
+    first element, so page scripts outside the component can listen for
+    it. Event names that start with `citry:` are reserved for Citry's own
+    events, and `actions.Dispatch` rejects them.
+
+## Show progress
+
+`$loading('load_choices')` is true while the call is running:
+
+```citry-html
+<button
+  type="button"
+  :disabled="$loading('load_choices')"
+  @c-click="load_choices"
+>
+  Load choices
+</button>
+<span v-show="$loading('load_choices')">Loading...</span>
+```
+
+While this component's `load_choices` call runs, the button is disabled
+and the “Loading...” text shows.
 
 ## Next steps
 
-Next, [carry state between Python calls](/getting-started/state/).
+Next, [keep values between Python calls](/getting-started/state/).

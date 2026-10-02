@@ -5,19 +5,22 @@ description: Reuse a component contract while changing its template, browser cod
 
 # Subclassing components
 
-Subclass a component when several variants deliberately share the same inputs
-and behavior. Put the shared work on one base class, then let each child change
-only the part that makes it different.
+Sometimes you need several versions of one component: a card and a linked
+card, a dialog and a confirm dialog. They take the same inputs and behave
+the same way, and differ only in one part, such as the template or the
+styles.
 
-When two pieces need independent public APIs, build one from the other as
-nested components. Inheritance is most useful when every child really is
-another form of the same component.
+Subclass the component for this. Put the shared parts on a base class, and
+let each child change only what makes it different.
 
-## Reuse Python inputs and behavior
+A subclass inherits every future change to its parent. When the two
+should change independently, render one inside the other's template
+instead.
 
-A child keeps the inputs and methods of its parent. Declare another nested
-schema on the child when it needs more fields. Citry combines those fields
-with the ones from the parent.
+## Inherit behavior
+
+A child inherits its parent's inputs, methods, template, JavaScript, and
+CSS. Override only the method that differs:
 
 ```citry
 from citry import Component
@@ -27,13 +30,10 @@ class Message(Component):
     class Kwargs:
         text: str
 
-    class Slots:
-        pass
-
     def template_data(
         self,
         kwargs: Kwargs,
-        slots: Slots,
+        slots,
     ) -> dict[str, str]:
         return {"message": self.format_message(kwargs.text)}
 
@@ -46,73 +46,73 @@ class Message(Component):
 
 
 class LoudMessage(Message):
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
-
     def format_message(self, text: str) -> str:
         return text.upper()
 ```
 
-The empty nested declarations give `LoudMessage` its own schema types while
-keeping the fields from `Message`. It also keeps the parent's data method and
-template. The inherited `template_data()` calls the child's
-`format_message()`, so the final text is uppercase.
+`LoudMessage(text="Saved")` renders `<p>SAVED</p>`. The inherited
+`template_data()` calls the child's `format_message()`.
 
-A child may also call `super()` and adjust the returned data:
+## Add inputs in a child
+
+Declare a nested `Kwargs` on the child with only the new fields. Citry
+combines them with the parent's fields, so `SignedMessage` takes both
+`text` and `author`:
 
 ```citry
-class TitledMessage(Message):
+class SignedMessage(Message):
     class Kwargs:
-        pass
-
-    class Slots:
-        pass
+        author: str
 
     def template_data(
         self,
         kwargs: Kwargs,
-        slots: Slots,
+        slots,
     ) -> dict[str, str]:
         data = super().template_data(kwargs, slots)
-        data["message"] = f"Notice: {data['message']}"
+        data["message"] += f" ({kwargs.author})"
         return data
 ```
 
-Citry combines the same set of declarations across a component family:
+The child calls `super().template_data()` and adjusts the result.
 
-- [`Kwargs`][citry.Component.Kwargs] and [`Slots`][citry.Component.Slots] describe inputs;
-- [`TemplateData`][citry.Component.TemplateData], [`JsData`][citry.Component.JsData], and [`CssData`][citry.Component.CssData] describe returned data;
-- the events extension adds [`State`][citry.Component.State] and [`Events`][citry.Component.Events].
+Citry combines these nested declarations the same way:
 
-Set a declaration to `None` when the child should start without the parent's
-declaration:
+- [`Kwargs`][citry.Component.Kwargs] and [`Slots`][citry.Component.Slots],
+  which describe the inputs;
+- [`TemplateData`][citry.Component.TemplateData],
+  [`JsData`][citry.Component.JsData], and
+  [`CssData`][citry.Component.CssData], which describe the data methods
+  return;
+- [`State`][citry.Component.State] and [`Events`][citry.Component.Events],
+  from [server events](/events/).
+
+To start a child without the parent's declaration, set it to `None`:
 
 ```citry
 class FreeformMessage(Message):
     Kwargs = None
+
+    def template_data(self, kwargs, slots):
+        return {"message": kwargs.get("text", "")}
 ```
 
-Plain classes, dataclasses, named tuples, Pydantic models, and other supported
-schema styles do not all combine in the same way. Citry reports incompatible
-mixtures when the child class is created. See
-[Inputs and validation](/concepts/inputs-and-validation/) before mixing schema
-styles across a component family.
+`FreeformMessage` declares no `Kwargs`, so it accepts any inputs. It also
+overrides `template_data()`, because the inherited one reads
+`kwargs.text`, which no longer exists.
 
-## Change one primary asset
+## Replace inherited code
 
-The primary assets form three independent inline-or-file pairs:
+A component's template, JavaScript, and CSS can each be written inline or
+loaded from a file:
 
-- [`template`][citry.Component.template] and `template_file`;
-- [`js`][citry.Component.js] and `js_file`;
-- [`css`][citry.Component.css] and `css_file`.
+- [`template`][citry.Component.template] or `template_file`;
+- [`js`][citry.Component.js] or `js_file`;
+- [`css`][citry.Component.css] or `css_file`.
 
-If a child does not mention a pair, it inherits that pair. If it sets either
-member, that child owns the whole pair. This means a child `template_file`
-replaces a parent's inline `template`, while the parent's JS and CSS can still
-be inherited:
+Each line above is one pair. A child that sets neither member of a pair inherits
+the parent's. A child that sets either member replaces the whole pair, and
+still inherits the other two pairs:
 
 ```citry
 from citry import Component
@@ -146,26 +146,24 @@ class LinkedCard(BaseCard):
     template_file = "linked_card.html"
 ```
 
-`LinkedCard` reads its own template file and keeps `BaseCard`'s JS and CSS.
-Setting both non-empty members of one pair on the same class raises
-`ValueError` when the class is defined.
+`LinkedCard` uses its own template file in place of `BaseCard`'s inline
+`template`, and keeps `BaseCard`'s JavaScript and CSS.
 
-Set one member to `None` when a child should have no asset for that pair:
+To drop one of them in a child, set it to `None`:
 
 ```citry
 class StaticCard(BaseCard):
     js = None
 ```
 
-Leaving `js` out would inherit it. Writing `js = None` makes the choice
-explicit and stops the search through base classes for that pair.
+`StaticCard` has no JavaScript. Leaving `js` out would inherit it.
 
-## Dependencies inheritance
+## Extend dependencies
 
-The nested `Dependencies` class lists secondary scripts and styles. These
-entries merge across base classes by default. Base entries come first and the
-child's entries come last, so the child's stylesheet wins an
-equal-specificity CSS tie by document order.
+The nested `Dependencies` class lists extra script and stylesheet files a
+component needs. A child's `Dependencies` adds to its parents' lists rather
+than replacing them. Parent entries come first, so a child's stylesheet
+loads later and wins when two CSS rules are equally specific:
 
 ```citry
 from citry import Component, SlotInput
@@ -191,30 +189,43 @@ class ConfirmDialog(BaseDialog):
         css = ["/static/confirm-dialog.css"]
 ```
 
-`ConfirmDialog` receives `dialog.js`, `dialog.css`, and then
-`confirm-dialog.css`. Duplicate URLs and duplicate inline content keep their
-first position. For scripts, the first entry wins completely, including its tag
-attributes; a later duplicate cannot add another attribute. The same holds for
-a stylesheet the child lists again under the same `media` key. Listing one
-stylesheet under two different `media` keys makes serialization raise
-`ValueError`.
+`ConfirmDialog` loads `dialog.js`, `dialog.css`, and then
+`confirm-dialog.css`.
 
-The `extend` setting chooses which branches contribute:
+Set `extend` on `Dependencies` to choose which parents contribute:
 
-- `extend = True`, the default, includes the ordinary base classes;
-- `extend = False` includes only this class's entries;
+- `extend = True`, the default, includes the parent classes;
+- `extend = False` includes only this class's own entries;
 - `extend = [CompactTheme, BrandTheme]` includes exactly those classes and
-  their selected bases, in the written order.
+  their own parents, in the order written.
 
-Set `Dependencies = None` to contribute no secondary assets and stop
-dependency inheritance through that branch.
+`Dependencies = None` gives the child no extra files, not even its
+parents'.
 
-The [Dependency files](/advanced/dependency-files/) guide covers dependency
-entry forms, local files, URLs, and serving.
+[Dependency files](/advanced/dependency-files/) covers the forms an entry
+can take, local files, URLs, and how the files are served.
 
-## Keep the shared contract deliberate
+## Less common cases
 
-Before adding a child, ask whether it should keep the parent's inputs,
-browser behavior, styles, and future changes. A shared base works well when
-the answer is yes. Composition is easier to change independently when the
-answer differs for only one part of the component.
+### Mixing schema styles
+
+Plain classes, dataclasses, named tuples, Pydantic models, and the other
+supported schema styles do not all combine the same way. Citry raises an
+error when the child class is defined if the parent's and child's styles
+cannot be combined. See
+[Inputs and validation](/concepts/inputs-and-validation/) before mixing
+them.
+
+### Conflicting pairs
+
+Setting both `template` and `template_file` to non-empty values on the
+same class raises `ValueError` when the class is defined. The same applies
+to `js` and `js_file`, and `css` and `css_file`.
+
+### Duplicate entries
+
+A dependency listed more than once is loaded once, at its first position.
+For a script, the first entry's tag attributes are used, and a later
+duplicate cannot add more. The same holds for a stylesheet listed again
+under the same `media` key. Listing one stylesheet under two different
+`media` keys raises `ValueError` when the page is rendered to HTML.

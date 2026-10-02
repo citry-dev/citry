@@ -29,6 +29,7 @@ from docs_site._internal.guards import (
     blog,
     blog_feed,
     builtin_tags,
+    citry_highlight,
     code_lang,
     community_packages,
     component_fence,
@@ -37,6 +38,7 @@ from docs_site._internal.guards import (
     example_contract,
     fence_validator,
     frontmatter,
+    heading_length,
     headings,
     html_wellformed,
     internal_link,
@@ -85,6 +87,7 @@ __all__ = [
 SOURCE_GUARDS: list[Guard] = [
     fence_validator.check,
     lexer_alias.check,
+    citry_highlight.check,
     live_code.check,
     code_lang.check,
     component_fence.check,
@@ -99,6 +102,7 @@ SOURCE_GUARDS: list[Guard] = [
     authored_reference.check,
     api_symbols.check,
     crossref.check,
+    heading_length.check,
 ]
 
 POST_BUILD_GUARDS: list[Guard] = [

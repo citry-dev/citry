@@ -5,18 +5,22 @@ description: Understand Vue state, props, events, slots, and server-render lifec
 
 # Client interactivity
 
-Each interactive Citry component is a Vue component. The component's template
-can read its Python-seeded data, local Vue state, props, setup bindings,
-methods, computed values, and injections.
+Some interactions should happen in the browser without a call to the
+server: opening a menu, counting clicks, switching a tab. For these, a Citry
+component is also a Vue component. Python renders its HTML, and Vue makes it
+interactive in the browser.
 
-Use [Vue in templates](/syntax/vue/) for directive syntax. This page explains
-how data and behavior cross Citry component boundaries.
+This page shows how to start a component with data from Python, add browser
+state and behavior, and pass data and events between components. For the
+directive syntax itself, such as `v-if` and `@click`, see
+[Vue in templates](/syntax/vue/).
 
-## Seed browser data from Python
+## Set data from Python { #seed-browser-data-from-python }
 
-Return initial browser data from
-[`Component.js_data()`][citry.Component.js_data]. Citry exposes every top-level
-key as a reactive member of that component's Vue instance:
+Return the starting data from
+[`Component.js_data()`][citry.Component.js_data]. Each top-level key becomes
+a reactive value that the template and the component's JavaScript can read
+and change:
 
 ```citry
 from citry import Component
@@ -47,20 +51,24 @@ class Counter(Component):
     """
 ```
 
-The returned value must be JSON-serializable. When the page
-applies a server render that updates this component, Citry updates these keys on its live Vue instance.
-Member assignment such as `this.count += 1` remains available for local
-browser changes.
+The returned data must be JSON-serializable. When the server renders the
+component again, for example after an
+[event handler](/events/) returns it, Citry updates these values in the
+browser.
 
-Choose distinct names for Python-seeded data and native Vue `data()`,
-`setup()`, props, injections, methods, and computed values. Citry reports a
-collision rather than silently overwriting a member.
+## Add state and methods
 
-## Define local Vue state and behavior
-
-`$component({...})` accepts native Vue Options. Use `data()` for local mutable
-state, `methods` and `computed` for behavior derived from that state, and
-normal Vue lifecycle hooks when the work follows the component lifetime:
+`$component({...})` takes standard
+[Vue options](https://vuejs.org/api/#options-api){: target="_blank" rel="noopener"}.
+Use
+[`data()`](https://vuejs.org/api/options-state.html#data){: target="_blank" rel="noopener"}
+for state that lives only in the browser,
+[`methods`](https://vuejs.org/api/options-state.html#methods){: target="_blank" rel="noopener"}
+and
+[`computed`](https://vuejs.org/api/options-state.html#computed){: target="_blank" rel="noopener"}
+for behavior, and
+[Vue's lifecycle hooks](https://vuejs.org/api/options-lifecycle.html){: target="_blank" rel="noopener"}
+such as `mounted` for work tied to the component's life:
 
 ```js
 $component({
@@ -80,8 +88,11 @@ $component({
 });
 ```
 
-Citry also accepts Vue's synchronous `setup()` form. Composition API helpers
-come from the exact runtime used by the page:
+Vue's synchronous
+[`setup()`](https://vuejs.org/api/composition-api-setup.html){: target="_blank" rel="noopener"}
+works too. Take Composition API helpers such as
+[`ref`](https://vuejs.org/api/reactivity-core.html#ref){: target="_blank" rel="noopener"}
+from `Citry.vue`, which is the Vue build the page uses:
 
 ```js
 $component({
@@ -92,52 +103,14 @@ $component({
 });
 ```
 
-## React after a server render
-
-Use `onServerRender` when an integration must inspect the updated DOM or start
-work again after each server render that the page applies to this component:
-
-```js
-$component({
-  onServerRender({ component, revision }) {
-    const canvas = component.$refs.chart;
-    if (!(canvas instanceof HTMLCanvasElement)) return;
-
-    const chart = createChart(canvas, component.points);
-    console.log("rendered revision", revision);
-    return () => chart.destroy();
-  },
-});
-```
-
-Add the matching Vue ref to the template:
-
-```citry-html
-<canvas ref="chart"></canvas>
-```
-
-Citry calls the callback after this component mounts and after an accepted
-server render updates it. An unrelated reactive update does not call it.
-`component` is the live Vue public instance, and `revision` is the accepted
-server revision. Citry runs the optional cleanup before the callback runs
-again and when the component unmounts.
-
-Reactive effects created synchronously during the callback share that cleanup
-lifetime. Use `Citry.vue.watchEffect()` or another Composition API helper when
-you need one. Work started later by a timer or Promise must arrange its own
-cleanup.
-
-The callback shorthand has the same arguments and cleanup behavior:
-
-```js
-$component(({ component }) => {
-  component.$refs.input?.focus();
-});
-```
+Give each value a different name from the others: the keys from
+`js_data()`, `data()`, `setup()`, props, injected values, methods, and
+computed values. When two of them share a name, Citry reports an error
+instead of letting one hide the other.
 
 ## Pass props to a child
 
-Declare native Vue props in the child's `$component` options:
+Declare Vue props in the child's `$component` options:
 
 ```js
 $component({
@@ -150,25 +123,25 @@ $component({
 });
 ```
 
-The parent passes a reactive value with `:` or `v-bind`:
+The parent passes a browser value with `:` or `v-bind`:
 
 ```citry-html
 <c-StatusBadge :status="currentStatus" />
 ```
 
-A plain component attribute remains a Python component input. The Vue binding
-prefix is what makes `:status` a browser prop.
+The `:` prefix makes `status` a Vue prop that updates in the browser. A
+plain attribute, such as `status="ok"`, is a Python input instead, used
+when the server renders the component.
 
 ## Listen to child events
 
-Use Vue event bindings on the child component tag:
+Put a Vue event listener on the child's tag:
 
 ```citry-html
 <c-ColorPicker @select="chooseColor" />
 ```
 
-Declare and emit the event in the child's native Vue definition. This works
-the same way when the child renders several roots:
+The child declares the event and sends it with Vue's `$emit`:
 
 ```js
 $component({
@@ -186,16 +159,19 @@ $component({
 <button type="button" @click="choose('#12b76a')">Green</button>
 ```
 
-The handler belongs to the parent that wrote the component call. The child
-emits the event through Vue's normal component event API. Citry's `@c-*`
-bindings are separate: they call declared Python event handlers on the server.
-See [Event bindings](/events/bindings/) for that contract.
+`chooseColor` runs in the parent, the component whose template contains the
+`<c-ColorPicker>` tag.
 
-## Pass arbitrary HTML attributes explicitly
+This listener runs JavaScript in the browser. To run a Python handler on
+the server when the child emits `select`, write `@c-select` instead; see
+[Bind events in templates](/events/bindings/).
 
-An ordinary attribute on a Citry component tag is a Python component input.
-When a component should expose an HTML-attribute API, accept a mapping and
-apply it to the intended element:
+## Pass HTML attributes { #pass-arbitrary-html-attributes-explicitly }
+
+A plain attribute on a component tag is a Python input. To let the template
+that uses a component set
+HTML attributes such as `class` or `aria-label`, accept a mapping as an
+input and spread it onto the element that should get them:
 
 ```citry-html
 <c-Card c-attrs="{'class': 'featured', 'aria-label': label}" />
@@ -208,19 +184,16 @@ apply it to the intended element:
 </article>
 ```
 
-This is explicit for components with one root, several roots, or a nested
-interactive element.
+## Forward attributes
 
-## Forward fallthrough attributes to a chosen child
-
-Use Vue's `$attrs` when a wrapper receives attributes or listeners that it does
-not declare. Set `inheritAttrs: false` and place the values on the child that
-should receive them:
+In Vue, attributes and listeners that a component does not declare as props
+or events are collected in `$attrs`. To place them on a specific child
+rather than the component's outer element, set `inheritAttrs: false` and
+spread `$attrs` there:
 
 ```js
 $component({
   inheritAttrs: false,
-  // props, emits, and other options
 });
 ```
 
@@ -229,27 +202,19 @@ $component({
 <c-Child v-bind="$attrs" />
 ```
 
-Undeclared attributes and listeners remain in `$attrs` until this explicit
-forwarding point. A declared prop is consumed as a prop, and a listener for a
-declared emitted event is consumed by Vue, so neither appears in `$attrs`.
-When the wrapper has several roots, choose the one child or root that receives
-the forwarding expression. A `v-if` on the component call controls that call;
-it does not become a fallthrough attribute.
+Declared props and declared events do not appear in `$attrs`.
 
-An object of Vue listeners can also be attached with the object form:
+To attach an object of Vue listeners, use `v-on` with the object:
 
 ```citry-html
 <c-Child v-on="listeners" />
 ```
 
-The listener object is Vue expression data. Python `c-bind` spreads component
-data into Python inputs and cannot create executable `v-on` syntax. Plain
-attributes on a `<c-Child>` tag remain Python kwargs.
-
 ## Understand slot scope
 
-Template-authored fill content keeps the Vue expression context of its call
-site. A slot fallback uses the receiving component's context:
+A fill, the content you put into another component's slot, reads Vue values
+from the template you wrote it in. A slot's fallback reads values from the
+component that defines the slot:
 
 ```citry-html
 <c-Panel>
@@ -259,19 +224,66 @@ site. A slot fallback uses the receiving component's context:
 </c-Panel>
 ```
 
-The fill can read `pageTitle` from the caller. The panel's fallback cannot.
-See [Slots](/concepts/slots/) for the server-rendered composition rules.
+Here `pageTitle` comes from the outer component. `Panel`'s own values are
+not visible inside the fill. [Slots](/concepts/slots/) covers the same rule
+for Python expressions.
 
-## Work with one or several roots
+## React to a re-render { #react-after-a-server-render }
 
-Vue components may render one root, several roots, text, or no HTML element.
-Do not assume `component.$el` is an `Element`. Add a template ref to the exact
-element your JavaScript needs, then check its type before using it.
+Use `onServerRender` for work that must run again each time the server
+renders this component, such as drawing a chart into the new HTML:
+
+```js
+$component({
+  onServerRender({ component }) {
+    const canvas = component.$refs.chart;
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+
+    const chart = createChart(canvas, component.points);
+    return () => chart.destroy();
+  },
+});
+```
+
+Mark the element with a matching Vue `ref`:
+
+```citry-html
+<canvas ref="chart"></canvas>
+```
+
+Citry calls the function once the component first appears on the page, and
+again each time the server renders it again. A change in browser state
+alone does not call it. `component` is the component's Vue instance.
+
+Reach elements through a `ref`, as above, not through `component.$el`. A
+Vue component can render one root element, several, only text, or nothing,
+so `$el` is not always the element you expect. Check the element's type
+before you use it.
+
+Return a cleanup function to undo the work. Citry runs it before the next
+call and when the component is removed.
+
+The callback can also be passed directly to `$component`:
+
+```js
+$component(({ component }) => {
+  component.$refs.input?.focus();
+});
+```
+
+!!! note "Cleanup for watchers, timers, and promises"
+
+    Watchers and effects you create synchronously inside the callback, for
+    example with `Citry.vue.watchEffect()`, are stopped with the cleanup
+    automatically. Work that starts later, from a timer or after an
+    `await`, is not stopped automatically. Stop it in your cleanup function.
+
 
 ## See also
 
 - [Vue in templates](/syntax/vue/) for directives and expressions.
-- [Browser APIs](/reference/browser-apis/) for `$component`, `Citry.vue`, and
-  the component Events helpers.
-- [Event actions](/events/actions/) for server responses and page updates.
+- [Browser APIs](/reference/browser-apis/) for `$component`, `Citry.vue`,
+  and the full `onServerRender` arguments.
+- [Event actions](/events/actions/) for what the server can do after a
+  handler runs.
 - [HTML fragments](/advanced/html-fragments/) for interactive fragments.

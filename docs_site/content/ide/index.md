@@ -1,52 +1,67 @@
 ---
 title: IDE support
-description: Check Citry templates and add editor intelligence with the command-line checker, language server, and editor integrations.
+description: Catch template mistakes as you type in your editor, or from the command line and CI, with the same checks Citry runs when it renders.
 ---
 
 # IDE support
 
-Citry uses the same parser in its command-line checker and editor tooling. A
-template that fails in the editor should therefore fail for the same reason in
-`citry check` and at runtime.
+A misspelled component tag, a variable your template data never provides, or
+an unclosed element otherwise shows up only when the page renders. Citry's
+editor tools report these mistakes while you type, and `citry check` reports
+them from a terminal or CI.
 
-Citry's public-beta tooling is VS Code-first. The language server is editor-neutral,
-but each editor still needs a client that knows how to start it and which files
-to send.
+All of these tools use the same parser that renders your templates. A template
+that shows an error in the editor fails for the same reason in `citry check`
+and at runtime.
 
-## Current tooling
+## Pick your editor
 
-| Tool | What it does | Status |
+| Editor | What you get | Setup |
 | --- | --- | --- |
-| `citry check` | Checks templates from a terminal or CI | Included in Citry |
-| `pygments-citry` | Highlights Citry source in Pygments-based tools | Published separately |
-| [`citry-lsp`](https://pypi.org/project/citry-lsp/) | Provides diagnostics, completion, hover, navigation, and symbols | Published on PyPI |
-| VS Code extension | Highlights inline and standalone templates and starts `citry-lsp` | Published on [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry) and [Open VSX](https://open-vsx.org/extension/citry-dev/citry) |
-| PyCharm + LSP4IJ | Connects PyCharm to Citry's standard language-server features | Tested setup available; no Citry-specific coloring or official plugin yet |
+| VS Code, Cursor, and other VS Code forks | Errors as you type, completion, hover, go to definition, type checking, formatting, and template coloring | [VS Code](/ide/vscode/) |
+| PyCharm | The same errors, completion, hover, and navigation, without Citry coloring | [PyCharm](/ide/pycharm/) |
+| Any editor | `citry check` in a terminal | [Check from a terminal](#check-from-a-terminal) |
 
-Start with [VS Code](/ide/vscode/) for the complete editor integration. See
-[PyCharm](/ide/pycharm/) for the tested LSP4IJ setup and its current coloring
-and embedded-language limits.
+VS Code has the most complete support. The editor help comes from a separate
+program, the Citry language server (`citry-lsp` on PyPI), which the VS Code
+extension starts for you. It uses the standard Language Server Protocol, so
+another editor can use it too, once that editor is set up to start it for
+Python and Citry template files.
 
-## Check templates without an editor extension
+## Check from a terminal
 
-Every editor can run the batch checker in a terminal. Choose the explicit
-static mode when importing the application is unnecessary:
-
-```console
-citry check --static
-```
-
-For registered component names, inputs, and slots, point the command at the
-[`Citry`][citry.Citry] instance used by the application:
+`citry check` runs the same checks without an editor. Point it at the
+[`Citry`][citry.Citry] instance your application uses:
 
 ```console
 citry --app myproject.app:citry_app check
 ```
 
-If the app import fails, Citry reports the failure, continues with syntax-only
-checks, and exits with status 2. CI cannot mistake that degraded result for a
-complete registry check.
+With the application loaded, Citry knows every component you registered, so it
+also reports unknown component tags, wrong inputs and slots, and template
+variables that come from nowhere.
 
-Registry-backed checks also report unknown free template roots. Configure the
-shared batch/editor rule, runtime globals, and analysis-only variables on the
-application as described in [Template linting](/ide/template-linting/).
+When the project cannot be imported, for example in a CI job without its
+dependencies, run the checks that do not need your components, such as
+template syntax:
+
+```console
+citry check --static
+```
+
+If the import fails under `--app`, Citry reports the failure, checks syntax
+only, and exits with status 2, so a CI job cannot mistake it for a full check.
+See [Command line](/cli/#check-component-templates) for every option and exit
+status.
+
+## Choose what's an error
+
+Your application decides which template mistakes are errors, warnings, or
+ignored, and which extra variable names are known. `citry check` and the
+editor read the same settings. See [Template linting](/ide/template-linting/).
+
+To look up an error code such as `citry.template.unknown-variable`, see the
+[diagnostic reference](/ide/diagnostics/).
+
+To color Citry code in documentation or other tools built on Pygments, install
+the separate `pygments-citry` package.

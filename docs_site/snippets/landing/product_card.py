@@ -96,8 +96,9 @@ class ProductCard(Component):
 
 
 lamp = load_product(7)
-html = str(ProductCard(
+card = ProductCard(
     product_id=lamp.id,
     tags=lamp.tags,
     slots={"body": lamp.name},
-))
+)
+html = str(card)

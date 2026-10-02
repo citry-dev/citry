@@ -5,18 +5,21 @@ description: Let Python objects resolve themselves into Citry components during 
 
 # Custom component values
 
-Sometimes a value from your domain already knows how it should appear. A
-payment status might choose a status badge, for example. The
-[`ComponentLike`][citry.ComponentLike] protocol lets that object become a Citry
-component when a template inserts it.
+Sometimes one of your own Python objects already knows how it should look
+on the page. A payment status, for example, always shows as a green or red
+badge. Instead of choosing the badge component in every template, you can
+teach the object to turn itself into that component. Then a template only
+writes `{{ status }}`.
 
-This is an advanced composition tool. A direct component call is clearer when
-the page already knows which component it wants.
+When the page already knows which component it wants, call that component
+directly. It is clearer.
 
-## Define the conversion
+## Make an object render
 
-Add `__citry_element__(citry)` to the value. Use the supplied engine to find or
-create the component element:
+Add a `__citry_element__(citry)` method to the class. Citry calls it with
+the [`Citry`][citry.Citry] instance that is rendering the page. Use that
+instance to look up the component, and return the component called with
+its inputs:
 
 ```python
 from dataclasses import dataclass
@@ -39,43 +42,59 @@ class PaymentStatus:
         return badge(label=self.label, tone=tone)
 ```
 
-`ComponentLike` is a structural protocol. You do not need to inherit from it.
-Implementing this method with the right shape is enough.
+The class does not need to inherit from anything. Having this method is
+enough for Citry to treat it as a [`ComponentLike`][citry.ComponentLike]
+value.
 
-The method must return a [`CitryElement`][citry.CitryElement] that belongs to
-the engine Citry supplied. Do not use the module-level default engine or keep a
-component class from another application.
+Look the component up on the `citry` argument, as above. Do not use a
+component class bound to the default instance or to another application's
+`Citry`; Citry raises `ValueError`.
 
-## Insert the value in a template
+## Use it in a template
 
-Return the object as ordinary template data:
+Pass the object to the template like any other value:
 
 ```citry
 from citry import Component
 
 
 class Receipt(Component):
+    citry = app
+
     class Kwargs:
         status: PaymentStatus
-
-    citry = app
 
     template = """
       <p>Payment: {{ status }}</p>
     """
 ```
 
-When the expression is inserted, Citry calls `__citry_element__()` once for
-that occurrence and renders the returned element in the current component
-tree. The same conversion works for a value passed into a slot.
+Each time the template inserts `status`, Citry calls `__citry_element__()`
+once and renders the returned component in that place. The same works when
+you pass the object as slot content.
 
-There is no ambient engine outside a component render. A general custom value
-does not gain a `.render()` method, so application code should choose a Citry
-instance and build the concrete component directly when rendering on its own.
+## Render it elsewhere
 
-[`LibraryComponentInvocation`][citry.LibraryComponentInvocation] implements
-the same protocol and adds `render(citry=app)` for that library-specific use
-case. See [Component libraries](/advanced/component-libraries/).
+The object knows which component to build only while a page is rendering,
+because that is when Citry supplies the `citry` argument. It has no
+`.render()` method of its own. To render it on its own, choose the `Citry`
+instance yourself and build the component directly.
+
+Library components are the exception: calling one, such as
+`AcmeBadge(label="Ready")`, returns a value with a `render(citry=app)`
+method. See [Component libraries](/advanced/component-libraries/).
+
+## Return value errors
+
+Citry checks what the method returns:
+
+- a value that is not a [`CitryElement`][citry.CitryElement] raises
+  `TypeError`;
+- a component from a different `Citry` instance than the one rendering the
+  page raises `ValueError`.
+
+Rendering the object while no component is rendering, for example by
+calling a `Slot` that holds it from plain Python, raises `RuntimeError`.
 
 ## Related reference
 

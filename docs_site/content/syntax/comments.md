@@ -5,37 +5,22 @@ description: Choose whether a comment reaches the browser, and use c-raw when te
 
 # Comments and literal text
 
-Citry has two template comment forms. Use an HTML comment when it should reach
-the browser, or a Citry comment when it should stay in the source file.
+Use this page to leave a note in a template, for the next person who edits
+it or for someone reading the page source in the browser. It also shows how to
+display text that looks like template syntax, such as a code sample with
+`{{ name }}`, exactly as written.
 
-Use `<c-raw>` for a different job: keeping a whole block of
-template-looking text unchanged.
+## Citry `{# #}` comments { #write-a-hidden-note }
 
-## Keep a comment in the HTML
-
-A normal HTML comment remains in the rendered output:
-
-```citry-html
-<!-- The browser receives this comment. -->
-<p>Account details</p>
-```
-
-This is useful for a note meant for someone inspecting the page source.
-
-An HTML comment counts as rendered content. For example, it cannot sit between
-an `if` branch and its `else` branch, because those branches must be adjacent.
-
-## Keep a comment only in the template
-
-A Citry template comment starts with `{#` and ends with `#}`. Citry removes it
-before rendering:
+A Citry comment starts with `{#` and ends with `#}`. Citry removes it while
+rendering, so the browser never receives it:
 
 ```citry-html
 {# Replace this copy after the beta. #}
 <p>Account details</p>
 ```
 
-You can put one in ordinary template text or between attributes:
+It also works between attributes:
 
 ```citry-html
 <button
@@ -47,23 +32,26 @@ You can put one in ordinary template text or between attributes:
 </button>
 ```
 
-Inside a control-flow branch, a template comment is safe. It is also safe
-between adjacent control-flow branches: the non-rendering comment and its
-surrounding formatting whitespace do not break the branch chain. See
-[Conditions and loops](/syntax/control-flow/#wrap-several-elements-in-a-condition)
-for the exact rule.
+A Citry comment may sit between an `if` branch and its `else` branch, because
+it renders nothing. See
+[Keep branches together](/syntax/control-flow/#keep-branches-next-to-each-other).
 
-Inside `{{ ... }}`, `{# ... #}` is not a comment and causes a parse error.
-Inside a quoted static attribute, it is literal text:
+## HTML `<!-- -->` comments { #write-an-html-comment }
+
+An HTML comment passes through to the browser:
 
 ```citry-html
-<p title="{# This text stays in the title. #}">Details</p>
+<!-- The browser receives this comment. -->
+<p>Account details</p>
 ```
 
-## Comment inside a Python expression
+Use it for notes meant for someone reading the page source. Because it is
+part of the output, an HTML comment cannot sit between an `if` branch and its
+`else` branch.
 
-Within `{{ ... }}` or an expression-valued dynamic `c-*` attribute, `#` starts
-an ordinary Python comment:
+## Python `#` comments { #comment-an-expression }
+
+Inside `{{ ... }}` or a `c-*` attribute, `#` starts a Python comment:
 
 ```citry-html
 <div c-class="get_classes()  # build the class list">
@@ -71,64 +59,59 @@ an ordinary Python comment:
 </div>
 ```
 
-The comment ends at the end of the line, as it does in Python, or earlier
-at the end of the expression: the closing `}}` or the attribute's closing
-quote. A `#` inside a Python string remains part of the string.
+The comment ends at the end of the line, or earlier at the end of the
+expression: the closing `}}` or the attribute's closing quote. A `#` inside a
+Python string stays part of the string.
 
-Outside a Python expression, `#` is ordinary text. That includes plain
-template text, static attribute values, and markup passed through a nested
-template attribute.
+## `<c-raw>` literal text { #pass-template-looking-text-through-unchanged }
 
-## Pass template-looking text through unchanged
-
-Wrap text in `<c-raw>` when Citry must not interpret expressions, component
+Wrap text in `<c-raw>` when Citry must not read the expressions, component
 tags, or comments inside it:
 
 ```citry-html
 --8<-- "docs_site/snippets/builtin_raw.html"
 ```
 
-Citry removes the `<c-raw>` wrapper and copies its body to the rendered output
-without interpreting it. In this example, `{{ this_stays_as_text }}` is not
-evaluated and `<c-Card>` is not rendered as a Citry component.
+Citry removes the `<c-raw>` tags and copies the content to the output as
+written. Here `{{ this_stays_as_text }}` is not evaluated and `<c-Card>` is
+not rendered as a component. Event attributes such as `@c-click="save"` and
+`:c-query` stay plain text too.
 
-When a raw block sits at the top level of a component's template, the HTML
-tags at its top level are that component's top-level elements. In output
-with no browser behavior, Citry adds the component's `data-cid-<id>`
-attribute to them, as it does to every other top-level element of a
-component. Citry reads the raw HTML only to find those top-level tags.
+`<c-raw>` takes no attributes and needs a closing tag. It cannot nest: the
+first closing tag ends the block.
 
-Raw output is not HTML-escaped. The browser will still interpret any HTML in
-the copied body. Use `<c-raw>` only for text written and trusted by the template
-author. It is not a safe way to display HTML supplied by a user.
+!!! warning "`<c-raw>` does not make HTML safe"
 
-Events binding syntax is safe to show inside the block. Citry turns
-`@c-click="save"` and `:c-query` into server event bindings only on elements
-written in the template itself, so inside `<c-raw>` they stay ordinary
-attribute text.
+    Citry does not escape the content of `<c-raw>`, so the browser still
+    reads any HTML in it as HTML. Use it only for text you wrote in the
+    template. To show text from a user, insert it with `{{ ... }}`, which
+    escapes it.
 
-`<c-raw>` has a deliberately small syntax:
+## Keep `<c-raw>` complete { #keep-raw-html-complete }
 
-- It takes no attributes.
-- It needs both opening and closing tags and cannot self-close.
-- Raw blocks cannot nest. The first closing tag ends the block.
-
-### Keep raw HTML complete on interactive pages
-
-When anything on the page or fragment has browser behavior, such as Vue
-directives or `$component`, the body of `<c-raw>` must be a complete piece of HTML. Vue
-takes over that part of the page, so Citry has to know where the raw HTML
-starts and ends. Otherwise the render fails with an error that names the
-block's line and column and explains the rule, such as "The <c-raw>
-block at line 2, column 10 is not a complete HTML fragment":
+When any component on the page, or in an HTML fragment you insert into a
+page, runs in the browser (it has its own `js`, or uses Vue syntax such as
+`@click`), the content of `<c-raw>` must be complete HTML.
+Vue takes over that part of the page and needs to know where the raw HTML
+starts and ends. Otherwise the render fails with an error that gives the
+block's line and column and says it "is not a complete HTML fragment":
 
 ```citry-html
 --8<-- "docs_site/snippets/builtin_raw_complete.html"
 ```
 
-Void elements such as `<br>` and `<img>` need no closing tag. Output with
-no browser behavior anywhere copies the raw body unchanged, as described
-above.
+Void elements such as `<br>` and `<img>` need no closing tag. On pages
+without browser behavior, Citry copies the content unchanged.
 
-To pass an HTML comment through a component input, see
-[Markup in attributes](/syntax/nested-templates/#when-the-fragment-markers-are-optional).
+## Less common rules
+
+- Inside `{{ ... }}`, `{# ... #}` is not a comment. It is a parse error.
+- Inside a plain attribute value, `{# ... #}` and `#` are ordinary text:
+  `title="{# note #}"` keeps the text in the title.
+- `#` is ordinary text everywhere outside a Python expression, including
+  [markup passed in an attribute](/syntax/nested-templates/).
+- To pass an HTML comment to a component input, see
+  [Skip the `<>` markers](/syntax/nested-templates/#when-the-fragment-markers-are-optional).
+- When a `<c-raw>` block sits at the top level of a component's template,
+  the HTML tags at its top level count as the component's top-level
+  elements, so Citry marks them as belonging to that component.

@@ -255,6 +255,19 @@ def test_live_source_accepts_modules_without_a_preview_value(tmp_path: Path, sou
     assert load_live_source(path, repo_root=tmp_path, title="Sample") == source
 
 
+def test_live_code_block_shows_one_blank_line_from_each_run(tmp_path: Path) -> None:
+    source = "from markupsafe import Markup\n\n\nvalue = Markup('<p>x</p>')\n"
+    path = _snippet_path(tmp_path, source)
+
+    result = render_page(f'<c-live-code path="{path}" title="Sample" />', config=_docs_config(tmp_path))
+
+    tree = lxml_html.fromstring(result.html)
+    [highlight] = tree.xpath("//*[@data-live-static]//*[contains(@class, 'highlight')]")
+    # The Try live editor starts from this text, so it is also what a reader runs.
+    assert highlight.text_content() == "from markupsafe import Markup\n\nvalue = Markup('<p>x</p>')\n"
+    assert (tmp_path / path).read_text(encoding="utf-8") == source
+
+
 def test_incomplete_live_source_remains_static_and_passes_the_guard(tmp_path: Path) -> None:
     source = "value = '<p>complete me</p>'\n"
     path = _snippet_path(tmp_path, source)

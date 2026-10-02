@@ -105,9 +105,10 @@ class TaskEditor(Component):
     class Events:
         def save(self, data: TaskIn):
             save_task(data.task_id)
+            summary = TaskSummary(task_id=data.task_id)
             return [
                 actions.Render(
-                    TaskSummary(task_id=data.task_id),
+                    summary,
                     target="mark:task-summary",
                 ),
                 actions.Dispatch(

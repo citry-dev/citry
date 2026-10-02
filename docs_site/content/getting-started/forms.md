@@ -5,15 +5,22 @@ description: Turn named form controls into typed Python data and show field erro
 
 # Handle and validate forms
 
-Build an email form, reject the wrong domain in Python, and show the field
-error without clearing what the visitor typed.
+When a user submits a form, you want the fields as typed Python values. When
+a value is wrong, you want the error next to the field, without clearing what
+the user typed. In this step you build an email form that Python checks: it
+rejects addresses outside `@example.com` and shows the error under the
+field.
+
+Replace `components.py` with this version. The signup form takes the
+choice picker's place on the page; keep `citry_setup.py` and `app.py` as
+they are:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step11.py" language="citry" />
 
 Submit `ada@elsewhere.test` to see the field error, then submit
 `ada@example.com` to see the accepted address.
 
-## Submit named controls
+## Send the form
 
 ```citry-html
 <form @c-submit.prevent="submit">
@@ -21,8 +28,10 @@ Submit `ada@elsewhere.test` to see the field error, then submit
 </form>
 ```
 
-The `.prevent` modifier stops normal navigation. Citry collects named controls
-and sends them to the typed handler input:
+`@c-submit` calls the `submit` handler when the form is submitted, and
+`.prevent` stops the browser from loading a new page. Citry collects every
+control that has a `name` and passes the values to the handler as a typed
+object:
 
 ```python
 class SignupIn:
@@ -33,7 +42,10 @@ class Events:
         email = data.email.strip()
 ```
 
-## Return field errors
+The `data: SignupIn` annotation tells Citry which class to build from the
+form.
+
+## Reject a value
 
 ```python
 raise EventError(
@@ -42,8 +54,14 @@ raise EventError(
 )
 ```
 
-The field name matches both `SignupIn.email` and `name="email"`. Vue reads the
-instance-scoped error and loading values directly:
+Raising [`EventError`][citry.ext.events.EventError] stops the handler and
+sends the errors to the browser. The key in `fields` is the field name: it
+matches both `SignupIn.email` and `name="email"`.
+
+## Show error and progress
+
+The template reads the error with `$error('submit')` and the progress with
+`$loading('submit')`. Both refer to this component's `submit` handler:
 
 ```citry-html
 <span
@@ -60,11 +78,12 @@ instance-scoped error and loading values directly:
 </button>
 ```
 
-A successful call clears that handler's retained error.
+The error stays until the next call to `submit` succeeds. The page does not
+reload, so the input keeps what the user typed.
 
-## Handle success in Vue
+## Show the valid address
 
-The handler dispatches the accepted email:
+When the address is valid, the handler sends a browser event with it:
 
 ```python
 return actions.Dispatch("SignupForm:sent", {"email": email})
@@ -72,7 +91,9 @@ return actions.Dispatch("SignupForm:sent", {"email": email})
 
 As in the earlier steps, the event name starts with the component's name.
 
-The component declares its local state with Vue Options:
+The component keeps the accepted address in its Vue data, and listens for
+the event with [`onEvent`][onEvent] inside
+[`onServerRender`][onServerRender]:
 
 ```js
 $component({
@@ -80,28 +101,23 @@ $component({
     // Nothing is accepted until Python answers.
     return { acceptedEmail: '' };
   },
+  onServerRender({ component, onEvent }) {
+    // Citry removes this listener before onServerRender
+    // runs again and when the component unmounts.
+    onEvent('SignupForm:sent', (detail) => {
+      // Show the email that Python sent with the event.
+      component.acceptedEmail = detail.email;
+    });
+  },
 });
-```
-
-The [`onServerRender`][onServerRender] option runs after the component
-mounts and again after each server render. It listens with
-[`onEvent`][onEvent], which hears the events that this component's own
-Python handlers dispatch:
-
-```js
-onServerRender({ component, onEvent }) {
-  // Citry removes this listener before onServerRender
-  // runs again and when the component unmounts.
-  onEvent('SignupForm:sent', (detail) => {
-    // Show the email that Python sent with the event.
-    component.acceptedEmail = detail.email;
-  });
-}
 ```
 
 `onEvent` hears only events from this component's own Python handlers, so
 another form on the same page cannot change this one.
 
+[Handle and validate forms](/events/forms/) in the Events guide covers
+more, such as which Python type each kind of input sends.
+
 ## Next steps
 
-Next, [replace the calling component from Python](/getting-started/server-rendered-updates/).
+Next, [replace the form with new HTML from Python](/getting-started/server-rendered-updates/).

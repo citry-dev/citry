@@ -1,22 +1,24 @@
 ---
 title: Cache rendered output
-description: Reuse complete component output or named template regions without mixing data between callers.
+description: Store a component's or template region's rendered HTML and reuse it on later requests, keyed by the values that change it.
 ---
 
 # Cache rendered output
 
-Cache rendered output when producing the same component subtree costs more
-than looking it up. Citry can replay a previous render while giving the
-replayed components fresh identities for the current page.
+Some components do the same expensive work on every request: a product
+card loads its record from the database and renders its children, and
+the HTML comes out the same each time. Caching stores that rendered
+output and reuses it on later calls with the same key, until the entry
+expires.
 
-Choose the smallest useful scope:
+There are two ways to cache:
 
-- `Component.Cache` caches every call to one component class.
-- `<c-cache>` caches one named region inside a larger template.
+- Add a `Cache` class to a component to cache every call to it.
+- Wrap part of a template in `<c-cache>` to cache just that region.
 
-Caching is an optimization. Keep application state in its normal database or
-service, and make sure every caller who shares a cache key is allowed to see
-the same output.
+The cache key decides which calls share an entry. Every value that can
+change the output must be part of it, or one user can see another
+user's HTML.
 
 ## Cache a component
 
@@ -58,22 +60,19 @@ class ProductCard(Component):
     """
 ```
 
-The first `ProductCard(product_id=42)` renders and stores its subtree. Later
-calls with the same effective typed kwargs replay it until it expires or its
-key changes.
+The first `ProductCard(product_id=42)` renders and stores its HTML. Later
+calls with `product_id=42` reuse it for 300 seconds. When Citry reuses an
+entry, the components in it get new IDs for the current page, so they
+still work in the browser.
 
-The default variation includes every typed kwarg after defaults, factories,
-input hooks, coercion, and validation. This safe default works well when the
-kwargs already consist of stable scalar values.
+By default the key contains every input in `Kwargs`, after defaults and
+validation. That works well when the inputs are plain values such as IDs
+and strings.
 
-`Component.Cache` is not available on a transparent component, because it
-needs a component boundary to replay. Wrap the relevant template region in
-`<c-cache>` instead.
+## Build a stable key
 
-## Reduce objects to stable identifiers
-
-Define `Cache.vary()` when a kwarg contains a domain object or when only part
-of the input affects the output:
+When an input is an object, or only part of it affects the output,
+define `Cache.vary()` and return the values that matter:
 
 ```citry
 from dataclasses import dataclass
@@ -117,65 +116,25 @@ class ProductSummary(Component):
     """
 ```
 
-The method receives read-only snapshots of the effective kwargs and slots.
-Return only stable plain values:
+`vary()` receives read-only copies of the inputs and slots. Include
+every value that can change the output. Use a database ID rather than an
+object's `str()` or `repr()`, which can change between runs or contain
+private data. If a record can change while keeping its ID, add a
+revision number or update time, as `product_revision` does here.
 
-- `None`, exact booleans and integers, finite floats, strings, or bytes;
-- exact built-in lists, tuples, or dictionaries containing those values.
+Return only plain values of these exact types:
 
-Dictionary keys must be exact strings. The complete value may be at most 32
-containers deep, contain at most 10,000 items in total, and take at most
-64 KiB once Citry encodes it for the key. Every list, tuple, and dictionary
-counts as one item, and so does each value inside it and each dictionary
-key. A value that breaks these rules
-raises [`CacheKeyError`][citry.ext.cache.CacheKeyError] when the component
-renders.
+- `None`, `bool`, `int`, finite `float`, `str`, or `bytes`;
+- `list`, `tuple`, or `dict` of those values, with `str` keys.
 
-A custom variation is a correctness promise. Include every input that can
-change the output. Use a database ID instead of an object's `str()` or
-`repr()`, which may be unstable or expose private data. If the record can
-change while keeping the same ID, include a revision or update timestamp too.
+Subclasses such as enums, named tuples, or `OrderedDict` are rejected.
 
-The default component variation distinguishes an ordinary value from the
-same value wrapped in [`Const`][citry.Const]. `<c-cache>` unwraps `Const` from
-its own control values. Custom `vary()` methods should generally return plain
-values so the intended distinction is obvious.
+## Cache a region
 
-## Decide how slots affect the key
-
-Citry cannot safely guess what supplied slot content will render. With the
-default variation, an effective slot value raises
-[`CacheKeyError`][citry.ext.cache.CacheKeyError]. This includes slot defaults,
-factories, and values created by input hooks.
-
-An optional slot whose effective value is `None` is safe. Fallback markup
-inside `<c-slot>` belongs to the component template and is safe too.
-
-Leave a slotted component uncached unless you can describe every relevant
-output difference in a custom `Cache.vary()`:
-
-```citry
-from citry import Component, SlotInput
-
-
-class PersonalizedPanel(Component):
-    class Slots:
-        body: SlotInput | None = None
-
-    class Cache:
-        enabled = False
-
-    citry = app
-
-    template = """
-      <section><c-slot name="body" /></section>
-    """
-```
-
-## Cache one template region
-
-`<c-cache>` adds no HTML wrapper. Give the region a stable semantic key, then
-vary it by every value used inside:
+`<c-cache>` caches part of a template and adds no HTML of its own. Give
+it a fixed `key` that names the region (the name is shared across the
+whole app, so two templates with the same `key` share entries), and list in `c-vary` every value
+the region uses:
 
 ```citry-html
 <c-cache
@@ -190,45 +149,66 @@ vary it by every value used inside:
 </c-cache>
 ```
 
-This produces a separate entry for each user and locale. The body itself is
-not inspected or included in the key. Add tenant, permissions, timezone,
-feature flags, injected values, or any other input that can change the body.
+This stores a separate entry for each user and locale. Citry does not
+look inside the body to build the key, so add anything else that can
+change it: the tenant, permissions, time zone, feature flags, or values
+passed down with [provide and inject](/concepts/provide-and-inject/).
 
-The controls are:
+`<c-cache>` accepts these attributes:
 
-- `key`: required exact non-empty string;
-- `vary`: one canonical value, defaulting to an empty tuple;
-- `ttl`: expiry in seconds, `None`, or zero;
-- `version`: exact integer or non-empty string, defaulting to `1`;
-- `enabled`: exact boolean, defaulting to `True`.
+- `key`: required non-empty string that names the region;
+- `vary`: one value built from the plain types listed above, by default
+  an empty tuple;
+- `ttl`: seconds until the entry expires, `None` for no expiry, or `0`
+  to skip the cache entirely;
+- `version`: integer or non-empty string, by default `1`;
+- `enabled`: boolean, by default `True`.
 
-An omitted `ttl` uses the Cache extension default. A positive value expires
-the entry after that many seconds, `None` keeps it until invalidation or
-eviction, and zero bypasses both lookup and storage. A hit does not restart
-the expiry timer.
+Write typed values as expressions: `c-ttl="300"` and
+`c-enabled="False"`. A plain attribute such as `ttl="300"` passes a
+string, which Citry rejects.
 
-Literal HTML attributes are strings. Use expressions for typed controls:
-`c-ttl="300"` and `c-enabled="False"`. The literal forms `ttl="300"` and
-`enabled="false"` are invalid strings for these controls.
+When you omit `ttl`, the entry uses the app's default, 300 seconds unless
+you change it. Reusing an entry does not restart its expiry time.
 
-## Know what a hit skips
+## Protect private output
 
-Every component call still creates the boundary and finalizes its inputs.
-Input hooks, defaults, factories, coercion, validation, and a custom
-`Cache.vary()` therefore run before lookup.
+Two calls with the same key get the same HTML. Before you enable a
+cache:
 
-On a component hit, Citry skips its data methods, render hooks, template
-nodes, child components, and slot rendering. On a `<c-cache>` hit, it skips
-the entire body. A hit on an outer entry also skips every cache lookup
-nested inside it, so the outer TTL must satisfy the strictest freshness
-requirement inside that region.
+1. Put every value that depends on the user or request into the key.
+2. Share an entry only among users allowed to see the same output.
+3. Include CSRF tokens, CSP nonces, `template_globals`, and provided
+   values when they appear in the cached HTML.
+4. After each deploy that changes output, change the deployment
+   generation, a value set up in
+   [Cache backends](/performance/cache-backends/#share-cached-output-between-workers)
+   that you change on every deploy.
+5. Protect the cache store like your database. Anyone who can write to
+   it can inject HTML that Citry trusts, and stored entries can contain
+   private HTML, Events state, and JavaScript or CSS data.
 
-Component and slot highlighting from the Debug extension bypasses rendered
-output caching. This keeps the development overlay accurate.
+Citry stores keys as hashes, so logs do not show the raw values or region
+names. The stored entries themselves still need protection.
 
-## Change or remove entries
+## What still runs
 
-Increase a component or fragment `version` when one family of output changes:
+When Citry finds a stored entry, a cached component skips its data methods, render hooks,
+template, child components, and slots. A `<c-cache>` region skips its
+whole body.
+
+Some work still runs on every call, because Citry needs the inputs to
+build the key: input hooks, defaults, factories, type conversion,
+validation, and your `Cache.vary()`.
+
+When an outer entry is reused, the cache lookups nested inside it are
+skipped too. Give the outer entry an expiry no longer than any content
+inside it can tolerate.
+
+## Update or remove { #update-or-remove-entries }
+
+When the output changes for all entries of one component or region,
+raise its `version`:
 
 ```citry-html
 <c-cache key="category-nav" version="nav-v3">
@@ -236,11 +216,10 @@ Increase a component or fragment `version` when one family of output changes:
 </c-cache>
 ```
 
-The new version makes old entries unreachable; it does not delete them. They
-remain until their backend expiry or eviction.
+Old entries are no longer found. They stay in the store until they
+expire or the store drops them.
 
-To remove one exact variation, build the key the backend stores it under
-and delete it:
+To remove one entry, build its key and delete it:
 
 ```python
 from citry.ext.cache import (
@@ -263,51 +242,96 @@ fragment_key = fragment_cache_key(
 app.cache.delete(fragment_key)
 ```
 
-`component_cache_key()` accepts the already-computed variation. It does not
-create a component or call its `Cache.vary()` method.
+`component_cache_key()` takes the key values you pass. It does not call
+the component's `Cache.vary()` for you.
 
-[`Citry.clear`][citry.Citry.clear] advances local invalidation state. It also
-clears backends that provide `clear()`, including the in-process backend.
-Shared adapters leave store-wide clearing to their underlying clients. Use a
-new deployment generation for coordinated invalidation across workers.
+[`Citry.clear`][citry.Citry.clear] stops this `Citry` instance from
+finding its existing entries, and empties stores that have a `clear()` method, such as the
+default in-memory one. The shared adapters do not clear the whole store.
+To invalidate entries on every worker at once, change the deployment
+generation.
 
-## Handle misses and backend failures
+## Cache with slots
 
-An absent, corrupt, incompatible, oversized, or unreplayable render artifact
-is treated as a miss. Citry renders normally and replaces the entry when the
-new artifact fits the configured size limit. An oversized new render still
-succeeds, but is not stored.
+Citry cannot tell what passed-in slot content will render. With the
+default key, a component that receives slot content raises
+[`CacheKeyError`][citry.ext.cache.CacheKeyError]. This includes slot
+defaults, factories, and slots set by input hooks.
 
-Exceptions raised by the backend's `get()` or `set()` methods propagate.
-Choose or wrap a backend with the failure policy your application needs.
-[Cache backends](/performance/cache-backends/) covers capacity, shared stores,
-and deployment settings.
+A slot whose value is `None` is fine, and so is fallback content written
+inside `<c-slot>` in the component's own template.
 
-## Check privacy before enabling a cache
+Leave a component that receives slot content uncached, unless a custom
+`Cache.vary()` can describe every way that content changes the output:
 
-Before caching rendered output:
+```citry
+from citry import Component, SlotInput
 
-1. Include every caller-dependent value in the variation.
-2. Share an entry only among callers allowed to see the same output.
-3. Include CSRF values, CSP nonces, template globals, and injected data when
-   they affect the rendered subtree.
-4. Treat the cache as trusted application infrastructure. Anyone who can
-   write to it can inject HTML that Citry trusts during replay.
-5. Change the deployment generation after every output-affecting deploy.
-6. Apply suitable access controls and retention. Cached values can contain
-   private HTML, protected Events state, and dependency data.
 
-The keys Citry writes to the backend contain a hash instead of the raw
-variation values or fragment names. This reduces accidental disclosure in logs; it does
-not make the stored artifact safe to expose.
+class PersonalizedPanel(Component):
+    class Slots:
+        body: SlotInput | None = None
+
+    class Cache:
+        enabled = False
+
+    citry = app
+
+    template = """
+      <section><c-slot name="body" /></section>
+    """
+```
+
+## Handle cache failures
+
+When an entry is missing, damaged, in an incompatible format, too
+large, or impossible to reuse, Citry treats it as if no entry existed.
+It renders normally and stores the new result. A result larger than the size limit still renders but is not
+stored. [Cache backends](/performance/cache-backends/#limit-the-size-of-one-stored-render)
+explains the limit.
+
+An exception raised by the cache store's `get()` or `set()` reaches your
+code. If a store outage should count as a missing entry, wrap the store
+in an [adapter](/performance/cache-backends/#write-an-adapter-for-another-store)
+that catches the error.
+
+## Edge cases
+
+### Limits on key values
+
+A key value can be at most 32 containers deep, contain at most 10,000
+items, and take at most 64 KiB once encoded. Each list, tuple, and
+dictionary counts as one item, and so does each value and each
+dictionary key inside it. A value that breaks a limit, or uses an
+unsupported type, raises [`CacheKeyError`][citry.ext.cache.CacheKeyError]
+when the component renders.
+
+### `Const` values in keys
+
+The default component key treats a value wrapped in [`Const`][citry.Const]
+as different from the same plain value. `<c-cache>` removes `Const` from
+its own attributes. Return plain values from `vary()` so the key is easy
+to reason about.
+
+### Transparent components
+
+A component with `transparent = True` cannot use `Cache`, because it has
+no HTML of its own for Citry to store and reuse. Wrap its template region in `<c-cache>`
+instead.
+
+### The Debug extension
+
+Component and slot highlighting from the Debug extension turns rendered
+output caching off, so the overlay always shows the live result.
 
 ## Related pages
 
 - [Performance overview](/performance/) compares caching with the other
-  rendering optimizations.
-- [Cache backends](/performance/cache-backends/) for in-process and shared
-  storage.
+  ways to speed up rendering.
+- [Cache backends](/performance/cache-backends/) covers where entries are
+  stored and how to share them between workers.
 - [Constant values](/performance/const/) and
-  [Pure components](/performance/pure/) for reusing stable values and
-  component bodies inside an ordinary render.
-- [Security](/security/) for template and Events trust boundaries.
+  [Pure components](/performance/pure/) reuse work within ordinary
+  renders.
+- [Security](/security/) covers trust boundaries for templates and
+  Events.

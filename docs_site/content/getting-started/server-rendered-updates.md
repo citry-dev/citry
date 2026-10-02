@@ -1,48 +1,69 @@
 ---
 title: Update page from Python
-description: Replace the calling component with freshly rendered HTML, browser data, and CSS.
+description: Replace a component with freshly rendered HTML, browser data, and CSS from a Python event handler.
 ---
 
 # Update page from Python
 
-The form currently reports success with local browser state. This version has
-Python replace the successful `SignupForm` with a `Confirmation` component.
+Sometimes the result of a call is easier to show as new HTML than as browser
+data: a confirmation, an updated table, a different view. A handler can
+return a component, and Citry renders it on the server and puts it on the
+page.
+
+In the last step, the form showed the accepted address with browser data. In
+this step, Python replaces the whole `SignupForm` with a `Confirmation`
+component.
+
+Replace `components.py` with:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step12.py" language="citry" />
 
-Submit an invalid address to confirm validation still works, then submit
+Submit an invalid address to check that validation still works, then submit
 `ada@example.com`. The form becomes a bordered confirmation.
 
-## Render the replacement
+## Return a new component
 
 ```python
-return actions.Render(Confirmation(email=email))
+confirmation = Confirmation(email=email)
+return actions.Render(confirmation)
 ```
 
-With no explicit target, [`actions.Render`][citry.ext.events.actions.Render]
-updates the component instance whose handler was called, and here puts a
-different component in its place. `Confirmation` is a fresh component tree,
-so its HTML, browser data, and CSS travel in the response. Another component
-or a `<c-mark>` region can be addressed with `target="render:<id>"` or
-`target="mark:<name>"`, but the calling component is the default, so the
-handler needs no address at all.
+[`actions.Render`][citry.ext.events.actions.Render] renders `Confirmation`
+on the server and puts it in place of the component whose handler ran, here
+`SignupForm`. The response carries everything the new component needs: its
+HTML, its browser data, and its CSS.
 
-`Confirmation` takes the form's place inside the `aria-live` region. That
-region belongs to `TutorialPage`, which stays on the page, so screen readers
-announce the confirmation. The swap happens only in the open browser tab:
-reloading the page shows the form again, because `TutorialPage` still
-renders `SignupForm`. [Replace the calling component with a different
-component](/events/actions/#replace-the-calling-component-with-a-different-component)
-lists what the new component does not inherit from the old one.
+To update a different part of the page instead, pass a `target`, as
+[Update part of the page](/events/actions/#update-one-part-of-the-page)
+shows.
 
-## Browser data in the new component
+The swap happens only in the open browser tab. Reloading the page shows the
+form again, because `TutorialPage` still renders `SignupForm`.
+
+## Announce the change
+
+`TutorialPage` wraps the form in an `aria-live` region:
+
+```citry-html
+<div aria-live="polite">
+  <c-SignupForm />
+</div>
+```
+
+The region belongs to `TutorialPage`, which stays on the page. When
+`Confirmation` takes the form's place inside it, screen readers announce the
+confirmation.
+
+## Set its browser data
+
+`Confirmation` has its own [`js_data()`][citry.Component.js_data]:
 
 ```python
 def js_data(self, kwargs: Kwargs, slots: Slots):
     return {"email": kwargs.email}
 ```
 
-The top-level `email` value is reactive and available to Vue:
+Vue can use `email` as soon as the new component is on the page:
 
 ```citry-html
 <p
@@ -53,20 +74,24 @@ The top-level `email` value is reactive and available to Vue:
 </p>
 ```
 
-The server-rendered text remains useful before Vue mounts. `v-text` replaces
-it after the fragment is ready.
+The text Python rendered shows until Vue starts. Then `v-text` replaces it.
 
-## Fragment assets
+## Load its CSS and JS
 
-The full page explicitly places collected assets with `<c-css />` in the head
-and `<c-js />` near the end of the body. `Confirmation` only appears later, so
-its fragment carries any dependencies missing from the first response. Citry
-loads those assets before activating the new component. That is why its border
-and reactive status appear after replacement.
+`TutorialPage` now places `<c-css />` in the head and `<c-js />` at the end
+of the body. These tags mark where Citry puts the CSS and JavaScript that the
+page's components need.
 
-Read [Event actions](/events/actions/) for other handler results and [HTML
-fragments](/advanced/html-fragments/) for partial-render details.
+`Confirmation` was not on the first page, so its CSS was not loaded. Citry
+sends the missing CSS and JavaScript with the response and loads them before
+it shows the new component. That is why the border appears right away.
 
 ## Next steps
+
+[Event actions](/events/actions/) lists other things a handler can return,
+and [Swap in a component](/events/actions/#swap-in-a-different-component)
+lists what the new component does not keep from the old one. [HTML
+fragments](/advanced/html-fragments/) covers rendering part of a page in more
+depth.
 
 Next, [build a CRUD task list](/getting-started/build-crud-pages/).

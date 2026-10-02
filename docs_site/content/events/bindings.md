@@ -5,224 +5,142 @@ description: Call Citry event handlers from HTML, bind controls to State, and sh
 
 # Bind events in templates
 
-Citry's `@c-*` attributes call handlers. Its `:c-*` attributes connect form
-controls to [`State`][citry.Component.State]. Both are compiled with the
-component, so invalid handler names, State fields, and modifier combinations
-fail when the template first compiles, normally on its first render.
+To run Python when the user clicks, types, or submits, add an attribute to
+the element. Use `@c-*` to call a handler when something happens on an
+element, such as a click or a keypress. Use `:c-*` to keep a form control in
+sync with a [`State`][citry.Component.State] field. Vue helpers such as
+`$loading()` and `$error()` show what a call is doing.
+
+A misspelled handler name, an unknown State field, or modifiers that cannot
+be combined raise an error on the component's first render.
 
 ## Call handlers from HTML
 
+`@c-<event>="handler"` calls the handler when the element receives that DOM
+event:
+
 | Syntax | Result |
 |---|---|
-| `@c-click="save"` | Call `save` when this element receives `click`. Native and custom DOM event names work, including events that do not bubble. |
-| `@c-click="rate({stars: 5})"` | Evaluate one Vue object expression and validate it as the handler's `data`. |
-| `@c-submit.prevent="submit"` | Collect named form controls and call `submit` without native navigation. |
+| `@c-click="save"` | Call `save` when the element is clicked. Any DOM event name works, including your own custom events. |
+| `@c-click="rate({stars: 5})"` | Pass arguments as one object. The handler receives it as `data`. |
+| `@c-submit.prevent="submit"` | Collect the form's named controls and call `submit` instead of submitting the page. |
+
+Modifiers after the event name control which events send a call, and when:
 
 | Modifier | Use |
 |---|---|
-| `.prevent` | Call `preventDefault()` before sending. It takes effect when that event instance is cancelable. |
-| `.stop` | Stop the DOM event from bubbling. |
-| `.self` | Send only when the bound element itself was the event target. |
-| `.once` | Send at most once during the binding's lifetime. |
-| `.enter` / `.escape` | Require the concrete event's `key` to be `Enter` / `Escape`, regardless of the event name. |
+| `.prevent` | Call `preventDefault()` on the event first. |
+| `.stop` | Stop the event from bubbling to ancestors. |
+| `.self` | Send only when the event happened on this element, not on a child. |
+| `.once` | Send at most once. |
+| `.enter` / `.escape` | Send only when the key pressed was Enter / Escape. |
+| `.debounce` | Wait until events stop for a moment, then send once. |
+| `.throttle` | Send at most once per interval. |
 
-On HTML elements, `.once` follows Vue's native listener behavior: the first
-event consumes the listener even if `.enter` or `.self` prevents the handler
-from running. For example, with `@c-keydown.enter.once`, pressing another key
-first leaves no listener for a later Enter press.
+`.debounce` and `.throttle` wait 250 ms by default. Add a duration to change
+it, as in `@c-input.debounce.300ms="search"` or `.throttle.1s`.
 
-Ordinary-element `@c-*` bindings support `.debounce` and `.throttle`. Each may
-take an optional whole-number duration in milliseconds or seconds immediately
-after the modifier, as in `@c-input.debounce.300ms="search"`; a bare modifier
-uses 250 ms. Two-way `:c-*` State control bindings support the same modifiers.
+Citry listens on the element that has the attribute. An event that does not
+bubble, such as `focus`, reaches only that element, so a binding on an
+ancestor does not see it. Use a bubbling event such as `focusin` there
+instead.
 
-Citry listens on the element carrying the binding. A non-bubbling event works
-on that element but does not reach a binding on an ancestor. Use a bubbling
-counterpart such as `focusin` when an ancestor should react to descendant
-events. Custom names are exact: Citry cannot tell a misspelling from an
-intentional application event with that name. Citry also does not maintain a
-tag/event compatibility table. Application code may dispatch a synthetic
-event from any element, so even `<br @c-submit="save">` is valid and fires if
-`submit` is dispatched on that element.
+On a child component tag, `@c-select="save"` calls the parent's `save`
+handler when the child emits `select` through Vue. To let the child call
+something from its own template, pass a callback through a Vue prop instead.
+See [Client interactivity](/concepts/client-interactivity/#listen-to-child-events).
 
-Modifiers follow the concrete event too. For example, a native `scroll` event
-is not cancelable, but application code may dispatch a cancelable synthetic
-event named `scroll`; `.prevent` cancels the latter. Likewise, `.enter` and
-`.escape` inspect `event.key` rather than maintaining an event-name allowlist.
-An ordinary event with no `key` simply does not match the filter, while an
-arbitrarily named `KeyboardEvent` can.
+## Read State and status { #read-call-state-from-vue }
 
-Bindings inside an HTML `<template>` definition remain inert with the rest of
-its `content`. When Vue creates live `v-if` or `v-for` copies, Citry
-activates the bindings on those inserted copies. A binding on the `<template>`
-element itself is different: that element is live, so its binding activates
-normally.
+These helpers work in the template and, through `this`, in the component's
+JavaScript:
 
-An `@c-*` attribute on a child component tag is a parent-owned listener. Its
-handler name and optional argument expression use the parent's Vue instance even
-though the child receives the event. If the child should run a callback from
-its own template, declare a native Vue function prop and pass the callback
-through that prop. See
-[Client interactivity](/concepts/client-interactivity/#listen-to-child-events)
-for component-boundary isolation. Debounce and throttle work only on `@c-*`
-bindings attached to HTML elements. A component tag has no element to time
-the event on, so a timed binding on a child component tag makes
-`serialize()` or `str()` on the render raise `TypeError`.
+| Helper | Use |
+|---|---|
+| [`$state`][$state] | Read State, or replace a field the browser may change. The change is sent with the next call from this component, unless that call uses GET (see [Event routes](/events/routes/)). |
+| [`$loading()`][$loading] | True while any call from this component is waiting or running. |
+| [`$loading('save')`][$loading] | The same, for the `save` handler only. |
+| [`$error()`][$error] | The newest error from any of this component's handlers, or `null`. |
+| [`$error('save')`][$error] | The last error from `save`, or `null`. |
+| [`$sendEvent(name, args?)`][$sendEvent] | Call a handler and get a Promise for its result. |
+
+A successful call clears its handler's error. A retry keeps showing the old
+error until the new call finishes. Passing an unknown handler name to
+`$loading` or `$error` raises an error.
+
+Use `$sendEvent` when your JavaScript needs the handler's return value. An
+`@c-*` attribute does not give you one:
+
+```javascript
+$component({
+  data() {
+    return { result: null };
+  },
+  methods: {
+    async refresh() {
+      this.result = await this.$sendEvent("refresh");
+    },
+  },
+});
+```
+
+When a call made with `$sendEvent` fails, its Promise rejects. Catch it with
+`try`/`catch` or `.catch(...)`. When the server returns an error for an
+`@c-*` call, the error goes to `$error()` and nothing else happens.
+
+## Keep changes local { #keep-rapid-local-changes-in-the-browser }
+
+Not every click needs Python. [`$state`][$state] is a Vue object holding the
+component's State. A plain Vue click handler can change it without a request,
+and the next server call sends the latest value along:
+
+```citry-html
+<button @click="$state.count++">+1</button>
+<span v-text="$state.count">{{ count }}</span>
+<button @c-click="save">Save</button>
+```
+
+The `+1` button is ordinary Vue and makes no request. Save calls the `save`
+handler, which receives the updated `count` in `state`.
 
 ## Bind controls to State
 
+`:c-<field>` connects a form control to the State field of the same name:
+
 | Syntax | Result |
 |---|---|
-| `:c-query` | Display the public `query` State field in this control. |
-| `:c-query="refresh"` | Update `query` and call `refresh` on the control's normal update event. |
-| `:c-query.lazy="refresh"` | Wait for the committed-value event. |
-| `:c-query.debounce.300ms="refresh"` | Wait for 300 ms of quiet before one update and call. |
-| `:c-query.throttle.1s="refresh"` | Send at most one update per second. |
-| `:c-query.on:keyup.enter="refresh"` | Use `keyup` as the update event and accept only Enter. |
+| `:c-query` | Show the `query` field in this control. |
+| `:c-query="refresh"` | Also write each edit to `query` and call `refresh`. |
+| `:c-query.lazy="refresh"` | Send when the user finishes editing (on `change`), not on every keystroke. |
+| `:c-query.debounce.300ms="refresh"` | Send once, after 300 ms without edits. |
+| `:c-query.throttle.1s="refresh"` | Send at most once per second. |
+| `:c-query.on:keyup.enter="refresh"` | Send on `keyup`, only for the Enter key. |
 
-A binding with no value is **one-way**: Citry writes the State field into the
-control and never reads it back. A binding with a handler value is **two-way**:
-the control writes to the field and calls the handler. Only a two-way binding
-takes the timing modifiers above. Bare `.debounce` and `.throttle` use 250 ms,
-and `.lazy` and `.on:<event>` cannot be combined.
+A binding without a handler is **one-way**: Citry shows the field's value in
+the control but never reads the control back. A binding with a handler is
+**two-way**: each edit updates the field and calls the handler with the new
+State. Only two-way bindings take the timing modifiers. `.lazy` and
+`.on:<event>` cannot be combined.
 
-State bindings belong on HTML controls inside the component that owns the
-State. A `:c-*` binding on a child component tag is an error.
+Put the binding on a control inside the component that declares the State. A
+`:c-*` binding on a child component tag is an error.
 
-### Which elements you can bind
+### Python field types
 
-A binding reads a value out of a control and writes one back into it, so it
-needs an element that holds an editable or displayable value.
-
-| Element or input type | One-way | Two-way |
-|---|---:|---:|
-| `<input type="text">`, `search`, `tel`, `url`, `email`, `password`, `date`, `month`, `week`, `time`, `datetime-local`, `number`, `range`, `color`, `checkbox`, `radio` | Yes | Yes |
-| `<input type="hidden">` | Yes | No: it has no user update event. |
-| `<input type="file">` | No | No: files cannot live in JSON State; use an ordinary upload endpoint or custom transport. |
-| `<input type="submit">`, `image`, `reset`, `button` | No | No: these are action controls, not editable values. |
-| `<textarea>` | Yes | Yes |
-| `<select>` | Yes | Yes. A single select binds a string; `multiple` binds a `list[str]`. |
-| A custom element that exposes a value | Yes | Yes, with `.on:<event>`. |
-| Any other element, such as `<div>` or `<span>` | No | No |
-
-A missing, bare, or empty input `type` means `text`. Type matching is
-case-insensitive but exact: `TEXT` works, while `" text "` or an unknown type
-is an error. `.on:<event>` changes the event for a supported two-way binding;
-it cannot make `hidden`, file/action inputs, or unknown native types bindable.
-
-An element such as `<div>` holds no value, so a binding has nothing to read or
-write. To react to what happens on one, use an `@c-*` event binding:
-
-```citry-html
-{# ❌ A <div> has no value to bind #}
-<div :c-query.on:click="refresh"></div>
-
-{# ✅ Listen for the event instead #}
-<div @c-click="refresh"></div>
-```
-
-Citry rejects a known unbindable element when the template compiles. A binding
-that a `c-bind` spread puts on an HTML element is checked the same way when it
-resolves, including an element selected by `<c-element>`.
-
-A `<select multiple>` reads all selected option values into a `list[str]`, in
-the options' document order. Citry writes that list back by selecting every
-option whose value occurs in it; an empty list or any non-list value clears the
-selection. The live `multiple` property decides the value shape, so the same rule applies when
-`multiple` or the `:c-*` binding comes from `c-bind`:
-
-```citry-html
-<select multiple :c-tags="save">
-  <option value="new">New</option>
-  <option value="sale">Sale</option>
-</select>
-```
-
-Any non-list value, including `None`, clears every selection on the downward
-path. A State binding reads selected disabled options too; ordinary form
-submission keeps standard `FormData` behavior and omits disabled options.
-
-```python
-from dataclasses import field
-
-
-class State:
-    tags: list[str] = field(default_factory=list)
-```
-
-`<c-element>` binds whatever element its `is` attribute names, so
-`<c-element is="input" :c-query="refresh" />` is an ordinary input binding.
-When `is` is computed, Citry validates the State field and handler while the
-template compiles, then validates the selected element and its final attributes
-at render time. A result such as `input` works; a result such as `div`, an
-unsupported input type, or a custom element without the required `.on:` event
-fails before its HTML reaches the browser.
-
-A custom element is bound by its `value` property. Citry writes the State value
-to that property without HTML-control coercion, so strings, numbers, booleans,
-lists, objects, and `None` arrive as their corresponding JavaScript values. A
-two-way binding reads the property the same way; its value must therefore be
-JSON-compatible and the Python field must accept the matching shape. If a
-custom element returns `undefined`, throws while being read, or returns a
-non-JSON value such as `Date` or `BigInt`, Citry leaves State unchanged and
-does not send the binding's handler. It reports the invalid value in the
-browser console, and a later valid update can recover normally.
-
-The element may be defined before or after Citry starts. If its JavaScript
-class has not loaded yet, Citry waits for the browser to upgrade that tag and
-then applies the **current** State value to the live element. It does not create
-a pre-upgrade `value` property or retain an element removed while waiting. The
-class must expose `value` by the end of its synchronous upgrade. A missing
-property, or a getter or setter that throws, produces a browser-console error
-without aborting the other bindings on the page.
-
-### Which event updates the field
-
-A two-way binding listens for one DOM event. `.lazy` switches to the event that
-fires when the value is committed, and `.on:<event>` replaces the choice
-entirely. The listener belongs to the control itself, so `.on:<event>` also
-works with a custom or non-bubbling event dispatched on that control.
-
-| Control | Default event | With `.lazy` |
-|---|---|---|
-| `<input type="text">` and the other text-like types | `input` | `change` |
-| `<input type="number">`, `<input type="range">` | `input` | `change` |
-| `<input type="checkbox">`, `<input type="radio">` | `change` | Rejected: the value already commits on `change` |
-| `<textarea>` | `input` | `change` |
-| `<select>` | `change` | Rejected: the value already commits on `change` |
-| A custom element | `.on:<event>` is required | Not applicable |
-
-The `.enter` and `.escape` filters inspect the concrete update event's `key`.
-Pair them with `.on:keyup` / `.on:keydown` for ordinary controls, or with any
-custom update event that exposes a compatible `key` value.
-
-Citry applies this matrix at every point where a type becomes known: template
-load for a literal type, render time for Python-resolved `c-type` / `c-bind`,
-and in the browser for Vue `:type`. A live invalid type
-turns off State application, update listeners, draft preservation, and pending
-timers. Citry reports it once and reactivates the binding if the type becomes
-valid again. The browser checks the raw `type` attribute so an unknown keyword
-cannot be silently normalized to `text`. Text-like changes such as a password
-visibility toggle preserve an accepted draft; a value/event-shape change such
-as text to checkbox cancels the stale draft before activating the new shape.
-
-### What Python type the field receives
-
-A two-way binding sends a JSON value, and the server checks it against the State
-field's declared type **without converting it**. Declare the field to match the
-control:
+The browser sends the control's value as JSON, and the server checks it
+against the field's type **without converting it**. Declare the field to
+match the control:
 
 | Control | Value sent | Declare the field as |
 |---|---|---|
-| `<input type="checkbox">`, `<input type="radio">` | whether the control is checked | `bool` |
+| Checkbox, radio | whether it is checked | `bool` |
 | `<input type="number">`, `<input type="range">` | a number | `int` or `float` |
-| `<select multiple>` | all selected option values, in document order | `list[str]` |
-| Supported string-valued two-way inputs, a single `<select>`, `<textarea>` | the value string | `str` |
-| A custom element | whatever JSON-compatible value its `value` property holds | match that property |
+| `<select multiple>` | the selected option values, in page order | `list[str]` |
+| Other text-like inputs, a single `<select>`, `<textarea>` | the text | `str` |
+| A custom element | its `value` property, which must be JSON | the matching type |
 
-An empty or half-typed `<input type="number">` holds no number, so it sends the
-text instead. A field declared `int` rejects that value. Accept both spellings
-and convert in the handler:
+An empty or half-typed number input has no number, so it sends its text. A
+field declared `int` rejects that. Accept both and convert in the handler:
 
 ```python
 class State:
@@ -234,106 +152,73 @@ class Events:
         amount = int(state.amount or 0)
 ```
 
-### What Citry writes into the control
+For `<select multiple>`, give the field an empty list as its default:
 
-Citry applies the field to every bound control in the browser and re-applies it
-after each update, including a response that only changes State, so a
-one-way binding keeps showing the server's value:
+```python
+from dataclasses import field
+
+
+class State:
+    tags: list[str] = field(default_factory=list)
+```
+
+### Elements you can bind { #which-elements-you-can-bind }
+
+A binding reads and writes a control's value, so the element must have one:
+
+| Element or input type | One-way | Two-way |
+|---|---:|---:|
+| `<input>` of type `text`, `search`, `tel`, `url`, `email`, `password`, `date`, `month`, `week`, `time`, `datetime-local`, `number`, `range`, `color`, `checkbox`, `radio` | Yes | Yes |
+| `<input type="hidden">` | Yes | No: the user cannot edit it. |
+| `<input type="file">` | No | No: files cannot go into State. Use an upload endpoint. |
+| `<input>` of type `submit`, `image`, `reset`, `button` | No | No: these are buttons, not values. |
+| `<textarea>`, `<select>` | Yes | Yes |
+| A custom element with a `value` property | Yes | Yes, with `.on:<event>` |
+| Any other element, such as `<div>` or `<span>` | No | No |
+
+An `<input>` without a `type` counts as `text`. To react to something
+happening on an element without a value, use an `@c-*` event binding:
+
+```citry-html
+{# ❌ A <div> has no value to bind #}
+<div :c-query.on:click="refresh"></div>
+
+{# ✅ Listen for the event instead #}
+<div @c-click="refresh"></div>
+```
+
+### When the field updates
+
+A two-way binding sends on one DOM event. `.lazy` switches to the event that
+fires when the user finishes editing, and `.on:<event>` names the event
+yourself:
+
+| Control | Default event | With `.lazy` |
+|---|---|---|
+| Text-like inputs, number, range, `<textarea>` | `input` | `change` |
+| Checkbox, radio, `<select>` | `change` | Not allowed: these already send on `change` |
+| A custom element | You must set `.on:<event>` | Not allowed |
+
+`.enter` and `.escape` need a keyboard event, so pair them with
+`.on:keyup` or `.on:keydown`.
+
+### What the control shows
+
+Citry writes the field into every bound control, and again after each
+response that changes State. This is how a one-way binding shows the
+server's value:
 
 | Control | Written as |
 |---|---|
-| `<input type="checkbox">`, `<input type="radio">` | checked when the value is truthy |
-| `<select multiple>` | each option is selected when its value occurs in the list; an empty list or any non-list value (including `None`) clears all options |
-| Every other input, `<textarea>`, a single `<select>` | the value as a string, with `None` becoming `""` |
-| A custom element | the State value unchanged, including `None` as JavaScript `null` |
+| Checkbox, radio | checked when the value is truthy |
+| `<select multiple>` | options whose value is in the list are selected; anything that is not a list clears the selection |
+| Other inputs, `<textarea>`, a single `<select>` | the value as text; `None` becomes empty |
+| A custom element | the value as is; `None` becomes `null` |
 
-## Keep rapid local changes in the browser
+## Call on a timer { #call-a-handler-on-a-timer }
 
-Not every click needs Python. [`$state`][$state] is reactive, so a local button
-can update it immediately and a later server event can persist the latest
-value:
-
-```citry
-class SavedCounter(Component):
-    citry = citry_app
-
-    class Kwargs:
-        count: int = 0
-
-    class State(Kwargs):
-        pass
-
-    class Events:
-        def save(self, state):
-            persist_count(state.count)
-
-    def template_data(self, kwargs, slots):
-        return {"count": kwargs.count}
-
-    template = """
-      <div>
-        <button @click="$state.count++">+1</button>
-        <span v-text="$state.count">{{ count }}</span>
-        <button @c-click="save">Save</button>
-      </div>
-    """
-```
-
-The first button is ordinary Vue and makes no request. The Save button sends
-the queued State update with the `save` call.
-
-## Read call state from Vue
-
-These helpers are available in Vue expressions inside an interactive Citry
-component:
-
-| Helper | Use |
-|---|---|
-| [`$state`][$state] | Read reactive public State or replace a field allowed by `_model`. A write rides the next non-GET browser call from this component. |
-| [`$loading()`][$loading] | Test whether any call from this component is queued or running. |
-| [`$loading('save')`][$loading] | Test only the named handler. |
-| [`$error()`][$error] | Read the newest retained error across this component's handlers, or `null`. |
-| [`$error('save')`][$error] | Read only the named handler's retained error. |
-| [`$sendEvent(name, args?)`][$sendEvent] | Send a named event from a Vue expression. |
-
-The loading and error accessors are read-only. A successful call clears only
-its handler's error. Retrying a failed handler leaves its error visible until
-the new call succeeds or fails. Unknown handler names passed to `$loading` or
-`$error` throw before a request is sent.
-
-Component JavaScript uses the same public-instance helpers through `this`:
-
-```javascript
-$component({
-  methods: {
-    async refresh() {
-      const result = await this.$sendEvent("refresh");
-      this.result = result;
-    },
-  },
-  data() {
-    return { result: null };
-  },
-});
-```
-
-Declarative `@c-*` bindings do not expose the handler's Promise or an
-[`actions.Data`][citry.ext.events.actions.Data] value. Use `$sendEvent` when browser code needs that one caller's value. Return
-[`actions.Dispatch`][citry.ext.events.actions.Dispatch] when a declarative
-call must notify browser listeners.
-
-A well-formed server `ok: false` result, including `invalid_args`, is recorded
-for `$error(...)` and consumed by a declarative `@c-*` binding. A native Vue
-listener that calls `$sendEvent`, such as `@select="$sendEvent('save')"`, owns
-a Promise instead; handle its rejection with `await` and `try`/`catch` or with
-`.catch(...)`. Client-side argument expressions that cannot be encoded as JSON,
-malformed Events protocol responses, and render or lifecycle failures still
-surface as runtime errors.
-
-## Call a handler on a timer
-
-Use `@c-poll.<seconds>s` on an ordinary DOM element to call a server handler at
-a fixed cadence. The first call starts after one complete interval:
+`@c-poll.<seconds>s` calls a handler repeatedly, for example to refresh a
+status. The first call happens after one full interval:
 
 ```citry-html
 <output @c-poll.30s="refresh({projectId})">
@@ -341,15 +226,44 @@ a fixed cadence. The first call starts after one complete interval:
 </output>
 ```
 
-Each live element owns its polling lifetime. Citry skips a tick while that
-element's previous polling request is queued or running. Removing the element
-or accepting a server revision that replaces that binding stops its old
-lifetime and starts a fresh complete interval. A revision in an unrelated
-subtree does not reset the timer. A hidden page pauses polling; returning to it
-starts a fresh complete interval, without catch-up calls.
+Citry skips a tick while the previous poll is still waiting or running. Polls
+stop while the browser tab is hidden. When the tab is shown again, the timer
+starts a new full interval, without making up for missed calls. The timer
+also stops when the element is removed, and starts over when a re-render
+replaces it.
 
-Put `@c-poll` on an HTML element. A component tag has no element to poll
-from, so `@c-poll` on a child component tag makes `serialize()` or `str()`
-on the render raise `TypeError`. A `c-bind` spread
-may add `@c-poll` to an element, but only with a bare handler name such as
-`"refresh"`; an argument expression there is an error.
+## Fix binding problems
+
+### Timing needs an element
+
+`.debounce`, `.throttle`, and `@c-poll` work only on HTML elements. On a
+child component tag they raise `TypeError` when the page renders. A
+`c-bind` spread can add `@c-poll` to an element, but only with a plain
+handler name such as `"refresh"`, without arguments.
+
+### `.once` is used up early
+
+`.once` removes the listener after the first event, even when another
+modifier stops that event from sending. With `@c-keydown.enter.once`,
+pressing any other key first means a later Enter sends nothing.
+
+### How modifiers match
+
+`.prevent` has an effect only when the event can be cancelled.
+`.enter` and `.escape` read the event's `key` property, whatever the
+event's name. An event without a `key` never matches.
+
+### `:type` stops a binding
+
+If Vue later changes `:type` to a type that cannot be bound, the binding
+stops and the browser console says why. It works again once the type
+changes back.
+
+### Custom elements
+
+Citry reads and writes a custom element's `value` property as is, so
+numbers, lists, and objects arrive unchanged. If reading `value` throws,
+returns `undefined`, or returns something that is not JSON, Citry
+leaves State unchanged, sends nothing, and reports the problem in the
+browser console. The element may be defined after Citry starts: Citry
+waits for it and then applies the current State value.

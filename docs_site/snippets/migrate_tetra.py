@@ -51,7 +51,9 @@ class Counter(Component):
       $component({
         methods: {
           async addOne() {
-            const result = await this.$sendEvent("increment", { amount: 1 });
+            const result = await this.$sendEvent("increment", {
+              amount: 1,
+            });
             return result.count;
           },
         },
@@ -77,14 +79,16 @@ class TaskEditor(Component):
     class Events:
         def complete(self, data: TaskIn):
             mark_complete(data.task_id)
+            editor = TaskEditor(
+                task_id=data.task_id,
+                status="complete",
+            )
             return [
                 actions.Dispatch(
                     "TaskEditor:completed",
                     {"taskId": data.task_id},
                 ),
-                actions.Render(
-                    TaskEditor(task_id=data.task_id, status="complete"),
-                ),
+                actions.Render(editor),
             ]
 
     def template_data(self, kwargs: Kwargs, slots) -> dict[str, Any]:

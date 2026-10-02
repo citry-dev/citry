@@ -5,24 +5,29 @@ description: Replace a component render or adjust the JavaScript and CSS tags it
 
 # Component hooks
 
-Hooks let one component change its own render or asset tags. Use them when a
-normal data method or template cannot express the job clearly.
+Sometimes a component needs Python logic that its template cannot express:
+show a placeholder instead of the template when there is no data, turn an
+error into a friendly message, or add an attribute to the script tags it
+brings. A hook is a method that Citry calls at a fixed point while it
+renders the component, so your code can change the result.
 
-Citry provides two component hooks:
+A component has two hooks:
 
-- `on_render()` can replace a render or recover from an error.
-- `on_dependencies()` can adjust the component's scripts and styles.
+- `on_render()` replaces the component's output, or reacts after it
+  renders.
+- `on_dependencies()` changes the script and style tags the component adds
+  to the page.
 
-For behavior that spans an application, use an
+To change every component in an application at once, write an
 [`Extension`][citry.Extension] instead.
 
-## Replace output with `on_render()`
+## Replace the output
 
-On an uncached render, `on_render()` runs after Citry has prepared the
-component's data and before it renders the template. Return `None` to continue
-with the template. Return content to use it as the component's whole output.
+Citry calls `on_render()` after it prepares the component's data and before
+it renders the template. Return `None` to render the template as usual.
+Return anything else to use it as the component's whole output.
 
-This table shows a placeholder instead of an empty table:
+This table shows a message instead of an empty table:
 
 ```citry
 from citry import Component
@@ -32,11 +37,7 @@ class Table(Component):
     class Kwargs:
         rows: list[str] | None = None
 
-    def template_data(
-        self,
-        kwargs: Kwargs,
-        slots,
-    ) -> dict[str, list[str]]:
+    def template_data(self, kwargs: Kwargs, slots):
         return {"rows": kwargs.rows or []}
 
     def on_render(self):
@@ -53,45 +54,39 @@ class Table(Component):
     """
 ```
 
-`Table()` inserts the placeholder. `Table(rows=["Ada", "Alan"])` continues
-to the template.
+`Table()` shows the message. `Table(rows=["Ada", "Alan"])` renders the
+table.
 
-The replacement may be:
+`on_render()` can return:
 
-- a string;
-- a composed element such as `Message(text="Hello")`;
-- an existing [`CitryRender`][citry.CitryRender];
-- a [`Slot`][citry.Slot], called without data; or
+- a string of HTML;
+- a component, such as `Message(text="Hello")`;
+- a [`CitryRender`][citry.CitryRender] that was already rendered;
+- a [`Slot`][citry.Slot], which Citry renders without data;
 - a [`ComponentLike`][citry.ComponentLike].
 
-Because `None` means “continue,” return an empty string to insert nothing.
+Because `None` means "render the template", return `""` to show nothing.
 
-!!! warning
+The hook can read `self.kwargs`, `self.slots`, `self.parent`, and
+[`self.inject()`][citry.Component.inject]. To pass values to the template,
+use [`template_data()`][citry.Component.template_data] instead.
 
-    Citry trusts a string returned from `on_render()` as component markup. It
-    is not escaped. Never build that string by joining untrusted input. Put
-    user-controlled values in a template, component inputs, or another API
-    that escapes them.
+!!! warning "Citry does not escape a returned string"
 
-Values needed by the template belong in
-[`template_data()`][citry.Component.template_data]. The hook already has
-access to `self.kwargs`, `self.slots`, `self.parent`, and
-[`self.inject()`][citry.Component.inject].
+    Citry inserts a string from `on_render()` as HTML. Never build it from
+    user input. Put user values in a template or a component input, where
+    Citry escapes them.
 
-### Component caching skips the hook
+## Show a failure message
 
-A successful component-cache hit reuses the completed output. Citry does not
-run data methods, the template, slots, or `on_render()` again.
+For most error handling, wrap the part that may fail in the built-in
+`<c-error-fallback>` tag; see
+[Error boundaries](/concepts/error-boundaries/). Use `on_render()` when
+deciding what to show needs Python code.
 
-If a hook's result depends on something outside the declared component inputs,
-that value must also vary the cache key. Otherwise a cached result can outlive
-the condition that produced it. See [Caching](/performance/caching/).
-
-## Observe completion or recover from an error
-
-Add `yield` to make `on_render()` a two-phase generator. Code before the yield
-runs before the template. Once the component and its children settle, the
-yield receives `(result, error)`:
+Add `yield` to `on_render()`. Code before the `yield` runs before the
+template. The `yield` waits until the component and everything inside it
+has rendered, then gives you a `(result, error)` pair:
 
 ```python
 def on_render(self):
@@ -102,48 +97,27 @@ def on_render(self):
     return None
 ```
 
-Exactly one value is present:
+When rendering succeeds, `result` is the rendered
+[`CitryRender`][citry.CitryRender] and `error` is `None`. When it fails,
+`result` is `None` and `error` is the exception.
 
-- on success, `result` is the live
-  [`CitryRender`][citry.CitryRender] and `error` is `None`;
-- on failure, `result` is `None` and `error` is the exception.
+After the `yield`, you can:
 
-After the yield, you may:
+- return new content to replace the result;
+- raise an exception;
+- return `None` to keep a successful result, or to let the error continue
+  to the components around this one.
 
-- return new content to replace the current result;
-- raise an exception; or
-- return `None` to keep a successful result or let an error continue upward.
+## Change asset tags
 
-Do not call `str(result)` merely to inspect it. The render still carries live
-relationships between components and slot content, and it may not be safe to
-serialize from inside this hook. If you return serialized HTML, you also take
-responsibility for replacing the live result with that string. HTML you
-serialize inside the hook does not carry this component's own `data-cid-*`
-attribute; Citry adds it to the HTML you return.
+`on_dependencies()` receives the script and style tags that one rendered
+component adds to the page. Those are its own `js` and `css`, the files in
+its [`Dependencies`](/advanced/dependency-files/) class, and the
+stylesheet that holds its `css_data()` values. Change the lists in place,
+or return a new `(scripts, styles)` pair. Return `None` to keep them as
+they are.
 
-You can yield replacement content and receive another `(result, error)` pair,
-which supports multi-stage rendering. The generated
-[`on_render()` reference][citry.Component.on_render] contains the complete
-generator protocol.
-
-For ordinary error recovery, prefer the built-in `<c-error-fallback>` tag.
-See [Error boundaries](/concepts/error-boundaries/). A custom hook is useful
-when recovery itself needs Python logic.
-
-## Adjust a component's asset tags
-
-`on_dependencies()` is a classmethod. At serialization time, Citry calls it
-once for each rendered instance with that instance's scripts and styles. The
-lists include:
-
-- the component's own `js` and `css`;
-- entries from its nested `Dependencies` class; and
-- the stylesheet Citry generates from `css_data()`.
-
-Mutate the lists, or return a `(scripts, styles)` pair to replace them. Return
-`None` to leave them unchanged.
-
-This component adds `crossorigin` to the external scripts it contributes:
+This component adds `crossorigin` to its external scripts:
 
 ```citry
 from citry import Component
@@ -170,32 +144,58 @@ class Chart(Component):
     """
 ```
 
-This hook runs before Citry removes duplicates across components. When two
-scripts share a URL or inline content, the first one wins, including any
-attributes the hook added. Two stylesheets that share a URL or inline content
-must carry the same attributes; otherwise serialization raises `ValueError`.
+The hook is a classmethod. Citry calls it when it turns the render into
+HTML, once for each time the component appears on the page.
 
-Removing a component's own script can stop its browser behavior. Drop an
-entry only when the same behavior is supplied somewhere else.
+Removing the component's own script stops its browser code from running.
+Remove an entry only when the same code reaches the page another way.
 
-An extension `on_dependencies()` hook can adjust the collected component
-lists after duplicates are removed. Citry adds its own browser runtime after
-that hook returns, so the hook does not see every script on the page. See
-[Extensions](/advanced/extensions/) for the application-wide hook.
+## Less common cases
 
-The extension hook's context also has an `early_scripts` list for scripts
-that must run before the others. Static output writes them as tags before
-the dependency scripts; an interactive page (one that uses Citry's browser
-runtime) loads them first. See
-[Extensions](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page).
+### Cached renders
+
+When [component caching](/performance/caching/) finds a stored result,
+Citry reuses it and does not run the data methods, the template, or
+`on_render()`. If the hook's result depends on something other than the
+component's inputs, make that value part of the cache key, or the stored
+result outlives the condition that produced it.
+
+### Avoid `str(result)`
+
+Do not call `str(result)` just to look at the HTML. The render is still
+linked to the components and slot content around it, and turning it into a
+string inside the hook may fail. If you do return serialized HTML, it
+replaces the result, and Citry adds this component's marker attribute to
+it.
+
+### Yield more than once
+
+Instead of a bare `yield`, you can yield new content. Citry renders it and
+sends back a new `(result, error)` pair, so one hook can try several
+outputs in turn. The [`on_render()` reference][citry.Component.on_render]
+describes every step.
+
+### Duplicate tags
+
+The hook runs before Citry removes tags that several components share.
+When two components add the same script, the first one wins, together with
+any attribute the hook added. Stylesheets follow stricter rules; see
+[Order and duplicates](/advanced/dependency-files/#order-files-and-handle-duplicates).
+
+### Change page-wide tags
+
+The hook sees only this component's tags. An extension's
+`on_dependencies()` hook sees the tags of every component on the page, and
+can also add scripts that run before all others. Citry adds its own
+browser runtime after that hook, so neither hook sees it. See
+[Add scripts and styles](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page).
 
 ## Next steps
 
-- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) covers
-  primary assets and per-render data.
-- [Dependency files](/advanced/dependency-files/) covers libraries, shared
-  files, and custom tags.
-- [Place JavaScript and CSS](/advanced/asset-placement/) controls where the
-  collected tags go.
-- [Rendering](/concepts/rendering/) explains the larger compose, render, and
-  serialize process.
+- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) adds
+  code and styles to one component.
+- [Dependency files](/advanced/dependency-files/) adds libraries and shared
+  files.
+- [Place JavaScript and CSS](/advanced/asset-placement/) chooses where the
+  tags go in the page.
+- [Rendering](/concepts/rendering/) explains how a component becomes HTML.

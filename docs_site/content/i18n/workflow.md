@@ -5,114 +5,84 @@ description: Check message contracts, inspect project catalogs, hand source to t
 
 # Translation workflow and tooling
 
-Citry treats a message as checked application data. The source message defines
-its stable ID and parameter interface. Translations may change grammar and
-ordering, but they must still satisfy that interface.
+As an application changes, messages, translations, and the code that
+calls them drift apart: a variable is renamed, a message is deleted, a
+new message is never translated. Citry can check all of them together,
+so these problems show up in CI instead of on a user's screen.
 
-A normal workflow is:
+A typical workflow:
 
 ```text
 Write source messages
-→ check message IDs, variables, and call sites
-→ translate locale catalogs
-→ check the complete locale graph
-→ compile standalone packages
-→ build and deploy the application
+→ check message IDs, variables, and calls
+→ translate into each locale
+→ check coverage of each locale
+→ compile catalog packages
+→ build and deploy
 ```
 
-## Write the defining source first
+This page covers each step and the commands that support it.
 
-Put component-owned source text in `messages` or `messages_file`, or put shared
-source text in a standalone catalog package:
+## Write source messages
+
+The message in the source language defines the message: its ID, its
+text and attributes, and the type of each variable. Write it in the
+component's `messages` block or in a catalog package:
 
 ```fluent
 # @param {str} $name - User name.
 my-app-account-greeting = Welcome, { $name }.
 ```
 
-The defining source owns:
-
-- the public message ID;
-- the value and attributes;
-- the allowed variables and `@param` types;
-- public message references and private terms; and
-- the package source locale.
-
-Translators edit the corresponding locale file without copying the `@param`
-declarations:
+Translators then write the same message in their locale's file, using
+the same variables, without the `@param` comments:
 
 ```fluent
 my-app-account-greeting = Ahoj, { $name }.
 ```
 
-## Run the project checker
+See [Write messages](/i18n/messages/) and
+[Organize catalogs](/i18n/catalogs/).
 
-Run Citry's normal registry-backed checker against the engine:
+## Check messages
+
+Run the project checker with your application:
 
 ```bash
 citry --app myproject.engine:app check
 ```
 
-The project index lets i18n checks see component messages and configured
-catalog packages together. It can report problems such as:
+With `--app`, the checker sees every component's messages and every
+configured catalog package at once. It reports problems such as:
 
-- an unknown literal message or attribute;
-- two source units defining the same public ID;
-- a missing, unknown, or statically incompatible argument;
-- malformed, duplicate, unsupported, or unused `@param` metadata;
-- an unknown `Component.I18n.client_messages` ID;
-- unsafe cross-language fallback at a call site that cannot carry `lang`; and
-- a missing parameter type according to the configured lint severity.
+- a call to an unknown message or attribute;
+- two sources that define the same message;
+- a missing, unknown, or wrongly typed variable;
+- a broken, duplicate, unsupported, or unused `@param` comment;
+- an unknown ID in `Component.I18n.client_messages`, the list of
+  messages a component's browser code loads by runtime ID;
+- text that would fall back to another language where nothing can mark
+  its `lang`; and
+- a variable without a type, at the severity you configure.
 
-An application-backed check knows the complete registry. Syntax-only
-`citry check --static` cannot prove the same project-wide catalog facts, so use
-the explicit app form in CI.
+`citry check --static` checks syntax only and cannot see the whole
+catalog. Use the `--app` form in CI.
 
-## Choose the missing-type lint severity
+## Find untranslated text { #find-missing-translations }
 
-A simple server-only scalar without `@param` metadata is a warning by default.
-Set the application policy with [`LintSettings`][citry.LintSettings]:
-
-```citry
-from citry import Citry, LintSettings
-
-app = Citry(
-    lint=LintSettings(
-        rule_i18n_missing_param_type="error",
-    ),
-)
-```
-
-One component may override that lint rule:
-
-```citry
-class LegacyNotice(Component):
-    class Lint:
-        rule_i18n_missing_param_type = "ignore"
-```
-
-The accepted severities are `ignore`, `warning`, and `error`. Selectors,
-formatters, browser values, and rich `Slot` parameters still need a concrete
-type because their runtime behavior cannot be checked without it.
-
-## Use the i18n extension commands
-
-The built-in extension adds five commands below `citry ext run i18n`.
-
-### Report locale coverage
+`coverage` lists, for each message and each Fluent attribute, whether
+the locale has its own translation, falls back to another configured
+locale, or falls back to the source language it was written in:
 
 ```bash
 citry --app myproject.engine:app \
   ext run i18n coverage --locale cs-CZ
 ```
 
-`coverage` reports every checked message value and Fluent attribute as an
-exact translation, an owner-source fallback, or another configured fallback.
-It also works in zero-configuration source mode.
-
-Repeat `--locale` to select several locales, use `--json` for stable machine
-output, and use `--fail-on-missing` in CI to exit unsuccessfully when any
-requested output falls back to the source text:
+Repeat `--locale` for several locales. Add `--json` for output that
+scripts can read. Add `--fail-on-missing` to exit with an error when any
+message in the requested locales falls back to its source language; a
+fallback to another configured locale does not count:
 
 ```bash
 citry --app myproject.engine:app \
@@ -123,82 +93,14 @@ citry --app myproject.engine:app \
   --fail-on-missing
 ```
 
-### Check the compiled catalog
+`coverage` also works when the engine has no i18n settings.
 
-```bash
-citry --app myproject.engine:app \
-  ext run i18n check
-```
+## Help translators
 
-This loads every registered component source and configured package, compiles
-the complete catalog, and prints the catalog and formatter revisions. It does
-not render a component.
-
-### List source units
-
-```bash
-citry --app myproject.engine:app \
-  ext run i18n extract
-```
-
-`extract` prints a deterministic JSON index of the package, locale, and path of
-each source unit used by the compiler. It is useful for verifying discovery and
-for feeding project tooling. It does not rewrite the `.ftl` files.
-
-### Inspect the checked artifact
-
-```bash
-citry --app myproject.engine:app \
-  ext run i18n inspect --out build/i18n-project.json
-```
-
-`inspect` writes the complete checked project artifact. Use it to see which
-locale and source path won for a public output, which interfaces were
-extracted, and which revisions identify the result.
-
-Without `--out`, the command prints JSON to standard output.
-
-### Compile catalog packages
-
-```bash
-citry --app myproject.engine:app \
-  ext run i18n compile my_app_i18n
-```
-
-Omit package names to compile every package listed in the engine's `catalogs`
-setting. The command writes `_compiled/manifest.json`, `server.json`, and
-`link.json` into each writable source package, then verifies the result as a
-production loader would.
-
-Run this command before the wheel build. See
-[Production and deployment](/i18n/production/) for the package requirements.
-
-## Navigate messages in VS Code
-
-With `citry.app` configured, the Citry language server reads the same checked
-catalog index as the project checker. It completes literal message IDs and
-named formatter or parser profiles, shows each message's typed parameters on
-hover, and navigates to definitions from:
-
-- template `tr()` and `<c-trans message="...">` calls;
-- Python `self.i18n.tr()` and `Component.I18n.client_messages`;
-- Vue `$i18n.tr()` inside a client-enabled provider;
-- checked `$c-tr` bindings in component templates;
-- component JavaScript calls on `component.$i18n` or `this.$i18n`,
-  including `bind()` calls written with an object literal; and
-- public message references inside Fluent.
-
-The extension also colors inline `messages` blocks and standalone `.ftl`
-files. The docs playground uses Citry's small CodeMirror Fluent highlighter.
-Coloring does not replace the Rust compiler: catalog validation, interfaces,
-references, and source locations still come from the checked project index.
-
-See [VS Code](/ide/vscode/) for project setup and the boundary between
-registry-backed features and syntax-only mode.
-
-## Give translators useful context
-
-The optional text after an `@param` type belongs to the translator:
+Translators see the comments above a message. Say where the text
+appears, how much space it has, its tone, and whether it is an
+accessible label. The description after each `@param` type explains the
+variable:
 
 ```fluent
 # Label above the list of account owners.
@@ -206,26 +108,123 @@ The optional text after an `@param` type belongs to the translator:
 my-app-account-owner = Owner: { $name }
 ```
 
-Use ordinary Fluent comments to explain where the message appears, its space
-constraints, tone, and whether an attribute is an accessible name. Keep
-implementation details out of those comments.
+Leave implementation details out of these comments.
 
-Use stable IDs with application and feature prefixes. That gives a translator
-and a diagnostic a direct path back to the owning feature.
+Use IDs with application and feature prefixes, such as
+`my-app-account-owner`. A translator, or an error message, can then
+trace the text back to its feature.
 
-## Check translations before release
+## Check in CI
 
-At minimum, CI should:
+At minimum, have CI:
 
 1. run `citry --app ... check`;
 2. run `citry --app ... ext run i18n check`;
 3. run `citry --app ... ext run i18n coverage --fail-on-missing` for the
    locales that must be complete;
-4. regenerate standalone package artifacts;
-5. fail if regeneration changes committed artifacts; and
-6. build and inspect the installed wheel so the descriptor, locale files, and
-   compiled files are all present.
+4. compile the catalog packages again;
+5. fail if compiling changed the committed files; and
+6. build the wheel, install it, and check that the descriptor, locale
+   files, and compiled files are all present.
 
-Exercise at least one right-to-left locale and a visibly expanded test locale
-in application-level tests. Check visible text, accessible names, `lang`,
-`dir`, focus behavior, and input state rather than only taking screenshots.
+In your application tests, include at least one right-to-left locale
+and a test locale with noticeably longer text. Check visible text,
+accessible names, `lang`, `dir`, focus, and form input, not only
+screenshots.
+
+## Use the i18n commands
+
+The i18n extension adds five commands under `citry ext run i18n`.
+`coverage` is described above.
+
+### Build the full catalog
+
+```bash
+citry --app myproject.engine:app \
+  ext run i18n check
+```
+
+Loads every component's messages and every configured package, builds
+the complete catalog, and prints the catalog and formatter versions. It
+does not render any component.
+
+### List sources
+
+```bash
+citry --app myproject.engine:app \
+  ext run i18n extract
+```
+
+Prints JSON listing the package, locale, and path of every message
+source Citry found, always in the same order. Use it to confirm that
+Citry finds your files, or as input to other tools. It does not change
+any `.ftl` file.
+
+### Inspect the catalog
+
+```bash
+citry --app myproject.engine:app \
+  ext run i18n inspect --out build/i18n-project.json
+```
+
+Writes the complete built catalog as JSON, or prints it when you leave
+out `--out`. Use it to see which locale and file supplied a message, the
+variables Citry found, and the versions that identify the result.
+
+### Compile packages
+
+```bash
+citry --app myproject.engine:app \
+  ext run i18n compile my_app_i18n
+```
+
+Writes the `_compiled` files into each named package, then loads them
+the way production would to verify them. Without package names, it
+compiles every package in the `catalogs` setting. The packages must be
+writable source folders. Run it before building the wheel; see
+[Production and deployment](/i18n/production/).
+
+## Change type warnings { #make-a-missing-type-an-error-or-ignore-it }
+
+A simple server-only variable without an `@param` comment is a warning
+by default. Change this for the whole application with
+[`LintSettings`][citry.LintSettings]:
+
+```python
+from citry import Citry, LintSettings
+
+app = Citry(
+    lint=LintSettings(
+        rule_i18n_missing_param_type="error",
+    ),
+)
+```
+
+Or for one component:
+
+```citry
+class LegacyNotice(Component):
+    class Lint:
+        rule_i18n_missing_param_type = "ignore"
+```
+
+The severities are `ignore`, `warning`, and `error`. Variables used in
+selectors, formatting functions, browser calls, or as a `Slot` always
+need a type, whatever the setting.
+
+## Navigate in VS Code
+
+When the [VS Code extension](/ide/vscode/) knows your application (the
+`citry.app` setting), it uses the same catalog as the checker. It
+completes message IDs and format profile names, shows variable types on
+hover, and jumps to a message's definition from:
+
+- template `tr()` and `<c-trans message="...">`;
+- Python `self.i18n.tr()` and `Component.I18n.client_messages`;
+- Vue `$i18n.tr()` inside a client provider;
+- `$c-tr` bindings;
+- component JavaScript calls on `component.$i18n` or `this.$i18n`,
+  including `bind()` with an object literal; and
+- message references inside Fluent.
+
+It also highlights inline `messages` blocks and `.ftl` files.

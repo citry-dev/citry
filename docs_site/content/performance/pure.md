@@ -1,20 +1,22 @@
 ---
 title: Pure components
-description: Reuse a component's rendered body when equal occurrences repeat within one root render.
+description: Render a component's template once per page when it repeats with the same data, and reuse that HTML for the other copies.
 ---
 
 # Pure components
 
-A small component such as a status icon can appear many times on one page
-with the same data. Declare [`pure = True`][citry.Component.pure] to let
-Citry render the first occurrence and reuse its body for later occurrences
-with the same template data in the same render. Start without it, measure a real
-repeated-render workload, and opt in only when the component's whole body
-can keep the promise described below.
+A small component such as a status icon can appear hundreds of times on
+one page with only a few different values. By default Citry renders its
+template again for every copy, even when the data is the same.
 
-## Declare a pure component
+Declare [`pure = True`][citry.Component.pure] to render the template once
+for each distinct set of template data and reuse that HTML for the other
+copies on the same page. Use it only when the template's output depends
+on nothing but its template data.
 
-Set the flag on the component class:
+## Reuse repeated HTML
+
+Set the flag on the class:
 
 ```citry
 from citry import Component
@@ -31,36 +33,68 @@ class StatusIcon(Component):
     """
 ```
 
-This is a class-level promise: rendering the template body must be a
-deterministic, side-effect-free function of its template variables. Citry
-still creates each ordinary component instance, runs its data and lifecycle
-hooks, and gives it a fresh render ID. If the component also sets
-`simple = True`, the [simple component](/performance/simple-components/)
-rules still apply. Within one root render, a later occurrence with the same
-template data reuses the HTML Citry already produced for the first one.
-Child components and slot content inside the body still render again for
-each occurrence. Citry discards the stored HTML when the root render ends.
+On a page with 300 `StatusIcon` calls and three states, Citry renders the
+template three times. Every other call with the same template data reuses
+the HTML of the first one.
 
-## When not to declare a component pure
+Citry keeps that HTML only while it renders one page, meaning one
+top-level render call such as `str(Page())`. The next page render starts
+empty. To reuse output across requests, see
+[Cache rendered output](/performance/caching/).
 
-Do not declare a component pure when its template expressions mutate state,
-consume one-shot iterators, read ambient values not present in template data,
-or rely on a per-element extension hook running for every occurrence. Child
-components, slots, and translated text inside the body still render for every
-occurrence. A subclass must state `pure = True` again because it can add new
-behavior.
+## What still runs
 
-Purity pays only when equal instances repeat within the same tree. A component
-that appears once, or whose inputs are unique every time, should not declare
-it.
+`pure = True` reuses only the HTML that the template itself produces.
+Citry still does the rest for every copy:
+
+- creates the component instance and gives it its own render ID, the
+  value that identifies it in the browser;
+- runs `template_data()` and the lifecycle hooks;
+- renders child components, slot content, and translated text inside
+  the template.
+
+The saving is therefore largest for a component whose template does
+most of its work itself.
+
+## Check the template
+
+`pure = True` is a promise that rendering the template always produces
+the same HTML for the same template data and changes nothing else. Do not
+declare it when the template:
+
+- calls a function that changes state, such as a counter;
+- reads a one-time iterator, such as a generator;
+- reads a value that is not in its template data;
+- relies on an extension hook that must run for every element.
+
+If the promise is broken, later copies show the first copy's HTML.
+
+Use it only where equal data repeats within one page. A component that
+appears once, or receives different data every time, gains nothing.
+
+## Edge cases
+
+### Later class changes
+
+`pure` is not inherited, and you cannot reassign it after the class is
+defined. A subclass must declare `pure = True` itself,
+because it can add behavior that breaks the promise.
+
+### Combining with `simple`
+
+A component can declare both `pure = True` and
+[`simple = True`](/performance/simple-components/). The simple component
+rules still apply, and a `simple = True` template that contains
+`<c-slot />` renders again on every call. `simple = "vue"` cannot be
+combined with `pure = True`; every call raises an error.
 
 ## Related pages
 
 - [Performance overview](/performance/) compares `pure = True` with the
-  other optimizations.
-- [Constant values](/performance/const/) for reusing template work tied to
-  individual stable inputs.
-- [Simple components](/performance/simple-components/) for skipping
-  independent component setup.
-- [Cache rendered output](/performance/caching/) for reusing a complete
-  rendered subtree across renders.
+  other ways to speed up rendering.
+- [Constant values](/performance/const/) reuse template work for single
+  inputs that never change.
+- [Simple components](/performance/simple-components/) skip the setup of
+  each component instance.
+- [Cache rendered output](/performance/caching/) reuses whole rendered
+  components across requests.

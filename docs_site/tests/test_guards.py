@@ -22,12 +22,14 @@ from docs_site._internal.guards import (
     blog,
     blog_feed,
     builtin_tags,
+    citry_highlight,
     component_fence,
     crossref,
     example_contract,
     fence_validator,
     format_report,
     frontmatter,
+    heading_length,
     internal_link,
     json_ld,
     make_context,
@@ -189,6 +191,66 @@ def test_nav_guard_requires_sources_for_generated_pages(
     assert source in results[0].message
 
 
+def test_heading_length_guard_reports_long_section_headings_as_info(tmp_path: Path) -> None:
+    # Fenced lines and other heading levels are not section headings, and the
+    # 24-character limit itself is allowed.
+    (tmp_path / "page.md").write_text(
+        "# A page title that is long enough to be reported\n"
+        "\n"
+        "## Exactly twenty-four char\n"
+        "\n"
+        "## Exactly twenty-five chars\n"
+        "\n"
+        "### Configure a signing secret before using State\n"
+        "\n"
+        "```python\n"
+        "## a comment line inside a code block that is long\n"
+        "```\n"
+        "\n"
+        "#### A fourth-level heading that is long enough\n",
+        encoding="utf-8",
+    )
+
+    results = list(heading_length.check(_content_ctx(tmp_path)))
+
+    assert [(r.line, r.severity) for r in results] == [(5, Severity.INFO), (7, Severity.INFO)]
+    assert results[0].source == "page.md"
+    assert "'Exactly twenty-five chars'" in results[0].message
+    # Info findings never fail the build, even under --strict.
+    assert run_guards(_content_ctx(tmp_path), strict=True, guards=[heading_length.check])[1] is True
+
+
+@pytest.mark.parametrize(
+    ("raw", "visible"),
+    [
+        ("Swap in a component { #swap-in-a-different-component }", "Swap in a component"),
+        ("Title ## { #x }", "Title"),
+        ("Call [`render`](/reference/) here", "Call render here"),
+        ("Use [`Component`][citry.Component] here", "Use Component here"),
+        ("Run on the server<br/>or standalone", "Run on the serveror standalone"),
+        ("The **bold** `<c-if>` tag", "The bold <c-if> tag"),
+    ],
+)
+def test_heading_length_guard_counts_only_visible_text(raw: str, visible: str) -> None:
+    assert heading_length.visible_heading_text(raw) == visible
+
+
+def test_heading_length_guard_skips_the_rest_of_an_unclosed_fence(tmp_path: Path) -> None:
+    (tmp_path / "page.md").write_text(
+        "```python\n## a comment line inside a code block that is long\n",
+        encoding="utf-8",
+    )
+
+    assert list(heading_length.check(_content_ctx(tmp_path))) == []
+
+
+def test_scan_fences_records_the_closing_line() -> None:
+    closed, unclosed = fence_validator.scan_fences("```py\nx\n```\n\n~~~\ny\n")
+
+    assert (closed.open_line, closed.close_line) == (1, 3)
+    assert (unclosed.open_line, unclosed.close_line) == (5, None)
+
+
 def test_fence_validator_flags_unclosed_fence(tmp_path: Path) -> None:
     (tmp_path / "bad.md").write_text("# X\n\n```python\nprint(1)\n", encoding="utf-8")
     ctx = GuardContext(
@@ -262,6 +324,35 @@ def test_component_fence_ignores_plain_python_fragments_and_citry_fences(tmp_pat
     (tmp_path / "p.md").write_text(source, encoding="utf-8")
 
     assert list(component_fence.check(_content_ctx(tmp_path))) == []
+
+
+def test_citry_highlight_warns_on_an_error_token_at_its_line(tmp_path: Path) -> None:
+    source = (
+        "# Doc\n\n"
+        "```citry-html\n<c-Card c-body=\"<><a c-href='ok'>x</a></>\" />\n```\n\n"
+        "- item\n\n"
+        '    ```citry-html\n    <c-Card\n      c-body="<><a c-href="bad">x</a></>"\n    />\n    ```\n'
+    )
+    (tmp_path / "page.md").write_text(source, encoding="utf-8")
+
+    results = list(citry_highlight.check(_content_ctx(tmp_path)))
+
+    assert [(r.severity, r.source, r.line) for r in results] == [(Severity.WARNING, "page.md", 11)]
+
+
+def test_citry_highlight_lexes_included_snippets_and_skips_foreign_lexers(tmp_path: Path) -> None:
+    (tmp_path / "bad.html").write_text('<c-A c-x="<><b c-y="z">q</b></>" />\n', encoding="utf-8")
+    source = (
+        '```citry-html\n--8<-- "bad.html"\n```\n\n'
+        '```citry-html\n--8<-- "missing.html"\n```\n\n'
+        "```citry-html\n--8<--\nbad.html:section\n--8<--\n```\n\n"
+        '```html\n<c-A c-x="<><b c-y="z">q</b></>" />\n```\n'
+    )
+    (tmp_path / "page.md").write_text(source, encoding="utf-8")
+
+    results = list(citry_highlight.check(_content_ctx(tmp_path)))
+
+    assert [(r.line, "bad.html" in r.message) for r in results] == [(2, True), (11, True)]
 
 
 def test_frontmatter_flags_unknown_key(tmp_path: Path) -> None:

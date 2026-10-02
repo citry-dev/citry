@@ -5,32 +5,13 @@ description: Runnable Citry components, each rendered live with its source.
 
 # Examples
 
-Each recipe is executable Citry code. The component source opens first; switch
-tabs to see the complete page and its live result.
+Each example is a small, working Citry component that solves one common
+task. Find the task you have, copy the code, and adapt it.
 
-## Start from a complete project
-
-The recipes below are optimized for the documentation renderer. For an
-independently copyable application with its own `pyproject.toml`, lockfile,
-server command, and tests, use the
-[complete starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}.
-The collection includes standalone rendering, FastAPI, Django, Flask, bare
-ASGI, and bare WSGI, plus the larger Project Board and HTMX integration demos.
-Every web starter shows the same Vue and server Events behavior so the
-framework wiring is easy to compare. The HTMX demo instead shows how an
-existing application can keep using HTMX for requests and page updates while
-Citry renders the HTML, CSS, and JavaScript returned by each route.
-
-## Try an example
-
-This complete module uses component State and a Python event handler. Select
-**Try live** to edit it in the page, run it in your browser, and interact with
-the rendered result.
-
-<c-live-code
-  path="docs_site/live_snippets/welcome.py"
-  title="Welcome card with State and Events"
-/>
+Every example page has three tabs: **Component** shows the component,
+**Page** shows a complete page that uses it, and **Live demo** shows the
+result. Each example has its own tests, and the docs build runs it to make
+the live demo, so the code works as shown.
 
 ## Components
 
@@ -52,3 +33,31 @@ the rendered result.
 - [Form submission](/examples/form-submission/) - handle a form in the browser.
 - [Fragments](/examples/fragments/) - load rendered HTML and its assets on
   demand.
+
+## Try an example live { #try-an-example }
+
+This example uses component State and a Python event handler. Select
+**Try live** to edit it, run it in your browser, and use the result.
+
+<c-live-code
+  path="docs_site/live_snippets/welcome.py"
+  title="Welcome card with State and Events"
+/>
+
+## Start a full project { #start-from-a-complete-project }
+
+The examples above are small so they fit on a docs page. To start an
+application, copy one of the
+[starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}
+instead. Each has its own `pyproject.toml`, lockfile, server command, and
+tests.
+
+There are starters for standalone rendering, FastAPI, Django, Flask, bare
+ASGI, and bare WSGI. Every web starter builds the same page, so you can
+compare how each framework connects to Citry.
+
+Two larger demos sit beside them. Project Board is a task board where
+components, Vue, and Python handlers work together. The HTMX demo shows
+an existing HTMX application that keeps HTMX for requests and page
+updates, while Citry renders the HTML, CSS, and JavaScript that each
+route returns.

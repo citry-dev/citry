@@ -22,12 +22,12 @@ areas:
           - { title: Your first component, path: /getting-started/your-first-component/ }
           - { title: Use data in components, path: /getting-started/data-in-components/ }
           - { title: Build a page from components, path: /getting-started/build-page/ }
-          - { title: Add flexible content, path: /getting-started/add-slots/ }
+          - { title: Add slots, path: /getting-started/add-slots/ }
           - { title: Add browser behavior, path: /getting-started/browser-interactivity/ }
           - { title: Connect components in the browser, path: /getting-started/client-props-and-handlers/ }
           - { title: Serve pages with FastAPI, path: /getting-started/fastapi/ }
           - { title: Call Python from a click, path: /getting-started/call-python/ }
-          - { title: Events state, path: /getting-started/state/ }
+          - { title: Keep values between calls, path: /getting-started/state/ }
           - { title: Handle and validate forms, path: /getting-started/forms/ }
           - { title: Update page from Python, path: /getting-started/server-rendered-updates/ }
           - { title: Build CRUD pages, path: /getting-started/build-crud-pages/ }
@@ -49,25 +49,25 @@ areas:
         collapsible: true
         section_style: true
         items:
-          - { title: Components, path: /concepts/components/, needs_review: true }
-          - { title: Inputs and validation, path: /concepts/inputs-and-validation/, needs_review: true }
-          - { title: Slots, path: /concepts/slots/, needs_review: true }
-          - { title: Rendering, path: /concepts/rendering/, needs_review: true }
-          - { title: Registration, path: /concepts/registration/, needs_review: true }
-          - { title: Provide and inject, path: /concepts/provide-and-inject/, needs_review: true }
-          - { title: Client interactivity, path: /concepts/client-interactivity/, needs_review: true }
-          - { title: Error boundaries, path: /concepts/error-boundaries/, needs_review: true }
+          - { title: Components, path: /concepts/components/ }
+          - { title: Inputs and validation, path: /concepts/inputs-and-validation/ }
+          - { title: Slots, path: /concepts/slots/ }
+          - { title: Rendering, path: /concepts/rendering/ }
+          - { title: Registration, path: /concepts/registration/ }
+          - { title: Provide and inject, path: /concepts/provide-and-inject/ }
+          - { title: Client interactivity, path: /concepts/client-interactivity/ }
+          - { title: Error boundaries, path: /concepts/error-boundaries/ }
 
       - label: Events
         collapsible: true
         section_style: true
         items:
-          - { title: Server events, path: /events/, needs_review: true }
-          - { title: Keep state between calls, path: /events/state/, needs_review: true }
-          - { title: Handle and validate forms, path: /events/forms/, needs_review: true }
-          - { title: Bind events in templates, path: /events/bindings/, needs_review: true }
-          - { title: Event actions, path: /events/actions/, needs_review: true }
-          - { title: Use event routes directly, path: /events/http/, needs_review: true }
+          - { title: Server events, path: /events/ }
+          - { title: Event state, path: /events/state/ }
+          - { title: Handle and validate forms, path: /events/forms/ }
+          - { title: Bind events in templates, path: /events/bindings/ }
+          - { title: Event actions, path: /events/actions/ }
+          - { title: Event routes, path: /events/routes/ }
 
       - label: I18n
         collapsible: true
@@ -138,7 +138,7 @@ areas:
         section_style: true
         items:
           - { title: Compatibility, path: /about/compatibility/ }
-          - { title: Benchmarks, path: /about/benchmarks/, needs_review: true }
+          - { title: Benchmarks, path: /about/benchmarks/ }
           - { title: Security, path: /security/, needs_review: true }
 
       - label: Release notes

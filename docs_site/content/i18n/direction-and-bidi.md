@@ -5,21 +5,29 @@ description: Mark language and direction correctly and keep mixed-direction text
 
 # Language direction and accessibility
 
-Language, writing direction, and bidirectional text are related but different.
+A translated page also needs the right markup around its text. Screen
+readers pick a voice from the `lang` attribute, so English text marked as
+Czech is read with Czech pronunciation. Arabic and Hebrew run right to
+left and need `dir="rtl"`. And a Latin name or a number inside an Arabic
+sentence can scramble the punctuation around it if nothing keeps it
+apart.
 
-- `lang` tells browsers and assistive technology which language an element
+Three tools handle this:
+
+- `lang` tells browsers and screen readers which language an element
   contains.
-- `dir` tells layout and text processing whether the surrounding direction is
-  left-to-right or right-to-left.
-- Bidirectional isolation prevents an inserted run of text from changing the
-  order of surrounding punctuation and words.
+- `dir` tells the browser whether text and layout run left to right or
+  right to left.
+- Bidirectional isolation keeps an inserted value, such as a name, from
+  reordering the words and punctuation around it.
 
-Changing `dir` alone does not translate text, and translating text does not
-automatically make every surrounding element use the right language.
+Setting `dir` does not translate anything, and translating text does not
+update the `lang` of the elements around it. This page shows how to get
+each one right.
 
-## Let a real provider own lang and dir
+## Set lang and dir
 
-Give `<c-i18n>` a real tag when a subtree needs semantic language markup:
+Give `<c-i18n>` a `tag` so it renders a real element:
 
 ```citry-html
 <c-i18n locale="ar-EG" tag="section">
@@ -27,7 +35,7 @@ Give `<c-i18n>` a real tag when a subtree needs semantic language markup:
 </c-i18n>
 ```
 
-Citry derives the normal direction for `ar-EG` and renders:
+Citry picks the direction from the locale and renders:
 
 ```html
 <section lang="ar-EG" dir="rtl">
@@ -35,16 +43,22 @@ Citry derives the normal direction for `ar-EG` and renders:
 </section>
 ```
 
-You may set `direction="ltr"` or `direction="rtl"` explicitly for an unusual
-subtree. In normal application code, let Citry derive it from the locale.
+## Set `<html>` lang and dir
 
-When another framework owns `<html>`, that framework's document shell should
-read `context.locale` and `context.direction` and apply them to its root
-element. Citry does not search for and mutate an unrelated document element.
+Citry does not change the `<html>` element by itself. When your web
+framework renders the document shell, read the locale context there and
+set both attributes:
 
-## Use logical CSS properties
+```html
+<html lang="ar-EG" dir="rtl">
+```
 
-Components that support both directions should prefer logical properties:
+Take the values from `context.locale` and `context.direction`.
+
+## Use logical CSS
+
+Use logical CSS properties, which follow the text direction, instead of
+`left` and `right`:
 
 ```css
 .account-card {
@@ -53,31 +67,45 @@ Components that support both directions should prefer logical properties:
 }
 ```
 
-Review icons separately. An arrow that means "next" may need to mirror, while
-a media-play icon or a brand mark usually should not.
+Check icons one by one. An arrow that means "next" usually needs to flip
+in right-to-left layouts; a play button or a logo usually should not.
 
-## Citry isolates interpolated scalar text
+## Values keep direction
 
-An inserted name, path, identifier, or number may use another direction from
-the surrounding translation. Citry keeps typed scalar boundaries through
-message formatting and isolates those runs so they do not reorder surrounding
-text.
+A name, file path, ID, or number inserted into a message may run in a
+different direction from the sentence around it. Citry isolates each
+inserted value automatically, so it cannot reorder the surrounding text.
 
-Application strings may not contain Unicode bidi controls or paragraph
-boundaries inside one inline parameter. Use separate structural markup for
-multiline or deliberately directed content.
+This is separate from HTML escaping. Escaping stops a value from adding
+markup; isolation stops it from changing the visual order. Citry does
+both.
 
-HTML escaping and bidi isolation solve different problems. Escaping prevents
-markup injection. Isolation protects visual ordering. Citry applies both where
-each is needed.
+## Translate labels too
 
-## Preserve fallback language metadata
+Keep a control's visible text and its accessible label in one message,
+as Fluent attributes:
 
-`tr()` returns only text. If fallback selects another language, the plain
-string cannot attach a different `lang` to itself.
+```fluent
+my-app-account-actions = Actions
+    .aria-label = Open account actions
+    .title = Show available actions
+```
 
-Server code that permits this fallback should use `resolve()` and apply the
-returned metadata to an application-owned element:
+Ask for the attribute by name, as in `tr(..., attr="aria-label")`. Each
+attribute falls back on its own, so a missing `.aria-label` translation
+is never replaced by the visible label. See
+[Write messages](/i18n/messages/#translate-labels-such-as-aria-label).
+
+## Mark fallback text { #mark-fallback-text-with-its-language }
+
+When a translation is missing, Citry falls back to another language.
+`tr()` returns only text, so the text cannot carry its own `lang`, and a
+screen reader would read it in the page's language. For this reason
+`citry check` reports an error for a `tr()` call that would fall back to
+another locale.
+
+Where fallback is acceptable, call `resolve()` and put its locale and
+direction on an element you control:
 
 ```python
 resolved = self.i18n.resolve("my-app-legal-notice")
@@ -95,44 +123,38 @@ return {
 </p>
 ```
 
-`resolved.used_fallback` tells application code whether the selected locale
-differs from the requested locale.
+`resolved.used_fallback` is `True` when the text came from a different
+locale than the one requested.
 
-Directional isolation still protects a plain fallback string, but it cannot
-tell a screen reader which language to pronounce. Keep the `lang` markup when
-the language may differ.
+## Keep server text apart
 
-## Translate accessible outputs too
+When a [client provider](/i18n/browser/) (a `<c-i18n client>` element)
+switches language in the
+browser, it updates its `lang` and `dir` together with its Vue-owned
+text. Server-rendered text inside it stays in the old language, so the
+element would claim a language its text does not use.
 
-Keep visible and assistive text under one message when they describe the same
-control:
+Put such text inside its own `<c-i18n tag="...">` without `client`, or
+render it again on the server.
 
-```fluent
-my-app-account-actions = Actions
-    .aria-label = Open account actions
-    .title = Show available actions
-```
+## Less common cases
 
-Call the attribute explicitly for `aria-label` or `title`. Catalog fallback is
-computed for each attribute, so a missing assistive translation cannot be
-mistaken for the visible label.
+### Force a direction
 
-Browser-owned text and accessibility outputs need equivalent-language coverage
-for every selectable locale. Their call sites cannot safely attach a hidden
-fallback language after `$i18n.switchLocale()`.
+`<c-i18n>` accepts `direction="ltr"` or `direction="rtl"` for an unusual
+part of the page. Usually, let Citry derive it from the locale.
 
-Rich messages, which have no element around the whole message, have the
-same requirement. See
-[Rich messages](/i18n/rich-messages/) for why `<c-trans>` rejects a
-cross-language fallback.
+### Line breaks in values
 
-## Browser providers update their semantic host
+A value passed into a message may not contain Unicode direction control
+characters or line or paragraph breaks. For text on several lines, or
+text that needs a fixed direction, use separate elements.
 
-A successful browser switch updates the client provider's `lang` and `dir`
-attributes together with its readonly context. It does not change ordinary
-server-owned text below that element.
+### Fallback warnings
 
-Do not put fixed server text directly below a provider whose browser locale can
-change, because the wrapper could then claim a new language while the text
-stays in the old one. Place fixed text behind its own server-only
-`<c-i18n tag="...">` boundary or rerender it from the server.
+`citry check` reports `citry.i18n.cross-language-fallback` when text
+would fall back to another locale and nothing can mark its `lang`. This
+covers `tr()` and `self.i18n.tr()` calls, text translated in the browser,
+and [rich messages](/i18n/rich-messages/), which have no element around
+them. Add a translation for each selectable locale, or use `resolve()`
+as shown above for server text.

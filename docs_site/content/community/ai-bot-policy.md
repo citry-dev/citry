@@ -5,43 +5,48 @@ description: Which AI training and search crawlers may index the Citry documenta
 
 # AI bot policy
 
-The Citry documentation allows AI and LLM crawlers through the same wildcard
-policy as every other crawler.
+You run an AI crawler or build an AI tool, and want to know whether it may
+read the Citry documentation. It may: the docs treat AI and LLM crawlers
+the same as every other crawler. This page also shows how an AI tool can
+find the pages it needs.
 
-## Which crawlers are allowed
+## Allowed crawlers { #which-crawlers-are-allowed }
 
-`robots.txt` starts with an allow-all rule (`User-agent: *` followed by
-`Allow: /`), so any well-behaved crawler may index the docs. There is no list of
-named bots to keep current. The wildcard group also carries the generated
-exclusions for older documentation versions, so that policy applies uniformly
-to search and AI crawlers.
+`robots.txt` starts with a rule that allows every crawler (`User-agent: *`
+followed by `Allow: /`). Any crawler that follows `robots.txt` may index
+the docs, and there is no list of named bots to keep up to date.
 
-## How AI tools find the documentation
-
-The [llms.txt index](/llms.txt){: target="_blank" rel="noopener"} gives agents
-a short, organized list of the documentation. Its entries lead directly to
-page-level Markdown companions, so an agent can fetch only the pages relevant
-to a question. Authored pages contain expanded Markdown. Generated Reference
-pages may retain HTML-rich fragments from the reference renderer, but omit the
-surrounding site chrome.
-
-Every documentation page also identifies its own Markdown version and the
-covering `llms.txt` file through standard HTML link relations. These discovery
-links help an agent choose readable content. They do not grant or deny crawler
-access; `robots.txt` carries that separate policy.
-
-The larger [`llms-full.txt`](/llms-full.txt){: target="_blank" rel="noopener"}
-file remains available as a nonstandard bulk-download convenience. It is not
-part of the llms.txt v2 discovery contract.
+The same `User-agent: *` group also has `Disallow` lines for older
+documentation versions, so no crawler, search or AI, indexes those pages.
 
 ## Why we allow them
 
-Citry is an open-source, community-maintained framework. The more discoverable
-the docs are to AI-based search and AI-based authoring tools, the easier it is
-for people to find Citry and write components correctly the first time.
+Citry is an open-source, community-maintained framework. When AI search and
+AI coding tools can read the docs, people find Citry more easily and write
+correct components on the first try.
 
-## Requesting a change
+## How AI tools find docs { #how-ai-tools-find-the-documentation }
 
-Every well-behaved crawler is allowed by default. To ask for a specific bot to
-be blocked, or to report a crawler that ignores `robots.txt`,
+Start from the [llms.txt index](/llms.txt){: target="_blank" rel="noopener"}.
+It is a short, organized list of the documentation, and each entry links to
+a Markdown version of one page. An agent can fetch only the pages that
+answer its question.
+
+Every documentation page also points to its own Markdown version and to
+the `llms.txt` file that lists it, through standard HTML `<link>` tags.
+These links help an agent find readable content. They do not allow or block
+crawling; `robots.txt` alone decides that.
+
+The Markdown versions of the generated [API Reference](/reference/) pages
+may still contain some HTML, but they leave out the site's header,
+navigation, and footer.
+
+The larger [`llms-full.txt`](/llms-full.txt){: target="_blank" rel="noopener"}
+file holds all the documentation in one download. It is an extra
+convenience, not part of the llms.txt standard.
+
+## Request a change { #requesting-a-change }
+
+To ask for a specific bot to be blocked, or to report a crawler that ignores
+`robots.txt`,
 [file an issue]({{ repo_issues_url }}){: target="_blank" rel="noopener"}.

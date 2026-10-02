@@ -5,11 +5,12 @@ description: Scaffold components, check templates, inspect an engine, watch file
 
 # Command line
 
-Installing Citry gives you the `citry` command. It can create a component file,
-check templates, show what an engine registered, watch component files during
-development, and run commands supplied by extensions.
+Installing Citry gives you the `citry` command. Use it to create a
+component file, find template mistakes before you render, format component
+files, reload templates while you develop, and see what your application
+registered.
 
-See the available commands at any level with `--help`:
+Every command and subcommand lists its options with `--help`:
 
 ```bash
 citry --help
@@ -17,24 +18,24 @@ citry watch --help
 citry --version
 ```
 
-## Create a component file
+## Create a component
 
-`citry create` turns a component name into a Python file:
+`citry create` writes a new component file:
 
 ```bash
 citry create MyButton
 ```
 
-This creates `my_button.py` in the current directory. The file contains a
-[`Component`][citry.Component] with `Kwargs`, `Slots`, and an inline template.
-Use `--path` or `-p` to choose another directory:
+This creates `my_button.py` in the current directory, with a
+[`Component`][citry.Component] that has `Kwargs`, `Slots`, and an inline
+template. Use `--path` or `-p` to write it to another directory:
 
 ```bash
 citry create MyButton --path ./components
 ```
 
-Names may use PascalCase, snake_case, or kebab-case. These commands all create
-`my_button.py` with `class MyButton(Component)`:
+You can write the name in PascalCase, snake_case, or kebab-case. All of
+these create `my_button.py` with `class MyButton(Component)`:
 
 ```bash
 citry create MyButton
@@ -42,19 +43,21 @@ citry create my_button
 citry create my-button
 ```
 
-Citry preserves an already-PascalCase name, including acronyms. For example,
-`citry create HTTPServer` creates `http_server.py` containing
+A PascalCase name is kept as written, acronyms included:
+`citry create HTTPServer` creates `http_server.py` with
 `class HTTPServer(Component)`.
 
-The command never overwrites an existing file. It also rejects Python keywords
-and reserved double-underscore module names.
+The command never overwrites an existing file. It also refuses a Python
+keyword, such as `class`, and a name that turns into a module name starting
+with `__`.
 
-## Select your application's engine
+## Point at your app
 
-`list`, `inspect`, `watch`, and extension commands use the module-level
-[`citry`][citry.citry] engine by default. `check` requires one of the explicit
-modes described below. If your application creates its own engine, pass `--app
-module:attribute` before the subcommand:
+Most commands work on a [`Citry`][citry.Citry] instance: they read its
+registered components and extensions. By default they use the module-level
+[`citry`][citry.citry] instance, except `check`, which needs `--app` or
+`--static`. If your application creates its own instance, name it with
+`--app module:attribute`, before the command name:
 
 ```bash
 citry --app myproject.engine:app list
@@ -63,103 +66,114 @@ citry --app myproject.engine:app check
 citry --app myproject.engine:app ext list
 ```
 
-The target must be an imported [`Citry`][citry.Citry] instance. `--app` must be
-the first argument, either as `--app VALUE` or `--app=VALUE`.
+`--app` must be the first argument, written as `--app VALUE` or
+`--app=VALUE`. The value must name a `Citry` instance. Citry imports
+it from the current directory, as web servers such as uvicorn do.
 
-Import and discovery errors stop other engine commands. An app-backed `check`
-reports the project failure once, continues with syntax-only analysis, and
-exits with status 2. It never treats a partial registry as complete.
+If importing the application fails, the command stops with an error.
+`check` is the exception, described below.
 
-## Check component templates
+## Check templates { #check-component-templates }
 
-Use the application engine for the registry-backed check:
+`citry check` finds template mistakes without rendering anything. Run it
+against your application:
 
 ```bash
 citry --app myproject.engine:app check
 ```
 
-This checks the authored inline and file templates of every registered
-application component. It applies the component declarations from `Kwargs` and
-`Slots`, including required inputs and typed slot data, and reports component
-tags the complete registry does not know. Built-in component names and
-registered aliases are included in that lookup. It also applies the
-application's [template lint policy](/ide/template-linting/) to free root
-variables. Runtime `template_globals` and declared analysis-only variables are
-known automatically.
+It reads the inline and file templates of every component your
+application registers, and reports:
 
-When importing project code is intentionally unavailable, select the limited
-static mode explicitly:
+- template syntax errors;
+- inputs and slots that do not match the component's `Kwargs` and `Slots`,
+  including a missing required input and wrong slot data;
+- a component tag that names no registered component (built-in names and
+  aliases count as registered);
+- a template variable that comes from nowhere, following your
+  [template lint settings](/ide/template-linting/). Values from
+  `template_globals` and declared analysis-only variables count as known.
+
+Each error shows the template excerpt and where it came from: the
+component, such as `myapp.card.Card.template`, or the template file. Line
+and column numbers count from the start of the template, not the start of
+the Python file.
+
+The exit status is:
+
+- `0` when there are no errors, including when there are only warnings;
+- `1` when a template or source file has an error;
+- `2` when the command line is wrong, or the application could not be
+  imported (see below).
+
+Add `--format json` to print one JSON report instead of text lines. Each
+finding has an `origin`, `code`, `severity`, `message`, and `range`.
+`range` is `null` when the finding has no position.
+
+### Check syntax only
+
+When you cannot import the project, for example in a CI job without its
+dependencies, check template syntax only:
 
 ```bash
 citry check --static
 ```
 
-Syntax-only mode recognizes direct module-level `Component` and
-`LibraryComponent` imports that remain unshadowed before the class. It checks
-direct literal `template` assignments on undecorated, unambiguous component
-candidates whose base template language is known. It skips computed values,
-inherited declarations, and file templates; only the registry-backed check
-reads file templates. This mode validates base template syntax but does not
-report an unknown component, because it cannot see the complete registry.
+This mode reads the Python files in the current directory without running
+them. It finds only undecorated classes that subclass `Component` or
+`LibraryComponent` imported at the top of the module, and checks only a
+`template` written on the class as a plain string. It skips file
+templates, inherited and computed templates, and cannot report an unknown
+component, because it never sees the full list of registered components.
+An error's origin is the file's full path followed by the attribute, such
+as `/home/me/proj/myapp/card.py (Card.template)`.
 
-Bare `citry check` is rejected so a successful result always identifies which
-level of checking ran. `--static` cannot be combined with `--app`.
+`citry check` without `--app` or `--static` is rejected with status 2, so a
+passing result always says which kind of check ran. The two options cannot
+be combined.
 
-Unknown-component checks cover the tags in template bodies. They do not look
-inside attribute values that hold template source, so an unknown tag there is
-not reported.
+### When import fails
 
-The checker reads authored template text directly. It does not run template
-transform hooks, because transformed diagnostics cannot be placed back onto
-authored text without a source mapping. The command reports this capability
-limit once and continues checking the base Citry syntax.
+With `--app`, a failed import does not stop the check. The command reports
+the failure once, checks template syntax as `--static` would, and exits
+with status 2. It never reports results from a partly loaded set of
+components as complete.
 
-Each parser failure includes the parser's annotated template excerpt and an
-origin naming the component, such as `myapp.card.Card.template`, or the
-template file. With `--static`, the origin is the file's full path
-followed by the attribute, such as
-`/home/me/proj/myapp/card.py (Card.template)`. The excerpt's line and
-column count from the start of the template body, not from the start of the
-Python file.
+### What is not checked
 
-Add `--format json` to print one JSON report instead of text lines. Each
-finding carries its `origin`, `code`, `severity`, `message`, and `range`
-(`null` when the finding has no position).
+- It does not look for unknown component tags inside attribute values
+  that hold template source.
+- It does not run template transform hooks. It checks the template as you
+  wrote it, and notes this once in its output.
 
-The exit status is:
+### Check types { #check-types-with-typescript-and-ty }
 
-- `0` when no error is present, including a warning-only report
-- `1` when a template or source asset has an error
-- `2` for a missing or conflicting mode, or when explicit app selection or
-  discovery fails after syntax-only fallback finishes
-
-### Check types with TypeScript and ty
-
-Add `--types` to also type-check every component in the current directory
-the way the editor does. TypeScript checks each component's JavaScript and
-Vue template expressions, the same check the
-[VS Code extension](/ide/vscode/#typescript-errors-in-component-javascript-and-templates)
-runs. ty, the Python type checker that `citry-lsp` installs, checks the
-Python expressions in its templates:
+Add `--types` to also type-check your components the way the editor does:
 
 ```bash
 citry --app myproject.engine:app check --types
 ```
 
-Each TypeScript error is an error finding at its file's full path, line,
-and column, with TypeScript's code (wrapped here to fit):
+Two type checkers run on every component whose source is in the current
+directory:
+
+- TypeScript checks each component's JavaScript and the Vue expressions in
+  its template, the same check the
+  [VS Code extension](/ide/vscode/#typescript-errors-in-component-javascript-and-templates)
+  runs;
+- ty, the Python type checker that `citry-lsp` installs, checks the Python
+  expressions in its template.
+
+A TypeScript error shows the file's full path, line, column, and
+TypeScript's code (wrapped here to fit):
 
 ```text
 /srv/shop/app/components/lane.py:24:13: error: TS2322: Type
 'boolean' is not assignable to type '() => void'.
 ```
 
-In `--format json`, its code is `citry.typescript.ts2322` and its message
-is TypeScript's text.
-
-A ty finding in a template expression, such as adding a number to a
-string, keeps ty's severity and leads with ty's rule name (wrapped here to
-fit):
+A ty finding, such as adding a number to a string, keeps ty's severity and
+starts with ty's rule name:
 
 ```text
 /srv/shop/app/components/card.py:56:16: error: unsupported-operator:
@@ -167,57 +181,81 @@ Operator `+` is not supported between objects of type `str` and
 `Literal[1]`
 ```
 
-In `--format json`, its code is `citry.python.unsupported-operator`. The
-command reports the same ty findings the editor shows. ty's own
+In `--format json`, the codes are `citry.typescript.ts2322` and
+`citry.python.unsupported-operator`.
+
+The findings match what the editor shows, with one difference: ty's own
 unknown-name finding is left out, because Citry's
 [`citry.template.unknown-variable`](/ide/diagnostics/#citry.template.unknown-variable)
-rule reports that mistake.
-
-ty also types the `js_data()` values Citry has no rule for, such as a
-method call, before TypeScript runs, so TypeScript checks the browser code
-that reads them, as in the
+rule already reports that mistake. ty runs first and works out the types
+of `js_data()` values Citry cannot type on its own, such as a method call.
+TypeScript then uses those types to check the browser code that reads
+them, as in the
 [editor](/ide/vscode/#complete-vue-expressions-and-component-javascript).
 
-An error makes the command exit with status 1, like any other error. A ty
-warning is reported but does not change the exit status. When the app's
-registry does not load, `--types` does not run and the report notes that.
+An error exits with status 1, like any other error. A ty warning is shown
+but does not change the exit status.
 
-ty resolves imports from the current directory, so run the command from
-the project root. Run from a subdirectory, it can miss findings in code
+Run the command from the project root. ty resolves imports from the
+current directory, so from a subdirectory it can miss findings in code
 that imports the rest of the project.
 
-`--types` needs three things, and the command exits with status 2 and says
-what to install when one is missing:
+`--types` needs:
 
-- the `citry-lsp` package, which builds the files TypeScript and ty check
-  and installs ty;
+- the `citry-lsp` package, which prepares the files TypeScript and ty
+  check, and installs ty;
 - Node.js on `PATH`;
-- TypeScript's `tsc`, from the project's `node_modules` (the nearest one in
-  the current directory or a parent) or from `PATH`. Install it with
+- TypeScript's `tsc`, from the nearest `node_modules` in the current
+  directory or a parent, or from `PATH`. Install it with
   `npm install --save-dev typescript`.
 
-Components installed from another package are skipped. `--types` cannot be
-combined with `--static`, because it needs the registry. If ty cannot
-start or stops responding, the command also exits with status 2 and prints
-the reason.
+If one is missing, or ty cannot start or stops responding, the command
+exits with status 2 and says what to install or fix.
 
-## Format component assets
+`--types` skips components installed from another package. It needs your
+registered components, so it cannot be combined with `--static`, and it
+does not run when the application fails to import. The report notes that
+it was skipped.
 
-`citry format` formats standalone Citry files and statically identifiable
-component assets without importing an application. That includes direct
-`template`, `js`, and `css` literals, plus constant `template_file`, `js_file`,
-and `css_file` declarations discovered beneath an explicit directory:
+## Format component files
+
+`citry format` formats component templates in place. It reads source files
+without importing your application:
 
 ```bash
 citry format path/to/components
-citry format --check path/to/components
-citry format --diff path/to/card.py
-citry format --verbose path/to/card.citry-html
 ```
 
-The shared formatter handles conservative Citry/HTML structure, Python
-expressions, `c-for` clauses, and `c-fill data` patterns. JavaScript and CSS
-formatting is opt-in and uses an explicitly named Biome executable:
+It accepts files and directories, and formats the current directory when
+you give no path:
+
+- in a Python file, the `template`, `js`, and `css` strings of each
+  component it can find without running the code;
+- in a directory, those Python files, plus the files named by a fixed
+  `template_file`, `js_file`, or `css_file` inside that directory;
+- standalone `.html`, `.citry`, and `.citry-html` template files, and
+  `.js` and `.css` files.
+
+Preview a change without writing it:
+
+```bash
+citry format --check path/to/components
+citry format --diff path/to/card.py
+```
+
+`--check` lists the files that would change, and `--diff` prints the
+changes. Both exit with status 1 when a file would change. They cannot be
+combined. A file that cannot be formatted makes the command exit with
+status 2. `citry format` rejects `--app` and `--static` with status 2.
+
+The formatter lays out the HTML structure conservatively and formats
+Python expressions, `c-for` clauses, and `c-fill data` patterns. Add
+`--verbose` to see which formatters are active.
+
+### Format JS and CSS
+
+Citry formats JavaScript and CSS only when you name a
+[Biome](https://biomejs.dev/) executable:
 
 ```bash
 citry format path/to/components \
@@ -225,112 +263,60 @@ citry format path/to/components \
   --css-provider biome:/absolute/path/to/native/biome
 ```
 
-The path must name Biome's self-contained platform-native binary. Citry
-rejects interpreter scripts and npm, pnpm, or Windows command launchers,
-because it cannot hash everything such a launcher loads.
+The path must point to Biome's native binary for your platform. Citry
+rejects scripts and launchers such as the npm, pnpm, or Windows command
+wrappers, because it cannot tell which files they would load.
 
-`--embedded=available` (the default) formats regions whose provider is
-configured and reports the rest without failing the file.
-`--embedded=required` makes a missing provider an error and writes none of the
-affected file; `--embedded=off` disables embedded providers and does not even
-probe provider paths supplied alongside it. Explicit `{# fmt: off #}`
-suppression remains an opt-out and does not count as a missing provider in
-required mode.
+Biome then formats component `js` and `css` strings, standalone `.js` and
+`.css` files, and `<script>` and `<style>` bodies in templates. Citry
+leaves a `<script>` or `<style>` body unchanged, and reports it, when the
+body:
 
-With a provider configured, Biome formats component `js` and `css` assets,
-standalone `.js` and `.css` files, and the bodies of `<script>` and
-`<style>` elements in templates. In a template, Citry leaves these bodies
-unchanged and reports them:
-
-- a body that contains Citry interpolation such as `{{ value }}` or a
-  `{# ... #}` comment;
-- a body whose language is not plain JavaScript or CSS, or is set by an
+- contains Citry syntax such as `{{ value }}` or a `{# ... #}` comment;
+- is not plain JavaScript or CSS, or sets its language with an
   expression;
-- a body with a multiline string or template literal, a line continuation,
-  or a multiline block comment, whose exact whitespace Citry must keep;
-- a body that starts with a hashbang (`#!`), `@charset`, or a byte order
-  mark.
+- has a multiline string or template literal, a line continuation, or a
+  multiline block comment, whose exact whitespace must stay;
+- starts with a hashbang (`#!`), `@charset`, or a byte order mark.
 
-Citry identifies each provider by a fingerprint: a hash of the Biome
-binary and of the exact bytes of the configuration it used. Provider error
-messages include it. Two runs with the same fingerprint used the same
-inputs. To make sure of that, Citry:
+`--embedded` decides what happens when no Biome path is given for a
+language:
 
-- uses the nearest `biome.json` or `biome.jsonc` for each asset, and passes
-  Biome a private copy of it, or an empty configuration when none exists,
-  so Biome cannot find a different file during the run. File patterns in
-  the configuration still match each file's path relative to the
-  configuration;
-- rejects a configuration that uses `extends` or `plugins` (including
-  override plugins), because the files those settings load are not part of
-  the fingerprint;
-- rejects a symlinked configuration file, so the file Citry hashes is the
-  file Biome reads;
-- ignores `BIOME_*` environment variables, `.editorconfig`, and options
-  derived from version control;
-- hashes the selected executable and runs a copy of it from a private
-  per-user cache.
+- `available`, the default, formats what it can and reports the rest
+  without failing;
+- `required` treats a missing provider as an error and leaves the
+  affected file unchanged;
+- `off` turns Biome off, and ignores any provider paths you passed.
 
-`--check` and `--diff` do not write. `--verbose` also reports which
-formatters are active, including the Biome version for each language. Citry never searches `PATH`, invokes a shell,
-or asks Biome to write the target file. Provider output has one 8 MiB bound
-across stdout and stderr, and the provider process tree is stopped after 15
-seconds. Formatting reads source files only, so `citry format` rejects
-`--app` and `--static` with exit status 2.
+A region you turned off with `{# fmt: off #}` never counts as missing.
 
-## List registered components
+### Repeatable Biome runs
 
-`list` completes component discovery and prints the engine's component
-registry:
+Citry identifies each Biome setup by a fingerprint: a hash of the Biome
+binary and of the exact configuration it used. Error messages include it,
+and two runs with the same fingerprint used the same inputs. To keep that
+true, Citry:
 
-```bash
-citry --app myproject.engine:app list
-```
+- uses the nearest `biome.json` or `biome.jsonc` for each file and gives
+  Biome a private copy, or an empty configuration when none exists. File
+  patterns in it still match paths relative to the configuration file.
+  Having both files in one directory is an error;
+- rejects a configuration that uses `extends` or `plugins`, including
+  override plugins, because the files they load are not in the
+  fingerprint;
+- rejects a configuration file that is a symlink;
+- ignores `BIOME_*` environment variables, `.editorconfig`, and settings
+  taken from version control;
+- runs a copy of the binary from a private per-user cache.
 
-Each row shows the registered names, Python class, and source path. The list
-includes Citry's built-in components as well as application components.
+Citry never searches `PATH` for Biome, never runs it through a shell, and
+never lets it write files itself. It stops Biome after 15 seconds, or when
+its output passes 8 MiB.
 
-Use this when a template tag does not resolve as expected, or to check that
-[component discovery](/advanced/component-discovery/) found a module.
+## Reload templates
 
-## Export the runtime catalog
-
-`inspect --json` prints the versioned
-[`ComponentCatalog`][citry.ComponentCatalog] as compact JSON:
-
-```bash
-citry --app myproject.engine:app inspect --json
-```
-
-Pass one registered name or alias to inspect only that component:
-
-```bash
-citry --app myproject.engine:app inspect checkout-page --json
-```
-
-Selection is case-insensitive and retains the component's canonical primary
-name in the output. An explicitly named built-in can also be inspected. An
-unknown name exits with status 2 and a concise usage error.
-
-The `--json` flag is required. The command uses the Python introspection API's
-defaults: built-ins are excluded, asset paths are not resolved on disk,
-portable field defaults are omitted, and extension inspectors do not run.
-Those defaults describe the all-components form; selecting one built-in
-includes that built-in only. Call
-[`inspect_component()`][citry.Citry.inspect_component] or
-[`inspect_components()`][citry.Citry.inspect_components] from Python when a
-tool needs different options.
-
-The output may contain absolute paths from the developer's machine. Treat it
-as a local tooling artifact rather than sending it directly from a public HTTP
-endpoint. Output printed by application imports also goes to stdout, so keep
-those imports quiet when another tool will parse the JSON.
-
-## Watch component files
-
-`watch` monitors the engine's configured component directories. When a
-template, JavaScript, or CSS file changes, it clears the affected component's
-loaded files:
+`watch` watches your component directories. When a template, JavaScript,
+or CSS file changes, the next render uses the new file:
 
 ```bash
 citry --app myproject.engine:app watch
@@ -338,8 +324,8 @@ citry --app myproject.engine:app watch
 
 Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop it.
 
-Pass `--path` or `-p` more than once to replace the engine's configured
-directories for this run:
+To watch other directories than the ones your application configures,
+pass `--path` or `-p`, once per directory:
 
 ```bash
 citry --app myproject.engine:app watch \
@@ -347,45 +333,91 @@ citry --app myproject.engine:app watch \
   -p ./plugins/components
 ```
 
-The watcher reloads component templates and assets. It does not reload changed
-Python class definitions or restart your web server. Pair it with your host
-framework's Python reloader when both kinds of files may change. See
-[Hot reload](/guides/dev-server/) for the complete development setup.
+`watch` does not reload changed Python code or restart your web server.
+Run your framework's reloader alongside it. See
+[Hot reload](/guides/dev-server/) for the complete setup.
 
-When installed, `watchfiles` or `watchdog` supplies native filesystem events.
-Without either optional package, Citry uses its dependency-free polling
-watcher.
+If `watchfiles` or `watchdog` is installed, Citry uses it to get file
+change events from the operating system. Otherwise it checks the files
+for changes at regular intervals.
 
-## List installed extensions
+## List components
 
-`ext list` prints the extensions attached to the selected engine:
+`list` prints every component your application registered, Citry's
+built-in components included:
+
+```bash
+citry --app myproject.engine:app list
+```
+
+Each row shows the component's names, its Python class, and its source
+file. Use it when a template tag does not find the component you expect,
+or to check that [component discovery](/advanced/component-discovery/)
+found a module.
+
+## Export as JSON
+
+`inspect --json` prints a description of your components, as a
+[`ComponentCatalog`][citry.ComponentCatalog] in JSON, for tools to read:
+
+```bash
+citry --app myproject.engine:app inspect --json
+```
+
+Add a registered name or alias to describe one component:
+
+```bash
+citry --app myproject.engine:app inspect checkout-page --json
+```
+
+The name ignores letter case, and the output uses the component's main
+name. You can name a built-in component this way too. An unknown name
+exits with status 2.
+
+`--json` is required. The command leaves out built-in components (unless
+you name one), does not resolve asset paths on disk, leaves out the default
+values of inputs, and does not run extension inspectors. For other options, call
+[`inspect_component()`][citry.Citry.inspect_component] or
+[`inspect_components()`][citry.Citry.inspect_components] from Python.
+
+The output can contain absolute paths from your machine, so do not serve
+it from a public endpoint. Anything your application prints while it is
+imported also goes to the output, so keep imports quiet when another tool
+reads the JSON.
+
+## List extensions
+
+`ext list` prints the [extensions](/advanced/extensions/) your
+application uses:
 
 ```bash
 citry --app myproject.engine:app ext list
 ```
 
-Every engine includes `cache`, `dependencies`, `events`, and `i18n`.
-Extensions added by the application appear after them.
+Every application has `cache`, `dependencies`, `events`, and `i18n`.
+Extensions your application adds come after them.
 
-## Run an extension command
+## Run extension commands { #run-an-extension-command }
 
-Extensions can provide their own commands. Run one beneath its extension name:
+Extensions can add their own commands. Run one with `ext run`, the
+extension name, and the command name:
 
 ```bash
 citry --app myproject.engine:app \
   ext run events openapi
 ```
 
-Omit the command name to see the commands that extension provides:
+Leave out the command name to list the commands an extension offers:
 
 ```bash
 citry --app myproject.engine:app ext run events
 ```
 
-### Add a command to an extension
+### Add a command
 
-Define an [`ExtensionCommand`][citry.ExtensionCommand], describe its arguments
-with [`CommandArg`][citry.CommandArg], and list it on the extension:
+Subclass [`ExtensionCommand`][citry.ExtensionCommand], describe its
+arguments with [`CommandArg`][citry.CommandArg], and list it in the
+extension's `commands`:
 
 ```python
 from citry import CommandArg, Extension, ExtensionCommand
@@ -405,16 +437,16 @@ class Greeter(Extension):
     commands = (Greet,)
 ```
 
-Expose the application engine from an importable module, then run:
+Add the extension to your application's `Citry` instance, then run:
 
 ```bash
 citry --app myproject.engine:app \
   ext run greeter greet Ada
 ```
 
-Citry binds the selected engine to `self.citry` before calling `handle()`.
-Accept `**kwargs` because it receives every parsed option, including options
-defined by a parent command.
+In `handle()`, `self.citry` is the selected `Citry` instance. Accept
+`**kwargs`, because `handle()` receives every parsed option, including
+options of the commands above it.
 
 See [Extensions](/advanced/extensions/) for the rest of the extension API.
 

@@ -5,19 +5,23 @@ description: Add replaceable regions to a component, with defaults, named fills,
 
 # Slots
 
-Use slots when a component should own the surrounding layout while another
-template chooses what appears inside it. A modal can always render its frame,
-for example, while each use supplies a different message and set of actions.
+Use a slot when a component should draw the frame while each use of it
+supplies what goes inside. A modal, for example, always renders its border,
+body, and button row, but every page that uses it puts in a different
+message and different buttons.
+
+A slot is a place in the component's template where each use of the
+component can insert content. The content that goes into a slot is called
+a fill.
 
 If you have not used a slot yet, start with
-[Add flexible content](/getting-started/add-slots/). This page explains the
-full composition model and the choices you have when designing a component.
+[Add slots](/getting-started/add-slots/).
 
-## Define the places another template can fill
+## Add slots
 
-Add the [`<c-slot>` built-in](/reference/builtins/#c-slot) wherever the
-component should accept content. An unnamed slot is the `default` slot. Give
-other slots a `name`:
+Put a [`<c-slot>`](/reference/builtins/#c-slot) tag where the content should
+appear. A slot without a name is the `default` slot. Give any other slot a
+`name`:
 
 ```citry
 from citry import Citry, Component, SlotInput
@@ -44,23 +48,19 @@ class Modal(Component):
     """
 ```
 
-The inner [`Slots` class][citry.Component.Slots] describes the names this
-component accepts. [`SlotInput`][citry.SlotInput] describes content for one
-slot. A field without a default must be filled when the component is used;
-`SlotInput | None = None` makes that field optional.
+The nested [`Slots`][citry.Component.Slots] class lists the slots the
+component accepts, each annotated with [`SlotInput`][citry.SlotInput]. A
+slot without a default must be filled. `SlotInput | None = None` makes it
+optional.
 
-Without a `Slots` class, a component accepts any slot name. Declaring one gives
-the component a closed, checked interface: Citry rejects a fill, or a
-`<c-slot name="...">` tag in the component's own template, whose name the
-class does not declare. This page calls a `<c-slot>` tag an outlet: the place
-where a fill appears.
+Without a `Slots` class, a component accepts any slot name. With one, Citry
+rejects a fill for a slot the class does not list, and a `<c-slot name="...">`
+with a fixed name that the class does not list.
 
-## Choose one way to fill a component
+## Fill from a template
 
-There are two valid shapes for content inside a component tag.
-
-For a component with only a default fill, put the content directly in the
-body:
+When a component has only a default slot, put the content between its
+opening and closing tags:
 
 ```citry-html
 <c-Modal>
@@ -68,10 +68,8 @@ body:
 </c-Modal>
 ```
 
-The body fills the `default` slot.
-
-When you need a named slot, use only
-[`<c-fill>` tags](/reference/builtins/#c-fill) in the body:
+To fill a named slot, wrap each fill in a
+[`<c-fill>`](/reference/builtins/#c-fill) tag:
 
 ```citry-html
 <c-Modal>
@@ -85,14 +83,14 @@ When you need a named slot, use only
 </c-Modal>
 ```
 
-Do not mix direct body content with `<c-fill>` tags. Once you use one explicit
-fill, every non-whitespace part of the body must belong to a fill. This keeps
-it clear which slot owns each piece of content.
+Use one form or the other. Once the body has a `<c-fill>` tag, everything
+in it other than whitespace must be inside a `<c-fill>`, including the
+default slot's content.
 
-## Supply fallback content
+## Add fallback content
 
-Content inside `<c-slot>` is a fallback. Citry inserts it only when no fill is
-available:
+Content inside `<c-slot>` is a fallback. Citry shows it when the slot is not
+filled:
 
 ```citry-html
 <button type="button">
@@ -105,97 +103,37 @@ available:
 <c-Button>Save changes</c-Button>
 ```
 
-The first button says `Continue`; the second says `Save changes`.
+The first button says `Continue`, and the second says `Save changes`.
 
-There are three related rules worth keeping separate:
+## What a fill can read
 
-- A `Slots` field without a default must be supplied when the component is
-  used.
-- A non-`None` field default is itself a fill. It wins over the fallback body
-  inside `<c-slot>`.
-- `required` on `<c-slot>` raises only if that outlet actually renders without
-  a fill.
-
-This component supplies a default fill from its schema:
-
-```citry
-from citry import Component, SlotInput
-
-
-class Notice(Component):
-    class Slots:
-        title: SlotInput = "Notice"
-        details: SlotInput | None = None
-
-    template = """
-      <aside>
-        <h2><c-slot name="title">Fallback title</c-slot></h2>
-        <c-slot name="details" />
-      </aside>
-    """
-```
-
-With no `title` fill, Citry inserts `Notice`, not `Fallback title`. The `None`
-default on `details` means no fill, so its in-template fallback would still be
-available.
-
-Use `required` when the requirement depends on whether the outlet is reached:
+A fill is written in the template that uses the component, so it reads
+that template's variables. A fallback is written in the component, so it reads the
+component's variables:
 
 ```citry-html
-<c-if cond="show_details">
-  <c-slot name="details" required />
-</c-if>
-```
-
-If `show_details` is false, that slot does not render and cannot raise. If it
-is true and no fill exists, Citry raises `RuntimeError`.
-
-### Require a slot conditionally
-
-Use `c-required` when the requirement itself comes from a Python expression:
-
-```citry-html
-<c-slot
-  name="details"
-  c-required="account.must_supply_details"
-/>
-```
-
-Citry evaluates the expression when the outlet renders. A truthy result has
-the same behavior as the bare `required` marker; a falsy result leaves the
-slot optional. As with `required`, an outlet in a branch that does not render
-cannot raise a missing-fill error.
-
-## Know which scope a fill uses
-
-A template-authored fill belongs to the template that uses the component. Its
-Python expressions keep that template's variables. A fallback belongs to the
-component that defines the slot and uses that component's variables.
-
-```citry-html
-<!-- Inside ProfileCard: fallback uses ProfileCard data. -->
+<!-- Inside ProfileCard: the fallback reads ProfileCard's data. -->
 <c-slot name="title">{{ default_title }}</c-slot>
 ```
 
 ```citry-html
-<!-- This fill uses the surrounding template's page_title. -->
+<!-- In the page: the fill reads the page's page_title. -->
 <c-ProfileCard>
   <c-fill name="title">{{ page_title }}</c-fill>
 </c-ProfileCard>
 ```
 
-The same scope rule applies to Vue expressions. See
-[Understand slot scope](/concepts/client-interactivity/#understand-slot-scope)
-for the browser side.
+Vue expressions in the browser follow the same rule. See
+[Understand slot scope](/concepts/client-interactivity/#understand-slot-scope).
 
-## Scoped slots: passing data to the fill
+## Pass data to the fill { #pass-data-from-the-component-to-the-fill }
 
-Sometimes the component owns information that the surrounding template needs
-to format. A list component can expose the current row and its position
-without deciding how either should look.
+Sometimes the component holds data that the fill should format. A list
+component can hand each item and its position to the fill, and let the page
+decide how a row looks.
 
-Extra attributes on `<c-slot>` become scoped slot data. Use `c-*` for Python
-expressions:
+Extra attributes on `<c-slot>` become data for the fill. Use the `c-` prefix
+to pass the value of a Python expression:
 
 ```citry
 from citry import Component, SlotInput
@@ -237,7 +175,7 @@ class ItemList(Component):
     """
 ```
 
-The fill opts in with `data="..."`:
+The fill names a variable for that data with `data="..."`:
 
 ```citry-html
 <c-ItemList c-items="items">
@@ -247,13 +185,11 @@ The fill opts in with `data="..."`:
 </c-ItemList>
 ```
 
-The value is an immutable [`SlotData`][citry.SlotData] record. Identifier keys
-support attribute access, as in `row.index`. It also behaves like a mapping,
-so use brackets for keys such as `row["aria-label"]`.
+`row` is a read-only [`SlotData`][citry.SlotData] record. Read a field as an
+attribute, such as `row.index`, or with brackets for a key that is not a
+valid Python name, such as `row["aria-label"]`.
 
-Typing the slot as `SlotInput[RowData]` documents what the outlet supplies and
-lets Citry catch unknown fields in direct destructuring patterns. A fill can
-name only the fields it needs:
+A fill can also unpack just the fields it needs, and rename them:
 
 ```citry-html
 <c-ItemList c-items="items">
@@ -263,34 +199,107 @@ name only the fields it needs:
 </c-ItemList>
 ```
 
-Use `**rest` last to collect fields you did not name. For the complete binding
-grammar and errors, see [`<c-fill>`](/reference/builtins/#c-fill).
+Typing the slot as `SlotInput[RowData]` documents which fields the
+component passes, and lets Citry reject an unpacked field name that
+`RowData` does not have. Add `**rest` at the end to collect the fields you
+did not name. [`<c-fill>`](/reference/builtins/#c-fill) lists the full
+unpacking syntax.
 
-## Filling slots from Python
+## Fill from Python { #fill-slots-from-python }
 
-Pass a `slots` mapping when Python, rather than another template, assembles
-the component:
+When Python code builds the component, pass the fills in a `slots`
+mapping:
 
 ```python
-html = str(
-    Modal(
-        slots={
-            "default": "Your export is ready.",
-            "actions": "Download",
-        },
-    )
+modal = Modal(
+    slots={
+        "default": "Your export is ready.",
+        "actions": "Download",
+    },
 )
+html = str(modal)
 ```
 
-Citry converts each accepted value to a lazy, repeatable
-[`Slot`][citry.Slot]. Ordinary strings are escaped. A `None` value means the
-slot was not filled. See the [Slot Reference][citry.Slot] for callable fills,
-safe rendered values, and metadata used by extensions.
+Citry escapes plain strings, so they appear as text. A `None` value leaves
+the slot unfilled. The [`Slot`][citry.Slot] reference covers other kinds of
+fill, such as a function that renders the content or HTML you have already
+marked safe.
 
-## Dynamic slot names
+## Wrap the fallback { #wrap-the-fallback-instead-of-replacing-it }
 
-Use `c-name` when the available slot names genuinely depend on component data.
-This table creates one outlet per column:
+A fill normally replaces the fallback. To keep the fallback and add markup
+around it, give the fallback a variable name with `fallback="..."`, then
+insert that variable in the fill:
+
+```citry-html
+<c-Card>
+  <c-fill name="title" fallback="original">
+    <strong>{{ original }}</strong>
+  </c-fill>
+</c-Card>
+```
+
+`{{ original }}` renders the slot's fallback content at that point.
+
+## Set a default fill
+
+A default other than `None` in the `Slots` class acts as a fill that the
+component supplies itself. It takes priority over the fallback inside
+`<c-slot>`:
+
+```citry
+from citry import Component, SlotInput
+
+
+class Notice(Component):
+    class Slots:
+        title: SlotInput = "Notice"
+        details: SlotInput | None = None
+
+    template = """
+      <aside>
+        <h2><c-slot name="title">Fallback title</c-slot></h2>
+        <c-slot name="details" />
+      </aside>
+    """
+```
+
+When a page does not fill `title`, Citry shows `Notice`, not
+`Fallback title`. A `None` default means no fill, so a fallback inside
+`<c-slot name="details">` would still show.
+
+## Require conditionally { #require-a-slot-conditionally }
+
+A slot without a default in the `Slots` class must always be filled. When a
+slot is needed only if a certain part of the template renders, add
+`required` to that `<c-slot>` instead:
+
+```citry-html
+<c-if cond="show_details">
+  <c-slot name="details" required />
+</c-if>
+```
+
+If `show_details` is false, the slot does not render and nothing is checked.
+If it is true and there is no fill, Citry raises `RuntimeError`.
+
+When a Python expression decides whether the slot is required, use
+`c-required`:
+
+```citry-html
+<c-slot
+  name="details"
+  c-required="account.must_supply_details"
+/>
+```
+
+A truthy result behaves like `required`, and a falsy result leaves the slot
+optional.
+
+## Compute slot names
+
+Use `c-name` when the slot names depend on the component's data. This table
+header creates one slot per column:
 
 ```citry-html
 <c-for each="column in columns">
@@ -305,27 +314,27 @@ This table creates one outlet per column:
 </c-for>
 ```
 
-The template using the component can fill `header-name`, `header-age`, or any
-other name produced by the expression. `<c-fill c-name="...">` can compute
-fill names too. Names with dashes, like these, work only when the component
-does not declare `Slots`, because a Python field name cannot contain a dash.
+A template that uses the component can then fill `header-name`, `header-age`, and so on.
+`<c-fill c-name="...">` computes the name of a fill the same way.
 
-A computed fill name must still appear in the component's declared `Slots`
-schema; an undeclared one raises `TypeError` when the component renders. Citry
-does not check a computed `<c-slot>` name against the schema. If it is not
-declared, no fill can reach it, so the outlet always shows its fallback. If
-two dynamic fills resolve to the same name, Citry raises `RuntimeError`.
-Prefer literal names when the interface is fixed; they are easier to discover
-and check.
+Prefer fixed names when the set of slots is known in advance. They are
+easier to find and Citry can check them.
 
-## Spread slot and fill settings
+!!! note "Computed names and a `Slots` class"
 
-`<c-slot>` and `<c-fill>` are the two structural tags that accept `c-bind`.
-The expression must produce a mapping, and Citry applies its keys in source
-order with the directly authored attributes.
+    When the component has a `Slots` class, a computed fill name must be
+    listed in it, or Citry raises `TypeError` when the component renders. Names with dashes,
+    such as `header-name`, cannot be Python field names, so they work only
+    in a component without a `Slots` class. Citry does not check a slot's
+    computed name against the class: if the name is not listed, no fill can
+    reach that slot, and it always shows its fallback. Two computed fills
+    that produce the same name raise `RuntimeError`.
 
-On `<c-slot>`, the mapping may provide `name` and `required`. Every other key
-becomes data exposed by that slot:
+## Bind slot settings { #spread-slot-and-fill-settings }
+
+`<c-slot>` and `<c-fill>` accept a `c-bind` mapping, so the settings can come
+from one Python value. On `<c-slot>`, the keys `name` and `required` set
+those options, and every other key becomes data for the fill:
 
 ```citry-html
 <c-slot
@@ -350,35 +359,24 @@ On `<c-fill>`, the accepted keys are `name`, `data`, and `fallback`:
 </c-fill>
 ```
 
-A later source wins for the same setting. A spread that evaluates to `None`
-leaves the current settings unchanged. Inside a mapping, `None` is still a
-value: it makes `required` false, remains available as slot data, omits a
-fill's `data` or `fallback` binding, and is invalid for `name`. Non-string or
-unsupported keys raise an error. See
-[`c-bind`](/syntax/dynamic-attributes/#c-bind-spread) for mapping evaluation
-and ordering on ordinary HTML elements and component inputs.
+When the mapping and an attribute set the same option, the one written
+later in the tag wins.
 
-## Wrapping the fallback
+!!! note "`None` values and invalid keys in a slot or fill mapping"
 
-A fill normally replaces the fallback. To wrap it instead, bind the fallback
-to a variable and insert that variable inside the fill:
-
-```citry-html
-<c-Card>
-  <c-fill name="title" fallback="original">
-    <strong>{{ original }}</strong>
-  </c-fill>
-</c-Card>
-```
-
-The `original` value is a [`Slot`][citry.Slot], so inserting it renders the
-slot's fallback at that point.
+    A `c-bind` expression that evaluates to `None` changes nothing. Inside
+    the mapping, `None` is a value: it makes `required` false, is passed to
+    the fill as data, leaves out a fill's `data` or `fallback` variable, and
+    is not allowed for `name`. A key that is not a string, or that the tag
+    does not accept, raises an error.
+    [`c-bind`](/syntax/dynamic-attributes/#c-bind-spread) describes how
+    mappings are applied on other tags.
 
 ## Next steps
 
-- [Provide and inject](/concepts/provide-and-inject/) passes data through a
-  whole rendered subtree.
-- [Client interactivity](/concepts/client-interactivity/) explains which
+- [Provide and inject](/concepts/provide-and-inject/) shares a value with
+  every component inside a part of the page.
+- [Client interactivity](/concepts/client-interactivity/) shows which
   component's data a Vue expression inside a fill reads.
-- [Inputs and validation](/concepts/inputs-and-validation/) covers typed
+- [Inputs and validation](/concepts/inputs-and-validation/) covers
   component inputs in more depth.

@@ -5,8 +5,9 @@ description: The c-* tags Citry provides in every component template.
 
 # Built-in tags
 
-Citry provides these tags in every component template. You do not need to
-register or import them.
+Look up a built-in `<c-*>` tag here: what it does, its attributes, and a
+short example. Every component template can use these tags without
+registering or importing anything.
 
 - **Control flow:** [`<c-if>`](#c-if), [`<c-elif>`](#c-elif),
   [`<c-else>`](#c-else), [`<c-for>`](#c-for), and
@@ -14,10 +15,10 @@ register or import them.
 - **Slots:** [`<c-slot>`](#c-slot) and [`<c-fill>`](#c-fill)
 - **Dynamic output:** [`<c-component>`](#c-component) and
   [`<c-element>`](#c-element)
-- **Targeted updates:** [`<c-mark>`](#c-mark)
 - **Data and resilience:** [`<c-provide>`](#c-provide),
   [`<c-cache>`](#c-cache), and
   [`<c-error-fallback>`](#c-error-fallback)
+- **Targeted updates:** [`<c-mark>`](#c-mark)
 - **Internationalization:** [`<c-i18n>`](#c-i18n) and
   [`<c-trans>`](#c-trans)
 - **Page assets:** [`<c-css>`](#c-css) and [`<c-js>`](#c-js)
@@ -27,8 +28,8 @@ register or import them.
 
 <h3 id="c-if"><code>&lt;c-if&gt;</code></h3>
 
-Render a block when its `cond` expression is truthy. An `<c-if>` may be
-followed by any number of `<c-elif>` branches and one `<c-else>` branch.
+Render a block only when its `cond` expression is truthy. Any number of
+`<c-elif>` branches and one `<c-else>` may follow it.
 
 ```citry-html
 <c-if cond="is_admin">
@@ -36,13 +37,13 @@ followed by any number of `<c-elif>` branches and one `<c-else>` branch.
 </c-if>
 ```
 
-The [control-flow guide](/syntax/control-flow/) covers inline `c-if`
-attributes, truthiness, and branch ordering.
+[Conditions and loops](/syntax/control-flow/) covers the inline `c-if`
+attribute, truthiness, and branch order.
 
 <h3 id="c-elif"><code>&lt;c-elif&gt;</code></h3>
 
-Add another condition to an `<c-if>` chain. Citry renders this branch only
-when every earlier condition was false and this branch's `cond` is truthy.
+Add another condition to a `<c-if>` chain. The branch renders when every
+earlier condition was false and its own `cond` is truthy.
 
 ```citry-html
 <c-if cond="is_admin">Admin</c-if>
@@ -51,8 +52,7 @@ when every earlier condition was false and this branch's `cond` is truthy.
 
 <h3 id="c-else"><code>&lt;c-else&gt;</code></h3>
 
-Add the final fallback to an `<c-if>` chain. `<c-else>` has no `cond`
-attribute.
+Add the final fallback to a `<c-if>` chain. It takes no `cond`.
 
 ```citry-html
 <c-if cond="is_signed_in">Account</c-if>
@@ -61,8 +61,8 @@ attribute.
 
 <h3 id="c-for"><code>&lt;c-for&gt;</code></h3>
 
-Repeat a block for every value in an iterable. Its `each` attribute uses a
-Python-style target and expression.
+Repeat a block for every item in an iterable. The `each` attribute is
+written like a Python `for`: a target, `in`, and an expression.
 
 ```citry-html
 <c-for each="book in books">
@@ -70,13 +70,12 @@ Python-style target and expression.
 </c-for>
 ```
 
-Read [Conditions and loops](/syntax/control-flow/#unpack-and-filter-values)
-for unpacking, filtering, and variable scope.
+[Conditions and loops](/syntax/control-flow/#unpack-and-filter-values)
+covers unpacking, filtering, and variable scope.
 
 <h3 id="c-empty"><code>&lt;c-empty&gt;</code></h3>
 
-Show an empty state when the `<c-for>` immediately before it produces no
-items.
+Show an empty state when the `<c-for>` right before it has no items.
 
 ```citry-html
 <c-for each="book in books">
@@ -89,9 +88,9 @@ items.
 
 <h3 id="c-slot"><code>&lt;c-slot&gt;</code></h3>
 
-Mark a place where another template can add content. Leave out `name` for the
-default slot, or name the slot when a component has more than one. Content
-inside the tag is its fallback.
+Mark a place in a component where the template that uses it can add
+content. Leave out `name` for the default slot, and name each extra slot.
+Content inside the tag is shown when no content is passed.
 
 ```citry-html
 <article>
@@ -102,13 +101,14 @@ inside the tag is its fallback.
 </article>
 ```
 
-See [Slots](/concepts/slots/) for required slots, slot data, dynamic names,
-and fallback details.
+[Slots](/concepts/slots/) covers required slots, slot data, dynamic
+names, and fallback content.
 
 <h3 id="c-fill"><code>&lt;c-fill&gt;</code></h3>
 
-Choose which named slot receives a block of content when you use a component.
-You can pass plain body content when you only need the default slot.
+Send a block of content to a named slot of the component you are using.
+For the default slot alone, put the content directly in the component's
+body instead.
 
 ```citry-html
 <c-Panel>
@@ -122,59 +122,130 @@ You can pass plain body content when you only need the default slot.
 
 <c-builtin tag="component" c-level="3" />
 
-<c-builtin tag="element" c-level="3" />
-
-Read [Dynamic components](/advanced/dynamic-components/) for complete examples
-and the difference between component names and HTML tag names.
-
-## Targeted updates
-
-<c-builtin tag="mark" c-level="3" />
-
-Use `<c-mark>` to name part of a component's template so that an event
-handler can replace just that part in the browser. Its only attribute is the
-required `name`, written as a literal string (not a `c-name` expression) that
-matches `[A-Za-z][A-Za-z0-9_-]*`. Names are case-sensitive and must be unique
-within a component. Put the content directly in the tag body; `<c-mark>` has
-no named slots. A handler on the component whose template contains the
-mark can return `actions.Render(element, target="mark:summary")` to replace
-the region marked `<c-mark name="summary">`. See [Events actions](/events/actions/).
-
-Because `<c-mark>` is built in, your own component cannot use the name
-`mark`. A class named `Mark`, or one registered as `mark`, fails when it is
-defined:
-
-```text
-AlreadyRegistered: Cannot register 'Mark' as 'mark': the name is
-reserved for the built-in <c-mark> component.
+```citry-html
+<c-component is="card" />
+<c-component c-is="chosen_component" />
 ```
 
-Rename the class, for example to `Highlight`, and write `<c-highlight>` in
-your templates.
+<c-builtin tag="element" c-level="3" />
+
+```citry-html
+<c-element c-is="tag" class="heading">
+  {{ text }}
+</c-element>
+```
+
+[Dynamic components](/advanced/dynamic-components/) has complete
+examples and explains how component names differ from HTML tag names.
 
 ## Data and resilience
 
 <c-builtin tag="provide" c-level="3" />
 
+```citry-html
+<c-provide key="theme" name="dark">
+  <c-theme-label />
+</c-provide>
+```
+
+[Provide and inject](/concepts/provide-and-inject/) shows how a component
+reads the value.
+
 <c-builtin tag="cache" c-level="3" />
 
+```citry-html
+<c-cache
+  key="account-menu"
+  c-vary="[current_user.id, locale]"
+  c-ttl="300"
+>
+  <c-account-menu
+    c-user="current_user"
+    c-locale="locale"
+  />
+</c-cache>
+```
+
+[Caching](/performance/caching/) covers keys, expiry, and clearing
+entries.
+
 <c-builtin tag="error-fallback" c-level="3" />
+
+```citry-html
+<c-error-fallback fallback="Recent activity is unavailable">
+  <c-recent-activity />
+</c-error-fallback>
+```
+
+[Error boundaries](/concepts/error-boundaries/) shows a fallback with
+markup and nested boundaries.
+
+## Targeted updates
+
+<c-builtin tag="mark" c-level="3" />
+
+To update the marked part, return
+`actions.Render(..., target="mark:<name>")` from an event handler:
+
+```citry-html
+<c-mark name="summary">
+  <c-CartSummary c-cart="cart" />
+</c-mark>
+```
+
+Write `name` as a plain attribute. A computed `c-name`, or a name that
+breaks the rules above, raises `ValueError` when the component renders.
+`<c-mark>` takes no `<c-fill>`; put the content directly inside it.
+
+See [Update part of the page](/events/actions/#update-one-part-of-the-page).
+
+!!! note "You cannot name a component `mark`"
+
+    A component class named `Mark`, or one registered as `mark`, fails when
+    it is defined:
+
+    ```text
+    AlreadyRegistered: Cannot register 'Mark' as 'mark': the name is
+    reserved for the built-in <c-mark> component.
+    ```
+
+    Rename the class, for example to `Highlight`, and write
+    `<c-highlight>` in your templates.
 
 ## Internationalization
 
 <c-builtin tag="i18n" c-level="3" />
 
-Use it to provide a locale to one subtree. Add a real `tag` when the subtree
-needs `lang` and `dir`. To let browser code in the subtree translate and
-format text, add the bare `client` attribute together with `tag`. A
-`<c-i18n>` nested inside a `client` one also needs `tag`.
+Use it to set the locale for one part of the page. Add `tag` when that
+part needs `lang` and `dir` attributes. To let browser code in that part
+translate and format text, add the bare `client` attribute as well:
+
+```citry-html
+<c-i18n locale="ar-EG" tag="aside">
+  <c-account-card />
+</c-i18n>
+```
+
 See [Locales and context](/i18n/locale-context/) and
 [Browser i18n](/i18n/browser/).
 
 <c-builtin tag="trans" c-level="3" />
 
-Use it when a translator needs to position an application-owned link or
-inline component. See [Rich messages](/i18n/rich-messages/).
+Use it when a translated sentence contains a link or a component, and the
+translator decides where it goes:
+
+```citry-html
+<c-trans
+  message="my-app-terms-acceptance"
+  c-values="{'account_name': account.name}"
+>
+  <c-fill name="terms_link">
+    <a href="/terms">{{ tr("my-app-terms-name") }}</a>
+  </c-fill>
+</c-trans>
+```
+
+See [Rich messages](/i18n/rich-messages/).
 
 ## Page assets
 
@@ -182,21 +253,36 @@ inline component. See [Rich messages](/i18n/rich-messages/).
 
 <c-builtin tag="js" c-level="3" />
 
-The [Asset placement guide][dependencies-guide] explains where Citry puts the
+Without them, Citry puts the CSS at the end of `<head>` and the
+JavaScript at the end of `<body>`. Use the tags to place them somewhere
+else, such as before your own stylesheet:
+
+```citry-html
+<head>
+  <c-css />
+  <link rel="stylesheet" href="/static/overrides.css">
+</head>
+<body>
+  <c-Chart c-points="[1, 2, 3]" />
+  <c-js />
+</body>
+```
+
+[Asset placement][dependencies-guide] explains where Citry puts the
 collected files and component assets.
 
 ## Literal template text
 
 <h3 id="c-raw"><code>&lt;c-raw&gt;</code></h3>
 
-Keep template-looking text unchanged. Citry does not evaluate expressions or
-component tags inside `<c-raw>`.
+Keep text that looks like template syntax exactly as written. Citry does
+not evaluate expressions or component tags inside `<c-raw>`.
 
 ```citry-html
 --8<-- "docs_site/snippets/builtin_raw.html"
 ```
 
-Read [Comments and literal text](/syntax/comments/#pass-template-looking-text-through-unchanged)
-for the trust boundary and exact raw-block rules.
+[Comments and literal text](/syntax/comments/#pass-template-looking-text-through-unchanged)
+covers what is trusted and the exact rules.
 
 [dependencies-guide]: /advanced/asset-placement/

@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from markupsafe import Markup
-from pygments import highlight
 from pygments.formatters import HtmlFormatter
 
 from citry import Component
+from docs_site._internal.code_display import highlight_for_display
 from docs_site._internal.components._live_code_markup import (
     LiveActivationControls,  # noqa: F401 - registered for the template below
     LiveWorkspace,  # noqa: F401 - registered for the template below
@@ -97,7 +97,9 @@ class LiveCode(Component):
             static=authored_static,
             allow_citry_ui=local_ui_runtime,
         )
-        highlighted = highlight(
+        # The Try live editor starts from this block's text, so a reader edits
+        # and runs exactly the code shown, with the extra blank lines removed.
+        highlighted = highlight_for_display(
             source,
             CitryPythonLexer(stripnl=False, ensurenl=False),
             HtmlFormatter(cssclass="highlight", nowrap=False),

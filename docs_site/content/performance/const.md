@@ -1,27 +1,23 @@
 ---
 title: Constant values
-description: Mark component inputs that never change so Citry can prepare the template work that depends on them once.
+description: Mark component inputs that never change, so Citry prepares the template parts that use them once and reuses them across renders.
 ---
 
 # Constant values
 
-Use [`Const`][citry.Const] when the same component input appears across many
-renders and never changes. Citry can then finish the template work that
-depends on that input once and reuse the result.
+Some inputs have the same value in every render, such as a column label
+in every table row or a layout setting that is fixed for the whole site.
+Citry still evaluates and escapes the template parts that use them on
+every render.
 
-This is useful for repeated rows with the same label, components with stable
-layout choices, and application-wide presentation settings. It is a focused
-rendering optimization, not a general cache for component output. Start
-without it, measure a real repeated-render workload, and mark values only
-where the measurement shows repeated template work.
+Wrap such a value in [`Const`][citry.Const]. Citry then
+prepares the template parts that depend only on constant values once,
+and reuses them in later renders. Measure a real page first, and mark
+only values that repeat.
 
-`Const(...)` describes one value. To reuse a whole component body, see
-[Pure components](/performance/pure/). To compare `Const` with the other
-options, see the [Performance overview](/performance/).
+## Mark a fixed input
 
-## Mark a stable input
-
-Wrap the value at the point where you pass it to a component:
+Wrap the value where you pass it to the component:
 
 ```citry
 from citry import Component, Const
@@ -46,54 +42,70 @@ rows = [
 ]
 ```
 
-The label is the same for both rows, so Citry can reuse the rendered
-`<strong>` content. Each `value` remains ordinary input and renders normally.
+Both rows reuse the prepared `<strong>` content. `value` is an ordinary
+input and renders as usual.
 
-`Const` is a promise from your code. Citry does not watch the value for later
-changes, so treat the marked value as read-only.
+Inside the component, `label` is a plain string. Citry removes the
+`Const` wrapper before your code and templates see the value.
 
-## What Citry can reuse
+`Const` is a promise. Citry does not check the value again, so do not
+change it afterwards. If you change a marked list or object in place, the
+page can show the old output.
 
-Citry precomputes a template part when every value needed by that part is
+## Mark repeated values
+
+Each [`Citry`][citry.Citry] instance keeps the prepared templates for
+the 512 most recently used combinations of component and constant
+values. [`Citry.clear`][citry.Citry.clear] empties this store.
+
+Mark values that recur across many renders: fixed labels, small layout
+choices, and site-wide settings. Do not mark a value that differs on
+almost every render, such as `Const(user.id)`. Each new value adds an
+entry that is never reused and pushes out useful ones.
+
+## See what runs once
+
+Citry prepares a template part in advance when every value it uses is
 constant:
 
-- `{{ expression }}` becomes reusable escaped text.
-- A `<c-if>` chain keeps only its selected branch.
-- A `<c-for>` loop that produces only text can be unrolled once, up to 1,000
+- `{{ expression }}` becomes ready-made escaped text.
+- A `<c-if>` chain keeps only the branch that applies.
+- A `<c-for>` loop that produces only text is expanded once, up to 1,000
   iterations.
-- Constant attribute expressions become reusable attribute text unless an
-  installed extension needs to process the final attributes.
+- An attribute expression becomes ready-made attribute text, unless an
+  installed extension implements the `on_attrs_resolved` hook to inspect
+  or change the final attributes on every render.
 
-Child component tags and slot or fill content stay live. They may create new
-components or depend on the template that supplied the content. Constant
-expressions inside those live areas can still be precomputed.
+Child components and slot content always render again, because they can
+create new components or depend on the template that supplied the
+content. Constant expressions inside them can still be prepared in
+advance.
 
-Keep template expressions free of side effects. Citry may evaluate a constant
-expression while preparing a branch, even when that branch is not selected in
-the current render.
+Keep template expressions free of side effects. Citry may evaluate a
+constant expression in a branch that the current render does not show.
 
-## Let template literals be constant automatically
+## Values written in tags
 
-Values written directly on a component tag cannot vary between renders, so
-Citry marks them for you:
+A value written directly on a component tag is the same in every render,
+so Citry treats it as constant without `Const`:
 
 ```citry-html
 <c-Grid columns="3" compact="" />
 <c-Grid c-columns="1 + 2" c-breakpoints="[480, 900]" />
 ```
 
-The same applies to an expression attribute with no variable references. Citry
-also forwards the optimization through a direct expression attribute when all
-of that expression's variables are known constant.
+The same applies to an expression attribute that uses no variables. An
+expression attribute whose variables are all constant also passes a
+constant result to the child.
 
-Citry evaluates an expression before marking its complete result as the child
-input. In `c-total="add(1, 2)"`, the arguments remain ordinary integers. When
-every referenced variable, including `add`, is known constant, Citry marks the
-evaluated result as a whole, so the child's `total` input counts as constant.
+Citry marks the result as a whole. In `c-total="add(1, 2)"`, the child's
+`total` input is constant when `add` is a constant value too; the
+arguments `1` and `2` stay ordinary integers inside the call.
 
-## Make a default constant
+## Mark a default
 
-Mark a typed default when the omitted value should receive the optimization:
+Wrap a default in `Const` so calls that omit the input get the same
+benefit:
 
 ```citry
 from citry import Component, Const
@@ -110,25 +122,18 @@ class Grid(Component):
     """
 ```
 
-`Grid()` uses the constant default. `Grid(columns=4)` receives an ordinary
-dynamic value unless the caller passes `Const(4)`.
+`Grid()` uses the constant default. `Grid(columns=4)` passes an ordinary
+value, unless the caller writes `Const(4)`.
 
-## Mark stable output from a custom callback
+## Keep values constant
 
-Citry consumes the markers it adds automatically and an explicit `Const(...)`
-at the root of each component input or output. Those values reach component
-kwargs, data callbacks, hooks, and template expressions as ordinary Python
-values. Citry keeps the optimization metadata separately, so identity checks,
-`type()` checks, JSON serialization, path operations, and standard-library
-APIs work normally for the values Citry prepares.
+With the default `template_data()`, every constant input stays constant
+in the template, unless the `Kwargs` class converts or copies it. The
+`Metric` and `Grid` examples need nothing more.
 
-The base `template_data` method returns the component kwargs. Citry knows that
-this mapping preserves each name and value, so the earlier `Metric` and `Grid`
-examples keep their known const inputs without an override.
-
-A custom `template_data` callback can run arbitrary Python, so Citry does not
-infer constness from equal values. It does preserve a marked input when the
-final output has the same key and is the exact same ordinary object:
+A custom `template_data()` can return anything, so Citry does not guess.
+An output stays constant only when it has the same name as a constant
+input and is the exact same object:
 
 ```python
 def template_data(self, kwargs, slots):
@@ -137,14 +142,13 @@ def template_data(self, kwargs, slots):
     }
 ```
 
-If the caller supplied `label=Const(value)` and the input schema preserves
-`value`'s identity, this direct pass-through keeps its promise when the final
-output still has that identity. Citry compares after the output schema and data
-hooks. The same rule applies to `return kwargs`: each same-key input keeps its
-known constness when both schema stages retained the recorded object.
+`return kwargs` works the same way. Citry compares the objects with
+Python's `is` test, after the `Kwargs` class, the output data class,
+and any extension data hooks have run. If one of them converts or
+replaces a value, that value loses its mark.
 
-Renamed or replaced outputs are dynamic unless the callback makes a new
-promise. Mark them only when the result will stay stable:
+Mark a renamed or computed output yourself, but only when it really is
+stable:
 
 ```python
 def template_data(self, kwargs, slots):
@@ -154,25 +158,38 @@ def template_data(self, kwargs, slots):
     }
 ```
 
-Citry uses Python's `is` identity test. Normal singleton and interning behavior
-therefore applies: a recomputed immutable value can count as the same object
-when Python reuses its identity.
+## Edge cases
 
-Schemas that validate, coerce, or otherwise transform data do not inherit the
-input's optimization by name alone. A same-key field can keep it by retaining
-the exact input object; otherwise the final named field needs an explicit
-`Const(...)` promise. Citry normalizes marked defaults and factories on its
-generated dataclasses, but it does not assume how arbitrary schema-owned
-factories behave.
+### `True` is not `1`
 
-Citry consumes each output marker before a template expression reads its
-value.
+Values of different types never share a stored entry, even when Python
+considers them equal, as it does `True` and `1`.
 
-## Use marker helpers before rendering
+### Recomputed values
 
-[`is_const`][citry.is_const] and
-[`const_value`][citry.const_value] remain useful when your own code handles a
-manually marked value before passing it to Citry:
+Because Citry uses the `is` test, a recomputed value that Python happens
+to reuse, such as a small integer or a short string, counts as the same
+object and keeps its mark.
+
+### Skip generators
+
+Preparing the template can use it up and leave
+later work with an empty iterator. Pass a list or tuple.
+
+### Custom schemas
+
+Citry keeps `Const` defaults and default factories constant on the
+`Kwargs` dataclasses it generates. It does not assume anything about
+default factories in schema classes you write yourself, so mark their
+results with `Const(...)` in `template_data()` when needed.
+
+### Using marked values
+
+Before Citry receives it, `Const(value)` is a wrapper object that stands
+in for the value. An API that needs the real built-in object, or checks
+its identity, can reject the wrapper. Use
+[`is_const`][citry.is_const] and [`const_value`][citry.const_value] to
+unwrap it first:
 
 ```python
 from citry import Const, const_value, is_const
@@ -183,16 +200,16 @@ if is_const(marked):
     plain = const_value(marked)
 ```
 
-The manual marker is a Python proxy until Citry consumes it. Like other proxy
-objects, it cannot preserve identity with the wrapped object, and an API that
-requires an actual built-in value may reject it. Call `const_value()` before
-handing such a value directly to that API.
+### Nested markers
 
-Citry recursively unwraps a value only when its outermost object is `Const`:
-`Const([Const(1)])` reaches component code as `[1]`. This cleanup follows exact
-builtin containers. An ordinary container is left alone, so `[Const(1)]` still
-contains a marker. Unwrap a manually nested marker at the point where your code
-uses it:
+Citry removes nested markers only when the outer value is marked:
+`Const([Const(1)])` reaches the component as `[1]`. It looks inside
+built-in lists, tuples, sets, frozensets, and dictionaries, but not
+inside your own classes.
+
+An unmarked list keeps its markers, so `[Const(1)]` still contains a
+wrapper, and so does a list that component or extension code puts a
+marker into. Unwrap it where you use it:
 
 ```python
 from operator import add
@@ -204,43 +221,31 @@ items = [Const(1)]
 total = add(const_value(items[0]), 2)
 ```
 
-Calling `add(items[0], 2)` would pass the proxy to `add`. This also applies to
-a marker inserted into an ordinary container by component or extension code.
+### Inputs that share data
 
-Root markers supplied together in one normalization operation are converted
-together, preserving aliases between those roots. When marked and unmarked
-fields share a graph that must be rebuilt, the marked value can become a
-separate cleaned graph; the unmarked original stays unchanged. Citry does not
-inspect attributes or contents inside custom objects. Marker cycles encountered
-beneath an outer `Const` raise `ValueError`, and a marked graph that requires
-rebuilding a cyclic tuple or frozenset may also be rejected. A custom
-unhashable object that cannot form a stable cache key renders normally.
+Citry unwraps markers passed in the same call together, so two inputs
+that refer to the same object still do afterwards.
 
-Do not mark a one-shot generator. Precomputing can consume it, leaving later
-work with an exhausted iterator. Use a stable list or tuple instead.
+When a marked and an unmarked input share data that Citry must rebuild,
+the marked input can get its own cleaned copy. The original stays
+unchanged.
 
-Extensions can also keep attribute processing live by implementing the
-`on_attrs_resolved` hook. This preserves the extension's chance to inspect or
-change the final attributes.
+### Cyclic data
 
-## Choose values that will repeat
+A marker that contains itself raises `ValueError`. A marked tuple or
+frozenset that contains itself can raise it too.
 
-The optimization cache keeps the 512 most recently used combinations on each
-[`Citry`][citry.Citry] instance. [`Citry.clear`][citry.Citry.clear] empties it.
+### Unhashable values
 
-Marking `Const(user.id)` when nearly every user has a different ID creates
-many entries with little or no reuse. Prefer values such as fixed labels,
-small layout choices, and stable configuration that recur across many
-renders.
-
-Different types remain different cache inputs. `Const(True)` and `Const(1)`
-do not share an entry, even though Python considers those values equal.
+A marked value that cannot be hashed, such as an unhashable custom
+object, renders normally without the speed-up.
 
 ## Related pages
 
-- [Pure components](/performance/pure/) for reusing a whole component body
-  within one render.
-- [Cache rendered output](/performance/caching/) for reusing a complete
-  rendered subtree.
-- [Rendering](/concepts/rendering/) for the full render and serialization
-  process.
+- [Performance overview](/performance/) compares `Const` with the other
+  ways to speed up rendering.
+- [Pure components](/performance/pure/) reuse a whole component's HTML
+  within one page.
+- [Cache rendered output](/performance/caching/) reuses whole rendered
+  components across requests.
+- [Rendering](/concepts/rendering/) explains the full render process.

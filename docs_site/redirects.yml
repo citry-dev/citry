@@ -21,3 +21,5 @@ redirects:
     to: /performance/cache-backends/
   - from: /ui-library/components/stack-group/
     to: /ui-library/components/col-row/
+  - from: /events/http/
+    to: /events/routes/

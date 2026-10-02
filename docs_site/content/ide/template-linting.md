@@ -1,42 +1,73 @@
 ---
 title: Template linting
-description: Configure unknown template, Vue, and component JavaScript names, leftover Alpine attributes, and invalid HTML attribute values, consistently across Citry tools.
+description: Find names that come from nowhere, Python variables read by Vue, leftover Alpine attributes, and invalid HTML attribute values, and choose how strict each check is.
 ---
 
 # Template linting
 
-Citry reports a free template root that is not available from the component's
-template data, a lexical `c-for` or `c-fill` binding, or a known global. The
-rule code is `citry.template.unknown-variable`, and its default severity is an
-error.
+Some template mistakes show up only when the page renders, and some never
+raise an error at all. A misspelled variable fails only when the page
+renders. A Vue binding can read a Python loop variable the browser never
+sees. The browser silently ignores an attribute value it does not accept.
+Citry's lint rules find these mistakes in the editor and in `citry check`,
+before anyone opens the page.
 
-Citry applies the same strict default to browser code that it can prove belongs
-to a component:
+Your application owns the rules. You set them once on your
+[`Citry`][citry.Citry] instance, and both `citry check` and the editor read
+them. There is no separate editor setting.
 
-- `citry.vue.unknown-variable` checks free roots in Vue expressions.
-- `citry.component-js.unknown-variable` checks free names inside a
-  `$component` callback or configuration object's `onServerRender` callback.
+| Rule | What it catches | Default |
+| --- | --- | --- |
+| [`citry.template.unknown-variable`](/ide/diagnostics/#citry.template.unknown-variable) | A template variable that comes from nowhere | error |
+| [`citry.vue.unknown-variable`](/ide/diagnostics/#citry.vue.unknown-variable) | A name in a Vue expression that the component does not send to the browser | error |
+| [`citry.component-js.unknown-variable`](/ide/diagnostics/#citry.component-js.unknown-variable) | An undeclared name in `$component` code | error |
+| [`citry.component-js.unknown-member`](/ide/diagnostics/#citry.component-js.unknown-member) | A misspelled `this.<name>` or `component.<name>` | error |
+| [`citry.vue.python-variable`](/ide/diagnostics/#citry.vue.python-variable) | A Vue expression that reads a Python loop variable | warning |
+| [`citry.template.alpine-attribute`](/ide/diagnostics/#citry.template.alpine-attribute) | A leftover Alpine `x-*` attribute | warning |
+| [`citry.template.alpine-cloak`](/ide/diagnostics/#citry.template.alpine-cloak) | A leftover `x-cloak`, which hides the element for good | error |
+| [`citry.template.invalid-attribute-value`](/ide/diagnostics/#citry.template.invalid-attribute-value) | An HTML attribute value the browser does not accept | warning |
 
-The component JavaScript rule catches a missing binding, such as an
-undeclared `settings` name inside an `onServerRender` callback:
+## Fix unknown names
+
+A template variable must come from the component's template data, a `c-for`
+or `c-fill` binding around it, or a global you configured. Anything else is an
+error:
+
+```citry-html
+{# error: Template variable 'usr' is not available
+   in this template. #}
+<p>{{ usr.name }}</p>
+```
+
+Vue expressions follow the same idea. A name in `:title`, `v-text`, or
+`@click` must be something the component sends to the browser, such as a
+`js_data()` key, or a Vue or Citry helper:
+
+```citry-html
+{# error: Vue variable 'submitting1' is not available
+   in this component. #}
+<button :disabled="submitting1">Save</button>
+```
+
+Inside `$component(...)`, every name must be declared in that code,
+destructured from the callback's argument, or be a browser global:
 
 ```javascript
 $component({
   onServerRender({ component }) {
+    // error: Component JavaScript variable 'settings' is not defined.
     component.ready = settings.ready;
   },
 });
 ```
 
-Use an instance value such as `component.ready` instead of an undeclared
-name, or declare a real project global through the lint settings when another
-script supplies that name.
+Usually the fix is to correct the spelling, or to read the value from the
+component, such as `component.ready`. If another script on the page really
+provides the name, [declare it](#declare-outside-names).
 
-A misspelled instance value is an error by default too. When the component's
-`js_data()` keys are known and its Vue Options are written out in the source,
-`citry.component-js.unknown-member` reports a `component.<name>` or
-`this.<name>` read that names no `js_data()` key, prop, `data()` key, `setup`
-binding, method, computed value, or injection:
+A misspelled member of the component is an error too. Citry reports a
+`component.<name>` or `this.<name>` read that names no `js_data()` key,
+prop, `data()` key, `setup` binding, method, computed value, or injection:
 
 ```javascript
 // js_data() returns {"likes": ...}
@@ -47,56 +78,48 @@ $component(({ component }) => {
 });
 ```
 
-Options that merge in `mixins` or `extends` turn this check off, because
-their names are not in the source. A plugin that adds an instance property
-should name it with a `$` prefix, such as `$api`; the rule reports an
-unprefixed name it cannot find.
+Citry runs this check only when it can see every `js_data()` key and every
+Vue Options section in the source. It skips names that start with `$` or
+`_`, so a Vue plugin that adds a property to every component should name it
+with a `$` prefix, such as `$api`. An unprefixed plugin property, such as
+`this.axios`, is reported.
 
-A Vue binding that reads a Python loop variable never sees the loop value.
-Python runs the `c-for` loop on the server, but Vue evaluates `:title` later
-in the browser, where `item` does not exist:
+## Python loops in Vue
+
+Python runs a `c-for` loop on the server. Vue evaluates `:title` later, in the
+browser, where `item` does not exist:
 
 ```citry-html
-<!-- Vue looks up `item` in browser state. -->
+<!-- Wrong: Vue looks up `item` in browser state. -->
 <li c-for="item in items" :title="item"></li>
 
-<!-- Python sets the attribute for each item. -->
+<!-- Right: Python sets the attribute for each item. -->
 <li c-for="item in items" c-title="item"></li>
 ```
 
-Citry reports each such read once. When Citry knows all of the component's
-browser names, the read is a `citry.vue.unknown-variable` error whose message
-says the name is a Python variable. When it cannot know them all, for
-example because the Vue Options use `mixins`, or when you set
-`rule_unknown_vue_variable="ignore"`, the read is a
-`citry.vue.python-variable` warning that suggests the `c-` attribute form.
+Citry reports this once per read. When it knows every name the component
+sends to the browser, it reports a `citry.vue.unknown-variable` error whose
+message says the name is a Python variable. Otherwise, or when you set
+`rule_unknown_vue_variable` to `"ignore"`, it reports a
+`citry.vue.python-variable` warning that suggests the `c-` attribute.
 
-The warning also fires when the component's browser data, such as a
-`js_data()` key, defines the same name. Vue then shows the component's value
-instead of the loop value without any error, so the message names both
-meanings and suggests the `c-` attribute or renaming one of them.
+The warning also fires when the component's browser data has a name equal to
+the loop variable. Vue then shows the browser value instead of the loop
+value, with no error, so the message suggests the `c-` attribute or renaming
+one of them.
 
-Both cover names from `c-for` loops and `c-fill` bindings in every Vue
-expression, including `v-text`, `v-show`, and `@click`. Neither reports the
-read when a Vue `v-for` or slot alias of the same name encloses the
-expression, because Vue then reads its own loop or slot value.
+The same applies to `c-fill` bindings and to every Vue expression, including
+`v-text`, `v-show`, and `@click`. A Vue `v-for` or slot alias with the same
+name around the expression is fine, because Vue then reads its own value.
 
-See the diagnostic reference entries for
-[template variables](/ide/diagnostics/#citry.template.unknown-variable),
-[Vue variables](/ide/diagnostics/#citry.vue.unknown-variable),
-[Python variables in Vue expressions](/ide/diagnostics/#citry.vue.python-variable),
-[component JavaScript variables](/ide/diagnostics/#citry.component-js.unknown-variable),
-[component instance members](/ide/diagnostics/#citry.component-js.unknown-member),
-[Alpine attributes](/ide/diagnostics/#citry.template.alpine-attribute),
-and [`x-cloak`](/ide/diagnostics/#citry.template.alpine-cloak)
-for their stable messages and reporting surfaces.
+## Declare outside names
 
-The application owns this policy. `citry check` and the language server use
-the same settings, so there is no separate VS Code lint preference.
+Some names reach a template or browser code from somewhere Citry cannot see,
+such as a framework integration or a script on the host page. Declare them on
+the application so Citry stops reporting them.
 
-## Configure the application
-
-Pass one [`LintSettings`][citry.LintSettings] object to [`Citry`][citry.Citry]:
+Keys in `template_globals` are known automatically, with types guessed from
+their values. For other names, pass a [`LintSettings`][citry.LintSettings]:
 
 ```python
 from collections.abc import Callable
@@ -105,11 +128,8 @@ from typing import Annotated
 from citry import Citry, LintSettings
 
 app = Citry(
-    template_globals={
-        "site_name": "Citry",
-    },
+    template_globals={"site_name": "Citry"},
     lint=LintSettings(
-        rule_unknown_template_variable="error",
         template_variables={
             "request": Annotated[
                 "django.http.HttpRequest",
@@ -117,20 +137,54 @@ app = Citry(
             ],
             "url_for": Callable[[str], str],
         },
-        rule_unknown_vue_variable="error",
         vue_variables={
             "$analytics": Annotated[
                 "myapp.browser.Analytics",
-                "Analytics available as a custom Vue magic.",
+                "Analytics added as a custom Vue property.",
             ],
         },
-        rule_unknown_component_js_variable="error",
         component_js_globals={
             "featureFlags": Annotated[
                 "myapp.browser.FeatureFlags",
-                "Flags installed by the host page.",
+                "Flags set by the host page.",
             ],
         },
+    ),
+)
+```
+
+- `template_variables` are names that reach the template from another
+  integration, such as a request object.
+- `vue_variables` are custom Vue properties, or values that a Vue scope
+  outside Citry provides.
+- `component_js_globals` are real globals that a project script defines,
+  available inside `$component`.
+
+These declarations only tell the checker about the names. They do not provide
+a value at runtime. Each value is a type annotation, which the editor shows on
+hover. `Annotated[T, "description"]` adds a description too. The editor
+resolves type names written as strings, such as `"django.http.HttpRequest"`,
+in your project's environment.
+
+Do not declare a value that `onServerRender` receives, such as props, refs,
+or event helpers. Read it from the callback's argument or the `component`
+instance instead. Declaring it as a global would hide the bug where you forgot
+to destructure it.
+
+## Change rule severity { #change-how-strict-a-rule-is }
+
+Each rule has a `rule_*` setting on `LintSettings` that accepts `"ignore"`,
+`"warning"`, or `"error"`. Warnings are shown but do not fail `citry check`;
+errors do. These are the defaults:
+
+```python
+from citry import Citry, LintSettings
+
+app = Citry(
+    lint=LintSettings(
+        rule_unknown_template_variable="error",
+        rule_unknown_vue_variable="error",
+        rule_unknown_component_js_variable="error",
         rule_unknown_component_js_member="error",
         rule_vue_python_variable="warning",
         rule_alpine_attribute="warning",
@@ -140,40 +194,13 @@ app = Citry(
 )
 ```
 
-Each `rule_*` field accepts `"ignore"`, `"warning"`, or `"error"`.
-`rule_vue_python_variable`, `rule_alpine_attribute`, and
-`rule_invalid_attribute_value` default to `"warning"`; `rule_alpine_cloak`
-and the `rule_unknown_*` fields default to `"error"`.
-`rule_unknown_component_js_member` sets the severity of
-`citry.component-js.unknown-member`. When one JavaScript file serves several
-components, the strictest of their severities applies, so every one of them
-must set `"ignore"` to silence the rule for that file.
-
-Every key already present in `Citry.template_globals` is known automatically.
-Citry conservatively infers ordinary scalar, homogeneous-container, and
-importable object types from their runtime values. You do not repeat those
-keys in the lint settings merely to suppress a diagnostic.
-
-`template_variables` is analysis metadata. It does not inject a runtime value.
-Use it for request-scoped or framework-provided names that enter the render by
-another integration. A plain annotation supplies a type. `Annotated[T,
-"description"]` also supplies hover documentation. Qualified string
-annotations are resolved by the language server in the selected project
-environment.
-
-`vue_variables` and `component_js_globals` follow the same annotation
-convention and also supply analysis metadata only. Use `vue_variables` for
-custom Vue magics or values supplied to a Vue scope outside Citry. Use
-`component_js_globals` for project scripts that make a real global available
-inside `$component`. Citry passes `onServerRender` one object with
-`component` and the other callback fields; server defaults, props, refs,
-i18n and event helpers are reached through those fields or the `component`
-instance. Listing one of those names as a global would hide a real initializer
-bug.
+`LintSettings` also has `rule_i18n_missing_param_type`, described in
+[Translation workflow](/i18n/workflow/#make-a-missing-type-an-error-or-ignore-it).
 
 ## Override one component
 
-Use a nested `Lint` declaration when one component has a different contract:
+When one component works differently, give it a nested `Lint` class with the
+settings to change:
 
 ```citry
 from typing import Annotated
@@ -184,43 +211,31 @@ from citry import Component
 class AccountCard(Component):
     class Lint:
         rule_unknown_template_variable = "warning"
-        rule_unknown_component_js_variable = "warning"
         rule_unknown_component_js_member = "warning"
         template_variables = {
             "account_context": Annotated[
                 "myapp.accounts.AccountContext",
-                "Context added by the account page integration.",
+                "Added by the account page integration.",
             ],
         }
         component_js_globals = {
             "accountClient": Annotated[
                 "myapp.browser.AccountClient",
-                "Client installed by the account page.",
+                "Client set up by the account page.",
             ],
         }
 ```
 
-Nested `Lint` declarations compose through component inheritance. The nearest
-rule wins, variable mappings merge by name, and `Lint = None` clears inherited
-component overrides and returns to the application policy.
+Subclasses inherit `Lint`. The nearest setting wins, and declared names merge
+by name. Set `Lint = None` on a subclass to drop the inherited overrides and
+use the application's settings again.
 
-`Lint` is a nested component configuration class, not a Citry extension. It
-does not install hooks or commands. Citry captures it while defining the
-component and combines it with inherited lint declarations.
+## Alpine leftovers { #find-leftover-alpine-attributes }
 
-Go to Definition and Go to Declaration link a lint-only variable to its exact
-authored dictionary key when the selected application uses a direct `Citry`
-assignment or simple settings aliases. Component variables link to the nested
-`Lint` class that supplied the effective value, including inherited and
-library-component declarations. Computed mappings and factory-built settings
-remain valid at runtime but have no guessed navigation target.
-
-## Find leftover Alpine attributes
-
-Citry uses Vue, so an Alpine attribute left in a template does nothing.
-Citry renders `x-data` or `x-on:click` unchanged, and nothing in the browser
-reads it. `citry check` and the editor report each `x-*` attribute on an
-HTML element as a `citry.template.alpine-attribute` warning:
+Citry uses Vue, so an Alpine attribute left over from older templates does
+nothing. Citry renders `x-data` or `x-on:click` unchanged, and nothing in the
+browser reads it. Each `x-*` attribute on an HTML element is a
+`citry.template.alpine-attribute` warning:
 
 ```citry-html
 {# Warning: nothing reads x-data or x-on:click #}
@@ -232,27 +247,19 @@ HTML element as a `citry.template.alpine-attribute` warning:
 Move the state into the component's `js_data()` or `$component`, and write
 the listener as a Vue `@click`. See [Vue in templates](/syntax/vue/).
 
-A leftover `x-cloak` does real harm. Nothing removes the attribute any
-more, so an app CSS rule such as `[x-cloak] { display: none }` hides the
-element for good. Citry reports it as a `citry.template.alpine-cloak`
-error. Delete both the attribute and the CSS rule; the served HTML already
-contains the content.
+A leftover `x-cloak` does real harm. Nothing removes the attribute, so a CSS
+rule such as `[x-cloak] { display: none }` hides the element for good. Citry
+reports it as a `citry.template.alpine-cloak` error. Delete both the
+attribute and the CSS rule; the HTML from the server already shows the
+content.
 
-Only HTML elements and `<c-element>` are checked. On a component tag, an
-`x-*` attribute is an ordinary Python keyword argument.
+Only Alpine's own directive names are reported, such as `x-data`,
+`x-on:click`, or `x-intersect`, and only on HTML elements and
+`<c-element>`. Other `x-*` names, such as `x-webkit-airplay`, are ordinary
+HTML. On a component tag, an `x-*` attribute is a Python keyword argument.
 
-When another library on the page reads `x-*` attributes, turn the warning
-off for the whole application:
-
-```python
-from citry import Citry, LintSettings
-
-app = Citry(
-    lint=LintSettings(rule_alpine_attribute="ignore"),
-)
-```
-
-Or turn it off for the components that use that library:
+When another library on the page reads `x-*` attributes, turn the warning off
+for the components that use it:
 
 ```citry
 from citry import Component
@@ -263,32 +270,16 @@ class DatePicker(Component):
         rule_alpine_attribute = "ignore"
 ```
 
-Only Alpine's own directive names are reported, such as `x-data`,
-`x-on:click`, or `x-intersect`. Other `x-*` names, such as the browser
-attribute `x-webkit-airplay`, are ordinary HTML and pass.
+Or for the whole application, with
+`LintSettings(rule_alpine_attribute="ignore")`.
 
-A template that several components use is reported unless every one of
-them sets `"ignore"`. These two rules do not depend on a component's data,
-so `citry check --static` and an editor without a loaded app still run
-them. They cannot read your settings there, so they use the default
-severities: a leftover `x-cloak` is an error even when your settings
-ignore it. Run `citry --app <module>:<app> check` in CI so the check
-reads your `LintSettings` and each component's `Lint` class.
+## Invalid attribute values { #find-invalid-html-attribute-values }
 
-Two related template mistakes are not lint rules, so no setting turns
-them off: an Alpine-only event modifier such as `@click.outside`, and
-`v-once` or `v-memo`. Both fail when the template loads, on every page,
-with a message that shows what to write instead. See
-[Vue in templates](/syntax/vue/).
-
-## Find invalid HTML attribute values
-
-Some HTML attributes accept only a few keywords. `draggable` takes `"true"`
-or `"false"`, and `<input type>` takes a type the browser knows. The
-browser ignores any other value or falls back to a default, so the page
-renders without an error and the attribute silently does nothing.
-`citry check` and the editor report such a value as a
-`citry.template.invalid-attribute-value` warning and suggest the closest
+Some HTML attributes accept only a few keywords. `draggable` takes `"true"` or
+`"false"`, and `<input type>` takes a type the browser knows. The browser
+ignores any other value or falls back to a default, so the attribute silently
+does nothing. Citry reports such a value as a
+`citry.template.invalid-attribute-value` warning and suggests the closest
 valid keyword:
 
 ```citry-html
@@ -309,51 +300,24 @@ The keywords come from the HTML Standard. The check covers:
 - `loading`, `decoding`, `fetchpriority`, `crossorigin`, and
   `referrerpolicy` on the elements that take them, such as `<img>`;
 - `preload` on `<audio>` and `<video>`, `kind` on `<track>`, `wrap` on
-  `<textarea>`, and `scope` on `<th>`.
+  `<textarea>`, and `scope` on `<th>`;
+- `target` and `formtarget`, `http-equiv` on `<meta>`, and `name` on
+  `<iframe>` and `<object>`, as described
+  [below](#window-names-meta-tags).
 
-Letter case does not matter, so `type="Email"` passes. The exception is
-the list markers of `type` on `<ol>` and `<li>`, where `"a"` and `"A"` are
-different. An attribute that accepts an empty value, such as `hidden`,
-`crossorigin`, or `contenteditable`, may also be written with no value at
-all.
+Letter case does not matter, so `type="Email"` passes. An attribute that
+accepts an empty value, such as `hidden`, may also be written with no value.
 
-`target` and `formtarget` take any window name, so only a name that starts
-with an underscore is checked. `target="_new"` is reported, because the
-only valid names with an underscore are `_blank`, `_self`, `_parent`, and
-`_top`. The `name` of an `<iframe>` or `<object>` may not start with an
-underscore at all.
-
-`http-equiv` on `<meta>` is checked against the pragmas browsers act on:
-`content-type`, `default-style`, `refresh`, `x-ua-compatible`, and
-`content-security-policy`. Browsers ignore a header name such as
-`Cache-Control` or `Pragma` there, so the warning says to send it in the
-HTTP response instead:
-
-```citry-html
-{# Warning: browsers ignore this; send Cache-Control as a header. #}
-<meta http-equiv="Cache-Control" content="no-cache">
-```
-
-A Vue binding whose value is one JavaScript string sets the same text, so
-it is checked too:
+A Vue binding whose value is one JavaScript string is checked too, because it
+sets the same text:
 
 ```citry-html
 {# Warning: 'rlt' is not a valid value; did you mean 'rtl'? #}
 <div :dir="'rlt'">...</div>
 ```
 
-When the editor or `citry check --types` also runs TypeScript, a value
-that Vue's types reject as well is reported once, by this rule, at this
-rule's severity. That is a warning by default, so set the rule to
-`"error"` if such a value should fail a check. Other bound values, such as
-`:dir="direction"` or `c-dir`, and a binding with a modifier such as
-`.prop` are not checked, and neither are component tags, `<c-element>`, a
-custom element such as `<my-widget>`, and elements inside `<svg>` or
-`<math>`. Attributes that take a list of words, such as `rel`, `sandbox`,
-or `autocomplete` on `<input>`, are not checked either.
-
-When a script on the page reads its own values from one of these
-attributes, turn the warning off for the components that use it:
+When a script on the page reads its own values from one of these attributes,
+turn the warning off for the components that use it:
 
 ```citry
 from citry import Component
@@ -364,47 +328,113 @@ class LegacyWidget(Component):
         rule_invalid_attribute_value = "ignore"
 ```
 
-Like the Alpine rules, this rule needs no component data, so
-`citry check --static` and an editor without a loaded app run it with the
-default severity. Without a loaded app they also cannot tell which values
-an extension's template syntax produces, so such a value may be reported
-there but not by `citry --app <module>:<app> check`.
+## Check rules in CI
 
-## Understand open schemas
-
-Citry tracks known fields separately from whether they exhaust the normalized
-runtime mapping:
-
-| Namespace | Configured `error` | Configured `warning` | Configured `ignore` |
-| --- | --- | --- | --- |
-| Closed schema | error | warning | no finding |
-| Pydantic `extra="allow"` | warning | warning | no finding |
-| Unknown or absent schema | error | warning | no finding |
-
-A Pydantic schema that explicitly allows extras can accept an undeclared name
-at runtime, so Citry does not call it a definite error. It remains a warning
-because relying on arbitrary undeclared keys makes a template contract harder
-to understand. Unknown and absent schemas stay strict by default. Declare a
-real variable or choose a component override when dynamic data is intentional.
-
-Plain schema classes, dataclasses, NamedTuples, and Pydantic models that ignore
-or forbid extras are closed.
-
-## Run the batch check
-
-Unknown-variable linting requires a complete component registry:
+Run the check against your application, so it knows every component and
+reads your `LintSettings` and each component's `Lint` class:
 
 ```console
 citry --app myproject.app:app check
 ```
 
-Warnings are printed and included in JSON output but do not make the command
-fail. Any error exits with status 1. `citry check --static` cannot prove which
-component owns a template or browser asset, so it intentionally performs
-syntax checks without these namespace rules. It still reports leftover
-Alpine attributes, with the default severities.
+Warnings are printed, and included in `--format json` output, but do not fail
+the command. Any error exits with status 1. See
+[Command line](/cli/#check-component-templates).
 
-Extensions that add template data can publish detached namespace metadata with
-[`TemplateNamespaceContribution`][citry.TemplateNamespaceContribution]. An
-extension can enumerate variables or report that it preserves unenumerated
-extras, but it cannot weaken the application's selected rule severity.
+## Less common cases
+
+### Without a loaded app
+
+`citry check --static`, and an editor that has not loaded your application,
+cannot tell which component owns a template. They skip the unknown-name
+rules.
+
+They still run the Alpine and attribute-value rules, which need no component
+data, but they cannot read your settings, so they use the default
+severities. A leftover `x-cloak` is then an error even if your settings
+ignore it. They also cannot tell which values an extension's template syntax
+produces, so they may report a value that `citry --app ... check` does not.
+
+### Shared templates
+
+When several components use the same template or JavaScript file, Citry
+applies the strictest severity among them. To silence a rule for that file,
+every one of those components must set it to `"ignore"`.
+
+### Data with extra keys
+
+How strict the unknown template variable rule can be depends on the
+component's template data schema:
+
+| Template data schema | Set to `error` | Set to `warning` | Set to `ignore` |
+| --- | --- | --- | --- |
+| Closed | error | warning | nothing |
+| Pydantic with `extra="allow"` | warning | warning | nothing |
+| Unknown or none | error | warning | nothing |
+
+A Pydantic schema that allows extra keys may receive any name at runtime, so
+Citry reports an undeclared name as a warning, not an error. Plain classes,
+dataclasses, NamedTuples, and Pydantic models that ignore or forbid extra
+keys are closed.
+
+### Mixins and extends
+
+The unknown member check needs every name the component defines. When the
+component's Vue Options use `mixins` or `extends`, those names are not in
+the source, so Citry skips the check. A Python loop variable read by Vue is then
+reported as the `citry.vue.python-variable` warning.
+
+### Unchecked attributes
+
+The attribute-value check does not look at a bound value that is not one
+string, such as `:dir="direction"` or `c-dir`, or at a binding with a
+modifier such as `.prop`. It also skips component tags, `<c-element>`,
+custom elements such as `<my-widget>`, elements inside `<svg>` or `<math>`,
+and attributes that take a list of words, such as `rel`, `sandbox`, or
+`autocomplete` on `<input>`.
+
+For `type` on `<ol>` and `<li>`, letter case matters: `"a"` and `"A"` are
+different list markers.
+
+When the editor or `citry check --types` also runs TypeScript, a bound value
+that Vue's types reject is reported once, by this rule, at this rule's
+severity. Set the rule to `"error"` if such a value should fail a check.
+
+### Window names, meta tags
+
+`target` and `formtarget` accept any window name, so Citry checks only names
+that start with an underscore. The valid ones are `_blank`, `_self`,
+`_parent`, and `_top`, so `target="_new"` is reported. The `name` of an
+`<iframe>` or `<object>` may not start with an underscore at all.
+
+`http-equiv` on `<meta>` is checked against the values browsers act on:
+`content-type`, `default-style`, `refresh`, `x-ua-compatible`, and
+`content-security-policy`. Browsers ignore a header name such as
+`Cache-Control` there, so the warning says to send it as an HTTP header:
+
+```citry-html
+{# Warning: browsers ignore this; send Cache-Control as a header. #}
+<meta http-equiv="Cache-Control" content="no-cache">
+```
+
+### Alpine load errors
+
+An Alpine-only event modifier such as `@click.outside`, and `v-once` or
+`v-memo`, are not lint rules, so no setting turns them off. The template
+fails to load, with a message that shows what to write instead. See
+[Vue in templates](/syntax/vue/).
+
+### Navigate declared names
+
+In the editor, go to definition on a name declared in `template_variables`
+opens its key in your `LintSettings`, when the settings are written directly
+in the `Citry(...)` call or through a simple variable. A name declared in a
+component's `Lint` class opens that class, including an inherited one.
+Settings built by a function still work, but have no definition to open.
+
+### Extension variables
+
+An extension that adds template variables can describe them with
+[`TemplateNamespaceContribution`][citry.TemplateNamespaceContribution], so
+Citry knows them. It can list the names, or say that it adds names it cannot
+list. It cannot lower the severity your application chose.
