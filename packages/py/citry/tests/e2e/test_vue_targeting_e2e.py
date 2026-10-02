@@ -527,11 +527,11 @@ def test_unchanged_definition_renders_new_js_data_key(page: Any, serve_live: Any
 
 
 @pytest.mark.e2e
-def test_render_that_changes_the_app_root_type_names_both_types_and_the_fix(page: Any, serve_live: Any) -> None:
+def test_render_that_replaces_the_app_root_component_names_both_and_the_fix(page: Any, serve_live: Any) -> None:
     # Vue fixes an app's root component when it creates the app, so a Render
-    # into the app root must keep its type. A nested component may change type
-    # (see test_vue_component_changing_render_e2e.py).
-    engine = Citry(secret="vue-type-change-secret", autodiscover=False)  # noqa: S106
+    # into the app root must keep its component. A nested component may be
+    # replaced (see test_vue_component_changing_render_e2e.py).
+    engine = Citry(secret="vue-component-change-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
     class Done(Component):
@@ -559,7 +559,8 @@ def test_render_that_changes_the_app_root_type_names_both_types_and_the_fix(page
     with page.expect_event("pageerror") as error_info:
         page.locator("#submit").click()
     fault = str(error_info.value)
-    assert f"cannot replace component {form_type} with a different component, Done_" in fault
+    assert f"cannot replace {form_type}, the top-level component of its Vue app," in fault
+    assert "with a different component, Done_" in fault
     assert f"Render {form_type} again with new inputs" in fault
     assert 'target="mark:<name>"' in fault
     # The rejected Render leaves the form on the page.

@@ -631,3 +631,300 @@ test("self-target subtree expansion restores the mounted target placement", asyn
   assert.equal(app.occurrences.get("target").placementKey, "target");
   assert.deepEqual(JSON.parse(JSON.stringify(app.occurrences.get("target").serverData)), { revision: 1 });
 });
+
+// A component-changing Render (#164) keeps the occurrence ID and gives it another component. These
+// fixtures start from Parent (the app's top-level component) calling Form under the ID "target".
+function componentChangingFixture({ mountForm = true } = {}) {
+  let flush;
+  const fixture = runtime({
+    nextTick: async () => {
+      if (flush) await flush();
+    },
+  });
+  const { citryRuntime, realm } = fixture;
+  const appId = "component-change";
+  citryRuntime.configure(
+    realm({
+      protocol: "citry-vue-prepared/1",
+      appId,
+      revision: 0,
+      rootId: "root",
+      markers: [],
+      occurrences: [
+        occurrence("root", "Parent", "parent-def", null, { form: { id: "target", key: "target", parentId: "root" } }),
+        occurrence("target", "Form", "form-def", "root"),
+      ],
+    }),
+  );
+  citryRuntime.registerDefinition(
+    appId,
+    "parent-def",
+    replacementDefinition(fixture, [], [ordinary("form", "Form", "citry-form")]),
+  );
+  citryRuntime.registerDefinition(appId, "form-def", replacementDefinition(fixture));
+  citryRuntime.registerDefinition(appId, "done-def", replacementDefinition(fixture));
+  const app = citryRuntime._apps.get(appId);
+  const registered = [];
+  app.vueApp = { component: (tag, type) => registered.push([tag, type]) };
+  const Parent = citryRuntime.defineType(appId, "Parent", {});
+  const Form = citryRuntime.defineType(appId, "Form", {});
+  let forcedUpdates = 0;
+  const rootInstance = {
+    $parent: null,
+    $options: {},
+    citryId: "root",
+    $forceUpdate() {
+      forcedUpdates += 1;
+    },
+  };
+  Parent.beforeCreate.call(rootInstance);
+  Parent.created.call(rootInstance);
+  const formInstance = { $parent: rootInstance, $options: {}, citryId: "target" };
+  if (mountForm) {
+    Form.beforeCreate.call(formInstance);
+    Form.created.call(formInstance);
+  }
+  return {
+    fixture,
+    citryRuntime,
+    realm,
+    appId,
+    app,
+    registered,
+    forcedUpdates: () => forcedUpdates,
+    // Vue swaps the instance only when the caller renders again; the stub does it on the next tick.
+    remountTargetAs(typeKey) {
+      flush = async () => {
+        flush = undefined;
+        if (mountForm) Form.beforeUnmount.call(formInstance);
+        const type = app.types.get(typeKey);
+        const next = { $parent: rootInstance, $options: {}, citryId: "target" };
+        type.beforeCreate.call(next);
+        type.created.call(next);
+        type.mounted.call(next);
+      };
+    },
+    envelope(occurrences, updatedIds, definitions = []) {
+      return realm({
+        protocol: "citry-vue-prepared/1",
+        appId,
+        baseRevision: app.revision,
+        revision: app.revision + 1,
+        rootId: occurrences[0].id,
+        markers: [],
+        scripts: [],
+        styles: [],
+        typePolicies: [],
+        definitions,
+        occurrences,
+        updatedIds,
+      });
+    },
+  };
+}
+
+test("a Render may give a nested component another component while its kept caller names the old one", async () => {
+  const setup = componentChangingFixture();
+  const { citryRuntime, appId, app } = setup;
+  const priorGeneration = app.mounted.get("target").record.generation;
+  setup.remountTargetAs("Done");
+
+  // The Render's own envelope holds only the new component; the caller is kept unchanged.
+  await citryRuntime.applyEnvelope(
+    appId,
+    setup.envelope([occurrence("target", "Done", "done-def", null)], ["target"]),
+    "target",
+  );
+
+  assert.equal(app.revision, 1);
+  assert.equal(app.occurrences.get("target").typeKey, "Done");
+  assert.equal(app.occurrences.get("target").parentId, "root");
+  // The kept caller still names Form, so the browser remembers the replacement.
+  assert.deepEqual([...app.replacedTypeIds], ["target"]);
+  // No template calls Done by tag, so its Vue type is registered without one.
+  assert.deepEqual([...app.untaggedTypes], ["Done"]);
+  assert.deepEqual(setup.registered, []);
+  // The caller renders again to build the new component's VNode, and the old instance is replaced.
+  assert.equal(setup.forcedUpdates(), 1);
+  assert.equal(app.mounted.get("target").record.generation, priorGeneration + 1);
+});
+
+test("a component change is rejected for a component the server did not list as updated", async () => {
+  // Only a component the server rendered in this response may arrive with another component. A
+  // response that updates several targets at once is checked as a whole page, which is where an
+  // unlisted component can appear.
+  const setup = componentChangingFixture();
+  const { citryRuntime, appId, app } = setup;
+  await assert.rejects(
+    citryRuntime.applyEnvelope(
+      appId,
+      setup.envelope(
+        [
+          occurrence("root", "Parent", "parent-def", null, { form: { id: "target", key: "target", parentId: "root" } }),
+          occurrence("target", "Done", "done-def", "root"),
+        ],
+        [],
+      ),
+      "root",
+      { combined: true, activate() {}, callbackOwnerIds: [] },
+    ),
+    /changed the component of an occurrence it did not update/,
+  );
+  assert.equal(app.revision, 0);
+  assert.equal(app.occurrences.get("target").typeKey, "Form");
+});
+
+test("a component change is rejected for the app's top-level component", async () => {
+  const setup = componentChangingFixture();
+  const { citryRuntime, appId, app } = setup;
+  citryRuntime.registerDefinition(appId, "other-root-def", setup.fixture.definition(definition()));
+  await assert.rejects(
+    citryRuntime.applyEnvelope(
+      appId,
+      setup.envelope([occurrence("root", "OtherRoot", "other-root-def", null)], ["root"]),
+      "root",
+    ),
+    /changed the component of the app's top-level component/,
+  );
+  assert.equal(app.occurrences.get("root").typeKey, "Parent");
+});
+
+test("a caller the server renders again must name its child's new component", async () => {
+  // The server wrote this caller's call table in the same response, so a Form declaration for a
+  // Done child is a malformed response, not a replacement.
+  const setup = componentChangingFixture();
+  const { citryRuntime, appId, app } = setup;
+  await assert.rejects(
+    citryRuntime.applyEnvelope(
+      appId,
+      setup.envelope(
+        [
+          occurrence("root", "Parent", "parent-def", null, { form: { id: "target", key: "target", parentId: "root" } }),
+          occurrence("target", "Done", "done-def", "root"),
+        ],
+        ["root", "target"],
+      ),
+      "root",
+    ),
+    /stable-type mismatch/,
+  );
+  assert.equal(app.revision, 0);
+  assert.deepEqual([...app.replacedTypeIds], []);
+});
+
+test("a component change below the Render target follows the target's new call table", async () => {
+  // The Render targets Panel. Panel's child changes component inside the same response, and Panel's
+  // new call table names the new component, so the change is ordinary and leaves no replacement.
+  const fixture = runtime();
+  const { citryRuntime, realm } = fixture;
+  const appId = "nested-change";
+  citryRuntime.configure(
+    realm({
+      protocol: "citry-vue-prepared/1",
+      appId,
+      revision: 0,
+      rootId: "root",
+      markers: [],
+      occurrences: [
+        occurrence("root", "Parent", "parent-def", null, { panel: { id: "panel", key: "panel", parentId: "root" } }),
+        occurrence("panel", "Panel", "panel-form-def", "root", {
+          inner: { id: "inner", key: "inner", parentId: "panel" },
+        }),
+        occurrence("inner", "Form", "form-def", "panel"),
+      ],
+    }),
+  );
+  citryRuntime.registerDefinition(
+    appId,
+    "parent-def",
+    replacementDefinition(fixture, [], [ordinary("panel", "Panel", "citry-panel")]),
+  );
+  citryRuntime.registerDefinition(
+    appId,
+    "panel-form-def",
+    replacementDefinition(fixture, [], [ordinary("inner", "Form", "citry-form")]),
+  );
+  citryRuntime.registerDefinition(
+    appId,
+    "panel-done-def",
+    replacementDefinition(fixture, [], [ordinary("inner", "Done", "citry-done")]),
+  );
+  citryRuntime.registerDefinition(appId, "form-def", replacementDefinition(fixture));
+  citryRuntime.registerDefinition(appId, "done-def", replacementDefinition(fixture));
+  const app = citryRuntime._apps.get(appId);
+  const registered = [];
+  app.vueApp = { component: (tag) => registered.push(tag) };
+  const [Parent] = ["Parent", "Panel", "Form"].map((typeKey) => citryRuntime.defineType(appId, typeKey, {}));
+  // Only the top-level component is mounted; the commit requires it.
+  const rootInstance = { $parent: null, $options: {}, citryId: "root", $forceUpdate() {} };
+  Parent.beforeCreate.call(rootInstance);
+  Parent.created.call(rootInstance);
+
+  await citryRuntime.applyEnvelope(
+    appId,
+    realm({
+      protocol: "citry-vue-prepared/1",
+      appId,
+      baseRevision: 0,
+      revision: 1,
+      rootId: "panel",
+      markers: [],
+      scripts: [],
+      styles: [],
+      typePolicies: [],
+      definitions: [],
+      occurrences: [
+        occurrence("panel", "Panel", "panel-done-def", null, {
+          inner: { id: "inner", key: "inner", parentId: "panel" },
+        }),
+        occurrence("inner", "Done", "done-def", "panel"),
+      ],
+      updatedIds: ["panel", "inner"],
+    }),
+    "panel",
+  );
+
+  assert.equal(app.occurrences.get("inner").typeKey, "Done");
+  // Panel's template calls Done by tag now, so the tag is registered and nothing stays replaced.
+  assert.deepEqual(registered, ["citry-done"]);
+  assert.deepEqual([...app.replacedTypeIds], []);
+  assert.deepEqual([...app.untaggedTypes], []);
+});
+
+test("a replacement-only component gets its tag once a later caller names it", async () => {
+  const setup = componentChangingFixture({ mountForm: false });
+  const { citryRuntime, appId, app, fixture } = setup;
+  await citryRuntime.applyEnvelope(
+    appId,
+    setup.envelope([occurrence("target", "Done", "done-def", null)], ["target"]),
+    "target",
+  );
+  const doneType = app.types.get("Done");
+  assert.deepEqual([...app.untaggedTypes], ["Done"]);
+
+  // The server renders the caller again, and its new template calls Done by tag.
+  citryRuntime.registerDefinition(
+    appId,
+    "parent-done-def",
+    replacementDefinition(fixture, [], [ordinary("done", "Done", "citry-done")]),
+  );
+  await citryRuntime.applyEnvelope(
+    appId,
+    setup.envelope(
+      [
+        occurrence("root", "Parent", "parent-done-def", null, {
+          done: { id: "target", key: "target", parentId: "root" },
+        }),
+        occurrence("target", "Done", "done-def", "root"),
+      ],
+      ["root", "target"],
+    ),
+    "root",
+  );
+
+  // The Vue type stays the same object, so a mounted Done instance stays valid under its new tag.
+  assert.deepEqual(setup.registered, [["citry-done", doneType]]);
+  assert.deepEqual([...app.untaggedTypes], []);
+  // The caller now names Done itself, so the occurrence is no longer a replacement.
+  assert.deepEqual([...app.replacedTypeIds], []);
+});

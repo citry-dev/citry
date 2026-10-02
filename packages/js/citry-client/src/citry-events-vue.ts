@@ -67,7 +67,12 @@ export interface VueEventsHost {
    * any field the browser changed but has not sent yet, so a refresh never discards a local write.
    */
   commitState(serverRenderId: string, stateToken: string, publicState: JsonObject, source: VueEventSource): void;
-  dispatchEvent(name: string, detail: JsonValue | undefined, source: VueEventSource): void;
+  /**
+   * Delivers a Dispatch action from the calling component. `followRemount` is true when a Render
+   * earlier in the same response remounted the caller: the host then delivers the event from the
+   * instance mounted at the caller's place now, because the one that made the call is gone.
+   */
+  dispatchEvent(name: string, detail: JsonValue | undefined, source: VueEventSource, followRemount?: boolean): void;
   dispatchEventGlobal?(name: string, detail: JsonValue | undefined): void;
   redirect(url: string): void;
   updateUrl(url: string, mode: "push" | "replace"): void;
@@ -524,15 +529,22 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       stillCurrent(source, state, epoch);
       options.host.commitState(action.targetRenderId, action.stateToken, action.publicState, source);
     } else if (action.action === "event") {
-      stillCurrent(source, state, epoch);
-      const rootTarget = `render:${current(source).serverRenderId}`;
+      // A Render earlier in this response may have remounted the caller, possibly as another
+      // component. That retires the calling instance, but the response was accepted, so the event
+      // still goes out, from whatever the page now shows at the caller's place.
+      if (!job.external) continuationCurrent(source, state, epoch, job);
+      else stillCurrent(source, state, epoch);
+      const followRemount = job.acceptedRemount;
+      // The retired instance has no current context, so after a remount only the caller's own
+      // render ID from the call identifies the caller.
+      const rootTarget = followRemount ? undefined : `render:${current(source).serverRenderId}`;
       const callerTarget = job.callerRenderId === undefined ? undefined : `render:${job.callerRenderId}`;
       if (action.target !== undefined && action.target !== rootTarget && action.target !== callerTarget) {
         throw new Error("The experimental Vue Events bridge accepts only its current root Event target.");
       }
       if (job.external && action.target === undefined && options.host.dispatchEventGlobal)
         options.host.dispatchEventGlobal(action.eventName, action.detail);
-      else options.host.dispatchEvent(action.eventName, action.detail, source);
+      else options.host.dispatchEvent(action.eventName, action.detail, source, followRemount);
     } else if (action.action === "redirect") {
       if (!job.external) continuationCurrent(source, state, epoch, job);
       options.host.redirect(action.url);

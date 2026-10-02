@@ -1526,6 +1526,57 @@ test("an accepted render may remount its sender and still return Data", async ()
   assert.deepEqual(await bridge.send({ source, handler: "move" }), { accepted: true });
 });
 
+test("an accepted render may remount its sender and still Dispatch from the new instance", async () => {
+  // The Render retires the sender (a component-changing Render always does). The Dispatch after it
+  // must still go out, and the host is told to follow the caller's place to its new instance.
+  const source = { stableId: "board", generation: 1 };
+  const transaction = {};
+  const dispatched = [];
+  let bridge;
+  const host = {
+    ...basicHost(),
+    async prepareRender() {
+      return { transaction };
+    },
+    abortRender() {},
+    async commitRender() {
+      bridge.retire(source, transaction);
+    },
+    dispatchEvent(name, detail, eventSource, followRemount) {
+      dispatched.push({ name, detail, eventSource, followRemount });
+    },
+  };
+  bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async (_url, init) =>
+      resultResponse(JSON.parse(init.body), [
+        { action: "render", target: "render:server_1", swap: "morph", renderer: "vue-prepared/1", prepared: {} },
+        { action: "event", eventName: "Board:moved", detail: { to: 2 } },
+      ]),
+  });
+  await bridge.send({ source, handler: "move" });
+  assert.deepEqual(dispatched, [{ name: "Board:moved", detail: { to: 2 }, eventSource: source, followRemount: true }]);
+});
+
+test("a Dispatch without an earlier remount keeps the sender's own instance", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const dispatched = [];
+  const host = {
+    ...basicHost(),
+    dispatchEvent(name, _detail, _eventSource, followRemount) {
+      dispatched.push({ name, followRemount });
+    },
+  };
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async (_url, init) => resultResponse(JSON.parse(init.body), [{ action: "event", eventName: "Board:moved" }]),
+  });
+  await bridge.send({ source, handler: "move" });
+  assert.deepEqual(dispatched, [{ name: "Board:moved", followRemount: false }]);
+});
+
 test("retirement during render preparation settles promptly and aborts a late transaction", async () => {
   const source = { stableId: "board", generation: 1 };
   let finishPrepare;

@@ -3137,17 +3137,21 @@
             });
           }
           const root = action.prepared?.occurrences?.find(item => item.id === action.prepared.rootId);
-          // The parent's compiled template still calls the target's component type, so a Render must keep that
-          // type. The message names both types and the two supported patterns, because the handler author sees
-          // only this error and not the Vue structure behind it.
           if (!root) throw new Error("prepared Events Render has no root component occurrence");
-          // A marker keeps its built-in type, and the app root's component is fixed when Vue creates the
-          // app. Any other component target may take a new type: the caller's VNode reads the
+          // A nested component target may become another component: its caller's VNode reads the
           // occurrence's current type (compilerCreateVNode), so the caller's template stays valid.
-          if (root.typeKey !== target.typeKey && (selectedMarker || target.parentId === null))
-            throw new Error(`Citry Events Render cannot replace component ${target.typeKey} with a different ` +
-              `component, ${root.typeKey}. Render ${target.typeKey} again with new inputs, or place a ` +
-              "<c-mark name=\"...\"> region in the caller's template and Render into target=\"mark:<name>\".");
+          // The app's top-level component has no caller, and Vue fixes it when it creates the app.
+          // The handler author sees only this message, so it names both components and the fixes.
+          if (root.typeKey !== target.typeKey && target.parentId === null && !selectedMarker)
+            throw new Error(`Citry Events Render cannot replace ${target.typeKey}, the top-level component of ` +
+              `its Vue app, with a different component, ${root.typeKey}. The top-level component stays the ` +
+              `same for the life of the page. Render ${target.typeKey} again with new inputs, or place a ` +
+              "<c-mark name=\"...\"> region in the calling component's template and Render into " +
+              "target=\"mark:<name>\".");
+          // A marker Render wraps its content in the built-in mark component, so the region's own
+          // component never changes; a prepared result that says otherwise is malformed.
+          if (root.typeKey !== target.typeKey && selectedMarker)
+            throw new Error("prepared Events Render changed the component of a <c-mark> region");
           const extensions = new Map(extensionEntries(action.prepared.extensions || {}));
           for (const name of plugins.keys()) if (!extensions.has(name)) throw new Error("prepared revision omitted installed browser plugin: " + name);
           for (const [name, incoming] of extensions) {
@@ -3512,12 +3516,16 @@
           if (source && mounted?.record.generation === source.generation) mounted.record.state.adopt(context);
         }
       },
-      dispatchEvent(name, detail, source) {
-        const mounted = ownedApp.mounted.get(source.stableId);
-        if (!mounted || mounted.record.generation !== source.generation)
+      dispatchEvent(name, detail, source, followRemount = false) {
+        // After an accepted Render remounted the caller, the bridge asks for the instance at the
+        // caller's place now, which may be another component; its `$onEvent` listeners and first
+        // element receive the event. Without that request a retired sender is an error.
+        const effectiveSource = followRemount ? sources.get(source.stableId) || source : source;
+        const mounted = ownedApp.mounted.get(effectiveSource.stableId);
+        if (!mounted || mounted.record.generation !== effectiveSource.generation)
           throw new Error("Citry Events dispatch source is stale or retired");
         mounted.record.events.dispatch(name, detail);
-        dispatchCarrier(source).dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
+        dispatchCarrier(effectiveSource).dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
       },
       dispatchEventGlobal(name, detail) {
         document.dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
@@ -4372,8 +4380,10 @@
       // caller's call table names it, and Vue mounts the new type in its place (#164). The app root has no
       // caller VNode to retarget, so its type stays fixed.
       const typeChanged = Boolean(prepared && prepared.typeKey !== action.typeKey);
-      if (typeChanged && (!updatedIds.has(action.id) || action.parentId === null))
-        throw new Error("unknown occurrence or definition");
+      if (typeChanged && action.parentId === null)
+        throw new Error("prepared revision changed the component of the app's top-level component");
+      if (typeChanged && !updatedIds.has(action.id))
+        throw new Error("prepared revision changed the component of an occurrence it did not update");
       if (typeChanged) typeChangedIds.add(action.id);
       if ((prepared && (prepared.parentId !== action.parentId || prepared.placementKey !== action.placementKey)) || !nextDefinition) throw new Error("unknown occurrence or definition");
       const boundType = nextDefinitionTypes.get(action.definitionId);
@@ -4456,7 +4466,7 @@
       if (changedDirectives.some(id => !changed.some(site => id.startsWith(site + "D"))))
         throw new Error("runtime directive change is outside a changed keyed replacement site");
     }
-    // A component whose type changed mounts as a new instance of the new type.
+    // A component that a Render replaced with another component mounts as a new instance.
     for (const id of typeChangedIds) if (app.mounted.has(id)) expectedRemountIds.add(id);
     // A component that mounts again takes every component mounted below it along.
     const directRemountIds = new Set(expectedRemountIds);
