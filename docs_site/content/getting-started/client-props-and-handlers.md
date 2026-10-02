@@ -1,6 +1,6 @@
 ---
 title: Connect components in the browser
-description: Pass a reactive value into a child Citry component and handle an event the child emits.
+description: Pass a browser value into a child Citry component and handle an event the child sends.
 ---
 
 # Connect components in the browser
@@ -85,9 +85,12 @@ $component({
 });
 ```
 
+`data()` gives the parent its starting browser data from JavaScript, as
+`js_data()` does from Python.
+
 The [Client interactivity](/concepts/client-interactivity/) guide covers
 more, such as slots in the browser, components with several root elements,
-and code that runs when a component mounts.
+and code that runs when a component first appears on the page.
 
 ## Next steps
 
