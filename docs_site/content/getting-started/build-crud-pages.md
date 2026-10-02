@@ -6,15 +6,17 @@ description: Give each row of a list its own event handlers, errors, and status,
 # Build CRUD pages
 
 Admin pages often show a list of records where you can edit each row and
-filter the whole list. CRUD stands for create, read, update, and delete. In
-this step you build a task list that combines the earlier steps:
+filter the whole list. CRUD stands for create, read, update, and delete;
+this step covers editing and filtering. You build a task list that combines
+the earlier steps:
 
 - Each task row is its own component, with its own form, errors, and
   "Saved" message.
 - Two filter buttons, above and below the list, ask Python for a filtered
   list and both show the current filter.
 
-Replace `components.py` with:
+Replace `components.py` with this version. The task list takes the signup
+form's place on the page; keep `citry_setup.py` and `app.py` as they are:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step13.py" language="citry" />
 
@@ -34,8 +36,8 @@ returns two rows, and both buttons change to “Show all tasks.”
 </c-for>
 ```
 
-Each `TaskRow` has its own State, loading status, and errors, so one row's
-error does not affect another.
+`TaskRows` renders one `TaskRow` per task. Each `TaskRow` has its own State,
+loading status, and errors, so one row's error does not affect another.
 
 `#c-key` gives each row a key. When the list renders again, Vue uses the key
 to tell which row is which. Use a database id or another value that stays
@@ -54,7 +56,17 @@ class Events:
         ...
 ```
 
-The handler reads `state.task_id` to know which task to update.
+Citry fills `state.task_id` from the `task_id` input on the first render, as
+in [Keep values between calls](/getting-started/state/). The handler reads it
+to know which task to update.
+
+!!! note "Sending the id from a hidden input"
+
+    The row could instead send its id in a hidden `name="task_id"` input,
+    with a matching field on `RenameTaskIn`. A user can edit a hidden
+    input's value before submitting. State is signed, so Citry detects a
+    changed `task_id`. Either way, keep sensitive values on the server and
+    check in the handler that the user may edit that task.
 
 ## Show each row's error and success message
 
@@ -152,16 +164,11 @@ The new `TaskList` replaces the old one, because its handler ran. Passing
 filter, so both buttons show it. The row keys let Vue keep the rows that are
 still there, and remove or add the others.
 
-!!! note "Design choices for larger pages"
+## Split larger pages into smaller components
 
-    The row could also send its id in a hidden `name="task_id"` input,
-    with a matching field on `RenameTaskIn`. The user can change a hidden
-    input, while Citry signs State. Either way, check in the handler that
-    the user may edit that task.
-
-    On a larger page, split it into smaller components that each have their
-    own `Events`. A handler's `actions.Render` then replaces only its own
-    component, not the whole page.
+On a larger page, split it into smaller components that each have their own
+`Events`. A handler's `actions.Render` then replaces only its own component,
+not the whole page.
 
 ## Next steps
 
