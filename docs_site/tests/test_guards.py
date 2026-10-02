@@ -191,14 +191,14 @@ def test_nav_guard_requires_sources_for_generated_pages(
 
 
 def test_heading_length_guard_reports_long_section_headings_as_info(tmp_path: Path) -> None:
-    # Anchors, link targets, and backticks are not shown in the sidebar, so
-    # they must not count; fenced lines and other levels are not headings here.
+    # Fenced lines and other heading levels are not section headings, and the
+    # 24-character limit itself is allowed.
     (tmp_path / "page.md").write_text(
         "# A page title that is long enough to be reported\n"
         "\n"
-        "## Short heading { #a-very-long-explicit-anchor-id }\n"
+        "## Exactly twenty-four char\n"
         "\n"
-        "## Call [`render`](/reference/) from a template page\n"
+        "## Exactly twenty-five chars\n"
         "\n"
         "### Configure a signing secret before using State\n"
         "\n"
@@ -214,8 +214,40 @@ def test_heading_length_guard_reports_long_section_headings_as_info(tmp_path: Pa
 
     assert [(r.line, r.severity) for r in results] == [(5, Severity.INFO), (7, Severity.INFO)]
     assert results[0].source == "page.md"
-    assert "'Call render from a template page'" in results[0].message
+    assert "'Exactly twenty-five chars'" in results[0].message
+    # Info findings never fail the build, even under --strict.
     assert run_guards(_content_ctx(tmp_path), strict=True, guards=[heading_length.check])[1] is True
+
+
+@pytest.mark.parametrize(
+    ("raw", "visible"),
+    [
+        ("Swap in a component { #swap-in-a-different-component }", "Swap in a component"),
+        ("Title ## { #x }", "Title"),
+        ("Call [`render`](/reference/) here", "Call render here"),
+        ("Use [`Component`][citry.Component] here", "Use Component here"),
+        ("Run on the server<br/>or standalone", "Run on the serveror standalone"),
+        ("The **bold** `<c-if>` tag", "The bold <c-if> tag"),
+    ],
+)
+def test_heading_length_guard_counts_only_visible_text(raw: str, visible: str) -> None:
+    assert heading_length.visible_heading_text(raw) == visible
+
+
+def test_heading_length_guard_skips_the_rest_of_an_unclosed_fence(tmp_path: Path) -> None:
+    (tmp_path / "page.md").write_text(
+        "```python\n## a comment line inside a code block that is long\n",
+        encoding="utf-8",
+    )
+
+    assert list(heading_length.check(_content_ctx(tmp_path))) == []
+
+
+def test_scan_fences_records_the_closing_line() -> None:
+    closed, unclosed = fence_validator.scan_fences("```py\nx\n```\n\n~~~\ny\n")
+
+    assert (closed.open_line, closed.close_line) == (1, 3)
+    assert (unclosed.open_line, unclosed.close_line) == (5, None)
 
 
 def test_fence_validator_flags_unclosed_fence(tmp_path: Path) -> None:
