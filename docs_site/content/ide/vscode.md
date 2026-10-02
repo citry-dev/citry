@@ -111,8 +111,9 @@ DJANGO_SETTINGS_MODULE=myproject.settings
 DJANGO_SECRET_KEY=editor-development-secret
 ```
 
-Citry uses these variables only while it imports your application. They do
-not change your terminal, tests, or application server. Saving, creating, or
+Citry uses these variables only while it imports your application. Values in
+the file win over variables VS Code was started with. They do not change your
+terminal, tests, or application server. Saving, creating, or
 deleting the file reloads your components. If the file is missing or invalid,
 Citry checks syntax only, and **Citry: Show Language Server Status** says
 why.
@@ -428,9 +429,10 @@ Reading a member the component does not define is an error; see
 
 With several root nodes, Vue sets `$el` to an empty marker node, not to the
 first element, so use `$refs` or the `els` value in `onServerRender`
-instead. `$el` is `null` until the component
-mounts, for example in `data()` or `created()`, although its type does not
-say so, as in Vue's own types.
+instead.
+
+`$el` is `null` until the component mounts, for example in `data()` or
+`created()`, although its type does not say so, as in Vue's own types.
 
 `$state` is Citry's [Events State](/reference/browser-apis/#state) for the
 component, not Vue's `data()`. Its fields come from the component's `State`
@@ -820,11 +822,6 @@ environment. If ty cannot start or stops answering, Citry says so once and
 keeps its own checks, completion, hover, and navigation for template
 variables. Member types and Python type errors are missing until ty works
 again.
-
-### Other editors
-
-Other editors that use `citry-lsp` run the TypeScript check with the `tsc`
-from your project's `node_modules` or from `PATH`.
 
 ### Limits
 
