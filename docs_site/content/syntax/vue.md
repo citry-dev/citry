@@ -18,23 +18,30 @@ the component's `js`.
 
 ## Add a browser counter
 
-Define the values the browser keeps in Vue's `data()` option:
+In the component's `js`, call `$component({...})` and return the values the
+browser keeps from a `data()` function, as in any Vue component. The
+`template` holds the Vue attributes and can read and change `count`
+directly:
 
-```js
-$component({
-  data() {
-    return { count: 0 };
-  },
-});
-```
+```citry
+from citry import Component
 
-The template can read and change `count` directly:
 
-```citry-html
-<button type="button" @click="count += 1">
-  Add one
-</button>
-<output v-text="count"></output>
+class Counter(Component):
+    template = """
+      <button type="button" @click="count += 1">
+        Add one
+      </button>
+      <output v-text="count"></output>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { count: 0 };
+        },
+      });
+    """
 ```
 
 Each copy of the component on the page keeps its own `count`.
@@ -64,6 +71,9 @@ class Counter(Component):
     """
 ```
 
+This component needs no `js`: the `js_data()` values are enough to turn on
+Vue.
+
 The values must convert to JSON: strings, numbers, booleans, `None`, lists,
 and dictionaries with string keys. Convert dates, model instances, and other
 objects first. Name the keys the JavaScript way, such as `itemCount`.
@@ -88,7 +98,19 @@ forms for listening to events and setting attributes:
 | `:disabled="busy"` | Short for `v-bind:disabled="busy"`. |
 
 Modifiers stay in the attribute name. `@keydown.enter.prevent="submit()"`
-listens for Enter and stops the browser's default action.
+listens for Enter and stops the browser's default action. A key name such
+as `.enter` works only on `keydown`, `keyup`, and `keypress`. On another
+event, such as `@click.enter`, the template fails when it loads, because
+that event has no key: Vue would ignore `.enter` and run the listener on
+every click. A `@c-*` binding such as `@c-click.enter` also fails when the
+template loads.
+
+Write the `v-` prefix and Vue's own directive names in lowercase.
+`V-IF` and `v-If` fail when the
+template loads, on HTML elements and component tags alike, because Vue
+would read `V-IF` as a plain attribute and `v-If` as a custom directive
+named `If`. Names that start with `v-c-` or `v-citry-` fail too, because
+Citry keeps them for its own use.
 
 See Vue's
 [template syntax guide](https://vuejs.org/guide/essentials/template-syntax.html){: target="_blank" rel="noopener"}
@@ -186,6 +208,14 @@ A Citry component tag accepts these Vue directives:
 | `v-show` | Hides or shows the child's root element. |
 | A custom directive | Runs on the child's root element. |
 
+Other directives fail when the template loads, and the error says what to
+write instead. To pass slot content, put `<c-fill name="...">` inside the
+component tag rather than `v-slot` or `#name`. To repeat a component, use
+`<c-for>` rather than `v-for`; see
+[Repeat a component](#repeat-a-component). For `v-html` or `v-text`, pass
+a prop or a fill that the child renders. `v-once` and `v-memo` fail
+everywhere; see [`v-once` and `v-memo`](#v-once-and-v-memo).
+
 ### `:prop` on a child { #pass-data-to-a-child }
 
 A child component has its own browser data. Pass it a value from the parent
@@ -221,27 +251,35 @@ component exists at all, use `<c-if>`.
 ### `v-model` on a child { #bind-with-v-model }
 
 `v-model` on a component tag passes the value as the `modelValue` prop. It
-updates the value when the child emits `update:modelValue`:
+updates the value when the child emits `update:modelValue`. Here `query` is
+the parent's browser data:
 
 ```citry-html
 <c-SearchField v-model="query" />
 ```
 
-These are Vue props, not Python inputs, so the child declares them in its
-`$component` options, not in `Kwargs`:
+`modelValue` is a Vue prop, not a Python input, so `SearchField` declares
+it, along with the `update:modelValue` event, in `$component({...})` in its
+`js`, not in `Kwargs`:
 
-```js
-$component({
-  props: ["modelValue"],
-  emits: ["update:modelValue"],
-});
-```
+```citry
+from citry import Component
 
-```citry-html
-<input
-  :value="modelValue"
-  @input="$emit('update:modelValue', $event.target.value)"
-/>
+
+class SearchField(Component):
+    template = """
+      <input
+        :value="modelValue"
+        @input="$emit('update:modelValue', $event.target.value)"
+      />
+    """
+
+    js = """
+      $component({
+        props: ["modelValue"],
+        emits: ["update:modelValue"],
+      });
+    """
 ```
 
 An argument names a different prop. Modifiers reach the child in a
@@ -258,32 +296,45 @@ modifier of your own, the child reads the modifiers prop and decides.
 ### `v-show` on a child { #use-v-show-on-a-child }
 
 `v-show` and custom directives act on the element at the root of the child's
+template. The parent registers a custom directive in its own `js`. Here
+`OrderPanel` registers `tooltip` and uses it on the `StatusBadge` in its
 template:
 
-```citry-html
-<c-StatusBadge
-  v-show="expanded"
-  v-tooltip:top="statusHelp"
-  :status="currentStatus"
-/>
+```citry
+from citry import Component
+
+
+class OrderPanel(Component):
+    template = """
+      <c-StatusBadge
+        v-show="expanded"
+        v-tooltip:top="statusHelp"
+        :status="currentStatus"
+      />
+    """
+
+    js = """
+      $component({
+        data() {
+          return {
+            expanded: true,
+            statusHelp: "Updated every hour",
+            currentStatus: "shipped",
+          };
+        },
+        directives: {
+          tooltip: {
+            mounted(el, binding) {
+              el.title = binding.value;
+            },
+          },
+        },
+      });
+    """
 ```
 
-The component whose template contains the tag registers the custom directive:
-
-```js
-$component({
-  directives: {
-    tooltip: {
-      mounted(el, binding) {
-        el.title = binding.value;
-      },
-    },
-  },
-});
-```
-
-If nothing registers the name, Vue skips the directive silently, so check
-the spelling when nothing happens.
+If nothing registers the name, the page's Vue app stops and the browser
+console shows an error that names the directive and the component.
 
 The child's template must have exactly one root element. Wrap it in one
 element, or put the directive on an element around the component tag.
@@ -300,7 +351,7 @@ A natural first attempt at a list of components is `v-for`:
 />
 ```
 
-The template fails to compile with an error that says what to write
+The template fails when it loads, with an error that says what to write
 instead. Repeat the component with `<c-for>` over a Python value, and pass
 each item's data as a Python input:
 
@@ -310,25 +361,99 @@ each item's data as a Python input:
 </c-for>
 ```
 
+## Customize Vue { #customize-the-vue-app }
+
+Citry creates the Vue app for you, so there is no `createApp()` call to
+configure. To add something to every component, write a Vue plugin and
+register it with
+[`Citry.vue.use(plugin, ...options)`](/reference/browser-apis/#citry-vue-use).
+Citry installs it on every Vue app it creates on the page, before the app
+mounts.
+
+In `install(app)` you can register directives and components, provide
+values with `app.provide()`, set `app.config.errorHandler`, and add
+`app.config.globalProperties`. A component reads a provided value with
+`inject` in `$component({...})`. Here a plugin adds a `v-autofocus`
+directive, which any template can then use as `<input v-autofocus />`:
+
+```js
+// static/vue-plugins.js
+Citry.vue.use({
+  install(app) {
+    app.directive("autofocus", {
+      mounted(el) {
+        el.focus();
+      },
+    });
+  },
+});
+```
+
+Load the file in the page's `<head>` with
+`<script defer src="/static/vue-plugins.js"></script>`, or add it to every
+page from an extension through `ctx.early_scripts`; see
+[Add scripts and styles](/advanced/extensions/#add-scripts-and-stylesheets-to-a-page).
+`defer` makes the file run after Citry's runtime loads and before Citry
+creates the first Vue app.
+
+Keep these limits in mind when you write a plugin:
+
+- Call `Citry.vue.use()` before Citry creates its first Vue app. A later
+  call throws an `Error`, because that app would run without the plugin.
+- A component registered with `app.component()` can be used in any
+  template by its name, such as `<my-widget>`. It needs a `render()`
+  function written with `Citry.vue.h`. A `template` string does not
+  compile in the browser.
+- A page can run several Vue apps, for example when
+  [HTML fragments](/advanced/html-fragments/) add components to it. The
+  plugin's `install` runs once for each app, and each app has its own
+  `app.provide()` values. For one value that every app shares, create it
+  outside `install` and provide that same object.
+- `app.config.compilerOptions` has no effect, because Citry compiles
+  templates on the server. `app.config.warnHandler` is never called,
+  because the Vue build Citry loads leaves out Vue's warnings.
+- A plugin cannot add a mixin to components: `$component({...})` rejects
+  `mixins` and `extends` with an error. Define the data, methods, and
+  computed values in the options directly.
+- Citry adds [`$loading`](/reference/browser-apis/#loading) and
+  [`$error`](/reference/browser-apis/#error) to `globalProperties`. A plugin
+  that sets either name replaces Citry's version, and `$loading()` and
+  `$error()` stop working in every template. Give your properties other
+  names.
+- If the plugin's `install` throws, that Vue app does not start, and the
+  error shows as a page error.
+
+!!! note "Log errors in your `errorHandler`"
+
+    When a plugin sets `app.config.errorHandler`, Citry passes each error
+    to it instead of the browser console, so log it there yourself. With
+    or without a handler, after an error Citry stops sending server
+    updates to that app.
+
 ## What is not supported
 
 Each of these fails, except where noted below.
 
-### Unknown modifiers
+### Alpine modifiers { #unknown-modifiers }
 
-Vue has no `.outside`, `.window`, `.document`, `.debounce`, or `.throttle`
-event modifier. It would read one as a key name and the listener would never
-run, so the template fails when it loads:
+`.outside`, `.window`, `.document`, `.debounce`, and `.throttle` are Alpine
+modifiers. Citry 0.6.0 replaced Alpine with Vue, which has none of these
+modifiers. Citry rejects them when the template loads, and the error says
+how to write the same behavior in Vue:
 
 ```citry-html
-{# Fails: Vue has no .outside modifier #}
+{# Fails: .outside is an Alpine modifier #}
 <div @click.outside="open = false;">...</div>
 ```
 
-For a click outside, add a `click` listener to `document` in `mounted()` and
-remove it in `unmounted()`. For a Python event handler, `@c-*` attributes
-accept `.debounce` and `.throttle`; see
-[Bind events in templates](/events/bindings/).
+For a click outside, add a `click` listener to `document` in the
+`mounted()` option of `$component({...})` in the component's `js`, skip
+clicks where `this.$el.contains(event.target)`, and remove the listener in
+`unmounted()`. For a Python event handler, `@c-*` attributes accept
+`.debounce` and `.throttle`; see
+[Bind events in templates](/events/bindings/). The
+[0.6.0 upgrade guide](/guides/upgrading-to-0-6-0/#rewrite-alpine-modifiers)
+covers the rest of the move from Alpine.
 
 ### `v-once` and `v-memo`
 
@@ -336,22 +461,40 @@ The template fails when it loads. Compute a fixed value once in `data()`. To
 keep an element's contents as the server first rendered them, use
 [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
 
-### Vue helper components
+### Vue built-in components
 
-When the page uses Vue, `serialize()` or `str()` on the render raises
-`ValueError` with an "unsupported Vue helper" message. On a page without
-Vue, the tag is written out as plain HTML and does nothing.
+`<Transition>`, `<TransitionGroup>`, `<KeepAlive>`, `<Teleport>`, and
+`<Suspense>`, in any spelling such as `<KeepAlive>` or `<keep-alive>`,
+fail when the template loads,
+on every page. The error says what to use instead, such as a CSS
+transition or the HTML `<dialog>` element.
 
 ## Fill group components { #keep-vue-bound-group-content-inside-the-groups-tag }
 
 Some Citry UI components, such as `CTabs`, collect the content you put inside
-them and render it in their own layout. The page stops with an error when
-you pass such content from a separate component, and that content uses Vue data,
-handlers, `v-model`, a `ref`, or an `@c-*` binding. For example, `TabLabels`
-writes a tab:
+them and render it in their own layout. If another component writes that
+content, and the content uses Vue data, a Vue event listener, `v-model`, a
+`ref`, or an `@c-*` binding, the page stops with an error. For example,
+`TabLabels` writes a tab that shows its own browser data, `label`:
 
-```citry-html
-<c-CTab value="one"><span v-text="label"></span></c-CTab>
+```citry
+from citry import Component
+
+
+class TabLabels(Component):
+    template = """
+      <c-CTab value="one">
+        <span v-text="label"></span>
+      </c-CTab>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { label: "Overview" };
+        },
+      });
+    """
 ```
 
 and the page passes `TabLabels` into the group:
@@ -369,11 +512,14 @@ of the component that wrote it only inside that component, and the tab list
 is not inside `TabLabels`. The error names the content, the component that
 wrote it, and the line.
 
-Write the content directly inside the group's tag:
+Write the content directly inside the group's tag, in the page component's
+template, and define `label` in that component's `js`:
 
 ```citry-html
 <c-CTabs default_value="one" aria_label="Example">
-  <c-CTab value="one"><span v-text="label"></span></c-CTab>
+  <c-CTab value="one">
+    <span v-text="label"></span>
+  </c-CTab>
   <c-CTabPanel value="one">Details</c-CTabPanel>
 </c-CTabs>
 ```
@@ -387,28 +533,13 @@ separate component.
 
 ## Less common rules
 
-### Rejected directives
-
-The template fails to compile when a component tag has one of these:
-
-| Instead of | Write |
-| --- | --- |
-| `v-slot` or `#name` | `<c-fill name="...">` inside the component tag |
-| `v-html`, `v-text` | A prop or a fill that the child renders |
-| `v-if`, `v-else-if`, `v-else`, or `v-show` with an argument or modifiers | The directive without them |
-| `.name`, `^name`, or `v-bind.prop` | A prop, `:name="..."` |
-| `v-cloak`, `v-pre` | The directive on an element in the child's template |
-| `v-once`, `v-memo` | Nothing: they are not supported on elements either |
-| `v-If` or another capitalized built-in name | The lowercase name |
-| `V-SHOW` or another name with an uppercase `V-` | The same name with a lowercase `v-`, if this table allows it |
-
-It also fails when `v-if`, `v-else-if`, `v-show`, or `v-model` has no
-expression, or when `v-else` has one.
-
 ### Directives via `c-bind`
 
-A directive from `c-bind`, or written with a `c-` prefix such as `c-v-if`,
-fails when the page renders. Its expression must be written in the template.
+A Vue directive or listener that comes from `c-bind`, or is written with
+a `c-` prefix such as `c-v-if`, fails when the page renders. Write Vue
+code directly in the template. A value that Python works out at render
+time may contain user input, so Citry never lets it become code that the
+browser runs.
 
 ### Vue on built-in tags
 
@@ -416,7 +547,8 @@ fails when the page renders. Its expression must be written in the template.
 it. A built-in tag that renders only its content, such as `<c-provide>`,
 accepts no Vue syntax.
 
-`<c-slot>` accepts no Vue syntax either, and the template fails to compile.
+`<c-slot>` accepts no Vue syntax either, and the template fails when it
+loads.
 Its attributes other than `name` and `required` become data that Python
 passes to the slot content, so a `v-if` there could never reach the browser.
 Put `v-if` on a `<template>`

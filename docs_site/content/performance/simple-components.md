@@ -130,7 +130,9 @@ class Inset(Component):
 The caller passes the content as the tag's body:
 
 ```citry-html
-<c-Inset><strong>{{ user_name }}</strong></c-Inset>
+<c-Inset>
+  <strong>{{ user_name }}</strong>
+</c-Inset>
 ```
 
 `user_name` comes from the caller's data, as it would with an ordinary

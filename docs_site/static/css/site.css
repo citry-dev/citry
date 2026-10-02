@@ -1301,14 +1301,14 @@ body {
   margin-bottom: 1.5rem;
 }
 
-/* Area groups that use the old always-open section presentation keep the
-   spacing the former top-level section wrappers provided. */
+/* Always-open area groups get a gap above and below, so each group's
+   label reads as the start of a new block of links. */
 .djc-sidebar__subsection:not(.djc-sidebar__group) {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .djc-sidebar__items + .djc-sidebar__subsection:not(.djc-sidebar__group) {
-  margin-top: 1.5rem;
+  margin-top: 1rem;
 }
 
 .djc-sidebar__label {
