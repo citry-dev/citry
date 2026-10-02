@@ -515,7 +515,35 @@
     }
     return prepared;
   }
+  // An Events Render can put a component of another type in place of a component (#164). The caller's
+  // compiled template still names the old type, so each Citry component VNode reads the type its
+  // occurrence has now. citryTypeInfo maps each registered Vue type to its app and stable type.
+  const citryTypeInfo = new WeakMap();
+  // Pages that never change a component's type skip the lookup entirely, so their renders cost nothing extra.
+  let typeReplacementSeen = false;
+  function currentOccurrenceType(type, props) {
+    const info = citryTypeInfo.get(type);
+    const id = props?.["citry-id"] ?? props?.citryId;
+    if (!info || typeof id !== "string") return type;
+    const app = apps.get(info.appId);
+    const occurrence = app?.occurrences.get(id);
+    if (!occurrence || occurrence.typeKey === info.typeKey) return type;
+    // registerIncomingTypes staged the new type before the revision published the occurrence.
+    const replacement = app.types.get(occurrence.typeKey);
+    if (!replacement) throw new Error("replaced component type is not registered: " + occurrence.typeKey);
+    return replacement;
+  }
   function compilerCreateVNode(type, props, children, patchFlag, dynamicProps) {
+    if (typeReplacementSeen && type !== null && typeof type === "object") {
+      const current = currentOccurrenceType(type, props);
+      // The caller's props, listeners and ref were written for the old type. Passing them on would turn
+      // them into stray attributes on the new component's root, so the new component gets only its
+      // identity, as the 0.5.1 HTML swap gave the new content nothing from the caller.
+      if (current !== type) {
+        type = current;
+        props = {"citry-id": props["citry-id"] ?? props.citryId, key: props.key};
+      }
+    }
     return V.createVNode(type, editableValueProps(type, vnodeProps(props), props, patchFlag, dynamicProps), children, 0,
       dynamicProps);
   }
@@ -934,10 +962,13 @@
       declared.set(normalized.id, prior || normalized);
     }
     const occurrenceMap = new Map(occurrences.map(item => [item.id, item]));
+    // Computed once: only a kept caller reads it, and it does not change between occurrences.
+    const replacedTypes = keptOwners && replacedTypeIds(app, occurrenceMap);
     for (const occurrence of occurrences) {
       const definition = declared.get(occurrence.definitionId) || app.definitions.get(occurrence.definitionId);
       if (!definition) throw new Error("unknown prepared definition metadata");
-      validateOccurrenceCallRuns(occurrenceMap, occurrence, definition, keptOwners?.has(occurrence.id) === true);
+      validateOccurrenceCallRuns(occurrenceMap, occurrence, definition, keptOwners?.has(occurrence.id) === true,
+        replacedTypes);
       validateOccurrenceRuntimeEvents(occurrence, definition);
       const opaque = own(occurrence.preparedData, "opaqueHtml")
         ? plain(occurrence.preparedData.opaqueHtml, "preparedData.opaqueHtml") : {};
@@ -957,6 +988,17 @@
   // caller did not supply, so they stay unused. A later server Render of the caller sends a call
   // table without them. This returns the
   // components an envelope keeps unchanged, whose call tables may hold such entries.
+  // The components whose type differs from the type their caller's template names: ones replaced by an
+  // earlier Render, plus ones whose type this envelope changes.
+  function replacedTypeIds(app, incoming) {
+    const ids = new Set(app.replacedTypeIds);
+    for (const [id, item] of incoming) {
+      const prior = app.occurrences.get(id);
+      if (prior && prior.typeKey !== item.typeKey) ids.add(id);
+    }
+    return ids;
+  }
+
   function keptOwnerIds(app, envelope) {
     const updated = new Set(envelope.updatedIds);
     return new Set(envelope.occurrences
@@ -966,7 +1008,12 @@
   // allowRemovedChildren: the occurrence is one the page keeps unchanged (see keptOwnerIds), so a
   // call whose component is no longer in `occurrences` is a fill a Render replaced, not an error.
   // A call whose component is present must still match its declaration exactly.
-  function validateOccurrenceCallRuns(occurrences, occurrence, definition, allowRemovedChildren = false) {
+  // replacedTypes: components that a Render put in place of the type their caller's template names (#164).
+  // Only a kept caller may still name the old type, because a caller the server renders again names the new one.
+  function validateOccurrenceCallRuns(occurrences, occurrence, definition, allowRemovedChildren = false,
+    replacedTypes = null) {
+    const typeMatches = (child, declaration) => child.typeKey === declaration.typeKey ||
+      allowRemovedChildren && replacedTypes?.has(child.id) === true;
     const calls = plain(occurrence.preparedData.calls, "preparedData.calls");
     const declarations = new Map(definition.localCallRuns.map(run => [run.runId, run]));
     const values = own(occurrence.preparedData, "callRuns")
@@ -984,7 +1031,7 @@
       const binding = calls[declaration.localId];
       const child = occurrences.get(binding.id);
       if (!child && allowRemovedChildren) continue;
-      if (!child || child.parentId !== binding.parentId || child.typeKey !== declaration.typeKey || covered.has(child.id))
+      if (!child || child.parentId !== binding.parentId || !typeMatches(child, declaration) || covered.has(child.id))
         throw new Error("prepared ordinary local call stable-type mismatch");
       covered.add(child.id);
     }
@@ -995,7 +1042,7 @@
       for (const id of ids) {
         const child = occurrences.get(id);
         if (!child && allowRemovedChildren) continue;
-        if (!child || child.parentId !== occurrence.id || child.typeKey !== declaration.typeKey || covered.has(id))
+        if (!child || child.parentId !== occurrence.id || !typeMatches(child, declaration) || covered.has(id))
           throw new Error("prepared local call run stable-type or ownership mismatch");
         covered.add(id);
       }
@@ -1126,7 +1173,7 @@
     const initialLive = new Map([...occurrences].map(([id,item]) => [id, {...item, serverData: V.reactive(clone(item.serverData))}]));
     const definitionTypes = new Map();
     for (const item of occurrences.values()) { const prior = definitionTypes.get(item.definitionId); if (prior && prior !== item.typeKey) throw new Error("definition used by multiple stable types"); definitionTypes.set(item.definitionId, item.typeKey); }
-    const app = {id: bootstrap.appId, startAttempt, rootId: bootstrap.rootId, revision: bootstrap.revision, occurrences, markers, snapshot: V.shallowRef(initialLive), definitions: new Map(), definitionTypes, callRunTags: new Map(), typeTags: new Map(), types: new Map(), browserPlugins: [], templateContextNames: [], initialPluginStages: [], vueApp: null, hostElement: null, mounted: new Map(), mountEpoch: 0, nextMountGeneration: 0, preparedHost: null, eventDispatch: null, eventDispatchComponent: null, initialTasks: new Set(), initialError: null, transaction: null, busy: false, terminal: false};
+    const app = {id: bootstrap.appId, startAttempt, rootId: bootstrap.rootId, revision: bootstrap.revision, occurrences, markers, snapshot: V.shallowRef(initialLive), definitions: new Map(), definitionTypes, callRunTags: new Map(), typeTags: new Map(), types: new Map(), replacedTypeIds: new Set(), untaggedTypes: new Set(), browserPlugins: [], templateContextNames: [], initialPluginStages: [], vueApp: null, hostElement: null, mounted: new Map(), mountEpoch: 0, nextMountGeneration: 0, preparedHost: null, eventDispatch: null, eventDispatchComponent: null, initialTasks: new Set(), initialError: null, transaction: null, busy: false, terminal: false};
     apps.set(app.id, app);
     return app;
   }
@@ -1145,7 +1192,7 @@
     // The committed page passed the strict graph check when it started and before every revision,
     // so a call naming an absent component here is a fill a Render replaced (see keptOwnerIds).
     for (const occurrence of app.occurrences.values()) if (occurrence.definitionId === definitionId)
-      validateOccurrenceCallRuns(app.occurrences, occurrence, normalized, true);
+      validateOccurrenceCallRuns(app.occurrences, occurrence, normalized, true, app.replacedTypeIds);
     if (!prior) {
       app.definitions.set(definitionId, normalized);
       for (const call of [...normalized.localCalls, ...normalized.localCallRuns])
@@ -2071,6 +2118,7 @@
     if (userOptions === undefined) userOptions = registeredTypeOptions.get(typeKey)?.options || {};
     const options = V.defineComponent(typeOptions(appId, typeKey, userOptions));
     app.types.set(typeKey, options);
+    citryTypeInfo.set(options, {appId, typeKey});
     return options;
   }
 
@@ -3093,7 +3141,10 @@
           // type. The message names both types and the two supported patterns, because the handler author sees
           // only this error and not the Vue structure behind it.
           if (!root) throw new Error("prepared Events Render has no root component occurrence");
-          if (root.typeKey !== target.typeKey)
+          // A marker keeps its built-in type, and the app root's component is fixed when Vue creates the
+          // app. Any other component target may take a new type: the caller's VNode reads the
+          // occurrence's current type (compilerCreateVNode), so the caller's template stays valid.
+          if (root.typeKey !== target.typeKey && (selectedMarker || target.parentId === null))
             throw new Error(`Citry Events Render cannot replace component ${target.typeKey} with a different ` +
               `component, ${root.typeKey}. Render ${target.typeKey} again with new inputs, or place a ` +
               "<c-mark name=\"...\"> region in the caller's template and Render into target=\"mark:<name>\".");
@@ -4305,7 +4356,9 @@
     const incoming = new Map(envelope.occurrences.map(item => [item.id, item]));
     normalizeMarkers(envelope.markers, incoming);
     const keptOwners = keptOwnerIds(app, envelope);
+    const replacedTypes = replacedTypeIds(app, incoming);
     const staged = [], ids = new Set(), updatedIds = new Set(), nextDefinitionTypes = new Map(app.definitionTypes);
+    const typeChangedIds = new Set();
     for (const id of envelope.updatedIds) { if (typeof id !== "string" || updatedIds.has(id)) throw new Error("invalid updated occurrence ids"); updatedIds.add(id); }
     for (const action of envelope.occurrences) {
       plain(action, "occurrence action");
@@ -4315,12 +4368,19 @@
       if (ids.has(action.id)) throw new Error("duplicate occurrence action"); ids.add(action.id);
       const mounted = app.mounted.get(action.id), prepared = app.occurrences.get(action.id), nextDefinition = app.definitions.get(action.definitionId);
       const added = !prepared;
-      if ((prepared && (prepared.typeKey !== action.typeKey || prepared.parentId !== action.parentId || prepared.placementKey !== action.placementKey)) || !nextDefinition) throw new Error("unknown occurrence or definition");
+      // A Render that replaces a component with one of another type keeps the occurrence ID, because the
+      // caller's call table names it, and Vue mounts the new type in its place (#164). The app root has no
+      // caller VNode to retarget, so its type stays fixed.
+      const typeChanged = Boolean(prepared && prepared.typeKey !== action.typeKey);
+      if (typeChanged && (!updatedIds.has(action.id) || action.parentId === null))
+        throw new Error("unknown occurrence or definition");
+      if (typeChanged) typeChangedIds.add(action.id);
+      if ((prepared && (prepared.parentId !== action.parentId || prepared.placementKey !== action.placementKey)) || !nextDefinition) throw new Error("unknown occurrence or definition");
       const boundType = nextDefinitionTypes.get(action.definitionId);
       if (boundType && boundType !== action.typeKey) throw new Error("render definition stable-type mismatch");
       nextDefinitionTypes.set(action.definitionId, action.typeKey);
       const definitionChanged = !prepared || prepared.definitionId !== action.definitionId;
-      validateOccurrenceCallRuns(incoming, action, nextDefinition, keptOwners.has(action.id));
+      validateOccurrenceCallRuns(incoming, action, nextDefinition, keptOwners.has(action.id), replacedTypes);
       if (definitionChanged) {
         const priorDefinition = prepared && app.definitions.get(prepared.definitionId);
         if (!updatedIds.has(action.id) || nextDefinition.target !== ORDINARY_TARGET ||
@@ -4330,7 +4390,7 @@
       const nextKeys = new Set(Object.keys(action.serverData));
       const serverShapeChanged = mounted ? signatureKey([...nextKeys].sort()) !==
         signatureKey([...mounted.record.serverKeys].sort()) : false;
-      if (mounted) for (const key of nextKeys) if (!mounted.record.serverKeys.has(key) && (key in mounted.component || key.startsWith("$") || key.startsWith("_"))) throw new Error("later js_data/public collision: " + key);
+      if (mounted && !typeChanged) for (const key of nextKeys) if (!mounted.record.serverKeys.has(key) && (key in mounted.component || key.startsWith("$") || key.startsWith("_"))) throw new Error("later js_data/public collision: " + key);
       // Only an occurrence the server did not list as updated must keep its prior payload, so only
       // those payloads are serialized and compared.
       if (!updatedIds.has(action.id) && (added || JSON.stringify(prepared.serverData) !== JSON.stringify(action.serverData) ||
@@ -4396,6 +4456,8 @@
       if (changedDirectives.some(id => !changed.some(site => id.startsWith(site + "D"))))
         throw new Error("runtime directive change is outside a changed keyed replacement site");
     }
+    // A component whose type changed mounts as a new instance of the new type.
+    for (const id of typeChangedIds) if (app.mounted.has(id)) expectedRemountIds.add(id);
     // A component that mounts again takes every component mounted below it along.
     const directRemountIds = new Set(expectedRemountIds);
     for (const id of incoming.keys()) {
@@ -4405,19 +4467,29 @@
       if (cursor !== null) expectedRemountIds.add(id);
     }
     const expectedNewIds = addedIds;
-    return {snapshot: envelope, staged, removed, nextDefinitionTypes, expectedRemountIds, expectedNewIds};
+    return {snapshot: envelope, staged, removed, nextDefinitionTypes, expectedRemountIds, expectedNewIds, typeChangedIds};
   }
 
-  function registerIncomingTypes(app, snapshot) {
+  function registerIncomingTypes(app, snapshot, typeChangedIds = new Set()) {
     const incomingTypes = new Set(snapshot.occurrences.map(item => item.typeKey));
     const pending = [];
     for (const typeKey of incomingTypes) {
-      if (app.types.has(typeKey)) continue;
+      // A type first registered as a Render replacement has no tag yet. A later revision may bring a
+      // caller that names it by tag, and Vue can only resolve that tag once the type is registered under it.
+      const untagged = app.untaggedTypes.has(typeKey);
+      if (app.types.has(typeKey) && !untagged) continue;
       if (!app.vueApp) throw new Error("new prepared component type requires an attached Vue app");
       const tags = new Set();
       for (const definition of app.definitions.values()) {
         for (const call of [...definition.localCalls, ...definition.localCallRuns])
           if (call.typeKey === typeKey) tags.add(call.componentTag);
+      }
+      // A type that arrives only as a Render replacement has no caller that names it by tag; the
+      // replaced call resolves it through citryTypeInfo, so it needs no tag registration.
+      if (tags.size === 0 && untagged) continue;
+      if (tags.size === 0 && snapshot.occurrences.some(item => typeChangedIds.has(item.id) && item.typeKey === typeKey)) {
+        pending.push({typeKey, tag: null});
+        continue;
       }
       if (tags.size !== 1) throw new Error("new prepared component type has no unique component tag");
       const tag = [...tags][0];
@@ -4427,6 +4499,8 @@
     }
     const prepared = [];
     for (const {typeKey, tag} of pending) {
+      // An untagged type keeps its Vue type, so instances already mounted stay valid.
+      if (app.types.has(typeKey)) { prepared.push({typeKey, tag, type: app.types.get(typeKey)}); continue; }
       let options = registeredTypeOptions.get(typeKey)?.options || {};
       for (const plugin of app.browserPlugins) if (typeof plugin.decorateTypeOptions === "function")
         options = plugin.decorateTypeOptions(typeKey, options);
@@ -4437,6 +4511,9 @@
     }
     for (const {typeKey, tag, type} of prepared) {
       app.types.set(typeKey, type);
+      citryTypeInfo.set(type, {appId: app.id, typeKey});
+      if (tag === null) { app.untaggedTypes.add(typeKey); continue; }
+      app.untaggedTypes.delete(typeKey);
       app.typeTags.set(typeKey, tag);
       app.vueApp.component(tag, type);
     }
@@ -4588,7 +4665,7 @@
       pluginTransaction?.combined ? keptOwnerIds(app, incoming) : null);
     // This check always runs: it compares the envelope with the mounted components and the current
     // revision, which may have moved since preflight, and it produces the records the commit uses.
-    const {snapshot, staged, removed, nextDefinitionTypes, expectedRemountIds, expectedNewIds} =
+    const {snapshot, staged, removed, nextDefinitionTypes, expectedRemountIds, expectedNewIds, typeChangedIds} =
       pluginTransaction?.combined ? validateCombinedActions(app, incoming) : validateActions(app, incoming, targetId);
     app.busy = true;
     const priorMounted = new Map(app.mounted);
@@ -4604,7 +4681,7 @@
     };
     try {
       pluginTransaction?.activate();
-      registerIncomingTypes(app, snapshot);
+      registerIncomingTypes(app, snapshot, typeChangedIds);
     } catch (error) {
       app.transaction = null;
       app.busy = false;
@@ -4632,6 +4709,15 @@
       // The snapshot is either the frozen validated envelope or this call's private copy, so the app
       // can keep its occurrences without another copy; freezing makes them safe to share later.
       app.occurrences = new Map(snapshot.occurrences.map(item => [item.id, deepFreeze(item)]));
+      // A component stays replaced while it exists and its Vue parent is kept. A parent the server
+      // rendered again wrote its children's types itself, so those children are ordinary again. For a
+      // fill, the call-table owner is the caller, not the parent, but a server Render of either one
+      // replaces the fill: the caller's render includes the receiver, and the receiver's drops the fill.
+      const updatedNow = new Set(snapshot.updatedIds);
+      app.replacedTypeIds = new Set([...app.replacedTypeIds, ...typeChangedIds].filter(id => {
+        const item = app.occurrences.get(id);
+        return item && !updatedNow.has(item.parentId);
+      }));
       app.markers = normalizeMarkers(snapshot.markers, app.occurrences);
       app.definitionTypes = nextDefinitionTypes;
       const changedIds = new Set(staged.map(item => item.action.id)), priorLive = app.snapshot.value;
@@ -4645,6 +4731,11 @@
         item.record.live.value = nextLive.get(item.action.id);
       for (const item of staged) if (item.record && item.serverShapeChanged && !item.added &&
           !expectedRemountIds.has(item.action.id)) item.component.$forceUpdate();
+      // The VNode for a replaced component comes from whichever instance rendered it: its caller, or the
+      // receiver whose slot holds it. That is the old instance's Vue parent, and it may be a component this
+      // revision keeps unchanged, so it re-renders here and picks up the new type in compilerCreateVNode.
+      if (typeChangedIds.size) typeReplacementSeen = true;
+      for (const id of typeChangedIds) oldAcceptedRecords.get(id)?.component.$parent?.$forceUpdate();
       await V.nextTick();
       restoreNativeControlState(nativeControlSnapshot);
       if (app.terminal) throw new Error("render failed after prepared revision publication");

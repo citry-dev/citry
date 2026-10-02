@@ -142,7 +142,6 @@ def test_step11_form_shows_the_field_error_then_the_accepted_address(
     assert errors == []
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="component-changing Render, #164")
 def test_step12_python_replaces_the_form_with_a_confirmation(page: Any, getting_started_urls: dict[str, str]) -> None:
     errors = _open(page, getting_started_urls["12"])
     _submit_email(page, "ada@elsewhere.test")
@@ -150,15 +149,7 @@ def test_step12_python_replaces_the_form_with_a_confirmation(page: Any, getting_
 
     _submit_email(page, "ada@example.com")
     confirmation = page.locator(".confirmation")
-    try:
-        expect(confirmation).to_contain_text("ada@example.com", timeout=3_000)
-    except AssertionError:
-        # Only the browser's type-change rejection is the expected failure;
-        # anything else fails the test outright instead of hiding behind it.
-        if not any("cannot replace component" in error for error in errors):
-            msg = f"step 12 failed without the type-change rejection; page errors: {errors}"
-            raise RuntimeError(msg) from None
-        raise
+    expect(confirmation).to_contain_text("ada@example.com")
     expect(page.locator("form")).to_have_count(0)
     # The confirmation's CSS and Vue data arrived with the response.
     assert confirmation.evaluate("element => getComputedStyle(element).borderTopStyle") == "solid"

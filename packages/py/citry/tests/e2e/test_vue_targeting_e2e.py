@@ -527,9 +527,10 @@ def test_unchanged_definition_renders_new_js_data_key(page: Any, serve_live: Any
 
 
 @pytest.mark.e2e
-def test_render_that_changes_the_component_type_names_both_types_and_the_fix(page: Any, serve_live: Any) -> None:
-    # The parent's compiled template calls the nested caller by its component
-    # type, so a Render must keep that type.
+def test_render_that_changes_the_app_root_type_names_both_types_and_the_fix(page: Any, serve_live: Any) -> None:
+    # Vue fixes an app's root component when it creates the app, so a Render
+    # into the app root must keep its type. A nested component may change type
+    # (see test_vue_component_changing_render_e2e.py).
     engine = Citry(secret="vue-type-change-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -545,13 +546,9 @@ def test_render_that_changes_the_component_type_names_both_types_and_the_fix(pag
             def submit(self):
                 return actions.Render(Done())
 
-    class Page(Component):
-        citry = engine
-        template = "<main><c-Form /></main>"
-
     dispatcher_for(engine)
     _watch_citry_ready(page)
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    page.goto(serve_live(engine, Form().render().serialize(), "") + "/")
     _wait_for_citry_ready(page)
     form_type = page.evaluate(
         """[...[...__citryRuntime._apps.values()][0].occurrences.values()]
