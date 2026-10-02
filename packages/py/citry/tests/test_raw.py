@@ -45,3 +45,14 @@ def test_raw_inner_component_tag_not_resolved():
 def test_raw_content_not_html_escaped():
     # Raw means raw: `<` and `&&` pass through unescaped.
     assert _render("<div><c-raw>a < b && c</c-raw></div>") == '<div data-cid-c1="">a < b && c</div>'
+
+
+def test_raw_elements_at_template_root_carry_the_component_marker():
+    # Raw HTML at the top of a template is the component's root output, so
+    # its top-level elements get the component's marker like any other root
+    # element (CSS and `$component` callbacks find roots by it). The raw body
+    # itself, including nested tags and text, is copied unchanged.
+    assert (
+        _render("<c-raw><div>x <b>{{ y }}</b></div>a < b</c-raw><p>after</p>")
+        == '<div data-cid-c1="">x <b>{{ y }}</b></div>a < b<p data-cid-c1="">after</p>'
+    )
