@@ -193,7 +193,7 @@ keeps its server-rendered language and needs a real `tag`:
 [Format values](/i18n/formatting/#format-values-in-the-browser) and
 [Parse localized input](/i18n/parsing/#parse-numbers-and-percentages-in-the-browser).
 
-## Load computed IDs
+## Load IDs from variables
 
 Citry sends the browser only the messages the page uses. It finds them
 by reading message IDs written literally in your code, such as
@@ -327,7 +327,7 @@ Any other value raises `TypeError`. The binding must be on a plain HTML
 element that holds the text or attribute itself, not on a component
 tag.
 
-### One owner per text
+### Avoid `v-text` with `$c-tr`
 
 That gives two browser mechanisms ownership of the same text. Give each
 text one owner.

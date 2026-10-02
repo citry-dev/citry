@@ -43,7 +43,7 @@ Citry picks the direction from the locale and renders:
 </section>
 ```
 
-## Set them on `<html>`
+## Set `<html>` lang and dir
 
 Citry does not change the `<html>` element by itself. When your web
 framework renders the document shell, read the locale context there and
