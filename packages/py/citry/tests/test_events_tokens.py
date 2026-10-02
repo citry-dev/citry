@@ -246,6 +246,35 @@ class TestMintGuards:
         )
         assert token.startswith("ces1.")
 
+    def test_server_state_is_stored_under_the_citry_namespace(self):
+        # Citry's cache keys share the ``citry:`` namespace, so State can sit
+        # in a cache shared with the host app without colliding with its keys.
+        cache = InMemoryCache()
+        token = mint_state_token(
+            CounterState(count=1),
+            class_id=CLASS_ID,
+            secret=None,
+            max_age=None,
+            max_bytes=10,
+            storage="server",
+            cache=cache,
+        )
+        key = token.removeprefix("ces1.")
+        assert cache.get(f"citry:state:{key}") is not None
+        assert cache.get(key) is None
+
+    def test_server_token_cannot_read_a_key_outside_the_state_namespace(self):
+        # The key in a token is client input; it must only ever address
+        # State entries, never another cache entry it happens to name.
+        cache = InMemoryCache()
+        cache.set(
+            "user-key",
+            tokens._canonical_json({"v": 1, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None}),
+            ttl=None,
+        )
+        with pytest.raises(StaleStateError):
+            verify_state_token("ces1.user-key", cls=FakeCounter, secrets=[], cache=cache)
+
     def test_missing_secret_raises_pointed_error(self):
         with pytest.raises(SigningSecretError) as exc_info:
             mint_state_token(CounterState(), class_id=CLASS_ID, secret=None, max_age=None, max_bytes=8192)
@@ -912,7 +941,7 @@ class TestServerStorage:
         cache = InMemoryCache()
         key = "some-server-key"
         cache.set(
-            key,
+            f"citry:state:{key}",
             tokens._canonical_json({"v": 2, "c": CLASS_ID, "s": {"count": 1}, "t": 0, "x": None}),
             ttl=None,
         )

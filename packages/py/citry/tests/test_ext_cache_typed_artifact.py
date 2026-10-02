@@ -1226,7 +1226,12 @@ def test_server_state_cache_hit_mints_fresh_storage_key_without_rebuilding_state
     assert first_entry.state_token.startswith("ces1.")
     assert second_entry.state_token.startswith("ces1.")
     assert first_entry.state_token != second_entry.state_token
-    assert app.cache.has(second_entry.state_token.removeprefix("ces1."))
+    assert app.cache.has(_state_cache_key(second_entry.state_token))
+
+
+def _state_cache_key(token: str) -> str:
+    """The cache key a server-storage ``ces1.<key>`` token's State is stored under."""
+    return "citry:state:" + token.removeprefix("ces1.")
 
 
 def test_missing_server_state_rejects_replay_before_context_contribution() -> None:
@@ -1260,7 +1265,7 @@ def test_missing_server_state_rejects_replay_before_context_contribution() -> No
 
     first = render_prepared_direct(Card())
     first_entry = next(iter(first.context.extra[EVENTS_EXTRA_KEY]))
-    app.cache.delete(first_entry.state_token.removeprefix("ces1."))
+    app.cache.delete(_state_cache_key(first_entry.state_token))
 
     second = render_prepared_direct(Card())
     second_entries = tuple(second.context.extra[EVENTS_EXTRA_KEY])
@@ -1268,7 +1273,7 @@ def test_missing_server_state_rejects_replay_before_context_contribution() -> No
     assert state_builds == 2
     assert len(second_entries) == 1
     assert second_entries[0].state_token != first_entry.state_token
-    assert app.cache.has(second_entries[0].state_token.removeprefix("ces1."))
+    assert app.cache.has(_state_cache_key(second_entries[0].state_token))
 
 
 def test_inner_cache_hit_can_be_exported_by_an_outer_cache_miss() -> None:
