@@ -79,7 +79,7 @@ reads it.
 Give component classes distinctive names so they do not style something else
 by accident.
 
-## Use it in a template
+## Use the card in a template
 
 Inside another component's template, the card looks like this:
 
@@ -95,7 +95,7 @@ Inside another component's template, the card looks like this:
 `accent` makes the top border purple. The heading and paragraph go inside the
 card because they sit between its opening and closing tags.
 
-## Use it in Python
+## Use the card in Python
 
 You can also create the card directly in Python. Save this as `render.py`
 next to `component.py`:

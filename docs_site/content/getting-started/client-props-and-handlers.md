@@ -28,7 +28,7 @@ python connected_components.py > connected_components.html
 The picker starts at “Ocean.” Each click switches between “Forest” and
 “Ocean.”
 
-## Set props and events
+## Declare props and events
 
 `ChoiceButton` declares a `label` prop and a `select` event in its Vue
 options:
@@ -58,7 +58,7 @@ change without another Python render. Vue's guides cover
 and [component events](https://vuejs.org/guide/components/events.html){: target="_blank" rel="noopener"}
 in more depth.
 
-## Connect the parent
+## Connect parent to child
 
 `ChoicePicker` uses the button like this:
 

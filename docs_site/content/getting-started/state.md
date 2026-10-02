@@ -93,7 +93,7 @@ the browser's current choice on its next call.
     does not let the browser change. See
     [`$state`](/reference/browser-apis/#state) for the full rules.
 
-## Keep secrets out
+## Keep secrets out of State
 
 State is signed, not secret. Citry signs it with `CITRY_SECRET` so it can
 tell when someone has changed it, but anyone who opens the page can read the
