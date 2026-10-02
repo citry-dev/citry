@@ -218,26 +218,10 @@ the current starter projects. You do not need to install a Citry skill.
 
 ## Performance
 
-The current benchmark renders a large project page using Citry's documented
-performance optimizations:
-
-![First, second and warmed render times for optimized Citry, Django, django-components and Jinja2. Lower is better.](https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmark.png)
-
-\* Citry uses `simple` and `pure` optimizations. See the
-[performance optimization guide](https://citry.dev/performance/).
-
-- Citry takes 24.62 ms warmed, about 55% less time than django-components
-  on this workload.
-- Button, Icon and HeroIcon use `simple = True`, giving up independent
-  component identity and hooks while keeping their data callbacks live.
-- Django takes 11.67 ms warmed and Jinja2 7.21 ms. The scenarios emit different
-  output and perform different component and browser-support work.
-
-These are relative results from one machine. Read the
-[published benchmark](https://citry.dev/about/benchmarks/) for the chart and
-interpretation, or the
-[benchmark repository guide](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md)
-to reproduce it.
+The [benchmarks page](https://citry.dev/about/benchmarks/) shows how long
+a page with 1,400 rendered entries takes to become usable in Citry and
+eleven other frameworks, including Django with HTMX and Alpine,
+django-components, Next.js and Nuxt.
 
 ## Get help and contribute
 

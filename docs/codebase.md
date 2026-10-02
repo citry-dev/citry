@@ -1095,6 +1095,11 @@ published version; the new description appears with that package's next
 release. Do not create an otherwise-empty patch release merely to refresh the
 description unless maintainers explicitly choose to do so.
 
+A released description keeps loading its images from `main`. The READMEs of
+`citry` 0.4.0 to 0.5.1 load `docs/assets/benchmark.png` this way. Published
+descriptions never change, so keep such an image on `main` even after the
+current README stops using it.
+
 #### Recording Marketplace demo GIFs
 
 The first VS Code release used this practical macOS workflow. It favors crisp,

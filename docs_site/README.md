@@ -142,6 +142,9 @@ under `/v/<version>/`; links to site pages remain at the root. Shared
 root-owned. During assembly, mounted snapshot pages are rewritten to load that
 root Pagefind bundle, so changing its configured directory does not strand
 historical versions on an old asset URL.
+Mounted snapshots load every `/static/` file, images included, from the
+current `static/`, so keep a file that an older snapshot still uses, such as
+`static/img/benchmark.png`, even after the current pages stop using it.
 Content assets inherit the unanimous scope of their first route segment. Keep a
 content-asset directory within one scope; put site-global assets under
 `static/`. An unknown or mixed asset namespace defaults to `versioned` so the

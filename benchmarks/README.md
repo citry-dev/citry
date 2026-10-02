@@ -108,10 +108,10 @@ django-components):
   has a different mix of templates, components, and data.
 - Never compare numbers across machines, runs, or build profiles.
 
-## Current rendering results (large scenario, 2026-09-10)
+## Server rendering results (large scenario, 2026-09-10)
 
-The README and docs-site chart use retained measurements of the runtime and
-public `Component.simple = True` API. The
+These are server render times for the runtime and the public
+`Component.simple = True` API. The
 [publication runner](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/publication.py)
 and its experiment helpers live on the performance research branch.
 
@@ -130,7 +130,7 @@ Each worker keeps six initial and 80 warmed output strings alive with normal GC.
 First and second figures are medians of the respective samples; warmed figures
 are medians of per-process means. Scenario loading and data preparation are
 excluded. Startup/import measurements remain available through `compare.py` but
-are not part of the refreshed chart.
+are not part of these results.
 
 The simple row changes only Button, Icon and HeroIcon declarations to the public
 flag and static data-method contract. Templates and callback bodies stay the
@@ -146,14 +146,8 @@ browser-manifest validation. Activation and server ownership are captured once
 per Citry worker after timing. Other engines retain output digests and sizes;
 their page-size and anchor tests are independent checks, not exact snapshots.
 
-Regenerate both PNG copies from the compact, checked-in chart data:
-
-```sh
-uv run --no-project --with matplotlib python benchmarks/plot.py
-```
-
-The [chart data](results/publication-20260910-release-0.5.0.json) retains the
-published medians and measurement settings. To repeat the measurement, use the
+The [compact report](results/publication-20260910-release-0.5.0.json) keeps
+these medians and the measurement settings. To repeat the measurement, use the
 [archived benchmark checkout](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/RESEARCH.md).
 Its [full observations](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/results/publication-20260910-release-0.5.0.json)
 include wall/CPU samples, GC counters, source hashes and output digests;
@@ -282,13 +276,8 @@ benchmarks/
     compare.py   the comparison runner (one table per scenario size)
     native_build.py  the check that makes the runners exit on a debug build
     utils.py     marker slicing shared by runners
-    plot.py      draws the project README chart from the large-scenario table
+    results/     the compact report of the 2026-09-10 rendering results
 ```
-
-`plot.py` reads the compact publication report under `results/`. After a new
-measurement, update that report with the published medians and a link to the
-retained full observations, then regenerate the images:
-`uv run --no-project --with matplotlib python benchmarks/plot.py`.
 
 Still ahead: asv adoption (per-commit tracking, dashboards, memory
 benchmarks), and more engines beyond the Django family (MiniJinja, JinjaX,
@@ -296,9 +285,12 @@ django-cotton, ...); see the design doc's section 8. Jinja2 is the first
 beyond-Django-family engine, ported for both scenarios
 (`test_benchmark_jinja2_small.py` and `test_benchmark_jinja2.py`).
 
-## Framework interaction suite
+## Framework comparison on the docs site
 
-The maintained [web suite](web/README.md) measures initial browser readiness and
-server actions with isolated application environments and retained payload sizes.
-Its initial native runs are diagnostic; the linked design defines publication
-qualification and the broader framework cohort.
+The [Benchmarks page](https://citry.dev/about/benchmarks/) compares how long
+the same page takes to become usable in Citry and other frameworks. A separate
+framework benchmark suite, outside this repository, measures it. To update the
+page, run
+`uv run --no-sync python -m docs_site.scripts.benchmark_data REPORT_DIR` on the
+suite's report folder; it rewrites
+`docs_site/data/benchmark_time_to_interactive.json`.
