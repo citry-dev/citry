@@ -35,7 +35,7 @@ def test_redirect_stub_forwards_and_self_excludes(tmp_path: Path) -> None:
     assert f"window.location.replace({href} + window.location.search + window.location.hash);" in stub
 
 
-def test_redirect_stub_keeps_fragment_before_meta_refresh_fires(tmp_path: Path) -> None:
+def test_redirect_stub_script_appends_fragment_and_precedes_meta_refresh(tmp_path: Path) -> None:
     # A link to /old/#section must land on /new/#section. Only the script can
     # read the fragment, so it has to run before the meta refresh is parsed and
     # append location.hash; the meta refresh and link remain the no-JS route.
@@ -71,3 +71,11 @@ def test_redirect_catalog_rejects_filesystem_and_html_unsafe_paths(tmp_path: Pat
 
     with pytest.raises(DocsConfigError):
         load_redirect_catalog(path)
+
+
+def test_redirect_stub_script_cannot_be_closed_by_the_target_path(tmp_path: Path) -> None:
+    # emit_redirects also serves callers whose paths skip the catalog checks.
+    emit_redirects(tmp_path, site_url="https://x.test", redirects={"/old/": "/</script>/"})
+
+    stub = (tmp_path / "old" / "index.html").read_text(encoding="utf-8")
+    assert stub.count("</script>") == 1

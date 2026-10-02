@@ -12,8 +12,8 @@ as the real one and keep the stub itself out of results.
 
 The script carries the visitor's query string and ``#fragment`` over to the new
 page, so a link to a section of the old page still lands on that section. The
-meta refresh and the fallback link cannot do that: the fragment never reaches
-the server and plain HTML cannot read it, so without JavaScript the visitor
+meta refresh and the fallback link carry a fixed URL written at build time, so
+without JavaScript the query string and fragment are dropped and the visitor
 arrives at the top of the new page.
 
 The forwarding href is written relative to the stub, so it keeps working when
@@ -109,8 +109,8 @@ def validate_redirect_routes(
             raise DocsConfigError(f"redirect destination is not in current navigation: {new}")
 
 
-# The script runs before the meta refresh is parsed, so a browser with
-# JavaScript always takes the route that keeps the query and fragment.
+# The script comes first, so a browser with JavaScript starts the navigation
+# that keeps the query and fragment before it reads the meta refresh.
 _TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -142,7 +142,8 @@ def emit_redirects(output_dir: Path, *, site_url: str, redirects: dict[str, str]
             _TEMPLATE.format(
                 canonical=escape(f"{site_url}{new}", quote=True),
                 href=escape(href, quote=True),
-                href_json=json.dumps(href),
+                # Escape "<" so no path could ever close the <script> early.
+                href_json=json.dumps(href).replace("<", "\\u003c"),
             ),
             encoding="utf-8",
         )
