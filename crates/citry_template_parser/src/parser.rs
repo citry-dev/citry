@@ -2305,7 +2305,7 @@ fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Resu
             return Err(context.error_from_token(
                 &attr.token,
                 format!(
-                    "'{name}' (line {line}, column {col}) uses the Alpine modifier '.{modifier}', which Vue does not have. Vue would read '.{modifier}' as a key name, so the listener would never run. {hint}"
+                    "'{name}' (line {line}, column {col}) uses '.{modifier}', which is not a Vue event modifier. Vue would read '.{modifier}' as a key name, so the listener would never run. {hint}"
                 ),
             ));
         }

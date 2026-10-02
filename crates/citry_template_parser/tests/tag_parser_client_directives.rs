@@ -293,7 +293,7 @@ mod tests {
     fn alpine_only_listener_modifiers_are_rejected_with_the_vue_form() {
         assert_parse_error(
             r#"<div @click.outside="open = false;">x</div>"#,
-            "'@click.outside' (line 1, column 6) uses the Alpine modifier '.outside', which Vue does not have. Vue would read '.outside' as a key name, so the listener would never run. Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted().",
+            "'@click.outside' (line 1, column 6) uses '.outside', which is not a Vue event modifier. Vue would read '.outside' as a key name, so the listener would never run. Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted().",
         );
         for (input, modifier, hint) in [
             (
@@ -353,7 +353,10 @@ mod tests {
                 "this.$el contains",
             ),
         ] {
-            assert_parse_error(input, &format!("the Alpine modifier '.{modifier}'"));
+            assert_parse_error(
+                input,
+                &format!("uses '.{modifier}', which is not a Vue event modifier"),
+            );
             assert_parse_error(input, hint);
         }
     }
