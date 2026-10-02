@@ -54,12 +54,13 @@ engine's `dirs` (the directories you pass to `Citry(dirs=[...])`). When a
 component file there changes, Citry reloads it and Django keeps running.
 When a Python file changes, Django restarts the server as usual.
 
-Point `dirs` at your component folders, not the project root: the
-reloader checks every file under them for changes.
+Point `dirs` at your component folders, not the project root. The
+reloader checks every file under them, so a large folder makes it slow.
 
-To restart the server instead of reloading in place, pass
-`mode="restart"`. The server then restarts when a component file that
-has already been rendered changes:
+To restart the server instead of reloading in place, for example when
+other code reads component files at startup, pass `mode="restart"`. The
+server then restarts when a component file that has already been
+rendered changes; other files under `dirs` never restart it:
 
 ```python
 enable_hot_reload(engine, mode="restart")

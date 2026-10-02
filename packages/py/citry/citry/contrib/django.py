@@ -205,18 +205,17 @@ def enable_hot_reload(
     - Any other file outside the engine's ``dirs`` goes to Django's normal
       handling.
 
+    Calling it again for the same engine replaces the earlier call, so the
+    last ``mode`` wins. Point the engine's ``dirs`` at your component
+    folders, not the project root: the reloader checks every file under
+    them, so a large folder makes it slow.
+
     Args:
         citry_instance: The engine whose components should pick up edits.
         mode: What happens after Citry clears a changed component file.
             ``"hot"`` (the default) keeps the server running, and the next
             render reads the new file. ``"restart"`` restarts the server
             process, the same way Django restarts it after a Python edit.
-
-    Calling it again for the same engine replaces the earlier call, so the
-    last ``mode`` wins.
-
-    Point the engine's ``dirs`` at your component folders, not the project
-    root: the reloader checks every file under them for changes.
 
     Returns:
         The receiver connected to Django's ``file_changed`` signal.
@@ -242,7 +241,10 @@ def enable_hot_reload(
 
     """
     if mode not in ("hot", "restart"):
-        msg = f"mode must be 'hot' or 'restart', got {mode!r}. Pass mode='hot' to reload component files in place."
+        msg = (
+            f"mode must be 'hot' or 'restart', got {mode!r}. Pass mode='hot' to reload component files "
+            "in place, or mode='restart' to restart the server."
+        )
         raise ValueError(msg)
 
     # Imported here, not at module load: this module must be importable
