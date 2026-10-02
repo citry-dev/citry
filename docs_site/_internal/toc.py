@@ -11,9 +11,17 @@ headings are present, so a normal content page (whose headings are all markdown)
 is returned untouched. It also lifts each symbol's members into the tree and
 records the symbol *kind* (class / function / attribute / ...) so the rail can
 show the type badge and nest members under their class.
+
+Every token this module returns carries its heading text in two forms: ``name``
+is plain, unescaped text (the template escapes it once when it renders), and
+``label`` is that same text split into ``(text, is_code)`` parts, so the rail can
+show a heading's code spans as code without trusting any other heading markup.
 """
 
 from __future__ import annotations
+
+import html
+import re
 
 import lxml.html  # type: ignore[import-untyped]
 
@@ -31,11 +39,15 @@ def merge_html_headings_into_toc(content_html: str, toc_tokens: list) -> list:
     Headings that live inside a docstring body are left out. Returns
     ``toc_tokens`` unchanged when there is nothing raw to add.
     """
+    # python-markdown hands over ``name`` already HTML-escaped. Convert it to plain
+    # text first, so every name in the tree has one form and the template's own
+    # escaping is the only escaping (otherwise "<c-if>" shows as "&lt;c-if&gt;").
+    toc_tokens = _normalize_markdown_tokens(toc_tokens)
     existing_ids = _collect_ids(toc_tokens)
     dom_headings = _extract_headings(content_html)
     kept = [
-        (lvl, hid, name, kind)
-        for (lvl, hid, name, cls, kind) in dom_headings
+        (lvl, hid, label, kind)
+        for (lvl, hid, label, cls, kind) in dom_headings
         if hid in existing_ids or "toc-heading" in cls or "doc-heading" in cls or "doc-member-heading" in cls
     ]
 
@@ -43,13 +55,87 @@ def merge_html_headings_into_toc(content_html: str, toc_tokens: list) -> list:
     if all(hid in existing_ids for (_, hid, _, _) in kept):
         return toc_tokens
 
-    existing_names = _collect_names(toc_tokens)
-    enriched = [(lvl, hid, existing_names.get(hid, name), kind) for (lvl, hid, name, kind) in kept]
+    # A heading markdown already tracked keeps its markdown label, which honors
+    # an author's ``data-toc-label`` override.
+    existing_labels = _collect_labels(toc_tokens)
+    enriched = [(lvl, hid, existing_labels.get(hid, label), kind) for (lvl, hid, label, kind) in kept]
     return _build_tree(enriched)
 
 
-def _extract_headings(content_html: str) -> list[tuple[int, str, str, str, str]]:
-    """Document-order (level, id, label, class, kind) for every id'd h1-h6 in the HTML."""
+def _normalize_markdown_tokens(tokens: list) -> list:
+    """Copy python-markdown's toc tokens with a plain-text ``name`` and a ``label``."""
+    normalized = []
+    for token in tokens:
+        if token.get("data-toc-label"):
+            # The author's override wins, and the toc extension already reduced
+            # it to escaped text, so it has no code spans to keep.
+            label = _clean_parts([(html.unescape(token.get("name", "")), False)])
+        else:
+            # ``html`` is the heading's rendered inner markup, ``<code>`` and all.
+            label = _label_parts(lxml.html.fragment_fromstring(token.get("html", ""), create_parent="div"))
+        normalized.append(
+            {
+                **token,
+                "name": _label_text(label),
+                "label": label,
+                "children": _normalize_markdown_tokens(token.get("children", [])),
+            }
+        )
+    return normalized
+
+
+def _label_parts(el: lxml.html.HtmlElement) -> list[tuple[str, bool]]:
+    """
+    Split an element's text into ``(text, is_code)`` parts.
+
+    A ``<code>`` element becomes one code part. Every other element contributes
+    only its text, so links, emphasis, or any raw HTML in a heading cannot reach
+    the rail as markup.
+    """
+    parts: list[tuple[str, bool]] = []
+
+    def walk(node: lxml.html.HtmlElement) -> None:
+        parts.append((node.text or "", False))
+        for child in node:
+            # Comments and processing instructions have a non-string tag and no
+            # visible text, but the text after them still belongs to the heading.
+            if isinstance(child.tag, str):
+                if child.tag == "code":
+                    parts.append((child.text_content(), True))
+                else:
+                    walk(child)
+            parts.append((child.tail or "", False))
+
+    walk(el)
+    return _clean_parts(parts)
+
+
+def _clean_parts(parts: list[tuple[str, bool]]) -> list[tuple[str, bool]]:
+    """Collapse whitespace like a browser would, trim the ends, and join neighboring text parts."""
+    cleaned: list[tuple[str, bool]] = []
+    for raw_text, is_code in parts:
+        # Only ASCII whitespace collapses in HTML; a non-breaking space must survive.
+        text = re.sub(r"[ \t\n\r\f]+", " ", raw_text)
+        if not text:
+            continue
+        # Two plain parts in a row are one run of text; merging keeps the label minimal.
+        if cleaned and not is_code and not cleaned[-1][1]:
+            cleaned[-1] = (cleaned[-1][0] + text, False)
+        else:
+            cleaned.append((text, is_code))
+    # Trim the label's outer whitespace, dropping a part that becomes empty.
+    if cleaned:
+        cleaned[0] = (cleaned[0][0].lstrip(), cleaned[0][1])
+        cleaned[-1] = (cleaned[-1][0].rstrip(), cleaned[-1][1])
+    return [(text, is_code) for text, is_code in cleaned if text]
+
+
+def _label_text(label: list[tuple[str, bool]]) -> str:
+    return "".join(text for text, _ in label)
+
+
+def _extract_headings(content_html: str) -> list[tuple[int, str, list[tuple[str, bool]], str, str]]:
+    """Document-order (level, id, label parts, class, kind) for every id'd h1-h6 in the HTML."""
     if not content_html.strip():
         return []
 
@@ -61,7 +147,7 @@ def _extract_headings(content_html: str) -> list[tuple[int, str, str, str, str]]
     # mutating the tree while iterating it would abort the iteration.
     heading_els = [el for el in frag.iter() if isinstance(el.tag, str) and el.tag in _HEADING_TAGS and el.get("id")]
 
-    headings: list[tuple[int, str, str, str, str]] = []
+    headings: list[tuple[int, str, list[tuple[str, bool]], str, str]] = []
     for el in heading_els:
         # Drop the permalink anchor so its glyph does not end up in the label.
         for anchor in el.findall(".//a"):
@@ -71,16 +157,16 @@ def _extract_headings(content_html: str) -> list[tuple[int, str, str, str, str]]
     return headings
 
 
-def _heading_label(el: lxml.html.HtmlElement) -> str:
+def _heading_label(el: lxml.html.HtmlElement) -> list[tuple[str, bool]]:
     """
-    The clean symbol name: the ``doc-object-name`` span's text when present (so a
-    member label is just its name, without the type badge), otherwise the
-    heading's full text.
+    The heading's label parts: the ``doc-object-name`` span's text when present
+    (so a member label is just its name, without the type badge), otherwise the
+    heading's own text with its code spans kept as code.
     """
     for span in el.iter("span"):
         if "doc-object-name" in (span.get("class") or "").split():
-            return " ".join(span.text_content().split())
-    return " ".join(el.text_content().split())
+            return _clean_parts([(span.text_content(), False)])
+    return _label_parts(el)
 
 
 def _heading_kind(el: lxml.html.HtmlElement) -> str:
@@ -104,21 +190,21 @@ def _collect_ids(tokens: list) -> set[str]:
     return ids
 
 
-def _collect_names(tokens: list) -> dict[str, str]:
-    names: dict[str, str] = {}
+def _collect_labels(tokens: list) -> dict[str, list[tuple[str, bool]]]:
+    labels: dict[str, list[tuple[str, bool]]] = {}
     for token in tokens:
         if token.get("id"):
-            names[token["id"]] = token.get("name", token["id"])
-        names.update(_collect_names(token.get("children", [])))
-    return names
+            labels[token["id"]] = token["label"]
+        labels.update(_collect_labels(token.get("children", [])))
+    return labels
 
 
-def _build_tree(headings: list[tuple[int, str, str, str]]) -> list:
+def _build_tree(headings: list[tuple[int, str, list[tuple[str, bool]], str]]) -> list:
     """Build a nested toc tree from a flat document-order heading list."""
     root: list = []
     stack: list[tuple[int, dict]] = []  # (level, node)
-    for level, hid, name, kind in headings:
-        node = {"id": hid, "name": name, "level": level, "kind": kind, "children": []}
+    for level, hid, label, kind in headings:
+        node = {"id": hid, "name": _label_text(label), "label": label, "level": level, "kind": kind, "children": []}
         while stack and stack[-1][0] >= level:
             stack.pop()
         (stack[-1][1]["children"] if stack else root).append(node)

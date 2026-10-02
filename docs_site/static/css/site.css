@@ -1971,6 +1971,13 @@ a.djc-sidebar__label:hover {
   font-weight: 500;
 }
 
+/* A heading's code span keeps its code font in the rail but inherits the link's
+   color, so the active and hover states still read as one entry. */
+.djc-toc__link code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
 /* ------------------------------------------------------------------ */
 /* Reference TOC: collapsible class -> members, with symbol badges     */
 /* ------------------------------------------------------------------ */

@@ -586,6 +586,63 @@ def test_toc_preserves_and_marks_every_heading_depth() -> None:
         assert four_item.xpath('.//a[@href="#five"]')
 
 
+def _toc_links(rendered: str, heading_id: str) -> list:
+    document = lxml_html.document_fromstring(rendered)
+    return [
+        *document.xpath(f'//aside[@id="djc-toc"]//a[@href="#{heading_id}"]'),
+        *document.xpath(f'//details[contains(@class, "djc-toc-mobile")]//a[@href="#{heading_id}"]'),
+    ]
+
+
+def test_toc_label_escapes_code_span_text_once() -> None:
+    # The toc extension hands over its text already escaped; escaping it again
+    # showed "&lt;c-if&gt; blocks" in the rail instead of "<c-if> blocks".
+    rendered = render_page("# Page\n\n## `<c-if>` blocks & more { #wrap }\n").html
+
+    assert "&amp;lt;" not in rendered
+    links = _toc_links(rendered, "wrap")
+    assert len(links) == 2
+    for link in links:
+        assert link.text_content().strip() == "<c-if> blocks & more"
+        # The code span keeps its code styling in the rail.
+        assert [code.text for code in link.xpath("./code")] == ["<c-if>"]
+
+
+def test_toc_label_keeps_only_code_markup_from_a_heading() -> None:
+    # Raw HTML and links in a heading reach the rail as text, never as markup.
+    rendered = render_page('# Page\n\n## <b onclick="x()">Bold</b> [link](/x/) `a<b` { #mixed }\n').html
+
+    for link in _toc_links(rendered, "mixed"):
+        assert link.text_content().strip() == "Bold link a<b"
+        assert [child.tag for child in link.iterdescendants()] == ["code"]
+
+
+def test_toc_label_uses_the_data_toc_label_override_as_plain_text() -> None:
+    rendered = render_page('# Page\n\n## `long` heading { #short data-toc-label="<i>Short</i> & sweet" }\n').html
+
+    for link in _toc_links(rendered, "short"):
+        assert link.text_content().strip() == "Short & sweet"
+        assert not list(link.iterdescendants())
+
+
+def test_toc_label_of_a_raw_html_heading_keeps_its_code_span() -> None:
+    # Raw headings that opt in with toc-heading reach the rail through the HTML
+    # merge in toc.py, which must produce the same once-escaped label.
+    source = (
+        "# Page\n\n## Markdown `<c-for>` { #md }\n\n"
+        '<h2 id="raw" class="toc-heading">Raw <code>&lt;c-if&gt;</code> &amp; text</h2>\n'
+    )
+    rendered = render_page(source).html
+
+    assert "&amp;lt;" not in rendered
+    for heading_id, text, codes in (("md", "Markdown <c-for>", ["<c-for>"]), ("raw", "Raw <c-if> & text", ["<c-if>"])):
+        links = _toc_links(rendered, heading_id)
+        assert len(links) == 2
+        for link in links:
+            assert link.text_content().strip() == text
+            assert [code.text for code in link.xpath("./code")] == codes
+
+
 def test_chrome_header_and_footer() -> None:
     html = _render_components_page()
     assert '<span class="djc-logo__wordmark">Citry</span>' in html

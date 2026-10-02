@@ -25,7 +25,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
 
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
 from citry import Component
 from docs_site._internal.components.brand import CitryMark  # noqa: F401
@@ -90,7 +90,7 @@ class TocItems(Component):
               class="djc-toc__link"
               c-href="'#' + item.id"
             >
-              {{ item.name }}
+              {{ item.label_html }}
             </a>
           </span>
           <c-TocItems
@@ -1461,6 +1461,7 @@ def _flatten_toc(toc_tokens: list) -> list[SimpleNamespace]:
         return SimpleNamespace(
             id=token["id"],
             name=token["name"],
+            label_html=_toc_label_html(token),
             kind=token.get("kind", ""),
             level=level,
             level_class=f"djc-toc__level-{level}",
@@ -1482,6 +1483,19 @@ def _flatten_toc(toc_tokens: list) -> list[SimpleNamespace]:
     for token in top:
         items.append(view(token, allow_collapse=True))
     return items
+
+
+def _toc_label_html(token: dict) -> Markup:
+    """
+    Render a TOC entry's label, keeping the heading's code spans as ``<code>``.
+
+    Each part is plain text and is escaped exactly once here, and ``<code>`` is the
+    only tag added, so heading text cannot inject markup into the rail.
+    """
+    parts = token.get("label") or [(token["name"], False)]
+    return Markup(  # noqa: S704 - each part is escaped; only <code> is added
+        "".join(f"<code>{escape(text)}</code>" if is_code else str(escape(text)) for text, is_code in parts)
+    )
 
 
 def _resolve_og_image(og_image: str, site_url: str) -> str:
