@@ -13,6 +13,7 @@ from docs_site._internal.components.doc_page import DocPage
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.nav import SCOPE_SITE, NavArea, NavGroup, NavItem, NavTree
 from docs_site._internal.pipeline import render_page
+from docs_site._internal.toc import merge_html_headings_into_toc
 
 # Read repository files from this file's location rather than the working
 # directory, so the tests pass however pytest is launched.
@@ -610,17 +611,34 @@ def test_toc_label_escapes_code_span_text_once() -> None:
 
 def test_toc_label_keeps_only_code_markup_from_a_heading() -> None:
     # Raw HTML and links in a heading reach the rail as text, never as markup.
-    rendered = render_page('# Page\n\n## <b onclick="x()">Bold</b> [link](/x/) `a<b` { #mixed }\n').html
+    rendered = render_page(
+        '# Page\n\n## <b onclick="x()">Bold</b>  <em> [link](/x/)</em> `a<b`<script>x()</script> { #mixed }\n'
+    ).html
 
-    for link in _toc_links(rendered, "mixed"):
+    links = _toc_links(rendered, "mixed")
+    assert len(links) == 2
+    for link in links:
+        # Script text is not visible heading text, so it stays out of the label.
         assert link.text_content().strip() == "Bold link a<b"
         assert [child.tag for child in link.iterdescendants()] == ["code"]
+
+
+def test_toc_name_collapses_whitespace_across_element_boundaries() -> None:
+    # ``name`` feeds the plain-text aria-label, where a doubled space would survive.
+    tokens = [{"level": 2, "id": "a", "name": "", "html": "foo <em> bar</em> <code>x </code> baz", "children": []}]
+
+    merged = merge_html_headings_into_toc("", tokens)
+
+    assert merged[0]["name"] == "foo bar x baz"
+    assert merged[0]["label"] == [("foo bar ", False), ("x ", True), ("baz", False)]
 
 
 def test_toc_label_uses_the_data_toc_label_override_as_plain_text() -> None:
     rendered = render_page('# Page\n\n## `long` heading { #short data-toc-label="<i>Short</i> & sweet" }\n').html
 
-    for link in _toc_links(rendered, "short"):
+    links = _toc_links(rendered, "short")
+    assert len(links) == 2
+    for link in links:
         assert link.text_content().strip() == "Short & sweet"
         assert not list(link.iterdescendants())
 

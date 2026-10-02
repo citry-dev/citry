@@ -1447,7 +1447,7 @@ def _project_blog_neighbor(post: Any, nav_tree: NavTree | None, version_prefix: 
 
 def _flatten_toc(toc_tokens: list) -> list[SimpleNamespace]:
     """
-    Turn python-markdown's toc tokens into the right-rail model.
+    Turn the page's normalized toc tokens (see ``toc.py``) into the right-rail model.
 
     The page H1 is unwrapped so its sections become the top level (the rail
     lists sections, not the redundant page title). Descendants retain their

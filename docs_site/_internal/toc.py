@@ -102,6 +102,9 @@ def _label_parts(el: lxml.html.HtmlElement) -> list[tuple[str, bool]]:
             if isinstance(child.tag, str):
                 if child.tag == "code":
                     parts.append((child.text_content(), True))
+                elif child.tag in {"script", "style"}:
+                    # Their text is code for the browser, not words a reader sees.
+                    pass
                 else:
                     walk(child)
             parts.append((child.tail or "", False))
@@ -111,17 +114,23 @@ def _label_parts(el: lxml.html.HtmlElement) -> list[tuple[str, bool]]:
 
 
 def _clean_parts(parts: list[tuple[str, bool]]) -> list[tuple[str, bool]]:
-    """Collapse whitespace like a browser would, trim the ends, and join neighboring text parts."""
+    """Join neighboring text parts, collapse whitespace like a browser would, and trim the ends."""
+    # Join first, so whitespace on both sides of an element boundary collapses as one run.
+    joined: list[tuple[str, bool]] = []
+    for text, is_code in parts:
+        if joined and not is_code and not joined[-1][1]:
+            joined[-1] = (joined[-1][0] + text, False)
+        else:
+            joined.append((text, is_code))
+
     cleaned: list[tuple[str, bool]] = []
-    for raw_text, is_code in parts:
+    for raw_text, is_code in joined:
         # Only ASCII whitespace collapses in HTML; a non-breaking space must survive.
         text = re.sub(r"[ \t\n\r\f]+", " ", raw_text)
-        if not text:
-            continue
-        # Two plain parts in a row are one run of text; merging keeps the label minimal.
-        if cleaned and not is_code and not cleaned[-1][1]:
-            cleaned[-1] = (cleaned[-1][0] + text, False)
-        else:
+        # A space that follows a space across a code boundary would show twice in plain text.
+        if cleaned and cleaned[-1][0].endswith(" "):
+            text = text.lstrip(" ")
+        if text:
             cleaned.append((text, is_code))
     # Trim the label's outer whitespace, dropping a part that becomes empty.
     if cleaned:
