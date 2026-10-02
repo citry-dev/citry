@@ -60,7 +60,7 @@ Citry also works with Django, Flask, Starlette, and other
   the browser.
 - [Examples](/examples/): copy a working recipe or run it in the browser.
 
-## Learn each part
+## Learn in depth
 
 - [Template syntax](/syntax/) explains how to insert Python values, set HTML
   attributes from Python, show or repeat content, use built-in tags, and add

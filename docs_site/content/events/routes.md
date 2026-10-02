@@ -8,7 +8,7 @@ description: Call Citry event handlers by URL from plain HTML forms, htmx, and G
 Every event handler has its own URL. Citry's browser code calls it for you,
 but you can also call it yourself: from a plain HTML form that must work
 without JavaScript, from htmx, or from other code that reads data with a
-GET request. A handler that sends a file also uses its own URL; see
+GET request. To send a file from a handler, see
 [Download a file](/events/actions/#download-a-file).
 
 ## Protect every handler
@@ -26,8 +26,9 @@ Set up your web framework's CSRF protection as described in
 
 A plain HTML form keeps working when JavaScript is off or has not loaded
 yet. Point its `action` at the handler's URL. `self.events.url()` builds the
-URL while the component renders, and works like
-[`get_event_url()`][citry.ext.events.get_event_url]:
+URL while the component renders. It takes the same `query` and `fragment`
+options as [`get_event_url()`][citry.ext.events.get_event_url], which builds
+it outside a render:
 
 ```citry
 from citry.ext.events import actions

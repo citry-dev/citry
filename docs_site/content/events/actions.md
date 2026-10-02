@@ -15,7 +15,7 @@ Return one value for one effect, or a list of values to apply in order:
 |---|---|
 | `MyComponent(...)` or `actions.Render(...)` | Re-renders the component whose handler ran, or puts a different component in its place. See [Re-render the component](#re-render-the-component). |
 | `actions.Dispatch(name, detail)` | Fires a browser event that JavaScript can listen for. See [Notify browser code](#notify-browser-code-that-something-happened). |
-| `dict` or `actions.Data(value)` | Gives the value to the JavaScript that called `$sendEvent`. See [Return data to JavaScript](#return-data-to-javascript). |
+| `dict` or `actions.Data(value)` | Gives the value to the JavaScript that called `$sendEvent`. See [Send data to JavaScript](#send-data-to-javascript). |
 | `actions.Redirect(url)` | Navigates to another page. See [Redirect to a page](#redirect-to-a-page). |
 | `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` | Changes the address bar without loading a page. See [Change the URL](#change-the-url). |
 | `actions.Download(...)` | Downloads a file. See [Download a file](#download-a-file). |
@@ -162,7 +162,7 @@ To hear the event anywhere else, such as in a parent component or page
 script, listen on an ancestor element, on `document`, or with
 [`Citry.events.on`](/reference/browser-apis/#citry-events-on).
 
-## Return data to JavaScript
+## Send data to JavaScript
 
 When your JavaScript calls a handler with `$sendEvent`, return a `dict` or
 [`actions.Data`][citry.ext.events.actions.Data]:
@@ -184,8 +184,9 @@ console.log(result.count);
 ```
 
 Wrap any other JSON value in `actions.Data(value)`. A bare list would be
-read as a list of actions, so return `actions.Data(["a", "b"])` to send one.
-A response can carry at most one Data value.
+read as a list of actions, so wrap a list too: `actions.Data(["a", "b"])`.
+A handler can return at most one Data value; a second one makes the call
+fail.
 
 An `@c-*` attribute in a template does not receive the value. To let browser
 code react to such a call, return `actions.Dispatch` instead.
@@ -217,10 +218,16 @@ class Events:
     def open_task(self, data: TaskRef):
         task = load_task(data.id)
         return [
-            TaskDetail(task=task),
+            actions.Render(
+                TaskDetail(task=task),
+                target="mark:detail",
+            ),
             actions.PushUrl(f"/tasks/{task.id}/"),
         ]
 ```
+
+Use a same-origin URL that your server also serves, so a reload or a shared
+link opens the same task.
 
 `PushUrl` adds a history entry, so Back returns to the previous address.
 `ReplaceUrl` replaces the current entry. Either way, Back and Forward change
@@ -260,8 +267,8 @@ State. Either mistake makes the call fail.
 
 ## Return nothing
 
-A handler that returns `None` changes nothing visible on the page. Use it
-when the handler only saves something, or only changes State:
+A handler that returns `None` does not re-render the component. Use it when
+the handler only saves something, or only changes State:
 
 ```python
 class Events:
@@ -269,9 +276,10 @@ class Events:
         state.editing = not state.editing
 ```
 
-The new State still reaches the browser, so a template that reads
-`$state.editing` updates. See
-[Event state](/events/state/#limit-what-the-browser-can-read-and-change).
+The new State still reaches the browser, so Vue parts that read
+`$state.editing` update. Server-rendered HTML stays as it was. Only fields
+the browser can read reach `$state`; see
+[Limit browser access](/events/state/#limit-what-the-browser-can-read-and-change).
 
 ## Run several actions { #return-several-actions-in-order }
 
@@ -287,7 +295,7 @@ return [
 ]
 ```
 
-Two options change the timing of any action:
+Two options change the timing of any action except Download:
 
 - `delay=<seconds>` waits before applying it.
 - `wait=False` lets the actions after it start without waiting for it.
@@ -299,9 +307,13 @@ Here a toast appears at once and hides three seconds later:
 ```python
 return [
     actions.Dispatch("Toast:show", {"text": "Saved"}),
-    actions.Dispatch("Toast:hide", delay=3),
+    actions.Dispatch("Toast:hide", delay=3, wait=False),
 ]
 ```
+
+A delay on an action that waits keeps the call running, so `$loading()`
+stays true and later calls wait for it. Add `wait=False` to a
+delayed action that only tidies up.
 
 Put a Redirect last. Actions after it may not run before the browser leaves
 the page. To show something first, give the Redirect a delay and

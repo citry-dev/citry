@@ -50,7 +50,7 @@ handler when the child emits `select` through Vue. To let the child call
 something from its own template, pass a callback through a Vue prop instead.
 See [Client interactivity](/concepts/client-interactivity/#listen-to-child-events).
 
-## Read call state { #read-call-state-from-vue }
+## Read State and status { #read-call-state-from-vue }
 
 These helpers work in the template and, through `this`, in the component's
 JavaScript:
@@ -247,13 +247,13 @@ handler name such as `"refresh"`, without arguments.
 modifier stops that event from sending. With `@c-keydown.enter.once`,
 pressing any other key first means a later Enter sends nothing.
 
-### Modifiers read the event
+### How modifiers match
 
 `.prevent` has an effect only when the event can be cancelled.
 `.enter` and `.escape` read the event's `key` property, whatever the
 event's name. An event without a `key` never matches.
 
-### Input type changes
+### `:type` stops a binding
 
 If Vue later changes `:type` to a type that cannot be bound, the binding
 stops and the browser console says why. It works again once the type
