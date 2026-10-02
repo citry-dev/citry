@@ -427,7 +427,7 @@ browser value with a child, pass it as a
 
 Read [Bind controls to State](/events/bindings/#bind-controls-to-state) for
 which input types are supported in which direction, and
-[Keep State between calls](/events/state/) for declaring State.
+[Event state](/events/state/) for declaring State.
 
 ## Keep list items matched across renders with `#c-key` { #c-key }
 
