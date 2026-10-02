@@ -52,6 +52,7 @@ button text changes.
 
 [`State`][citry.Component.State] holds the values the next call needs, here
 the current count. Citry sends it to the browser and back with each call.
+`citry_app` needs a signing secret for this, as the next section shows.
 
 Every public method on [`Events`][citry.Component.Events] can be called from
 the browser. A method whose name starts with an underscore cannot, so use that
@@ -59,9 +60,9 @@ for helpers.
 
 ## Configure a signing secret before using State
 
-Citry signs State before sending it to the browser, so it can detect when
-someone changes it. Signing needs a secret. Rendering a component that has
-State without one raises an error.
+By default, Citry signs State before sending it to the browser, so it can
+detect when someone changes it. Signing needs a secret. Rendering a component
+that has State without one raises an error.
 
 Give your Citry instance a long random secret, then register and mount that
 same instance:
