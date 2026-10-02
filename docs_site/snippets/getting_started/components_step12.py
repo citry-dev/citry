@@ -60,7 +60,7 @@ class SignupForm(Component):
                     "Please fix the email address.",
                     fields={"email": "Use an @example.com address."},
                 )
-            # New in this step: replace this calling component.
+            # New in this step: put Confirmation in place of this form.
             return actions.Render(Confirmation(email=email))
 
     template = """
