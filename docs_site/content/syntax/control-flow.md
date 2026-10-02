@@ -182,6 +182,7 @@ comment, an expression, or another element.
 
 ## Less common rules for conditions and loops
 
+- The names a loop creates exist only inside the loop.
 - A loop name must not reuse a name the template already has. If the
   template has a `book` variable, name the loop variable something else.
   Citry rejects the clash even when the list is empty.
