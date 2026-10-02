@@ -5,14 +5,14 @@ description: Choose where Citry stores cached output and generated files, and sh
 
 # Cache backends
 
-Citry keeps cached HTML and some generated files in a cache backend: the
-store that holds those values. By default each `Citry` instance keeps its
-own store in memory, which is enough for one process.
+With several worker processes or hosts, a page rendered by one worker
+can ask another worker for a generated file and get a 404, and cached
+output is never shared between workers.
 
-With several worker processes or hosts, each worker would then have its
-own separate store. A page rendered by one worker can ask another worker
-for a generated file and get a 404, and cached output is never shared.
-Give every worker the same shared backend to fix both.
+Both happen because Citry keeps cached HTML and some generated files in
+a cache backend, the store that holds those values, and by default each
+`Citry` instance keeps its own store in memory. That is enough for one
+process. For several workers, give them all the same shared backend.
 
 The backend holds more than [cached rendered output](/performance/caching/):
 
@@ -33,7 +33,7 @@ Size and protect it for all of these uses.
 | `RedisCache` | Workers on several hosts | A deployment on several hosts |
 | `DjangoCache` | Whatever Django's cache shares | An existing Django application |
 
-The DiskCache and Redis adapters wrap a client you create, so install
+Citry's DiskCache and Redis classes wrap a client you create, so install
 `diskcache` or `redis` in your application. `DjangoCache` uses Django's
 own cache framework.
 
@@ -170,13 +170,6 @@ When you pass a backend, Citry stores these files there without an
 expiry, and `vue_asset_max_bytes` has no effect. Give the backend enough
 room that it does not drop them while pages are still open.
 
-!!! note "A dropped file can return 404 for up to a minute"
-
-    Each process checks whether a shared backend still holds a file at
-    most once a minute, not on every render. If the backend drops a
-    file, the next render after that minute writes it back. Until then,
-    other workers answer 404 for it.
-
 ## Limit the size of one stored render
 
 Citry does not store a single rendered result larger than 1,000,000
@@ -249,6 +242,15 @@ Citry checks for the four methods when you create `Citry` and raises
 `TypeError` if one is missing. Errors raised by these methods reach your
 code; add retries, or treat errors as misses, inside the adapter if your
 application needs that.
+
+## Edge cases
+
+### A dropped file can return 404 for up to a minute
+
+Each process checks whether a shared backend still holds a file at most
+once a minute, not on every render. If the backend drops a file, the
+next render after that minute writes it back. Until then, other workers
+answer 404 for it.
 
 ## Related pages
 
