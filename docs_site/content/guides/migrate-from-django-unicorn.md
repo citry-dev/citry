@@ -5,9 +5,10 @@ description: Move django-unicorn state, actions, validation, and browser calls t
 
 # Migrate from django-unicorn
 
-This guide is for django-unicorn users porting components to Citry. It
-shows where each part of a `UnicornView` goes: its attributes, its methods,
-its validation, and the JavaScript calls it makes.
+You have django-unicorn components with bound attributes, methods called
+from the template, and validation, and you want them to behave the same in
+Citry. This guide shows where each part of a `UnicornView` goes: its
+attributes, its methods, its validation, and the JavaScript calls it makes.
 
 Much of the template vocabulary carries over. `unicorn:click` becomes
 `@c-click`, `unicorn:model` becomes a `:c-*` binding with matching debounce
@@ -18,13 +19,13 @@ field.
 
 What changes most is where values live. django-unicorn sends every public
 attribute back and forth and re-renders the component after each method
-call. In Citry, two places hold those values, and a third piece changes them:
+call. Citry splits a `UnicornView`'s job across three pieces:
 
 - `Kwargs` are the inputs a component is rendered with. See
   [Inputs and validation](/concepts/inputs-and-validation/).
 - [`State`][citry.Component.State] lists only the values a later call needs.
-  Citry sends them to the browser with the rendered component and gets them
-  back with the next call. See [Event state](/events/state/).
+  Citry keeps them between calls, either on the server or in the page. See
+  [Event state](/events/state/).
 - A **handler** is a public method in the component's nested `class Events`.
   The browser calls it by name, and the handler returns the new render
   itself. See [Server events](/events/).
@@ -237,7 +238,7 @@ from Vue state and the
 Citry does not queue calls while the browser is offline. Replaying a change
 after a deployment is rarely safe, so it is left to application code.
 
-### Accept file uploads
+### Handle files
 
 Citry does not read multipart file uploads by default. To accept files,
 register a custom payload codec, a class that turns the request body into
@@ -252,8 +253,9 @@ upload flow.
 Before shipping a migrated component, check that:
 
 - State holds only values a later call needs;
-- `_public` and `_model` narrow browser access where the default is too
-  broad;
+- `_public` and `_model`, the State settings that limit which fields
+  browser code can read and change, are set where the default (every
+  field) is too broad;
 - every handler returns the render or action that should happen;
 - validation failures raise `EventError` and leave the form in place;
 - every database id from State or `data` is checked against the current
