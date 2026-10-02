@@ -42,7 +42,9 @@ def repeated_mark_name_error(component_name: str, name: str) -> ValueError:
         f"Component {component_name!r} rendered more than one <c-mark name={name!r}>. An event handler picks "
         f"the region to update by its name (target='mark:{name}'), so each name can render only once per "
         "component. Give each <c-mark> its own name. If the <c-mark> sits inside <c-for>, wrap the whole "
-        "loop in one <c-mark>, or move the loop body into its own component so each item has its own regions."
+        "loop in one <c-mark>, or move the loop body into its own component (one without simple=True) so "
+        "each item has its own regions. If it sits in a fill that a component shows more than once, move it "
+        "out of the fill."
     )
     return ValueError(msg)
 
@@ -100,8 +102,8 @@ def reject_repeated_mark_names(owner: Component, render: CitryRender) -> None:
                     raise repeated_mark_name_error(type(owner).__name__, name)
             pending.extend(part.parts)
         elif type(part) is SimpleVueRecord and part.leaf.call_children is not None:
-            # A simple='vue' occurrence keeps the components it called in its
-            # leaf instead of in `parts`.
+            # A simple='vue' occurrence keeps the components it called in a
+            # separate render of its own instead of in `parts`.
             pending.extend(part.leaf.call_children.parts)
 
 
@@ -117,7 +119,7 @@ def make_mark_component(citry_instance: Citry) -> type[Component]:
         accepts no other attribute and only its default slot.
 
         Each name may render only once per component: a ``<c-mark>`` inside a
-        ``<c-for>`` that runs more than once, or two tags with the same name
+        ``<c-for>`` that loops over more than one item, or two tags with the same name
         that both render, raise ``ValueError`` when the component renders.
         Tags in different ``<c-if>``/``<c-else>`` branches may share a name,
         because only one of them renders. A ``<c-mark>`` written inside a
