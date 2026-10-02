@@ -276,7 +276,7 @@ fails, because these template helpers do not exist in 0.6.0.
 
 Provide a value from a component with Vue's `provide` option, and read it
 in a descendant with `inject`. See
-[Provide and inject in client code](/concepts/provide-and-inject/#provide-and-inject-in-client-code).
+[Provide in the browser](/concepts/provide-and-inject/#provide-and-inject-in-client-code).
 
 ### Rename reserved names { #rename-reserved-names }
 
@@ -289,7 +289,7 @@ in a descendant with `inject`. See
   the built-in `<c-mark>` reserves the name. Rename the class or give it
   another `name`. See [Built-in tags](/reference/builtins/#targeted-updates).
 
-[Names Citry reserves on the component instance](/advanced/vue-runtime/#names-citry-reserves-on-the-component-instance)
+[Reserved names](/advanced/vue-runtime/#names-citry-reserves-on-the-component-instance)
 lists the rest.
 
 ## Update Events code
@@ -334,7 +334,7 @@ replace the outermost component of a page or HTML fragment. Move the part
 that changes into a child component, or into a `<c-mark>` region. Props,
 listeners, and a `ref` that the parent wrote on the old component's tag do
 not reach the new one. See
-[Swap in a different component](/events/actions/#swap-in-a-different-component).
+[Swap in a component](/events/actions/#swap-in-a-different-component).
 
 ### Nested `$state` writes
 
@@ -482,7 +482,7 @@ exception: they combine with `class` and `c-class`, or `style` and
 For the same reason, an object `v-bind="..."` or a dynamic `:[name]`
 cannot sit on an element that has any `c-*` attribute, and `:key` cannot
 sit next to `#c-key`. See
-[Combine `:class` and `:style` with `c-class` and `c-style`](/syntax/vue/#combine-class-and-style-with-c-class-and-c-style).
+[Combine class bindings](/syntax/vue/#combine-class-and-style-with-c-class-and-c-style).
 
 ### Inline group content
 
@@ -580,7 +580,7 @@ to `vue_asset_max_bytes` (64 MiB by default). A page always finds its own
 files right after it loads. A page left open long enough to ask for a file
 that was dropped gets the same 404, so raise the limit or configure a
 cache. See
-[Share the cache between worker processes](/web-frameworks/#share-the-cache-between-worker-processes).
+[Share the cache](/web-frameworks/#share-the-cache-between-worker-processes).
 
 ## Proxies and CDNs { #proxies-and-cdns }
 
@@ -592,7 +592,7 @@ Citry's asset routes now send `Access-Control-Allow-Origin: *`. When a
 proxy or CDN serves Citry's files from another host, or the page runs in a
 sandboxed iframe, make sure the proxy or CDN passes that header through.
 See
-[Keep the CORS header when a proxy or CDN serves Citry's files](/security/#keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files).
+[Keep the CORS header](/security/#keep-the-cors-header-when-a-proxy-or-cdn-serves-citrys-files).
 
 ## Settings and extensions { #update-settings-and-extensions }
 
@@ -737,18 +737,18 @@ argument.
 - Interactive pages send their content in the served HTML, so search
   engines and readers without JavaScript see it. Tune this with `ssr` and
   `ssr_element_threshold`; see
-  [Send page content in the served HTML](/advanced/vue-runtime/#send-page-content-in-the-served-html).
+  [What the server sends](/advanced/vue-runtime/#send-page-content-in-the-served-html).
 - `simple = "vue"` gives a component its own Vue state and assets without
   a Python component instance; see
   [Simple components](/performance/simple-components/#give-a-simple-component-its-own-vue-state).
 - A component tag accepts `v-if`, `v-model`, `v-show`, and custom
   directives; see
-  [Use Vue directives on a component tag](/syntax/vue/#use-vue-directives-on-a-component-tag).
+  [Vue on component tags](/syntax/vue/#use-vue-directives-on-a-component-tag).
 - `<c-mark>` names a region that an Events handler can render again; see
   [Built-in tags](/reference/builtins/#targeted-updates).
 - A text field keeps what the user typed when its component renders
   again, until the server sends a different value; see
-  [Keep what the user typed across renders](/advanced/vue-runtime/#keep-what-the-user-typed-across-renders).
+  [Keep typed input](/advanced/vue-runtime/#keep-what-the-user-typed-across-renders).
 - `citry check` and the editor report a misspelled `js_data()` member and
   a Vue binding that reads a Python loop variable; see
   [Template linting](/ide/template-linting/).
