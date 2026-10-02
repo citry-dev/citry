@@ -64,6 +64,7 @@ from .capture import (
 from .compiler import (
     _ElementBindingDeclaration,
     _generated_event_args,
+    _generated_event_modifiers,
     _generated_vue_attr,
     _RuntimeEventDeclaration,
 )
@@ -2657,10 +2658,7 @@ class _Compiler:
         if len(event_names) != len(set(event_names)):
             self.safe_body = False
         for binding in node._event_bindings:
-            modifiers = [name for name in ("prevent", "stop", "self", "once") if binding[name] is True]
-            if binding["key"] is not None:
-                modifiers.append(str(binding["key"]))
-            suffix = "" if not modifiers else "." + ".".join(modifiers)
+            suffix = _generated_event_modifiers(binding)
             args = binding["args"]
             authored_args = _generated_event_args(args)
             attrs.append(

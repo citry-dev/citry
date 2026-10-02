@@ -3697,9 +3697,25 @@
       plain(args, "Citry Events arguments");
       return args;
     };
+    // Vue already checks a `@c-*` binding's `.enter` or `.escape` on its
+    // keyboard event, before `.prevent`, `.stop`, and `.self`. The key is
+    // checked again here, in that same order, so the server is never called
+    // for another key, whatever the Vue compiler does with key modifiers.
+    // Running these checks a second time changes nothing: the key still
+    // matches, the event is already prevented or stopped, and the target is
+    // unchanged because this runs before the first `await`.
+    const keyedEventPasses = (binding, event) => {
+      if (binding.key === null) return true;
+      if (event === null || typeof event !== "object") return false;
+      if (String(event.key || "").toLowerCase() !== binding.key) return false;
+      if (binding.prevent === true) event.preventDefault();
+      if (binding.stop === true) event.stopPropagation();
+      return binding.self !== true || event.target === event.currentTarget;
+    };
     definitionRegistry(appId).eventDispatch = async (record, bindingId, event, authoredArgs) => {
       const {binding, source} = resolveDeclarativeEvent(record, bindingId);
       if (binding.event !== event.type) throw new Error("Citry Events binding is missing or stale");
+      if (!keyedEventPasses(binding, event)) return undefined;
       const args = declarativeEventArgs(event, authoredArgs);
       if (binding.debounce === null && binding.throttle === null)
         return sendDeclarativeEvent(record, binding, source, args);
@@ -3749,6 +3765,7 @@
     };
     definitionRegistry(appId).eventDispatchComponent = async (record, bindingId, emittedValue, authoredArgs) => {
       const {binding, source} = resolveDeclarativeEvent(record, bindingId);
+      if (!keyedEventPasses(binding, emittedValue)) return undefined;
       const args = declarativeEventArgs(emittedValue, authoredArgs);
       if (binding.debounce !== null || binding.throttle !== null)
         throw new Error(TIMED_COMPONENT_BINDING_ERROR);

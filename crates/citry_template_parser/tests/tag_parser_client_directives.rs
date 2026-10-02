@@ -322,7 +322,7 @@ mod tests {
     fn alpine_only_listener_modifiers_are_rejected_with_the_vue_form() {
         assert_parse_error(
             r#"<div @click.outside="open = false;">x</div>"#,
-            "'@click.outside' (line 1, column 6) uses '.outside', which is not a Vue event modifier. Vue would read '.outside' as a key name, so the listener would never run. Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted().",
+            "'@click.outside' (line 1, column 6) uses '.outside', which is not a Vue event modifier. Vue would read '.outside' as a key name, so the listener would not do what '.outside' asks. Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted().",
         );
         for (input, modifier, hint) in [
             (
@@ -409,7 +409,7 @@ mod tests {
     fn key_names_on_a_non_keyboard_event_are_rejected() {
         assert_parse_error(
             r#"<button @click.enter="go();"></button>"#,
-            "'@click.enter' (line 1, column 9) uses '.enter' on the 'click' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so the listener would never run. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. Remove '.enter', or listen to 'keydown' or 'keyup' to react to a key.",
+            "'@click.enter' (line 1, column 9) uses '.enter' on the 'click' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so Vue would ignore '.enter' and run the listener on every 'click' event. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. Remove '.enter', or listen to 'keydown' or 'keyup' to react to a key.",
         );
         for (input, modifier, event) in [
             (r#"<button @click.foo="go();"></button>"#, "foo", "click"),

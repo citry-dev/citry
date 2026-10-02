@@ -103,6 +103,9 @@ _COMMITTED_INPUT_TYPES: Final = frozenset({"checkbox", "radio"})
 # Event-binding boolean modifiers (design 5.1 modifier table).
 _EVENT_FLAGS: Final = frozenset({"prevent", "stop", "self", "once"})
 _KEY_FILTERS: Final = frozenset({"enter", "escape"})
+# The only event names whose events carry a `key`, matched exactly. The
+# template parser applies the same rule to Vue listeners such as `@click.enter`.
+_KEYBOARD_EVENTS: Final = frozenset({"keydown", "keyup", "keypress"})
 
 _PREFIX_EVENT: Final = "@c-"
 _PREFIX_STATE: Final = ":c-"
@@ -344,6 +347,17 @@ def _build_event_spec(info: EventsInfo, event: str, attr: _Attr, location: _Loca
             _fail(location, f"{attr.name!r}: a time segment only applies to @c-poll; use '.debounce'/'.throttle' here")
         else:  # unknown
             _fail(location, f"{attr.name!r} has an unknown modifier '.{token.value}'")
+
+    # A native event by any other name has no key, so the binding would
+    # silently never send. Reject it when the template loads, as the template
+    # parser does for a Vue listener such as `@click.enter`.
+    if key is not None and event not in _KEYBOARD_EVENTS:
+        _fail(
+            location,
+            f"{attr.name!r} uses '.{key}' on the {event!r} event. '.enter' and '.escape' work only on"
+            f" keyboard events ('keydown', 'keyup', 'keypress'), which carry the pressed key. Remove"
+            f" '.{key}', or listen to 'keydown' or 'keyup' to react to a key.",
+        )
 
     debounce, throttle = _merged_timing(info, handler, debounce, throttle)
     _validate_timing_pair(debounce, throttle, attr.name, location)

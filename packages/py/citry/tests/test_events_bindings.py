@@ -759,14 +759,29 @@ class TestValidationErrors:
                 events={"go": _noop},
             )
 
-    @pytest.mark.parametrize("event_name", ["click", "lol"])
-    def test_event_key_filter_accepts_any_event_name(self, event_name):
+    @pytest.mark.parametrize("event_name", ["keydown", "keyup", "keypress"])
+    def test_event_key_filter_accepts_keyboard_events(self, event_name):
         comp = self._component(f'<button @c-{event_name}.enter="go">x</button>', events={"go": _noop})
         _, tables, compiled = _typed_binding_tables(comp)
         [spec] = tables["eventBindings"]
         assert f"@c-{event_name}" not in compiled.template
         assert spec["event"] == event_name
         assert spec["key"] == "enter"
+
+    # Only these three names carry a key, matched exactly as for a Vue
+    # listener, so `keyDown` and a custom name are rejected like `click`.
+    @pytest.mark.parametrize(
+        ("event_name", "key"),
+        [("click", "enter"), ("input", "escape"), ("lol", "enter"), ("keyDown", "enter")],
+    )
+    def test_event_key_filter_on_a_keyless_event_fails_to_load(self, event_name, key):
+        expected = (
+            f"'@c-{event_name}.{key}' uses '.{key}' on the '{event_name}' event. '.enter' and '.escape'"
+            " work only on keyboard events ('keydown', 'keyup', 'keypress'), which carry the pressed key."
+            f" Remove '.{key}', or listen to 'keydown' or 'keyup' to react to a key. (in Comp template, line 1)"
+        )
+        with pytest.raises(ValueError, match=re.escape(expected)):
+            self._load(f'<button @c-{event_name}.{key}="go">x</button>', events={"go": _noop})
 
     def test_state_key_filter_accepts_any_update_event_name(self):
         comp = self._component(
@@ -1377,6 +1392,32 @@ class TestComponentTagSpreadBoundary:
 
         with pytest.raises(TypeError, match="more than one listener named 'v-on:click'"):
             _typed_binding_tables(Parent)
+
+    def test_two_key_filters_on_one_component_event_stay_distinct(self):
+        app = Citry()
+
+        class Child(Component):
+            citry = app
+            template = "<span>child</span>"
+
+        class Parent(Component):
+            citry = app
+
+            class Events:
+                def submit(self):
+                    return None
+
+                def cancel(self):
+                    return None
+
+            template = '<c-Child @c-keydown.enter="submit" @c-keydown.escape="cancel"></c-Child>'
+
+        # Each key filter keeps its own Vue listener name, so the two
+        # bindings neither collide nor share a binding id.
+        _, tables, _ = _typed_binding_tables(Parent)
+        keys = sorted(spec["key"] for spec in tables["eventBindings"])
+        assert keys == ["enter", "escape"]
+        assert len({spec["id"] for spec in tables["eventBindings"]}) == 2
 
     def test_cached_runtime_component_listener_replays(self):
         app = Citry(cache=InMemoryCache())

@@ -3638,6 +3638,73 @@ def test_native_runtime_event_modifiers_apply_key_self_and_once(page: Any, serve
 
 
 @pytest.mark.e2e
+def test_key_filtered_binding_checks_the_key_before_prevent(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="vue-key-before-prevent-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class KeyedInput(Component):
+        citry = engine
+        template = """
+            <main>
+              <input
+                id="authored"
+                @c-keydown.prevent.enter="authored"
+              />
+              <input id="runtime" c-bind="attrs" />
+            </main>
+        """
+
+        class Events:
+            def authored(self):
+                return None
+
+            def runtime(self):
+                return None
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"@c-keydown.prevent.enter": "runtime"}}
+
+    dispatcher_for(engine)
+    calls: list[dict[str, Any]] = []
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "request",
+        lambda request: calls.extend(request.post_data_json["calls"])
+        if request.url.endswith("/ext/events/call") and request.post_data_json
+        else None,
+    )
+    page.goto(serve_live(engine, KeyedInput().render().serialize(), "") + "/")
+    # Record, after the binding ran, whether each key's default was prevented.
+    page.evaluate(
+        "window.prevented = [];"
+        "document.addEventListener('keydown', e => window.prevented.push([e.target.id, e.key, e.defaultPrevented]));"
+    )
+
+    for field_id, handler in (("authored", "authored"), ("runtime", "runtime")):
+        field = page.locator(f"#{field_id}")
+        # Any other key types as usual: `.prevent` applies only after the
+        # key matches, as with Vue's `@keydown.prevent.enter`.
+        field.press_sequentially("ab")
+        page.wait_for_timeout(60)
+        assert field.input_value() == "ab"
+        assert not any(call["handlerName"] == handler for call in calls)
+        with page.expect_request("**/ext/events/call") as request:
+            field.press("Enter")
+        assert request.value.post_data_json["calls"][0]["handlerName"] == handler
+
+    assert page.evaluate("window.prevented") == [
+        ["authored", "a", False],
+        ["authored", "b", False],
+        ["authored", "Enter", True],
+        ["runtime", "a", False],
+        ["runtime", "b", False],
+        ["runtime", "Enter", True],
+    ]
+    assert faults == []
+
+
+@pytest.mark.e2e
 def test_native_runtime_event_once_survives_unrelated_binding_revisions_and_replaces_changed_handler(
     page: Any, serve_live: Any
 ) -> None:

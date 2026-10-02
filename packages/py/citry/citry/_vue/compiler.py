@@ -69,6 +69,24 @@ def _generated_event_args(args: object, *, el_expression: str = "$event.currentT
     return f", (($el) => ({args}))({el_expression})"
 
 
+def _generated_event_modifiers(binding: Mapping[str, object]) -> str:
+    """
+    Return the Vue modifier suffix for one ``@c-*`` event binding, such as ``.prevent.enter``.
+
+    A key filter (``.enter`` or ``.escape``) only reaches this point on a
+    ``keydown``, ``keyup``, or ``keypress`` binding, where Vue checks the key
+    before ``.prevent``, ``.stop``, and ``.self``. The browser client checks
+    the key again before it sends, so the server is never called for another
+    key, whatever the Vue compiler does with key modifiers.
+    """
+    modifiers = [name for name in ("prevent", "stop", "self", "once") if binding[name] is True]
+    if binding["key"] is not None:
+        # The key stays in the name so that `@c-keydown.enter` and
+        # `@c-keydown.escape` on one tag become two distinct Vue listeners.
+        modifiers.append(str(binding["key"]))
+    return "" if not modifiers else "." + ".".join(modifiers)
+
+
 def _authored_vue_attr(name: str, value: str) -> str:
     """
     Write one authored Vue binding exactly as its template text reads.
@@ -313,7 +331,7 @@ class CompiledView:
 
 
 ORDINARY_TARGET = "ordinary-vnodes/1"
-_NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.2"}
+_NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.3"}
 _TEXT_ACTION_RULES = {
     "rewrite": {"condense.whitespace"},
     "drop": {"condense.drop-whitespace", "drop.comment", "drop.branch-gap"},
@@ -1351,10 +1369,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                     if event in seen_events:
                         raise ValueError("prepared Vue target supports one Events binding per DOM event")
                     seen_events.add(event)
-                    modifiers = [name for name in ("prevent", "stop", "self", "once") if binding[name] is True]
-                    if binding["key"] is not None:
-                        modifiers.append(str(binding["key"]))
-                    suffix = "" if not modifiers else "." + ".".join(modifiers)
+                    suffix = _generated_event_modifiers(binding)
                     binding_id = str(binding["id"])
                     args = binding["args"]
                     authored_args = _generated_event_args(args)

@@ -2134,17 +2134,18 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
 /// The modifiers Vue handles itself on any event: event options,
 /// propagation and target checks, modifier-key checks, and mouse buttons.
 /// The list matches `resolveModifiers` in Vue's `compiler-dom` (3.5).
-/// Citry's Vue compiler (vize, `codegen/props/events.rs`) wraps every other
-/// modifier in a check of `event.key`, whatever the event.
+/// Vue reads every other modifier as a key name: it checks `event.key` on a
+/// keyboard event or a dynamic event name, and drops the modifier on any
+/// other event, which has no key.
 const VUE_NON_KEY_MODIFIERS: [&str; 14] = [
     "stop", "prevent", "self", "capture", "once", "passive", "ctrl", "shift", "alt", "meta",
     "exact", "left", "right", "middle",
 ];
 
 /// Whether a static event name is a keyboard event, where key-name modifiers
-/// work. The name must match exactly: on an element, Citry's Vue compiler
-/// listens for an event spelled `KeyDown` as written, and the browser never
-/// sends one.
+/// work. The name must match exactly: on an element, Vue listens for an event
+/// spelled `KeyDown` or `key-down` as written, and the browser never sends
+/// one.
 fn is_vue_keyboard_event(event: &str) -> bool {
     matches!(event, "keydown" | "keyup" | "keypress")
 }
@@ -2166,8 +2167,8 @@ fn non_key_modifier_hint(modifier: &str) -> String {
 /// What to write instead of an Alpine event modifier that Vue does not have,
 /// or `None` for a modifier Vue accepts (including every key name).
 ///
-/// Vue compiles an unknown modifier into a key filter, so a listener that
-/// carries one of these would silently never run.
+/// Vue reads an unknown modifier as a key name, so a listener that carries
+/// one of these silently ignores it or never runs, depending on the event.
 fn alpine_only_modifier_hint(modifier: &str) -> Option<&'static str> {
     Some(match modifier {
         "outside" | "away" => {
@@ -2499,20 +2500,20 @@ fn validate_vue_binding_python_conflicts(
     Ok(())
 }
 
-/// Reject event modifiers that would stop a Vue listener (`@event` or
-/// `v-on:event`) from ever running.
+/// Reject event modifiers on a Vue listener (`@event` or `v-on:event`) that
+/// Vue would silently drop, or that would stop the listener from running.
 ///
-/// Citry's Vue compiler wraps every modifier outside `VUE_NON_KEY_MODIFIERS`
-/// in a check that lets the listener run only when the event's `key`
-/// matches. That works for keyboard events, but a `click` has no `key`, so
-/// `@click.enter` would never run. Two
-/// kinds of modifier are rejected: Alpine modifiers that Vue lacks, on any
-/// event, and key names on an event whose static name is not a keyboard
-/// event. A dynamic event name (`@[name]`) is checked only for Alpine
-/// modifiers, because its event is known only in the browser.
+/// Vue reads every modifier outside `VUE_NON_KEY_MODIFIERS` as a key name.
+/// On a keyboard event the listener then runs only for that key, but on any
+/// other static event Vue drops the modifier, because the event has no key:
+/// `@click.enter` would run on every click. Two kinds of modifier are
+/// rejected: Alpine modifiers that Vue lacks, on any event, and key names on
+/// an event whose static name is not a keyboard event. A dynamic event name
+/// (`@[name]`) is checked only for Alpine modifiers, because its event is
+/// known only in the browser.
 ///
 /// A '@c-*' binding is a Citry Events binding with its own modifiers, such as
-/// '.debounce', so it is left to the Events compiler.
+/// '.debounce', so the Events compiler checks it, with the same key rule.
 fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
     for attr in node.attrs() {
         let name = attr.key.content.as_str();
@@ -2543,12 +2544,12 @@ fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Resu
         let (line, col) = attr.token.line_col;
         for modifier in modifiers.split('.').skip(1) {
             // Vue compares modifiers case-sensitively, so `.OUTSIDE` is an
-            // unknown modifier too and the listener would never run.
+            // unknown modifier too and Vue would read it as a key name.
             if let Some(hint) = alpine_only_modifier_hint(&modifier.to_ascii_lowercase()) {
                 return Err(context.error_from_token(
                     &attr.token,
                     format!(
-                        "'{name}' (line {line}, column {col}) uses '.{modifier}', which is not a Vue event modifier. Vue would read '.{modifier}' as a key name, so the listener would never run. {hint}"
+                        "'{name}' (line {line}, column {col}) uses '.{modifier}', which is not a Vue event modifier. Vue would read '.{modifier}' as a key name, so the listener would not do what '.{modifier}' asks. {hint}"
                     ),
                 ));
             }
@@ -2563,7 +2564,7 @@ fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Resu
             return Err(context.error_from_token(
                 &attr.token,
                 format!(
-                    "'{name}' (line {line}, column {col}) uses '.{modifier}' on the '{event}' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so the listener would never run. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. {}",
+                    "'{name}' (line {line}, column {col}) uses '.{modifier}' on the '{event}' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so Vue would ignore '.{modifier}' and run the listener on every '{event}' event. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. {}",
                     non_key_modifier_hint(modifier)
                 ),
             ));

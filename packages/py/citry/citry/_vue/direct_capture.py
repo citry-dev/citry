@@ -57,6 +57,7 @@ from .compiler import (
     _DynamicElementDeclaration,
     _ElementBindingDeclaration,
     _generated_event_args,
+    _generated_event_modifiers,
     _generated_vue_attr,
     _LocalCallBindingDeclaration,
     _LocalCallDeclaration,
@@ -1701,10 +1702,7 @@ def assemble_typed_render(
                                     "runtime component-boundary Events bindings accept a handler name "
                                     "without arguments"
                                 )
-                            modifiers = [name for name in ("prevent", "stop", "self", "once") if spec[name] is True]
-                            if spec["key"] is not None:
-                                modifiers.append(str(spec["key"]))
-                            suffix = "" if not modifiers else "." + ".".join(modifiers)
+                            suffix = _generated_event_modifiers(spec)
                             generated_name = f"v-on:{spec['event']}{suffix}"
                             if generated_name in emitted_listener_names:
                                 raise UnsupportedPreparedView(
@@ -3156,10 +3154,7 @@ def _event_directive_attrs(part: PreparedElementOpen | PreparedDynamicElementOpe
         if event in seen_events:
             raise UnsupportedPreparedView("prepared Vue target supports one Events binding per DOM event")
         seen_events.add(event)
-        modifiers = [name for name in ("prevent", "stop", "self", "once") if binding[name] is True]
-        if binding["key"] is not None:
-            modifiers.append(str(binding["key"]))
-        suffix = "" if not modifiers else "." + ".".join(modifiers)
+        suffix = _generated_event_modifiers(binding)
         authored_args = _generated_event_args(binding["args"])
         attrs.append(
             _generated_vue_attr(
