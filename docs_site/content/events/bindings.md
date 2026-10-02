@@ -5,15 +5,14 @@ description: Call Citry event handlers from HTML, bind controls to State, and sh
 
 # Bind events in templates
 
-This page covers the template attributes that connect your HTML to Python
-handlers. Use `@c-*` to call a handler when something happens on an element,
-such as a click or a keypress. Use `:c-*` to keep a form control in sync with
-a [`State`][citry.Component.State] field. Vue helpers such as `$loading()` and
-`$error()` show what a call is doing.
+To run Python when the user clicks, types, or submits, add an attribute to
+the element. Use `@c-*` to call a handler when something happens on an
+element, such as a click or a keypress. Use `:c-*` to keep a form control in
+sync with a [`State`][citry.Component.State] field. Vue helpers such as
+`$loading()` and `$error()` show what a call is doing.
 
-Citry checks these attributes when the template first compiles, which is
-usually on the first render. A misspelled handler name, an unknown State
-field, or modifiers that cannot be combined raise an error there.
+A misspelled handler name, an unknown State field, or modifiers that cannot
+be combined raise an error on the component's first render.
 
 ## Call handlers from HTML
 
@@ -26,7 +25,7 @@ event:
 | `@c-click="rate({stars: 5})"` | Pass arguments as one object. The handler receives it as `data`. |
 | `@c-submit.prevent="submit"` | Collect the form's named controls and call `submit` instead of submitting the page. |
 
-Modifiers after the event name change when the call is sent:
+Modifiers after the event name control which events send a call, and when:
 
 | Modifier | Use |
 |---|---|
@@ -51,6 +50,59 @@ handler when the child emits `select` through Vue. To let the child call
 something from its own template, pass a callback through a Vue prop instead.
 See [Client interactivity](/concepts/client-interactivity/#listen-to-child-events).
 
+## Read call state from Vue
+
+These helpers work in the template and, through `this`, in the component's
+JavaScript:
+
+| Helper | Use |
+|---|---|
+| [`$state`][$state] | Read State, or replace a field the browser may change. The change is sent with the next call from this component, unless that call uses GET (see [Use event routes directly](/events/http/)). |
+| [`$loading()`][$loading] | True while any call from this component is waiting or running. |
+| [`$loading('save')`][$loading] | The same, for the `save` handler only. |
+| [`$error()`][$error] | The newest error from any of this component's handlers, or `null`. |
+| [`$error('save')`][$error] | The last error from `save`, or `null`. |
+| [`$sendEvent(name, args?)`][$sendEvent] | Call a handler and get a Promise for its result. |
+
+A successful call clears its handler's error. A retry keeps showing the old
+error until the new call finishes. Passing an unknown handler name to
+`$loading` or `$error` raises an error.
+
+Use `$sendEvent` when your JavaScript needs the handler's return value. An
+`@c-*` attribute does not give you one:
+
+```javascript
+$component({
+  data() {
+    return { result: null };
+  },
+  methods: {
+    async refresh() {
+      this.result = await this.$sendEvent("refresh");
+    },
+  },
+});
+```
+
+When a call made with `$sendEvent` fails, its Promise rejects. Catch it with
+`try`/`catch` or `.catch(...)`. When the server returns an error for an
+`@c-*` call, the error goes to `$error()` and nothing else happens.
+
+## Keep rapid local changes in the browser
+
+Not every click needs Python. [`$state`][$state] is a Vue object holding the
+component's State. A plain Vue click handler can change it without a request,
+and the next server call sends the latest value along:
+
+```citry-html
+<button @click="$state.count++">+1</button>
+<span v-text="$state.count">{{ count }}</span>
+<button @c-click="save">Save</button>
+```
+
+The `+1` button is ordinary Vue and makes no request. Save calls the `save`
+handler, which receives the updated `count` in `state`.
+
 ## Bind controls to State
 
 `:c-<field>` connects a form control to the State field of the same name:
@@ -70,7 +122,7 @@ the control but never reads the control back. A binding with a handler is
 State. Only two-way bindings take the timing modifiers. `.lazy` and
 `.on:<event>` cannot be combined.
 
-Put the binding on a control inside the component that owns the State. A
+Put the binding on a control inside the component that declares the State. A
 `:c-*` binding on a child component tag is an error.
 
 ### What Python type the field receives
@@ -163,59 +215,6 @@ server's value:
 | Other inputs, `<textarea>`, a single `<select>` | the value as text; `None` becomes empty |
 | A custom element | the value as is; `None` becomes `null` |
 
-## Keep rapid local changes in the browser
-
-Not every click needs Python. [`$state`][$state] is a Vue object holding the
-component's State. A plain Vue click handler can change it without a request,
-and the next server call sends the latest value along:
-
-```citry-html
-<button @click="$state.count++">+1</button>
-<span v-text="$state.count">{{ count }}</span>
-<button @c-click="save">Save</button>
-```
-
-The `+1` button is ordinary Vue and makes no request. Save calls the `save`
-handler, which receives the updated `count` in `state`.
-
-## Read call state from Vue
-
-These helpers work in the template and, through `this`, in the component's
-JavaScript:
-
-| Helper | Use |
-|---|---|
-| [`$state`][$state] | Read State, or replace a field the browser may change. The change is sent with the next non-GET call from this component. |
-| [`$loading()`][$loading] | True while any call from this component is waiting or running. |
-| [`$loading('save')`][$loading] | The same, for the `save` handler only. |
-| [`$error()`][$error] | The newest error from any of this component's handlers, or `null`. |
-| [`$error('save')`][$error] | The last error from `save`, or `null`. |
-| [`$sendEvent(name, args?)`][$sendEvent] | Call a handler and get a Promise for its result. |
-
-A successful call clears its handler's error. A retry keeps showing the old
-error until the new call finishes. Passing an unknown handler name to
-`$loading` or `$error` raises an error.
-
-Use `$sendEvent` when your JavaScript needs the handler's return value. An
-`@c-*` attribute does not give you one:
-
-```javascript
-$component({
-  data() {
-    return { result: null };
-  },
-  methods: {
-    async refresh() {
-      this.result = await this.$sendEvent("refresh");
-    },
-  },
-});
-```
-
-When a call made with `$sendEvent` fails, its Promise rejects. Catch it with
-`try`/`catch` or `.catch(...)`. An `@c-*` attribute handles failures for you:
-the error goes to `$error()`.
-
 ## Call a handler on a timer
 
 `@c-poll.<seconds>s` calls a handler repeatedly, for example to refresh a
@@ -254,14 +253,11 @@ replaces it.
     `.enter` and `.escape` read the event's `key` property, whatever the
     event's name. An event without a `key` never matches.
 
-!!! note "Bindings that Citry checks during the render"
+!!! note "A binding stops when its input type changes"
 
-    When `<c-element>`, a `c-bind` spread, or a Python-computed `c-type`
-    decides the element or its input type, Citry checks the binding while
-    rendering, before the HTML reaches the browser. When Vue changes `:type`
-    in the browser to a type that cannot be bound, the binding stops
-    working and Citry reports it in the browser console. It starts working
-    again if the type changes back.
+    If Vue later changes `:type` to a type that cannot be bound, the binding
+    stops and the browser console says why. It works again once the type
+    changes back.
 
 !!! note "Binding a custom element"
 
