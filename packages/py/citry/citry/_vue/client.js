@@ -578,8 +578,30 @@
   });
   for (const name of ["resolveDirective", "vModelCheckbox", "vModelDynamic", "vModelRadio", "vModelSelect", "vModelText"]) {
     if (V[name] === undefined) throw new Error("Vue runtime lacks required compiler helper: " + name);
+    if (name === "resolveDirective") continue;
     Object.defineProperty(compilerRuntime, name, {value: V[name], enumerable: true});
   }
+  // Vue's production build returns nothing for a custom directive nobody registered, and the element
+  // then renders without it and without an error, so a misspelled or missing directive would only show
+  // up as behavior that never happens. Vue resolves directives while the component that uses them
+  // renders, after every plugin from `Citry.vue.use()` is installed, so a name that is still missing
+  // here is missing for good, and the error stops the app like any other render error.
+  Object.defineProperty(compilerRuntime, "resolveDirective", {
+    value: name => {
+      const directive = V.resolveDirective(name);
+      if (directive !== undefined) return directive;
+      // Name the component by its type key, as other render errors do. Vue copies the root
+      // component's options when the app is created, so the instance's record is the reliable way to it.
+      const instance = V.getCurrentInstance();
+      const record = instance && (instanceRecords.get(instance.proxy) || instanceRecords.get(instance.ctx));
+      const component = record?.app.occurrences.get(record.occurrenceId)?.typeKey || instance?.type?.name || "(unknown)";
+      throw new Error("Component " + component + " uses the directive 'v-" + name + "', but no directive " +
+        "named '" + name + "' is registered, so Vue would skip it. Register it in the component's " +
+        "`directives` option in its $component() options, or for every component with " +
+        "Citry.vue.use(plugin), where the plugin's install(app) calls app.directive(\"" + name + "\", ...).");
+    },
+    enumerable: true,
+  });
   function runtimeForDynamicElements(entries) {
     if (!Array.isArray(entries)) throw new TypeError("dynamicElements must be an array");
     if (entries.length === 0) return compilerRuntime;

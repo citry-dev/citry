@@ -118,6 +118,70 @@ def test_a_page_plugin_reaches_every_component_of_the_app(page: Any, serve_docum
     assert errors == []
 
 
+@pytest.mark.e2e
+def test_a_directive_registered_on_the_component_resolves(page: Any, serve_document: Any) -> None:
+    engine = Citry(autodiscover=False)
+
+    class Panel(Component):
+        citry = engine
+        template = """
+            <p
+                id="panel"
+                v-mark="'local'"
+            >panel</p>
+        """
+        js = """
+            $component({
+              directives: {
+                mark: {
+                  mounted(el, binding) {
+                    el.dataset.mark = binding.value;
+                  },
+                },
+              },
+            });
+        """
+
+    errors = _collect_page_errors(page)
+    page.goto(serve_document(Panel().render().serialize()))
+    page.wait_for_function("document.querySelector('#panel')?.dataset.mark === 'local'")
+    assert errors == []
+
+
+@pytest.mark.e2e
+def test_an_unregistered_directive_stops_the_app_with_its_name(page: Any, serve_document: Any) -> None:
+    engine = Citry(autodiscover=False)
+
+    class Panel(Component):
+        citry = engine
+        template = """
+            <p
+                id="panel"
+                v-tooltipp="'help'"
+            >panel</p>
+        """
+        js = """
+            $component({});
+        """
+
+    errors = _collect_page_errors(page)
+    page.goto(serve_document(Panel().render().serialize()))
+    # The error reaches the page once Vue renders the component; wait up to 2.5 seconds for it.
+    for _ in range(50):
+        if errors:
+            break
+        page.wait_for_timeout(50)
+    # Vue's production build would skip the directive without a word; Citry
+    # names the directive, the component, and both ways to register it.
+    assert any(
+        "Component Panel_" in error
+        and "uses the directive 'v-tooltipp', but no directive named 'tooltipp' is registered" in error
+        and "`directives` option" in error
+        and 'app.directive("tooltipp", ...)' in error
+        for error in errors
+    ), errors
+
+
 def _events_page(engine: Citry) -> type[Component]:
     class Counter(Component):
         citry = engine

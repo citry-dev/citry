@@ -1322,9 +1322,15 @@ be written in the template, so one authored call always has the same
 directives, and a different authored call gets a different Vue key because
 the call key hashes the template source. A custom directive name is
 compared in lowercase against Vue's built-ins, so `v-If` is rejected rather
-than looked up as a custom directive. Nothing checks that a custom
-directive is registered: Vue's production build skips an unknown name
-without an error, on a call and on an element alike. When Python selects another call in
+than looked up as a custom directive. Vue's production build skips an
+unknown name without an error, so the browser runtime checks the name when
+the component that uses the directive renders, on a call and on an element
+alike. Citry's `resolveDirective` helper asks Vue first, which finds the
+component's own `directives` option and every directive a
+`Citry.vue.use()` plugin registered (plugins are installed before the app
+mounts). A name Vue cannot find throws an error that names the directive
+and the component, and that error stops the app like any other render
+error. When Python selects another call in
 a later revision (for example through `<c-if>`), Vue unmounts the old child
 together with its root element and the directive's state. A custom directive
 on an element, by contrast, joins the signature and gets a replacement key,
@@ -2015,7 +2021,6 @@ built-in components (`<Transition>`, `<TransitionGroup>`, `<KeepAlive>`,
 `<Teleport>`, `<Suspense>`, in either spelling) would need helpers outside
 the allowlist; the template parser rejects them when the template loads,
 on every page, and the allowlist stays as a second guard. Native Vue
-
 slot handling remains responsible for fallback selection and slot behavior;
 the qualified generated dynamic slots permit full reconciliation. General
 control flow, slot topology, and mixed rendering targets still require tests.

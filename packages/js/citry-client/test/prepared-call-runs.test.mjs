@@ -24,12 +24,12 @@ function vueStub(overrides = {}) {
   };
 }
 
-function runtime({ nextTick } = {}) {
+function runtime({ nextTick, vue = {} } = {}) {
   const context = {
     CitryVueFragments: { installFragmentManager() {} },
     document: { currentScript: null },
     queueMicrotask,
-    Vue: vueStub(nextTick === undefined ? {} : { nextTick }),
+    Vue: vueStub(nextTick === undefined ? vue : { ...vue, nextTick }),
   };
   context.globalThis = context;
   context.window = context;
@@ -955,4 +955,31 @@ test("$component() options that Citry cannot check fail with a message naming th
     () => citryRuntime.defineType("app", "Card_abc125", { methods: { $loading() {} } }),
     /\$component\(\) options for Card_abc125 define "\$loading", a name Citry's event helpers/,
   );
+});
+
+test("a custom directive nobody registered stops the render with the component's name", () => {
+  // Vue's production build returns nothing for an unknown directive; this stub does the same.
+  const directives = { tooltip: { mounted() {} } };
+  let instance = { type: { name: "OrderPanel" }, proxy: {}, ctx: {} };
+  const { citryRuntime } = runtime({
+    vue: {
+      resolveDirective: (name) => directives[name],
+      getCurrentInstance: () => instance,
+    },
+  });
+  const { compilerRuntime } = citryRuntime;
+
+  // A registered directive, global or local, resolves to what Vue found.
+  assert.equal(compilerRuntime.resolveDirective("tooltip"), directives.tooltip);
+  // A component Citry rendered is named by its type key (the browser test covers that); without
+  // Citry's record for the instance, the Vue name stands in.
+  assert.throws(() => compilerRuntime.resolveDirective("tooltipp"), {
+    message:
+      "Component OrderPanel uses the directive 'v-tooltipp', but no directive named 'tooltipp' " +
+      "is registered, so Vue would skip it. Register it in the component's `directives` option in its " +
+      "$component() options, or for every component with Citry.vue.use(plugin), where the plugin's " +
+      'install(app) calls app.directive("tooltipp", ...).',
+  });
+  instance = null;
+  assert.throws(() => compilerRuntime.resolveDirective("focus"), /Component \(unknown\) uses the directive 'v-focus'/);
 });
