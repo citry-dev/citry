@@ -61,7 +61,10 @@ presses `/`, and stops listening when it goes away:
 $component({
   onServerRender({ component }) {
     const onKey = (event) => {
-      if (event.key === "/") component.$refs.input.focus();
+      if (event.key !== "/") return;
+      // Keep the "/" out of the search box.
+      event.preventDefault();
+      component.$refs.input.focus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -158,7 +161,8 @@ The property applies only to that render's elements, so two banners with
 different colors show different colors. The component needs its own `css`
 for this to work; without it, Citry does not emit the values.
 
-Each value must be a string, a finite number, or `None`. A key must be a
+Each value must be a string, a finite number (not a boolean), or
+`None`. A key must be a
 string that is valid as the name of a custom property, without the leading
 `--`. Citry quotes a string that contains spaces, unless it starts with a
 CSS function such as `calc(...)` or `rgba(...)`. It raises `ValueError` for
@@ -177,12 +181,13 @@ that `js_data()` or `css_data()` returns. A missing or unexpected name then
 raises `TypeError` when the component renders. Return either an instance of
 the class or a plain dictionary:
 
-```python
-class JsData:
-    points: list[int]
+```citry
+class Sparkline(Component):
+    class JsData:
+        points: list[int]
 
-def js_data(self, kwargs: Kwargs, slots) -> JsData:
-    return self.JsData(points=kwargs.points)
+    def js_data(self, kwargs: Kwargs, slots) -> JsData:
+        return self.JsData(points=kwargs.points)
 ```
 
 A plain annotated class checks names, not the type of each value. See
