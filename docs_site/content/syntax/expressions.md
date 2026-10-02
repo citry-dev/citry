@@ -21,7 +21,7 @@ value when it renders the component on the server:
 This page covers which names a template can use, what Python you can write,
 how values turn into HTML, and how to insert HTML you trust.
 
-## Where expressions go
+## Where `{{ }}` works { #where-expressions-go }
 
 `{{ ... }}` works only in the content between tags. To set an attribute from
 Python, put `c-` in front of the attribute name and write the expression
@@ -88,7 +88,7 @@ return {
 
 A name the template cannot find raises `KeyError`.
 
-## Write expressions
+## Python in `{{ }}` { #write-expressions }
 
 Any Python expression that produces a value works:
 
@@ -230,7 +230,7 @@ Otherwise the render fails with "A Markup value (trusted HTML from Python)
 is not a complete HTML fragment". On pages without browser behavior, Citry
 inserts the value unchanged.
 
-## Add a comment
+## Python `#` comments { #add-a-comment }
 
 Inside `{{ ... }}` or a `c-*` attribute, `#` starts a Python comment:
 
