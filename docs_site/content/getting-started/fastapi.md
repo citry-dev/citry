@@ -50,8 +50,9 @@ Every other file in the app imports this same
 Citry's browser routes all use the same settings.
 
 The secret lets Citry detect when someone changes data that passes through
-the browser. You need it once you add [`State`][citry.Component.State] in a
-later step.
+the browser. Citry uses it once you add [`State`][citry.Component.State] in a
+later step, but `citry_setup.py` stops with an error when the secret is
+missing, so set it now.
 
 Create a random development secret in your current terminal:
 
@@ -80,7 +81,7 @@ Save this as `components.py`:
 <c-include-file path="docs_site/snippets/getting_started/components_step8.py" language="citry" />
 
 The `New in this step` comments mark what changed from the browser-only
-version. Each component now has one new line:
+version. Each existing component gets one new line:
 
 ```citry
 class ChoiceButton(Component):
