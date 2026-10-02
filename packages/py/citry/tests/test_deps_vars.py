@@ -75,7 +75,13 @@ class TestJsVars:
             def js_data(self, kwargs, slots):
                 return {key: "value"}
 
-        with pytest.raises(TypeError, match=r"prepared Vue data object keys must be strings"):
+        with pytest.raises(
+            TypeError,
+            match=(
+                r"js_data\(\) of component 'Widget_\w+' returned a value the browser "
+                r"cannot receive: .*must use only string dict keys"
+            ),
+        ):
             str(_page(c)())
 
     def test_records_carry_the_hashes(self):
@@ -193,7 +199,7 @@ class TestJsVars:
 
         error_type = TypeError if asset_kind == "js" else ValueError
         error_match = (
-            "prepared Vue data must be strict JSON, got object"
+            "must contain only dicts, lists, strings, numbers, booleans, and None, got object"
             if asset_kind == "js"
             else r"css_data\(\) entry 'bad'.*object is not supported"
         )

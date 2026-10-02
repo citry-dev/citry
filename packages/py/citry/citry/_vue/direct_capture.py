@@ -641,9 +641,17 @@ def assemble_typed_render(
             raw_frame_data = server_data[frame.render_id]
         if raw_frame_data is None:
             raise UnsupportedPreparedView("component occurrence has no captured js_data")
-        frame_data = _json_plain(raw_frame_data)
+        try:
+            frame_data = _json_plain(raw_frame_data)
+        except (TypeError, ValueError) as error:
+            # js_data() is the author's code, and the bare conversion error
+            # names neither the component nor what to return instead.
+            msg = f"js_data() of component {frame.class_id!r} returned a value the browser cannot receive: {error}."
+            raise type(error)(msg) from error
         if type(frame_data) is not dict:
-            raise TypeError("component occurrence js_data must be a JSON object")
+            raise TypeError(
+                f"js_data() of component {frame.class_id!r} must return a dict, got {type(frame_data).__name__}"
+            )
         type_key = frame.class_id
         if not type_key:
             raise UnsupportedPreparedView("component occurrence has no stable class id")

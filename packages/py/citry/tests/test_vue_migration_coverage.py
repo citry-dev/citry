@@ -603,12 +603,16 @@ def test_direct_capture_json_and_document_helpers_validate_boundaries() -> None:
     assert _json_plain(Const({"x": (1, True)})) == {"x": [1, True]}
     assert _json_plain(CapturedTranslationText("translated")) == "translated"
     assert _json_plain(1.5) == 1.5
-    for value, message in ((float("nan"), "finite"), ({1: "x"}, "keys"), (object(), "strict JSON")):
+    for value, message in (
+        (float("nan"), "finite numbers, got nan"),
+        ({1: "x"}, "string dict keys, got int key 1"),
+        (object(), "None, got object"),
+    ):
         with pytest.raises((TypeError, ValueError), match=message):
             _json_plain(value)
     cyclic: list[object] = []
     cyclic.append(cyclic)
-    with pytest.raises(ValueError, match="cycle"):
+    with pytest.raises(ValueError, match="must not contain itself"):
         _json_plain(cyclic)
 
     source = [

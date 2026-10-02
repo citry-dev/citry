@@ -3343,7 +3343,7 @@ def test_assembly_rejects_cycles_in_prepared_values() -> None:
         template = "<div>x</div>"
 
     rendered = Root().render()
-    with pytest.raises(ValueError, match="must not contain a cycle"):
+    with pytest.raises(ValueError, match="must not contain itself"):
         assemble_typed_render(
             rendered,
             revision=0,

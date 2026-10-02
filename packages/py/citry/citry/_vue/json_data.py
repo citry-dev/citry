@@ -22,14 +22,16 @@ def _json_plain(value: object, _ancestors: set[int] | None = None) -> object:
         return value
     if type(value) is float:
         if not math.isfinite(value):
-            raise ValueError("prepared Vue data must contain only finite numbers")
+            raise ValueError(f"data sent to the browser must contain only finite numbers, got {value!r}")
         return value
     if isinstance(value, Mapping):
         if any(not isinstance(key, str) for key in value):
-            raise TypeError("prepared Vue data object keys must be strings")
+            raise TypeError(
+                "data sent to the browser must use only string dict keys, got " + _first_non_string_key(value)
+            )
         ancestors = set() if _ancestors is None else _ancestors
         if id(value) in ancestors:
-            raise ValueError("prepared Vue data must not contain a cycle")
+            raise ValueError("data sent to the browser must not contain itself")
         ancestors.add(id(value))
         try:
             return {str(key): _json_plain(item, ancestors) for key, item in value.items()}
@@ -38,13 +40,22 @@ def _json_plain(value: object, _ancestors: set[int] | None = None) -> object:
     if isinstance(value, (list, tuple)):
         ancestors = set() if _ancestors is None else _ancestors
         if id(value) in ancestors:
-            raise ValueError("prepared Vue data must not contain a cycle")
+            raise ValueError("data sent to the browser must not contain itself")
         ancestors.add(id(value))
         try:
             return [_json_plain(item, ancestors) for item in value]
         finally:
             ancestors.remove(id(value))
-    raise TypeError(f"prepared Vue data must be strict JSON, got {type(value).__name__}")
+    raise TypeError(
+        "data sent to the browser must contain only dicts, lists, strings, numbers, booleans, and None, "
+        f"got {type(value).__name__}"
+    )
+
+
+def _first_non_string_key(value: Mapping[object, object]) -> str:
+    """Describe the key that broke the string-key rule, so the error names it."""
+    key = next(key for key in value if not isinstance(key, str))
+    return f"{type(key).__name__} key {key!r}"
 
 
 # JavaScript numbers hold integers exactly only up to 2**53 - 1.
