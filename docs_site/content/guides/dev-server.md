@@ -24,6 +24,8 @@ has to be imported.
 
 The two work together: your framework restarts for Python edits, and Citry
 reloads template and asset files in place, which is faster than a restart.
+It also sees template and asset directories that `uvicorn --reload` does
+not watch by default.
 
 ## Enable in Django
 
@@ -47,29 +49,28 @@ class MyAppConfig(AppConfig):
 ```
 
 When a component file changes, Citry reloads it and Django keeps running.
-To have Django restart the process instead, as it does for a Python edit,
-pass `mode="restart"`:
-
-```python
-enable_hot_reload(engine, mode="restart")
-```
-
 A changed file that belongs to no Citry component goes to Django's normal
 handling.
+
+`enable_hot_reload` also accepts `mode="restart"`, which asks Django to
+restart the process instead. Django reloads files in its template
+directories without a restart, though, so for those component files
+`mode="restart"` behaves like the default.
 
 !!! warning "Keep component files where Django's reloader looks"
 
     Django's reloader only reports changes to Python files and to files in
-    your Django template directories (the `DIRS` in `TEMPLATES` and, with
-    the app directories loader, each app's `templates/` folder). An edit
+    your Django template directories (the `DIRS` of a `DjangoTemplates`
+    backend in `TEMPLATES` and, with the app directories loader, each
+    app's `templates/` folder). An edit
     to a component file outside those directories does not show up. Move
     the files into a template directory, or use
     [`citry.reload.watch`](#enable-in-any-other-app) instead.
 
 ## Enable in FastAPI
 
-Add `reload_lifespan` to your app's lifespan. Initialize Citry first, then
-start the watcher inside it:
+Add `reload_lifespan` to your app's lifespan; Starlette works the same
+way. Initialize Citry first, then start the watcher inside it:
 
 ```python
 from contextlib import asynccontextmanager
@@ -221,7 +222,7 @@ Two related calls help when one path is not enough:
 - `get_components_for_file(path)` returns the components that loaded a
   file without resetting them, so your handler can decide what to do.
 
-## One process, dev only
+## Use in development only
 
 A reload clears only the process it runs in. With several worker
 processes, each keeps its own copy, so an edit shows up one worker at a
