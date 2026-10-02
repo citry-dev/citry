@@ -14,7 +14,7 @@ component's template. They run in the browser.
 Citry adds Vue to the page as soon as one component on it uses Vue. You write
 Vue's own attributes, such as `@click` and `v-show`, on the HTML in the
 template, and define the component's browser data with `$component({...})` in
-its JavaScript.
+the component's `js`.
 
 ## Add a browser-side counter
 
@@ -310,10 +310,43 @@ each item's data as a Python input:
 </c-for>
 ```
 
-## Show tab content written in another component { #keep-vue-bound-group-content-inside-the-groups-tag }
+## Vue features that Citry does not support
 
-The page stops with an error when you pass content into a citry_ui group,
-such as `CTabs`, from a separate component, and that content uses Vue data,
+Each of these fails, except where noted below.
+
+### Event modifiers that Vue does not have
+
+Vue has no `.outside`, `.window`, `.document`, `.debounce`, or `.throttle`
+event modifier. It would read one as a key name and the listener would never
+run, so the template fails when it loads:
+
+```citry-html
+{# Fails: Vue has no .outside modifier #}
+<div @click.outside="open = false;">...</div>
+```
+
+For a click outside, add a `click` listener to `document` in `mounted()` and
+remove it in `unmounted()`. For a Python event handler, `@c-*` attributes
+accept `.debounce` and `.throttle`; see
+[Bind events in templates](/events/bindings/).
+
+### `v-once` and `v-memo`
+
+The template fails when it loads. Compute a fixed value once in `data()`. To
+keep an element's contents as the server first rendered them, use
+[`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
+
+### `<Teleport>`, `<Transition>`, `<Suspense>`, and `<KeepAlive>`
+
+When the page uses Vue, `serialize()` or `str()` on the render raises
+`ValueError` with an "unsupported Vue helper" message. On a page without
+Vue, the tag is written out as plain HTML and does nothing.
+
+## Pass Vue content into a group component such as `CTabs` { #keep-vue-bound-group-content-inside-the-groups-tag }
+
+Some Citry UI components, such as `CTabs`, collect the content you put inside
+them and render it in their own layout. The page stops with an error when
+you pass such content from a separate component, and that content uses Vue data,
 handlers, `v-model`, a `ref`, or an `@c-*` binding. For example, `TabLabels`
 writes a tab:
 
@@ -352,38 +385,6 @@ place, as if the page had written it inside the group's tag.
 Content that shows only Python values, such as `{{ title }}`, works from a
 separate component.
 
-## Vue features that Citry does not support
-
-Each of these fails with an error that says what to use instead.
-
-### Event modifiers that Vue does not have
-
-Vue has no `.outside`, `.window`, `.document`, `.debounce`, or `.throttle`
-event modifier. It would read one as a key name and the listener would never
-run, so the template fails when it loads:
-
-```citry-html
-{# Fails: Vue has no .outside modifier #}
-<div @click.outside="open = false;">...</div>
-```
-
-For a click outside, add a `click` listener to `document` in `mounted()` and
-remove it in `unmounted()`. For a Python event handler, `@c-*` attributes
-accept `.debounce` and `.throttle`; see
-[Bind events in templates](/events/bindings/).
-
-### `v-once` and `v-memo`
-
-The template fails when it loads. Compute a fixed value once in `data()`. To
-keep an element's contents as the server first rendered them, use
-[`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
-
-### `<Teleport>`, `<Transition>`, `<Suspense>`, and `<KeepAlive>`
-
-When the page uses Vue, `serialize()` or `str()` on the render raises
-`ValueError` with an "unsupported Vue helper" message. On a page without
-Vue, the tag is written out as plain HTML and does nothing.
-
 ## Less common rules for Vue on component tags
 
 ### Directives a component tag rejects
@@ -414,9 +415,10 @@ fails when the page renders. Its expression must be written in the template.
 it. A built-in tag that renders only its content, such as `<c-provide>`,
 accepts no Vue syntax.
 
-`<c-slot>` accepts no Vue syntax either. Its attributes other than `name`
-and `required` become data that Python passes to the slot content, so a
-`v-if` there would never reach the browser. Put `v-if` on a `<template>`
+`<c-slot>` accepts no Vue syntax either, and the template fails to compile.
+Its attributes other than `name` and `required` become data that Python
+passes to the slot content, so a `v-if` there could never reach the browser.
+Put `v-if` on a `<template>`
 around the slot, or `v-show` on an element around it:
 
 ```citry-html
