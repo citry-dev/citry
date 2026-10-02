@@ -18,7 +18,6 @@
 //! |---|---|---|
 //! | (inline string) | Plain text, static HTML | `"""text"""` |
 //! | `ExprNode` | `{{ expr }}` | `ExprNode(source, (start, end,), """expr""", ("var1",))` |
-//! | `TemplateNode` | Nested template on an HTML tag's dynamic attr | `TemplateNode(source, (start, end,), """expr""", ("var1",))` |
 //! | `ElementAttrsNode` | An HTML tag's structured attribute region | `ElementAttrsNode(source, (start, end,), (attrs,), (used_vars,))` |
 //! | `ElementKeyNode` | `#c-key="expr"` on a plain element | `ElementKeyNode(ExprHtmlAttr(source, (start, end,), """#c-key""", """expr""", ("var1",)))` |
 //! | `ComponentNode` | `<c-Card>`, `<c-component>`, any `<c-*>` | `ComponentNode(source, (start, end,), (attrs,), [body], (used_vars,), """name""", contains_fills)` - range/element metadata appends one tagged tuple argument |
@@ -485,21 +484,14 @@ fn compile_template_body_with_mode(
 /// **Start tag - dynamic attributes:**
 ///
 /// Dynamic attributes, e.g. `c-class="..."`, NEED to be evaluated at runtime.
+/// Class and style values also merge across attributes, so the runtime needs
+/// to see the whole attribute set at once rather than one value at a time.
 ///
-/// But everything that is NOT dynamic CAN be converted to literal string.
-///
-/// So we practically end up with a string that is similar to if we had used an F-string to define the template:
-///
-/// ```python
-/// f'<div style="color: red" c-class="{...}">'
-/// ```
-///
-/// Since we're converting the HTML tag to a literal string, the evaluated dynamic attributes
-/// will not be passed to another Python-side `Node` class. Instead, the evaluated attributes
-/// will be concatenated to the surrounding static text.
-///
-/// Thus, while in other cases we'd convert dynamic attributes to `ExprHtmlAttr()` or `TemplateHtmlAttr()`,
-/// here we generate calls for `ExprNode()` or `TemplateNode()`.
+/// So when any ordinary attribute is dynamic, the compiler emits one
+/// `ElementAttrsNode` that carries every ordinary attribute of the tag, the
+/// static ones included, in source order. Each attribute is wrapped in its
+/// `StaticHtmlAttr()`, `ExprHtmlAttr()`, or `TemplateHtmlAttr()` call. The
+/// tag name and the closing `>` stay literal strings around it.
 ///
 /// In the end, the output is similar to this:
 ///
@@ -507,21 +499,19 @@ fn compile_template_body_with_mode(
 /// body_parts = [
 ///     # Beginning
 ///     """<div""",
-///     # Static attribute
-///     """ style=\"color: red\" """,
-///     # Dynamic attribute key start
-///     """ class=\"""",
-///     # Dynamic expression
-///     ExprNode(source, (14, 19), """base + 'foo'""", ("base",)),
-///     # Dynamic attribute key end
-///     """\"""",
+///     # The whole attribute region, resolved at render time
+///     ElementAttrsNode(source, (0, 47), (
+///         StaticHtmlAttr(source, (5, 23), """style""", """color: red""", ()),
+///         ExprHtmlAttr(source, (24, 46), """c-class""", """base + 'foo'""", ("base",)),
+///     ), ("base",)),
 ///     # Ending part
 ///     """>""",
 /// ]
 /// ```
 ///
-/// The Python implementation then only needs to evaluate the dynamic parts,
-/// and concatenate the result with the static parts to obtain the final HTML.
+/// The Python implementation then resolves the attribute region to one
+/// attribute string and concatenates it with the static parts to obtain the
+/// final HTML.
 ///
 /// **End tag:**
 ///
@@ -2012,7 +2002,6 @@ fn format_expr_node(
         .collect();
 
     // E.g. `ExprNode(source, (14, 19), """expr""", ("var1", "var2"))`
-    //      `TemplateNode(source, (14, 19), """template""", ("var1", "var2"))`
     LangSpecArgument::Struct(LangSpecStruct {
         name: node_class_name.to_string(),
         arguments: vec![

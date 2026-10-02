@@ -127,7 +127,6 @@ pub const COMPONENT_METADATA_ENTRY_MORPH: &str = "morph";
 // They represent the different types of nodes in the compiled template tree.
 pub const EXPR_NODE: &str = "ExprNode";
 pub const FOREIGN_NODE: &str = "ForeignNode";
-pub const TEMPLATE_NODE: &str = "TemplateNode";
 pub const COMPONENT_NODE: &str = "ComponentNode";
 pub const IF_NODE: &str = "IfNode";
 pub const FOR_NODE: &str = "ForNode";
