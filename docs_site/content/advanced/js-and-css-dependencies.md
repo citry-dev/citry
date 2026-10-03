@@ -265,9 +265,9 @@ component's template, so a few Vue options do not apply:
 
 - `mixins` and `extends` fail with an error that names the component.
   Write the data, methods, and computed values in the options directly.
-- `render` and `template` are ignored, without an error. Citry renders
-  the component's `template` on the server and generates the browser's
-  render function from it.
+- A `render` function or `template` option inside `$component()` is
+  ignored, without an error. Citry builds the browser's render function
+  from the component's Python `template`.
 - A name that Citry already puts on the instance, such as `$state`, or a
   name that is also a `js_data()` key, fails with an error that names it.
   See [Reserved names](/advanced/vue-runtime/#names-citry-reserves-on-the-component-instance).
@@ -284,7 +284,7 @@ Each Python value goes to one place:
 | `template_data()` | The template, on the server | `{{ name }}` or `c-*` attributes |
 | `js_data()` | The Vue instance, as JSON | `name` in Vue expressions, `this.name` in JS |
 | `css_data()` | CSS custom properties | `var(--name)` in the component's CSS |
-| [`State`](/events/state/) | The browser, through Events | `$state.name`, `this.$state.name` |
+| [`State`](/events/state/) | The browser, through server events | `$state.name`, `this.$state.name` |
 
 Vue props are separate from all of these: the parent component passes them
 in the browser with `:name`.
@@ -533,16 +533,19 @@ sets the property only on the elements that carry it. Simplified,
 ```
 
 So the banner's background is `#fde68a`. Citry generates the attribute
-name from the values, so do not write selectors against it. A `Banner(color="#bfdbfe")` on
-the same page gets a different attribute and its own color. Renders with
-the same values share one attribute and one stylesheet.
+name from the values, so do not write selectors against it. A
+`Banner(color="#bfdbfe")` on the same page gets a different attribute and
+its own color. Renders with the same values share one attribute and one
+stylesheet.
 
 The component needs its own `css` for this to work. Without it, Citry
 drops the `css_data()` values without an error.
 
-Each value must be a string, a finite number (not a boolean), or `None`. A
-key must be a string that is valid as the name of a custom property,
-without the leading `--`. Citry quotes a string that contains spaces,
+Each value must be a string, a finite number (not a boolean), or `None`,
+which leaves the property empty. Any other value, such as a `bool` or a
+`list`, raises `ValueError` when the component renders. A key must
+be a string that is valid as the name of a custom property, without the
+leading `--`. Citry quotes a string that contains spaces,
 unless it starts with a CSS function such as `calc(...)` or `rgba(...)`.
 It raises `ValueError` for a value that could break out of the generated
 CSS, such as one with a top-level `;` or a `</style` end tag.

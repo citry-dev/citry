@@ -285,9 +285,10 @@ templates, Python, Vue `$i18n.tr()`, component JavaScript, and
 ### Missing `@param`
 
 Declare a type for every variable. A variable without an `@param` is
-treated as plain text: a `str`, `int`, or `Decimal` value in Python, or a
-string or number in the browser. This holds on the server and in browser
-calls such as `$i18n.tr()`. `citry check` reports it as a warning
+inserted as plain text, without number or date formatting. Its value must
+be a `str`, `int`, or `Decimal` in Python, or a string or number in the
+browser, and any other value, such as a `datetime`, fails the call. This
+holds on the server and in browser calls such as `$i18n.tr()`. `citry check` reports it as a warning
 (`citry.i18n.missing-param-type`), which does not fail the check.
 [Translation workflow and tooling](/i18n/workflow/#make-a-missing-type-an-error-or-ignore-it)
 shows how to change its severity.

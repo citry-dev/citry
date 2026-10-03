@@ -30,7 +30,7 @@ Return anything else to use it as the component's whole output.
 This table shows a message instead of an empty table:
 
 ```citry
-from citry import Component
+from citry import Component, Markup
 
 
 class Table(Component):
@@ -42,7 +42,7 @@ class Table(Component):
 
     def on_render(self):
         if not self.kwargs.rows:
-            return "<p>No data yet</p>"
+            return Markup("<p>No data yet</p>")
         return None
 
     template = """
@@ -59,7 +59,10 @@ table.
 
 `on_render()` can return:
 
-- a string of HTML;
+- a string of HTML wrapped in [`Markup`][citry.Markup], as above. A
+  plain `str` works only on a static page. On an interactive page (one
+  where a component uses Vue or server events), a plain string that is not
+  empty raises `TypeError` when you turn the page into HTML;
 - a component, such as `Message(text="Hello")`;
 - a [`CitryRender`][citry.CitryRender] that was already rendered;
 - a [`Slot`][citry.Slot], which Citry renders without data;
@@ -73,9 +76,24 @@ use [`template_data()`][citry.Component.template_data] instead.
 
 !!! warning "Citry does not escape a returned string"
 
-    Citry inserts a string from `on_render()` as HTML. Never build it from
-    user input. Put user values in a template or a component input, where
-    Citry escapes them.
+    Citry inserts the `Markup` you return from `on_render()` as HTML,
+    without escaping. Never build it from user input. Put user values in a
+    template or a component input, where Citry escapes them.
+
+!!! warning "Prefer `c-if` and `c-for` in the template"
+
+    The `Table` above only shows how the hook works. When the output
+    depends only on the data, branch in the template with `c-if` and
+    `c-else`, or loop with `c-for`, as in
+    `<p c-if="not rows">No data yet</p>`. The template is easier to read,
+    and `citry check` reports mistakes in it, such as an unknown name.
+
+    A component that defines `on_render()` also cannot be a
+    [simple component](/performance/simple-components/), which skips the
+    per-component setup: with `simple = True` the class raises `TypeError`
+    when Python defines it, and with `simple = "vue"` the first render
+    raises it. The form with `yield` also adds a small cost to every
+    render.
 
 ## Show a failure message
 
@@ -93,7 +111,7 @@ def on_render(self):
     result, error = yield
 
     if error is not None:
-        return "<p>Could not load this section.</p>"
+        return Markup("<p>Could not load this section.</p>")
     return None
 ```
 
@@ -172,8 +190,70 @@ it.
 
 Instead of a bare `yield`, you can yield new content. Citry renders it and
 sends back a new `(result, error)` pair, so one hook can try several
-outputs in turn. The [`on_render()` reference][citry.Component.on_render]
-describes every step.
+outputs in turn. Here `Report` draws a chart, falls back to a summary when
+the chart fails, and shows a message when the summary fails too:
+
+```citry
+from citry import Component, Markup
+
+
+class Chart(Component):
+    class Kwargs:
+        points: list[int]
+
+    def template_data(self, kwargs: Kwargs, slots):
+        if not kwargs.points:
+            raise ValueError("no points to draw")
+        return {"top": max(kwargs.points)}
+
+    template = """
+      <svg class="chart">{{ top }}</svg>
+    """
+
+
+class ChartSummary(Component):
+    class Kwargs:
+        points: list[int]
+
+    def template_data(self, kwargs: Kwargs, slots):
+        return {"count": len(kwargs.points)}
+
+    template = """
+      <p>{{ count }} points</p>
+    """
+
+
+class Report(Component):
+    class Kwargs:
+        points: list[int]
+
+    def template_data(self, kwargs: Kwargs, slots):
+        return {"points": kwargs.points}
+
+    def on_render(self):
+        # First render the template, which draws the chart.
+        result, error = yield
+        if error is None:
+            return None
+
+        # The chart failed, so try the summary in its place.
+        summary = ChartSummary(points=self.kwargs.points)
+        result, error = yield summary
+        if error is None:
+            return None
+
+        return Markup("<p>The report is not available.</p>")
+
+    template = """
+      <c-Chart c-points="points" />
+    """
+```
+
+`Report(points=[3, 7])` renders the chart. `Report(points=[])` makes
+`Chart` fail, so it renders `<p>0 points</p>` instead. If `ChartSummary`
+failed too, the hook would return the message. Returning `None`
+after a `yield` keeps whatever that `yield` rendered. The
+[`on_render()` reference][citry.Component.on_render] describes every step.
 
 ### Duplicate tags
 

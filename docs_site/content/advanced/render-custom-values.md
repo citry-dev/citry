@@ -1,6 +1,6 @@
 ---
 title: Render custom values
-description: Let Python objects resolve themselves into Citry components during rendering.
+description: Let your own Python objects turn themselves into Citry components when a template renders them.
 ---
 
 # Render custom values
