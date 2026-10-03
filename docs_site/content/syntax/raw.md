@@ -51,6 +51,6 @@ without browser behavior, Citry copies the content unchanged.
 - When a `<c-raw>` block sits at the top level of a component's template,
   the HTML tags at its top level count as the component's top-level
   elements, so Citry marks them as belonging to that component.
-- A Vue directive on a component tag fails when that component's template
-  has its top-level HTML in `<c-raw>`. See
-  [Several root elements](/syntax/vue/#several-root-elements).
+- `v-show` or a custom directive on a component tag fails when that
+  component's template has its top-level HTML in `<c-raw>`. See
+  [`v-show` needs one root](/syntax/vue/#several-root-elements).

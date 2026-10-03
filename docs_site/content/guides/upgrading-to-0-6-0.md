@@ -404,8 +404,9 @@ fires, call `addEventListener` on an element you hold in a `ref`.
 
 ### Key filters need a keyboard event
 
-**What you see:** a `@c-*` binding such as `@c-click.enter` fails when the
-template loads, saying that only keyboard events have a key.
+**What you see:** a `@c-*` binding such as `@c-click.enter`, or a `:c-*`
+binding such as `:c-query.enter`, fails when the template loads, saying
+that only keyboard events have a key.
 
 `.enter` and `.escape` on a `@c-*` binding now need `keydown`, `keyup`, or
 `keypress`, as they do on a Vue listener. Citry 0.5.1 accepted them on any
@@ -414,6 +415,48 @@ when its object had a `key`. Listen to the keyboard event instead:
 
 ```citry-html
 <input @c-keydown.enter="search" />
+```
+
+A `:c-*` binding checks the key of its update event: by default `input`
+or `change`, or the event named in `.on:`. Citry 0.5.1 accepted `.enter`
+on any of them, and on the default events the binding never sent. Name a
+keyboard update event:
+
+```citry-html
+<input :c-query.on:keydown.enter="search" />
+```
+
+### One `.on:` per binding
+
+**What you see:** a `:c-*` binding that names two update events, such as
+`:c-query.on:keyup.on:change`, fails when the template loads, and the
+error names both events.
+
+Citry 0.5.1 used the last one. Keep the event you want:
+
+```citry-html
+<input :c-query.on:change="search" />
+```
+
+### One key per binding
+
+**What you see:** a binding with two key filters, such as
+`@c-keydown.enter.escape`, or an element with two `@c-*` bindings for one
+event, such as `@c-keydown.enter` and `@c-keydown.escape`, fails when the
+template loads, and the error names both.
+
+Citry 0.5.1 used the last key filter of a binding and ran every binding
+for an event. To react to either key with one handler, call it from one
+Vue listener. To call a different handler for each key, write one Vue
+listener per key:
+
+```citry-html
+<input @keydown.enter.escape="$sendEvent('search')" />
+
+<input
+  @keydown.enter="$sendEvent('search')"
+  @keydown.escape="$sendEvent('clear')"
+/>
 ```
 
 ### Update stale listeners
@@ -504,17 +547,22 @@ sit next to `#c-key`. See
 
 ### Inline group content
 
-**What you see:** the render stops with an error that names the content,
-the component that wrote it, and the line.
+**What you see:** the render stops with an error that names the component
+that wrote the tab, the line, the Vue code it uses, such as
+`v-text="label"` on `<span>`, and `CTabs` as the component that moves the
+content.
 
-A group component is one whose children work together, such as Citry
-UI's `CTabs` and its tabs. It needs content that uses Vue
-data, handlers, `v-model`, a `ref`, or a `@c-*` binding to be written
-inside the group's tag. The error appears when a separate component writes
-that content and the page passes that component in. Move the content
-inside the group's tag, or set `transparent = True` on the component that
-writes it, so it renders its content in place. See
-[Fill group components](/syntax/vue/#keep-vue-bound-group-content-inside-the-groups-tag).
+Citry UI's `CTabs` collects the `<c-CTab>` and `<c-CTabPanel>` tags
+inside it and moves their content into the `CTabs` template. Other Citry
+UI components that collect item tags, such as `CStepper` and `CTimeline`,
+work the same way. Content that uses
+Vue data, handlers, `v-model`, a `ref`, or a `@c-*` binding must therefore
+be written in the component that holds `<c-CTabs>`. The error appears when
+a separate component placed inside `<c-CTabs>` writes that content. Move
+the tags into the component that holds `<c-CTabs>`, or set
+`transparent = True` on the component that writes them and define their
+Vue data in the component that holds `<c-CTabs>`. See
+[Vue data inside `CTabs`](/syntax/vue/#keep-vue-bound-group-content-inside-the-groups-tag).
 
 ## Check `#c-ignore` { #check-your-c-ignore-markers }
 
@@ -797,7 +845,10 @@ argument.
     `wait: false` and unknown call options, and wait for `citry:ready`
     before calling `Citry.events.send`.
     Move `.enter` and `.escape` from a `@c-*` binding on any other event to
-    a `keydown` or `keyup` binding.
+    a `keydown` or `keyup` binding, and give a `:c-*` binding that uses
+    them `.on:keydown` in place of `.lazy` or its other `.on:` event.
+    Keep one `.on:` event and one key filter on each binding, and one
+    `@c-*` binding per event on each element.
 13. Set `security_csp` and `security_javascript` on the `Citry` instance
     for pages with Events.
 14. Update action lists passed to `Citry.events.applyActions`, including

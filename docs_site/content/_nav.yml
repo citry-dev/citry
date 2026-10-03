@@ -41,7 +41,7 @@ areas:
           - { title: Expressions, path: /syntax/expressions/ }
           - { title: Attributes, path: /syntax/dynamic-attributes/ }
           - { title: Conditions and loops, path: /syntax/control-flow/ }
-          - { title: Vue, path: /syntax/vue/, needs_review: true }
+          - { title: Vue, path: /syntax/vue/ }
           - { title: Markup in attributes, path: /syntax/nested-templates/ }
           - { title: Comments, path: /syntax/comments/ }
           - { title: Literal text, path: /syntax/raw/ }

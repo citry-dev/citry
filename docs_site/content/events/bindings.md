@@ -119,8 +119,9 @@ handler, which receives the updated `count` in `state`.
 A binding without a handler is **one-way**: Citry shows the field's value in
 the control but never reads the control back. A binding with a handler is
 **two-way**: each edit updates the field and calls the handler with the new
-State. Only two-way bindings take the timing modifiers. `.lazy` and
-`.on:<event>` cannot be combined.
+State. Only two-way bindings take the timing modifiers. A binding takes at
+most one `.on:<event>`, and cannot combine `.lazy` with `.on:<event>`;
+either mistake fails when the template loads.
 
 Put the binding on a control inside the component that declares the State. A
 `:c-*` binding on a child component tag is an error.
@@ -199,8 +200,10 @@ yourself:
 | Checkbox, radio, `<select>` | `change` | Not allowed: these already send on `change` |
 | A custom element | You must set `.on:<event>` | Not allowed |
 
-`.enter` and `.escape` need a keyboard event, so pair them with
-`.on:keyup` or `.on:keydown`.
+`.enter` and `.escape` need the binding to send on a keyboard event, so
+pair them with `.on:keydown` or `.on:keyup`. With the default event, or
+an `.on:` event other than `keydown`, `keyup`, or `keypress`, the
+template fails to load.
 
 ### What the control shows
 
@@ -261,6 +264,37 @@ because that event has no key to check:
 
 {# Works: send when Enter is pressed #}
 <input @c-keydown.enter="search" />
+```
+
+A `:c-*` binding checks the key of its update event, so the same rule
+applies to that event:
+
+```citry-html
+{# Fails: the default update event, input, has no key #}
+<input :c-query.enter="search" />
+
+{# Works: update query and send when Enter is pressed #}
+<input :c-query.on:keydown.enter="search" />
+```
+
+A binding takes one key filter, and an element takes one `@c-*` binding
+per event. Unlike a Vue listener, `@c-keydown.enter.escape` does not mean
+"either key", so it fails when the template loads, as does a second
+`@c-keydown` on the same element. Call the handler from a Vue listener
+instead:
+
+```citry-html
+{# Fails: two key filters on one binding #}
+<input @c-keydown.enter.escape="search" />
+
+{# Works: Vue runs the listener for Enter or Escape #}
+<input @keydown.enter.escape="$sendEvent('search')" />
+
+{# Works: a different handler for each key #}
+<input
+  @keydown.enter="$sendEvent('search')"
+  @keydown.escape="$sendEvent('clear')"
+/>
 ```
 
 ### `:type` stops a binding
