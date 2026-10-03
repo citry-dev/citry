@@ -59,10 +59,8 @@ table.
 
 `on_render()` can return:
 
-- a string of HTML wrapped in [`Markup`][citry.Markup], as above. A
-  plain `str` works only on a static page. On an interactive page (one
-  where a component uses Vue or server events), a plain string that is not
-  empty raises `TypeError` when you turn the page into HTML;
+- a plain `str`, which the page shows as text;
+- a string of HTML wrapped in [`Markup`][citry.Markup], as above;
 - a component, such as `Message(text="Hello")`;
 - a [`CitryRender`][citry.CitryRender] that was already rendered;
 - a [`Slot`][citry.Slot], which Citry renders without data;
@@ -70,15 +68,37 @@ table.
 
 Because `None` means "render the template", return `""` to show nothing.
 
+A plain `str` is text, the same as a value in `{{ }}`. Citry escapes it,
+so a string of HTML shows its tags as characters on the page:
+
+```python
+def on_render(self):
+    if not self.kwargs.rows:
+        # Wrong: the page shows "<p>No data yet</p>" as text.
+        return "<p>No data yet</p>"
+    return None
+```
+
+Wrap the HTML in `Markup` to insert it as HTML, or return a component:
+
+```python
+def on_render(self):
+    if not self.kwargs.rows:
+        # Right: Markup marks the string as HTML.
+        return Markup("<p>No data yet</p>")
+    return None
+```
+
+!!! warning "Citry does not escape `Markup`"
+
+    Citry inserts the `Markup` you return from `on_render()` as HTML,
+    without escaping. Never build it from user input. Return user input as
+    a plain `str`, or put it in a template or a component input, where
+    Citry escapes it.
+
 The hook can read `self.kwargs`, `self.slots`, `self.parent`, and
 [`self.inject()`][citry.Component.inject]. To pass values to the template,
 use [`template_data()`][citry.Component.template_data] instead.
-
-!!! warning "Citry does not escape a returned string"
-
-    Citry inserts the `Markup` you return from `on_render()` as HTML,
-    without escaping. Never build it from user input. Put user values in a
-    template or a component input, where Citry escapes them.
 
 !!! warning "Prefer `c-if` and `c-for` in the template"
 
@@ -180,11 +200,11 @@ result outlives the condition that produced it.
 
 ### Avoid `str(result)`
 
-Do not call `str(result)` just to look at the HTML. The render is still
-linked to the components and slot content around it, and turning it into a
-string inside the hook may fail. If you do return serialized HTML, it
-replaces the result, and Citry adds this component's marker attribute to
-it.
+Do not turn `result` into a string to look at the HTML or to add to it.
+For a component that runs in the browser, the string holds the whole
+browser app, Citry's runtime script included, not just the component's
+tags. A plain string you return also shows as text, so returned HTML must
+be wrapped in `Markup`.
 
 A natural first attempt logs the HTML and adds a line under it:
 
@@ -194,13 +214,13 @@ def on_render(self):
     if error is not None:
         return None
 
-    # Wrong: for a component that uses Vue, this string is a whole
-    # app with Citry's browser runtime script, not just its tags.
+    # Wrong: for a component that runs in the browser, the log line
+    # holds the whole browser app, runtime script included.
     html = str(result)
     logger.info("Rendered %s", html)
 
-    # Wrong: the string replaces the result, and Citry marks each
-    # top-level tag in it, the new <p> too, as this component's.
+    # Wrong: the new <p> lands after Citry's scripts, outside the
+    # part of the page that Vue updates.
     return Markup(html + "<p>Updated today</p>")
 ```
 

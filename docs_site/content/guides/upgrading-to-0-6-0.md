@@ -22,7 +22,8 @@ behavior, usually needs only these steps: upgrade the packages,
 [check `#c-ignore`](#check-your-c-ignore-markers),
 [rename a component named `Mark`](#rename-reserved-names),
 [name the parent class](#name-the-parent-class) in subclasses that add
-inputs, and work through
+inputs, [wrap HTML that `on_render()` returns](#wrap-html-returned-from-on-render),
+and work through
 [Settings and extensions](#update-settings-and-extensions).
 
 ## Upgrade the packages { #upgrade-the-packages-together }
@@ -642,6 +643,40 @@ classes and write `class Kwargs(FirstFields, SecondFields):`.
 still add to the parent's settings, so they need no change. See
 [Subclass components](/advanced/subclassing/).
 
+## Wrap `on_render` HTML { #wrap-html-returned-from-on-render }
+
+**What you see:** HTML that a component's `on_render()` returns shows on
+the page as text, with its tags visible, such as `<p>No data</p>`.
+
+In 0.6.0, a plain `str` that `on_render()` returns or yields is text, the
+same as a value in `{{ }}`, and Citry escapes it. In 0.5.x, Citry
+inserted it as HTML. Wrap HTML in `Markup`, or return a component:
+
+```python
+from citry import Markup
+
+
+# 0.5.x: the string was inserted as HTML.
+def on_render(self):
+    return "<p>No data</p>"
+
+
+# 0.6.0: Markup marks the string as HTML.
+def on_render(self):
+    return Markup("<p>No data</p>")
+```
+
+If a hook returns `str(result)` after a `yield`, that is a plain `str`
+too, so wrap it in `Markup`. For a component that runs in the browser,
+put added HTML in the template instead; see
+[Avoid `str(result)`](/advanced/hooks/#avoid-strresult).
+
+Before you wrap a string, check where its text comes from. If it contains
+user input, such as a name or a comment, keep the string plain: escaping
+stops that input from adding a script to the page. If it needs markup
+around the user input, write the markup in the template and pass the value
+in as a component input.
+
 ## Fix rejected HTML
 
 These rules apply only to components that run in the browser. Static pages
@@ -934,25 +969,27 @@ argument.
     base, such as `class Kwargs(Parent.Kwargs):`. On a component whose
     parents declare one of these classes differently, declare it on the
     component itself.
-19. Close every tag in `<c-raw>` and `Markup` inside interactive
+19. Wrap HTML that `on_render()` returns or yields in `Markup`, and keep
+    a string that contains user input plain, so Citry escapes it.
+20. Close every tag in `<c-raw>` and `Markup` inside interactive
     components, and put an interactive page's content inside one
     `<body>`.
-20. Remove uses of `Citry.alpine`, `Citry.manager`, `Citry.i18n`,
+21. Remove uses of `Citry.alpine`, `Citry.manager`, `Citry.i18n`,
     `window.Alpine`, and `alpine:init`.
-21. On a deployment with several workers, configure a shared cache
+22. On a deployment with several workers, configure a shared cache
     backend, and let a proxy or CDN pass `Access-Control-Allow-Origin`
     through for Citry's files.
-22. Rename the Alpine lint settings and diagnostic codes, and fix any
+23. Rename the Alpine lint settings and diagnostic codes, and fix any
     output that `security_csp="strict"` now rejects.
-23. Check that dependency scripts on interactive pages are classic
+24. Check that dependency scripts on interactive pages are classic
     JavaScript, rename `ctx.before_manifest` to `ctx.early_scripts`, and
     build `OnSerializeContext` and `OnDependenciesContext` with keyword
     arguments.
-24. Pass `URLRoute(methods=...)` as a tuple of uppercase names, read
+25. Pass `URLRoute(methods=...)` as a tuple of uppercase names, read
     `parameters` from `citry.analysis` results starting at index 0, and
     remove `TemplateNode`, `citry.ownership` imports, and `ownership=`
     arguments.
-25. Remove `citry-htmx.js`, `hx-ext="citry-fragments"`, and `data-cid-*`
+26. Remove `citry-htmx.js`, `hx-ext="citry-fragments"`, and `data-cid-*`
     or `data-citry-key` selectors.
-26. Open each interactive page, reloading pages opened before the
+27. Open each interactive page, reloading pages opened before the
     upgrade, and check the browser console for `[Citry]` errors.

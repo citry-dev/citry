@@ -2605,7 +2605,7 @@ class Guarded(Component):
     def on_render(self):
         result, error = yield          # result: CitryRender | None
         if error is not None:
-            return "<p>fallback</p>"   # swallow the error
+            return Markup("<p>fallback</p>")  # swallow the error
         return None                    # keep the rendered output
 ```
 

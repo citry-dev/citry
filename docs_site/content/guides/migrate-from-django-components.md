@@ -348,10 +348,12 @@ Details:
   template output. As a generator, code before `yield` runs before the
   template renders. Write `result, error = yield`: `result` is the
   finished render (a `CitryRender`, not a string), or `None` when
-  rendering failed, and then `error` holds the exception. To append to the
-  output, `return str(result) + "..."`. Each `yield content` replaces the
-  output and receives a new `(result, error)` pair. Code that added
+  rendering failed, and then `error` holds the exception. To add content
+  after the output, put it in the template. Each `yield content` replaces
+  the output and receives a new `(result, error)` pair. Code that added
   template variables in `on_render_before` moves into `template_data`.
+  A plain `str` that `on_render` returns shows as text; wrap HTML in
+  `Markup`.
 - **DJC-071:** Move each `Defaults` attribute onto `Kwargs` with an
   annotation: `variable = "test"` becomes `variable: str = "test"`. An
   unannotated `name = value` declares nothing.
