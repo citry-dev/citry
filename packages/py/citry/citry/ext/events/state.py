@@ -196,8 +196,8 @@ def check_replaced_state(component_class: type, nearest: NestedClassDeclaration,
     if getattr(parent_schema, "_storage", "signed") == "server" and not hasattr(declared, "_storage"):
         msg = (
             f"Component {owner}: State replaces {parent_name}, which keeps its values on the server"
-            f' (_storage = "server"). The new State does not set _storage, so it would store its'
-            f" values in the page, where anyone who opens it can read them. Write"
+            f' (_storage = "server"). The new State does not set _storage, so its values would be'
+            f" stored in the page, where anyone who opens the page can read them. Write"
             f" `class State({parent_name}):` to keep the parent's fields and settings, or set"
             f' _storage in the new State ("server", or "signed" to store the values in the page'
             f" on purpose)."
@@ -213,7 +213,7 @@ def check_replaced_state(component_class: type, nearest: NestedClassDeclaration,
     consequences = {
         "_public": "browser code can now read every field",
         "_model": "browser code can now change every field it can read",
-        "_max_age": "its State tokens never expire",
+        "_max_age": "its values never expire",
     }
     for setting, consequence in consequences.items():
         if getattr(parent_schema, setting, None) is not None and not hasattr(declared, setting):

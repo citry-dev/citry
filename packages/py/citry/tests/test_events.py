@@ -350,7 +350,7 @@ class TestStateCapture:
 
         with pytest.warns(
             NestedSchemaReplacedWarning,
-            match=r"It does not set _max_age, which Parent.State sets, so its State tokens never expire.",
+            match=r"It does not set _max_age, which Parent.State sets, so its values never expire.",
         ):
 
             class Child(Parent):

@@ -82,7 +82,7 @@ class NestedSchemaReplacedWarning(UserWarning):
                 signature: str
 
         # Keeps 'text' and adds 'signature'; no warning.
-        class SignedMessage(Message):
+        class SignedMessageFixed(Message):
             class Kwargs(Message.Kwargs):
                 signature: str
         ```

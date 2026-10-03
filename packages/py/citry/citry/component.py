@@ -773,9 +773,10 @@ class Component(metaclass=ComponentMeta):
                 body: str = ""
 
     A subclass inherits its parent's ``Kwargs`` unless it declares its own.
-    Its own plain ``class Kwargs:`` replaces the parent's fields, like any
-    nested Python class. To keep them and add more, name the parent's class
-    as the base::
+    Its own plain ``class Kwargs:`` replaces the parent's class, like any
+    nested Python class, so the parent's fields are dropped and Citry emits
+    [`NestedSchemaReplacedWarning`][citry.NestedSchemaReplacedWarning]. To
+    keep them and add more, name the parent's class as the base::
 
         class ImageCard(Card):
             class Kwargs(Card.Kwargs):
@@ -788,7 +789,9 @@ class Component(metaclass=ComponentMeta):
     """
 
     Slots: ClassVar[type | None] = None
-    """Optional typed slot definitions, inherited and extended like [`Kwargs`][citry.Component.Kwargs].
+    """Optional typed slot definitions.
+
+    They are inherited, replaced, or extended like [`Kwargs`][citry.Component.Kwargs].
 
     Use [`SlotInput`][citry.SlotInput] for places where people can add content.
     A field without a default must be filled whenever the component is used.
@@ -864,20 +867,23 @@ class Component(metaclass=ComponentMeta):
     """
 
     TemplateData: ClassVar[type | None] = None
-    """Optional typed template data output, inherited and extended like [`Kwargs`][citry.Component.Kwargs]."""
+    """Optional typed template data output.
+
+    It is inherited, replaced, or extended like [`Kwargs`][citry.Component.Kwargs].
+    """
 
     JsData: ClassVar[type | None] = None
     """Optional typed schema for the ``js_data()`` output.
 
-    A plain annotated class converts to a dataclass. It is inherited and
-    extended like [`Kwargs`][citry.Component.Kwargs].
+    A plain annotated class converts to a dataclass. It is inherited,
+    replaced, or extended like [`Kwargs`][citry.Component.Kwargs].
     """
 
     CssData: ClassVar[type | None] = None
     """Optional typed schema for the ``css_data()`` output.
 
-    A plain annotated class converts to a dataclass. It is inherited and
-    extended like [`Kwargs`][citry.Component.Kwargs].
+    A plain annotated class converts to a dataclass. It is inherited,
+    replaced, or extended like [`Kwargs`][citry.Component.Kwargs].
     """
 
     _citry_dynamic_selector: ClassVar[bool] = False
