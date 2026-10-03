@@ -235,8 +235,9 @@ shows how the browser reads `js_data()`.
 
 ## Extend inputs
 
-A plain `Kwargs` class in a subclass adds its fields to the ones it
-inherits:
+A subclass uses its parent's `Kwargs` until it declares its own. To add
+inputs, name the parent's class as a base, so the subclass keeps the
+parent's fields and defaults:
 
 ```citry
 from citry import Component
@@ -252,7 +253,7 @@ class Button(Component):
 
 
 class IconButton(Button):
-    class Kwargs:
+    class Kwargs(Button.Kwargs):
         icon: str
 
     template = """
@@ -260,11 +261,12 @@ class IconButton(Button):
     """
 ```
 
-`IconButton` accepts both `label` and `icon`. With several parent
-components, Citry combines them in Python's usual method resolution order.
-`Slots`, `TemplateData`, `JsData`, and `CssData` combine the same way.
+`IconButton` accepts both `label` and `icon`. A plain `class Kwargs:` in
+the subclass would replace the parent's fields instead, like any nested
+Python class, and Citry warns when that leaves out a parent field.
+`Slots`, `TemplateData`, `JsData`, and `CssData` follow the same rule.
 
-To stop a subclass from inheriting a schema, set it to `None`:
+To stop a subclass from checking inputs, set its `Kwargs` to `None`:
 
 ```python
 class FreeFormButton(Button):
@@ -272,5 +274,6 @@ class FreeFormButton(Button):
 ```
 
 `FreeFormButton` accepts any keyword name.
-[Subclassing](/advanced/subclassing/) covers how templates, JavaScript, and
-CSS combine across a component hierarchy.
+[Subclass components](/advanced/subclassing/) covers replacing inputs,
+combining two parents, and how templates, JavaScript, and CSS carry over
+to a subclass.

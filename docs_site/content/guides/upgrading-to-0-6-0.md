@@ -20,8 +20,10 @@ A project that only renders static HTML from Python, with no browser
 behavior, usually needs only these steps: upgrade the packages,
 [check component tag attributes](#update-attributes-on-component-tags),
 [check `#c-ignore`](#check-your-c-ignore-markers),
-[rename a component named `Mark`](#rename-reserved-names), and work
-through [Settings and extensions](#update-settings-and-extensions).
+[rename a component named `Mark`](#rename-reserved-names),
+[name the parent class](#name-the-parent-class) in subclasses that add
+inputs, and work through
+[Settings and extensions](#update-settings-and-extensions).
 
 ## Upgrade the packages { #upgrade-the-packages-together }
 
@@ -593,6 +595,53 @@ contents can hold only HTML, `{{ }}` expressions, `<c-if>`, `<c-for>`, and
 See
 [`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
 
+## Extend a parent's Kwargs { #name-the-parent-class }
+
+**What you see:** rendering a subclass fails with
+`unexpected keyword argument` naming an input its parent accepts, or
+an inherited method fails with `AttributeError` when it reads that input,
+or defining the class raises `ValueError`. Defining the class also prints a `NestedSchemaReplacedWarning` that names the
+missing fields.
+
+Since 0.3.0, a nested `Kwargs` on a subclass added its fields to its
+parent's. In 0.6.0 it replaces them, like any nested Python class. Name
+the parent's class as a base to keep its fields:
+
+```python
+# 0.5.1: SignedMessage takes `text` and `author`.
+class SignedMessage(Message):
+    class Kwargs:
+        author: str
+
+# 0.6.0: name Message.Kwargs to keep `text`.
+class SignedMessage(Message):
+    class Kwargs(Message.Kwargs):
+        author: str
+```
+
+The same applies to `Slots`, `State`, `TemplateData`, `JsData`, and
+`CssData`. A subclass that declares none of them still uses its parent's.
+`class Kwargs(Message.Kwargs):` also keeps the parent's defaults now, so
+a parent field with a default stays optional in the subclass.
+
+If a parent's `State` sets `_storage = "server"`, a subclass with its own
+plain `class State:` must set `_storage` too. Otherwise defining it raises
+`ValueError`, because the values would move into the page. Write
+`class State(Parent.State):`, or set `_storage` in the new class.
+
+A plain `class State:` also starts from the default settings, so browser
+code can read and change all of its fields. Name the parent's class to
+keep its `_public`, `_model`, and `_max_age`.
+
+A component with two parent components that declare different `Kwargs`
+raises `ValueError` when it is defined. Pick one with
+`Kwargs = Parent.Kwargs`, or list the fields of both in module-level
+classes and write `class Kwargs(FirstFields, SecondFields):`.
+
+`Events`, `Dependencies`, `Lint`, `Cache`, and other settings classes
+still add to the parent's settings, so they need no change. See
+[Subclass components](/advanced/subclassing/).
+
 ## Fix rejected HTML
 
 These rules apply only to components that run in the browser. Static pages
@@ -880,25 +929,30 @@ argument.
 17. Keep `#c-ignore` only on HTML elements whose contents a library
     manages, and move it off component tags, table row elements, and
     `<c-element>`.
-18. Close every tag in `<c-raw>` and `Markup` inside interactive
+18. In subclasses that add fields to a parent's `Kwargs`, `Slots`, `State`,
+    `TemplateData`, `JsData`, or `CssData`, name the parent's class as a
+    base, such as `class Kwargs(Parent.Kwargs):`. On a component whose
+    parents declare one of these classes differently, declare it on the
+    component itself.
+19. Close every tag in `<c-raw>` and `Markup` inside interactive
     components, and put an interactive page's content inside one
     `<body>`.
-19. Remove uses of `Citry.alpine`, `Citry.manager`, `Citry.i18n`,
+20. Remove uses of `Citry.alpine`, `Citry.manager`, `Citry.i18n`,
     `window.Alpine`, and `alpine:init`.
-20. On a deployment with several workers, configure a shared cache
+21. On a deployment with several workers, configure a shared cache
     backend, and let a proxy or CDN pass `Access-Control-Allow-Origin`
     through for Citry's files.
-21. Rename the Alpine lint settings and diagnostic codes, and fix any
+22. Rename the Alpine lint settings and diagnostic codes, and fix any
     output that `security_csp="strict"` now rejects.
-22. Check that dependency scripts on interactive pages are classic
+23. Check that dependency scripts on interactive pages are classic
     JavaScript, rename `ctx.before_manifest` to `ctx.early_scripts`, and
     build `OnSerializeContext` and `OnDependenciesContext` with keyword
     arguments.
-23. Pass `URLRoute(methods=...)` as a tuple of uppercase names, read
+24. Pass `URLRoute(methods=...)` as a tuple of uppercase names, read
     `parameters` from `citry.analysis` results starting at index 0, and
     remove `TemplateNode`, `citry.ownership` imports, and `ownership=`
     arguments.
-24. Remove `citry-htmx.js`, `hx-ext="citry-fragments"`, and `data-cid-*`
+25. Remove `citry-htmx.js`, `hx-ext="citry-fragments"`, and `data-cid-*`
     or `data-citry-key` selectors.
-25. Open each interactive page, reloading pages opened before the
+26. Open each interactive page, reloading pages opened before the
     upgrade, and check the browser console for `[Citry]` errors.

@@ -87,6 +87,18 @@ walks through every step.
   `citry.analysis` results leave `self` out of `parameters`, and the
   `TemplateNode` class is removed
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-settings-and-extensions)).
+- **Subclasses name the parent class to add inputs:** a nested `Kwargs`,
+  `Slots`, `State`, `TemplateData`, `JsData`, or `CssData` on a subclass
+  now replaces the parent's class, like any nested Python class, so write
+  `class Kwargs(Parent.Kwargs):` to keep the parent's fields. Citry warns
+  with `NestedSchemaReplacedWarning` when a subclass leaves out a parent's
+  fields. A replacing `State` also drops the parent's `_public`, `_model`,
+  and `_max_age`, and Citry warns. A component whose parents declare
+  different `Kwargs`, or that replaces a `State` with
+  `_storage = "server"` without setting `_storage`, raises `ValueError`
+  when defined. `Events`, `Dependencies`, and other settings
+  classes still add to the parent's
+  ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#name-the-parent-class)).
 
 ### Other additions
 
@@ -130,6 +142,9 @@ walks through every step.
 
 ### Fixes
 
+- `class Kwargs(Parent.Kwargs):` on a subclass now keeps the parent's
+  field defaults, and a nested data class such as `Kwargs` can list a
+  required field after one with a default.
 - `$state` and State bindings now show the State an Events handler changed
   when the handler returns nothing, returns data, or renders only a
   `<c-mark>` region, instead of keeping the old values until the component

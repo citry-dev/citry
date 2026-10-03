@@ -527,33 +527,51 @@ This preserves the existing difference between `Kwargs = None` and an empty
 declared `class Kwargs`. Reusing the richer schema adapter from `get_fields()`
 also keeps parser `TagRules` and the catalog from drifting apart.
 
-Schema roles use Citry's preserved component C3 declaration chain:
+Schema roles follow ordinary Python inheritance. The nearest binding in the
+component's method resolution order (C3 order) supplies the schema:
 
-- A subclass that omits `Kwargs`, `Slots`, or another schema role reuses a
-  single inherited effective schema when no other branch contributes.
-- A schema declared on the subclass automatically extends compatible schema
-  declarations below it in C3 order. Nearer fields and methods take normal
-  Python precedence; users do not need to spell `class Kwargs(Parent.Kwargs)`.
-- An explicit `Kwargs = None` or `Slots = None` stops declarations below that
-  point and reopens that input dimension. A nearer declaration above the reset
-  starts a new chain.
-- Multiple component bases contribute compatible declarations in C3 order.
-  Plain field classes, unslotted dataclasses with one consistent frozen mode,
-  and Pydantic models from the same generation can compose. Compatible frozen
-  dataclasses produce a frozen effective schema. Multiple NamedTuple branches,
-  multiple slotted dataclass layouts, mixed frozen modes, and incompatible
-  adapter families fail at component definition with a targeted error rather
-  than silently dropping fields.
-- A single explicitly adapted schema keeps its native runtime behavior and
-  options.
+- A subclass that omits `Kwargs`, `Slots`, or another schema role reuses its
+  parent's effective schema class unchanged (the same class object).
+- A plain `class Kwargs:` on the subclass replaces the parent's schema.
+  Naming the parent's class as a base, `class Kwargs(Parent.Kwargs):`,
+  extends it: the subclass keeps the parent's fields and defaults and adds
+  its own. `Kwargs = Parent.Kwargs` reuses the parent's class as is. Citry
+  emits `NestedSchemaReplacedWarning` once per declaring class at definition
+  (or at `register_library()` for a library definition) when a replacing
+  class leaves out field names the parent's class declared. Choosing another
+  base's class (`Kwargs = Right.Kwargs`) does not warn.
+- An explicit `Kwargs = None` or `Slots = None` means the role has no
+  schema, so the component accepts any name for that role. A class
+  declaration on a subclass supplies a new schema.
+- A non-class, non-`None` binding (such as `Kwargs = 5`) raises `ValueError`
+  at component definition.
+- When two separate bases bind different classes for one role (or one binds
+  `None`) and the subclass binds none, component definition raises
+  `ValueError` naming both and suggesting `Kwargs = Left.Kwargs` or
+  module-level field classes as bases. When one declaring class is an
+  ancestor of the other, or both bases bind the same class (such as one
+  module-level class), the nearer declaration applies without an error.
+- Citry converts the declared plain field class into one slotted dataclass,
+  collecting fields from its plain and dataclass bases (such as module-level
+  field classes or a parent's generated class). The declared class is
+  converted even when it defines `__init__` itself. When a plain base
+  defines `__init__`, `__new__`, `__slots__`, or a schema protocol attribute
+  (`model_fields`, `__fields__`, `_fields`), the class keeps that base's
+  construction. An explicitly decorated dataclass, Pydantic model, or
+  NamedTuple is kept as written. When a required field follows one with a
+  default, every field Citry generates (all fields not already declared by
+  a dataclass base) becomes keyword-only. A plain class over a frozen
+  dataclass is frozen; mixed frozen and non-frozen dataclass bases, and a
+  NamedTuple subclass that adds fields, fail at component definition with a
+  targeted error.
 
 `declared_on` is the import path of the C3-MRO class whose own dictionary
-contains the nearest contributing schema-role binding. It may name a base
+contains the nearest schema-role binding. It may name a base
 component or an ordinary definition base when the role is inherited. An
 explicit user `None` also has `declared_on`; only framework-default absence
 leaves it null. `import_path` names the effective class assigned to the
-receiving component, including a synthesized multi-branch schema, and is null
-for an absent schema.
+receiving component, including a dataclass Citry generated from a plain
+declaration, and is null for an absent schema.
 
 Schema builders enforce these combinations:
 
@@ -572,9 +590,10 @@ records reject contradictory constructor arguments in `__post_init__`;
 internal private builders remain the normal construction path.
 
 Field provenance names the authored class whose own annotation declares that
-effective field. It is deliberately per-field: a composed C3 schema can contain
-fields from several base declarations even though `SchemaInfo.import_path`
-names one effective receiving schema. When Citry builds an effective dataclass,
+effective field. It is deliberately per-field: a schema that names other
+classes as bases (`class Kwargs(Parent.Kwargs):` or module-level field
+classes) contains fields from several authored classes even though
+`SchemaInfo.import_path` names one effective receiving schema. When Citry builds an effective dataclass,
 it snapshots both each field annotation and its authored class before the
 generated schema merges those annotations. Python 3.10 through 3.13 use
 `inspect.get_annotations(..., eval_str=False)`. Python 3.14 uses
@@ -1160,7 +1179,7 @@ properties:
 |---|---|
 | Registry | Foreign registration is rejected before introspection ships; aliases group into one record; primary-name selection and ordering are stable; built-ins are marked and filtered; discovery runs; an unregistered class disappears from a fresh catalog; same-path definitions in two engines share `class_id` but differ in runtime tokens; a hot replacement keeps `class_id`, changes `definition_id`, and cannot be mistaken for the retained generation; identities cannot be forged during class-created hooks; generated class names still produce route-safe IDs. |
 | Lifetime | Retaining a core-only catalog or a catalog with bundled compliant extension metadata after final unregister does not keep the component class alive or file-indexed; closure-bearing Events and Dependencies declarations remain collectible after unregister and `Citry.clear()`. |
-| Schemas | Absent, closed-empty, closed-with-fields, and opaque are distinct; component-schema omission, compatible C3 composition, reset/reopen ordering, and explicit-`None` shadowing match runtime behavior; adapter-incompatible branch combinations fail explicitly; inherited dataclass, Pydantic v1/v2, and NamedTuple order and requiredness match `TagRules`; synthesized paths name the receiving component's effective schema; eager and Python 3.14 deferred annotations preserve each composed field's authored owner; unresolved deferred names remain available as forward references; one schema build evaluates an annotation expression once; stored string annotations are not evaluated; default factories never run. |
+| Schemas | Absent, closed-empty, closed-with-fields, and opaque are distinct; component-schema omission, nearest-declaration replacement, explicit base extension, and explicit-`None` shadowing match runtime behavior; conflicting declarations on separate bases fail explicitly; inherited dataclass, Pydantic v1/v2, and NamedTuple order and requiredness match `TagRules`; synthesized paths name the receiving component's effective schema; eager and Python 3.14 deferred annotations preserve each inherited field's authored owner; unresolved deferred names remain available as forward references; one schema build evaluates an annotation expression once; stored string annotations are not evaluated; default factories never run. |
 | Defaults | Values are omitted by default; requested portable values are copied and frozen; JSON null remains distinguishable from omission; safe-integer boundaries are exact; larger integers, unsupported objects, and cycles are reported without the copier invoking custom methods; factories never run. |
 | Types and docs | Every supported normalized type form has an exact expected string; unsupported or unsafe forms are unavailable without calling custom representations; own component docstrings do not inherit; Pydantic and dataclass descriptions use only the documented sources. |
 | Assets | Inline, file, none, explicit-`None` shadowing, inherited owners, absolute paths, configured-directory resolution, missing files, and no-resolution mode are covered. Arbitrary `PathLike` implementations are rejected without calling `__fspath__`. Inspection does not read content, run load hooks, fill asset caches, compile templates, update the file index, or execute custom component-metaclass attribute hooks. |

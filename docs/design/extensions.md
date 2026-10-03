@@ -189,8 +189,8 @@ from the component's C3 MRO, then builds the effective class on the extension's
 `Config` (with the component bound). That effective class is instantiated per
 render and attached as `component.view`.
 
-Nested declarations inherit automatically. The child does not repeat its
-parent's nested class in the base list:
+Nested config declarations inherit automatically. The child does not repeat
+its parent's nested class in the base list:
 
 ```python
 class Parent(Component):
@@ -215,6 +215,18 @@ C3 order as their component owners. A nearer declaration wins an attribute
 conflict. An explicit `View = None` stops component-level inheritance at that
 point while retaining the current Citry instance's global defaults and the
 extension's factory defaults.
+
+This combining applies to settings classes: extension config classes such as
+`View`, and the built-in `Events`, `Lint`, `Cache`, `I18n`, `Debug`, and
+`Preview`. The classes that describe data (`Kwargs`, `Slots`, `State`,
+`TemplateData`, `JsData`, `CssData`) follow ordinary Python lookup instead:
+the nearest declaration applies, a plain child declaration replaces the
+parent's class, and a child extends the parent's fields only by naming the
+parent's class as a base. Two separate bases that declare different data
+classes, with none on the subclass, fail at component definition.
+Section 4.2 of [`component_introspection.md`](component_introspection.md)
+lists the data class rules for the five schema roles, and section 3.2 of
+[`events.md`](events.md) covers `State`.
 
 Each installed extension owns one valid Python `class_name`. Those names must
 be unique, and extensions cannot claim the core schema names or the Events

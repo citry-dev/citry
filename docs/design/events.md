@@ -893,9 +893,26 @@ nothing that looks like one.
 `class State:` on the component declares **exactly what round-trips**
 between the browser and the handlers. The extension rebuilds it as a
 non-frozen `dataclass(slots=True)` (the same treatment the core gives
-`Kwargs`, applied by the extension). A child `class State:` automatically adds
-to its parents' State fields in component C3 order; `State = None` resets the
-inherited State, and a nearer declaration can reopen the chain. Rules:
+`Kwargs`, applied by the extension). State is a data shape like `Kwargs`: the
+nearest declaration in the component's method resolution order applies. A
+subclass that declares nothing keeps its parent's State class and settings.
+`class State(Parent.State):` extends the parent's fields and keeps its
+settings (`_public`, `_model`, `_storage`, `_max_age`, `_max_bytes`), because
+they are class attributes inherited through the base. A plain `class State:`
+replaces the parent's State and starts from the default settings, including
+the default `_max_bytes`, which changes without a warning. Two checks
+guard that replacement at class definition:
+
+- If the parent's State sets `_storage = "server"` and the new class does not
+  set `_storage`, definition raises `ValueError`, since the values would move
+  into the signed page token where anyone can read them.
+- If the new class drops parent fields, or does not set a `_public`,
+  `_model`, or `_max_age` the parent set, Citry emits
+  `NestedSchemaReplacedWarning` once, naming what changed.
+
+`State = None` gives the component no State. Two bases with different State
+declarations and no State on the subclass fail at definition, the same as
+`Kwargs`. Rules:
 
 - State is deliberately **separate from `Kwargs`**. Kwargs and slots are
   render-time inputs and can hold anything: ORM instances, big structures,
