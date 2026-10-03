@@ -527,16 +527,16 @@ def _sibling_author_page(fill: str) -> Component:
 @pytest.mark.parametrize(
     ("fill", "binding"),
     [
-        ('<span v-text="label"></span>', "v-text on <span>"),
-        ('<button @click="count++">+</button>', "@click on <button>"),
-        ('<input v-model="label" />', "v-model on <input>"),
-        ('<button @c-click="ping">ping</button>', "a Citry Events binding on <button>"),
-        ('<i ref="thing"></i>', "ref on <i>"),
-        ('<p v-for="item in 3" v-text="item"></p>', "v-for on <p>"),
-        ('<c-leaf :title="label" />', ":title on the call to Leaf"),
-        ('<c-if cond="note"><b :title="label">x</b></c-if>', ":title on <b>"),
-        ('<b :title="this.label">x</b>', ":title on <b>"),
-        ("<c-writer />", "v-text on <span>"),
+        ('<span v-text="label"></span>', 'v-text="label" on <span>'),
+        ('<button @click="count++">+</button>', '@click="count++" on <button>'),
+        ('<input v-model="label" />', 'v-model="label" on <input>'),
+        ('<button @c-click="ping">ping</button>', "@c-click on <button>"),
+        ('<i ref="thing"></i>', 'ref="thing" on <i>'),
+        ('<p v-for="item in 3" v-text="item"></p>', 'v-for="item in 3" on <p>'),
+        ('<c-leaf :title="label" />', ':title="label" on the call to Leaf'),
+        ('<c-if cond="note"><b :title="label">x</b></c-if>', ':title="label" on <b>'),
+        ('<b :title="this.label">x</b>', ':title="this.label" on <b>'),
+        ("<c-writer />", 'v-text="label" on <span>'),
     ],
 )
 def test_fill_from_outside_the_receivers_tree_is_rejected_when_it_uses_vue_data(fill: str, binding: str) -> None:
@@ -546,8 +546,14 @@ def test_fill_from_outside_the_receivers_tree_is_rejected_when_it_uses_vue_data(
         _assembly(_sibling_author_page(fill))
     message = str(error.value)
     assert f"({binding})" in message
-    assert "'default' fill written by Author at line 2 of Author's template" in message
-    assert "Receiver renders it inside Physical, which Author does not contain" in message
+    # The message names the writer and its line, then the component that
+    # holds both the writer and the place the content appears (here the
+    # page root), and never the receiving helpers in between.
+    assert "Author writes content at line 2 of its template that uses Author's Vue data" in message
+    assert "Root shows that content in its own template" in message
+    assert "Write the content in a component above Root" in message
+    assert "Receiver" not in message
+    assert "Physical" not in message
 
 
 @pytest.mark.parametrize(

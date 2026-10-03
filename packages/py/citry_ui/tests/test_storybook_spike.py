@@ -358,8 +358,16 @@ def test_tabs_rejects_vue_bound_declarations_owned_by_a_sibling_component(spike_
     # The declarations component is a sibling of the internal tab list, so
     # Vue cannot give the tab's content that component's data. Rendering
     # stops with an error instead of showing an empty tab.
-    with pytest.raises(TypeError, match=r"fill written by VueTabsDeclarations .* uses VueTabsDeclarations's Vue data"):
+    with pytest.raises(TypeError) as error:
         str(tabs)
+    message = str(error.value)
+    # The error names the public CTabs that moves the content, not the
+    # internal components that render the tab list.
+    assert "VueTabsDeclarations writes content at line 2 of its template" in message
+    assert '(v-text="label" on <span>)' in message
+    assert "CTabs shows that content in its own template" in message
+    assert "usually the one whose template contains the <c-CTabs> tag" in message
+    assert "CInternal" not in message
 
 
 def test_runner_exposes_catalog_standalone_pages_and_visible_errors(spike_modules):

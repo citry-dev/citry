@@ -486,25 +486,66 @@ def assemble_typed_render(
         except KeyError:
             return occurrence_types.get(occurrence, "an unknown component")
 
+    def tag_name_of(occurrence: str, class_name: str) -> str:
+        """Return the name a template uses in a component's ``<c-...>`` tag."""
+        try:
+            registered = citry.get_component_by_class_id(occurrence_types[occurrence]).name
+        except KeyError:
+            return class_name
+        # A component without an explicit name is called by its class name.
+        return registered or class_name
+
+    def component_holding_both(first: str, second: str) -> str | None:
+        """Return the nearest occurrence whose subtree holds both occurrences, or None when unknown."""
+        ancestors: set[str] = set()
+        current: str | None = first
+        # The parent chain ends at the root; the length guard stops a
+        # malformed chain from looping forever.
+        while current is not None and len(ancestors) <= len(occurrence_parents):
+            ancestors.add(current)
+            current = occurrence_parents.get(current)
+        current = second
+        steps = 0
+        while current is not None and steps <= len(occurrence_parents):
+            if current in ancestors:
+                return current
+            current = occurrence_parents.get(current)
+            steps += 1
+        return None
+
     def describe_fill_outside_author(
         part: DirectProjectionRender, author_owner: str, physical_owner: str, first_read: str
     ) -> str:
         fill_source = part.fill_source
         author = class_name_of(fill_source.lexical_render_id, author_owner)
-        receiver = class_name_of(part.receiver_render_id, physical_owner)
-        physical = class_name_of(None, physical_owner)
         location = ""
         if isinstance(fill_source.source, str):
             # Spans are byte offsets into the author's template source.
             line = fill_source.source.encode("utf-8")[: fill_source.span[0]].count(b"\n") + 1
-            location = f" at line {line} of {author}'s template"
+            location = f" at line {line} of its template"
+        # The components that receive and show the content are often a
+        # library's private helpers (CTabs shows tabs through its own inner
+        # components). The user wrote the tag of the nearest component that
+        # holds both the writer and the place where the content appears, so
+        # that is the component to name.
+        mover_owner = component_holding_both(author_owner, physical_owner)
+        if mover_owner is None:
+            mover = "Another component"
+            fix = "Write the content in a component above the one that shows it"
+        else:
+            mover = class_name_of(None, mover_owner)
+            # Content written above the mover's tag reaches the place it is
+            # shown through ordinary Vue slots. This holds when the mover is
+            # the page root too: wrapping it in a component fixes the error.
+            fix = (
+                f"Write the content in a component above {mover}, usually the one whose template "
+                f"contains the <c-{tag_name_of(mover_owner, mover)}> tag"
+            )
         return (
-            f"the {fill_source.public_name!r} fill written by {author}{location} uses {author}'s Vue data or "
-            f"handlers ({first_read}), but {receiver} renders it inside {physical}, which {author} does not "
-            f"contain. Vue gives a fill its author's data only inside the author's component tree. Write the "
-            f"fill in a component that contains {physical} (for a citry_ui group such as CTabs, write the "
-            f"declarations inside the group's tag or in a transparent component), or make the fill read only "
-            f"Python values."
+            f"{author} writes content{location} that uses {author}'s Vue data or event handlers ({first_read}). "
+            f"{mover} shows that content in its own template, where {author}'s Vue data and handlers are not "
+            f"available. {fix}, and define the Vue data there. Content that shows only Python values, such as "
+            f"{{{{ title }}}}, works from any component."
         )
 
     def note_attribute_reads(owner_id: str, tag: str, attrs: Sequence[PreparedAttribute]) -> None:
@@ -512,7 +553,9 @@ def assemble_typed_render(
             if attr.origin == "source" and _source_attribute_reads_instance(
                 attr.name, str(attr.value), template_context_names
             ):
-                note_browser_read(owner_id, f"{attr.name} on <{tag}>")
+                # The source text is the attribute as written, such as
+                # `v-text="label"`, which the reader can search for.
+                note_browser_read(owner_id, f"{_attribute_source_text(attr.name, str(attr.value))} on <{tag}>")
 
     def note_event_reads(owner_id: str, tag: str, part: PreparedElementOpen | PreparedDynamicElementOpen) -> None:
         # The browser sends a Citry Events binding for the component whose
@@ -526,7 +569,11 @@ def assemble_typed_render(
             or part.runtime_poll_bindings
             or part.runtime_events_candidate
         ):
-            note_browser_read(owner_id, f"a Citry Events binding on <{tag}>")
+            # Name the event the reader wrote (`@c-click`) when the record
+            # keeps it, so they can find the binding in their template.
+            event = next((binding.get("event") for binding in part.event_bindings), None)
+            written = f"@c-{event}" if isinstance(event, str) else "a Citry Events binding"
+            note_browser_read(owner_id, f"{written} on <{tag}>")
 
     def merge_projected_data(
         lexical_values: dict[str, object],
@@ -1634,7 +1681,7 @@ def assemble_typed_render(
                         ):
                             note_browser_read(
                                 data_owner_id,
-                                f"{component_binding.key} on the call to "
+                                f"{_binding_text(component_binding.key, component_binding.value)} on the call to "
                                 f"{citry.get_component_by_class_id(child_type).__name__}",
                             )
                         if not component_binding.authenticated:
@@ -2868,6 +2915,16 @@ def _vue_binding_reads_instance(name: str, value: str | None, allowed_names: Seq
         # `@click` alone does nothing; `:id` alone is Vue's shorthand for `:id="id"`.
         return not handler
     return _vue_expression_reads_instance(value, handler=handler, allowed_names=allowed_names)
+
+
+def _attribute_source_text(name: str, text: str) -> str:
+    """Return an authored attribute as written, falling back to its name for text the parser did not keep."""
+    return text if text.startswith(name) else name
+
+
+def _binding_text(name: str, value: str) -> str:
+    """Return a component-tag binding as it reads in a template, such as ``:title="label"``."""
+    return f'{name}="{value}"' if value else name
 
 
 def _source_attribute_reads_instance(name: str, text: str, allowed_names: Sequence[str]) -> bool:

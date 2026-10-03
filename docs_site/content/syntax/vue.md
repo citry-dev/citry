@@ -553,8 +553,9 @@ belongs to `TabLabels`, which is inside `CTabs`, because `Page` wrote
 `<c-TabLabels />` inside `<c-CTabs>`. Vue data does not pass from a
 component out to the component around it. Without a check, the label
 would show nothing, so Citry stops the render with an error instead. The
-error names the component that wrote the tab (`TabLabels`), the line, and
-the Vue code it found (`v-text on <span>`).
+error names the component that wrote the tab (`TabLabels`), the line, the
+Vue code it found (`v-text="label"` on `<span>`), and `CTabs` as the
+component that moves the content.
 
 **What works:** write the `<c-CTab>` in the component that holds
 `<c-CTabs>`, and define `label` there:

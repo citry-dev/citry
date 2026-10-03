@@ -4379,18 +4379,21 @@ Literal-only bindings (`v-text="'x'"`, `@click="$event.preventDefault()"`,
 
 - **Author outside the receiver's tree, fill reads browser data.** The page
   fails to render with `UnsupportedPreparedView` (a `TypeError`). The message
-  names the fill, its author and the line in the author's template, the
-  first binding that reads data, the transparent receiver and the component
-  it renders inside, and suggests a fix:
+  names the fill's author and the line in its template, the first binding
+  that reads data as written, and the component that moves the content:
+  the nearest component that holds both the author and the receiver, found
+  by walking `occurrence_parents`. For a citry_ui group that is the public
+  group (`CTabs`), never one of its `CInternal*` helpers. It then suggests a
+  fix:
 
   ```text
-  the 'default' fill written by Decls at line 2 of Decls's template uses
-  Decls's Vue data or handlers (v-text on <span>), but CInternalTab renders
-  it inside CInternalTabs, which Decls does not contain. Vue gives a fill its
-  author's data only inside the author's component tree. Write the fill in a
-  component that contains CInternalTabs (for a citry_ui group such as CTabs,
-  write the declarations inside the group's tag or in a transparent
-  component), or make the fill read only Python values.
+  Decls writes content at line 2 of its template that uses Decls's Vue
+  data or event handlers (v-text="label" on <span>). CTabs shows that
+  content in its own template, where Decls's Vue data and handlers are not
+  available. Write the content in a component above CTabs, usually the one
+  whose template contains the <c-CTabs> tag, and define the Vue data there.
+  Content that shows only Python values, such as {{ title }}, works from
+  any component.
   ```
 - **Author outside the receiver's tree, fill has only Python values or
   literals.** Copied into the receiving template.

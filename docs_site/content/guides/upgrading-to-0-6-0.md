@@ -527,8 +527,9 @@ sit next to `#c-key`. See
 ### Inline group content
 
 **What you see:** the render stops with an error that names the component
-that wrote the tab, the line, and the Vue code it uses, such as
-`v-text on <span>`.
+that wrote the tab, the line, the Vue code it uses, such as
+`v-text="label"` on `<span>`, and `CTabs` as the component that moves the
+content.
 
 Citry UI's `CTabs` collects the `<c-CTab>` and `<c-CTabPanel>` tags
 inside it and moves their content into the `CTabs` template. Other Citry
