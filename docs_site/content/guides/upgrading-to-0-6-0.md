@@ -514,17 +514,21 @@ sit next to `#c-key`. See
 
 ### Inline group content
 
-**What you see:** the render stops with an error that names the content,
-the component that wrote it, and the line.
+**What you see:** the render stops with an error that names the component
+that wrote the tab, the line, and the Vue code it uses, such as
+`v-text on <span>`.
 
-A group component is one whose children work together, such as Citry
-UI's `CTabs` and its tabs. It needs content that uses Vue
-data, handlers, `v-model`, a `ref`, or a `@c-*` binding to be written
-inside the group's tag. The error appears when a separate component writes
-that content and the page passes that component in. Move the content
-inside the group's tag, or set `transparent = True` on the component that
-writes it, so it renders its content in place. See
-[Fill group components](/syntax/vue/#keep-vue-bound-group-content-inside-the-groups-tag).
+Citry UI's `CTabs` collects the `<c-CTab>` and `<c-CTabPanel>` tags
+inside it and moves their content into the `CTabs` template. Other Citry
+UI components that collect item tags, such as `CStepper` and `CTimeline`,
+work the same way. Content that uses
+Vue data, handlers, `v-model`, a `ref`, or a `@c-*` binding must therefore
+be written in the component that holds `<c-CTabs>`. The error appears when
+a separate component placed inside `<c-CTabs>` writes that content. Move
+the tags into the component that holds `<c-CTabs>`, or set
+`transparent = True` on the component that writes them and define their
+Vue data in the component that holds `<c-CTabs>`. See
+[Vue data inside `CTabs`](/syntax/vue/#keep-vue-bound-group-content-inside-the-groups-tag).
 
 ## Check `#c-ignore` { #check-your-c-ignore-markers }
 

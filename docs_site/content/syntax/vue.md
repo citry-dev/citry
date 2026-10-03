@@ -481,28 +481,30 @@ fail when the template loads,
 on every page. The error says what to use instead, such as a CSS
 transition or the HTML `<dialog>` element.
 
-## Fill group components { #keep-vue-bound-group-content-inside-the-groups-tag }
+## Vue data inside `CTabs` { #keep-vue-bound-group-content-inside-the-groups-tag }
 
-The render fails when tab content that uses Vue is written in a separate
-component and passed into `<c-CTabs>`.
+`CTabs`, `CTab`, and `CTabPanel` come from the
+[Citry UI library](/ui-library/). Rendering fails when a `<c-CTab>` whose
+content reads Vue data is written in a separate component that you place
+inside `<c-CTabs>`.
 
-`CTabs` from Citry UI is a group component: it collects the `CTab` and
-`CTabPanel` items inside its tag and shows each one in its own place, the
-labels in the tab list and the content in the panels. `CTabs`, not the
-component where you wrote the tab, decides where it appears. Other Citry UI
-components that collect items this way, such as `CStepper` and `CTimeline`,
-follow the same rule.
-
-Content that uses Vue must therefore be written in the component that holds
-the `<c-CTabs>` tag. That covers browser data, a Vue event listener,
-`v-model`, a `ref`, and an `@c-*` binding. Content that shows only Python values, such as
-`{{ title }}`, works from any component.
-
-A natural first attempt moves the tabs into their own component.
-`TabLabels` writes a tab that shows its own browser data, `label`:
+**What you write:** `Page` holds the tabs, and `TabLabels` writes a tab
+whose label is its own Vue data:
 
 ```citry
 from citry import Component
+
+
+class Page(Component):
+    template = """
+      <c-CTabs
+        default_value="one"
+        aria_label="Sections"
+      >
+        <c-TabLabels />
+        <c-CTabPanel value="one">Details</c-CTabPanel>
+      </c-CTabs>
+    """
 
 
 class TabLabels(Component):
@@ -521,34 +523,78 @@ class TabLabels(Component):
     """
 ```
 
-```citry-html
-<!-- Fails: TabLabels wrote the tab, but CTabs shows it -->
-<c-CTabs default_value="one" aria_label="Example">
-  <c-TabLabels />
-</c-CTabs>
-```
-
-Vue passes content written inside a component's tag only to components
-inside the one that wrote it. `CTabs` sits outside `TabLabels`, so `label`
-cannot reach the tab list where `CTabs` shows the tab.
-The error names the content, the component that wrote it, and the line.
-
-Write the `CTab` items directly inside `<c-CTabs>`, in the component that
-defines `label` in its `js`:
+**What `CTabs` does:** while the page renders on the server, `CTabs`
+collects every `<c-CTab>` and `<c-CTabPanel>` inside its tag, including
+those that a component such as `TabLabels` writes. It moves each tab's
+content into a tab button in the `CTabs` template, and each panel's content
+into a panel. Nothing appears where you wrote `<c-CTab>`. Simplified,
+`CTabs` renders:
 
 ```citry-html
-<!-- Works: this component defines label -->
-<c-CTabs default_value="one" aria_label="Example">
-  <c-CTab value="one">
+<div role="tablist">
+  <button role="tab">
+    <!-- moved here from TabLabels -->
     <span v-text="label"></span>
-  </c-CTab>
-  <c-CTabPanel value="one">Details</c-CTabPanel>
-</c-CTabs>
+  </button>
+</div>
 ```
 
-Alternatively, set `transparent = True` on `TabLabels`. Its content then
-renders as if the component that holds `<c-CTabs>` had written it, so define
-`label` in that component's `js`, not in `TabLabels`.
+**Why it fails:** in the browser, the `<span>` now sits in the `CTabs`
+template, so Vue looks for `label` in the data of `CTabs`. But `label`
+belongs to `TabLabels`, which is inside `CTabs`, because `Page` wrote
+`<c-TabLabels />` inside `<c-CTabs>`. Vue data does not pass from a
+component out to the component around it. Without a check, the label
+would show nothing, so Citry stops the render with an error instead. The
+error names the component that wrote the tab (`TabLabels`), the line, and
+the Vue code it found (`v-text on <span>`).
+
+**What works:** write the `<c-CTab>` in the component that holds
+`<c-CTabs>`, and define `label` there:
+
+```citry
+from citry import Component
+
+
+class Page(Component):
+    template = """
+      <c-CTabs
+        default_value="one"
+        aria_label="Sections"
+      >
+        <c-CTab value="one">
+          <span v-text="label"></span>
+        </c-CTab>
+        <c-CTabPanel value="one">Details</c-CTabPanel>
+      </c-CTabs>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { label: "Overview" };
+        },
+      });
+    """
+```
+
+This works because `Page` contains `CTabs`. Vue can pass content, together
+with the data it reads, into a component inside the one that wrote it. Vue
+calls this a slot.
+
+The rule: content inside a `<c-CTab>` or `<c-CTabPanel>` that uses Vue
+data, a Vue event listener, `v-model`, a `ref`, or an `@c-*` binding must be
+written in the component that holds `<c-CTabs>`. Python values such as
+`{{ title }}` work from any component, because the server fills them in
+before `CTabs` moves anything.
+
+To keep writing the tab in `TabLabels`, set `transparent = True` on
+`TabLabels`. Citry then treats its template as if `Page` had written it, so
+define `label` in `Page`. If `label` stays in `TabLabels`, Citry raises no
+error, but the tab does not get that value.
+
+Other Citry UI components that collect their item tags this way follow the
+same rule: `CStepper`, `CTimeline`, `CTour`, `CSortable`, `CSplitter`,
+`CTransferList`, `CVirtualList`, and `CFormCollection`.
 
 ## Less common rules
 
