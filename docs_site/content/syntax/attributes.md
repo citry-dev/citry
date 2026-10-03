@@ -180,7 +180,9 @@ them. Write property names in kebab-case:
 ```
 
 When several values set the same property, a later `False` removes it and a
-later `None` leaves the earlier value alone. An empty style is left out:
+later `None` leaves the earlier value alone. An empty style is left out,
+on static and interactive pages alike. A string with no
+`property: value` pair in it, such as `'color'`, is empty too:
 
 ```citry-html
 <div

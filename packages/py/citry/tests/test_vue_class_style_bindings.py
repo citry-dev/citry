@@ -262,3 +262,78 @@ def test_a_c_bind_key_and_a_modified_binding_for_one_attribute_stop_the_render(b
 
     with pytest.raises(Exception, match="target the same HTML name"):
         Card().render().serialize()
+
+
+# Values that leave no class or style once Citry reads them: a style string
+# without a `property: value` pair, an empty string, an empty mapping or list.
+EMPTY_CLASS_AND_STYLE = pytest.mark.parametrize(
+    ("attribute", "value"),
+    [
+        ("c-style", "color"),
+        ("c-style", ""),
+        ("c-style", {}),
+        ("c-style", {"color": None}),
+        ("c-class", ""),
+        ("c-class", {"open": False}),
+    ],
+    ids=["style-unparsed", "style-empty", "style-dict", "style-none-value", "class-empty", "class-false"],
+)
+
+
+@EMPTY_CLASS_AND_STYLE
+@pytest.mark.parametrize("interactive", [False, True], ids=["static", "interactive"])
+def test_an_empty_c_class_or_c_style_is_left_out_on_static_and_interactive_pages(
+    attribute: str,
+    value: object,
+    interactive: bool,
+) -> None:
+    engine = Citry(autodiscover=False)
+    # A Vue listener makes the page interactive; the attribute under test
+    # sits on its own element beside it, and inside a loop.
+    button = '<button @click="n += 1">{{ n }}</button>' if interactive else ""
+
+    class Card(Component):
+        citry = engine
+        template = f"""
+          <main>
+            <p {attribute}="value">x</p>
+            <i c-for="i in [1, 2]" {attribute}="value">{{{{ i }}}}</i>
+            <span c-bind="{{'{attribute.removeprefix("c-")}': value, 'title': 't'}}">y</span>
+            {button}
+          </main>
+        """
+
+        def template_data(self, kwargs, slots) -> dict[str, object]:
+            return {"value": value, "n": 0}
+
+    html = str(Card())
+
+    assert "<p>x</p>" in html
+    assert "<i>1</i><i>2</i>" in html
+    assert '<span title="t">y</span>' in html
+    assert 'class=""' not in html
+    assert 'style=""' not in html
+
+
+@EMPTY_CLASS_AND_STYLE
+def test_an_empty_c_class_or_c_style_is_left_out_of_the_hydrated_html(attribute: str, value: object) -> None:
+    engine = Citry(autodiscover=False)
+
+    # The server writes the hydrated HTML the way Vue renders the same data,
+    # so the attribute is absent there too, not written as `style=""`.
+    class Card(Component):
+        citry = engine
+        template = f"""
+          <main>
+            <p {attribute}="value">x</p>
+            <button @click="n += 1">{{{{ n }}}}</button>
+          </main>
+        """
+
+        def template_data(self, kwargs, slots) -> dict[str, object]:
+            return {"value": value, "n": 0}
+
+    host, declines = _hydrated(Card)
+
+    assert host == "<main><p>x</p><button>0</button></main>"
+    assert declines == []

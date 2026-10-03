@@ -13,7 +13,7 @@ from inspect import getattr_static
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from citry.attrs import _html_attr_identity, is_vue_directive_name, merge_attrs
+from citry.attrs import _html_attr_identity, is_vue_directive_name, merge_attrs, normalize_class, normalize_style
 from citry.citry_render import (
     CitryRender,
     SimpleVueRecord,
@@ -46,9 +46,23 @@ class UnsupportedPreparedView(TypeError):
     """Raised when a render cannot be turned into the HTML and Vue template that the browser runs."""
 
 
-def include_prepared_attribute(value: object) -> bool:
-    """Omit absent HTML attributes while retaining presence metadata."""
-    return value is not None and value is not False
+def include_prepared_attribute(name: str, value: object) -> bool:
+    """
+    Return whether a Python-computed attribute goes into the element's Vue ``v-bind`` values.
+
+    ``None`` and ``False`` mean the attribute is absent. A ``class`` or
+    ``style`` whose value comes out empty, such as a ``c-style`` string with
+    no ``property: value`` pair in it, is left out too: a static page omits
+    it the same way, and Vue would otherwise write ``style=""``.
+    """
+    if value is None or value is False:
+        return False
+    identity = _html_attr_identity(name)
+    if identity == "class":
+        return bool(value if isinstance(value, str) else normalize_class(cast("Any", value)))
+    if identity == "style":
+        return bool(value if isinstance(value, str) else normalize_style(cast("Any", value)))
+    return True
 
 
 # Vue's `mergeProps` joins a bound `class` with every other class on the
@@ -1043,7 +1057,7 @@ class PreparedElementOpenNode(ElementAttrsNode):
             if preserved is not None:
                 entries.append(preserved)
             else:
-                if not include_prepared_attribute(value):
+                if not include_prepared_attribute(name, value):
                     continue
                 entries.append(PreparedAttribute(name, "data", self._data_attr_span(name), value))
                 remaining_data_attrs[name] = value

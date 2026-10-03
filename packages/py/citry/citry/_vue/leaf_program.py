@@ -3406,7 +3406,7 @@ def _spread_project_attrs(
         source_attr = preserved_source.get(name)
         if source_attr is not None:
             projected[name] = "" if source_attr.value is True else source_attr.value
-        elif include_prepared_attribute(data_attrs[name]):
+        elif include_prepared_attribute(name, data_attrs[name]):
             projected[name] = data_attrs[name]
     return projected
 
@@ -3526,7 +3526,7 @@ def _root_spread_plan(node: PreparedElementOpenNode, keys: tuple[str, ...]) -> t
             # write `hidden` as `hidden=""`.
             projected = "" if source[0].value is True else source[0].value
             prepared: PreparedAttribute | None = PreparedAttribute(name, "source", source[0].position, source[1])
-        elif include_prepared_attribute(value):
+        elif include_prepared_attribute(name, value):
             projected = value
             prepared = PreparedAttribute(name, "data", span, projected)
         else:
@@ -3896,7 +3896,7 @@ def _prepared_open(
                 and value == source[0].value
             ):
                 spread_attributes.append(PreparedAttribute(name, "source", source[0].position, source[1]))
-            elif include_prepared_attribute(value):
+            elif include_prepared_attribute(name, value):
                 spread_attributes.append(PreparedAttribute(name, "data", spans[name], value))
         return PreparedElementOpen(
             operation.node.source,
@@ -3913,7 +3913,7 @@ def _prepared_open(
         authored_attributes = operation.authored_attributes
     data_attributes: list[PreparedAttribute] = []
     for name, value in resolved.items():
-        if include_prepared_attribute(value):
+        if include_prepared_attribute(name, value):
             data_attributes.append(PreparedAttribute(name, "data", spans[name], value))
     return PreparedElementOpen(
         operation.node.source,
