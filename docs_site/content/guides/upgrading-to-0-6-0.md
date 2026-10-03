@@ -446,11 +446,17 @@ event, such as `@c-keydown.enter` and `@c-keydown.escape`, fails when the
 template loads, and the error names both.
 
 Citry 0.5.1 used the last key filter of a binding and ran every binding
-for an event. To react to either key, call the handler from one Vue
-listener:
+for an event. To react to either key with one handler, call it from one
+Vue listener. To call a different handler for each key, write one Vue
+listener per key:
 
 ```citry-html
 <input @keydown.enter.escape="$sendEvent('search')" />
+
+<input
+  @keydown.enter="$sendEvent('search')"
+  @keydown.escape="$sendEvent('clear')"
+/>
 ```
 
 ### Update stale listeners

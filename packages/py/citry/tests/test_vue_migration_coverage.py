@@ -384,7 +384,7 @@ def test_prepared_capture_rejects_runtime_binding_collisions_and_validation_cycl
     runtime_event = _RuntimeEventBindings(
         ({key: value for key, value in event.items() if key != "id"},), (), _RUNTIME_EVENTS_TOKEN
     )
-    with pytest.raises(ValueError, match="one element supports one"):
+    with pytest.raises(ValueError, match=r"<button> has a '@c-click' binding in its template and another from c-bind"):
         node._prepared_from_resolved(
             {RUNTIME_EVENTS_ATTR: runtime_event}, context=CitryContext(), extension_validated=True
         )
@@ -396,7 +396,7 @@ def test_prepared_capture_rejects_runtime_binding_collisions_and_validation_cycl
         (),
         _RUNTIME_EVENTS_TOKEN,
     )
-    with pytest.raises(ValueError, match="one element supports one"):
+    with pytest.raises(ValueError, match=r"<button> gets two '@c-click' bindings from c-bind"):
         node._prepared_from_resolved(
             {RUNTIME_EVENTS_ATTR: duplicate_events}, context=CitryContext(), extension_validated=True
         )

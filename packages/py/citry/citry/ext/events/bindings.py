@@ -145,6 +145,9 @@ class _Attr:
     name: str
     value: str | None  # None when the attribute was written with no `=value`
     source: str  # the exact source text, re-emitted verbatim for non-bindings
+    # True for a binding a `c-bind` spread added at render time. Its error
+    # cannot suggest template syntax such as a Vue listener in its place.
+    from_spread: bool = False
 
 
 def _split_name(attr_name: str, prefix: str) -> tuple[str, list[str]]:
@@ -311,7 +314,13 @@ def _validate_timing_pair(debounce: int | None, throttle: int | None, attr_name:
 
 
 def _reject_second_key_filter(
-    attr_name: str, key: str | None, second: str, location: _Location, *, handler: str | None = None
+    attr: _Attr,
+    key: str | None,
+    second: str,
+    location: _Location,
+    *,
+    handler: str | None = None,
+    args: str | None = None,
 ) -> None:
     """Fail when one binding carries a second key filter, naming both so the author picks."""
     if key is None:
@@ -320,18 +329,46 @@ def _reject_second_key_filter(
     # the first. Vue reads `@keydown.enter.escape` as "either key", so say
     # plainly that these bindings do not, and how to get that from Vue.
     message = (
-        f"{attr_name!r} has two key filters, '.{key}' and '.{second}'. A Citry Events binding"
-        f" reacts to one key, so it cannot read them as either key the way a Vue listener does."
-        f" Keep one key filter"
+        f"{attr.name!r} has two key filters, '.{key}' and '.{second}'. Unlike a Vue listener, a Citry"
+        f" Events binding does not react to either key; it takes one key filter. Keep one"
     )
-    if handler is None:
+    # A State binding writes a field as well as calling its handler, and a
+    # spread cannot hold a Vue listener, so neither gets the Vue suggestion.
+    if handler is None or attr.from_spread:
         _fail(location, message + ".")
-    event = _split_name(attr_name, _PREFIX_EVENT)[0]
+    event = _split_name(attr.name, _PREFIX_EVENT)[0]
+    call = f"$sendEvent('{handler}')" if args is None else f"$sendEvent('{handler}', {args})"
     _fail(
         location,
         f"{message}, or call the handler from a Vue listener, which accepts several keys:"
-        f" @{event}.{key}.{second}=\"$sendEvent('{handler}')\".",
+        f' @{event}.{key}.{second}="{call}".',
     )
+
+
+def _two_bindings_for_one_event_error(tag_name: str, event: str, first: _Attr, second: _Attr) -> str:
+    """Explain two ``@c-*`` bindings for one DOM event on one element, naming both and the fix."""
+    message = (
+        f"<{tag_name}> has two '@c-{event}' bindings, {first.name!r} and {second.name!r}. An element"
+        f" takes one '@c-{event}' binding. Keep one"
+    )
+    if first.from_spread or second.from_spread:
+        return message + "."
+    # The usual reason for two bindings is one handler per key. A Vue
+    # listener per key does that, so show it for the second binding. Keep
+    # only the modifiers Vue shares with Citry: Vue would read `.debounce`
+    # as a key name.
+    _, segments = _split_name(second.name, _PREFIX_EVENT)
+    shared = [segment for segment in segments if segment in _KEY_FILTERS or segment in _EVENT_FLAGS]
+    listener = ".".join([event, *shared])
+    text = (second.value or "").strip()
+    paren = text.find("(")
+    if paren == -1 or not text.endswith(")"):
+        call = f"$sendEvent('{text}')"
+    else:
+        args = text[paren + 1 : -1].strip()
+        handler = text[:paren].strip()
+        call = f"$sendEvent('{handler}', {args})" if args else f"$sendEvent('{handler}')"
+    return f'{message}, or write a Vue listener for each one that calls its handler, such as @{listener}="{call}".'
 
 
 def _build_event_spec(info: EventsInfo, event: str, attr: _Attr, location: _Location) -> dict[str, Any]:
@@ -357,7 +394,7 @@ def _build_event_spec(info: EventsInfo, event: str, attr: _Attr, location: _Loca
             self_flag = self_flag or token.value == "self"
             once = once or token.value == "once"
         elif token.kind == "flag" and token.value in _KEY_FILTERS:
-            _reject_second_key_filter(attr.name, key, str(token.value), location, handler=handler)
+            _reject_second_key_filter(attr, key, str(token.value), location, handler=handler, args=args)
             key = str(token.value)
         elif token.kind == "flag":  # lazy
             _fail(location, f"{attr.name!r}: '.lazy' only applies to a two-way state binding (:c-...), not an event")
@@ -465,7 +502,7 @@ def _build_bind_spec(
         if token.kind == "flag" and token.value == "lazy":
             lazy = True
         elif token.kind == "flag" and token.value in _KEY_FILTERS:
-            _reject_second_key_filter(attr.name, key, str(token.value), location)
+            _reject_second_key_filter(attr, key, str(token.value), location)
             key = str(token.value)
         elif token.kind == "flag":  # prevent/stop/self/once: event-only
             _fail(
@@ -990,17 +1027,17 @@ def _transform_element_attrs(
     # The browser keeps one Citry Events listener per DOM event on an element,
     # so a second `@c-keydown` would only fail later, when the page renders.
     # Catch it here, with the template line, naming both attributes.
-    events_seen: dict[str, str] = {}
+    events_seen: dict[str, _Attr] = {}
     for attr in bindings:
         if _classify_binding(attr.key) != _CHANNEL_EVENT:
             continue
         event, _ = _split_name(attr.key, _PREFIX_EVENT)
-        first = events_seen.setdefault(event, attr.key)
-        if first != attr.key:
+        current = _compiled_attr(attr)
+        first = events_seen.setdefault(event, current)
+        if first is not current:
             _fail(
                 _compiled_location(comp_name, source, attr.position),
-                f"<{tag_name}> has two bindings for the {event!r} event, {first!r} and {attr.key!r}. An element"
-                f" sends one Citry Events call per event, so keep one '@c-{event}' binding on it.",
+                _two_bindings_for_one_event_error(tag_name, event, first, current),
             )
 
     element_attrs = [_compiled_attr(attr) for attr in attrs]
@@ -1227,6 +1264,8 @@ def rewrite_resolved_attrs(
     element = _resolved_element(tag_name, attrs, location)
 
     result = {key: value for key, value in attrs.items() if key not in binding_keys}
+    # Two spread keys for one event would otherwise fail later with no names.
+    spread_events: dict[str, _Attr] = {}
     event_specs: list[dict[str, Any]] = []
     runtime_poll_specs: list[dict[str, Any]] = []
     bind_specs: list[dict[str, Any]] = []
@@ -1237,8 +1276,12 @@ def rewrite_resolved_attrs(
         # A spread value is the attribute's value; a bare boolean True means the
         # key was contributed with no value (a one-way :c-* binding).
         value = None if raw is True else _as_str(raw)
-        spec = _build_spec(channel, info, _Attr(name=key, value=value, source=key), element, location)
+        spread_attr = _Attr(name=key, value=value, source=key, from_spread=True)
+        spec = _build_spec(channel, info, spread_attr, element, location)
         if channel == _CHANNEL_EVENT:
+            first = spread_events.setdefault(spec["event"], spread_attr)
+            if first is not spread_attr:
+                _fail(location, _two_bindings_for_one_event_error(tag_name, spec["event"], first, spread_attr))
             event_specs.append(spec)
         elif channel == _CHANNEL_POLL:
             runtime_poll_specs.append(spec)

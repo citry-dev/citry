@@ -961,12 +961,22 @@ class PreparedElementOpenNode(ElementAttrsNode):
                 identified.append({"id": f"citryRuntimeEvent{identity}", **spec})
             runtime_event_bindings = _normalize_event_bindings(tuple(identified))
             runtime_names = [str(binding["event"]) for binding in runtime_event_bindings]
-            if len(runtime_names) != len(set(runtime_names)):
-                raise ValueError("one element supports one Events binding per DOM event")
+            # The Events binding pass names both spread keys when they share
+            # an event; this check stays for values that bypass it.
+            repeated = sorted({name for name in runtime_names if runtime_names.count(name) > 1})
+            if repeated:
+                raise ValueError(
+                    f"<{self._tag_name}> gets two '@c-{repeated[0]}' bindings from c-bind. An element takes one"
+                    f" '@c-{repeated[0]}' binding. Keep one."
+                )
             authored_events = {str(binding["event"]) for binding in self._event_bindings}
             overlap = authored_events & {str(binding["event"]) for binding in runtime_event_bindings}
             if overlap:
-                raise ValueError(f"one element supports one Events binding per DOM event: {sorted(overlap)!r}")
+                event = sorted(overlap)[0]
+                raise ValueError(
+                    f"<{self._tag_name}> has a '@c-{event}' binding in its template and another from c-bind."
+                    f" An element takes one '@c-{event}' binding. Remove one of them."
+                )
             identified_polls = []
             for spec in runtime_poll_specs:
                 canonical = json.dumps(spec, sort_keys=True, separators=(",", ":"))

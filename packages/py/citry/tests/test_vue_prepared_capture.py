@@ -894,7 +894,7 @@ def test_duplicate_handlers_for_one_dom_event_fail_before_a_leaf_program_is_buil
 
         template = '<button c-if="True" @c-click="save" @c-click.prevent="save">Save</button>'
 
-    with pytest.raises(ValueError, match=r"<button> has two bindings for the 'click' event"):
+    with pytest.raises(ValueError, match=r"<button> has two '@c-click' bindings"):
         render_prepared(Buttons())
 
 

@@ -778,7 +778,7 @@ class TestValidationErrors:
     # A binding sends for one key, so a second key filter must not silently
     # replace the first. Vue reads `@keydown.enter.escape` as "either key";
     # the error names both filters and, for an event binding, shows the Vue
-    # listener that reacts to either key.
+    # listener that reacts to either key, keeping the handler's arguments.
     @pytest.mark.parametrize(
         ("template", "attr_name", "fix"),
         [
@@ -789,10 +789,10 @@ class TestValidationErrors:
                 " @keydown.enter.escape=\"$sendEvent('go')\".",
             ),
             (
-                '<input @c-keyup.escape.prevent.enter="go">',
+                '<input @c-keyup.escape.prevent.enter="go({x: 1})">',
                 "@c-keyup.escape.prevent.enter",
                 ", or call the handler from a Vue listener, which accepts several keys:"
-                " @keyup.escape.enter=\"$sendEvent('go')\".",
+                " @keyup.escape.enter=\"$sendEvent('go', {x: 1})\".",
             ),
             (
                 '<input :c-q.on:keyup.enter.escape="go">',
@@ -804,9 +804,9 @@ class TestValidationErrors:
     def test_two_key_filters_on_one_binding_fail_to_load(self, template, attr_name, fix):
         first, second = [part for part in attr_name.split(".") if part in {"enter", "escape"}]
         expected = (
-            f"'{attr_name}' has two key filters, '.{first}' and '.{second}'. A Citry Events binding"
-            " reacts to one key, so it cannot read them as either key the way a Vue listener does."
-            f" Keep one key filter{fix} (in Comp template, line 1)"
+            f"'{attr_name}' has two key filters, '.{first}' and '.{second}'. Unlike a Vue listener, a Citry"
+            f" Events binding does not react to either key; it takes one key filter. Keep one{fix}"
+            " (in Comp template, line 1)"
         )
         with pytest.raises(ValueError, match=re.escape(expected)):
             self._load(template, state={"__annotations__": {"q": str}, "q": ""}, events={"go": _noop})
@@ -814,14 +814,32 @@ class TestValidationErrors:
     def test_two_event_bindings_for_one_event_fail_to_load(self):
         # The browser keeps one Events listener per DOM event on an element,
         # so a second binding for `keydown` fails when the template loads,
-        # not later when the page renders.
+        # not later when the page renders. The fix shows a Vue listener for
+        # the second binding, without `.debounce`, which Vue would read as a
+        # key name.
         expected = (
-            "<input> has two bindings for the 'keydown' event, '@c-keydown.enter' and '@c-keydown.escape'."
-            " An element sends one Citry Events call per event, so keep one '@c-keydown' binding on it."
+            "<input> has two '@c-keydown' bindings, '@c-keydown.enter' and '@c-keydown.escape.debounce'."
+            " An element takes one '@c-keydown' binding. Keep one, or write a Vue listener for each one"
+            " that calls its handler, such as @keydown.escape=\"$sendEvent('stop', {why: 1})\"."
             " (in Comp template, line 1)"
         )
         with pytest.raises(ValueError, match=re.escape(expected)):
-            self._load('<input @c-keydown.enter="go" @c-keydown.escape="go">', events={"go": _noop})
+            self._load(
+                '<input @c-keydown.enter="go" @c-keydown.escape.debounce="stop({why: 1})">',
+                events={"go": _noop, "stop": _noop},
+            )
+
+    def test_event_and_state_binding_may_share_an_event(self):
+        # The one-binding-per-event rule covers `@c-*` bindings only; a
+        # `:c-*` update event is a separate listener.
+        comp = self._component(
+            '<input @c-keydown.enter="go" :c-q.on:keydown="go">',
+            state={"__annotations__": {"q": str}, "q": ""},
+            events={"go": _noop},
+        )
+        _, tables, _ = _typed_binding_tables(comp)
+        assert [spec["event"] for spec in tables["eventBindings"]] == ["keydown"]
+        assert [spec["on"] for spec in tables["controlBindings"]] == ["keydown"]
 
     @pytest.mark.parametrize("event_name", ["keydown", "keyup", "keypress"])
     def test_event_key_filter_accepts_keyboard_events(self, event_name):
@@ -1259,6 +1277,64 @@ class TestStageTwoSpread:
         assert any(attrs_for_element.get("multiple") is True for attrs_for_element in attrs)
         assert "v-citry-control=" in compiled.template
         assert "data-cev-" not in compiled.template
+
+    @pytest.mark.parametrize(
+        ("spread", "expected"),
+        [
+            (
+                {"@c-keydown.enter": "go", "@c-keydown.escape": "go"},
+                "<input> has two '@c-keydown' bindings, '@c-keydown.enter' and '@c-keydown.escape'."
+                " An element takes one '@c-keydown' binding. Keep one."
+                " (in Comp template, <input> after dynamic attributes resolved)",
+            ),
+            (
+                {"@c-keydown.enter.escape": "go"},
+                "'@c-keydown.enter.escape' has two key filters, '.enter' and '.escape'. Unlike a Vue listener,"
+                " a Citry Events binding does not react to either key; it takes one key filter. Keep one."
+                " (in Comp template, <input> after dynamic attributes resolved)",
+            ),
+        ],
+    )
+    def test_spread_key_mistakes_name_the_spread_keys(self, spread, expected):
+        # A spread cannot hold a Vue listener, so its errors only say to keep one.
+        app = Citry(secret=SIGNING_KEY)
+
+        class Comp(Component):
+            citry = app
+
+            class Events:
+                def go(self):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": spread}
+
+            template = '<input c-bind="attrs">'
+
+        with pytest.raises(ValueError, match=re.escape(expected)):
+            _rendered(Comp())
+
+    def test_spread_binding_for_an_authored_event_is_rejected(self):
+        app = Citry(secret=SIGNING_KEY)
+
+        class Comp(Component):
+            citry = app
+
+            class Events:
+                def go(self):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": {"@c-keydown.enter": "go"}}
+
+            template = '<input @c-keydown.escape="go" c-bind="attrs">'
+
+        expected = (
+            "<input> has a '@c-keydown' binding in its template and another from c-bind."
+            " An element takes one '@c-keydown' binding. Remove one of them."
+        )
+        with pytest.raises(ValueError, match=re.escape(expected)):
+            _rendered(Comp())
 
     def test_binding_spread_onto_an_element_without_a_value_is_rejected(self):
         # The target check runs in the shared spec builder, so a binding that
