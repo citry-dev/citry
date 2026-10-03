@@ -1,9 +1,9 @@
 ---
-title: Custom component values
+title: Render custom values
 description: Let Python objects resolve themselves into Citry components during rendering.
 ---
 
-# Custom component values
+# Render custom values
 
 Sometimes one of your own Python objects already knows how it should look
 on the page. A payment status, for example, always shows as a green or red

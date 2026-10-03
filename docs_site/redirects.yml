@@ -23,3 +23,5 @@ redirects:
     to: /ui-library/components/col-row/
   - from: /events/http/
     to: /events/routes/
+  - from: /advanced/custom-component-values/
+    to: /advanced/render-custom-values/

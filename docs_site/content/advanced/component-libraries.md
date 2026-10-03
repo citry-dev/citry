@@ -163,7 +163,7 @@ when you call `AcmeBadge(...)`. Your editor also cannot check the inputs
 of that call, because its signature accepts any keyword arguments.
 
 Your own Python objects can turn into components the same way. See
-[Custom component values](/advanced/custom-component-values/).
+[Render custom values](/advanced/render-custom-values/).
 
 ## Get the bound class
 

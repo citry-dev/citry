@@ -797,7 +797,7 @@ why. This phase is the deliberate authoring pass. Approach:
   reference for who each page is written to.
 - **Component reuse pages.** The Advanced authoring pass separates two reader
   jobs: `Component libraries` covers packaging and publishing reusable
-  components, while `Custom component values` explains the `ComponentLike`
+  components, while `Render custom values` explains the `ComponentLike`
   integration contract. Both keep implementation detail behind the task it
   helps the reader complete.
 - **Intent-driven and concise.** Every reader arrives with a reason. Lead them to
