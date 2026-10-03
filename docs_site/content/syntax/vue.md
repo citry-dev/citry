@@ -98,23 +98,35 @@ forms for listening to events and setting attributes:
 | `:disabled="busy"` | Short for `v-bind:disabled="busy"`. |
 
 Modifiers stay in the attribute name. `@keydown.enter.prevent="submit()"`
-listens for Enter and stops the browser's default action. A key name such
-as `.enter` works only on `keydown`, `keyup`, and `keypress`. On another
-event, such as `@click.enter`, the template fails when it loads, because
-that event has no key: Vue would ignore `.enter` and run the listener on
-every click. A `@c-*` binding such as `@c-click.enter` also fails when the
-template loads.
-
-Write the `v-` prefix and Vue's own directive names in lowercase.
-`V-IF` and `v-If` fail when the
-template loads, on HTML elements and component tags alike, because Vue
-would read `V-IF` as a plain attribute and `v-If` as a custom directive
-named `If`. Names that start with `v-c-` or `v-citry-` fail too, because
-Citry keeps them for its own use.
+listens for Enter and stops the browser's default action.
 
 See Vue's
 [template syntax guide](https://vuejs.org/guide/essentials/template-syntax.html){: target="_blank" rel="noopener"}
 for every directive and modifier.
+
+!!! warning "Key modifiers need a keyboard event"
+
+    A key name such as `.enter` works only on `keydown`, `keyup`, and
+    `keypress`. On another event, such as `@click.enter`, the template fails
+    when it loads, because that event has no key: Vue would ignore `.enter`
+    and run the listener on every click. A `@c-*` binding such as
+    `@c-click.enter` also fails when the template loads.
+
+!!! warning "Write directive names in lowercase"
+
+    Write the `v-` prefix and Vue's own directive names in lowercase.
+    `V-IF` and `v-If` fail when the template loads, on HTML elements and
+    component tags alike, because Vue would read `V-IF` as a plain attribute
+    and `v-If` as a custom directive named `If`. Names that start with `v-c-`
+    or `v-citry-` fail too, because Citry keeps them for its own use.
+
+!!! info "Write Vue code in the template itself"
+
+    A Vue directive or listener that comes from `c-bind`, or is written with
+    a `c-` prefix such as `c-v-if`, fails when the page renders. Write Vue
+    code directly in the template. A value that Python works out at render
+    time may contain user input, so Citry never lets it become code that the
+    browser runs.
 
 ## Tell Python from Vue
 
@@ -336,8 +348,8 @@ class OrderPanel(Component):
 If nothing registers the name, the page's Vue app stops and the browser
 console shows an error that names the directive and the component.
 
-The child's template must have exactly one root element. Wrap it in one
-element, or put the directive on an element around the component tag.
+The child's template must have exactly one root element; see
+[`v-show` needs one root](#several-root-elements).
 
 ## Repeat a component
 
@@ -471,10 +483,22 @@ transition or the HTML `<dialog>` element.
 
 ## Fill group components { #keep-vue-bound-group-content-inside-the-groups-tag }
 
-Some Citry UI components, such as `CTabs`, collect the content you put inside
-them and render it in their own layout. If another component writes that
-content, and the content uses Vue data, a Vue event listener, `v-model`, a
-`ref`, or an `@c-*` binding, the page stops with an error. For example,
+The render fails when tab content that uses Vue is written in a separate
+component and passed into `<c-CTabs>`.
+
+`CTabs` from Citry UI is a group component: it collects the `CTab` and
+`CTabPanel` items inside its tag and shows each one in its own place, the
+labels in the tab list and the content in the panels. `CTabs`, not the
+component where you wrote the tab, decides where it appears. Other Citry UI
+components that collect items this way, such as `CStepper` and `CTimeline`,
+follow the same rule.
+
+Content that uses Vue must therefore be written in the component that holds
+the `<c-CTabs>` tag. That covers browser data, a Vue event listener,
+`v-model`, a `ref`, and an `@c-*` binding. Content that shows only Python values, such as
+`{{ title }}`, works from any component.
+
+A natural first attempt moves the tabs into their own component.
 `TabLabels` writes a tab that shows its own browser data, `label`:
 
 ```citry
@@ -497,25 +521,23 @@ class TabLabels(Component):
     """
 ```
 
-and the page passes `TabLabels` into the group:
-
 ```citry-html
-<!-- label belongs to TabLabels, but the tab list
-     that shows the tab is not inside TabLabels -->
+<!-- Fails: TabLabels wrote the tab, but CTabs shows it -->
 <c-CTabs default_value="one" aria_label="Example">
   <c-TabLabels />
 </c-CTabs>
 ```
 
-The group renders the tab inside its own tab list. Vue gives content the data
-of the component that wrote it only inside that component, and the tab list
-is not inside `TabLabels`. The error names the content, the component that
-wrote it, and the line.
+Vue passes content written inside a component's tag only to components
+inside the one that wrote it. `CTabs` sits outside `TabLabels`, so `label`
+cannot reach the tab list where `CTabs` shows the tab.
+The error names the content, the component that wrote it, and the line.
 
-Write the content directly inside the group's tag, in the page component's
-template, and define `label` in that component's `js`:
+Write the `CTab` items directly inside `<c-CTabs>`, in the component that
+defines `label` in its `js`:
 
 ```citry-html
+<!-- Works: this component defines label -->
 <c-CTabs default_value="one" aria_label="Example">
   <c-CTab value="one">
     <span v-text="label"></span>
@@ -524,22 +546,11 @@ template, and define `label` in that component's `js`:
 </c-CTabs>
 ```
 
-Alternatively, set `transparent = True` on the component that writes the
-content, such as `TabLabels`. A transparent component renders its content in
-place, as if the page had written it inside the group's tag.
-
-Content that shows only Python values, such as `{{ title }}`, works from a
-separate component.
+Alternatively, set `transparent = True` on `TabLabels`. Its content then
+renders as if the component that holds `<c-CTabs>` had written it, so define
+`label` in that component's `js`, not in `TabLabels`.
 
 ## Less common rules
-
-### Directives via `c-bind`
-
-A Vue directive or listener that comes from `c-bind`, or is written with
-a `c-` prefix such as `c-v-if`, fails when the page renders. Write Vue
-code directly in the template. A value that Python works out at render
-time may contain user input, so Citry never lets it become code that the
-browser runs.
 
 ### Vue on built-in tags
 
@@ -560,10 +571,27 @@ around the slot, or `v-show` on an element around it:
 </template>
 ```
 
-### Several root elements
+### `v-show` needs one root { #several-root-elements }
 
-The render fails, with an error naming the directive and the child, when the
-child's template has several top-level elements, a top-level `v-for`,
-`<c-for>`, or `<c-slot>`, only text, or top-level HTML from `<c-raw>`. When
-the child's root is another component with such a template, the browser
+`v-show` or a custom directive on a component tag, such as
+`<c-Panel v-show="open">`, needs the child's template to render exactly one
+root element, because Vue applies the directive to that element. Otherwise
+the render fails with an error naming the directive and the child. That
+happens when the child's template has:
+
+- several top-level elements, or an element next to text;
+- a top-level `v-for`, `<c-for>`, or `<c-slot>`;
+- only text;
+- top-level HTML from Python, such as `<c-raw>`.
+
+When the child's root is another component with such a template, the browser
 reports the error instead.
+
+Wrap the child's template in one element, or put the directive on an element
+around the child tag:
+
+```citry-html
+<div v-show="open">
+  <c-Panel />
+</div>
+```
