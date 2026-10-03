@@ -664,10 +664,11 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'check the type of the value that callers pass in.',
                                    'surfaces': ['check'],
                                    'title': 'Message variable without a type',
-                                   'when': 'A source-language message uses a variable such as { $name } directly in '
-                                           'its text, without a selector, Slot, formatting function, or browser use, '
-                                           'and has no # @param comment declaring its type, while '
-                                           'rule_i18n_missing_param_type is "warning".'},
+                                   'when': 'A source-language message uses a variable such as { $name } in its value '
+                                           'or an attribute, has no # @param comment declaring its type, and '
+                                           'rule_i18n_missing_param_type is "warning". A variable used in a selector '
+                                           'or a formatting function without a type fails catalog compilation and is '
+                                           'reported as citry.i18n.catalog-invalid.'},
  'citry.i18n.rich-message-fallback': {'code': 'citry.i18n.rich-message-fallback',
                                       'constant': 'I18N_RICH_MESSAGE_FALLBACK',
                                       'defaultSeverity': 'error',

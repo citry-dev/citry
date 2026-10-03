@@ -878,7 +878,7 @@
       "constant": "I18N_MISSING_PARAM_TYPE",
       "title": "Message variable without a type",
       "summary": "A message uses a variable that has no # @param comment, so Citry cannot check the type of the value that callers pass in.",
-      "when": "A source-language message uses a variable such as { $name } directly in its text, without a selector, Slot, formatting function, or browser use, and has no # @param comment declaring its type, while rule_i18n_missing_param_type is \"warning\".",
+      "when": "A source-language message uses a variable such as { $name } in its value or an attribute, has no # @param comment declaring its type, and rule_i18n_missing_param_type is \"warning\". A variable used in a selector or a formatting function without a type fails catalog compilation and is reported as citry.i18n.catalog-invalid.",
       "fix": "Add a comment such as # @param {str} $name above the message, naming the type the variable really takes. Set rule_i18n_missing_param_type to \"error\" to make a missing type fail catalog compilation, or to \"ignore\" to hide this warning.",
       "defaultSeverity": "warning",
       "configurableSeverity": true,

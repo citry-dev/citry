@@ -12,26 +12,27 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG_PATH = ROOT / "packages/protocol/diagnostics/v1/catalog.json"
 GENERATOR_PATH = ROOT / "scripts/generate_diagnostic_catalog.py"
-CODE_RE = re.compile(
-    r"(?P<quote>['\"])(?P<code>citry\."
-    r"(?:parse|template|component|component-js|browser|vue|js-data|csp|check|format|i18n|python)\."
-    r"[a-z0-9][a-z0-9.-]*)(?P=quote)"
-)
 CODE_RE_FULL = re.compile(r"citry\.[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
 CONSTANT_RE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
 SURFACES = frozenset({"parser", "formatter", "check", "lsp", "vscode"})
 SEVERITIES = frozenset({"error", "warning", "information"})
 IMPLEMENTATION_ROOTS = (
+    ROOT / "crates/citry_core_py/src",
     ROOT / "crates/citry_i18n/src",
     ROOT / "crates/citry_template_parser/src",
     ROOT / "crates/citry_template_formatter/src",
     ROOT / "packages/py/citry/citry",
     ROOT / "packages/py/citry_lsp/citry_lsp",
     ROOT / "packages/editors/vscode/src",
+    ROOT / "packages/js/citry-client/src",
 )
 # Crates that report diagnostics but receive no generated binding. Their code
 # literals must still be catalogued, but spelling the code is the only option.
-UNBOUND_ROOTS = (ROOT / "crates/citry_i18n/src",)
+UNBOUND_ROOTS = (
+    ROOT / "crates/citry_core_py/src",
+    ROOT / "crates/citry_i18n/src",
+    ROOT / "packages/js/citry-client/src",
+)
 GENERATED_PATHS = {
     ROOT / "packages/py/citry/citry/_diagnostic_catalog.py",
     ROOT / "crates/citry_template_parser/src/diagnostic_catalog.rs",
@@ -204,9 +205,24 @@ def _generated_problems() -> list[str]:
     return module.check_generated()
 
 
+def _code_literal_pattern(codes: set[str], prefixes: tuple[str, ...]) -> re.Pattern[str]:
+    """
+    Match quoted code literals in every family the catalog already owns.
+
+    The families come from the catalog, so a new code in an existing family is
+    scanned without editing this file. A pattern for any `citry.<word>.` string
+    would also match module paths such as `citry.contrib.asgi`, so a code in a
+    brand-new family is caught only once that family has its first entry.
+    """
+    families = sorted({code.split(".")[1] for code in codes} | {prefix.split(".")[1] for prefix in prefixes})
+    alternatives = "|".join(re.escape(family) for family in families)
+    return re.compile(rf"(?P<quote>['\"])(?P<code>citry\.(?:{alternatives})\.[a-z0-9][a-z0-9.-]*)(?P=quote)")
+
+
 def _code_literal_problems(codes: set[str], prefixes: tuple[str, ...]) -> list[str]:
     """Reject uncataloged IDs and catalog-value duplication outside generated bindings."""
     problems: list[str] = []
+    code_re = _code_literal_pattern(codes, prefixes)
     for root in IMPLEMENTATION_ROOTS:
         has_binding = root not in UNBOUND_ROOTS
         for path in root.rglob("*"):
@@ -215,7 +231,7 @@ def _code_literal_problems(codes: set[str], prefixes: tuple[str, ...]) -> list[s
             if any(part in {"tests", "out", "__pycache__"} for part in path.parts) or path.name == "corpus.rs":
                 continue
             source = path.read_text(encoding="utf-8")
-            for match in CODE_RE.finditer(source):
+            for match in code_re.finditer(source):
                 code = match.group("code")
                 if code in codes:
                     if not has_binding:
