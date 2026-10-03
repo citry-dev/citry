@@ -180,9 +180,7 @@ them. Write property names in kebab-case:
 ```
 
 When several values set the same property, a later `False` removes it and a
-later `None` leaves the earlier value alone. An empty style is left out,
-on static and interactive pages alike. A string with no
-`property: value` pair in it, such as `'color'`, is empty too:
+later `None` leaves the earlier value alone:
 
 ```citry-html
 <div
@@ -194,12 +192,21 @@ on static and interactive pages alike. A string with no
 <!-- Result: <div style="color: red;"></div> -->
 ```
 
+An empty style is left out, on static and interactive pages alike. A
+string with no `property: value` pair in it, such as `'color'`, is empty
+too:
+
+```citry-html
+<div c-style="'color'"></div>
+<!-- Result: <div></div> -->
+```
+
 !!! note "Components receive `class` and `style` as ordinary inputs"
 
     The joining above happens only on HTML elements, including
     [`<c-element>`][c-element]. On a component tag, `class` and `style` are
     inputs like any other, and the component decides where to put them. See
-    [Pass HTML attributes](/concepts/client-interactivity/#pass-arbitrary-html-attributes-explicitly).
+    [Pass HTML attributes](/vue/props-and-events/#pass-arbitrary-html-attributes-explicitly).
 
 ## `c-bind` { #c-bind-spread }
 
@@ -342,10 +349,10 @@ and pass reactive values and event listeners to a child component:
 ```
 
 - `:theme` passes a Vue prop that the child declares in its JavaScript. See
-  [Pass props to a child](/concepts/client-interactivity/#pass-props-to-a-child).
+  [Pass props to a child](/vue/props-and-events/#pass-props-to-a-child).
 - `@click` runs browser code when the child emits `click`. The expression can
   read `$event`. See
-  [Listen to child events](/concepts/client-interactivity/#listen-to-child-events).
+  [Listen to child events](/vue/props-and-events/#listen-to-child-events).
 - `@c-save` calls the Python event handler `saveSelection` on the server. See
   [Bind events in templates](/events/bindings/).
 - `v-on="listeners"` adds every listener in a Vue object at once.
@@ -448,7 +455,7 @@ when the template loads:
 
 A child component binds its own State in its own template. To share a
 browser value with a child, pass it as a
-[Vue prop](/concepts/client-interactivity/#pass-props-to-a-child).
+[Vue prop](/vue/props-and-events/#pass-props-to-a-child).
 
 Read [`:c-<field>` bindings](/events/bindings/#bind-controls-to-state) for
 which input types are supported in which direction, and

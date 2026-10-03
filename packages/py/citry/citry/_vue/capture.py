@@ -13,7 +13,7 @@ from inspect import getattr_static
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from citry.attrs import _html_attr_identity, is_vue_directive_name, merge_attrs, normalize_class, normalize_style
+from citry.attrs import _html_attr_identity, is_vue_directive_name, merge_attrs
 from citry.citry_render import (
     CitryRender,
     SimpleVueRecord,
@@ -50,19 +50,16 @@ def include_prepared_attribute(name: str, value: object) -> bool:
     """
     Return whether a Python-computed attribute goes into the element's Vue ``v-bind`` values.
 
-    ``None`` and ``False`` mean the attribute is absent. A ``class`` or
-    ``style`` whose value comes out empty, such as a ``c-style`` string with
-    no ``property: value`` pair in it, is left out too: a static page omits
-    it the same way, and Vue would otherwise write ``style=""``.
+    ``None`` and ``False`` mean the attribute is absent. Callers pass values
+    that ``merge_attrs`` already merged, where a ``class`` or ``style`` is a
+    string, and a ``c-style`` string with no ``property: value`` pair in it
+    is already empty. An empty ``class`` or ``style`` is left out too: a
+    static page omits it the same way, and Vue would otherwise write
+    ``style=""``.
     """
     if value is None or value is False:
         return False
-    identity = _html_attr_identity(name)
-    if identity == "class":
-        return bool(value if isinstance(value, str) else normalize_class(cast("Any", value)))
-    if identity == "style":
-        return bool(value if isinstance(value, str) else normalize_style(cast("Any", value)))
-    return True
+    return value != "" or _html_attr_identity(name) not in {"class", "style"}
 
 
 # Vue's `mergeProps` joins a bound `class` with every other class on the

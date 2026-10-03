@@ -789,15 +789,15 @@ class TestHookReturnedContent:
 
     @PAGES
     def test_unsupported_slot_hook_value_is_rejected(self, interactive, document):
-        # A slot rendered for Vue used to fail with an internal message about
-        # prepared slots that named neither the hook nor the slot.
+        # On a page Vue renders, the error still names the hook, the
+        # extension, and the slot.
         msg = "on_slot_rendered of extension 'replace' returned a value of type int for slot 'default' of Holder"
         with pytest.raises(TypeError, match=msg):
             str(self._page("slot", 42, interactive=interactive, document=document)())
 
     def test_unsupported_python_slot_hook_value_is_rejected(self):
-        # A slot filled from Python used to fail at serialize() with an
-        # unrelated message about the render queue.
+        # A slot filled from Python raises the same error while it renders,
+        # before serialize().
         class Replace(Extension):
             name = "replace"
 

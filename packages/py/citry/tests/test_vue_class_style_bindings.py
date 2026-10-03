@@ -265,7 +265,8 @@ def test_a_c_bind_key_and_a_modified_binding_for_one_attribute_stop_the_render(b
 
 
 # Values that leave no class or style once Citry reads them: a style string
-# without a `property: value` pair, an empty string, an empty mapping or list.
+# without a `property: value` pair, an empty string, an empty mapping, or a
+# mapping whose entries are all turned off.
 EMPTY_CLASS_AND_STYLE = pytest.mark.parametrize(
     ("attribute", "value"),
     [

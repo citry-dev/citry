@@ -911,8 +911,10 @@ class Extension:
         on static and interactive pages alike.
 
         Raises:
-            TypeError: Citry raises it when the hook returns any other
-                value that is not ``None`` or the unchanged ``ctx.result``.
+            TypeError: Citry raises it when the hook returns a value of any
+                other type, such as a bare ``Placeholder`` or component.
+                Return ``None`` or the unchanged ``ctx.result`` to keep the
+                output.
 
         """
 
