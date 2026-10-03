@@ -536,10 +536,23 @@ def test_internal_page_link_brings_active_sidebar_item_clearly_into_view(
     assert_active_link_is_clear(first_path)
 
 
+def _review_marked_page_path() -> str:
+    """Return a page whose own sidebar group still has an entry marked for review."""
+    # Which pages still need review changes as the maintainer reviews them, so
+    # the test finds one from the nav instead of naming a page. Opening the
+    # marked page itself keeps its group expanded, so the link is visible.
+    for area in load_site_nav(config).areas:
+        for group in area.groups:
+            for item in group.items:
+                if item.needs_review:
+                    return item.path
+    pytest.skip("no navigation entry is marked for review")
+
+
 def test_navigation_status_badges_and_review_hint_render(page: Any, docs_site_url: str) -> None:
-    # Open a page in a group containing review-marked entries. On /docs/ that
-    # group is collapsed, so its links are intentionally not visible.
-    page.goto(docs_site_url + "/syntax/control-flow/")
+    # Open a review-marked page. On /docs/ its group is collapsed, so its
+    # links are intentionally not visible there.
+    page.goto(docs_site_url + _review_marked_page_path())
 
     alpha_badge = page.locator('.djc-header__nav a[href="/ui-library/"] .djc-nav-badge')
     assert alpha_badge.inner_text() == "ALPHA"
@@ -570,7 +583,7 @@ def test_active_header_underline_excludes_status_badge(page: Any, docs_site_url:
 
 def test_navigation_review_hint_stays_inside_resized_sidebar(page: Any, docs_site_url: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
-    page.goto(docs_site_url + "/syntax/control-flow/")
+    page.goto(docs_site_url + _review_marked_page_path())
 
     sidebar = page.locator("#djc-sidebar")
     sidebar.evaluate(
