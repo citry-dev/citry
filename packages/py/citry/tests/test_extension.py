@@ -782,9 +782,36 @@ class TestHookReturnedContent:
         replaced = "unused" if hook == "component" else "fill"
         assert replaced not in html
 
-    def test_unsupported_component_hook_value_is_rejected(self):
-        with pytest.raises(TypeError, match="returned a value of type int"):
-            str(self._page("component", 42, interactive=False, document=False)())
+    @PAGES
+    def test_unsupported_component_hook_value_is_rejected(self, interactive, document):
+        with pytest.raises(TypeError, match="on_component_rendered for Replaced returned a value of type int"):
+            str(self._page("component", 42, interactive=interactive, document=document)())
+
+    @PAGES
+    def test_unsupported_slot_hook_value_is_rejected(self, interactive, document):
+        # A slot rendered for Vue used to fail with an internal message about
+        # prepared slots that named neither the hook nor the slot.
+        msg = "on_slot_rendered of extension 'replace' returned a value of type int for slot 'default' of Holder"
+        with pytest.raises(TypeError, match=msg):
+            str(self._page("slot", 42, interactive=interactive, document=document)())
+
+    def test_unsupported_python_slot_hook_value_is_rejected(self):
+        # A slot filled from Python used to fail at serialize() with an
+        # unrelated message about the render queue.
+        class Replace(Extension):
+            name = "replace"
+
+            def on_slot_rendered(self, ctx):
+                return 42
+
+        app = _Citry(extensions=[Replace], autodiscover=False)
+
+        class Holder(Component):
+            citry = app
+            template = "<section><c-slot /></section>"
+
+        with pytest.raises(TypeError, match="returned a value of type int for slot 'default' of Holder"):
+            str(Holder(slots={"default": "fill"}))
 
     @HOOKS
     def test_later_extension_receives_text_as_a_render(self, hook):

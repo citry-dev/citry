@@ -35,6 +35,7 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from importlib import import_module
+from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast
 from weakref import ReferenceType, WeakSet, ref
 
@@ -908,6 +909,11 @@ class Extension:
         ``CitryRender`` replaces the output, a plain ``str`` is shown as text
         (Citry escapes it), and [`Markup`][citry.Markup] is inserted as HTML,
         on static and interactive pages alike.
+
+        Raises:
+            TypeError: Citry raises it when the hook returns any other
+                value that is not ``None`` or the unchanged ``ctx.result``.
+
         """
 
     def on_attrs_resolved(self, ctx: OnAttrsResolvedContext) -> dict[str, Any] | None:
@@ -2017,11 +2023,24 @@ class ExtensionManager:
                 continue
             # The slot's own output, passed back unchanged, is already a
             # render part, even when it is an escaped str.
-            if context is not None and out is not ctx.result:
+            if out is not ctx.result:
                 # Imported lazily: component_render imports this module.
+                from citry.citry_render import CitryRender  # noqa: PLC0415
                 from citry.component_render import _ON_SLOT_RENDERED_TEXT_SOURCE, _hook_content_render  # noqa: PLC0415
 
-                out = cast("RenderPart", _hook_content_render(out, context, _ON_SLOT_RENDERED_TEXT_SOURCE))
+                if context is not None:
+                    out = cast("RenderPart", _hook_content_render(out, context, _ON_SLOT_RENDERED_TEXT_SOURCE))
+                # Anything else would only fail later, deep in the slot or Vue
+                # serializer, with a message that names neither the hook nor
+                # the slot, so reject it here where both are known.
+                if not isinstance(out, (CitryRender, str)) and getattr_static(out, "__html__", None) is None:
+                    msg = (
+                        f"on_slot_rendered of extension {extension.name!r} returned a value of type "
+                        f"{type(out).__name__} for slot {slot_name!r} of {type(component).__name__}, which Citry "
+                        "cannot put on the page. Return Markup for HTML, a str for text, a CitryRender, or None "
+                        "to keep the output."
+                    )
+                    raise TypeError(msg)
             ctx = replace(ctx, result=out)
         return ctx.result
 

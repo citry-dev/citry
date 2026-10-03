@@ -465,9 +465,10 @@ OnSlotRenderedContext(
 ```
 
 Return semantics follow `on_component_rendered`: `None` keeps the result, a
-returned `RenderPart` replaces it, raising propagates. One difference: another
-value is passed through as a render part, where `on_component_rendered` raises
-`TypeError`. A returned plain `str` is
+returned `CitryRender`, `str`, or `Markup` replaces it, raising propagates.
+Returning `ctx.result` unchanged keeps it too. Any other value raises
+`TypeError` naming the extension, the slot, and the component, on static and
+interactive pages alike. A returned plain `str` is
 text and is escaped, and `Markup` (or any object with `__html__`) is HTML, the
 rule of a `{{ ... }}` value. The manager wraps that text or HTML in a
 `CitryRender` of its own before the next extension sees it, which is also the
