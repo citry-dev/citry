@@ -67,5 +67,6 @@ they come from the same Vue copy as the page.
 
 - [Installation](/getting-started/installation/) walks through installing
   Citry and checking that it works.
-- [Vue runtime](/advanced/vue-runtime/) explains how the browser loads Vue
-  and how to deploy it.
+- [Vue in Citry](/vue/) explains which Vue version Citry ships and how the
+  browser loads it, and [Server-rendered HTML](/vue/server-rendering/)
+  covers what your deployment must leave untouched.

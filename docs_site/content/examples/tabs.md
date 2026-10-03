@@ -21,4 +21,4 @@ The lines to notice:
   element IDs.
 
 To learn how a component's JavaScript works, see
-[Client interactivity](/concepts/client-interactivity/).
+[Component options](/vue/component-options/).

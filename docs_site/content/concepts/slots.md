@@ -124,7 +124,7 @@ component's variables:
 ```
 
 Vue expressions in the browser follow the same rule. See
-[Understand slot scope](/concepts/client-interactivity/#understand-slot-scope).
+[Understand slot scope](/vue/slots/#understand-slot-scope).
 
 ## `SlotData` for fills { #pass-data-from-the-component-to-the-fill }
 
@@ -376,7 +376,7 @@ later in the tag wins.
 
 - [Provide and inject](/concepts/provide-and-inject/) shares a value with
   every component inside a part of the page.
-- [Client interactivity](/concepts/client-interactivity/) shows which
-  component's data a Vue expression inside a fill reads.
+- [Content and slots](/vue/slots/) shows which component's data a Vue
+  expression inside a fill reads.
 - [Inputs and validation](/concepts/inputs-and-validation/) covers
   component inputs in more depth.

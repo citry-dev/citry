@@ -230,7 +230,7 @@ A missing or unexpected field raises an error during the render. As with
 values. Citry passes the checked result on, with defaults filled in and any
 conversions the model made.
 
-[Client interactivity](/concepts/client-interactivity/#seed-browser-data-from-python)
+[Component options](/vue/component-options/#seed-browser-data-from-python)
 shows how the browser reads `js_data()`.
 
 ## `Kwargs` in subclasses

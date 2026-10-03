@@ -236,7 +236,7 @@ to be listed.
 Use `bind()` when the text has no fixed place in the HTML for `$c-tr`,
 such as an element or property your JavaScript manages. Here it keeps
 an `aria-label` translated from an
-[`onServerRender`](/concepts/client-interactivity/#react-after-a-server-render)
+[`onServerRender`](/vue/component-options/#react-after-a-server-render)
 callback, which runs after each server render of the component:
 
 ```javascript

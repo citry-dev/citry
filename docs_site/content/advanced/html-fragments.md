@@ -161,7 +161,7 @@ reload the page to let the reader try again.
 
 HTML optimizers and sanitizers must not remove or change the data block a
 fragment carries, or the Citry runtime on the page that reads it. See
-[Preserve page HTML](/advanced/vue-runtime/#preserve-interactive-html).
+[Preserve page HTML](/vue/server-rendering/#preserve-interactive-html).
 
 ## Use several workers
 
@@ -193,8 +193,8 @@ to the `document` and `simple` strategies.
 - [Component JS and CSS](/advanced/js-and-css-dependencies/) for a
   component's own browser behavior and styles.
 - [Dependency files](/advanced/dependency-files/) for URLs and local files.
-- [Client interactivity](/concepts/client-interactivity/) for browser state
-  and component lifecycles.
+- [Component options](/vue/component-options/) for browser state and
+  component lifecycles.
 - [Event actions](/events/actions/) for returning rendered updates from a
   Python handler.
 - [Rendering](/concepts/rendering/) for render and serialization choices.

@@ -156,8 +156,8 @@ The value must be a registered component name, such as `"card"`, or a
 
 Vue bindings on `<c-component>` follow the usual rules for a component
 tag. They do not become Python inputs. See
-[Client interactivity](/concepts/client-interactivity/) for Vue props,
-child events, and server-event handlers.
+[Props and events](/vue/props-and-events/) for Vue props, child events,
+and server-event handlers.
 
 ### Valid tag names
 

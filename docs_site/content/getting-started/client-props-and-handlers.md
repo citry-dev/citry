@@ -88,9 +88,13 @@ $component({
 `data()` gives the parent its starting browser data from JavaScript, as
 `js_data()` does from Python.
 
-The [Client interactivity](/concepts/client-interactivity/) guide covers
-more, such as slots in the browser, components with several root elements,
-and code that runs when a component first appears on the page.
+The [Vue](/vue/) section of the docs covers more, for example:
+
+- [Content and slots](/vue/slots/) for slots in the browser;
+- [`v-show` needs one root](/vue/limits/#several-root-elements) for
+  components with several root elements;
+- [`onServerRender` callback](/vue/component-options/#react-after-a-server-render)
+  for code that runs when a component first appears on the page.
 
 ## Next steps
 

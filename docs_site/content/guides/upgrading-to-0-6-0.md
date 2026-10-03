@@ -109,7 +109,7 @@ Delete `x-cloak` and its `[x-cloak] { display: none }` CSS rule. Nothing
 removes the attribute any more, so the rule would hide the element for
 good. You do not need it: the served HTML already shows the page's
 content; see
-[what a page shows before Vue starts](/advanced/vue-runtime/#what-a-hydrated-page-shows-before-vue-starts).
+[what a page shows before Vue starts](/vue/server-rendering/#what-a-hydrated-page-shows-before-vue-starts).
 
 [Vue in templates](/syntax/vue/) lists the directives Citry accepts and the
 few it rejects, such as `<Transition>` and `<Teleport>`.
@@ -298,7 +298,7 @@ in a descendant with `inject`. See
   the built-in `<c-mark>` reserves the name. Rename the class or give it
   another `name`. See [Built-in tags](/reference/builtins/#targeted-updates).
 
-[Reserved names](/advanced/vue-runtime/#names-citry-reserves-on-the-component-instance)
+[Reserved names](/vue/component-options/#names-citry-reserves-on-the-component-instance)
 lists the rest.
 
 ## Update Events code
@@ -505,7 +505,7 @@ bindings by how they are spelled:
   that the child does not declare goes to the child's single root element;
   a child with several root elements must place it with
   `v-bind="$attrs"`. See
-  [Listen to child events](/concepts/client-interactivity/#listen-to-child-events).
+  [Listen to child events](/vue/props-and-events/#listen-to-child-events).
 - **`x-on:event` stops the render** with `Alpine binding 'x-on:click' was
   removed; use native Vue v-on or @event syntax.` Write `@click` instead.
 - **A `.debounce` or `.throttle` `@c-*` binding, or `@c-poll`, stops the
@@ -585,7 +585,7 @@ a separate component placed inside `<c-CTabs>` writes that content. Move
 the tags into the component that holds `<c-CTabs>`, or set
 `transparent = True` on the component that writes them and define their
 Vue data in the component that holds `<c-CTabs>`. See
-[Vue data inside `CTabs`](/syntax/vue/#keep-vue-bound-group-content-inside-the-groups-tag).
+[Vue data inside `CTabs`](/vue/slots/#keep-vue-bound-group-content-inside-the-groups-tag).
 
 ## Check `#c-ignore` { #check-your-c-ignore-markers }
 
@@ -926,18 +926,18 @@ argument.
 - Interactive pages send their content in the served HTML, so search
   engines and readers without JavaScript see it. Tune this with `ssr` and
   `ssr_element_threshold`; see
-  [What the server sends](/advanced/vue-runtime/#send-page-content-in-the-served-html).
+  [What the server sends](/vue/server-rendering/#send-page-content-in-the-served-html).
 - `simple = "vue"` gives a component its own Vue state and assets without
   a Python component instance; see
   [Simple components](/performance/simple-components/#give-a-simple-component-its-own-vue-state).
 - A component tag accepts `v-if`, `v-model`, `v-show`, and custom
   directives; see
-  [Vue on component tags](/syntax/vue/#use-vue-directives-on-a-component-tag).
+  [Vue on component tags](/vue/props-and-events/#use-vue-directives-on-a-component-tag).
 - `<c-mark>` names a region that an Events handler can render again; see
   [Built-in tags](/reference/builtins/#targeted-updates).
 - A text field keeps what the user typed when its component renders
   again, until the server sends a different value; see
-  [Keep typed input](/advanced/vue-runtime/#keep-what-the-user-typed-across-renders).
+  [Keep typed input](/vue/server-rendering/#keep-what-the-user-typed-across-renders).
 - `citry check` and the editor report a misspelled `js_data()` member and
   a Vue binding that reads a Python loop variable; see
   [Template linting](/ide/template-linting/).

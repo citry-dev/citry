@@ -6,7 +6,11 @@
 # and cycles are rejected. See docs_site/_internal/redirects.py for validation.
 redirects:
   - from: /advanced/alpine-runtime/
-    to: /advanced/vue-runtime/
+    to: /vue/server-rendering/
+  - from: /advanced/vue-runtime/
+    to: /vue/server-rendering/
+  - from: /concepts/client-interactivity/
+    to: /vue/
   - from: /syntax/alpine/
     to: /syntax/vue/
   - from: /syntax/dynamic-attributes/

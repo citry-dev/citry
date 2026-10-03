@@ -16,7 +16,8 @@ shared file, see [Dependency files](/advanced/dependency-files/). To choose
 where the tags go in the page, see
 [Place JavaScript and CSS](/advanced/asset-placement/). For the Vue
 attributes you write in templates, such as `@click` and `v-show`, see
-[Vue in templates](/syntax/vue/).
+[Vue in templates](/syntax/vue/), and for the options the `js` passes to
+Vue, see [Component options](/vue/component-options/).
 
 ## `js` and `css` attributes
 
@@ -60,288 +61,33 @@ Python renders the HTML on the server. In the browser, each `Disclosure` on
 the page becomes a [Vue](https://vuejs.org/){: target="_blank" rel="noopener"}
 component with its own `open` value, and the CSS styles all of them.
 
-## Call `$component` once
+## Component JavaScript
 
-[`$component()`][$component] tells Citry how the component behaves in the
-browser. It takes the same object of options as a Vue component, such as
-`data`, `methods`, and `props`, and Citry applies it to every rendered copy
-of the component. Pass a function instead when all you need is code that
-runs after each server render; see
-[`onServerRender` callback](#run-after-a-render).
+The code in `js` runs in the browser. It calls
+[`$component({...})`][$component] once, at its top level, with the same
+options as a Vue component. [Component options](/vue/component-options/)
+covers what goes there:
 
-Call it once, at the top level of the component's `js`:
+- [`data()`, `computed`, `methods`, and `watch`](/vue/component-options/#data-and-methods)
+  for browser state and behavior;
+- [`js_data()`](/vue/component-options/#seed-browser-data-from-python) to
+  start that state from Python values;
+- [`onServerRender`](/vue/component-options/#react-after-a-server-render)
+  for code that runs again after each server render;
+- [shared helpers](/vue/component-options/#share-helpers) outside
+  `$component()`, and [`Citry.vue`](/vue/component-options/#use-citry-vue)
+  for Vue's own functions.
 
-- A `js` with no `$component()` call is fine. Its code runs, and
-  [`js_data()`](#send-data-to-js) values still reach the template.
-- A second call in the same script is ignored, without an error.
-- A call that runs later, for example inside a `setTimeout` or an event
-  listener, is too late. The page's Vue app does not start, so no
-  component on the page responds, and the browser console shows an error.
+For props and events between components, see
+[Props and events](/vue/props-and-events/).
+[Where each value goes](/vue/#where-each-value-goes) shows which Python
+value reaches the template, the JavaScript, and the CSS.
 
-## Share helpers
+## JS data must be JSON
 
-Code outside `$component()` runs once, when the browser loads the script,
-not once for each copy of the component. Use it for constants and helper
-functions that every copy shares:
-
-```javascript
-const formatter = new Intl.NumberFormat("en", {
-  style: "currency",
-  currency: "EUR",
-});
-
-$component({
-  methods: {
-    price(amount) {
-      return formatter.format(amount);
-    },
-  },
-});
-```
-
-Each component's script runs inside its own function, so its top-level
-names do not clash with other scripts on the page.
-
-A value that should differ between copies belongs in `data()`. A top-level
-variable is shared, so every copy changes the same one:
-
-```javascript
-// Wrong: all copies on the page share one `count`.
-let count = 0;
-
-$component({
-  methods: {
-    add() {
-      count += 1;
-    },
-  },
-});
-```
-
-```javascript
-// Right: each copy gets its own `count`.
-$component({
-  data() {
-    return { count: 0 };
-  },
-  methods: {
-    add() {
-      this.count += 1;
-    },
-  },
-});
-```
-
-## `$component()` options
-
-`$component()` accepts the usual
-[Vue options](https://vuejs.org/api/#options-api){: target="_blank" rel="noopener"}.
-This section shows the ones most components use.
-[Client interactivity](/concepts/client-interactivity/) shows how they
-work together across components, including slots.
-
-### `data()` and `methods`
-
-`data()` holds values that change in the browser, `computed` derives
-values from them, `methods` holds functions the template calls, and `watch`
-runs code when a value changes:
-
-```javascript
-$component({
-  data() {
-    return { query: "" };
-  },
-  computed: {
-    trimmed() {
-      return this.query.trim();
-    },
-  },
-  methods: {
-    clear() {
-      this.query = "";
-    },
-  },
-  watch: {
-    trimmed(value) {
-      localStorage.setItem("last-query", value);
-    },
-  },
-});
-```
-
-Inside these functions, `this` is the component's Vue instance. It also
-carries the [`js_data()`](#send-data-to-js) values and the
-[Events helpers](/reference/browser-apis/#component-events-helpers) such as
-`$state`.
-
-### `props` from a parent
-
-A child component declares the props it takes:
-
-```javascript
-$component({
-  props: {
-    status: String,
-  },
-});
-```
-
-The parent passes a browser value with `:`:
-
-```citry-html
-<c-StatusBadge :status="currentStatus" />
-```
-
-`currentStatus` comes from the parent's `data()`, `setup()`, or `js_data()`.
-A plain attribute such as `status="ok"` is a Python input instead; see
-[Pass props to a child](/concepts/client-interactivity/#pass-props-to-a-child).
-
-### `$emit` to a parent
-
-A child declares the events it sends and sends them with `$emit`:
-
-```javascript
-$component({
-  emits: ["select"],
-  methods: {
-    choose(color) {
-      this.$emit("select", color);
-    },
-  },
-});
-```
-
-The parent listens with `@` on the child's tag, and `chooseColor` runs in
-the parent:
-
-```citry-html
-<c-ColorPicker @select="chooseColor" />
-```
-
-To run a Python handler instead, write `@c-select`; see
-[Bind events in templates](/events/bindings/).
-
-### `provide` and `inject`
-
-A component can `provide` a value to every component inside it, which reads
-it with `inject`. These are Vue's own options and are separate from
-Citry's Python `<c-provide>`. See
-[Vue `provide`/`inject`](/concepts/provide-and-inject/#provide-and-inject-in-client-code).
-
-### Use `setup()`
-
-Vue's `setup()` works when it is synchronous and returns a plain object.
-Take the Composition API functions from [`Citry.vue`](#use-citry-vue):
-
-```javascript
-$component({
-  setup() {
-    const selected = Citry.vue.ref(null);
-    return { selected };
-  },
-});
-```
-
-An `async` `setup()`, or one that returns a render function, fails when
-the component first appears, and the page's Vue app stops. Move async work
-into a lifecycle hook such as `mounted`.
-
-### Lifecycle hooks
-
-Vue's lifecycle hooks, such as `mounted`, `updated`, and `unmounted`, work
-as in Vue. Citry also uses some of them, and runs its own code around
-yours:
-
-- `mounted` runs first, then the first
-  [`onServerRender`](#run-after-a-render) call.
-- In `beforeUnmount`, Citry first runs the `onServerRender` cleanup and
-  removes the component's [`$onEvent`](/reference/browser-apis/#on-event)
-  listeners, then calls yours.
-
-### Unsupported options
-
-Citry combines your options with the render function it generates from the
-component's template, so a few Vue options do not apply:
-
-- `mixins` and `extends` fail with an error that names the component.
-  Write the data, methods, and computed values in the options directly.
-- A `render` function or `template` option inside `$component()` is
-  ignored, without an error. Citry builds the browser's render function
-  from the component's Python `template`.
-- A name that Citry already puts on the instance, such as `$state`, or a
-  name that is also a `js_data()` key, fails with an error that names it.
-  See [Reserved names](/advanced/vue-runtime/#names-citry-reserves-on-the-component-instance).
-
-[Browser APIs](/reference/browser-apis/#component) lists every rule.
-
-## Where each value goes
-
-Each Python value goes to one place:
-
-| Python | Reaches | Read it as |
-| --- | --- | --- |
-| `Kwargs` | The server only. Nothing is sent to the browser. | `kwargs.name` in Python methods |
-| `template_data()` | The template, on the server | `{{ name }}` or `c-*` attributes |
-| `js_data()` | The Vue instance, as JSON | `name` in Vue expressions, `this.name` in JS |
-| `css_data()` | CSS custom properties | `var(--name)` in the component's CSS |
-| [`State`](/events/state/) | The browser, through server events | `$state.name`, `this.$state.name` |
-
-Vue props are separate from all of these: the parent component passes them
-in the browser with `:name`.
-
-A Vue expression cannot read a `template_data()` or `Kwargs` value. When
-the browser needs one, return it from `js_data()` too.
-
-## Send data to JS
-
-Return a mapping from [`js_data()`][citry.Component.js_data] to give one
-render's values to its JavaScript. Each key becomes a value on the Vue
-instance, which the template reads by name and JavaScript reads as
-`this.<key>`:
-
-```citry
-from citry import Component
-
-
-class Sparkline(Component):
-    class Kwargs:
-        points: list[int]
-
-    def js_data(self, kwargs: Kwargs, slots):
-        return {"points": kwargs.points}
-
-    template = """
-      <canvas
-        ref="canvas"
-        width="120"
-        height="30"
-      ></canvas>
-    """
-
-    js = """
-      $component({
-        onServerRender({ component }) {
-          // drawSparkline comes from a charting library.
-          drawSparkline(component.$refs.canvas, component.points);
-        },
-      });
-    """
-```
-
-Two sparklines on one page each get their own `points`. When the server
-renders the component again, these values update in the browser, and
-`onServerRender` draws the chart again; see
-[`onServerRender` callback](#run-after-a-render).
-
-A key must not start with `$` or `_`, and must not be `citryId`, because
-Vue and Citry already use those names. Rendering a component that returns
-such a key raises `ValueError`. Name keys the JavaScript way, such as
-`itemCount`.
-
-### JS data must be JSON
-
-Citry sends `js_data()` values to the browser as JSON. Each value must be
-one of:
+Citry sends the values that
+[`js_data()`](/vue/component-options/#seed-browser-data-from-python)
+returns to the browser as JSON. Each value must be one of:
 
 - `str`, `int`, `bool`, or `None`;
 - a `float` that is finite (`NaN` and infinity raise `ValueError`);
@@ -378,111 +124,6 @@ must still follow the rules above.
 
 JavaScript numbers lose precision above 2^53, so send large IDs as
 strings.
-
-## `onServerRender` callback { #run-after-a-render }
-
-Some code has to run again each time the server renders the component,
-for example to connect a non-Vue widget to the new HTML. Put it in
-`onServerRender`. Here the search box takes focus when the user presses
-`/`:
-
-```javascript
-$component({
-  onServerRender({ component }) {
-    const onKey = (event) => {
-      if (event.key !== "/") return;
-      // Keep the "/" out of the search box.
-      event.preventDefault();
-      component.$refs.input.focus();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  },
-});
-```
-
-`component` is the component's Vue instance, and `component.$refs.input`
-is the element marked with `ref="input"` in the template.
-
-Citry calls `onServerRender` after the component first appears on the
-page, and again after each server render that updates it. A change made
-only in the browser does not call it.
-
-The callback may return a cleanup function. Returning anything else is an
-error. Citry calls the cleanup before the next `onServerRender` call and
-when the component is removed. At the same time it stops the watchers
-that the callback created before it returned, and the listeners it added
-with the [`onEvent`](/reference/browser-apis/#on-server-render-on-event)
-member of its argument. A timer, or work that starts after an `await`,
-must be stopped in your cleanup function.
-
-Passing a function, as in `$component(callback)`, is short for passing
-`{ onServerRender: callback }`. [Browser APIs](/reference/browser-apis/#on-server-render)
-lists everything the callback receives, and how `async` callbacks work.
-
-## What a render keeps
-
-When an event handler returns the component and the server renders it
-again, Citry updates the Vue component that is already on the page. It
-does not create a new one:
-
-- `data()` and `setup()` values keep what the browser set.
-- `js_data()` values take the server's new values, replacing any change
-  the browser made to them.
-- Computed values update from the new values.
-- `onServerRender` runs its cleanup, then runs again.
-
-Vue creates a new component, which starts from `data()` again, when:
-
-- the handler returns a different component in its place; see
-  [`Render` another component](/events/actions/#swap-in-a-different-component);
-- an element around it gets a different key in the new render, or a
-  parent component is created again for one of these reasons;
-- the user reloads the page.
-
-When a component leaves the page, Vue runs its `beforeUnmount` and
-`unmounted` hooks, after Citry's cleanup. A text field the user is typing
-in keeps its text through a render in most cases; see
-[Keep typed input](/advanced/vue-runtime/#keep-what-the-user-typed-across-renders).
-
-## Use `Citry.vue` { #use-citry-vue }
-
-`Citry.vue` is the Vue library the page already loaded, so a component
-script can use Vue's functions without an import: `ref`, `reactive`,
-`computed`, `watch`, `nextTick`, `h`, and the rest.
-
-Use `this` for the component's own values and methods. Use `Citry.vue`
-for Vue's functions, mostly inside `setup()` and in shared helpers:
-
-```javascript
-$component({
-  methods: {
-    async open() {
-      this.expanded = true;
-      // Wait until Vue has shown the panel.
-      await Citry.vue.nextTick();
-      this.$refs.panel.focus();
-    },
-  },
-});
-```
-
-`Citry.vue.use()` installs a Vue plugin on every Vue app Citry creates.
-See [Browser APIs](/reference/browser-apis/#citry-vue) for the details, and
-[Customize Vue](/syntax/vue/#customize-the-vue-app) for plugins.
-
-## Check JS code
-
-The Citry editor extension and `citry check` read the code in `js`:
-
-- In `$component()`, `this` has the component's type, including its
-  `js_data()` keys, props, `data()`, methods, and computed values. See
-  [Vue and component JS](/ide/vscode/#complete-vue-expressions-and-component-javascript).
-- Reading `this.name` when the component has no such value is an error
-  (`citry.component-js.unknown-member`). Citry reports it only when it can
-  see all of the component's values in the source.
-- `citry check --types` also reports TypeScript errors in the code. See
-  [`check --types` typing](/advanced/cli/#check-types-with-typescript-and-ty).
 
 ## Send values to CSS
 
@@ -647,7 +288,7 @@ that also check types.
   [dependency file](/advanced/dependency-files/).
 - **CSP nonce.** A nonce passed to `serialize(csp_nonce=...)` goes on every
   style tag Citry adds; see
-  [Add a CSP nonce](/advanced/vue-runtime/#use-content-security-policy).
+  [Add a CSP nonce](/vue/csp/#use-content-security-policy).
 
 ## When CSS is removed
 
@@ -686,8 +327,10 @@ how the editor shows the code.
 
 ## Next steps
 
-- [Client interactivity](/concepts/client-interactivity/) covers Vue
-  props, events, and slots between components.
+- [Component options](/vue/component-options/) covers everything you can
+  pass to `$component({...})`.
+- [Props and events](/vue/props-and-events/) covers Vue props, events, and
+  attributes between components.
 - [Browser APIs](/reference/browser-apis/) lists `$component`,
   `onServerRender`, and `Citry.vue` in full.
 - [Dependency files](/advanced/dependency-files/) adds libraries and shared
