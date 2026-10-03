@@ -12,7 +12,7 @@ from citry import Citry, Component, Extension, ForeignSpan, ForeignSpanSet, Lint
 from citry.__main__ import main
 from citry._app_selection import CheckAppSelection
 from citry._checker import TRANSFORM_NOTE, check_project
-from citry._diagnostic_catalog import TEMPLATE_MARKER_NAME_INVALID
+from citry._diagnostic_catalog import I18N_MISSING_PARAM_TYPE, TEMPLATE_MARKER_NAME_INVALID
 from citry.ext.i18n import DateFormat, FormatRegistry, NumberFormat
 
 if TYPE_CHECKING:
@@ -465,7 +465,9 @@ class TestRegistryMode:
 
         report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
 
-        assert report.findings[0].code == "citry.i18n.missing-param-type"
+        # The Rust compiler spells this code itself, so the generated constant
+        # proves the reported code is the catalogued one.
+        assert report.findings[0].code == I18N_MISSING_PARAM_TYPE
         assert report.findings[0].severity == "warning"
         assert "without an @param" in report.findings[0].message
         assert report.exit_code == 0

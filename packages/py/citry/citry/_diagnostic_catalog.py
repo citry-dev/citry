@@ -43,6 +43,7 @@ CHECK_PYTHON_SOURCE_UNREADABLE = 'citry.check.python-source-unreadable'
 I18N_CATALOG_INVALID = 'citry.i18n.catalog-invalid'
 I18N_UNKNOWN_MESSAGE = 'citry.i18n.unknown-message'
 I18N_ARGUMENT_INVALID = 'citry.i18n.argument-invalid'
+I18N_MISSING_PARAM_TYPE = 'citry.i18n.missing-param-type'
 I18N_CROSS_LANGUAGE_FALLBACK = 'citry.i18n.cross-language-fallback'
 I18N_RICH_MESSAGE_FALLBACK = 'citry.i18n.rich-message-fallback'
 I18N_CLIENT_MESSAGE_INVALID = 'citry.i18n.client-message-invalid'
@@ -648,6 +649,25 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                 'message listed in Component.I18n.client_messages, has no translation '
                                                 'in some selectable locale and resolves to another locale through the '
                                                 "configured fallbacks or the message's source locale."},
+ 'citry.i18n.missing-param-type': {'code': 'citry.i18n.missing-param-type',
+                                   'configurableSeverity': True,
+                                   'constant': 'I18N_MISSING_PARAM_TYPE',
+                                   'defaultSeverity': 'warning',
+                                   'documentationPath': '/ide/diagnostics/#citry.i18n.missing-param-type',
+                                   'fix': 'Add a comment such as # @param {str} $name above the message, naming the '
+                                          'type the variable really takes. Set rule_i18n_missing_param_type to "error" '
+                                          'to make a missing type fail catalog compilation, or to "ignore" to hide '
+                                          'this warning.',
+                                   'messages': {'default': '{detail}'},
+                                   'parameters': {'detail': 'Message and variable that lack a type.'},
+                                   'summary': 'A message uses a variable that has no # @param comment, so Citry cannot '
+                                              'check the type of the value that callers pass in.',
+                                   'surfaces': ['check'],
+                                   'title': 'Message variable without a type',
+                                   'when': 'A source-language message uses a variable such as { $name } directly in '
+                                           'its text, without a selector, Slot, formatting function, or browser use, '
+                                           'and has no # @param comment declaring its type, while '
+                                           'rule_i18n_missing_param_type is "warning".'},
  'citry.i18n.rich-message-fallback': {'code': 'citry.i18n.rich-message-fallback',
                                       'constant': 'I18N_RICH_MESSAGE_FALLBACK',
                                       'defaultSeverity': 'error',

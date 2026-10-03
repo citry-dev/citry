@@ -14,7 +14,7 @@ CATALOG_PATH = ROOT / "packages/protocol/diagnostics/v1/catalog.json"
 GENERATOR_PATH = ROOT / "scripts/generate_diagnostic_catalog.py"
 CODE_RE = re.compile(
     r"(?P<quote>['\"])(?P<code>citry\."
-    r"(?:parse|template|component|csp|check|format|i18n|python)\."
+    r"(?:parse|template|component|component-js|browser|vue|js-data|csp|check|format|i18n|python)\."
     r"[a-z0-9][a-z0-9.-]*)(?P=quote)"
 )
 CODE_RE_FULL = re.compile(r"citry\.[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
@@ -22,12 +22,16 @@ CONSTANT_RE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
 SURFACES = frozenset({"parser", "formatter", "check", "lsp", "vscode"})
 SEVERITIES = frozenset({"error", "warning", "information"})
 IMPLEMENTATION_ROOTS = (
+    ROOT / "crates/citry_i18n/src",
     ROOT / "crates/citry_template_parser/src",
     ROOT / "crates/citry_template_formatter/src",
     ROOT / "packages/py/citry/citry",
     ROOT / "packages/py/citry_lsp/citry_lsp",
     ROOT / "packages/editors/vscode/src",
 )
+# Crates that report diagnostics but receive no generated binding. Their code
+# literals must still be catalogued, but spelling the code is the only option.
+UNBOUND_ROOTS = (ROOT / "crates/citry_i18n/src",)
 GENERATED_PATHS = {
     ROOT / "packages/py/citry/citry/_diagnostic_catalog.py",
     ROOT / "crates/citry_template_parser/src/diagnostic_catalog.rs",
@@ -204,6 +208,7 @@ def _code_literal_problems(codes: set[str], prefixes: tuple[str, ...]) -> list[s
     """Reject uncataloged IDs and catalog-value duplication outside generated bindings."""
     problems: list[str] = []
     for root in IMPLEMENTATION_ROOTS:
+        has_binding = root not in UNBOUND_ROOTS
         for path in root.rglob("*"):
             if path in GENERATED_PATHS or not path.is_file() or path.suffix not in {".py", ".rs", ".ts"}:
                 continue
@@ -213,6 +218,8 @@ def _code_literal_problems(codes: set[str], prefixes: tuple[str, ...]) -> list[s
             for match in CODE_RE.finditer(source):
                 code = match.group("code")
                 if code in codes:
+                    if not has_binding:
+                        continue
                     problems.append(
                         f"{path.relative_to(ROOT)} duplicates catalog code {code!r}; use the generated binding"
                     )

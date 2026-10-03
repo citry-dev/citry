@@ -19,3 +19,6 @@
   declarations in the checker and language server.
 - Extended the i18n argument and unknown-message contracts to checked `$c-tr`
   syntax, message outputs, and typed browser named values.
+- Added `citry.i18n.missing-param-type`, the configurable `citry check`
+  warning for a message variable without a `# @param` type, which the i18n
+  compiler already reported.
