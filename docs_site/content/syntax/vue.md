@@ -485,8 +485,14 @@ transition or the HTML `<dialog>` element.
 
 ## Vue data inside `CTabs` { #keep-vue-bound-group-content-inside-the-groups-tag }
 
-`CTabs`, `CTab`, and `CTabPanel` come from the
-[Citry UI library](/ui-library/). Rendering fails when a `<c-CTab>` whose
+Vue data reaches content through Vue's slots, which follow where the content
+is written. Some components move content somewhere else while the server
+renders the page. When that happens, the Vue data of the component that
+wrote the content can no longer reach it.
+
+`CTabs` from the [Citry UI library](/ui-library/) is one of them: it takes
+the content of each `<c-CTab>` and `<c-CTabPanel>` inside it and renders it
+in its own tab list and panels. So rendering fails when a `<c-CTab>` whose
 content reads Vue data is written in a separate component that you place
 inside `<c-CTabs>`.
 
