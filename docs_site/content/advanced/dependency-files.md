@@ -13,7 +13,7 @@ them before any component's own JavaScript, so the component can use the
 library.
 
 Code that belongs to the component itself goes in its `js` and `css`. See
-[Component JavaScript and CSS](/advanced/js-and-css-dependencies/).
+[Component JS and CSS](/advanced/js-and-css-dependencies/).
 
 ## Add a library URL
 

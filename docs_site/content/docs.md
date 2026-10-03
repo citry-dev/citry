@@ -84,7 +84,7 @@ Citry also works with Django, Flask, Starlette, and other
   helps you find the likely cause.
 
 When a project needs more control, read how to ship
-[component JavaScript and CSS](/advanced/js-and-css-dependencies/), return
+[component JS and CSS](/advanced/js-and-css-dependencies/), return
 [HTML fragments](/advanced/html-fragments/),
 [make rendering faster](/performance/), including
 [caching rendered output](/performance/caching/), and

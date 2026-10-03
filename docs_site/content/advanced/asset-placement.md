@@ -102,7 +102,7 @@ html = page.render().serialize(
 
 ## Next steps
 
-- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) adds
+- [Component JS and CSS](/advanced/js-and-css-dependencies/) adds
   code and styles to one component.
 - [Dependency files](/advanced/dependency-files/) adds libraries and shared
   files.

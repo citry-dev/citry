@@ -437,6 +437,6 @@ except for details a script might notice:
 - [Vue in templates](/syntax/vue/) for directives and expressions.
 - [Client interactivity](/concepts/client-interactivity/) for data, props,
   events, slots, and lifecycle callbacks.
-- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) for
+- [Component JS and CSS](/advanced/js-and-css-dependencies/) for
   component-owned assets.
 - [HTML fragments](/advanced/html-fragments/) for interactive fragment loading.

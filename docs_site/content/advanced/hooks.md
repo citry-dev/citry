@@ -192,7 +192,7 @@ browser runtime after that hook, so neither hook sees it. See
 
 ## Next steps
 
-- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) adds
+- [Component JS and CSS](/advanced/js-and-css-dependencies/) adds
   code and styles to one component.
 - [Dependency files](/advanced/dependency-files/) adds libraries and shared
   files.

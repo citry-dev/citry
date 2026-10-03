@@ -190,7 +190,7 @@ to the `document` and `simple` strategies.
 
 ## See also
 
-- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) for a
+- [Component JS and CSS](/advanced/js-and-css-dependencies/) for a
   component's own browser behavior and styles.
 - [Dependency files](/advanced/dependency-files/) for URLs and local files.
 - [Client interactivity](/concepts/client-interactivity/) for browser state
