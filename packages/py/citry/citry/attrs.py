@@ -25,8 +25,8 @@ choices, and parity keeps its test suite portable):
   stand", while a literal ``False`` removes the property entirely.
 
 All escaping goes through ``citry.util.html`` (markupsafe). Every value is
-escaped as attribute text, ``Markup`` included: ``Markup`` vouches for HTML,
-not for attribute text.
+escaped, ``Markup`` included: ``Markup`` says a string is safe to insert
+between tags, while an attribute value is plain text.
 
 HTML attribute identity is ASCII-case-insensitive. Merging therefore treats
 ``ID`` and ``id`` as one key while preserving the spelling and position of
@@ -44,7 +44,7 @@ from typing import Any, TypeAlias
 import wrapt
 
 from citry.util import html as _html
-from citry.util.html import Markup, escape_attribute_value, escape_to_str
+from citry.util.html import Markup, decode_attribute_entities, escape_attribute_value, escape_to_str
 
 ClassValue: TypeAlias = "str | Mapping[str, bool] | Sequence[ClassValue]"
 """A ``class`` attribute value: string, ``{class_name: bool}`` dict, or a list of those."""
@@ -156,6 +156,20 @@ _style_delimiter_re = re.compile(r";(?![^(]*\))", re.DOTALL)
 _style_property_re = re.compile(r":(.+)", re.DOTALL)
 
 
+def _attribute_text(value: Any) -> Any:
+    """
+    Return the attribute text of a ``Markup`` piece of a class or style value.
+
+    Splitting or formatting a ``Markup`` turns it into a plain ``str`` that
+    would then be escaped a second time, so decode its HTML to the text a
+    browser reads first, the same as ``escape_attribute_value`` does for a
+    whole value. Any other value is returned as it is.
+    """
+    if type(value) is not str and hasattr(value, "__html__"):
+        return decode_attribute_entities(str(value.__html__()))
+    return value
+
+
 def normalize_class(value: ClassValue) -> str:
     """
     Turn a structured ``class`` value into a plain class string.
@@ -199,7 +213,7 @@ def _collect_class(value: ClassValue, res: dict[str, bool]) -> None:
     # Defuse a transparent proxy (e.g. a Const-marked class string) so the
     # whitespace split below sees a real str. Recursion re-enters here for
     # each list element, so a marker nested inside a list is unwrapped too.
-    value = _underlying(value)
+    value = _attribute_text(_underlying(value))
     if isinstance(value, str):
         parts = _class_tokens(value) if type(value) is str and len(value) <= 2048 else _whitespace_re.split(value)
         for part in parts:
@@ -262,13 +276,15 @@ def normalize_style(value: StyleValue) -> str:
         msg = f"Invalid style value: {value!r}"
         raise TypeError(msg)
 
-    return " ".join(f"{prop}: {val};" for prop, val in merged.items() if val is not None and val is not False)
+    return " ".join(
+        f"{prop}: {_attribute_text(val)};" for prop, val in merged.items() if val is not None and val is not False
+    )
 
 
 def _collect_style(value: StyleValue, res: dict[str, Any]) -> None:
     """Apply nested style contributions without intermediate dictionaries."""
     if isinstance(value, str):
-        res.update(parse_string_style(value))
+        res.update(parse_string_style(_attribute_text(value)))
     elif isinstance(value, (list, tuple)):
         for item in value:
             _collect_style(item, res)
@@ -492,6 +508,7 @@ def _has_default_attr_formatting(formatter: object) -> bool:
         and normalize_style is _DEFAULT_FORMATTING_HELPERS[6]
         and escape_to_str is _html._DEFAULT_ESCAPE_TO_STR
         and _html.escape_to_str is _html._DEFAULT_ESCAPE_TO_STR
+        and escape_attribute_value is _html._DEFAULT_ESCAPE_ATTRIBUTE_VALUE
         and _html._CACHEABLE_ESCAPE_BACKEND
         and _html._escape_to_str_impl is _html._DEFAULT_ESCAPE_TO_STR_IMPL
     )

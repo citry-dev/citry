@@ -80,6 +80,16 @@ class TestFormatAttrs:
         assert format_attrs({"foo": Markup('a" onclick="x')}) == 'foo="a&#34; onclick=&#34;x"'
         assert format_attrs({"foo": Markup("<i>")}) == 'foo="&lt;i&gt;"'
 
+    def test_markup_class_and_style_pieces_are_decoded_once(self):
+        # Splitting or merging a Markup class or style turns it into plain
+        # text, which must not escape its entities a second time.
+        value = Markup("a &amp;b")
+        assert format_attrs({"class": [value]}) == 'class="a &amp;b"'
+        assert format_attrs(merge_attrs({"class": value}, {"class": "c"})) == 'class="a &amp;b c"'
+        style = Markup('content: "&amp;"')
+        assert format_attrs({"style": [style]}) == 'style="content: &#34;&amp;&#34;;"'
+        assert format_attrs({"style": {"content": Markup("&lt;")}}) == 'style="content: &lt;;"'
+
     def test_markup_entities_keep_the_text_they_stand_for(self):
         # Markup's HTML is decoded to what a browser reads, then escaped, so
         # an entity is not escaped a second time.

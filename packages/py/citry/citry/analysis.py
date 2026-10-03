@@ -12,7 +12,6 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher, get_close_matches
 from enum import Enum
-from html import unescape as _html_unescape
 from itertools import pairwise
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal
@@ -148,6 +147,7 @@ from citry._template_python import build_schema_template_shadow as _build_schema
 from citry._template_python import template_python_queries as _template_python_queries
 from citry._template_python import template_python_query_at as _template_python_query_at
 from citry._template_python import template_static_input_queries as _template_static_input_queries
+from citry.util.html import decode_attribute_entities
 from citry_core.template_formatter import (
     EmbeddedFormatPlan as _CoreEmbeddedFormatPlan,
 )
@@ -1110,8 +1110,9 @@ def _attribute_value_finding(
     inner = attr.inner_value
     value = inner.content if inner is not None else ""
     # The browser decodes character references such as `&#116;` before it
-    # reads the keyword, so compare the decoded text.
-    decoded = _html_unescape(value)
+    # reads the keyword, with the attribute-value rules, so compare the text
+    # it decodes.
+    decoded = decode_attribute_entities(value)
     bound = _bound_string_attribute(name, decoded)
     if bound is not None:
         # `:dir="'rlt'"` sets the same text as `dir="rlt"`. The finding marks

@@ -54,6 +54,7 @@ def test_cache_preserves_value_changes_types_order_and_escaping(output_cache):
         (attrs, "_underlying"),
         (attrs, "_html_attr_identity"),
         (attrs, "escape_to_str"),
+        (attrs, "escape_attribute_value"),
         (html, "_escape_to_str_impl"),
         (nodes, "_format_resolved_attrs_to_str"),
     ],

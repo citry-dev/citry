@@ -4,7 +4,8 @@ HTML escaping and the trusted-markup type.
 Citry autoescapes the result of template expressions before placing it in the
 output, so user data cannot inject markup. A value that is already trusted HTML
 (for example the result of rendering a subtree) carries that trust as
-``Markup`` and is passed through unescaped.
+``Markup`` and is passed through unescaped between tags. Attribute values
+are always escaped (see ``escape_attribute_value``).
 
 Citry's rendering modules import their escaping tools from this thin wrapper so
 backend-specific behavior stays in one place. The public package re-exports the
@@ -14,11 +15,11 @@ same ``Markup`` class directly.
   protocol, so a value that is already ``Markup`` (or any object with
   ``__html__``) passes through without double-escaping.
 - ``escape`` escapes ``& < > ' "``. Escaping all five means the same output is
-  safe in both HTML body text and double- or single-quoted attribute values,
-  which matters because a template expression can land in either position.
+  safe in both HTML body text and double- or single-quoted attribute values.
 - ``escape_attribute_value(value)`` escapes a value for an HTML attribute.
-  It does not trust ``__html__``: ``Markup`` is trusted HTML, not trusted
-  attribute text, so its text is escaped like any other value.
+  ``Markup`` says a string is safe to insert between tags, while an
+  attribute value is plain text, so its HTML is decoded to the text a
+  browser reads and then escaped.
 - ``Markup`` is exactly ``markupsafe.Markup``, imported unchanged.
   ``Markup(value)`` marks the complete value as trusted HTML; it does not
   sanitize, validate, or escape anything. See
@@ -120,8 +121,8 @@ def escape_attribute_value(value: Any) -> str:
     Escape ``value`` as the text of a double-quoted HTML attribute value, to a plain ``str``.
 
     Unlike :func:`escape_to_str`, an object with ``__html__`` (such as
-    ``Markup``) is escaped too. ``Markup`` vouches for HTML, not for
-    attribute text, and inserting it raw would let a ``"`` in it end the
+    ``Markup``) is escaped too. ``Markup`` says a string is safe to insert
+    between tags, and inserting it raw here would let a ``"`` in it end the
     attribute. Its HTML is first decoded to the value a browser would read
     from it, then escaped, so ``Markup("Tom &amp; Jerry")`` still reads as
     ``Tom & Jerry``. Interactive pages send Vue the same decoded value, so
@@ -139,6 +140,7 @@ def escape_attribute_value(value: Any) -> str:
 # replacements installed before the first render. Custom/Python backends keep
 # executing on each call; only the known C escaper supplies cached output.
 _DEFAULT_ESCAPE_TO_STR = escape_to_str
+_DEFAULT_ESCAPE_ATTRIBUTE_VALUE = escape_attribute_value
 _DEFAULT_ESCAPE_TO_STR_IMPL = _escape_to_str_impl
 _CACHEABLE_ESCAPE_BACKEND = (
     type(_escape_to_str_impl) is BuiltinFunctionType

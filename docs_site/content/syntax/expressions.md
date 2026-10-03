@@ -200,8 +200,8 @@ class MetaTag:
         ).format(self.name, self.content)
 ```
 
-`Markup` works only in page content. In an attribute value, such as
-`c-title="value"`, Citry escapes `Markup` like any other value; see
+`Markup` skips escaping only between tags. In an attribute value, such as
+`c-title="value"`, Citry escapes it like any other value; see
 [Attributes](/syntax/attributes/).
 
 `citry.Markup` is

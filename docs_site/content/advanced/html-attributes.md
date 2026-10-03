@@ -184,8 +184,8 @@ It follows the same rules as attributes in a template:
 - `True` writes the attribute name alone, as in `disabled`;
 - `False` and `None` leave the attribute out;
 - an empty `class` or `style` is left out;
-- names and values are HTML-escaped, a [`Markup`][citry.Markup] value
-  included.
+- names and values are HTML-escaped, including a
+  [`Markup`][citry.Markup] value.
 
 When Vue renders an interactive component, a `True` value on an attribute
 that is not a boolean HTML attribute renders as `data-open="true"` rather
@@ -225,10 +225,10 @@ name that is empty or contains whitespace, `=`, `/`, `>`, `<`, or `{#`
 raises `ValueError`. `c-bind` checks names the same way when it adds a
 mapping to an element.
 
-### `Markup` values
+### Escape `Markup` values
 
 A value with an `__html__()` method, such as `Markup`, is escaped like
-any other value, so a `"` or `<` in it stays part of the attribute. Citry
+any other value, so a `"` in it stays part of the attribute. Citry
 first reads its HTML the way a browser would, so an entity such as
 `&amp;` still stands for its character instead of showing as `&amp;`.
 Static and interactive pages set the same value.

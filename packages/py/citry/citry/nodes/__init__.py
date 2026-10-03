@@ -1342,7 +1342,7 @@ class ElementKeyNode(Node):
         if value is None:
             return ""
         # The key is identity text, never markup: str() first, so a Markup
-        # key is escaped too, as the prepared path writes it.
+        # key is escaped too, the same way the Vue render writes it.
         return f' data-citry-key=":{escape(str(value))}"'
 
     def __repr__(self) -> str:

@@ -548,17 +548,25 @@ cannot sit on an element that has any `c-*` attribute, and `:key` cannot
 sit next to `#c-key`. See
 [`c-*` with `:` bindings](/syntax/vue/#combine-class-and-style-with-c-class-and-c-style).
 
-### `Markup` attribute values { #markup-in-attributes }
+### `Markup` attribute values { #markup-attribute-values }
 
-**What you see:** an attribute value that held a `"` now keeps it as
-text, where 0.5.1 ended the attribute there.
+**What you see:** a `"` inside a `Markup` attribute value now shows as
+part of the value. In 0.5.x it ended the attribute, and the text after it
+became more attributes.
 
-Citry now escapes every attribute value, `Markup` included, so a quote
-in a value can no longer end the attribute and add another one.
-`Markup` marks HTML for the page, not attribute text. An entity in it
-still reads as its character, so `Markup("Tom &amp; Jerry")` still sets
-`Tom & Jerry`. To set several attributes from Python, pass a mapping
-to `c-bind`.
+Citry now escapes every attribute value, `Markup` included. `Markup` only
+says a string is safe to insert between tags. An entity in it still
+reads as its character, so `Markup("Tom &amp; Jerry")` still sets the
+attribute to `Tom & Jerry`. To set several attributes from Python, pass
+a mapping to `c-bind`:
+
+```python
+# 0.5.x: with c-title="label", the quote added data-id.
+return {"label": Markup('Saved" data-id="1')}
+
+# 0.6.0: with c-bind="attrs", one key per attribute.
+return {"attrs": {"title": "Saved", "data-id": 1}}
+```
 
 ### Inline group content
 
