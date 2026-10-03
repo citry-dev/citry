@@ -1604,9 +1604,9 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
     bubbling up (docs/design/component_on_render.md section 5). The extension hook
     receives the rendered output, or ``None`` together with the error when
     rendering failed. An extension may replace the output with a new
-    ``CitryRender`` or ``str`` (which also swallows the error), or raise to
-    replace the error. An error that is not swallowed is raised here, to
-    continue bubbling.
+    ``CitryRender``, a plain ``str`` (shown as text), or ``Markup`` (inserted
+    as HTML), which also swallows the error, or raise to replace the error.
+    An error that is not swallowed is raised here, to continue bubbling.
     """
     from citry._simple_runtime import SimpleRender  # noqa: PLC0415
 
@@ -1641,9 +1641,21 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
         if out_error is not error:
             set_component_error_message(out_error, _component_path(component))
         raise out_error
-    if isinstance(new_render, str):
+    if new_render is None:
+        return render
+    if not isinstance(new_render, CitryRender):
+        # A returned plain str is text and Markup is HTML, the same rule as
+        # on_render, so user input in the hook's string cannot add a script.
+        replacement = _text_or_html_part(new_render, _ON_COMPONENT_RENDERED_TEXT_SOURCE)
+        if replacement is None:
+            msg = (
+                f"on_component_rendered returned a {type(new_render).__name__}, which Citry cannot "
+                "put on the page. Return a CitryRender, a str (shown as text), Markup (inserted as "
+                "HTML), or None to keep the output."
+            )
+            raise TypeError(msg)
         return CitryRender(
-            parts=[new_render],
+            parts=[replacement],
             context=render.context,
             is_component_root=render.is_component_root,
             is_transparent_root=render.frame.is_transparent_root,
@@ -1673,8 +1685,6 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
             is_component_root=render.is_component_root,
             is_transparent_root=render.frame.is_transparent_root,
         )
-    if new_render is not None:
-        return new_render
     return render
 
 
@@ -2354,10 +2364,46 @@ def _send_on_render_generator(
         return generator.send(send_arg)
 
 
-# The source label on the text part a prepared (Vue) render gets when
-# on_render returns a plain str. That text has no template position, so the
-# part points into this label instead, the way Python slot text does.
+# The source labels on the text part a prepared (Vue) render gets when a
+# hook returns a plain str. That text has no template position, so the part
+# points into its label instead, the way Python slot text does.
 _ON_RENDER_TEXT_SOURCE = "on-render-text"
+_ON_COMPONENT_RENDERED_TEXT_SOURCE = "on-component-rendered-text"
+_ON_SLOT_RENDERED_TEXT_SOURCE = "on-slot-rendered-text"
+
+
+def _text_or_html_part(value: object, text_source: str) -> RenderPart | None:
+    """
+    Turn page content a hook returned into a render part: a plain ``str`` is text, ``__html__`` is HTML.
+
+    ``on_render``, ``on_component_rendered``, and ``on_slot_rendered`` all
+    hand content back to the page, and all follow the rule of a ``{{ ... }}``
+    value, on static and interactive pages alike. ``text_source`` labels the
+    text part a typed render gets, so a diagnostic can name the hook.
+    Returns ``None`` for any other value, which the caller handles itself.
+    """
+    if type(value) is str and value == "":
+        # "" is the public way to render nothing. Every serializer, the Vue
+        # one included, treats this exact empty string as zero output.
+        return ""
+    if getattr_static(value, "__html__", None) is not None:
+        # Trusted HTML, as in a {{ ... }} expression. The Vue target used by
+        # server events accepts HTML only as a typed part, the same one a
+        # {{ ... }} Markup value becomes there.
+        if vue_render_active():
+            return PreparedTrustedHtmlValue(str(cast("HasHtml", value).__html__()))
+        # Markup is already a render part; escape() turns another __html__
+        # object into Markup without escaping it.
+        return value if isinstance(value, Markup) else escape(value)
+    if isinstance(value, str):
+        # Plain text. A typed render needs a text part, which the serializer
+        # escapes and the browser renders as the same text node, so a
+        # returned "<script>" stays visible text. Renders outside a typed
+        # render scope escape it here instead.
+        if prepared_render_active():
+            return PreparedTextValue(text_source, (0, len(text_source)), str(value))
+        return escape(value)
+    return None
 
 
 def _replacement_parts(value: RenderReplacement, context: CitryContext, component: Component) -> list[RenderPart]:
@@ -2378,27 +2424,9 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
     value = const_value(value)
     if isinstance(value, ComponentLike):
         value = _resolve_component_like(value, component.citry)
-    if type(value) is str and value == "":
-        # "" is the public way to render nothing. Every serializer, the Vue
-        # one included, treats this exact empty string as zero output.
-        return [""]
-    if getattr_static(value, "__html__", None) is not None:
-        # Trusted HTML, as in a {{ ... }} expression. The Vue target used by
-        # server events accepts HTML only as a typed part, the same one a
-        # {{ ... }} Markup value becomes there.
-        if vue_render_active():
-            return [PreparedTrustedHtmlValue(str(cast("HasHtml", value).__html__()))]
-        # Markup is already a render part; escape() turns another __html__
-        # object into Markup without escaping it.
-        return [value if isinstance(value, Markup) else escape(value)]
-    if isinstance(value, str):
-        # Plain text. A typed render needs a text part, which the serializer
-        # escapes and the browser renders as the same text node, so a
-        # returned "<script>" stays visible text. Renders outside a typed
-        # render scope escape it here instead.
-        if prepared_render_active():
-            return [PreparedTextValue(_ON_RENDER_TEXT_SOURCE, (0, len(_ON_RENDER_TEXT_SOURCE)), str(value))]
-        return [escape(value)]
+    part = _text_or_html_part(value, _ON_RENDER_TEXT_SOURCE)
+    if part is not None:
+        return [part]
     if isinstance(value, Slot):
         # Invoked with no data, like {{ my_slot }}. Slot content renders with
         # the scope of the component that wrote it, so its collected data is

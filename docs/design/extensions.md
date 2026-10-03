@@ -446,16 +446,23 @@ observation point for extensions that need metrics or diagnostics.
 ### 7.2 Post-render return type: `CitryRender | str | None`
 
 `on_component_rendered` accepts **`CitryRender | str | None`**. A returned
-`str` is convenience: it is wrapped as a single-part `CitryRender` (treated as
-already-serialized HTML). Keeping the struct form available means deps stay
-recoverable; the `str` form is the easy path. (DJC used `str` only, because its
-render output was a string.)
+`str` is convenience: it is wrapped as a single-part `CitryRender`. It follows
+the rule of a `{{ ... }}` value, the same as `on_render`: a plain `str` is text
+and is escaped, while `Markup` (or any object with `__html__`) is inserted as
+HTML. On a typed (Vue) render the plain `str` becomes a text part and `Markup`
+a trusted-HTML part, so static and interactive pages show the same thing.
+Any other non-`None` value raises `TypeError`. Keeping the struct form
+available means deps stay recoverable; the `str` form is the easy path. (DJC
+used `str` only, because its render output was a string.)
 
 ### 7.3 `on_component_rendered` operates on the `CitryRender`
 
 Receives `render: CitryRender | None` + `error`. Return a `CitryRender`/`str` to
 replace output, raise to replace the error, return `None` to keep the original.
-Threading semantics preserved from DJC.
+Threading semantics preserved from DJC. Because the hooks thread, a later
+extension can receive a plain `str` or `Markup` that an earlier one returned as
+`ctx.render`; the built-in debug extension applies the same text-or-HTML rule
+before it wraps that value.
 
 ### 7.4 `on_template_compiled` fires at the node list, not a Template object
 

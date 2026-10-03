@@ -1,8 +1,10 @@
 """
-What the browser shows for content that ``Component.on_render`` returns on an interactive page.
+What the browser shows for content that a render hook returns on an interactive page.
 
-A plain ``str`` is text and ``Markup`` is HTML, on the server and after Vue
-takes over the page, so hydration finds the same nodes the server sent.
+``Component.on_render`` and the extension hooks ``on_component_rendered`` and
+``on_slot_rendered`` follow one rule: a plain ``str`` is text and ``Markup``
+is HTML, on the server and after Vue takes over the page, so hydration finds
+the same nodes the server sent.
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from citry import Citry, Component, Markup
+from citry import Citry, Component, Extension, Markup
 
 pytest.importorskip("playwright.sync_api")
 
@@ -94,4 +96,81 @@ def test_markup_shows_as_html_after_hydration(page: Any, serve_live: Any) -> Non
     faults = _open(page, serve_live, _page_with_replacement(Markup("<b>bold</b>")))
 
     assert page.locator("#replaced b").text_content() == "bold"
+    assert faults == []
+
+
+def _page_with_hook_replacement(hook: str, value: object) -> type[Component]:
+    class Replace(Extension):
+        name = "replace"
+
+        def on_component_rendered(self, ctx: Any) -> object:
+            if hook == "component" and type(ctx.component).__name__ == "Replaced":
+                return value
+            return None
+
+        def on_slot_rendered(self, ctx: Any) -> object:
+            if hook == "slot" and type(ctx.component).__name__ == "Holder":
+                return value
+            return None
+
+    engine = Citry(secret="on-render-e2e-secret", extensions=[Replace], autodiscover=False)  # noqa: S106 - test signing key
+    # Serve the runtime from the route the serve_live fixture mounts.
+    engine.set_mounted_prefix("/citry")
+
+    class Replaced(Component):
+        citry = engine
+        template = """
+          <p>unused</p>
+        """
+
+    class Holder(Component):
+        citry = engine
+        template = """
+          <section><c-slot>fallback</c-slot></section>
+        """
+
+    # A component with a Vue listener makes the page interactive.
+    class Counter(Component):
+        citry = engine
+        template = """
+          <button id="count" @click="count += 1">{{ count }}</button>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"count": 0}
+
+    class Page(Component):
+        citry = engine
+        template = """
+          <!doctype html>
+          <html>
+            <head></head>
+            <body>
+              <div id="replaced"><c-Replaced /></div>
+              <div id="slot"><c-Holder>fill</c-Holder></div>
+              <c-Counter />
+            </body>
+          </html>
+        """
+
+    return Page
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(("hook", "target"), [("component", "#replaced"), ("slot", "#slot")])
+def test_extension_hook_plain_str_shows_as_text(page: Any, serve_live: Any, hook: str, target: str) -> None:
+    faults = _open(page, serve_live, _page_with_hook_replacement(hook, USER_INPUT))
+
+    assert page.locator(target).text_content().strip() == USER_INPUT
+    assert page.locator(f"{target} b").count() == 0
+    assert page.evaluate("window.__pwned") is None
+    assert faults == []
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(("hook", "target"), [("component", "#replaced"), ("slot", "#slot")])
+def test_extension_hook_markup_shows_as_html(page: Any, serve_live: Any, hook: str, target: str) -> None:
+    faults = _open(page, serve_live, _page_with_hook_replacement(hook, Markup("<b>bold</b>")))
+
+    assert page.locator(f"{target} b").text_content() == "bold"
     assert faults == []

@@ -104,6 +104,35 @@ templates, JavaScript, and CSS.
     `on_serialize()` result that changes, removes, or repeats that element,
     or that drops Citry's runtime script. Edit only the rest of the HTML.
 
+### Return text or HTML
+
+`on_component_rendered()` and `on_slot_rendered()` can return new content
+for the component or slot. Citry treats a returned string like a value in
+`{{ }}`, on static and interactive pages alike: a plain `str` shows as
+text, so its tags appear as characters on the page:
+
+```python
+def on_component_rendered(self, ctx):
+    if type(ctx.component).__name__ == "Checkout":
+        # Wrong: the page shows "<p>Closed today</p>" as text.
+        return "<p>Closed today</p>"
+    return None
+```
+
+Wrap the HTML in [`Markup`][citry.Markup] to insert it as HTML:
+
+```python
+def on_component_rendered(self, ctx):
+    if type(ctx.component).__name__ == "Checkout":
+        # Right: Markup marks the string as HTML.
+        return Markup("<p>Closed today</p>")
+    return None
+```
+
+Never build `Markup` from user input. Return user input as a plain `str`,
+which Citry escapes. `on_serialize()` is different: it returns the whole
+page's HTML, and Citry uses that as it is.
+
 ### Handle a failed render
 
 `on_component_rendered` also runs when a component fails to render. Then

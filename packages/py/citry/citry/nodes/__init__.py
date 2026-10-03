@@ -2245,6 +2245,23 @@ class ForNode(Node):
         return f"ForNode(branches={len(self.branches)})"
 
 
+def _slot_hook_text_or_html(selected: RenderPart, original: RenderPart) -> RenderPart | None:
+    """
+    Apply the text-or-HTML rule to content that ``on_slot_rendered`` returned.
+
+    A plain ``str`` the hook returns is text and ``Markup`` is HTML, the same
+    rule as ``on_render`` and a ``{{ ... }}`` value. Returns the render part
+    for that content, or ``None`` when the hook kept the slot's own output or
+    returned a render, which the caller uses as it is.
+    """
+    if selected is original:
+        return None
+    # Imported lazily: component_render imports the node classes.
+    from citry.component_render import _ON_SLOT_RENDERED_TEXT_SOURCE, _text_or_html_part  # noqa: PLC0415
+
+    return _text_or_html_part(selected, _ON_SLOT_RENDERED_TEXT_SOURCE)
+
+
 @final
 class SlotNode(Node):
     """
@@ -2371,7 +2388,7 @@ class SlotNode(Node):
             part = _render_slot_value(slot_used, data, body_slot if fill is not None else None, context)
         if not component.citry.extensions.has_hook("on_slot_rendered"):
             return part
-        return component.citry.extensions.on_slot_rendered(
+        selected = component.citry.extensions.on_slot_rendered(
             component=component,
             slot=slot_used,
             slot_name=name,
@@ -2379,6 +2396,8 @@ class SlotNode(Node):
             slot_is_required=required,
             result=part,
         )
+        text_or_html = _slot_hook_text_or_html(selected, part)
+        return selected if text_or_html is None else text_or_html
 
     def _render_direct(
         self,
@@ -2439,6 +2458,11 @@ class SlotNode(Node):
                 slot_is_required=required,
                 result=hook_result,
             )
+            text_or_html = _slot_hook_text_or_html(selected, hook_result)
+            if text_or_html is not None:
+                # A direct slot keeps a whole render for its fill, so text or
+                # HTML the hook returned becomes a render of its own.
+                selected = CitryRender(parts=[text_or_html], context=context)
             selected_source = source
             if isinstance(selected, DirectSlotRender):
                 selected_source = selected.fill_source

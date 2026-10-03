@@ -216,7 +216,7 @@ class TestHookReturnsSerializedResult:
 
             def on_component_rendered(self, ctx):
                 if ctx.render is not None:
-                    return str(ctx.render) + "<hr>"
+                    return Markup(str(ctx.render) + "<hr>")  # noqa: S704 - serialized render output is trusted HTML
                 return None
 
         c = Citry(extensions=[AppendRule])

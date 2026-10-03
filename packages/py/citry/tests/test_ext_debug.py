@@ -542,7 +542,7 @@ class TestSerialization:
             name = "replace_output"
 
             def on_component_rendered(self, ctx):
-                return "<strong>replacement</strong>"
+                return Markup("<strong>replacement</strong>")
 
         app = Citry(
             extensions=[ReplaceOutput, Debug],
@@ -560,13 +560,38 @@ class TestSerialization:
         assert '<strong data-cid-c1="">replacement</strong>' in html
         assert "original" not in html
 
+    def test_debug_keeps_plain_str_from_an_earlier_extension_as_text(self):
+        # A plain str an earlier extension returns is text; wrapping it in
+        # the debug border must not turn it into HTML.
+        class ReplaceOutput(Extension):
+            name = "replace_output"
+
+            def on_component_rendered(self, ctx):
+                return "<strong>replacement</strong>"
+
+        app = Citry(
+            extensions=[ReplaceOutput, Debug],
+            extensions_defaults={"debug": {"highlight_components": True}},
+        )
+
+        class Card(Component):
+            citry = app
+            template = """
+                <p>original</p>
+            """
+
+        html = str(Card())
+        assert "citry-debug-component" in html
+        assert "&lt;strong&gt;replacement&lt;/strong&gt;" in html
+        assert "<strong" not in html
+
     def test_recovery_before_debug_is_highlighted(self):
         class Recover(Extension):
             name = "recover"
 
             def on_component_rendered(self, ctx):
                 if ctx.error is not None:
-                    return "<strong>recovered</strong>"
+                    return Markup("<strong>recovered</strong>")
                 return None
 
         app = Citry(
@@ -597,7 +622,7 @@ class TestSerialization:
 
             def on_component_rendered(self, ctx):
                 if ctx.error is not None:
-                    return "<strong>recovered</strong>"
+                    return Markup("<strong>recovered</strong>")
                 return None
 
         app = Citry(

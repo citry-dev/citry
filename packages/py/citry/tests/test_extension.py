@@ -20,10 +20,13 @@ from citry import (
     ForeignSpanSet,
     I18n,
     LintSettings,
+    Markup,
     Slot,
     TemplateNamespaceContribution,
 )
 from citry import Citry as _Citry
+from citry._vue.capture import render_prepared_direct
+from citry._vue.direct_capture import assemble_typed_render
 from citry.ext.events.openapi import OpenApiCommand
 from citry.ext.i18n.commands import I18N_COMMANDS
 
@@ -611,7 +614,7 @@ class TestRenderHooks:
             name = "e"
 
             def on_component_rendered(self, ctx):
-                return "<wrapped/>"
+                return Markup("<wrapped/>")
 
         app = _Citry(extensions=[E])
 
@@ -681,6 +684,121 @@ class TestRenderHooks:
 
         with pytest.raises(ValueError, match="boom"):
             str(Card())
+
+
+class TestHookReturnedContent:
+    """
+    Content that ``on_component_rendered`` or ``on_slot_rendered`` returns
+    follows the rule of a ``{{ ... }}`` value: a plain str is text, Markup
+    and other ``__html__`` objects are HTML, on static and interactive pages.
+    """
+
+    USER_INPUT = "<script>alert(1)</script> & <b>bold</b>"
+    ESCAPED = "&lt;script&gt;alert(1)&lt;/script&gt; &amp; &lt;b&gt;bold&lt;/b&gt;"
+
+    def _page(self, hook, value, *, interactive, document):
+        class Replace(Extension):
+            name = "replace"
+
+            def on_component_rendered(self, ctx):
+                if hook == "component" and type(ctx.component).__name__ == "Replaced":
+                    return value
+                return None
+
+            def on_slot_rendered(self, ctx):
+                if hook == "slot" and type(ctx.component).__name__ == "Holder":
+                    return value
+                return None
+
+        app = _Citry(extensions=[Replace], autodiscover=False)
+
+        class Replaced(Component):
+            citry = app
+            template = "<p>unused</p>"
+
+        class Holder(Component):
+            citry = app
+            template = "<section><c-slot>fallback</c-slot></section>"
+
+        # A component with a Vue listener makes the page interactive.
+        class Counter(Component):
+            citry = app
+            template = '<button @click="count += 1">{{ count }}</button>'
+
+            def template_data(self, kwargs, slots):
+                return {"count": 0}
+
+        body = "<c-Replaced /><c-Holder>fill</c-Holder>"
+        if interactive:
+            body += "<c-Counter />"
+        if document:
+            template = f"<!doctype html><html><head></head><body>{body}</body></html>"
+        else:
+            template = f"<div>{body}</div>"
+
+        class Page(Component):
+            citry = app
+
+        Page.template = template
+        return Page
+
+    PAGES = pytest.mark.parametrize(
+        ("interactive", "document"),
+        [(False, False), (True, True), (True, False)],
+        ids=["static", "interactive-document", "interactive-fragment"],
+    )
+    HOOKS = pytest.mark.parametrize("hook", ["component", "slot"])
+
+    @PAGES
+    @HOOKS
+    def test_plain_str_is_escaped(self, hook, interactive, document):
+        # An interactive page used to fail with "unsupported typed part str",
+        # and a static page inserted the string as HTML.
+        html = str(self._page(hook, self.USER_INPUT, interactive=interactive, document=document)())
+        assert self.ESCAPED in html
+        assert "<script>alert(1)" not in html
+        assert "<b>bold</b>" not in html
+
+    @PAGES
+    @HOOKS
+    def test_markup_is_inserted_as_html(self, hook, interactive, document):
+        html = str(self._page(hook, Markup("<b>bold</b>"), interactive=interactive, document=document)())
+        assert ">bold</b>" in html
+        assert "&lt;b&gt;" not in html
+
+    @PAGES
+    @HOOKS
+    def test_html_protocol_object_is_inserted_as_html(self, hook, interactive, document):
+        class Trusted:
+            def __html__(self):
+                return "<em>trusted</em>"
+
+        html = str(self._page(hook, Trusted(), interactive=interactive, document=document)())
+        assert ">trusted</em>" in html
+
+    @HOOKS
+    def test_empty_str_renders_nothing(self, hook):
+        html = str(self._page(hook, "", interactive=False, document=False)())
+        replaced = "unused" if hook == "component" else "fill"
+        assert replaced not in html
+
+    def test_unsupported_component_hook_value_is_rejected(self):
+        with pytest.raises(TypeError, match="on_component_rendered returned a int"):
+            str(self._page("component", 42, interactive=False, document=False)())
+
+    @HOOKS
+    def test_plain_str_reaches_vue_as_text_data(self, hook):
+        # Vue renders a text interpolation of the raw value, the same text
+        # the server escaped, so hydration sees identical text.
+        page = self._page(hook, "<b>bold</b>", interactive=True, document=False)
+        assembly = assemble_typed_render(
+            render_prepared_direct(page()),
+            revision=0,
+            tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+        )
+        values = [value for item in assembly.view.occurrences for value in item.prepared_data.values()]
+        assert "<b>bold</b>" in values
+        assert all("opaqueHtml" not in item.prepared_data for item in assembly.view.occurrences)
 
 
 class TestTemplateHooks:

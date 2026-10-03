@@ -1385,21 +1385,23 @@ def test_nested_component_keeps_lexical_call_span_and_evaluated_key() -> None:
     assert metadata.explicit_key == "7"
 
 
-def test_post_render_hook_raw_replacement_is_rejected() -> None:
-    class RawReplacement(Extension):
-        name = "raw_replacement"
+def test_post_render_hook_plain_str_replacement_is_text() -> None:
+    class TextReplacement(Extension):
+        name = "text_replacement"
 
         def on_component_rendered(self, ctx):
             return "<aside>raw</aside>"
 
-    registry = Citry(extensions=[RawReplacement])
+    registry = Citry(extensions=[TextReplacement])
 
     class Card(Component):
         citry = registry
         template = "<p>card</p>"
 
-    with pytest.raises(TypeError, match="unsupported raw output"):
-        render_prepared(Card())
+    rendered = render_prepared(Card())
+    [part] = rendered.parts
+    assert isinstance(part, PreparedTextValue)
+    assert part.value == "<aside>raw</aside>"
 
 
 def test_callable_slot_plain_text_is_prepared_as_data() -> None:

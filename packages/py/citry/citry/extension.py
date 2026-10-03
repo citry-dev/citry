@@ -878,11 +878,17 @@ class Extension:
 
     def on_component_rendered(self, ctx: OnComponentRenderedContext) -> CitryRender | str | None:
         """
-        Called after a component (and its children) rendered. Return a new
-        ``CitryRender`` / ``str`` to replace the output, raise to replace the
-        error, or return ``None`` to keep the original.
+        Called after a component (and its children) rendered. Return new
+        content to replace the output, raise to replace the error, or return
+        ``None`` to keep the original.
 
-        HTML you serialize inside the hook, such as ``str(ctx.render)``, does
+        The content follows the rule of a ``{{ ... }}`` value, on static and
+        interactive pages alike: a ``CitryRender`` is inlined, a plain ``str``
+        is shown as text (Citry escapes it), and [`Markup`][citry.Markup] is
+        inserted as HTML. Never build ``Markup`` from user input.
+
+        HTML you serialize inside the hook, such as ``str(ctx.render)``, is a
+        plain ``str``, so wrap it in ``Markup`` before you return it. It does
         not carry the component's own ``data-cid-*`` attribute; Citry adds it
         to the HTML you return.
         """
@@ -891,8 +897,11 @@ class Extension:
         """
         Called after a ``<c-slot>`` site rendered (a fill, or the fallback).
 
-        Return a new render part (``str`` or ``CitryRender``) to replace the
-        output, or ``None`` to keep the original. Raising propagates.
+        Return new content to replace the output, or ``None`` to keep the
+        original. Raising propagates. As with ``on_component_rendered``, a
+        ``CitryRender`` is inlined, a plain ``str`` is shown as text (Citry
+        escapes it), and [`Markup`][citry.Markup] is inserted as HTML, on
+        static and interactive pages alike.
         """
 
     def on_attrs_resolved(self, ctx: OnAttrsResolvedContext) -> dict[str, Any] | None:

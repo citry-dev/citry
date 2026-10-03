@@ -527,6 +527,10 @@ Details:
 Skip this section if your project has no custom extensions or custom
 template tags.
 
+A plain `str` that `on_component_rendered` or `on_slot_rendered` returns
+shows as text, the same as one that `on_render` returns; wrap HTML in
+`Markup`.
+
 | ID | django-components | Citry: what to do | Impact |
 |---|---|---|---|
 | <span id="djc-058">DJC-058</span> | Nested `ComponentConfig` class (or the `ExtensionClass` alias) | Rename it to `Config` with the base `Extension.Config`. Update hook bodies for renamed context fields such as `ctx.component_class`. | 🔴 |

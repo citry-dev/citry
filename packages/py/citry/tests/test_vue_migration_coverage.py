@@ -1488,7 +1488,8 @@ def test_finalize_and_merge_handle_simple_componentless_and_extension_failures()
 
     with typed_render_scope(direct=True, vue=True):
         initial = _render_one(OddPage())
-        assert _finalize(initial.render, None) is not None
+        with pytest.raises(TypeError, match="on_component_rendered returned a object"):
+            _finalize(initial.render, None)
 
 
 def test_component_render_rejects_raw_prepared_outputs_and_foreign_spans() -> None:

@@ -101,8 +101,9 @@ walks through every step.
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#name-the-parent-class)).
 - **HTML returned from `on_render` shows as text:** `on_render()` now
   escapes a plain `str` it returns or yields, as `{{ }}` does, so user
-  input in it cannot add a script. Wrap HTML in `Markup` or return a
-  component
+  input in it cannot add a script. The extension hooks
+  `on_component_rendered()` and `on_slot_rendered()` follow the same
+  rule. Wrap HTML in `Markup` or return a component
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#wrap-html-returned-from-on-render)).
 
 ### Other additions

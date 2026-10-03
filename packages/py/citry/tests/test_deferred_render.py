@@ -13,7 +13,7 @@ subtree is complete, and bubbles dependencies up at finalize time.
 
 import pytest
 
-from citry import Citry, CitryContext, CitryRender, Component
+from citry import Citry, CitryContext, CitryRender, Component, Markup
 from citry.citry_render import DeferredComponent
 from citry.extension import Extension
 
@@ -363,7 +363,7 @@ class TestNestedRenderedHook:
 
             def on_component_rendered(self, ctx):
                 if type(ctx.component).__name__ == "Leaf":
-                    return "<leaf-wrapped/>"
+                    return Markup("<leaf-wrapped/>")
                 return None
 
         c = Citry(extensions=[WrapLeaf])
