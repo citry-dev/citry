@@ -438,6 +438,21 @@ Citry 0.5.1 used the last one. Keep the event you want:
 <input :c-query.on:change="search" />
 ```
 
+### One key per binding
+
+**What you see:** a binding with two key filters, such as
+`@c-keydown.enter.escape`, or an element with two `@c-*` bindings for one
+event, such as `@c-keydown.enter` and `@c-keydown.escape`, fails when the
+template loads, and the error names both.
+
+Citry 0.5.1 used the last key filter of a binding and ran every binding
+for an event. To react to either key, call the handler from one Vue
+listener:
+
+```citry-html
+<input @keydown.enter.escape="$sendEvent('search')" />
+```
+
 ### Update stale listeners
 
 **What you see:** a listener that checks for `cancelled` or `timeout`
@@ -826,7 +841,8 @@ argument.
     Move `.enter` and `.escape` from a `@c-*` binding on any other event to
     a `keydown` or `keyup` binding, and give a `:c-*` binding that uses
     them `.on:keydown` in place of `.lazy` or its other `.on:` event.
-    Keep one `.on:` event on each `:c-*` binding.
+    Keep one `.on:` event and one key filter on each binding, and one
+    `@c-*` binding per event on each element.
 13. Set `security_csp` and `security_javascript` on the `Citry` instance
     for pages with Events.
 14. Update action lists passed to `Citry.events.applyActions`, including

@@ -3705,6 +3705,51 @@ def test_key_filtered_binding_checks_the_key_before_prevent(page: Any, serve_liv
 
 
 @pytest.mark.e2e
+def test_vue_listener_with_two_keys_sends_for_either_key(page: Any, serve_live: Any) -> None:
+    # An `@c-*` binding takes one key filter, and its load error points to a
+    # Vue listener instead. Prove that listener calls the handler for both
+    # keys and for no other key.
+    engine = Citry(secret="vue-two-key-listener-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class EitherKey(Component):
+        citry = engine
+        template = """
+            <main>
+              <input
+                id="field"
+                @keydown.enter.escape="$sendEvent('go')"
+              />
+            </main>
+        """
+
+        class Events:
+            def go(self):
+                return None
+
+    dispatcher_for(engine)
+    calls: list[dict[str, Any]] = []
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "request",
+        lambda request: calls.extend(request.post_data_json["calls"])
+        if request.url.endswith("/ext/events/call") and request.post_data_json
+        else None,
+    )
+    page.goto(serve_live(engine, EitherKey().render().serialize(), "") + "/")
+    field = page.locator("#field")
+    field.press_sequentially("ab")
+    page.wait_for_timeout(60)
+    assert calls == []
+    for key in ("Enter", "Escape"):
+        with page.expect_request("**/ext/events/call") as request:
+            field.press(key)
+        assert request.value.post_data_json["calls"][0]["handlerName"] == "go"
+    assert faults == []
+
+
+@pytest.mark.e2e
 def test_key_filtered_state_binding_sends_only_for_that_key(page: Any, serve_live: Any) -> None:
     engine = Citry(secret="vue-state-key-filter-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")

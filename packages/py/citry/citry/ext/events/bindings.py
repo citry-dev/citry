@@ -310,6 +310,30 @@ def _validate_timing_pair(debounce: int | None, throttle: int | None, attr_name:
             _fail(location, f"{attr_name!r}: .{name} timing exceeds the JavaScript safe-integer limit")
 
 
+def _reject_second_key_filter(
+    attr_name: str, key: str | None, second: str, location: _Location, *, handler: str | None = None
+) -> None:
+    """Fail when one binding carries a second key filter, naming both so the author picks."""
+    if key is None:
+        return
+    # A binding sends for one key, and a second filter would silently replace
+    # the first. Vue reads `@keydown.enter.escape` as "either key", so say
+    # plainly that these bindings do not, and how to get that from Vue.
+    message = (
+        f"{attr_name!r} has two key filters, '.{key}' and '.{second}'. A Citry Events binding"
+        f" reacts to one key, so it cannot read them as either key the way a Vue listener does."
+        f" Keep one key filter"
+    )
+    if handler is None:
+        _fail(location, message + ".")
+    event = _split_name(attr_name, _PREFIX_EVENT)[0]
+    _fail(
+        location,
+        f"{message}, or call the handler from a Vue listener, which accepts several keys:"
+        f" @{event}.{key}.{second}=\"$sendEvent('{handler}')\".",
+    )
+
+
 def _build_event_spec(info: EventsInfo, event: str, attr: _Attr, location: _Location) -> dict[str, Any]:
     """Validate and build one typed event spec from an ``@c-<event>`` attribute."""
     if not event:
@@ -333,6 +357,7 @@ def _build_event_spec(info: EventsInfo, event: str, attr: _Attr, location: _Loca
             self_flag = self_flag or token.value == "self"
             once = once or token.value == "once"
         elif token.kind == "flag" and token.value in _KEY_FILTERS:
+            _reject_second_key_filter(attr.name, key, str(token.value), location, handler=handler)
             key = str(token.value)
         elif token.kind == "flag":  # lazy
             _fail(location, f"{attr.name!r}: '.lazy' only applies to a two-way state binding (:c-...), not an event")
@@ -440,6 +465,7 @@ def _build_bind_spec(
         if token.kind == "flag" and token.value == "lazy":
             lazy = True
         elif token.kind == "flag" and token.value in _KEY_FILTERS:
+            _reject_second_key_filter(attr.name, key, str(token.value), location)
             key = str(token.value)
         elif token.kind == "flag":  # prevent/stop/self/once: event-only
             _fail(
@@ -961,6 +987,21 @@ def _transform_element_attrs(
             _compiled_location(comp_name, source, state_bindings[1].position),
             f"one element supports exactly one :c-* State binding; found {names!r}",
         )
+    # The browser keeps one Citry Events listener per DOM event on an element,
+    # so a second `@c-keydown` would only fail later, when the page renders.
+    # Catch it here, with the template line, naming both attributes.
+    events_seen: dict[str, str] = {}
+    for attr in bindings:
+        if _classify_binding(attr.key) != _CHANNEL_EVENT:
+            continue
+        event, _ = _split_name(attr.key, _PREFIX_EVENT)
+        first = events_seen.setdefault(event, attr.key)
+        if first != attr.key:
+            _fail(
+                _compiled_location(comp_name, source, attr.position),
+                f"<{tag_name}> has two bindings for the {event!r} event, {first!r} and {attr.key!r}. An element"
+                f" sends one Citry Events call per event, so keep one '@c-{event}' binding on it.",
+            )
 
     element_attrs = [_compiled_attr(attr) for attr in attrs]
     element = _element_of(tag_name, element_attrs)

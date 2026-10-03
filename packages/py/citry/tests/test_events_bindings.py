@@ -775,6 +775,54 @@ class TestValidationErrors:
                 events={"go": _noop},
             )
 
+    # A binding sends for one key, so a second key filter must not silently
+    # replace the first. Vue reads `@keydown.enter.escape` as "either key";
+    # the error names both filters and, for an event binding, shows the Vue
+    # listener that reacts to either key.
+    @pytest.mark.parametrize(
+        ("template", "attr_name", "fix"),
+        [
+            (
+                '<input @c-keydown.enter.escape="go">',
+                "@c-keydown.enter.escape",
+                ", or call the handler from a Vue listener, which accepts several keys:"
+                " @keydown.enter.escape=\"$sendEvent('go')\".",
+            ),
+            (
+                '<input @c-keyup.escape.prevent.enter="go">',
+                "@c-keyup.escape.prevent.enter",
+                ", or call the handler from a Vue listener, which accepts several keys:"
+                " @keyup.escape.enter=\"$sendEvent('go')\".",
+            ),
+            (
+                '<input :c-q.on:keyup.enter.escape="go">',
+                ":c-q.on:keyup.enter.escape",
+                ".",
+            ),
+        ],
+    )
+    def test_two_key_filters_on_one_binding_fail_to_load(self, template, attr_name, fix):
+        first, second = [part for part in attr_name.split(".") if part in {"enter", "escape"}]
+        expected = (
+            f"'{attr_name}' has two key filters, '.{first}' and '.{second}'. A Citry Events binding"
+            " reacts to one key, so it cannot read them as either key the way a Vue listener does."
+            f" Keep one key filter{fix} (in Comp template, line 1)"
+        )
+        with pytest.raises(ValueError, match=re.escape(expected)):
+            self._load(template, state={"__annotations__": {"q": str}, "q": ""}, events={"go": _noop})
+
+    def test_two_event_bindings_for_one_event_fail_to_load(self):
+        # The browser keeps one Events listener per DOM event on an element,
+        # so a second binding for `keydown` fails when the template loads,
+        # not later when the page renders.
+        expected = (
+            "<input> has two bindings for the 'keydown' event, '@c-keydown.enter' and '@c-keydown.escape'."
+            " An element sends one Citry Events call per event, so keep one '@c-keydown' binding on it."
+            " (in Comp template, line 1)"
+        )
+        with pytest.raises(ValueError, match=re.escape(expected)):
+            self._load('<input @c-keydown.enter="go" @c-keydown.escape="go">', events={"go": _noop})
+
     @pytest.mark.parametrize("event_name", ["keydown", "keyup", "keypress"])
     def test_event_key_filter_accepts_keyboard_events(self, event_name):
         comp = self._component(f'<button @c-{event_name}.enter="go">x</button>', events={"go": _noop})

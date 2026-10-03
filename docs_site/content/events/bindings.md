@@ -277,6 +277,20 @@ applies to that event:
 <input :c-query.on:keydown.enter="search" />
 ```
 
+A binding takes one key filter, and an element takes one `@c-*` binding
+per event. Unlike a Vue listener, `@c-keydown.enter.escape` does not mean
+"either key", so it fails when the template loads, as does a second
+`@c-keydown` on the same element. To react to either key, call the handler
+from a Vue listener:
+
+```citry-html
+{# Fails: two key filters on one binding #}
+<input @c-keydown.enter.escape="search" />
+
+{# Works: Vue runs the listener for Enter or Escape #}
+<input @keydown.enter.escape="$sendEvent('search')" />
+```
+
 ### `:type` stops a binding
 
 If Vue later changes `:type` to a type that cannot be bound, the binding

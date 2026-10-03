@@ -879,7 +879,9 @@ def test_leaf_program_reuses_one_authored_event_binding_across_python_loop_items
     ]
 
 
-def test_leaf_program_rejects_duplicate_handlers_for_one_dom_event() -> None:
+def test_duplicate_handlers_for_one_dom_event_fail_before_a_leaf_program_is_built() -> None:
+    # An element keeps one Events listener per DOM event, so the template
+    # fails to load and no leaf program ever sees the second binding.
     registry = Citry(secret="prepared-events-duplicate-secret")  # noqa: S106 - test-only key
     registry.set_mounted_prefix("/citry")
 
@@ -892,7 +894,8 @@ def test_leaf_program_rejects_duplicate_handlers_for_one_dom_event() -> None:
 
         template = '<button c-if="True" @c-click="save" @c-click.prevent="save">Save</button>'
 
-    assert not any(isinstance(part, PreparedLeafProgram) for part in render_prepared(Buttons()).parts)
+    with pytest.raises(ValueError, match=r"<button> has two bindings for the 'click' event"):
+        render_prepared(Buttons())
 
 
 def test_plain_element_key_metadata_is_evaluated_once_as_structured_data() -> None:
@@ -2503,6 +2506,8 @@ def test_compiler_still_rejects_vue_builtin_components_it_receives() -> None:
         ('@click.enter="go()"', False),
         ('v-on:click.foo="go()"', False),
         ('@keydown.enter="go()"', True),
+        # Vue runs this listener for either key, so Citry passes it through.
+        ('@keydown.enter.escape="go()"', True),
         ('@keyup.page-down="go()"', True),
         ('@click.ctrl.left.prevent="go()"', True),
     ],

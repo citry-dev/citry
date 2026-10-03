@@ -57,7 +57,8 @@ walks through every step.
   `publicState` object. `.enter` and `.escape` on a `@c-*` binding work
   only on `keydown`, `keyup`, or `keypress`, and on a `:c-*` binding only
   with `.on:keydown`, `.on:keyup`, or `.on:keypress`. A `:c-*` binding
-  that names two `.on:` events now fails
+  that names two `.on:` events, a binding with two key filters, and a
+  second `@c-*` binding for the same event on one element now fail
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-events-code)).
 - **Handlers that return a different component:** a handler can no longer
   replace the outermost component of a page or HTML fragment with a
