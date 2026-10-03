@@ -72,7 +72,7 @@ JavaScript, and CSS files still load the first time a component needs them.
 Call it from your app's own startup code, as the examples below show. A
 mounted ASGI sub-app does not reliably receive startup events, so mounting
 Citry does not initialize it for you. See
-[Component discovery and startup](/advanced/component-discovery/#initialize-before-starting-worker-threads)
+[Discovery and startup](/advanced/component-discovery/#initialize-before-starting-worker-threads)
 for what happens when initialization fails, runs twice, or starts from
 two threads at once.
 
