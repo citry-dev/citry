@@ -342,7 +342,7 @@ citry --app myproject.app:app check
 
 Warnings are printed, and included in `--format json` output, but do not fail
 the command. Any error exits with status 1. See
-[Command line](/cli/#check-component-templates).
+[Command line](/advanced/cli/#check-component-templates).
 
 ## Less common cases
 

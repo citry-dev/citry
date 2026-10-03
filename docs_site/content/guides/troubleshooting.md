@@ -113,7 +113,7 @@ that one first.
 
 | What the console shows | Cause | Fix |
 |---|---|---|
-| 404 responses for `citry.js`, component code, or stylesheets | Citry is not mounted on your web app, or another worker process answered without the stored files | [Mount Citry](/web-frameworks/), and [share the cache between worker processes](/web-frameworks/#share-the-cache-between-worker-processes) |
+| 404 responses for `citry.js`, component code, or stylesheets | Citry is not mounted on your web app, or another worker process answered without the stored files | [Mount Citry](/advanced/web-frameworks/), and [share the cache between worker processes](/advanced/web-frameworks/#share-the-cache-between-worker-processes) |
 | `[Citry] discarded Vue fragment` | An inserted fragment arrived incomplete, or its files did not load | Insert the whole response, and fix the first network error |
 | `[Citry] expected one configuration block for app ...` | A tool such as an HTML minifier, sanitizer, or your own script removed part of the HTML Citry wrote | [Keep Citry's elements and data blocks in the HTML](/advanced/vue-runtime/#preserve-interactive-html) |
 

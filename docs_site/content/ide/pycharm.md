@@ -112,7 +112,7 @@ citry --app myproject.app:citry_app check
 ```
 
 Use `citry check --static` when the project cannot be imported. See
-[Command line](/cli/#check-component-templates).
+[Command line](/advanced/cli/#check-component-templates).
 
 ## Current limits
 

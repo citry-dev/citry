@@ -34,7 +34,7 @@ It comes with
 a [UI library](/ui-library/),
 [editor support](/ide/vscode/),
 
-Citry works with any Python web framework - Django, FastAPI, Flask, even plain WSGI/ASGI. See [integrations](/web-frameworks/).
+Citry works with any Python web framework - Django, FastAPI, Flask, even plain WSGI/ASGI. See [integrations](/advanced/web-frameworks/).
 
 You can try it without installing anything in the [playground](/playground/).
 
@@ -228,7 +228,7 @@ walks through those pieces and serving the page.
 
 Here, `@c-click` sends the click to Python, and the returned action gives the
 browser the message to display. Citry integrates with [Django, FastAPI,
-Flask, Starlette, ASGI, and WSGI](/web-frameworks/), so you can use this with the backend you
+Flask, Starlette, ASGI, and WSGI](/advanced/web-frameworks/), so you can use this with the backend you
 already have.
 
 ## Catch mistakes while you build
@@ -307,7 +307,7 @@ Alongside the core framework, there's already quite a bit to try:
 - [Examples](/examples/) and the
   [getting-started tutorial](/getting-started/installation/) take you from
   rendering a component to handling server interactions.
-- [Integrations](/web-frameworks/) connect Citry to Python web frameworks,
+- [Integrations](/advanced/web-frameworks/) connect Citry to Python web frameworks,
   and [community extensions](/community/extensions/) add other ways to use it
   in an existing project.
 
@@ -353,7 +353,7 @@ When you are ready to port components, follow the
 It covers the template, Python, asset, extension, and testing changes and
 includes a checklist you can give to a coding agent.
 
-This is different from Citry's own [Django integration](/web-frameworks/#django), which handles serving components and event routes.
+This is different from Citry's own [Django integration](/advanced/web-frameworks/#django), which handles serving components and event routes.
 
 ## What comes next
 

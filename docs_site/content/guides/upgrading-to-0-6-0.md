@@ -734,7 +734,7 @@ to `vue_asset_max_bytes` (64 MiB by default). A page always finds its own
 files right after it loads. A page left open long enough to ask for a file
 that was dropped gets the same 404, so raise the limit or configure a
 cache. See
-[Share the cache](/web-frameworks/#share-the-cache-between-worker-processes).
+[Share the cache](/advanced/web-frameworks/#share-the-cache-between-worker-processes).
 
 ## Proxies and CDNs { #proxies-and-cdns }
 

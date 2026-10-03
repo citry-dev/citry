@@ -196,7 +196,7 @@ at the top of this page for that.
 
 For [server events](/events/), keep the business logic in ordinary Python
 functions and test those directly. Then add one smaller test that calls
-the event over HTTP. [Web frameworks](/web-frameworks/) shows how Citry
+the event over HTTP. [Web frameworks](/advanced/web-frameworks/) shows how Citry
 routes are added to each framework.
 
 In a browser test, act as a person would: click the visible control, then

@@ -170,7 +170,7 @@ Citry includes adapters for:
 | Any ASGI application | `citry.contrib.asgi.asgi_app()` |
 | Any WSGI application | `citry.contrib.wsgi.wsgi_app()` |
 
-The [web-framework guide](https://citry.dev/web-frameworks/) shows the right
+The [web-framework guide](https://citry.dev/advanced/web-frameworks/) shows the right
 startup and routing setup for each host.
 
 Want a complete project instead of an integration excerpt? Copy the
@@ -206,7 +206,7 @@ citry --app myproject.app:citry_app check
 ```
 
 See the [VS Code guide](https://citry.dev/ide/vscode/) and
-[CLI reference](https://citry.dev/cli/) for setup and CI usage.
+[CLI reference](https://citry.dev/advanced/cli/) for setup and CI usage.
 
 ## Work with a coding agent
 

@@ -15,10 +15,10 @@ the [server events](/events/) in the next steps.
 This tutorial uses FastAPI to keep the setup concrete. Citry also works
 with:
 
-- [FastAPI and Starlette](/web-frameworks/#fastapi-and-starlette)
-- [Django](/web-frameworks/#django)
-- [Flask](/web-frameworks/#flask)
-- Other [ASGI or WSGI applications](/web-frameworks/#bare-asgi-and-wsgi).
+- [FastAPI and Starlette](/advanced/web-frameworks/#fastapi-and-starlette)
+- [Django](/advanced/web-frameworks/#django)
+- [Flask](/advanced/web-frameworks/#flask)
+- Other [ASGI or WSGI applications](/advanced/web-frameworks/#bare-asgi-and-wsgi).
 
 You can switch to your framework after you finish the tutorial.
 
@@ -184,5 +184,5 @@ To confirm that Citry's routes work, visit
 The page and Citry now run on one server. Next, [call Python from a
 click](/getting-started/call-python/).
 
-To use another framework, the [Web frameworks](/web-frameworks/) guide shows
+To use another framework, the [Web frameworks](/advanced/web-frameworks/) guide shows
 the matching setup for Django, Flask, Starlette, and plain ASGI or WSGI apps.

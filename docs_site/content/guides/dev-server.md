@@ -150,7 +150,7 @@ To pick a backend yourself, pass an instance from `citry.reload`, such as
 
 ## Use `citry watch`
 
-The `citry` command (see the [CLI reference](/cli/)) has a `watch`
+The `citry` command (see the [CLI reference](/advanced/cli/)) has a `watch`
 subcommand. It reloads files only inside its own process, so it suits a
 script that renders components in that same process. For a web server,
 use one of the helpers above, which run inside the server.

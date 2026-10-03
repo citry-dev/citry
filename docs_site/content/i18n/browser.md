@@ -202,7 +202,7 @@ by reading message IDs written literally in your code, such as
 
 When the ID comes from a variable, the browser cannot know it in
 advance. With Citry mounted in one of its
-[web framework integrations](/web-frameworks/), load the message from
+[web framework integrations](/advanced/web-frameworks/), load the message from
 the server before calling `tr()`:
 
 ```javascript

@@ -27,3 +27,7 @@ redirects:
     to: /events/routes/
   - from: /advanced/custom-component-values/
     to: /advanced/render-custom-values/
+  - from: /cli/
+    to: /advanced/cli/
+  - from: /web-frameworks/
+    to: /advanced/web-frameworks/

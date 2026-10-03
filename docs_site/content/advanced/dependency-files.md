@@ -81,7 +81,7 @@ class Dependencies:
 
 Each URL contains a hash of the file's content, so a changed file gets a
 new URL. Serving needs Citry's routes added to your web app (see
-[Web frameworks](/web-frameworks/)); without them, Citry puts the content
+[Web frameworks](/advanced/web-frameworks/)); without them, Citry puts the content
 into the page as before. `local_files` accepts only `"inline"` (the
 default) and `"serve"`. Any other value raises `ValueError` when a page
 that includes one of the component's project files is serialized.

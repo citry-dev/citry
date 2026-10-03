@@ -482,7 +482,7 @@ The Citry editor extension and `citry check` read the code in `js`:
   (`citry.component-js.unknown-member`). Citry reports it only when it can
   see all of the component's values in the source.
 - `citry check --types` also reports TypeScript errors in the code. See
-  [`check --types` typing](/cli/#check-types-with-typescript-and-ty).
+  [`check --types` typing](/advanced/cli/#check-types-with-typescript-and-ty).
 
 ## Send values to CSS
 

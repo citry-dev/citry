@@ -125,7 +125,7 @@ Start discovery from one place, at startup. A second thread that starts
 discovery or `initialize()` while one is running raises
 [`CitryLifecycleInProgress`][citry.CitryLifecycleInProgress].
 
-[Web frameworks](/web-frameworks/) shows where startup code goes in each
+[Web frameworks](/advanced/web-frameworks/) shows where startup code goes in each
 framework.
 
 ## Run discovery yourself

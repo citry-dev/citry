@@ -160,7 +160,7 @@ html = rendered.serialize(deps_strategy="ignore")
 that you insert into a page that is already open.
 
 To return the HTML from a web route, see the
-[Web frameworks guide](/web-frameworks/).
+[Web frameworks guide](/advanced/web-frameworks/).
 
 ## Render more than once
 

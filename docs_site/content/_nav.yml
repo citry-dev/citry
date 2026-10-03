@@ -94,6 +94,7 @@ areas:
           - { title: HTML attributes, path: /advanced/html-attributes/ }
           - { title: Subclass components, path: /advanced/subclassing/, needs_review: true }
           - { title: Discovery and startup, path: /advanced/component-discovery/ }
+          - { title: Web frameworks, path: /advanced/web-frameworks/, needs_review: true }
           - { title: Component JS and CSS, path: /advanced/js-and-css-dependencies/, needs_review: true }
           - { title: Dependency files, path: /advanced/dependency-files/, needs_review: true }
           - { title: Asset placement, path: /advanced/asset-placement/, needs_review: true }
@@ -105,7 +106,7 @@ areas:
           - { title: Component libraries, path: /advanced/component-libraries/ }
           - { title: Render custom values, path: /advanced/render-custom-values/ }
           - { title: Testing components, path: /advanced/testing/ }
-          - { title: Command line, path: /cli/, needs_review: true }
+          - { title: Command line, path: /advanced/cli/, needs_review: true }
 
       - label: Performance
         collapsible: true
@@ -123,7 +124,6 @@ areas:
         section_style: true
         items:
           - { title: Upgrade to 0.6.0, path: /guides/upgrading-to-0-6-0/, needs_review: true }
-          - { title: Web frameworks, path: /web-frameworks/, needs_review: true }
           - { title: Use Citry with HTMX, path: /guides/htmx/, needs_review: true }
           - { title: Troubleshooting, path: /guides/troubleshooting/, needs_review: true }
           - { title: Hot reload, path: /guides/dev-server/, needs_review: true }

@@ -155,7 +155,7 @@ and the format profiles they need. Citry never sends the whole catalog.
 How more messages arrive depends on the setup:
 
 - With Citry mounted in a
-  [web framework integration](/web-frameworks/), the first response
+  [web framework integration](/advanced/web-frameworks/), the first response
   includes what the current locale needs. `switchLocale()` and
   `ensureMessages()` ask the server for more. The server rejects the
   whole request if it names an unknown or private message, an old

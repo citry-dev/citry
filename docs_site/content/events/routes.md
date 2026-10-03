@@ -66,7 +66,7 @@ the same URL and swap in the returned HTML.
 Allow GET on a handler that only reads data, with the `methods` option of
 [`@event()`][citry.ext.events.event]. Browser code and other servers
 can then call its URL, and Citry's
-[OpenAPI export](/cli/#run-an-extension-command) describes it:
+[OpenAPI export](/advanced/cli/#run-an-extension-command) describes it:
 
 ```citry
 from citry.ext.events import event

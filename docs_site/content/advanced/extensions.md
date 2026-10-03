@@ -342,7 +342,7 @@ A plain `def` handler works with every framework integration. An
 integration. To support both without blocking the event loop, pass a plain
 `handler` and its async version as `handler_async`.
 
-See [Web frameworks](/web-frameworks/) for mounting Citry's routes in your
+See [Web frameworks](/advanced/web-frameworks/) for mounting Citry's routes in your
 application.
 
 ## Add CLI commands
@@ -355,7 +355,7 @@ citry --app myproject.engine:app ext list
 citry --app myproject.engine:app ext run events openapi
 ```
 
-See [Command line](/cli/) for defining arguments and running extension
+See [Command line](/advanced/cli/) for defining arguments and running extension
 commands.
 
 ## Describe components

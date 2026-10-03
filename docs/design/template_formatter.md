@@ -1710,7 +1710,7 @@ all of these before publishing the formatter surfaces:
    `packages/editors/vscode/README.md` is its Marketplace and Open VSX listing;
    `docs_site/content/ide/index.md` gives the tooling overview; and
    `docs_site/content/ide/vscode.md` gives the complete setup guide. The public
-   `docs_site/content/cli.md` formatter guide belongs in the same review.
+   `docs_site/content/advanced/cli.md` formatter guide belongs in the same review.
    Together they must explain extension installation, `citry-lsp` installation
    in the selected project interpreter, `citry.app`, syntax-only degradation,
    standalone file association, formatting and save configuration, CLI modes

@@ -140,6 +140,6 @@ Before adding private data or write operations:
 - use a shared Citry cache when several workers render component updates; and
 - tune Waitress and your proxy for the traffic and timeouts you expect.
 
-Read the [bare ASGI and WSGI guide](https://citry.dev/web-frameworks/#bare-asgi-and-wsgi),
+Read the [bare ASGI and WSGI guide](https://citry.dev/advanced/web-frameworks/#bare-asgi-and-wsgi),
 [Events guide](https://citry.dev/events/), and
 [security guide](https://citry.dev/security/) before extending the starter.

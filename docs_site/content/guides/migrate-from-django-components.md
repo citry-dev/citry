@@ -127,7 +127,7 @@ on one page while you migrate. It is a community project, so follow its
 README for the versions and setup it supports.
 
 For a direct port, render Citry through its
-[Django integration](/web-frameworks/#django), which mounts Citry's
+[Django integration](/advanced/web-frameworks/#django), which mounts Citry's
 rendering, asset routes, and event routes in your Django project. Replace
 a whole component subtree at a time.
 

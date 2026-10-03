@@ -52,7 +52,7 @@ Follow it in order, or start with the part you need:
 
 The server steps use FastAPI so they can show complete, runnable code.
 Citry also works with Django, Flask, Starlette, and other
-[ASGI and WSGI applications](/web-frameworks/).
+[ASGI and WSGI applications](/advanced/web-frameworks/).
 
 ## Try it in the browser
 
@@ -78,7 +78,7 @@ Citry also works with Django, Flask, Starlette, and other
 - [Server events](/events/) shows how a click or form submit calls Python,
   and covers values kept between calls, forms, loading and error feedback,
   and page updates.
-- [Web frameworks](/web-frameworks/) shows how to mount Citry in FastAPI,
+- [Web frameworks](/advanced/web-frameworks/) shows how to mount Citry in FastAPI,
   Starlette, Django, Flask, ASGI, or WSGI applications.
 - [Troubleshooting](/guides/troubleshooting/) starts from what went wrong and
   helps you find the likely cause.
