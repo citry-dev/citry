@@ -83,7 +83,9 @@ class TemplateDataCard(Component):
 
 
 class TemplateDataChild(TemplateDataCard):
-    class TemplateData:
+    # Extending the parent's TemplateData keeps the shared inline template's
+    # fields valid for both consumers, so only the child-only field differs.
+    class TemplateData(TemplateDataCard.TemplateData):
         child_only: bool
 
 
@@ -3039,6 +3041,182 @@ def test_template_lint_diagnostics_decline_or_refresh_synchronized_schema_source
     assert template_lint_diagnostics(template_document, project, documents) == ()
 
 
+# A component that inherits a data shape from Base; each entry is what Card
+# declares for it. Only the nearest declaration applies, so a plain class
+# drops Base's field and only an explicit base keeps it.
+_NEAREST_SCHEMA_CHILDREN = {
+    "undeclared": "",
+    "plain": "    class {name}:\n        own: int\n",
+    "extends": "    class {name}(Base.{name}):\n        own: int\n",
+    "extends_through_mid": "    class {name}(Mid.{name}):\n        own: int\n",
+    "none": "    {name} = None\n",
+    "unparsable": "    class {name}(\n",
+}
+
+
+def _nearest_schema_app(name: str, asset: str, child: str) -> str:
+    return (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Base(Component):\n"
+        "    citry = engine\n"
+        f"    class {name}:\n"
+        "        inherited: str\n"
+        "class Mid(Base):\n"
+        "    pass\n"
+        "class Card(Mid):\n"
+        "    citry = engine\n"
+        f"    {asset}\n"
+        f"{_NEAREST_SCHEMA_CHILDREN[child].format(name=name)}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("child", "expected"),
+    [
+        ("undeclared", ["own"]),
+        ("plain", ["inherited"]),
+        ("extends", []),
+        ("extends_through_mid", []),
+        ("none", ["inherited", "own"]),
+    ],
+)
+def test_template_lint_reads_only_the_nearest_template_data(tmp_path, child, expected):
+    template_source = "{{ inherited }} {{ own }}"
+    template_file = tmp_path / "card.html"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_source = _nearest_schema_app("TemplateData", "template_file = 'card.html'", child)
+    app_file = tmp_path / "app.py"
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready
+    template_document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    template_document.update(template_source, 1, project)
+    # The open Python file is what lets the editor read Base's TemplateData
+    # directly, so a parent class must not lend its names to a plain child.
+    python_document = DocumentState(app_file.as_uri(), "python", app_source, 1)
+    python_document.update(app_source, 1, project)
+    documents = {template_document.uri: template_document, python_document.uri: python_document}
+
+    diagnostics = template_lint_diagnostics(template_document, project, documents)
+
+    assert {item.code for item in diagnostics} <= {"citry.template.unknown-variable"}
+    # The template is one ASCII line, so each range's characters slice out the flagged name.
+    flagged = sorted(template_source[item.range.start.character : item.range.end.character] for item in diagnostics)
+    assert flagged == expected
+
+
+@pytest.mark.parametrize(
+    ("saved", "edited", "expected"),
+    [
+        ("undeclared", "undeclared", (["inherited"], "closed")),
+        ("undeclared", "plain", (["own"], "closed")),
+        ("undeclared", "extends", (["inherited", "own"], "closed")),
+        ("plain", "extends", (["inherited", "own"], "closed")),
+        ("plain", "extends_through_mid", (["inherited", "own"], "closed")),
+        ("extends", "plain", (["own"], "closed")),
+        ("undeclared", "none", ([], "open")),
+        # Editor text that does not parse cannot say which class applies.
+        ("undeclared", "unparsable", ([], "open")),
+    ],
+)
+def test_js_data_schema_follows_the_nearest_unsaved_declaration(tmp_path, saved, edited, expected):
+    app_file = tmp_path / "app.py"
+    app_file.write_text(_nearest_schema_app("JsData", "template = '<div></div>'", saved), encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready
+    edited_source = _nearest_schema_app("JsData", "template = '<div></div>'", edited)
+    python_document = DocumentState(app_file.as_uri(), "python", edited_source, 2)
+    python_document.update(edited_source, 2, project)
+
+    namespace = engine_module._component_js_data_roots(
+        project.catalog.get_tag("c-card"), project, python_document, {python_document.uri: python_document}
+    )
+
+    assert (sorted(root.name for root in namespace.roots), namespace.policy) == expected
+
+
+@pytest.mark.parametrize(
+    ("app_source", "expected"),
+    [
+        # Citry's own Component sets JsData to None only for type checkers,
+        # so a mixin listed after Component still supplies the schema.
+        (
+            "from citry import Citry, Component\n"
+            "engine = Citry(autodiscover=False)\n"
+            "class Mixin:\n"
+            "    class JsData:\n"
+            "        inherited: str\n"
+            "class Card(Component, Mixin):\n"
+            "    citry = engine\n"
+            "    template = '<div></div>'\n",
+            (["inherited"], "closed"),
+        ),
+        # A.JsData resolves through A's own ancestors (Root), never through
+        # B, which only follows A in Card's base order.
+        (
+            "from citry import Citry, Component\n"
+            "engine = Citry(autodiscover=False)\n"
+            "class Root(Component):\n"
+            "    citry = engine\n"
+            "    class JsData:\n"
+            "        inherited: str\n"
+            "class A(Root):\n"
+            "    pass\n"
+            "class B(Root):\n"
+            "    class JsData(Root.JsData):\n"
+            "        bonly: str\n"
+            "class Card(A, B):\n"
+            "    citry = engine\n"
+            "    template = '<div></div>'\n"
+            "    class JsData(A.JsData):\n"
+            "        own: int\n",
+            (["inherited", "own"], "closed"),
+        ),
+    ],
+    ids=["mixin_after_component", "diamond"],
+)
+def test_js_data_schema_resolves_bases_like_python(tmp_path, app_source, expected):
+    app_file = tmp_path / "app.py"
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready
+    python_document = DocumentState(app_file.as_uri(), "python", app_source, 2)
+    python_document.update(app_source, 2, project)
+
+    namespace = engine_module._component_js_data_roots(
+        project.catalog.get_tag("c-card"), project, python_document, {python_document.uri: python_document}
+    )
+
+    assert (sorted(root.name for root in namespace.roots), namespace.policy) == expected
+
+
+@pytest.mark.parametrize(
+    ("edited", "expected"),
+    [
+        ("undeclared", ["inherited"]),
+        ("plain", ["own"]),
+        ("extends", ["inherited", "own"]),
+        ("none", None),
+    ],
+)
+def test_css_data_schema_follows_the_nearest_unsaved_declaration(tmp_path, edited, expected):
+    app_file = tmp_path / "app.py"
+    app_file.write_text(_nearest_schema_app("CssData", "template = '<div></div>'", "undeclared"), encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready
+    edited_source = _nearest_schema_app("CssData", "template = '<div></div>'", edited)
+    python_document = DocumentState(app_file.as_uri(), "python", edited_source, 2)
+    python_document.update(edited_source, 2, project)
+
+    roots = engine_module._component_css_data_roots(
+        project.catalog.get_tag("c-card"), project, python_document, {python_document.uri: python_document}
+    )
+
+    assert (None if roots is None else sorted(root.name for root in roots)) == expected
+
+
 def test_syntax_diagnostic_uses_parser_code_and_exact_range():
     source = "😀<div>"
     document = _document(source, _syntax_state())
@@ -4883,7 +5061,7 @@ def test_shared_file_template_data_exposes_only_identical_common_fields(tmp_path
             common: str
 
     class SharedChild(SharedBase):
-        class TemplateData:
+        class TemplateData(SharedBase.TemplateData):
             child_only: bool
 
     catalog = CatalogIndex(engine.inspect_components(include_builtins=True, resolve_assets=True).to_dict())

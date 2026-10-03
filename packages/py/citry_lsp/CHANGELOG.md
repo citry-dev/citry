@@ -57,6 +57,11 @@ All notable changes to `citry-lsp` are documented here.
   It requires Citry 0.6.0 or newer, with no upper bound, so upgrade
   `citry` and `citry-lsp` together. Keep citry-lsp 0.1.x for a project
   that stays on Citry 0.5.x.
+- On a subclassed component, completion, hover, and template checks
+  follow Citry 0.6.0's rule for nested data classes such as `TemplateData`
+  and `JsData`: a plain `class TemplateData:` on the subclass replaces the
+  parent's class and drops its fields, while
+  `class TemplateData(Parent.TemplateData):` keeps them.
 - Hovers and type checks cover every field of the `onServerRender`
   context, including `state`, `sendEvent`, `loading`, `error`, `i18n`,
   `els`, and `id`, and `$component({ init })` is checked like

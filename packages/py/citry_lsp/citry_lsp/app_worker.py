@@ -19,7 +19,7 @@ from citry import Citry, ComponentLibrary
 from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
 from citry._component_introspection import _loaded_python_file
 from citry._linting import _component_lint_variable_owners
-from citry._nested_declarations import _active_nested_class_declarations
+from citry._nested_declarations import _nearest_data_shape_declaration
 from citry._schema_introspection import _inspect_schema_class
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
@@ -226,10 +226,16 @@ def _schema_resolution_chain(
     ]
     # Field origins alone miss a base that only supplies schema policy, and an
     # empty schema still needs its component bases checked for later additions.
-    for declaration in _active_nested_class_declarations(component_class, schema_name):
-        if not isinstance(declaration.value, type):
-            return None
-        candidates.extend(candidate for candidate in _static_class_mro(declaration.value) if candidate is not object)
+    # Only the nearest declaration applies, like a Python attribute lookup, so
+    # its own bases (``class State(Parent.State)``) are the classes that add
+    # fields; a farther declaration is hidden and cannot change the schema.
+    try:
+        nearest = _nearest_data_shape_declaration(component_class, schema_name)
+    except ValueError:
+        # The runtime rejects this definition, so there is no schema to trust.
+        return None
+    if nearest is not None and isinstance(nearest.value, type):
+        candidates.extend(candidate for candidate in _static_class_mro(nearest.value) if candidate is not object)
     records: dict[tuple[str, str], dict[str, str]] = {}
     for candidate in candidates:
         module = _safe_class_text(candidate, "__module__")

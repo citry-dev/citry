@@ -164,6 +164,7 @@ if TYPE_CHECKING:
         I18nOutputRecord,
         I18nParameterDeclarationRecord,
         ProjectState,
+        SourceClassRecord,
         SourceEventRecord,
         SourceLintRecord,
         SourceStateFieldRecord,
@@ -8376,7 +8377,8 @@ def _component_js_data_roots(
     if schema.kind == "opaque":
         return _JsDataNamespace((), "unavailable")
     if schema.kind == "fields":
-        schema_roots = _js_schema_roots(component, owner_name, open_documents)
+        js_chain = project.source_analysis.js_data_chain(component) if project.source_analysis is not None else None
+        schema_roots = _js_schema_roots(component, owner_name, open_documents, js_chain)
         return _JsDataNamespace(
             () if schema_roots is None else schema_roots,
             "closed" if schema.namespace_policy == "closed" and schema_roots is not None else "open",
@@ -8627,6 +8629,7 @@ def _js_schema_roots(
     component: ComponentRecord,
     owner_name: str,
     open_documents: Mapping[str, DocumentState] | None,
+    chain: tuple[SourceClassRecord, ...] | None,
 ) -> tuple[_JsDataRoot, ...] | None:
     schema = component.schemas.js_data
     grouped: dict[tuple[Path, str], list[FieldRecord]] = {}
@@ -8638,6 +8641,11 @@ def _js_schema_roots(
         grouped.setdefault((schema_field.source_file.resolve(), schema_field.source_qualname), []).append(schema_field)
     if component.python_file is not None and component.qualname is not None:
         grouped.setdefault((component.python_file.resolve(), f"{component.qualname}.JsData"), [])
+    if open_documents is not None:
+        narrowed = _nearest_schema_groups(grouped, _schema_owners(component, chain), "JsData", open_documents)
+        if narrowed is None:
+            return None
+        grouped = narrowed
 
     roots = [_catalog_js_data_root(schema_field, owner_name) for schema_field in detached]
     for (source_file, qualname), catalog_fields in grouped.items():
@@ -8697,6 +8705,39 @@ def _js_schema_roots(
                 )
             )
     return tuple(roots)
+
+
+def _nearest_schema_groups(
+    grouped: dict[tuple[Path, str], list[FieldRecord]],
+    owners: tuple[tuple[Path, str], ...],
+    schema_name: str,
+    open_documents: Mapping[str, DocumentState],
+) -> dict[tuple[Path, str], list[FieldRecord]] | None:
+    """
+    Keep only the classes the nearest data-shape binding draws its fields from.
+
+    The catalog groups fields by the class that declared them when the app
+    was loaded. Synchronized source can show a newer binding, such as a
+    plain ``class JsData:`` that now replaces the parent's class, so groups
+    that binding no longer reaches are dropped. Returns ``None`` when the
+    source cannot be trusted or now binds no schema.
+    """
+    binding = _nearest_schema_binding(owners, schema_name, open_documents)
+    if binding is None or binding.kind == "unknown":
+        # The source shows no newer binding the LSP can read, so the catalog's
+        # groups stand.
+        return grouped
+    if binding.kind != "class":
+        return None
+    narrowed = dict(grouped)
+    for key in binding.classes:
+        narrowed.setdefault(key, [])
+    if not binding.complete:
+        # A base the LSP could not follow may own any catalog group, so all
+        # of them stay.
+        return narrowed
+    reachable = set(binding.classes)
+    return {key: catalog_fields for key, catalog_fields in narrowed.items() if key in reachable}
 
 
 def _catalog_js_data_root(schema_field: FieldRecord, owner_name: str) -> _JsDataRoot:
@@ -10961,7 +11002,8 @@ def _component_css_data_roots(
     if schema.kind == "opaque":
         return ()
     if schema.kind == "fields":
-        return _css_schema_roots(component, owner_name, open_documents)
+        css_chain = project.source_analysis.css_data_chain(component) if project.source_analysis is not None else None
+        return _css_schema_roots(component, owner_name, open_documents, css_chain)
     if project.source_analysis is None:
         return None
     chain = project.source_analysis.css_data_chain(component)
@@ -10998,6 +11040,7 @@ def _css_schema_roots(
     component: ComponentRecord,
     owner_name: str,
     open_documents: Mapping[str, DocumentState] | None,
+    chain: tuple[SourceClassRecord, ...] | None,
 ) -> tuple[_CssDataRoot, ...] | None:
     """Join catalog fields with direct schema edits from synchronized source."""
     schema = component.schemas.css_data
@@ -11013,6 +11056,11 @@ def _css_schema_roots(
     # point at its class, so check the component's ordinary nested owner too.
     if component.python_file is not None and component.qualname is not None:
         grouped.setdefault((component.python_file.resolve(), f"{component.qualname}.CssData"), [])
+    if open_documents is not None:
+        narrowed = _nearest_schema_groups(grouped, _schema_owners(component, chain), "CssData", open_documents)
+        if narrowed is None:
+            return None
+        grouped = narrowed
 
     roots = [_catalog_css_data_root(schema_field, owner_name) for schema_field in detached]
     for (source_file, qualname), catalog_fields in grouped.items():
@@ -12020,6 +12068,21 @@ def _current_template_schema_names(
     if open_documents is None:
         return frozenset()
     schema = component.schemas.template_data
+    chain = project.source_analysis.template_data_chain(component) if project.source_analysis is not None else None
+
+    # Only the nearest TemplateData binding counts, the same as a Python
+    # attribute lookup, so a parent's class must not lend names to a child
+    # that declared its own plain class.
+    binding = _nearest_schema_binding(_schema_owners(component, chain), "TemplateData", open_documents)
+    if binding is not None and binding.kind == "invalid":
+        return None
+    if binding is not None and binding.kind == "none":
+        return frozenset()
+    if binding is not None and binding.kind == "class" and binding.complete:
+        return frozenset(binding.field_names)
+
+    # The catalog names the fields the loaded schema had and where each was
+    # declared, which covers a base the LSP could not follow in source.
     candidates: set[tuple[Path, str]] = set()
     for schema_field in schema.fields:
         if schema_field.source_file is not None and schema_field.source_qualname is not None:
@@ -12028,22 +12091,22 @@ def _current_template_schema_names(
         prefix = f"{component.module}."
         if schema.import_path.startswith(prefix):
             candidates.add((component.python_file.resolve(), schema.import_path[len(prefix) :]))
-    if component.python_file is not None and component.qualname is not None:
-        candidates.add((component.python_file.resolve(), f"{component.qualname}.TemplateData"))
-    if project.source_analysis is not None:
-        chain = project.source_analysis.template_data_chain(component)
-        if chain is not None:
-            for item in chain:
-                if schema.import_path is not None and schema.import_path.startswith(f"{item.module}."):
-                    candidates.add(
-                        (
-                            item.source_file.resolve(),
-                            schema.import_path[len(item.module) + 1 :],
-                        )
-                    )
-                candidates.add((item.source_file.resolve(), f"{item.qualname}.TemplateData"))
-
+    if chain is not None:
+        for item in chain:
+            if schema.import_path is not None and schema.import_path.startswith(f"{item.module}."):
+                candidates.add((item.source_file.resolve(), schema.import_path[len(item.module) + 1 :]))
     names: set[str] = set()
+    if binding is not None and binding.kind == "class":
+        names.update(binding.field_names)
+    else:
+        # Without a readable nearest binding, every class on the chain may
+        # still be the one that applies, so accept the names of all of them
+        # rather than report a field the author may have just declared.
+        if component.python_file is not None and component.qualname is not None:
+            candidates.add((component.python_file.resolve(), f"{component.qualname}.TemplateData"))
+        if chain is not None:
+            candidates.update((item.source_file.resolve(), f"{item.qualname}.TemplateData") for item in chain)
+
     parsed_sources: dict[Path, ast.Module] = {}
     for source_file, qualname in candidates:
         found, source = _synchronized_document_source(source_file, open_documents)
@@ -12062,6 +12125,383 @@ def _current_template_schema_names(
         if class_node is not None:
             names.update(_direct_schema_field_names(class_node))
     return frozenset(names)
+
+
+@dataclass(frozen=True, slots=True)
+class _SchemaBinding:
+    """
+    The nested data-shape class that applies to a component, read from Python source.
+
+    Data shapes (``Kwargs``, ``Slots``, ``State``, ``TemplateData``, ``JsData``,
+    ``CssData``) follow Python attribute lookup: the first class in the order
+    Python searches the component's base classes that binds the name decides
+    the shape, and a parent's fields reach it only through the bound class's
+    own bases.
+
+    Attributes:
+        kind: ``"class"`` for a class statement or an alias of a class,
+            ``"none"`` for ``JsData = None``, ``"unknown"`` when the LSP cannot
+            read the binding or its owner statically, and ``"invalid"`` when
+            synchronized editor text conflicts or does not parse.
+        classes: The bound class and each base traced to its class statement,
+            as ``(file, qualname)`` pairs in the order they were found.
+        field_names: The annotated fields those class statements declare.
+        complete: Whether every base was traced, so ``classes`` lists every
+            class that can contribute a field.
+
+    """
+
+    kind: Literal["class", "none", "unknown", "invalid"]
+    classes: tuple[tuple[Path, str], ...] = ()
+    field_names: frozenset[str] = frozenset()
+    complete: bool = False
+
+
+def _schema_owners(
+    component: ComponentRecord,
+    chain: tuple[SourceClassRecord, ...] | None,
+) -> tuple[tuple[Path, str], ...]:
+    """Return the component classes to search for a nested data shape, nearest first."""
+    # The app worker copies the classes Python searches for the data method,
+    # nearest first, so a binding on any of them is visible here. A binding
+    # past the method's owner is not, and then the catalog decides.
+    if chain:
+        return tuple((item.source_file.resolve(), item.qualname) for item in chain)
+    if component.python_file is not None and component.qualname is not None:
+        return ((component.python_file.resolve(), component.qualname),)
+    return ()
+
+
+def _nearest_schema_binding(
+    owners: tuple[tuple[Path, str], ...],
+    schema_name: str,
+    open_documents: Mapping[str, DocumentState],
+) -> _SchemaBinding | None:
+    """Return the nearest owner's binding of ``schema_name``, or ``None`` when no owner binds it."""
+    return _schema_binding_from(owners, 0, schema_name, open_documents, {}, frozenset())
+
+
+def _schema_binding_from(
+    owners: tuple[tuple[Path, str], ...],
+    start: int,
+    schema_name: str,
+    open_documents: Mapping[str, DocumentState],
+    trees: dict[Path, ast.Module | Literal["invalid"] | None],
+    visiting: frozenset[tuple[Path, str]],
+    ancestors: frozenset[int] | None = None,
+) -> _SchemaBinding | None:
+    for index in range(start, len(owners)):
+        # A lookup through ``Parent.JsData`` only sees Parent's own ancestors;
+        # another base of the component that follows Parent is not one.
+        if ancestors is not None and index not in ancestors:
+            continue
+        source_file, owner_qualname = owners[index]
+        tree = _schema_source_tree(source_file, open_documents, trees)
+        if tree == "invalid":
+            return _SchemaBinding("invalid")
+        owner_node = _class_node_for_qualname(tree, owner_qualname) if tree is not None else None
+        if tree is None or owner_node is None:
+            # An owner the LSP cannot read might bind the shape itself, so no
+            # later owner can be trusted as the nearest one.
+            return _SchemaBinding("unknown")
+        if _is_component_root(owner_node):
+            # Citry's own Component class declares each shape as None only
+            # for type checkers; the runtime skips it when looking one up.
+            continue
+        statement = _direct_nested_binding(owner_node, schema_name)
+        if statement is None:
+            continue
+        if statement == "unknown":
+            return _SchemaBinding("unknown")
+        if isinstance(statement, ast.ClassDef):
+            qualname = f"{owner_qualname}.{schema_name}"
+            context = _SchemaTraceContext(owners, index, schema_name, open_documents, trees)
+            classes, field_names, complete = _trace_schema_bases(
+                statement.bases, tree, source_file, context, visiting | {(source_file, qualname)}
+            )
+            if classes is None:
+                return _SchemaBinding("invalid")
+            return _SchemaBinding(
+                "class",
+                ((source_file, qualname), *classes),
+                frozenset(_direct_schema_field_names(statement)) | field_names,
+                complete=complete,
+            )
+        value = statement.value
+        if value is None or (isinstance(value, ast.Constant) and value.value is None):
+            return _SchemaBinding("none")
+        # ``JsData = Parent.JsData`` uses that class unchanged, which reads
+        # the same as a class statement whose only base is the alias.
+        context = _SchemaTraceContext(owners, index, schema_name, open_documents, trees)
+        classes, field_names, complete = _trace_schema_bases([value], tree, source_file, context, visiting)
+        if classes is None:
+            return _SchemaBinding("invalid")
+        return _SchemaBinding("class", classes, field_names, complete=complete)
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class _SchemaTraceContext:
+    """The values ``_trace_schema_bases`` passes on when it looks up ``Parent.X`` on a later base class."""
+
+    owners: tuple[tuple[Path, str], ...]
+    index: int
+    schema_name: str
+    open_documents: Mapping[str, DocumentState]
+    trees: dict[Path, ast.Module | Literal["invalid"] | None]
+
+
+def _trace_schema_bases(
+    bases: list[ast.expr],
+    tree: ast.Module,
+    source_file: Path,
+    context: _SchemaTraceContext,
+    visiting: frozenset[tuple[Path, str]],
+) -> tuple[tuple[tuple[Path, str], ...] | None, frozenset[str], bool]:
+    """
+    Follow class bases to their class statements and collect their fields.
+
+    Returns the traced classes (``None`` when synchronized source is invalid),
+    their field names, and whether every base was traced.
+    """
+    classes: list[tuple[Path, str]] = []
+    names: set[str] = set()
+    complete = True
+    for base in bases:
+        dotted = _dotted_name(base)
+        if dotted is None:
+            complete = False
+            continue
+        if dotted in {"object", "builtins.object"}:
+            continue
+        key = (source_file, dotted)
+        if key in visiting:
+            complete = False
+            continue
+        # A base defined in the same module is read directly, including a
+        # nested one such as ``Parent.JsData`` when ``Parent`` declares it.
+        node = _class_node_for_qualname(tree, dotted)
+        if node is not None:
+            nested_classes, nested_names, nested_complete = _trace_schema_bases(
+                node.bases, tree, source_file, context, visiting | {key}
+            )
+            if nested_classes is None:
+                return None, frozenset(), False
+            classes.extend((key, *nested_classes))
+            names.update(_direct_schema_field_names(node), nested_names)
+            complete = complete and nested_complete
+            continue
+        # ``Parent.JsData`` where ``Parent`` is a later component class
+        # resolves the way Python would: through Parent's nearest binding,
+        # searched only among Parent and its own ancestors.
+        prefix, _, attribute = dotted.rpartition(".")
+        later = (
+            _later_owner_position(context.owners, context.index, prefix.rsplit(".", 1)[-1])
+            if prefix and attribute == context.schema_name
+            else None
+        )
+        ancestors = (
+            _owner_ancestor_positions(context.owners, later, context.open_documents, context.trees)
+            if later is not None
+            else None
+        )
+        if later is None or ancestors is None:
+            complete = False
+            continue
+        inherited = _schema_binding_from(
+            context.owners,
+            later,
+            context.schema_name,
+            context.open_documents,
+            context.trees,
+            visiting | {key},
+            ancestors,
+        )
+        if inherited is not None and inherited.kind == "invalid":
+            return None, frozenset(), False
+        if inherited is None or inherited.kind != "class":
+            complete = False
+            continue
+        classes.extend(inherited.classes)
+        names.update(inherited.field_names)
+        complete = complete and inherited.complete
+    return tuple(classes), frozenset(names), complete
+
+
+def _later_owner_position(owners: tuple[tuple[Path, str], ...], start: int, class_name: str) -> int | None:
+    """Return the one owner after ``start`` whose class has this name, or ``None`` if none or several match."""
+    # Source only names the class, so two owners that share a name cannot be
+    # told apart and the caller falls back to the catalog.
+    matches = [
+        position for position in range(start + 1, len(owners)) if owners[position][1].rsplit(".", 1)[-1] == class_name
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _owner_ancestor_positions(
+    owners: tuple[tuple[Path, str], ...],
+    start: int,
+    open_documents: Mapping[str, DocumentState],
+    trees: dict[Path, ast.Module | Literal["invalid"] | None],
+) -> frozenset[int] | None:
+    """
+    Return the owner positions that are ``owners[start]`` or one of its ancestors.
+
+    Each class's written bases are matched to later owners by class name.
+    Returns ``None`` when a class or a base cannot be read, since an
+    ancestor the LSP missed could hold the binding Python would use.
+    """
+    reached = {start}
+    pending = [start]
+    while pending:
+        position = pending.pop()
+        source_file, qualname = owners[position]
+        tree = _schema_source_tree(source_file, open_documents, trees)
+        node = _class_node_for_qualname(tree, qualname) if isinstance(tree, ast.Module) else None
+        if node is None:
+            return None
+        for base in node.bases:
+            dotted = _dotted_name(base)
+            if dotted is None:
+                return None
+            base_name = dotted.rsplit(".", 1)[-1]
+            candidates = [
+                later for later in range(position + 1, len(owners)) if owners[later][1].rsplit(".", 1)[-1] == base_name
+            ]
+            if len(candidates) > 1:
+                return None
+            # A base missing from the owners lies past the data method's
+            # owner, and so do its own bases, so it hides no owner.
+            for later in candidates:
+                if later not in reached:
+                    reached.add(later)
+                    pending.append(later)
+    return frozenset(reached)
+
+
+def _is_component_root(class_node: ast.ClassDef) -> bool:
+    """Whether a class body sets ``_citry_component_root = True``, as Citry's ``Component`` does."""
+    for statement in class_node.body:
+        target: ast.expr | None = None
+        if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
+            target = statement.targets[0]
+        elif isinstance(statement, ast.AnnAssign):
+            target = statement.target
+        value = getattr(statement, "value", None)
+        if (
+            isinstance(target, ast.Name)
+            and target.id == "_citry_component_root"
+            and isinstance(value, ast.Constant)
+            and value.value is True
+        ):
+            return True
+    return False
+
+
+def _dotted_name(node: ast.expr) -> str | None:
+    """Return ``a.b.c`` for a plain name or attribute chain, else ``None``."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return ".".join(reversed(parts))
+
+
+def _direct_nested_binding(
+    class_node: ast.ClassDef,
+    name: str,
+) -> ast.ClassDef | ast.Assign | ast.AnnAssign | Literal["unknown"] | None:
+    """
+    Return the statement that last binds ``name`` in a class body.
+
+    Returns ``"unknown"`` when the name is bound in a way the LSP does not
+    read statically (inside ``if`` or ``try``, by an import, or by a
+    function), because the bound value then depends on running the code.
+    """
+    found: ast.ClassDef | ast.Assign | ast.AnnAssign | None = None
+    for statement in class_node.body:
+        if isinstance(statement, ast.ClassDef):
+            if statement.name == name:
+                found = statement
+            continue
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if statement.name == name:
+                return "unknown"
+            continue
+        if (
+            isinstance(statement, ast.Assign)
+            and len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+            and statement.targets[0].id == name
+        ):
+            found = statement
+            continue
+        if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+            # A bare annotation such as ``JsData: ClassVar[type]`` binds nothing.
+            if statement.target.id == name and statement.value is not None:
+                found = statement
+            continue
+        if _statement_binds_name(statement, name):
+            return "unknown"
+    return found
+
+
+def _statement_binds_name(statement: ast.stmt, name: str) -> bool:
+    for node in ast.walk(statement):
+        if isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Store):
+            return True
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return True
+        if isinstance(node, ast.alias) and (node.asname or node.name.split(".", 1)[0]) == name:
+            return True
+    return False
+
+
+def _schema_source_tree(
+    source_file: Path,
+    open_documents: Mapping[str, DocumentState],
+    trees: dict[Path, ast.Module | Literal["invalid"] | None],
+) -> ast.Module | Literal["invalid"] | None:
+    """Parse synchronized text for an open file, or the saved file otherwise."""
+    if source_file in trees:
+        return trees[source_file]
+    found, source = _synchronized_document_source(source_file, open_documents)
+    result: ast.Module | Literal["invalid"] | None
+    if found:
+        # Editor text the LSP cannot trust makes every answer about this
+        # component unsafe, so callers decline rather than guess.
+        try:
+            result = "invalid" if source is None else ast.parse(source)
+        except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+            result = "invalid"
+    else:
+        result = _saved_python_tree(source_file)
+    trees[source_file] = result
+    return result
+
+
+def _saved_python_tree(source_file: Path) -> ast.Module | None:
+    """Parse a closed file, reusing the tree while the file is unchanged on disk."""
+    try:
+        status = source_file.stat()
+    except OSError:
+        return None
+    return _parsed_saved_python(source_file, status.st_mtime_ns, status.st_size)
+
+
+@lru_cache(maxsize=16)
+def _parsed_saved_python(source_file: Path, mtime_ns: int, size: int) -> ast.Module | None:
+    # The modification time and size are part of the cache key, so an edit
+    # saved to disk reads the new text on the next call.
+    del mtime_ns, size
+    try:
+        with tokenize.open(source_file) as source_stream:
+            return ast.parse(source_stream.read())
+    except (OSError, SyntaxError, UnicodeError, ValueError, TypeError, MemoryError, RecursionError):
+        return None
 
 
 def _direct_schema_field_names(class_node: ast.ClassDef) -> set[str]:

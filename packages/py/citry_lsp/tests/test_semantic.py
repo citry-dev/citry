@@ -1307,17 +1307,15 @@ async def test_composed_template_data_keeps_each_declaring_field_type(tmp_path: 
         "from pathlib import Path\n"
         "from citry import Citry, Component\n"
         "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
-        "class Titled(Component):\n"
+        "class TitleFields:\n"
+        "    title: str\n"
+        "class CountFields:\n"
+        "    count: int\n"
+        "class Card(Component):\n"
         "    citry = engine\n"
-        "    class TemplateData:\n"
-        "        title: str\n"
-        "class Counted(Component):\n"
-        "    citry = engine\n"
-        "    class TemplateData:\n"
-        "        count: int\n"
-        "class Card(Titled, Counted):\n"
-        "    citry = engine\n"
-        "    template_file = 'card.html'\n",
+        "    template_file = 'card.html'\n"
+        "    class TemplateData(TitleFields, CountFields):\n"
+        "        pass\n",
         encoding="utf-8",
     )
     project = load_project(tmp_path, "app:engine")
@@ -1355,17 +1353,15 @@ async def test_composed_kwargs_type_the_inherited_default_roots(tmp_path: Path) 
         "from pathlib import Path\n"
         "from citry import Citry, Component\n"
         "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
-        "class Titled(Component):\n"
+        "class TitleFields:\n"
+        "    title: str\n"
+        "class CountFields:\n"
+        "    count: int\n"
+        "class Card(Component):\n"
         "    citry = engine\n"
-        "    class Kwargs:\n"
-        "        title: str\n"
-        "class Counted(Component):\n"
-        "    citry = engine\n"
-        "    class Kwargs:\n"
-        "        count: int\n"
-        "class Card(Titled, Counted):\n"
-        "    citry = engine\n"
-        "    template_file = 'card.html'\n",
+        "    template_file = 'card.html'\n"
+        "    class Kwargs(TitleFields, CountFields):\n"
+        "        pass\n",
         encoding="utf-8",
     )
     project = load_project(tmp_path, "app:engine")

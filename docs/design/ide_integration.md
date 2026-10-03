@@ -1291,17 +1291,28 @@ degradation contract in section 3.4.1.
    roles, all three assets, extensions, and shared asset ownership in the LSP
    instead of reducing them to the first editor feature set. Add conservative
    per-field declaration provenance to `FieldInfo`, including the distinct
-   authored owners of C3-composed fields, and join it to exact annotated Python
-   assignments for component-input and static fill-slot definitions. Local,
+   authored owners of fields a schema class inherits from its own bases, and
+   join it to exact annotated Python assignments for component-input and
+   static fill-slot definitions. Local,
    generated, unreadable, invalid, and ambiguous declarations produce no field
    target. Open files use synchronized editor text and closed files use the
    current disk AST; v1 does not claim generation freshness without a source
    fingerprint. Effective schema construction snapshots each field's authored
    owner across both eager annotations on Python 3.10 through 3.13 and deferred
-   annotations on Python 3.14. C3-composed `TemplateData` and `Kwargs` therefore
-   retain every distinct source owner without asking the LSP process to evaluate
+   annotations on Python 3.14. A `TemplateData` or `Kwargs` class that inherits
+   fields, such as `class TemplateData(Parent.TemplateData):`, therefore keeps
+   every distinct source owner without asking the LSP process to evaluate
    project annotations. The unreleased catalog and client protocols remain
-   version 1.
+   version 1. Like the runtime, the LSP uses only the
+   first nested data class it finds in the order Python searches the
+   component's base classes, and reaches a parent's fields only through that
+   class's own bases. When the open editor text declares a different `JsData`
+   or `CssData` class than the loaded catalog, the LSP uses that class and the
+   bases it can find in open files or in the same module. If it cannot find a
+   base, it keeps every catalog field. If the editor text does not parse, it
+   gives no JS or CSS data roots for that component. For `TemplateData`, the
+   editor text can add names to the unknown-variable check but cannot remove
+   a field the catalog still lists.
 10. **Join `TemplateData` to template expressions.** Implemented 2026-08-06.
     For an AST-proven inline declaration or a registry-owned template file,
     intersect the `TemplateData` fields of every effective consumer of that
