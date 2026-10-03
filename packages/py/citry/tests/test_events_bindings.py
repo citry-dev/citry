@@ -724,6 +724,22 @@ class TestValidationErrors:
                 events={"go": _noop},
             )
 
+    def test_repeated_on_event_override(self):
+        # A binding sends on one update event, so a second `.on:` must not
+        # silently replace the first; the error names both.
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"':c-q\.on:keyup\.on:change' names two update events, '\.on:keyup' and '\.on:change'"
+                r".*\(in Comp template, line 1\)"
+            ),
+        ):
+            self._load(
+                '<input :c-q.on:keyup.on:change="go">',
+                state={"__annotations__": {"q": str}, "q": ""},
+                events={"go": _noop},
+            )
+
     def test_lazy_on_event_binding(self):
         with pytest.raises(
             ValueError, match=r"'\.lazy' only applies to a two-way state binding.*\(in Comp template, line 1\)"

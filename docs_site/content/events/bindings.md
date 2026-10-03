@@ -119,8 +119,9 @@ handler, which receives the updated `count` in `state`.
 A binding without a handler is **one-way**: Citry shows the field's value in
 the control but never reads the control back. A binding with a handler is
 **two-way**: each edit updates the field and calls the handler with the new
-State. Only two-way bindings take the timing modifiers. `.lazy` and
-`.on:<event>` cannot be combined.
+State. Only two-way bindings take the timing modifiers. A binding takes at
+most one `.on:<event>`, and cannot combine `.lazy` with `.on:<event>`;
+either mistake fails when the template loads.
 
 Put the binding on a control inside the component that declares the State. A
 `:c-*` binding on a child component tag is an error.

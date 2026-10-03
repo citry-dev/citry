@@ -426,6 +426,18 @@ keyboard update event:
 <input :c-query.on:keydown.enter="search" />
 ```
 
+### One `.on:` per binding
+
+**What you see:** a `:c-*` binding that names two update events, such as
+`:c-query.on:keyup.on:change`, fails when the template loads, and the
+error names both events.
+
+Citry 0.5.1 used the last one. Keep the event you want:
+
+```citry-html
+<input :c-query.on:change="search" />
+```
+
 ### Update stale listeners
 
 **What you see:** a listener that checks for `cancelled` or `timeout`
@@ -813,6 +825,7 @@ argument.
     Move `.enter` and `.escape` from a `@c-*` binding on any other event to
     a `keydown` or `keyup` binding, and give a `:c-*` binding that uses
     them `.on:keydown` in place of `.lazy` or its other `.on:` event.
+    Keep one `.on:` event on each `:c-*` binding.
 13. Set `security_csp` and `security_javascript` on the `Citry` instance
     for pages with Events.
 14. Update action lists passed to `Citry.events.applyActions`, including

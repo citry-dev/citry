@@ -451,6 +451,14 @@ def _build_bind_spec(
         elif token.kind == "throttle":
             throttle = _throttle_ms(token)
         elif token.kind == "on":
+            # A binding sends on exactly one update event, so a second `.on:`
+            # would silently replace the first. Name both so the author picks.
+            if on_event is not None:
+                _fail(
+                    location,
+                    f"{attr.name!r} names two update events, '.on:{on_event}' and '.on:{token.value}';"
+                    f" a state binding sends on one event, so keep one '.on:'",
+                )
             on_event = str(token.value)
             # `.on:` must name the update event; an empty name (`.on:=`) is a
             # malformed shape, so reject it rather than ship on="" to the client.
