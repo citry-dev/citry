@@ -284,14 +284,18 @@ templates, Python, Vue `$i18n.tr()`, component JavaScript, and
 
 ### Missing `@param`
 
-For a simple variable used only on the server, a missing `@param` is a
-warning (`citry.i18n.missing-param-type`).
+Declare a type for every variable. A variable without an `@param` is
+treated as plain text: a `str`, `int`, or `Decimal` value in Python, or a
+string or number in the browser. This holds on the server and in browser
+calls such as `$i18n.tr()`. `citry check` reports it as a warning
+(`citry.i18n.missing-param-type`), which does not fail the check.
 [Translation workflow and tooling](/i18n/workflow/#make-a-missing-type-an-error-or-ignore-it)
 shows how to change its severity.
 
-A type is always required when the variable is used in a selector, a
-`Slot`, a formatting function, or a browser call, because Citry cannot
-check those safely without it.
+A variable used in a selector or a formatting function such as
+`NUMBER()` must have a type, or the message fails to compile. A variable
+that `<c-trans>` fills must be declared as a `Slot`, or the fill is
+rejected.
 
 ### `@param` in translations
 

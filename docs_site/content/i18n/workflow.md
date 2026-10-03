@@ -188,9 +188,9 @@ writable source folders. Run it before building the wheel; see
 
 ## Change type warnings { #make-a-missing-type-an-error-or-ignore-it }
 
-A simple server-only variable without an `@param` comment is a warning
-by default. Change this for the whole application with
-[`LintSettings`][citry.LintSettings]:
+A variable without an `@param` comment is a warning by default, whether
+the server or the browser translates it. Change this for the whole
+application with [`LintSettings`][citry.LintSettings]:
 
 ```python
 from citry import Citry, LintSettings
@@ -211,8 +211,8 @@ class LegacyNotice(Component):
 ```
 
 The severities are `ignore`, `warning`, and `error`. Variables used in
-selectors, formatting functions, browser calls, or as a `Slot` always
-need a type, whatever the setting.
+selectors or formatting functions, and variables filled as a `Slot`,
+always need a type, whatever the setting.
 
 ## Change fallback warnings { #change-fallback-warnings }
 
