@@ -39,7 +39,7 @@ areas:
         items:
           - { title: Template basics, path: /syntax/ }
           - { title: Expressions, path: /syntax/expressions/ }
-          - { title: Attributes, path: /syntax/dynamic-attributes/ }
+          - { title: Attributes, path: /syntax/attributes/ }
           - { title: Conditions and loops, path: /syntax/control-flow/ }
           - { title: Vue, path: /syntax/vue/ }
           - { title: Markup in attributes, path: /syntax/nested-templates/ }

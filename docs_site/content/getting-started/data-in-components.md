@@ -121,7 +121,7 @@ If `books` is empty, the `c-empty` item appears instead:
 ```
 
 [Conditions and loops](/syntax/control-flow/) and
-[Attributes](/syntax/dynamic-attributes/) cover the other forms when you
+[Attributes](/syntax/attributes/) cover the other forms when you
 need them.
 
 ## Catch wrong options

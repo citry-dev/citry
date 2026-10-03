@@ -369,7 +369,7 @@ later in the tag wins.
     the fill as data, leaves out a fill's `data` or `fallback` variable, and
     is not allowed for `name`. A key that is not a string, or that the tag
     does not accept, raises an error.
-    [`c-bind`](/syntax/dynamic-attributes/#c-bind-spread) describes how
+    [`c-bind`](/syntax/attributes/#c-bind-spread) describes how
     mappings are applied on other tags.
 
 ## Next steps

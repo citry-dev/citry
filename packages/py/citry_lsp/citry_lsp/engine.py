@@ -5714,7 +5714,7 @@ class _CitryBindingModifierSpec:
 
 _BUILTINS_URL = "https://citry.dev/reference/builtins/"
 _CONTROL_FLOW_URL = "https://citry.dev/syntax/control-flow/"
-_DYNAMIC_ATTRIBUTES_URL = "https://citry.dev/syntax/dynamic-attributes/"
+_ATTRIBUTES_URL = "https://citry.dev/syntax/attributes/"
 _SLOTS_URL = "https://citry.dev/concepts/slots/"
 _CLIENT_INTERACTIVITY_URL = "https://citry.dev/concepts/client-interactivity/"
 _DYNAMIC_COMPONENTS_URL = "https://citry.dev/advanced/dynamic-components/"
@@ -6035,7 +6035,7 @@ _CITRY_SYNTAX = (
         "attribute",
         "Spread a Python attribute mapping",
         "Evaluate a Python mapping and apply its entries as attributes or component inputs.",
-        f"{_DYNAMIC_ATTRIBUTES_URL}#c-bind-spread",
+        f"{_ATTRIBUTES_URL}#c-bind-spread",
         context="general",
         insert_text='c-bind="${1:attributes}"',
         repeatable=True,
@@ -6045,7 +6045,7 @@ _CITRY_SYNTAX = (
         "attribute",
         "Stable Citry morph key",
         "Give this element or component a stable identity across browser updates.",
-        f"{_DYNAMIC_ATTRIBUTES_URL}#c-key",
+        f"{_ATTRIBUTES_URL}#c-key",
         context="general",
         insert_text='#c-key="${1:key}"',
     ),
@@ -6054,7 +6054,7 @@ _CITRY_SYNTAX = (
         "attribute",
         "Keep contents that a library manages",
         "Render this element's contents once and keep them unchanged on later renders.",
-        f"{_DYNAMIC_ATTRIBUTES_URL}#c-ignore-keep-contents-that-a-library-manages",
+        f"{_ATTRIBUTES_URL}#c-ignore-keep-contents-that-a-library-manages",
         context="general",
         insert_text="#c-ignore",
     ),
@@ -6200,7 +6200,7 @@ _CITRY_SYNTAX = (
         "attribute",
         "Spread target attributes",
         "Evaluate a Python mapping that may provide the dynamic target and its attributes.",
-        f"{_DYNAMIC_ATTRIBUTES_URL}#c-bind-spread",
+        f"{_ATTRIBUTES_URL}#c-bind-spread",
         context="dynamic-target",
         insert_text='c-bind="${1:attributes}"',
         repeatable=True,

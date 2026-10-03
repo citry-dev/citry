@@ -473,7 +473,7 @@ covers the rest of the move from Alpine.
 
 The template fails when it loads. Compute a fixed value once in `data()`. To
 keep an element's contents as the server first rendered them, use
-[`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
+[`#c-ignore`](/syntax/attributes/#c-ignore-keep-contents-that-a-library-manages).
 
 ### Vue built-in components
 

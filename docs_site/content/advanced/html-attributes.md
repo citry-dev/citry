@@ -66,7 +66,7 @@ A page passes the attributes as a Python dictionary:
 />
 ```
 
-[`c-bind`](/syntax/dynamic-attributes/#c-bind-spread) adds every entry of
+[`c-bind`](/syntax/attributes/#c-bind-spread) adds every entry of
 the merged mapping to the `<button>`. The rendered button keeps the
 `action-button` class and also gets `aria-label`, the quiet class when
 `quiet` is true, and `disabled` when `unavailable` is true.
@@ -189,7 +189,7 @@ It follows the same rules as attributes in a template:
 
 When Vue renders an interactive component, a `True` value on an attribute
 that is not a boolean HTML attribute renders as `data-open="true"` rather
-than a bare `data-open`. See [Toggle with `c-*`](/syntax/dynamic-attributes/#html-elements).
+than a bare `data-open`. See [Toggle with `c-*`](/syntax/attributes/#html-elements).
 
 ## Keep Vue in templates
 
@@ -213,7 +213,7 @@ root element by Vue's usual rules for undeclared attributes.
 Read
 [Client interactivity](/concepts/client-interactivity/#pass-arbitrary-html-attributes-explicitly)
 for the component-boundary rules, and
-[Attributes](/syntax/dynamic-attributes/) for static, dynamic, and spread
+[Attributes](/syntax/attributes/) for static, dynamic, and spread
 values in templates.
 
 ## Less common cases

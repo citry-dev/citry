@@ -593,7 +593,7 @@ contents can hold only HTML, `{{ }}` expressions, `<c-if>`, `<c-for>`, and
   as a plain tag, such as `<section #c-ignore>`.
 
 See
-[`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
+[`#c-ignore`](/syntax/attributes/#c-ignore-keep-contents-that-a-library-manages).
 
 ## Extend a parent's Kwargs { #name-the-parent-class }
 

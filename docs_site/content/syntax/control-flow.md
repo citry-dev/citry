@@ -193,5 +193,5 @@ comment, an expression, or another element.
   `c-elif` attributes always need a value.
 
 Read [Expressions](/syntax/expressions/) for the Python you can use in a
-condition or loop, and [Attributes](/syntax/dynamic-attributes/) for the
+condition or loop, and [Attributes](/syntax/attributes/) for the
 other attributes you can put on a repeated element.

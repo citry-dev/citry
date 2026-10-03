@@ -9,6 +9,8 @@ redirects:
     to: /advanced/vue-runtime/
   - from: /syntax/alpine/
     to: /syntax/vue/
+  - from: /syntax/dynamic-attributes/
+    to: /syntax/attributes/
   - from: /advanced/const-optimization/
     to: /performance/const/
   - from: /advanced/performance/

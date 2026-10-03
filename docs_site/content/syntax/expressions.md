@@ -25,7 +25,7 @@ how values turn into HTML, and how to insert HTML you trust.
 
 `{{ ... }}` works only in the content between tags. To set an attribute from
 Python, put `c-` in front of the attribute name and write the expression
-without braces (see [Attributes](/syntax/dynamic-attributes/)):
+without braces (see [Attributes](/syntax/attributes/)):
 
 ```citry-html
 {# ✅ Text content: evaluated #}

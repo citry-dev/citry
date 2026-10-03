@@ -123,7 +123,7 @@ Python expression:
 <c-component c-is="chosen_component" />
 ```
 
-You can also put `is` in a [`c-bind` mapping](/syntax/dynamic-attributes/),
+You can also put `is` in a [`c-bind` mapping](/syntax/attributes/),
 together with the other inputs:
 
 ```citry-html

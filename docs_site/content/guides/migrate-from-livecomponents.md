@@ -83,7 +83,7 @@ expression:
 
 The same applies to `action`, `src`, `class`, and any other attribute. Text
 between tags still uses `{{ expression }}`. See
-[Attributes](/syntax/dynamic-attributes/#c-dynamic-attributes).
+[Attributes](/syntax/attributes/#c-dynamic-attributes).
 
 ## Step 1: server State
 
