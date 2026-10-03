@@ -323,7 +323,7 @@ the first problem:
 | --- | --- |
 | The class is defined | A `simple` value other than `False`, `True`, or `"vue"`. With `simple = True`, also instance data methods, lifecycle hooks, `js`, `css`, messages, and `State`, `Events`, `Cache`, `Dependencies`, or `I18n`. |
 | The template is loaded | With `simple = True`, named or fallback slots and unsupported custom tags, even inside a `c-if` branch that never runs. With `simple = "vue"`, a child call that passes content, a `c-bind` spread, Vue bindings, or `#c-ignore`. Both modes reject `$c-tr` translation bindings. |
-| Each call | With `simple = True`, `<c-fill>`, Vue bindings or `#c-key`/`#c-ignore` on the component tag, and unsupported slot names from Python. With `simple = "vue"`, instance data methods or lifecycle hooks (the class defines without error and its first render fails), a call to a `simple = True` component, a transparent component, or a `<c-component>` that uses `c-is`. Both modes reject invalid inputs, invalid returned data, and `$c-tr` keys passed through a `c-bind` spread. |
+| Each call | With `simple = True`, `<c-fill>`, Vue bindings or `#c-key`/`#c-ignore` on the component tag, and unsupported slot names from Python. With `simple = "vue"`, instance data methods or lifecycle hooks (the class is created without error, and rendering it fails), a call to a `simple = True` component, a transparent component, or a `<c-component>` that uses `c-is`. Both modes reject invalid inputs, invalid returned data, and `$c-tr` keys passed through a `c-bind` spread. |
 
 ## Edge cases
 

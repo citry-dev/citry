@@ -169,9 +169,10 @@ walks through every step.
   JavaScript or one guarded by `self.i18n.configured`, matching the
   editor; an unguarded Python call is still reported.
 - `citry check` no longer crashes with a traceback when a component's
-  `messages` fail to compile, for example a selector variable without an
-  `@param` type. It reports `citry.i18n.catalog-invalid` at the message's
-  line and column instead.
+  `messages` fail to compile, for example a selector variable that is not
+  declared as a number with `@param`. It reports
+  `citry.i18n.catalog-invalid` instead, and the JSON output gives the line
+  and column inside the `messages` block.
 - Fallback text that runs in the other direction, such as English on an
   Arabic page, no longer reorders the surrounding sentence when the
   browser translates it with `$i18n.tr()`, `$c-tr`, `i18n.bind()`, or

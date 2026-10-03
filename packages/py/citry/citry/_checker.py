@@ -2356,7 +2356,9 @@ def _i18n_compile_diagnostic(exc: BaseException) -> dict[str, Any] | None:
             if isinstance(diagnostic, dict) and all(diagnostic.get(key) is not None for key in required):
                 return diagnostic
             return None
-        current = current.__cause__ or current.__context__
+        # Follow only an explicit `raise ... from`, so an unrelated error raised
+        # while handling another one cannot lend its position.
+        current = current.__cause__
     return None
 
 
