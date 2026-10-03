@@ -104,13 +104,15 @@ See Vue's
 [template syntax guide](https://vuejs.org/guide/essentials/template-syntax.html){: target="_blank" rel="noopener"}
 for every directive and modifier.
 
-!!! warning "Key modifiers need a keyboard event"
+!!! warning "Citry rejects key names on non-keyboard events"
 
-    A key name such as `.enter` works only on `keydown`, `keyup`, and
-    `keypress`. On another event, such as `@click.enter`, the template fails
-    when it loads, because that event has no key: Vue would ignore `.enter`
-    and run the listener on every click. A `@c-*` binding such as
-    `@c-click.enter` also fails when the template loads.
+    Citry accepts a key name such as `.enter` or `.escape` only on
+    `keydown`, `keyup`, and `keypress`. On any other event the template
+    fails when it loads. Other events, such as `click`, have no key, so Vue
+    would ignore `@click.enter` and run the listener on every click. The
+    same applies to a `@c-*` binding such as `@c-click.enter`. To react to a
+    key, listen to `keydown` or `keyup`, as in `@keydown.enter`. System keys
+    such as `.ctrl` and mouse buttons such as `.left` still work on `click`.
 
 !!! warning "Write directive names in lowercase"
 
@@ -120,13 +122,13 @@ for every directive and modifier.
     and `v-If` as a custom directive named `If`. Names that start with `v-c-`
     or `v-citry-` fail too, because Citry keeps them for its own use.
 
-!!! info "Write Vue code in the template itself"
+!!! warning "Citry rejects Vue code from `c-bind`"
 
-    A Vue directive or listener that comes from `c-bind`, or is written with
-    a `c-` prefix such as `c-v-if`, fails when the page renders. Write Vue
-    code directly in the template. A value that Python works out at render
-    time may contain user input, so Citry never lets it become code that the
-    browser runs.
+    Citry rejects a Vue directive, `:` binding, or `@` listener that comes
+    from `c-bind` or is written with a `c-` prefix, such as `c-v-if`, and
+    the page fails to render. A value that Python works out at render time may
+    contain user input, so Citry never lets it become code that the browser
+    runs. Write the directive directly in the template, as in `v-if="open"`.
 
 ## Tell Python from Vue
 
