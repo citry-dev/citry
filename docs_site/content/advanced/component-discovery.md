@@ -101,7 +101,7 @@ Importing a module only registers its classes. Citry does not render the
 components or read their template, JavaScript, or CSS files until a page
 needs them.
 
-## Initialize at startup { #initialize-before-starting-worker-threads }
+## `initialize()` at startup { #initialize-before-starting-worker-threads }
 
 Call [`initialize()`][citry.Citry.initialize] once at startup, before your
 server starts handling requests:

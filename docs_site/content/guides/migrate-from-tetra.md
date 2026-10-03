@@ -181,7 +181,7 @@ In the component's JavaScript, listen with the `onEvent` function that
 the component. With the Dispatch first, listeners from the current render
 hear it. When a Render replaces a component that contains this one, the
 Dispatch must come first, without `delay` or `wait=False`; see
-[Run several actions](/events/actions/#return-several-actions-in-order).
+[Action lists](/events/actions/#return-several-actions-in-order).
 
 ## Move Alpine code to Vue
 
@@ -216,7 +216,7 @@ storage keeps the values in the server cache, but fields listed in `_public`
 
 Citry's server events run over HTTP, and the server cannot push updates to
 the page. To refresh a part of the page on a timer, use `@c-poll`; see
-[Call on a timer](/events/bindings/#call-a-handler-on-a-timer).
+[`@c-poll` on a timer](/events/bindings/#call-a-handler-on-a-timer).
 
 ### Accept file uploads
 

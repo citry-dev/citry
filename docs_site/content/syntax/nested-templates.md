@@ -36,7 +36,7 @@ content between the component's tags, or in a
 component treats that content as one of its inputs. See
 [Slots](/concepts/slots/).
 
-## Use the caller's data
+## Names inside `<>...</>`
 
 The markup can use expressions and component tags, like the rest of the
 template. Its names come from the template you write it in, not from the

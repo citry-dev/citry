@@ -16,7 +16,7 @@ Citry has two built-in tags for this:
 
 On both, `c-is` holds the Python expression that makes the choice.
 
-## Choose a component
+## `<c-component>`
 
 Pass a registered component name to `c-is`. Every other attribute becomes
 an input of the chosen component, and the body fills its slots:
@@ -72,7 +72,7 @@ component may render one root element, several, text, or nothing. Values
 from [provide and inject](/concepts/provide-and-inject/) reach it as
 usual.
 
-## Choose an HTML tag
+## `<c-element>`
 
 Use `<c-element>` when only the tag name changes. Every other attribute
 becomes an HTML attribute, and the body becomes the element's content:

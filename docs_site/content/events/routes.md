@@ -9,7 +9,7 @@ Every event handler has its own URL. Citry's browser code calls it for you,
 but you can also call it yourself: from a plain HTML form that must work
 without JavaScript, from htmx, or from other code that reads data with a
 GET request. To send a file from a handler, see
-[Download a file](/events/actions/#download-a-file).
+[`Download` a file](/events/actions/#download-a-file).
 
 ## Protect every handler
 

@@ -147,7 +147,7 @@ Script(
 
 A script with a `type` such as `module` or `importmap` is never wrapped.
 
-## Load print styles
+## `media` print styles
 
 Use a mapping to give stylesheets a `media` attribute:
 

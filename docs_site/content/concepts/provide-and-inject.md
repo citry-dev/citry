@@ -15,7 +15,7 @@ it injects it, meaning it reads the value directly. This page covers
 providing values while Citry renders HTML on the server, then the separate
 browser version for Vue code.
 
-## Provide a value
+## `<c-provide>` and `inject()`
 
 Wrap part of a template in [`<c-provide>`](/reference/builtins/#c-provide)
 and give the value a `key`. The tag adds no HTML of its own:
@@ -72,7 +72,7 @@ Python expression, or `c-bind` to add every entry of a mapping:
 The key can come from an expression too, as in `c-key="context_key"`. A
 key must be a valid Python name.
 
-## Handle a missing value
+## `inject()` default value
 
 When no component above provides the key, `inject()` raises `KeyError`:
 
@@ -88,7 +88,7 @@ theme = self.inject("theme", None)
 locale = self.inject("locale", "en")
 ```
 
-## Provide from Python
+## `provide()` from Python
 
 Call [`Component.provide()`][citry.Component.provide] in a data method when
 Python is the easier place to build the value. Components that this
@@ -138,7 +138,7 @@ self.provide("citry_i18n", locale_context)
 The component that injects it receives that same object. One call takes
 either the object or keyword fields, not both.
 
-## Provide to the page
+## Global provide
 
 Pass `provides` to `render()` when every component in the page may need the
 value:
@@ -176,7 +176,7 @@ fields are not merged. Values under different keys are all available.
 written. If a component wraps its `<c-slot>` in `<c-provide>`, a component
 that the outer template passes into that slot can inject the value.
 
-## Hide a provided value
+## `unprovide()` hides a key
 
 [`Component.unprovide()`][citry.Component.unprovide] makes a key look
 missing to the components inside this one. The component itself can still
@@ -209,7 +209,7 @@ tab set placed inside another tab set's panel does not attach to the outer
 tab set by mistake. A component inside the boundary can still provide a new
 `tabs` value.
 
-## Provide in the browser { #provide-and-inject-in-client-code }
+## Vue `provide`/`inject` { #provide-and-inject-in-client-code }
 
 The browser has its own provide and inject, from Vue. Use Vue's `provide`
 and `inject` options in `$component`. A parent provides a reactive object:

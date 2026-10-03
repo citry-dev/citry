@@ -14,7 +14,7 @@ rendered component, and the browser sends them back with the next call.
 Start with [Server events](/events/) if you have not called a Python handler
 from a component yet.
 
-## Store values in State
+## `State` and `state_data()` { #store-values-in-state }
 
 When the component's inputs are already the values you need, make `State`
 inherit from `Kwargs`:
@@ -90,7 +90,7 @@ class Events:
 The rule: if the new render needs a value, the handler must get it and pass
 it in.
 
-## Bind an input to State
+## `:c-<field>` on inputs
 
 A `:c-<field>` attribute shows a State field in a form control. Give it a
 handler name, and edits update the field and call the handler. This
@@ -139,7 +139,7 @@ list in place, so the input keeps its focus and cursor position.
 [Bind events in templates](/events/bindings/#bind-controls-to-state) lists
 every control you can bind and the Python type each one sends.
 
-## Limit browser access { #limit-what-the-browser-can-read-and-change }
+## `_public` and `_model` { #limit-what-the-browser-can-read-and-change }
 
 By default, browser code can read every State field and change it, through
 the `$state` object in templates or a `:c-*` binding. Two settings narrow
@@ -200,7 +200,7 @@ class SortedProjectPanel(ProjectPanel):
 ```
 
 `ProjectPanel` is the component from
-[Store values in State](#store-values-in-state). Because the subclass
+[`State` and `state_data()`](#store-values-in-state). Because the subclass
 keeps any `_public` its parent sets, list a new field there too when
 browser code should read it.
 

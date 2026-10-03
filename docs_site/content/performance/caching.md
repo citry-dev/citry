@@ -129,7 +129,7 @@ Return only plain values of these exact types:
 
 Subclasses such as enums, named tuples, or `OrderedDict` are rejected.
 
-## Cache a region
+## `<c-cache>` regions
 
 `<c-cache>` caches part of a template and adds no HTML of its own. Give
 it a fixed `key` that names the region (the name is shared across the
@@ -205,7 +205,7 @@ When an outer entry is reused, the cache lookups nested inside it are
 skipped too. Give the outer entry an expiry no longer than any content
 inside it can tolerate.
 
-## Update or remove { #update-or-remove-entries }
+## `version` and `clear()` { #update-or-remove-entries }
 
 When the output changes for all entries of one component or region,
 raise its `version`:

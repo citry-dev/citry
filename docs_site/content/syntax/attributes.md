@@ -15,7 +15,7 @@ and component inputs. It then covers classes and styles, applying many
 attributes at once with `c-bind`, Vue's `:prop` and `@event`, and the
 special `:c-*`, `#c-key`, and `#c-ignore` attributes.
 
-## Set with `c-*` { #c-dynamic-attributes }
+## `c-*` Python attrs { #c-dynamic-attributes }
 
 An ordinary attribute holds fixed text. With `c-` in front, Citry evaluates
 the value as a Python [expression](/syntax/expressions/) and removes the `c-`
@@ -45,9 +45,9 @@ Write the expression without `{{ }}`: `c-title="user.name"`, not
 [Conditions and loops](/syntax/control-flow/) take no value.
 
 Citry HTML-escapes attribute names and values. To insert a value without
-escaping, see [Insert HTML you trust](/syntax/expressions/#insert-html-you-trust).
+escaping, see [`Markup` skips escape](/syntax/expressions/#insert-html-you-trust).
 
-## Toggle with `c-*` { #html-elements }
+## `c-*` boolean attrs { #html-elements }
 
 On an HTML element, `True` renders a bare attribute, and `False` or `None`
 leaves the attribute out:
@@ -109,7 +109,7 @@ UserBadge(
 Unlike on HTML elements, `False` and `None` are passed to the component
 like any other value.
 
-## Class
+## `c-class`
 
 `c-class` accepts more than a string. You can give it:
 
@@ -147,7 +147,7 @@ Citry leaves the attribute out:
 <!-- Result: <div></div> -->
 ```
 
-## Style
+## `c-style`
 
 `c-style` accepts a string, a dictionary of CSS properties, or a list of
 them. Write property names in kebab-case:
@@ -252,7 +252,7 @@ Keys are used exactly as written. Unlike a `c-` attribute, a key named
 <!-- Result: <button c-title="My Title"> -->
 ```
 
-### Combine with others
+### `c-bind` merge order
 
 You can use `c-bind` more than once and mix it with other attributes. Citry
 applies them from left to right. A later value replaces an earlier one, except
@@ -278,7 +278,7 @@ includes `id` together with `c-id`. The exceptions are `class` with
 `c-class` and `style` with `c-style` on HTML elements, and repeated
 `c-bind`.
 
-### Forward attributes
+### `c-bind` forwards `kwargs`
 
 A component often accepts extra HTML attributes, such as `id` or `data-*`,
 and puts them on one of its own elements. Vue calls these
@@ -446,7 +446,7 @@ A child component binds its own State in its own template. To share a
 browser value with a child, pass it as a
 [Vue prop](/concepts/client-interactivity/#pass-props-to-a-child).
 
-Read [Bind controls to State](/events/bindings/#bind-controls-to-state) for
+Read [`:c-<field>` bindings](/events/bindings/#bind-controls-to-state) for
 which input types are supported in which direction, and
 [Event state](/events/state/) for declaring State.
 
@@ -497,7 +497,7 @@ in the component's own template:
 </article>
 ```
 
-See [Keep list items matched](/events/actions/#keep-list-items-matched-to-their-records)
+See [`#c-key` for list items](/events/actions/#keep-list-items-matched-to-their-records)
 for how keys behave when a handler renders the list again.
 
 ## `#c-ignore` { #c-ignore-keep-contents-that-a-library-manages }
@@ -588,7 +588,7 @@ lowercase `is` or `c-is`.
 Most built-in tags, including [`<c-if>`][c-if] and [`<c-for>`][c-for], do
 not accept `c-bind`. Put it on the HTML element or component tag inside.
 `<c-slot>` and `<c-fill>` accept it to choose a slot and pass its data; see
-[Bind slot settings](/concepts/slots/#spread-slot-and-fill-settings).
+[`c-bind` on slots](/concepts/slots/#spread-slot-and-fill-settings).
 
 ### `:c-*` and `type`
 

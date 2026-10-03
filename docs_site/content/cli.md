@@ -18,7 +18,7 @@ citry watch --help
 citry --version
 ```
 
-## Create a component
+## `citry create` component
 
 `citry create` writes a new component file:
 
@@ -73,7 +73,7 @@ it from the current directory, as web servers such as uvicorn do.
 If importing the application fails, the command stops with an error.
 `check` is the exception, described below.
 
-## Check templates { #check-component-templates }
+## `citry check` templates { #check-component-templates }
 
 `citry check` finds template mistakes without rendering anything. Run it
 against your application:
@@ -110,7 +110,7 @@ Add `--format json` to print one JSON report instead of text lines. Each
 finding has an `origin`, `code`, `severity`, `message`, and `range`.
 `range` is `null` when the finding has no position.
 
-### Check syntax only
+### `check --static` syntax
 
 When you cannot import the project, for example in a CI job without its
 dependencies, check template syntax only:
@@ -146,7 +146,7 @@ components as complete.
 - It does not run template transform hooks. It checks the template as you
   wrote it, and notes this once in its output.
 
-### Check types { #check-types-with-typescript-and-ty }
+### `check --types` typing { #check-types-with-typescript-and-ty }
 
 Add `--types` to also type-check your components the way the editor does:
 
@@ -217,7 +217,7 @@ registered components, so it cannot be combined with `--static`, and it
 does not run when the application fails to import. The report notes that
 it was skipped.
 
-## Format component files
+## `citry format` files { #format-component-files }
 
 `citry format` formats component templates in place. It reads source files
 without importing your application:
@@ -313,7 +313,7 @@ Citry never searches `PATH` for Biome, never runs it through a shell, and
 never lets it write files itself. It stops Biome after 15 seconds, or when
 its output passes 8 MiB.
 
-## Reload templates
+## `citry watch` reloads
 
 `watch` watches your component directories. When a template, JavaScript,
 or CSS file changes, the next render uses the new file:
@@ -341,7 +341,7 @@ If `watchfiles` or `watchdog` is installed, Citry uses it to get file
 change events from the operating system. Otherwise it checks the files
 for changes at regular intervals.
 
-## List components
+## `citry list` components
 
 `list` prints every component your application registered, Citry's
 built-in components included:
@@ -355,7 +355,7 @@ file. Use it when a template tag does not find the component you expect,
 or to check that [component discovery](/advanced/component-discovery/)
 found a module.
 
-## Export as JSON
+## `inspect --json` export
 
 `inspect --json` prints a description of your components, as a
 [`ComponentCatalog`][citry.ComponentCatalog] in JSON, for tools to read:
@@ -385,7 +385,7 @@ it from a public endpoint. Anything your application prints while it is
 imported also goes to the output, so keep imports quiet when another tool
 reads the JSON.
 
-## List extensions
+## `ext list` extensions
 
 `ext list` prints the [extensions](/advanced/extensions/) your
 application uses:
@@ -397,7 +397,7 @@ citry --app myproject.engine:app ext list
 Every application has `cache`, `dependencies`, `events`, and `i18n`.
 Extensions your application adds come after them.
 
-## Run extension commands { #run-an-extension-command }
+## `ext run` commands { #run-an-extension-command }
 
 Extensions can add their own commands. Run one with `ext run`, the
 extension name, and the command name:

@@ -81,7 +81,7 @@ Number and range inputs send numbers. Every other input sends text, so
 declare its field as `str` and convert it in the handler. A checked checkbox
 sends `"on"`, which a `bool` field rejects.
 
-## Show validation errors
+## `EventError` field errors
 
 Raise [`EventError`][citry.ext.events.EventError] with a message and an error
 per field. When a call fails, nothing re-renders, so the form keeps what the
@@ -99,7 +99,7 @@ handlers in the same component are separate, so two forms in one component
 show their own errors. To show one banner for the whole component, call
 `$error()` without a name: it returns the newest error from any handler.
 
-## Disable while sending
+## `$loading` while sending
 
 [`$loading('submit')`][$loading] is true from the moment the user submits
 until the response arrives, including any time spent waiting behind other

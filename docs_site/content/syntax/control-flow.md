@@ -95,7 +95,7 @@ When each item needs several elements, use `<c-for>` and write the loop in
 </c-empty>
 ```
 
-## Unpack and filter { #unpack-and-filter-values }
+## `<c-for>` unpack and filter { #unpack-and-filter-values }
 
 The loop is written like the `for` part of a Python list comprehension. You
 can unpack each item:
@@ -127,7 +127,7 @@ Loop over nested lists with several `for` parts:
 `c-empty` renders when no items are left, including when `if` skipped all of
 them.
 
-## Number the items
+## `<c-for>` indices
 
 There is no `loop.index` or `loop.first`. Pair items with numbers in Python,
 then unpack them in the loop:
@@ -165,7 +165,7 @@ a loop, and an empty message, nest the tags:
 </c-if>
 ```
 
-## Keep branches together { #keep-branches-next-to-each-other }
+## `c-elif`/`c-else` order { #keep-branches-next-to-each-other }
 
 Each `elif`, `else`, or `empty` branch must come right after the branch
 before it. Whitespace and [template comments](/syntax/comments/) between

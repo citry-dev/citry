@@ -285,7 +285,7 @@ fails, because these template helpers do not exist in 0.6.0.
 
 Provide a value from a component with Vue's `provide` option, and read it
 in a descendant with `inject`. See
-[Provide in the browser](/concepts/provide-and-inject/#provide-and-inject-in-client-code).
+[Vue `provide`/`inject`](/concepts/provide-and-inject/#provide-and-inject-in-client-code).
 
 ### Rename reserved names { #rename-reserved-names }
 
@@ -341,7 +341,7 @@ replace the outermost component of a page or HTML fragment. Move the part
 that changes into a child component, or into a `<c-mark>` region. Props,
 listeners, and a `ref` that the parent wrote on the old component's tag do
 not reach the new one. See
-[Swap in a component](/events/actions/#swap-in-a-different-component).
+[`Render` another component](/events/actions/#swap-in-a-different-component).
 
 ### Nested `$state` writes
 

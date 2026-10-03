@@ -189,7 +189,7 @@ It follows the same rules as attributes in a template:
 
 When Vue renders an interactive component, a `True` value on an attribute
 that is not a boolean HTML attribute renders as `data-open="true"` rather
-than a bare `data-open`. See [Toggle with `c-*`](/syntax/attributes/#html-elements).
+than a bare `data-open`. See [`c-*` boolean attrs](/syntax/attributes/#html-elements).
 
 ## Keep Vue in templates
 

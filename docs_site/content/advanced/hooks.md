@@ -21,7 +21,7 @@ A component has two hooks:
 To change every component in an application at once, write an
 [`Extension`][citry.Extension] instead.
 
-## Replace the output
+## `on_render()` output
 
 Citry calls `on_render()` after it prepares the component's data and before
 it renders the template. Return `None` to render the template as usual.
@@ -115,7 +115,7 @@ use [`template_data()`][citry.Component.template_data] instead.
     raises it. The form with `yield` also adds a small cost to every
     render.
 
-## Show a failure message
+## `yield` to catch errors
 
 For most error handling, wrap the part that may fail in the built-in
 `<c-error-fallback>` tag; see
@@ -146,7 +146,7 @@ After the `yield`, you can:
 - return `None` to keep a successful result, or to let the error continue
   to the components around this one.
 
-## Change asset tags
+## `on_dependencies()` tags
 
 `on_dependencies()` receives the script and style tags that one rendered
 component adds to the page. Those are its own `js` and `css`, the files in
@@ -262,7 +262,7 @@ html = str(counter)
 assert "Updated today" in html
 ```
 
-### Yield more than once
+### `yield` more than once
 
 Instead of a bare `yield`, you can yield new content. Citry renders it and
 sends back a new `(result, error)` pair, so one hook can try several

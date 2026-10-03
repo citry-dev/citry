@@ -13,7 +13,7 @@ Read on when you need the tags somewhere else, or when the HTML is not a
 whole page: an email, a piece of HTML that another system places, or a page
 whose scripts you load yourself.
 
-## Mark where the tags go
+## `<c-css />` and `<c-js />` { #mark-where-the-tags-go }
 
 Put `<c-css />` where the CSS should go and `<c-js />` where the JavaScript
 should go:
@@ -74,7 +74,7 @@ html = rendered.serialize(deps_strategy="simple")
 With `"ignore"`, the HTML can look right in tests but have no styles or
 browser behavior if nothing else adds the files.
 
-## Put tags around output
+## Placement options
 
 Use `deps_position` when the output is not a whole HTML page and the code
 that receives it decides where it goes. It works with the `"document"` and
@@ -91,7 +91,7 @@ html = page.render().serialize(
 [`DepsPosition`][citry.DepsPosition] accepts three values:
 
 - `"smart"`, the default, uses `<c-css />` and `<c-js />`, or the locations
-  described in [Mark where the tags go](#mark-where-the-tags-go);
+  described in [`<c-css />` and `<c-js />`](#mark-where-the-tags-go);
 - `"prepend"` puts all the tags before the HTML;
 - `"append"` puts all the tags after the HTML.
 

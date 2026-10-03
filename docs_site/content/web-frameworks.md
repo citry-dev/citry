@@ -55,7 +55,7 @@ For complete, runnable apps, see the
 [starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}
 for FastAPI, Django, Flask, bare ASGI, and bare WSGI.
 
-## Initialize at startup
+## `initialize()` at startup
 
 Mounting adds the routes, but it does not import your component modules.
 Call [`initialize()`][citry.Citry.initialize] once at startup, after you

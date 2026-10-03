@@ -21,7 +21,7 @@ directly.
     `__citry_element__`, the same template renders something very different,
     and nothing in the template says so. Check input types where it matters.
 
-## Make an object render
+## `__citry_element__` hook
 
 Add a `__citry_element__(citry)` method to the class. Citry calls it with
 the [`Citry`][citry.Citry] instance that is rendering the page. Use that

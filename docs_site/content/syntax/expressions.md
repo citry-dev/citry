@@ -163,7 +163,7 @@ text from users cannot add tags to the page.
     return {"table": table}
     ```
 
-## Insert HTML you trust
+## `Markup` skips escape { #insert-html-you-trust }
 
 To insert HTML without escaping, wrap it in [`Markup`][citry.Markup].
 `Markup(value)` trusts the whole value. It does not check or clean it.
@@ -216,7 +216,7 @@ itself, so its documentation applies.
     extend-markup-names = ["citry.Markup"]
     ```
 
-### Keep HTML complete
+### `Markup` needs whole tags
 
 When any component on the page, or in an HTML fragment you insert into a
 page, runs in the browser (it has its own `js`, or uses Vue syntax such as

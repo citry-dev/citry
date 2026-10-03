@@ -18,7 +18,7 @@ where the tags go in the page, see
 attributes you write in templates, such as `@click` and `v-show`, see
 [Vue in templates](/syntax/vue/).
 
-## Add JS and CSS
+## `js` and `css` attributes
 
 ```citry
 from citry import Component
@@ -67,7 +67,7 @@ browser. It takes the same object of options as a Vue component, such as
 `data`, `methods`, and `props`, and Citry applies it to every rendered copy
 of the component. Pass a function instead when all you need is code that
 runs after each server render; see
-[Run after a render](#run-after-a-render).
+[`onServerRender` callback](#run-after-a-render).
 
 Call it once, at the top level of the component's `js`:
 
@@ -132,7 +132,7 @@ $component({
 });
 ```
 
-## Use Vue options
+## `$component()` options
 
 `$component()` accepts the usual
 [Vue options](https://vuejs.org/api/#options-api){: target="_blank" rel="noopener"}.
@@ -140,7 +140,7 @@ This section shows the ones most components use.
 [Client interactivity](/concepts/client-interactivity/) shows how they
 work together across components, including slots.
 
-### Data and methods
+### `data()` and `methods`
 
 `data()` holds values that change in the browser, `computed` derives
 values from them, `methods` holds functions the template calls, and `watch`
@@ -174,7 +174,7 @@ carries the [`js_data()`](#send-data-to-js) values and the
 [Events helpers](/reference/browser-apis/#component-events-helpers) such as
 `$state`.
 
-### Props from a parent
+### `props` from a parent
 
 A child component declares the props it takes:
 
@@ -196,7 +196,7 @@ The parent passes a browser value with `:`:
 A plain attribute such as `status="ok"` is a Python input instead; see
 [Pass props to a child](/concepts/client-interactivity/#pass-props-to-a-child).
 
-### Events to a parent
+### `$emit` to a parent
 
 A child declares the events it sends and sends them with `$emit`:
 
@@ -221,12 +221,12 @@ the parent:
 To run a Python handler instead, write `@c-select`; see
 [Bind events in templates](/events/bindings/).
 
-### Provide and inject
+### `provide` and `inject`
 
 A component can `provide` a value to every component inside it, which reads
 it with `inject`. These are Vue's own options and are separate from
 Citry's Python `<c-provide>`. See
-[Provide in the browser](/concepts/provide-and-inject/#provide-and-inject-in-client-code).
+[Vue `provide`/`inject`](/concepts/provide-and-inject/#provide-and-inject-in-client-code).
 
 ### Use `setup()`
 
@@ -331,7 +331,7 @@ class Sparkline(Component):
 Two sparklines on one page each get their own `points`. When the server
 renders the component again, these values update in the browser, and
 `onServerRender` draws the chart again; see
-[Run after a render](#run-after-a-render).
+[`onServerRender` callback](#run-after-a-render).
 
 A key must not start with `$` or `_`, and must not be `citryId`, because
 Vue and Citry already use those names. Rendering a component that returns
@@ -379,7 +379,7 @@ must still follow the rules above.
 JavaScript numbers lose precision above 2^53, so send large IDs as
 strings.
 
-## Run after a render
+## `onServerRender` callback { #run-after-a-render }
 
 Some code has to run again each time the server renders the component,
 for example to connect a non-Vue widget to the new HTML. Put it in
@@ -435,7 +435,7 @@ does not create a new one:
 Vue creates a new component, which starts from `data()` again, when:
 
 - the handler returns a different component in its place; see
-  [Swap in a component](/events/actions/#swap-in-a-different-component);
+  [`Render` another component](/events/actions/#swap-in-a-different-component);
 - an element around it gets a different key in the new render, or a
   parent component is created again for one of these reasons;
 - the user reloads the page.
@@ -482,7 +482,7 @@ The Citry editor extension and `citry check` read the code in `js`:
   (`citry.component-js.unknown-member`). Citry reports it only when it can
   see all of the component's values in the source.
 - `citry check --types` also reports TypeScript errors in the code. See
-  [Check types](/cli/#check-types-with-typescript-and-ty).
+  [`check --types` typing](/cli/#check-types-with-typescript-and-ty).
 
 ## Send values to CSS
 
@@ -593,7 +593,7 @@ This is the BEM naming style: `block__element` for a part and
 `block--modifier` for a variant. Citry has no option that scopes component
 CSS for you.
 
-## Use separate files
+## `js_file` and `css_file`
 
 Use `js_file` and `css_file` to keep the code in files next to the
 component:
@@ -612,7 +612,7 @@ Citry finds these files the same way it finds `template_file`. Set either
 `js` or `js_file`, not both, and either `css` or `css_file`. Setting both
 raises `ValueError` when the class is defined.
 
-## Check the data
+## `JsData` and `CssData`
 
 Declare a nested `JsData` or `CssData` class to have Citry check the names
 that `js_data()` or `css_data()` returns. A missing or unexpected name then

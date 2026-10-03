@@ -54,7 +54,7 @@ class LoudMessage(Message):
 `template_data()` calls the child's `format_message()`, and the child
 uses its parent's `Kwargs` because it declares none of its own.
 
-## Add inputs in a child
+## `Kwargs` in a child
 
 To give a child one more input, the natural first attempt is a nested
 `Kwargs` with only the new field. That class replaces the parent's, the
