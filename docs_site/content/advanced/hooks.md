@@ -186,6 +186,62 @@ string inside the hook may fail. If you do return serialized HTML, it
 replaces the result, and Citry adds this component's marker attribute to
 it.
 
+A natural first attempt logs the HTML and adds a line under it:
+
+```python
+def on_render(self):
+    result, error = yield
+    if error is not None:
+        return None
+
+    # Wrong: for a component that uses Vue, this string is a whole
+    # app with Citry's browser runtime script, not just its tags.
+    html = str(result)
+    logger.info("Rendered %s", html)
+
+    # Wrong: the string replaces the result, and Citry marks each
+    # top-level tag in it, the new <p> too, as this component's.
+    return Markup(html + "<p>Updated today</p>")
+```
+
+Instead, put fixed content in the template and keep the result as it is:
+
+```citry
+import logging
+
+from citry import Component
+
+logger = logging.getLogger(__name__)
+
+
+class Counter(Component):
+    def template_data(self, kwargs, slots):
+        return {"count": 0}
+
+    def on_render(self):
+        result, error = yield
+        if error is None:
+            # Log what the hook knows, not the HTML.
+            logger.info("Rendered %s", type(self).__name__)
+        # None keeps the result unchanged.
+        return None
+
+    template = """
+      <button @click="count += 1">{{ count }}</button>
+      <p>Updated today</p>
+    """
+```
+
+To put the output inside another component, wrap it where you use it, as
+in `<c-Panel><c-Counter /></c-Panel>`. To read the HTML in a log or a
+test, turn the whole render into a string after it finishes:
+
+```python
+counter = Counter()
+html = str(counter)
+assert "Updated today" in html
+```
+
 ### Yield more than once
 
 Instead of a bare `yield`, you can yield new content. Citry renders it and
