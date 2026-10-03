@@ -280,8 +280,11 @@ def test_provider_runner_terminates_cross_platform_descendants_holding_pipes(tmp
 
 
 def test_provider_runner_terminates_cross_platform_descendants_on_timeout(tmp_path: Path, monkeypatch) -> None:
-    child = "import time; time.sleep(5)"
-    source = f"import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', {child!r}]); time.sleep(5)"
+    # The children sleep far longer than the bound below, so finishing within
+    # the bound proves the runner stopped them instead of waiting. The bound
+    # leaves room for slow process start-up on busy CI machines.
+    child = "import time; time.sleep(30)"
+    source = f"import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', {child!r}]); time.sleep(30)"
     monkeypatch.setattr(embedded_provider_module, "_PROVIDER_TIMEOUT_SECONDS", 0.05)
 
     started = time.monotonic()
@@ -295,7 +298,7 @@ def test_provider_runner_terminates_cross_platform_descendants_on_timeout(tmp_pa
             unavailable_is_config=False,
             environment=os.environ.copy(),
         )
-    assert time.monotonic() - started < 2
+    assert time.monotonic() - started < 10
 
 
 def test_provider_runner_rejects_non_utf8_input_before_spawning(tmp_path: Path, monkeypatch) -> None:
