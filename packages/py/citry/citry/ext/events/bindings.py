@@ -19,7 +19,6 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, NoReturn, cast
 
 from citry._state_binding_targets import (
-    _TWO_WAY_INPUT_TYPES,
     _custom_update_event_error,
     _Element,
     _input_type,
@@ -553,13 +552,30 @@ def _keyless_update_event_error(
 
 def _default_update_event(element: _Element, *, lazy: bool) -> str | None:
     """The default update event of a known native control, or ``None`` when the tag or type is resolved later."""
+    # A control whose value commits as a whole (a choice, a checkbox) always
+    # sends on `change`; a text control sends on every keystroke unless `.lazy`.
+    if _committed_control(element) is not None:
+        return "change"
+    tag = element.tag_name.lower()
+    if tag == "textarea" or (tag == "input" and element.type_static_known):
+        return "change" if lazy else "input"
+    return None
+
+
+def _committed_control(element: _Element) -> str | None:
+    """
+    Describe a known native control whose value already commits on ``change``, such as ``<select>``.
+
+    Returns ``None`` for any other element, and for an ``<input>`` whose type
+    is resolved later, because its default update event is not known yet.
+    """
     tag = element.tag_name.lower()
     if tag == "select":
-        return "change"
-    if tag == "textarea":
-        return "change" if lazy else "input"
+        return "<select>"
     if tag == "input" and element.type_static_known:
-        return "change" if lazy or _input_type(element) in _COMMITTED_INPUT_TYPES else "input"
+        input_type = _input_type(element)
+        if input_type in _COMMITTED_INPUT_TYPES:
+            return f'<input type="{input_type}">'
     return None
 
 
@@ -611,7 +627,6 @@ def _validate_two_way_control(
     element: _Element, *, lazy: bool, on_event: str | None, attr_name: str, location: _Location
 ) -> None:
     """Run the control-type validations for a two-way binding (design 5.1's update-event table)."""
-    tag = element.tag_name.lower()
     kind = _validate_binding_target(
         element,
         binding_mode="two-way",
@@ -629,38 +644,14 @@ def _validate_two_way_control(
                 location,
                 _custom_update_event_error(element.tag_name, attr_name),
             )
-    elif on_event is None:
-        _control_event(element, tag, lazy=lazy, attr_name=attr_name, location=location)
-
-
-def _control_event(element: _Element, tag: str, *, lazy: bool, attr_name: str, location: _Location) -> str | None:
-    """
-    The update event for a statically-known form control, or ``None`` when the type is not statically known.
-
-    Raises for ``.lazy`` on a control whose committed value already updates on
-    ``change`` (checkbox, radio, select). The complete direction check runs
-    earlier in :func:`_validate_input_binding_mode`.
-    """
-    if tag == "select":
-        if lazy:
-            _fail(location, f"{attr_name!r}: '.lazy' has no effect on <select>; its value already commits on 'change'")
-        return "change"
-    if tag == "textarea":
-        return "change" if lazy else "input"
-    # tag == "input"
-    if not element.type_static_known:
-        return None
-    input_type = _input_type(element)
-    assert input_type in _TWO_WAY_INPUT_TYPES  # validated by _validate_binding_target  # noqa: S101
-    if input_type in _COMMITTED_INPUT_TYPES:
-        if lazy:
+    elif on_event is None and lazy:
+        # `.lazy` moves a text control's update to `change`; on a control that
+        # already sends on `change` it would do nothing, so reject it.
+        committed = _committed_control(element)
+        if committed is not None:
             _fail(
-                location,
-                f"{attr_name!r}: '.lazy' has no effect on <input type=\"{input_type}\">;"
-                f" its value already commits on 'change'",
+                location, f"{attr_name!r}: '.lazy' has no effect on {committed}; its value already commits on 'change'"
             )
-        return "change"
-    return "change" if lazy else "input"
 
 
 def _classify_binding(attr_name: str) -> str | None:
