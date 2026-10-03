@@ -153,6 +153,10 @@ walks through every step.
   "Unknown i18n format profile" for a formatter call in component
   JavaScript or one guarded by `self.i18n.configured`, matching the
   editor; an unguarded Python call is still reported.
+- Fallback text that runs in the other direction, such as English on an
+  Arabic page, no longer reorders the surrounding sentence when the
+  browser translates it with `$i18n.tr()`, `$c-tr`, or `i18n.bind()`; the
+  browser now isolates it exactly as the server does.
 
 - `citry create` now rejects a name whose file would be a Python keyword,
   such as `citry create class`, instead of writing a module nobody can

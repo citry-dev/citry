@@ -13,7 +13,7 @@ use fluent_syntax::parser::Slice;
 use icu::decimal::input::Decimal;
 use icu::locale::Locale;
 use icu::plurals::{PluralCategory, PluralRules};
-use icu_locale::LocaleCanonicalizer;
+use icu_locale::{Direction, LocaleCanonicalizer, LocaleDirectionality};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use unic_langid::LanguageIdentifier;
@@ -163,6 +163,30 @@ fn validate_locale(value: &str, source: &str) -> Result<(), Failure> {
         ));
     }
     Ok(())
+}
+
+/// Derive a canonical locale's writing direction from its likely script.
+///
+/// This is the same ICU4X lookup the server uses before it isolates fallback
+/// text, so the browser receives the direction the server compared against.
+fn locale_direction(value: &str) -> Result<&'static str, Failure> {
+    let locale: Locale = value.parse().map_err(|error| {
+        Failure::new(
+            "I18N_LOCALE_INVALID",
+            format!("bundle locale {value:?} is invalid: {error}"),
+        )
+    })?;
+    match LocaleDirectionality::new_extended().get(&locale.id) {
+        Some(Direction::LeftToRight) => Ok("ltr"),
+        Some(Direction::RightToLeft) => Ok("rtl"),
+        // A locale without a known left-to-right or right-to-left script
+        // cannot be compared with the page direction, and the server rejects
+        // it the same way when it renders that fallback.
+        _ => Err(Failure::new(
+            "I18N_LOCALE_DIRECTION",
+            format!("could not derive a writing direction for bundle locale {value:?}"),
+        )),
+    }
 }
 
 fn validate_request_locales(
@@ -4049,6 +4073,11 @@ struct BrowserArtifact {
     requested_locale: String,
     messages: BTreeMap<String, BrowserMessageEntry>,
     bundles: BTreeMap<String, String>,
+    /// Writing direction of each bundle's locale, keyed like `bundles`. The
+    /// browser compares it with the page direction to isolate fallback text
+    /// exactly as the server does, including for a package source locale
+    /// that is not one of the selectable locales.
+    bundle_directions: BTreeMap<String, &'static str>,
     revision: String,
 }
 
@@ -4389,6 +4418,7 @@ impl I18nRuntime {
             );
         }
         let mut browser_bundles = BTreeMap::new();
+        let mut bundle_directions = BTreeMap::new();
         for (bundle_locale, roots) in roots_by_locale {
             let source = self.artifacts.get(&bundle_locale).ok_or_else(|| {
                 Failure::new(
@@ -4396,6 +4426,7 @@ impl I18nRuntime {
                     format!("browser partition refers to missing bundle {bundle_locale:?}"),
                 )
             })?;
+            bundle_directions.insert(bundle_locale.clone(), locale_direction(&bundle_locale)?);
             browser_bundles.insert(bundle_locale, browser_bundle_subset(source, &roots)?);
         }
         let revision_payload = serde_json::to_string(&(
@@ -4406,6 +4437,7 @@ impl I18nRuntime {
             locale,
             &browser_messages,
             &browser_bundles,
+            &bundle_directions,
         ))
         .map_err(|error| Failure::new("I18N_INTERNAL_JSON", error.to_string()))?;
         let artifact = BrowserArtifact {
@@ -4416,6 +4448,7 @@ impl I18nRuntime {
             requested_locale: locale.to_owned(),
             messages: browser_messages,
             bundles: browser_bundles,
+            bundle_directions,
             revision: digest_text(&revision_payload),
         };
         serde_json::to_string(&artifact)
@@ -5006,7 +5039,52 @@ mod tests {
         assert!(!linked.contains(unused));
         assert_eq!(browser["catalog_revision"], runtime.revision());
         assert_eq!(browser["requested_locale"], "en-US");
+        assert_eq!(browser["bundle_directions"], json!({"en-US": "ltr"}));
         assert_eq!(browser["revision"].as_str().unwrap().len(), 64);
+    }
+
+    #[test]
+    fn browser_artifact_records_the_direction_of_each_fallback_bundle() {
+        // The source locale is not selectable here, so the browser's own
+        // locale contexts cannot tell it which way the English text runs.
+        let compiler = CatalogCompiler::new();
+        let catalog = |locale: &str, source: &str| {
+            json!({
+                "path": format!("{locale}.ftl"),
+                "package": "app",
+                "layer": "app",
+                "precedence": 0,
+                "locale": locale,
+                "source": source,
+            })
+        };
+        let artifact = compiler
+            .compile(
+                &request(
+                    &["ar"],
+                    vec![
+                        catalog("en-US", "greeting = Hello\nother = Other\n"),
+                        catalog("ar", "other = \u{622}\u{62e}\u{631}\n"),
+                    ],
+                    &[],
+                )
+                .to_string(),
+            )
+            .unwrap();
+        let runtime = I18nRuntime::new(&artifact).unwrap();
+        let browser: Value = serde_json::from_str(
+            &runtime
+                .browser_artifact_json("ar", r#"{"outputs":["greeting","other"],"messages":[]}"#)
+                .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(browser["messages"]["greeting"]["bundle_locale"], "en-US");
+        assert_eq!(browser["messages"]["other"]["bundle_locale"], "ar");
+        assert_eq!(
+            browser["bundle_directions"],
+            json!({"ar": "rtl", "en-US": "ltr"})
+        );
     }
 
     #[test]

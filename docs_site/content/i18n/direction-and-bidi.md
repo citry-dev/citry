@@ -99,6 +99,11 @@ is never replaced by the visible label. See
 ## Mark fallback text { #mark-fallback-text-with-its-language }
 
 When a translation is missing, Citry falls back to another language.
+If that language runs in the other direction, such as English text on
+an Arabic page, Citry isolates the fallback text so it cannot reorder
+the sentence around it. The server and the browser isolate it the same
+way, so the text does not change when Vue takes over the page.
+
 `tr()` returns only text, so the text cannot carry its own `lang`, and a
 screen reader reads it in the page's language. `citry check` warns about
 each `tr()` call that would fall back to another locale.

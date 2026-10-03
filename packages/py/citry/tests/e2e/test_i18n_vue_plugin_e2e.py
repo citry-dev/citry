@@ -121,6 +121,81 @@ def test_simple_spread_preserves_plain_output_between_caller_i18n_bindings(
     assert faults == []
 
 
+def test_browser_isolates_fallback_text_exactly_as_the_server_does(
+    page: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The Arabic catalog lacks `greeting`, so an Arabic page falls back to
+    # English. Both sides must wrap that left-to-right text in the same
+    # isolate pair, or hydration sees different text and a re-render in the
+    # browser lets the English run reorder the Arabic sentence around it.
+    package = tmp_path / "fallback_direction_catalog"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf8")
+    (package / "citry-i18n.toml").write_text(
+        'schema_version = 1\nowner = "fallback-direction-test"\nsource_locale = "en-US"\n', encoding="utf8"
+    )
+    for locale, source in (("en-US", "greeting = Hello\n"), ("ar", "other = شيء\n")):
+        locale_root = package / "locales" / locale
+        locale_root.mkdir(parents=True)
+        (locale_root / "common.ftl").write_text(source, encoding="utf8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    sys.modules.pop("fallback_direction_catalog", None)
+
+    engine = Citry(
+        autodiscover=False,
+        mode="development",
+        extensions_defaults={
+            "i18n": {
+                "source_locale": "en-US",
+                "default_locale": "ar",
+                "locales": ("ar", "en-US"),
+                "catalogs": ("fallback_direction_catalog",),
+            }
+        },
+    )
+
+    class Page(Component):
+        citry = engine
+        template = """<c-i18n c-client="True" tag="main">
+          <p class="server" $c-tr:greeting>{{ tr("greeting") }}</p>
+          <output class="browser" v-text="$i18n.tr('greeting')"></output>
+          <button id="english" @click="$i18n.switchLocale('en-US')">en</button>
+          <button id="arabic" @click="$i18n.switchLocale('ar')">ar</button>
+        </c-i18n>"""
+
+    body = Page().render().serialize()
+    isolated = "\u2066Hello\u2069"
+    # The server already isolates the fallback; the browser must reproduce
+    # these exact characters rather than only the visible word.
+    assert f">{isolated}</p>" in body
+
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    # Vue reports a hydration text mismatch through the console, so any
+    # warning or error there means the two renders disagreed.
+    page.on(
+        "console",
+        lambda message: faults.append(message.text) if message.type in {"error", "warning"} else None,
+    )
+    page.route("http://citry.test/", lambda route: route.fulfill(body=body, content_type="text/html"))
+    page.goto("http://citry.test/", wait_until="commit")
+    page.wait_for_function("document.querySelector('.browser')?.textContent.length > 0")
+    assert page.locator(".server").text_content() == isolated
+    assert page.locator(".browser").text_content() == isolated
+
+    # English on an English page needs no isolation.
+    page.locator("#english").click()
+    page.wait_for_function("document.querySelector('.server')?.textContent === 'Hello'")
+    assert page.locator(".browser").text_content() == "Hello"
+
+    # Switching back formats the fallback in the browser alone, which must
+    # still match what the server sent for the same locale.
+    page.locator("#arabic").click()
+    page.wait_for_function(f"document.querySelector('.server')?.textContent === {json.dumps(isolated)}")
+    assert page.locator(".browser").text_content() == isolated
+    assert faults == []
+
+
 def test_real_serialized_apps_own_separate_stylesheet_nodes(page: Any, serve_live: Any) -> None:
     engine = Citry(autodiscover=False)
     engine.set_mounted_prefix("/citry")

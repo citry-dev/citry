@@ -172,6 +172,7 @@ test("i18n artifact validation uses staged configuration without mutating live s
   };
   const wire = createI18nWireRuntime(state, fail);
   const artifact = {
+    bundle_directions: {},
     bundles: {},
     catalog_revision: "new-catalog",
     formats_revision: "new-formats",
@@ -185,6 +186,34 @@ test("i18n artifact validation uses staged configuration without mutating live s
   assert.equal(wire.browserArtifact(artifact, "en-US", staged).revision, "artifact-revision");
   assert.throws(() => wire.browserArtifact({ ...artifact, catalog_revision: "stale" }, "en-US", staged), /stale/);
   assert.equal(state.configuration, live);
+});
+
+test("i18n artifacts must give every bundle exactly one known direction", async () => {
+  const { createI18nWireRuntime } = await wireModule();
+  const configuration = { catalogRevision: "catalog", formats: {}, formatsRevision: "formats" };
+  const state = { activeFluentFailures: null, configuration };
+  const fail = (code, message) => {
+    const error = new TypeError(message);
+    error.code = code;
+    throw error;
+  };
+  const wire = createI18nWireRuntime(state, fail);
+  const artifact = (bundleDirections) => ({
+    bundle_directions: bundleDirections,
+    bundles: { "en-US": "greeting = Hello\n" },
+    catalog_revision: "catalog",
+    formats_revision: "formats",
+    messages: {},
+    requested_locale: "ar",
+    revision: "artifact-revision",
+    runtime: "@fluent/bundle@0.19.1",
+    schema_version: 1,
+  });
+
+  assert.equal(wire.createMessageRuntime(artifact({ "en-US": "ltr" }), "ar").artifact.revision, "artifact-revision");
+  assert.throws(() => wire.createMessageRuntime(artifact({}), "ar"), /bundle directions/);
+  assert.throws(() => wire.createMessageRuntime(artifact({ "en-US": "ltr", ar: "rtl" }), "ar"), /bundle directions/);
+  assert.throws(() => wire.createMessageRuntime(artifact({ "en-US": "auto" }), "ar"), /ltr or rtl/);
 });
 
 test("i18n staged records must match the staged locale and revisions", async () => {
@@ -539,4 +568,111 @@ test("per-app service resolves messages, commits latest locale switch, and resto
   assert.equal(service.context.locale, "en");
   assert.equal(service.status.phase, "error");
   assert.equal(root.plannedContexts.size, 0);
+});
+
+// Spelled as code points so the invisible isolate characters stay readable
+// in review and survive the formatter.
+const LRI = String.fromCodePoint(0x2066);
+const RLI = String.fromCodePoint(0x2067);
+const PDI = String.fromCodePoint(0x2069);
+const MARHABA = "مرحبا";
+const SHUKRAN = "شكرا";
+const SALAM = "سلام";
+
+async function fallbackService({ pageLocale, pageDirection, bundleLocale, bundleDirection, text }) {
+  const { createI18nRuntimeState, createPerAppI18nService } = await coreModule();
+  const context = {
+    catalog_revision: "catalog",
+    direction: pageDirection,
+    fallback_locales: [],
+    formats_revision: "formats",
+    locale: pageLocale,
+    time_zone: null,
+    tzdb_revision: "none",
+  };
+  const state = createI18nRuntimeState({ commitContext() {}, effect: () => () => {}, isAlive: () => true });
+  const requirement = {
+    artifacts: new Map([
+      [
+        pageLocale,
+        {
+          artifact: {
+            bundle_directions: { [bundleLocale]: bundleDirection },
+            messages: { greeting: { bundle_locale: bundleLocale } },
+          },
+          format: () => text,
+        },
+      ],
+    ]),
+  };
+  const root = { bindings: new Set(), definition: { id: "root" }, state: { context, status: {} } };
+  const fail = (code, message) => {
+    const error = new Error(message);
+    error.code = code;
+    throw error;
+  };
+  return createPerAppI18nService(state, { providerRequirements: () => [requirement] }, root, {
+    createFormatter: () => ({}),
+    createParser: () => ({}),
+    fail,
+  });
+}
+
+test("fallback text in the page direction is returned unchanged", async () => {
+  const service = await fallbackService({
+    pageLocale: "cs",
+    pageDirection: "ltr",
+    bundleLocale: "en-US",
+    bundleDirection: "ltr",
+    text: "Hello",
+  });
+  assert.equal(service.tr("greeting"), "Hello");
+  const resolved = service.resolve("greeting");
+  assert.deepEqual({ ...resolved }, { direction: "ltr", locale: "en-US", text: "Hello", usedFallback: true });
+});
+
+test("left-to-right fallback on a right-to-left page is isolated like the server does", async () => {
+  const service = await fallbackService({
+    pageLocale: "ar",
+    pageDirection: "rtl",
+    bundleLocale: "en-US",
+    bundleDirection: "ltr",
+    text: "Hello",
+  });
+  assert.equal(service.tr("greeting"), `${LRI}Hello${PDI}`);
+  const resolved = service.resolve("greeting");
+  assert.equal(resolved.text, `${LRI}Hello${PDI}`);
+  assert.equal(resolved.direction, "ltr");
+});
+
+test("right-to-left fallback on a left-to-right page isolates each paragraph", async () => {
+  // Expected output observed from the server's `_isolate_bidi_paragraphs`
+  // for the same input: CRLF stays one separator and empty paragraphs get
+  // no isolate pair.
+  const service = await fallbackService({
+    pageLocale: "en-US",
+    pageDirection: "ltr",
+    bundleLocale: "ar",
+    bundleDirection: "rtl",
+    text: `${MARHABA}\r\n${SHUKRAN}\n\n${SALAM}`,
+  });
+  assert.equal(service.tr("greeting"), `${RLI}${MARHABA}${PDI}\r\n${RLI}${SHUKRAN}${PDI}\n\n${RLI}${SALAM}${PDI}`);
+  assert.equal(service.resolve("greeting").direction, "rtl");
+});
+
+test("text in the requested locale follows an explicit provider direction without isolation", async () => {
+  // The server compares only fallback text with the provider direction, so
+  // an English provider forced to right-to-left leaves its own English text
+  // alone.
+  const service = await fallbackService({
+    pageLocale: "en-US",
+    pageDirection: "rtl",
+    bundleLocale: "en-US",
+    bundleDirection: "ltr",
+    text: "Hello",
+  });
+  assert.equal(service.tr("greeting"), "Hello");
+  const resolved = service.resolve("greeting");
+  assert.equal(resolved.direction, "rtl");
+  assert.equal(resolved.usedFallback, false);
 });

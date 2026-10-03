@@ -53,6 +53,8 @@ export interface BrowserMessageEntry {
 }
 
 export interface BrowserArtifact {
+  /** Writing direction of each bundle's locale, keyed like `bundles`. */
+  readonly bundle_directions: Readonly<Record<string, "ltr" | "rtl">>;
   readonly bundles: Readonly<Record<string, string>>;
   readonly catalog_revision: string;
   readonly formats_revision: string;
@@ -911,6 +913,7 @@ export function createI18nWireRuntime(
     exactKeys(
       item,
       [
+        "bundle_directions",
         "bundles",
         "catalog_revision",
         "formats_revision",
@@ -944,6 +947,15 @@ export function createI18nWireRuntime(
     const artifact = browserArtifact(value, locale, configuration);
     const messages = exactObject(artifact.messages, "browser artifact messages");
     const bundles = exactObject(artifact.bundles, "browser artifact bundles");
+    // Fallback isolation compares each bundle's direction with the page, so
+    // every bundle needs exactly one known direction before any text formats.
+    const directions = exactObject(artifact.bundle_directions, "browser artifact bundle directions");
+    exactKeys(directions, Object.keys(bundles), "browser artifact bundle directions");
+    for (const direction of Object.values(directions)) {
+      if (direction !== "ltr" && direction !== "rtl") {
+        fail("I18N_ARTIFACT_INVALID", "a browser bundle direction must be ltr or rtl.");
+      }
+    }
     const compiled = new Map<string, FluentBundle>();
     for (const [bundleLocale, source] of Object.entries(bundles)) {
       if (typeof source !== "string") fail("I18N_ARTIFACT_INVALID", "a browser bundle must contain FTL text.");

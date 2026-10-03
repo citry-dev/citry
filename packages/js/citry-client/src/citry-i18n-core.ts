@@ -1,6 +1,9 @@
 /** Framework-neutral exact-number and locale parser primitives shared by Citry browser adapters. */
 const BIDI_CONTROLS = new Set(Array.from("\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"));
 const PARAGRAPH_BOUNDARIES = new Set(Array.from("\r\n\u001c\u001d\u001e\u0085\u2029"));
+const LRI = "\u2066";
+const RLI = "\u2067";
+const PDI = "\u2069";
 const DECIMAL_PATTERN = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
 const INTEGER_PATTERN = /^-?(?:0|[1-9][0-9]*)$/;
 type NumericParseState = "incomplete" | "invalid" | "valid";
@@ -95,7 +98,10 @@ export function createI18nServiceCore<Context, Formatter, Parser, Resolved>(
 }
 
 export interface CoreMessageRuntime {
-  readonly artifact: { readonly messages: Readonly<Record<string, { readonly bundle_locale: string }>> };
+  readonly artifact: {
+    readonly bundle_directions: Readonly<Record<string, "ltr" | "rtl">>;
+    readonly messages: Readonly<Record<string, { readonly bundle_locale: string }>>;
+  };
   format(token: string, values: Readonly<Record<string, unknown>>): string;
 }
 export interface CoreRequirement extends TreeRequirement {
@@ -149,6 +155,42 @@ export interface CoreProviderTreeOperations {
   ): Promise<Array<[CoreProviderNode, TreeContext]>>;
 }
 
+/**
+ * Wrap each bidi paragraph of fallback text in a directional isolate.
+ *
+ * This mirrors the server's `_isolate_bidi_paragraphs` character for
+ * character: one isolate pair must not cross a paragraph boundary, CRLF stays
+ * one separator, and empty paragraphs get no pair.
+ */
+export function isolateBidiParagraphs(value: string, direction: "ltr" | "rtl"): string {
+  const isolate = direction === "ltr" ? LRI : RLI;
+  const parts: string[] = [];
+  let paragraphStart = 0;
+  let index = 0;
+  // Every boundary is a single UTF-16 code unit, so indexing by code unit
+  // never splits a surrogate pair.
+  while (index < value.length) {
+    const character = value[index]!;
+    if (!PARAGRAPH_BOUNDARIES.has(character)) {
+      index += 1;
+      continue;
+    }
+    const paragraph = value.slice(paragraphStart, index);
+    if (paragraph.length !== 0) parts.push(isolate, paragraph, PDI);
+    if (character === "\r" && value[index + 1] === "\n") {
+      parts.push("\r\n");
+      index += 2;
+    } else {
+      parts.push(character);
+      index += 1;
+    }
+    paragraphStart = index;
+  }
+  const paragraph = value.slice(paragraphStart);
+  if (paragraph.length !== 0) parts.push(isolate, paragraph, PDI);
+  return parts.join("");
+}
+
 export function createPerAppI18nService<Formatter, Parser>(
   state: CoreRuntimeState,
   tree: CoreProviderTreeOperations,
@@ -171,7 +213,7 @@ export function createPerAppI18nService<Formatter, Parser>(
     message: string,
     values: Readonly<Record<string, unknown>>,
     attr: string | undefined,
-  ): { entry: { readonly bundle_locale: string }; text: string } {
+  ): { direction: "ltr" | "rtl"; entry: { readonly bundle_locale: string }; text: string } {
     if (typeof message !== "string" || message.length === 0) fail("I18N_MESSAGE_INVALID", "message must be a string.");
     if (attr !== undefined && (typeof attr !== "string" || attr.length === 0)) {
       fail("I18N_MESSAGE_INVALID", "attr must be a non-empty string when provided.");
@@ -180,7 +222,27 @@ export function createPerAppI18nService<Formatter, Parser>(
     for (const requirement of tree.providerRequirements(internal)) {
       const runtime = requirement.artifacts.get(internal.state.context.locale);
       const entry = runtime?.artifact.messages[token];
-      if (runtime !== undefined && entry !== undefined) return { entry, text: runtime.format(token, values) };
+      if (runtime !== undefined && entry !== undefined) {
+        const context = internal.state.context;
+        const text = runtime.format(token, values);
+        // Text in the requested locale takes the provider's direction, which
+        // may be an explicit override. Fallback text runs in its own bundle's
+        // direction, and the server isolates it whenever that differs from the
+        // provider, so the browser must produce the same characters for
+        // hydration and later re-renders to agree with the server's HTML.
+        const direction =
+          entry.bundle_locale === context.locale
+            ? context.direction
+            : runtime.artifact.bundle_directions[entry.bundle_locale];
+        if (direction === undefined) {
+          fail("I18N_ARTIFACT_INVALID", `browser bundle ${entry.bundle_locale} has no direction.`);
+        }
+        return {
+          direction,
+          entry,
+          text: direction === context.direction ? text : isolateBidiParagraphs(text, direction),
+        };
+      }
     }
     fail(
       "I18N_MESSAGE_MISSING",
@@ -191,9 +253,8 @@ export function createPerAppI18nService<Formatter, Parser>(
   function resolvedLoaded(message: string, values: Readonly<Record<string, unknown>>, output: string | undefined) {
     const resolved = formatLoaded(message, values, output);
     const locale = resolved.entry.bundle_locale;
-    const selected = state.configuration?.contexts.get(locale);
     return Object.freeze({
-      direction: selected?.direction ?? internal.state.context.direction,
+      direction: resolved.direction,
       locale,
       text: resolved.text,
       usedFallback: locale !== internal.state.context.locale,
