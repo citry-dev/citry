@@ -72,9 +72,9 @@ Citry also works with Django, Flask, Starlette, and other
   Python class behind a component tag.
 - [Slots](/concepts/slots/) shows how a component can accept whole pieces of
   HTML as content.
-- [Client interactivity](/concepts/client-interactivity/) shows how to give
-  a component data and methods in the browser, and how parent and child
-  components talk to each other there.
+- [Vue in Citry](/vue/) shows how to give a component data and methods in
+  the browser, and how parent and child components talk to each other
+  there.
 - [Server events](/events/) shows how a click or form submit calls Python,
   and covers values kept between calls, forms, loading and error feedback,
   and page updates.

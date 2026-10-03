@@ -211,7 +211,7 @@ passes them to the component as props or listeners, or adds them to its
 root element by Vue's usual rules for undeclared attributes.
 
 Read
-[Client interactivity](/concepts/client-interactivity/#pass-arbitrary-html-attributes-explicitly)
+[Pass HTML attributes](/vue/props-and-events/#pass-arbitrary-html-attributes-explicitly)
 for the component-boundary rules, and
 [Attributes](/syntax/attributes/) for static, dynamic, and spread
 values in templates.

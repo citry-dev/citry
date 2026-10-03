@@ -192,7 +192,7 @@ each kind of value has its own place:
 - `State` belongs to the component and reaches Vue as `$state`.
 - `$component({...})` in the component's `js` adds Vue `data()`, methods,
   computed values, and props. See
-  [Client interactivity](/concepts/client-interactivity/).
+  [Component options](/vue/component-options/).
 - A Vue expression written on a child component's tag belongs to the parent.
   Pass values down with Vue props and listen to the child's events with
   Vue listeners such as `@select`.

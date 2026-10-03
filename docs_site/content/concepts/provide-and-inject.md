@@ -278,6 +278,7 @@ from a provider above it, if there is one.
 ## Next steps
 
 - [Slots](/concepts/slots/) explains which variables a fill reads.
-- [Client interactivity](/concepts/client-interactivity/) covers browser
-  data, local Vue state, and props.
+- [Component options](/vue/component-options/) covers browser data and
+  local Vue state, and [Props and events](/vue/props-and-events/) covers
+  props.
 - [Browser APIs](/reference/browser-apis/) lists the exact client helpers.

@@ -40,7 +40,7 @@ one paragraph for every book.
 | Set an attribute or component input from Python | `c-title="heading"` | [Attributes](/syntax/attributes/) |
 | Show, hide, or repeat content | `c-if`, `c-for` | [Conditions and loops](/syntax/control-flow/) |
 | React to clicks and typing in the browser | `@click`, `:title`, `v-*` | [Vue in templates](/syntax/vue/) |
-| Pass browser data to a child component | `:status="current"` | [Client interactivity](/concepts/client-interactivity/) |
+| Pass browser data to a child component | `:status="current"` | [Props and events](/vue/props-and-events/) |
 | Call a Python event handler from the page | `@c-click="save"` | [Events](/events/) |
 | Keep a form field in step with server data | `:c-query="refresh"` | [Bind events in templates](/events/bindings/) |
 | Place a component or a built-in tag | `<c-Card>`, `<c-slot>` | [Components](/concepts/components/), [Built-in tags](/reference/builtins/) |

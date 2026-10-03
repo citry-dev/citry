@@ -177,7 +177,7 @@ any other user input. See [Security](/security/#treat-state-as-client-input).
 
 Each server render replaces the `js_data()` values, so do not use them for
 values that must survive a call. See
-[Client interactivity](/concepts/client-interactivity/) for how Python and
+[Where each value goes](/vue/#where-each-value-goes) for how Python and
 browser code share a component.
 
 !!! note "The browser gets State changes even without a re-render"

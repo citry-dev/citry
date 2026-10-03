@@ -48,7 +48,7 @@ instead.
 On a child component tag, `@c-select="save"` calls the parent's `save`
 handler when the child emits `select` through Vue. To let the child call
 something from its own template, pass a callback through a Vue prop instead.
-See [Client interactivity](/concepts/client-interactivity/#listen-to-child-events).
+See [Listen to child events](/vue/props-and-events/#listen-to-child-events).
 
 ## `$state`, `$loading`, `$error` { #read-call-state-from-vue }
 

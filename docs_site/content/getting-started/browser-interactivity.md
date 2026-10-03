@@ -72,8 +72,8 @@ $component({
 });
 ```
 
-The next step uses this to connect two components. The [Client
-interactivity](/concepts/client-interactivity/) guide documents everything
+The next step uses this to connect two components.
+[Component options](/vue/component-options/) documents everything
 `$component` accepts, and [Vue in templates](/syntax/vue/) covers the template
 syntax.
 

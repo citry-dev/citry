@@ -381,7 +381,7 @@ templates on the server, so the browser never evaluates directive strings,
 and you can write any JavaScript in Vue expressions. Under a CSP, Vue
 rebuilds the page in the browser instead of reusing the server HTML, so
 focus and text typed before Vue starts are lost; see
-[Replaced pages](/advanced/vue-runtime/#pages-vue-replaces-instead-of-adopting).
+[Replaced pages](/vue/server-rendering/#pages-vue-replaces-instead-of-adopting).
 
 Citry does not add the nonce to a `<script>` or `<style>` tag written
 directly in a template, so the browser blocks it. Move that code to

@@ -195,7 +195,7 @@ component.
 
 A key cannot have the same name as local Vue data, a `setup` binding, a
 prop, an injection, a method, a computed value, or one of the
-[names Citry reserves on the instance](/advanced/vue-runtime/#names-citry-reserves-on-the-component-instance).
+[names Citry reserves on the instance](/vue/component-options/#names-citry-reserves-on-the-component-instance).
 Python raises an error when the component renders with a key that starts
 with `$` or `_`, or with the key `citryId`.
 

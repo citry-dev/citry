@@ -56,7 +56,6 @@ areas:
           - { title: Rendering, path: /concepts/rendering/ }
           - { title: Registration, path: /concepts/registration/ }
           - { title: Provide and inject, path: /concepts/provide-and-inject/ }
-          - { title: Client interactivity, path: /concepts/client-interactivity/ }
           - { title: Error boundaries, path: /concepts/error-boundaries/ }
 
       - label: Vue
@@ -111,7 +110,6 @@ areas:
           - { title: Component JS and CSS, path: /advanced/js-and-css-dependencies/, needs_review: true }
           - { title: Dependency files, path: /advanced/dependency-files/, needs_review: true }
           - { title: Asset placement, path: /advanced/asset-placement/, needs_review: true }
-          - { title: Vue runtime, path: /advanced/vue-runtime/, needs_review: true }
           - { title: HTML fragments, path: /advanced/html-fragments/, needs_review: true }
           - { title: Extensions, path: /advanced/extensions/, needs_review: true }
           - { title: Component previews, path: /advanced/previews/, needs_review: true }

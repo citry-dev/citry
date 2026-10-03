@@ -53,4 +53,4 @@ without browser behavior, Citry copies the content unchanged.
   elements, so Citry marks them as belonging to that component.
 - `v-show` or a custom directive on a component tag fails when that
   component's template has its top-level HTML in `<c-raw>`. See
-  [`v-show` needs one root](/syntax/vue/#several-root-elements).
+  [`v-show` needs one root](/vue/limits/#several-root-elements).
