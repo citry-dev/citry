@@ -947,7 +947,7 @@ export function createI18nWireRuntime(
     const artifact = browserArtifact(value, locale, configuration);
     const messages = exactObject(artifact.messages, "browser artifact messages");
     const bundles = exactObject(artifact.bundles, "browser artifact bundles");
-    // Fallback isolation compares each bundle's direction with the page, so
+    // Fallback isolation compares each bundle's direction with the provider, so
     // every bundle needs exactly one known direction before any text formats.
     const directions = exactObject(artifact.bundle_directions, "browser artifact bundle directions");
     exactKeys(directions, Object.keys(bundles), "browser artifact bundle directions");

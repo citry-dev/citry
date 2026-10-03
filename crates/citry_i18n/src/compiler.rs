@@ -180,8 +180,10 @@ fn locale_direction(value: &str) -> Result<&'static str, Failure> {
         Some(Direction::LeftToRight) => Ok("ltr"),
         Some(Direction::RightToLeft) => Ok("rtl"),
         // A locale without a known left-to-right or right-to-left script
-        // cannot be compared with the page direction, and the server rejects
-        // it the same way when it renders that fallback.
+        // cannot be compared with the provider direction. The server rejects
+        // such a locale only when it renders that fallback; the artifact fails
+        // as soon as it contains the bundle, because the browser cannot derive
+        // the direction later.
         _ => Err(Failure::new(
             "I18N_LOCALE_DIRECTION",
             format!("could not derive a writing direction for bundle locale {value:?}"),
@@ -4074,7 +4076,7 @@ struct BrowserArtifact {
     messages: BTreeMap<String, BrowserMessageEntry>,
     bundles: BTreeMap<String, String>,
     /// Writing direction of each bundle's locale, keyed like `bundles`. The
-    /// browser compares it with the page direction to isolate fallback text
+    /// browser compares it with the provider direction to isolate fallback text
     /// exactly as the server does, including for a package source locale
     /// that is not one of the selectable locales.
     bundle_directions: BTreeMap<String, &'static str>,

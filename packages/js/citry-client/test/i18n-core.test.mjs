@@ -575,6 +575,7 @@ test("per-app service resolves messages, commits latest locale switch, and resto
 const LRI = String.fromCodePoint(0x2066);
 const RLI = String.fromCodePoint(0x2067);
 const PDI = String.fromCodePoint(0x2069);
+const PS = String.fromCodePoint(0x2029);
 const MARHABA = "مرحبا";
 const SHUKRAN = "شكرا";
 const SALAM = "سلام";
@@ -675,4 +676,36 @@ test("text in the requested locale follows an explicit provider direction withou
   const resolved = service.resolve("greeting");
   assert.equal(resolved.direction, "rtl");
   assert.equal(resolved.usedFallback, false);
+});
+
+test("fallback isolation splits at every paragraph boundary the server splits at", async () => {
+  const { isolateBidiParagraphs } = await coreModule();
+  // Each expected value was observed from the server's
+  // `_isolate_bidi_paragraphs` with direction="ltr".
+  const cases = [
+    [`a${PS}b`, `${LRI}a${PDI}${PS}${LRI}b${PDI}`],
+    ["a\u0085b", `${LRI}a${PDI}\u0085${LRI}b${PDI}`],
+    ["a\u001cb\u001dc\u001ed", `${LRI}a${PDI}\u001c${LRI}b${PDI}\u001d${LRI}c${PDI}\u001e${LRI}d${PDI}`],
+    ["a\rb", `${LRI}a${PDI}\r${LRI}b${PDI}`],
+    ["a\n", `${LRI}a${PDI}\n`],
+    ["", ""],
+    ["\n", "\n"],
+  ];
+  for (const [input, expected] of cases) {
+    assert.equal(isolateBidiParagraphs(input, "ltr"), expected, JSON.stringify(input));
+  }
+});
+
+test("fallback text is isolated against an explicit provider direction", async () => {
+  // An English provider forced right-to-left that falls back to another
+  // left-to-right locale still differs from its provider, as on the server.
+  const service = await fallbackService({
+    pageLocale: "en-GB",
+    pageDirection: "rtl",
+    bundleLocale: "en-US",
+    bundleDirection: "ltr",
+    text: "Hello",
+  });
+  assert.equal(service.tr("greeting"), `${LRI}Hello${PDI}`);
+  assert.equal(service.resolve("greeting").direction, "ltr");
 });
