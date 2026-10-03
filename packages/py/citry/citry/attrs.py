@@ -24,8 +24,9 @@ choices, and parity keeps its test suite portable):
 - In a ``style`` merge, a ``None`` value means "skip, let an earlier value
   stand", while a literal ``False`` removes the property entirely.
 
-All escaping goes through ``citry.util.html`` (markupsafe): values render
-escaped unless they carry ``__html__``.
+All escaping goes through ``citry.util.html`` (markupsafe). Every value is
+escaped as attribute text, ``Markup`` included: ``Markup`` vouches for HTML,
+not for attribute text.
 
 HTML attribute identity is ASCII-case-insensitive. Merging therefore treats
 ``ID`` and ``id`` as one key while preserving the spelling and position of
@@ -43,7 +44,7 @@ from typing import Any, TypeAlias
 import wrapt
 
 from citry.util import html as _html
-from citry.util.html import Markup, escape_to_str
+from citry.util.html import Markup, escape_attribute_value, escape_to_str
 
 ClassValue: TypeAlias = "str | Mapping[str, bool] | Sequence[ClassValue]"
 """A ``class`` attribute value: string, ``{class_name: bool}`` dict, or a list of those."""
@@ -406,8 +407,10 @@ def format_attrs(attrs: Mapping[str, Any]) -> Markup:
     - ``class`` and ``style`` values may use the structured forms; they are
       normalized here, so ``merge_attrs`` output and hand-built dicts render
       the same. An empty class or style is omitted.
-    - Everything else renders ``key="value"``, escaped; values with
-      ``__html__`` pass through unescaped.
+    - Everything else renders ``key="value"``, escaped. A value with
+      ``__html__`` (such as ``Markup``) is escaped too, after decoding its
+      HTML to the text a browser would read, so a ``"`` in it cannot end
+      the attribute.
 
     Example::
 
@@ -456,7 +459,9 @@ def _format_resolved_attrs_to_str(coalesced: Mapping[str, Any]) -> str:
         else:
             # Escape pieces to plain strings for insertion into trusted render
             # parts. The public formatting helper wraps the complete result.
-            parts.append(f'{escape_to_str(key)}="{escape_to_str(value)}"')
+            # The value is attribute text even when it is Markup, so a quote
+            # in it cannot end the attribute and add markup.
+            parts.append(f'{escape_to_str(key)}="{escape_attribute_value(value)}"')
 
     return " ".join(parts)
 

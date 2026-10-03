@@ -129,7 +129,8 @@ Also relevant in `packages/py/citry/citry/`:
 
 - `util/html.py`: `escape` (markupsafe, escapes all five of `& < > ' "` so
   one escaping is safe in body and attribute position) and `Markup`
-  with `__html__` passthrough. The new code uses these, nothing new needed.
+  with `__html__` passthrough for body text. Attribute values use
+  `escape_attribute_value` instead, which escapes `Markup` too (section 3.1).
 - The static-attr path already normalizes `key=""` to the bare boolean form
   at compile time (`compiler.rs:456-460`), and `StaticHtmlAttr.resolve`
   returns `True` for value-less attributes (`nodes/__init__.py:405`). The
@@ -241,7 +242,7 @@ resolves to a Python object. What it means depends on the attribute:
 |---|---|
 | `True` | bare attribute: `disabled` |
 | `False` or `None` | attribute omitted entirely |
-| string / number / other | `key="value"`, value escaped via `escape()` (`Markup` / `__html__` objects pass through unescaped) |
+| string / number / other | `key="value"`, value escaped via `escape_attribute_value()`. A `Markup` / `__html__` object is escaped too: its HTML is first decoded with the browser's attribute rules (`decode_attribute_entities`), so `Markup("a &amp; b")` reads as `a & b` and a `"` in it cannot end the attribute. The Vue data path sends the same decoded text, so static and interactive pages agree |
 
 A value-less or empty dynamic attribute (`<div c-foo>`, `<div c-foo="">`) is
 a **parse error**: there is nothing to evaluate, and it is almost certainly
@@ -620,8 +621,7 @@ Phases 1 and 2 unblock the benchmark small-scenario port
   decision 5 keeps it out of scope here.
 - **Nested-template attribute values** (`c-foo="<span>...</span>"`):
   `TemplateHtmlAttr` resolves to rendered HTML; under the new node it is
-  escaped into the attribute value like any other string (`Markup` rules
-  apply). Behavior today is the same, just via flattened codegen.
+  escaped into the attribute value like any other string. Behavior today is the same, just via flattened codegen.
 
 ---
 

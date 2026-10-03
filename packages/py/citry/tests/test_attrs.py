@@ -13,6 +13,7 @@ import pytest
 
 from citry import Const, Markup, format_attrs, merge_attrs, normalize_class, normalize_style, parse_string_style
 from citry.attrs import validate_html_attr_name
+from citry.nodes import ElementKeyNode
 
 
 class TestFormatAttrs:
@@ -72,8 +73,21 @@ class TestFormatAttrs:
     def test_escapes_special_characters(self):
         assert format_attrs({"x-on:click": "bar", "@click": "'baz'"}) == 'x-on:click="bar" @click="&#39;baz&#39;"'
 
-    def test_does_not_escape_markup(self):
-        assert format_attrs({"foo": Markup("'bar'")}) == "foo=\"'bar'\""
+    def test_escapes_markup_as_attribute_text(self):
+        # Markup vouches for HTML, not attribute text: a quote in it must not
+        # end the attribute.
+        assert format_attrs({"foo": Markup("'bar'")}) == 'foo="&#39;bar&#39;"'
+        assert format_attrs({"foo": Markup('a" onclick="x')}) == 'foo="a&#34; onclick=&#34;x"'
+        assert format_attrs({"foo": Markup("<i>")}) == 'foo="&lt;i&gt;"'
+
+    def test_markup_entities_keep_the_text_they_stand_for(self):
+        # Markup's HTML is decoded to what a browser reads, then escaped, so
+        # an entity is not escaped a second time.
+        assert format_attrs({"foo": Markup("Tom &amp; Jerry")}) == 'foo="Tom &amp; Jerry"'
+        assert format_attrs({"foo": Markup("&quot;q&#39;")}) == 'foo="&#34;q&#39;"'
+        # A browser keeps a legacy entity before "=" as typed in an attribute.
+        assert format_attrs({"href": Markup("/x?a=1&copy=2")}) == 'href="/x?a=1&amp;copy=2"'
+        assert format_attrs({"foo": Markup("&copy 2026")}) == 'foo="\u00a9 2026"'
 
     def test_result_is_markup(self):
         result = format_attrs({"foo": "bar"})
@@ -361,3 +375,18 @@ class TestConstMarkedValues:
         # must keep it a list so each class name is split out, not str()-ed
         # into the list's repr.
         assert normalize_class(Const(["a", "b"])) == "a b"
+
+
+class TestElementKeyText:
+    def test_markup_key_is_escaped_as_text(self):
+        # The key is identity text, so Markup in it cannot add markup to the
+        # tag, the same as on the prepared path.
+        class Attr:
+            source = "s"
+            position = (0, 1)
+            used_vars = ()
+
+            def resolve(self, _context):
+                return Markup('a"b<i>')
+
+        assert ElementKeyNode(Attr()).render(None) == ' data-citry-key=":a&#34;b&lt;i&gt;"'

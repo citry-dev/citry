@@ -200,6 +200,10 @@ class MetaTag:
         ).format(self.name, self.content)
 ```
 
+`Markup` works only in page content. In an attribute value, such as
+`c-title="value"`, Citry escapes `Markup` like any other value; see
+[Attributes](/syntax/attributes/).
+
 `citry.Markup` is
 [`markupsafe.Markup`](https://markupsafe.palletsprojects.com/en/stable/escaping/#markupsafe.Markup){: target="_blank" rel="noopener"}
 itself, so its documentation applies.

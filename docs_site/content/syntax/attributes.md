@@ -44,8 +44,11 @@ Write the expression without `{{ }}`: `c-title="user.name"`, not
 `c-title=""` are errors. Only the `c-else` and `c-empty` markers from
 [Conditions and loops](/syntax/control-flow/) take no value.
 
-Citry HTML-escapes attribute names and values. To insert a value without
-escaping, see [`Markup` skips escape](/syntax/expressions/#insert-html-you-trust).
+Citry HTML-escapes attribute names and values, including a value wrapped
+in [`Markup`][citry.Markup]. `Markup` marks HTML for the page, not
+attribute text, so a `"` in it cannot end the attribute. An entity in it
+still reads as its character: `Markup("Tom &amp; Jerry")` sets
+`Tom & Jerry`.
 
 ## `c-*` boolean attrs { #html-elements }
 

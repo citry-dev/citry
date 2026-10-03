@@ -961,7 +961,7 @@ class ElementAttrsNode(Node):
       structured value forms (string / dict / nested list); every other key
       resolves last-one-wins.
     - ``True`` renders the bare attribute, ``False`` and ``None`` omit it,
-      everything else renders escaped (``__html__`` values pass through).
+      everything else renders escaped, ``Markup`` included.
 
     Renders to one string like ``' class="btn" disabled'`` (leading space
     included) or ``""`` when every attribute resolved away.
@@ -1341,7 +1341,9 @@ class ElementKeyNode(Node):
         value = const_value(self.attr.resolve(context))
         if value is None:
             return ""
-        return f' data-citry-key=":{escape(value)}"'
+        # The key is identity text, never markup: str() first, so a Markup
+        # key is escaped too, as the prepared path writes it.
+        return f' data-citry-key=":{escape(str(value))}"'
 
     def __repr__(self) -> str:
         return f"ElementKeyNode(expr={self.attr.expr!r}, used_vars={self.used_vars})"

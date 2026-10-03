@@ -105,6 +105,11 @@ walks through every step.
   `on_component_rendered()` and `on_slot_rendered()` follow the same
   rule. Wrap HTML in `Markup` or return a component
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#wrap-html-returned-from-on-render)).
+- **`Markup` in an attribute is escaped:** a `Markup` value in an HTML
+  attribute is now escaped like any other value, so a `"` in it can no
+  longer end the attribute and add another one. An entity such as
+  `&amp;` still reads as its character
+  ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#markup-in-attributes)).
 
 ### Other additions
 

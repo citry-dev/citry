@@ -16,6 +16,9 @@ same ``Markup`` class directly.
 - ``escape`` escapes ``& < > ' "``. Escaping all five means the same output is
   safe in both HTML body text and double- or single-quoted attribute values,
   which matters because a template expression can land in either position.
+- ``escape_attribute_value(value)`` escapes a value for an HTML attribute.
+  It does not trust ``__html__``: ``Markup`` is trusted HTML, not trusted
+  attribute text, so its text is escaped like any other value.
 - ``Markup`` is exactly ``markupsafe.Markup``, imported unchanged.
   ``Markup(value)`` marks the complete value as trusted HTML; it does not
   sanitize, validate, or escape anything. See
@@ -25,6 +28,9 @@ same ``Markup`` class directly.
 from __future__ import annotations
 
 import json
+import re
+from html import unescape
+from html.entities import html5
 from types import BuiltinFunctionType
 from typing import TYPE_CHECKING, Any
 
@@ -73,6 +79,62 @@ def escape_to_str(value: Any) -> str:
     return _escape_to_str_impl(text)
 
 
+# One character reference, the same pattern Python's html.unescape uses.
+_CHARREF = re.compile(r"&(#[0-9]+;?|#[xX][0-9a-fA-F]+;?|[^\t\n\f <&#;]{1,32};?)")
+
+
+def _decode_attribute_charref(match: re.Match[str]) -> str:
+    """Decode one character reference the way a browser does inside an attribute value."""
+    name = match.group(1)
+    # Numeric references, and names that match exactly, decode as in text.
+    if name[0] == "#" or name in html5:
+        return unescape(match.group(0))
+    # A legacy name without ";" (such as "&copy") decodes from its longest
+    # known prefix. Inside an attribute value a browser leaves it as typed
+    # when "=" or a letter or digit follows, so "?a=1&copy=2" stays a URL.
+    for end in range(len(name) - 1, 1, -1):
+        prefix = name[:end]
+        if prefix in html5:
+            following = name[end]
+            if following == "=" or (following.isascii() and following.isalnum()):
+                return match.group(0)
+            return html5[prefix] + name[end:]
+    return match.group(0)
+
+
+def decode_attribute_entities(html: str) -> str:
+    """
+    Return the attribute value a browser reads from ``html`` written inside quotes.
+
+    This follows the HTML parser's rules for character references in an
+    attribute value, which differ from text in one way: a legacy reference
+    without ``;`` stays as typed when ``=`` or a letter or digit follows it.
+    """
+    if "&" not in html:
+        return html
+    return _CHARREF.sub(_decode_attribute_charref, html)
+
+
+def escape_attribute_value(value: Any) -> str:
+    """
+    Escape ``value`` as the text of a double-quoted HTML attribute value, to a plain ``str``.
+
+    Unlike :func:`escape_to_str`, an object with ``__html__`` (such as
+    ``Markup``) is escaped too. ``Markup`` vouches for HTML, not for
+    attribute text, and inserting it raw would let a ``"`` in it end the
+    attribute. Its HTML is first decoded to the value a browser would read
+    from it, then escaped, so ``Markup("Tom &amp; Jerry")`` still reads as
+    ``Tom & Jerry``. Interactive pages send Vue the same decoded value, so
+    both kinds of page show the same attribute.
+    """
+    # An exact str is the common case and has no __html__ to look up.
+    if type(value) is not str:
+        html = getattr(value, "__html__", None)
+        if html is not None:
+            return escape_to_str(decode_attribute_entities(str(html())))
+    return escape_to_str(value)
+
+
 # Formatting caches must recognize the defining implementation, including
 # replacements installed before the first render. Custom/Python backends keep
 # executing on each call; only the known C escaper supplies cached output.
@@ -103,4 +165,11 @@ def script_json(value: object, *, sort_keys: bool = False, ensure_ascii: bool = 
     return text.replace("<", "\\u003c")
 
 
-__all__ = ["Markup", "escape", "escape_to_str", "script_json"]
+__all__ = [
+    "Markup",
+    "decode_attribute_entities",
+    "escape",
+    "escape_attribute_value",
+    "escape_to_str",
+    "script_json",
+]

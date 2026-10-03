@@ -548,6 +548,18 @@ cannot sit on an element that has any `c-*` attribute, and `:key` cannot
 sit next to `#c-key`. See
 [`c-*` with `:` bindings](/syntax/vue/#combine-class-and-style-with-c-class-and-c-style).
 
+### `Markup` attribute values { #markup-in-attributes }
+
+**What you see:** an attribute value that held a `"` now keeps it as
+text, where 0.5.1 ended the attribute there.
+
+Citry now escapes every attribute value, `Markup` included, so a quote
+in a value can no longer end the attribute and add another one.
+`Markup` marks HTML for the page, not attribute text. An entity in it
+still reads as its character, so `Markup("Tom &amp; Jerry")` still sets
+`Tom & Jerry`. To set several attributes from Python, pass a mapping
+to `c-bind`.
+
 ### Inline group content
 
 **What you see:** the render stops with an error that names the component
@@ -964,7 +976,8 @@ argument.
 16. Move `c-:attr`, `c-@event`, and Vue keys in `c-bind` into the
     template, set an attribute such as `title` with `c-title` or `:title`
     but not both, and write Vue-bound group content inside the group's
-    tag.
+    tag. Set several attributes with a `c-bind` mapping, not with quotes
+    inside a `Markup` value.
 17. Keep `#c-ignore` only on HTML elements whose contents a library
     manages, and move it off component tags, table row elements, and
     `<c-element>`.

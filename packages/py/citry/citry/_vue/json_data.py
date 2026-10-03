@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from html import unescape
 from typing import cast
 
 from citry.constness import const_value, is_const
+from citry.util.html import decode_attribute_entities
 
 
 def _json_plain(value: object, _ancestors: set[int] | None = None) -> object:
@@ -66,8 +66,9 @@ def _vue_attribute_value(value: object) -> object:
     """
     Return the value Vue should set for one Python-resolved HTML attribute.
 
-    Python's HTML output writes every attribute value as ``str(value)`` (or a
-    value's own ``__html__`` markup), while Vue's object binding turns a
+    Python's HTML output writes every attribute value as ``str(value)`` (or,
+    for a value with ``__html__``, the text a browser decodes from that
+    markup), escaped, while Vue's object binding turns a
     JavaScript value into text its own way: a dict becomes
     ``"[object Object]"``, a list ``"1,2"``, and ``1.0`` becomes ``"1"``. So
     any value whose JavaScript text could differ is sent as the exact text
@@ -97,11 +98,11 @@ def _vue_attribute_value(value: object) -> object:
             return value
     html = getattr(value, "__html__", None)
     if html is not None:
-        # Python's HTML writes this markup unescaped inside the quotes, so the
-        # browser's attribute value is its entity-decoded text. Decoding can
+        # Python's HTML writes this markup's decoded text, escaped, so the
+        # browser's attribute value is that decoded text. Decoding can
         # produce text such as a javascript: URL; Vue then sets the same value
         # the server HTML already gave the browser.
-        return unescape(html())
+        return decode_attribute_entities(str(html()))
     return str(value)
 
 

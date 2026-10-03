@@ -146,7 +146,7 @@ def test_protocols_proxies_and_mutable_class_values_remain_live(output_cache):
     assert render(node, {"class": flags}) == ' class="active"'
     flags["active"] = False
     assert render(node, {"class": flags}) == ""
-    assert render(node, {"title": Markup("<b>")}) == ' title="<b>"'
+    assert render(node, {"title": Markup("<b>")}) == ' title="&lt;b&gt;"'
     assert render(node, {"title": Const("x")}) == ' title="x"'
     assert output_cache == {}
 

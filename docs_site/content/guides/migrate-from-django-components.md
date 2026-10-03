@@ -296,7 +296,9 @@ Details:
   mapping first and the caller's mapping after it. `class` and `style`
   merge instead of overwriting. A leftover `attrs:foo=` is not rejected:
   it arrives as an input literally named `attrs:foo`, so search attribute
-  names for `:`.
+  names for `:`. A `Markup` or `mark_safe()` value is escaped like any
+  other attribute value, so set each attribute as its own key rather than
+  writing several into one value with quotes.
 - **DJC-002:** When a `c-bind` mapping and an explicit attribute set the
   same key, the later one wins (`foo="baz"`). `class` and `style` still
   merge.

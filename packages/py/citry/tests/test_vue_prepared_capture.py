@@ -2332,6 +2332,10 @@ _NON_SCALAR_ATTRIBUTE_VALUES = {
     "data-f": 1.0,
     "title": 2**60,
     "data-m": Markup("a&amp;b"),
+    # Markup is HTML, not attribute text: a quote or tag in it stays text.
+    "data-q": Markup('a"b <i>x</i>'),
+    # A browser keeps "&copy" as typed before "=" inside an attribute.
+    "data-u": Markup("/x?a=1&copy=2"),
 }
 
 
