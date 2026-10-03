@@ -58,6 +58,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from html import unescape
+from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
 
 from citry.citry_element import _DEFAULT_CITRY_ELEMENT, CitryElement
@@ -713,6 +714,10 @@ def _render_value(
       here: the call already produced a render part, handled by the rules
       below.) The slot's fallback handle is a Slot too, so ``{{ fallback }}``
       renders through this same branch.
+    - An object with ``__html__`` (such as ``Markup``) is trusted HTML and
+      passes through unescaped. This is checked before ``ComponentLike``, as
+      a template ``{{ ... }}`` checks it, so an object with both renders its
+      HTML.
     - A ``ComponentLike`` is asked for a ``CitryElement`` using the Citry
       instance rendering this tree. The result must belong to that exact
       instance. This lets packages expose import-time composition values while
@@ -722,8 +727,7 @@ def _render_value(
       surrounding tree.
     - A ``CitryRender`` (an already-rendered subtree) is inlined as-is; it is
       trusted HTML, and the surrounding ``_render_body`` merges its dependencies.
-    - Anything else is autoescaped. ``escape`` respects the ``__html__``
-      protocol, so ``Markup`` (trusted HTML) passes through unescaped.
+    - Anything else is autoescaped.
 
     ``provides`` are the provide/inject entries active where the value was
     found; an element rendered here inherits them, so a component embedded
@@ -759,6 +763,11 @@ def _render_value(
         and "__class__" not in kind.__dict__
     ):
         return value
+    # Trusted HTML wins over the component protocol, in the order the
+    # template's {{ ... }} uses, so an object with both __html__ and
+    # __citry_element__ renders the same in a slot as in the template.
+    if getattr_static(value, "__html__", None) is not None:
+        return escape(value)
     if isinstance(value, ComponentLike):
         value = _resolve_component_like(value, citry)
     if isinstance(value, CitryElement):

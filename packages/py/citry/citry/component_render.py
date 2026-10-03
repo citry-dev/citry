@@ -2422,11 +2422,14 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
     # here, so the marker has no further role, and the proxy must not leak
     # into the parts.
     value = const_value(value)
-    if isinstance(value, ComponentLike):
-        value = _resolve_component_like(value, component.citry)
+    # Text and HTML are checked before the component protocol, in the order
+    # a {{ ... }} expression uses, so an object that has both __html__ and
+    # __citry_element__ renders the same here as in the template.
     part = _text_or_html_part(value, _ON_RENDER_TEXT_SOURCE)
     if part is not None:
         return [part]
+    if isinstance(value, ComponentLike):
+        value = _resolve_component_like(value, component.citry)
     if isinstance(value, Slot):
         # Invoked with no data, like {{ my_slot }}. Slot content renders with
         # the scope of the component that wrote it, so its collected data is

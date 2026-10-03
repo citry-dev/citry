@@ -289,3 +289,59 @@ def test_html_attribute_values_do_not_invoke_component_like():
 
     assert "title=" in html
     assert value.seen == []
+
+
+@dataclass(slots=True)
+class _HtmlAndComponentLike(_ComponentLikeValue):
+    """A value that offers both trusted HTML and a component."""
+
+    def __html__(self) -> str:
+        return "<b>html</b>"
+
+
+@pytest.mark.parametrize("site", ["expression", "on_render", "slot_value", "slot_function"])
+def test_html_protocol_wins_over_component_like_at_every_content_site(site):
+    # A {{ ... }} expression checks __html__ before __citry_element__, so
+    # every other place that puts a Python value on the page does the same.
+    app = Citry(autodiscover=False)
+    value = _HtmlAndComponentLike(_text_value(app).factory)
+
+    class Holder(Component):
+        citry = app
+        template = """
+          <div><c-slot /></div>
+        """
+
+    class Hooked(Component):
+        citry = app
+        template = """
+          <p>template</p>
+        """
+
+        def on_render(self):
+            return value
+
+    class Page(Component):
+        citry = app
+        template = """
+          <main>{{ value }}</main>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"value": value}
+
+    root: Component
+    if site == "expression":
+        root = Page()
+    elif site == "on_render":
+        root = Hooked()
+    elif site == "slot_value":
+        root = Holder(slots={"default": value})
+    else:
+        root = Holder(slots={"default": lambda _ctx: value})
+
+    html = str(root)
+
+    assert ">html</b>" in html
+    assert "resolved" not in html
+    assert value.seen == []
