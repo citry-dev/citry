@@ -517,7 +517,11 @@ def assemble_typed_render(
         part: DirectProjectionRender, author_owner: str, physical_owner: str, first_read: str
     ) -> str:
         fill_source = part.fill_source
+        # A transparent writer has no Vue data of its own: its template reads
+        # the data of the component it is copied into. Name the writer for
+        # the line, and that component for the data.
         author = class_name_of(fill_source.lexical_render_id, author_owner)
+        data_owner = class_name_of(None, author_owner)
         location = ""
         if isinstance(fill_source.source, str):
             # Spans are byte offsets into the author's template source.
@@ -542,8 +546,9 @@ def assemble_typed_render(
                 f"contains the <c-{tag_name_of(mover_owner, mover)}> tag"
             )
         return (
-            f"{author} writes content{location} that uses {author}'s Vue data or event handlers ({first_read}). "
-            f"{mover} shows that content in its own template, where {author}'s Vue data and handlers are not "
+            f"{author} writes content{location} that uses {data_owner}'s Vue data or event handlers "
+            f"({first_read}). {mover} shows that content in its own template, where {data_owner}'s Vue data and "
+            f"handlers are not "
             f"available. {fix}, and define the Vue data there. Content that shows only Python values, such as "
             f"{{{{ title }}}}, works from any component."
         )
@@ -569,10 +574,20 @@ def assemble_typed_render(
             or part.runtime_poll_bindings
             or part.runtime_events_candidate
         ):
-            # Name the event the reader wrote (`@c-click`) when the record
-            # keeps it, so they can find the binding in their template.
+            # Name the binding by the start of what the reader wrote
+            # (`@c-click`, `:c-query`, `@c-poll`), which finds it in their
+            # template whatever modifiers follow. A binding added at render
+            # time keeps no such name, so it gets a general description.
             event = next((binding.get("event") for binding in part.event_bindings), None)
-            written = f"@c-{event}" if isinstance(event, str) else "a Citry Events binding"
+            field = next((binding.get("field") for binding in part.control_bindings), None)
+            if isinstance(event, str):
+                written = f"@c-{event}"
+            elif isinstance(field, str):
+                written = f":c-{field}"
+            elif part.poll_bindings:
+                written = "@c-poll"
+            else:
+                written = "a Citry Events binding"
             note_browser_read(owner_id, f"{written} on <{tag}>")
 
     def merge_projected_data(
@@ -2919,12 +2934,18 @@ def _vue_binding_reads_instance(name: str, value: str | None, allowed_names: Seq
 
 def _attribute_source_text(name: str, text: str) -> str:
     """Return an authored attribute as written, falling back to its name for text the parser did not keep."""
-    return text if text.startswith(name) else name
+    # The error is one line, so a value written across lines is joined.
+    return " ".join(text.split()) if text.startswith(name) else name
 
 
 def _binding_text(name: str, value: str) -> str:
     """Return a component-tag binding as it reads in a template, such as ``:title="label"``."""
-    return f'{name}="{value}"' if value else name
+    if not value:
+        return name
+    # Quote with the character the value does not use, as the author must
+    # have, and join a value written across lines into the one-line error.
+    quote = "'" if '"' in value and "'" not in value else '"'
+    return f"{name}={quote}{' '.join(value.split())}{quote}"
 
 
 def _source_attribute_reads_instance(name: str, text: str, allowed_names: Sequence[str]) -> bool:

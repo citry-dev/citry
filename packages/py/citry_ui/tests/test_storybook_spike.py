@@ -370,6 +370,41 @@ def test_tabs_rejects_vue_bound_declarations_owned_by_a_sibling_component(spike_
     assert "CInternal" not in message
 
 
+def test_tabs_error_names_the_data_owner_of_a_transparent_writer(spike_modules):
+    engine = spike_modules["app"].engine
+
+    class TransparentTabWriter(Component):
+        citry = engine
+        transparent = True
+        template = """
+          <c-CTab value="account"><span v-text="label"></span></c-CTab>
+        """
+
+    class DataOwningDeclarations(Component):
+        citry = engine
+        template = """
+          <c-TransparentTabWriter />
+          <c-CTabPanel value="account">Account preferences</c-CTabPanel>
+        """
+
+        def js_data(self, kwargs, slots):
+            return {"label": "Account"}
+
+    tabs = engine.get("ctabs")(
+        default_value="account",
+        aria_label="Account settings",
+        slots={"default": DataOwningDeclarations()},
+    )
+    # The transparent component wrote the line, but its template reads the
+    # data of the component it is copied into, so that one owns `label`.
+    with pytest.raises(TypeError) as error:
+        str(tabs)
+    message = str(error.value)
+    assert "TransparentTabWriter writes content at line 2 of its template" in message
+    assert "uses DataOwningDeclarations's Vue data" in message
+    assert "where DataOwningDeclarations's Vue data and handlers are not available" in message
+
+
 def test_runner_exposes_catalog_standalone_pages_and_visible_errors(spike_modules):
     app_module = spike_modules["app"]
     extension = app_module.engine.extensions.get_extension("storybook_scenarios")
