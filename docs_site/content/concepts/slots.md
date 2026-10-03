@@ -225,7 +225,7 @@ the slot unfilled. The [`Slot`][citry.Slot] reference covers other kinds of
 fill, such as a function that renders the content or HTML you have already
 marked safe.
 
-## Fallback { #wrap-the-fallback-instead-of-replacing-it }
+## Wrap the fallback { #wrap-the-fallback-instead-of-replacing-it }
 
 A fill normally replaces the fallback. To keep the fallback and add markup
 around it, give the fallback a variable name with `fallback="..."`, then
