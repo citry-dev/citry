@@ -450,6 +450,7 @@ No 0.5.1 default changed.
 | `component_js_globals={}` | `:133` | `:140` | unchanged | |
 | `rule_unknown_component_js_member="error"` | none | `:141` | new | |
 | `rule_vue_python_variable="warning"` | none | `:142` | new | |
+| `rule_i18n_cross_language_fallback="warning"` | none | `P/settings.py` | new | 0.5.1 always reported `citry.i18n.cross-language-fallback` as an error; plain-text fallback is now a configurable warning, and `<c-trans>` fallback uses `citry.i18n.rich-message-fallback`. In CHANGELOG. |
 | `Component.Lint` with the old names | `P/component.py` | `P/_linting.py` | changed-incompatible | Raises a `ValueError` that now names the replacement (checked by rendering). |
 | `TemplateLintInfo` fields and JSON keys | `P/_linting.py:166-244` | `P/_linting.py:166-178` | changed-incompatible | Renamed; a 0.5.1 dict no longer passes `from_dict()`. |
 | `citry.analysis` exports | `P/analysis.py` | same file | changed-incompatible | See 3.2. |
@@ -518,6 +519,9 @@ No 0.5.1 default changed.
 | `citry.vue.unknown-variable` | none | `:21` | new | |
 | `citry.vue.python-variable` | none | `:22` | new | |
 | `citry.component-js.unknown-member` | none | `:25` | new | |
+| `citry.i18n.cross-language-fallback` | error | warning, `configurableSeverity` | changed-compatible | Set by `LintSettings.rule_i18n_cross_language_fallback`; now also covers `client_messages` fallback. No longer reported for `<c-trans>`. In CHANGELOG. |
+| `citry.i18n.client-message-invalid` | unknown ID or fallback | unknown ID only | changed-compatible | Fallback moved to `citry.i18n.cross-language-fallback`. |
+| `citry.i18n.rich-message-fallback` | none | error | new | `<c-trans>` fallback, which raises at render time. |
 | All other codes | | | unchanged | Same severity and surfaces. |
 
 ### 3.4 Template syntax

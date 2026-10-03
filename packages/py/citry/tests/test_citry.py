@@ -156,6 +156,7 @@ class TestCitryInstance:
             rule_alpine_attribute="ignore",
             rule_alpine_cloak="warning",
             rule_invalid_attribute_value="error",
+            rule_i18n_cross_language_fallback="error",
         )
         app = Citry(lint=lint)
         variables["later"] = str
@@ -178,6 +179,8 @@ class TestCitryInstance:
         assert (LintSettings().rule_alpine_attribute, LintSettings().rule_alpine_cloak) == ("warning", "error")
         assert lint.rule_invalid_attribute_value == "error"
         assert LintSettings().rule_invalid_attribute_value == "warning"
+        assert lint.rule_i18n_cross_language_fallback == "error"
+        assert LintSettings().rule_i18n_cross_language_fallback == "warning"
         assert lint.component_js_globals == {
             "analytics": Annotated[object, "Application analytics client."],
         }
@@ -202,6 +205,8 @@ class TestCitryInstance:
             LintSettings(rule_alpine_cloak=severity)
         with pytest.raises(ValueError, match="rule_invalid_attribute_value"):
             LintSettings(rule_invalid_attribute_value=severity)
+        with pytest.raises(ValueError, match="rule_i18n_cross_language_fallback"):
+            LintSettings(rule_i18n_cross_language_fallback=severity)
 
     @pytest.mark.parametrize("name", ["", "two words", "class", "K"])  # noqa: RUF001
     def test_lint_settings_reject_names_without_exact_python_identity(self, name):

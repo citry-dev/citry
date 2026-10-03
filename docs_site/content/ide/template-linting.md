@@ -194,8 +194,11 @@ app = Citry(
 )
 ```
 
-`LintSettings` also has `rule_i18n_missing_param_type`, described in
-[Translation workflow](/i18n/workflow/#make-a-missing-type-an-error-or-ignore-it).
+`LintSettings` also has two translation rules:
+`rule_i18n_missing_param_type`
+([Change type warnings](/i18n/workflow/#make-a-missing-type-an-error-or-ignore-it))
+and `rule_i18n_cross_language_fallback`
+([Change fallback warnings](/i18n/workflow/#change-fallback-warnings)).
 
 ## Override one component
 

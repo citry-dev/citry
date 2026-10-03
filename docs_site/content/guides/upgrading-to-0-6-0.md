@@ -697,6 +697,21 @@ by code stops matching.
 | `citry.alpine.unknown-variable` | `citry.vue.unknown-variable` |
 | `citry.component-js.unknown-data-member` | `citry.component-js.unknown-member` |
 | `citry.browser.unknown-component-prop` | Removed |
+| `citry.i18n.cross-language-fallback` on a `<c-trans>` tag | `citry.i18n.rich-message-fallback` |
+| `citry.i18n.client-message-invalid` for a missing translation | `citry.i18n.cross-language-fallback` |
+
+### Untranslated text warns
+
+**What you see:** `citry check` passes for a `tr()` call whose message is
+not translated into every locale, and prints a
+`citry.i18n.cross-language-fallback` warning where 0.5.1 reported an
+error.
+
+A locale may now stay partly translated; the untranslated text falls back
+to another language. To keep failing the check on such text, set
+`LintSettings(rule_i18n_cross_language_fallback="error")`. A `<c-trans>`
+message still needs every translation. See
+[Change fallback warnings](/i18n/workflow/#change-fallback-warnings).
 
 ### Strict CSP mode
 

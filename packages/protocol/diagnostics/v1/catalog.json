@@ -876,11 +876,12 @@
     {
       "code": "citry.i18n.cross-language-fallback",
       "constant": "I18N_CROSS_LANGUAGE_FALLBACK",
-      "title": "Cross-language i18n fallback",
-      "summary": "A plain translated string can fall back to a message in another language, and plain text has no way to mark that language.",
-      "when": "A text-only translation can select a source or fallback locale whose language differs from the requested locale.",
-      "fix": "Add a translation for every locale that can be selected. The i18n guide's Language direction and accessibility page shows how to mark fallback text with its language.",
-      "defaultSeverity": "error",
+      "title": "Text from a fallback language",
+      "summary": "A translation is missing for some locales, so this text appears in another language there. The page still renders, but the text sits inside an element marked with the requested language, so a screen reader may read it with the wrong pronunciation.",
+      "when": "A tr() call or self.i18n.tr() call with a literal message ID, or a message listed in Component.I18n.client_messages, has no translation in some selectable locale and resolves to another locale through the configured fallbacks or the message's source locale.",
+      "fix": "Add the missing translations; the i18n coverage command lists them. To show fallback text with its own language, call self.i18n.resolve() and put its locale and direction on an element, as the i18n guide's Language direction and accessibility page shows. Set rule_i18n_cross_language_fallback to \"error\" to require complete translations, or to \"ignore\" to hide this warning.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": true,
       "surfaces": [
         "check"
       ],
@@ -893,12 +894,31 @@
       "documentationPath": "/ide/diagnostics/#citry.i18n.cross-language-fallback"
     },
     {
+      "code": "citry.i18n.rich-message-fallback",
+      "constant": "I18N_RICH_MESSAGE_FALLBACK",
+      "title": "Rich message without a translation",
+      "summary": "A <c-trans> message has no translation in some locale. Rendering it in that locale raises I18nRuntimeUnavailableError, because <c-trans> adds no element that could mark text from a fallback language.",
+      "when": "A <c-trans> tag names a message or attribute that has no translation in some selectable locale, so it would resolve to another locale through the configured fallbacks or the message's source locale.",
+      "fix": "Add a translation for each locale the finding lists. Plain text messages may fall back; only <c-trans> needs every translation.",
+      "defaultSeverity": "error",
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "detail": "Fallback coverage explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
+      "documentationPath": "/ide/diagnostics/#citry.i18n.rich-message-fallback"
+    },
+    {
       "code": "citry.i18n.client-message-invalid",
       "constant": "I18N_CLIENT_MESSAGE_INVALID",
-      "title": "Invalid client i18n message",
-      "summary": "A message listed for browser use is missing, or is not translated into every locale the browser may need.",
-      "when": "Component.I18n.client_messages names an unknown output, or an output that would fall back to another language inside a client-enabled <c-i18n> subtree.",
-      "fix": "Correct the name in client_messages, or add the missing translations.",
+      "title": "Unknown client i18n message",
+      "summary": "Component.I18n.client_messages names a message that does not exist, so the browser cannot load it.",
+      "when": "Component.I18n.client_messages names a message ID that no component or configured catalog package defines.",
+      "fix": "Correct the name in client_messages, or add the message.",
       "defaultSeverity": "error",
       "surfaces": [
         "check"

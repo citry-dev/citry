@@ -172,7 +172,10 @@ client provider.
 
 Before you deploy:
 
-1. run `citry --app ... check`;
+1. run `citry --app ... check`; for locales that must be fully
+   translated, also set
+   [`rule_i18n_cross_language_fallback="error"`](/i18n/workflow/#change-fallback-warnings)
+   or run the [coverage check](/i18n/workflow/#check-in-ci);
 2. compile and verify every catalog package;
 3. include the descriptor and compiled files in each wheel, plus the
    `.ftl` files if the wheel should also work in development mode;

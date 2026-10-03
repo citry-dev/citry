@@ -106,7 +106,9 @@ another language.
 sentence around it. Because there is no wrapping element, fallback text
 from another locale could not be marked with its own `lang`.
 
-So `citry check` reports an error
-(`citry.i18n.cross-language-fallback`) when a rich message would fall
-back to another locale. Add a translation for each selectable locale
-that renders it.
+Rendering a rich message in a locale that has no translation of it
+therefore raises `I18nRuntimeUnavailableError`, and `citry check` reports
+an error (`citry.i18n.rich-message-fallback`) for each `<c-trans>` that
+could do so. Add a translation for each selectable locale that renders
+it. Plain `tr()` text may fall back; only rich messages need every
+translation.

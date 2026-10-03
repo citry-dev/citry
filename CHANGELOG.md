@@ -108,6 +108,12 @@ walks through every step.
   leftover `x-*` attributes, invalid HTML attribute values
   (`rule_invalid_attribute_value`), and `js_data()` values Citry cannot
   prove it can send as JSON.
+- A translation catalog may leave messages out: `citry check` now warns,
+  instead of failing, when a `tr()` call or a message in
+  `I18n.client_messages` would show text from a fallback language. Set
+  `LintSettings(rule_i18n_cross_language_fallback="error")` to require
+  complete translations; a `<c-trans>` message still needs every
+  translation.
 - `citry check --types` checks `c-class`, `c-style`, and bound attributes
   such as `:style` against their expected types, which can report existing
   bindings such as `:aria-expanded="String(open)"`.

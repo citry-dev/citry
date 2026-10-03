@@ -35,6 +35,7 @@ from citry._diagnostic_catalog import (
     I18N_CATALOG_INVALID,
     I18N_CLIENT_MESSAGE_INVALID,
     I18N_CROSS_LANGUAGE_FALLBACK,
+    I18N_RICH_MESSAGE_FALLBACK,
     I18N_UNKNOWN_MESSAGE,
     JS_DATA_UNSUPPORTED_TYPE,
     PARSE_CONFIGURATION,
@@ -96,6 +97,7 @@ from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
 from citry.autodiscovery import _iter_py_files
 from citry.component_registry import NotRegistered
 from citry.ext.events.extension import _component_events_info
+from citry.settings import LintSettings
 from citry.tag_rules import build_tag_rules
 from citry_core.template_parser import (
     RESERVED_TAG_NAMES,
@@ -114,6 +116,7 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.component import Component
     from citry.ext.i18n.extension import I18nExtension
+    from citry.settings import LintSeverity
     from citry_core.template_parser import TagRules, Template
 
 
@@ -266,13 +269,18 @@ def _check_registry(
         if engine._is_builtin_component(comp_cls):
             continue
         if i18n_manifest is not None:
-            findings.extend(_client_message_findings(comp_cls, i18n_manifest))
+            # Text that falls back to another language still renders, so the
+            # component's own Lint class or the app setting decides how loudly
+            # check reports it.
+            fallback_severity = _component_lint_info(engine, comp_cls).rule_i18n_cross_language_fallback
+            findings.extend(_client_message_findings(comp_cls, i18n_manifest, fallback_severity=fallback_severity))
             findings.extend(
                 _i18n_python_findings(
                     comp_cls,
                     i18n_manifest,
                     i18n_profiles or {},
                     i18n_configured=i18n_configured,
+                    fallback_severity=fallback_severity,
                 )
             )
         findings.extend(_check_js_data_types(engine, comp_cls))
@@ -614,6 +622,7 @@ def _check_template(
                 i18n_manifest,
                 known_types=_known_template_types(engine, source.consumers),
                 profiles=i18n_profiles or {},
+                fallback_severity=_shared_fallback_severity(engine, source.consumers),
             )
         )
     if not (foreign_options is not None and any(span.may_control_body for span in foreign_options.foreign_spans)):
@@ -947,6 +956,7 @@ def _literal_tr_call_findings(
     end: int,
     *,
     known_types: dict[str, str],
+    fallback_severity: LintSeverity,
 ) -> list[CheckFinding]:
     target = _literal_tr_target(expression)
     if target is None:
@@ -1016,7 +1026,7 @@ def _literal_tr_call_findings(
                     end,
                 )
             )
-    findings.extend(_cross_language_findings(origin, source, token, entries, start, end))
+    findings.extend(_cross_language_findings(origin, source, token, entries, start, end, severity=fallback_severity))
     return findings
 
 
@@ -1026,6 +1036,7 @@ def _i18n_python_findings(
     profiles: dict[str, dict[str, frozenset[str]]],
     *,
     i18n_configured: bool,
+    fallback_severity: LintSeverity,
 ) -> list[CheckFinding]:
     source_file = _loaded_python_file(component)
     qualname = _safe_class_text(component, "__qualname__")
@@ -1058,6 +1069,7 @@ def _i18n_python_findings(
                     start,
                     end,
                     known_types={},
+                    fallback_severity=fallback_severity,
                 )
             )
             continue
@@ -1141,6 +1153,7 @@ def _i18n_template_findings(
     *,
     known_types: dict[str, str],
     profiles: dict[str, dict[str, frozenset[str]]],
+    fallback_severity: LintSeverity,
 ) -> list[CheckFinding]:
     """Check literal i18n calls against compiled outputs and typed source interfaces."""
     findings: list[CheckFinding] = []
@@ -1187,6 +1200,7 @@ def _i18n_template_findings(
                 use.start_index,
                 end,
                 known_types=known_types,
+                fallback_severity=fallback_severity,
             )
         )
     for node in _trans_nodes(template):
@@ -1207,7 +1221,7 @@ def _i18n_template_findings(
             findings.append(_i18n_message_finding(origin, source, token, start, end))
         else:
             findings.extend(_trans_contract_findings(origin, source, node, attrs, token, entries[0][1], start, end))
-            findings.extend(_cross_language_findings(origin, source, token, entries, start, end))
+            findings.extend(_rich_fallback_findings(origin, source, token, entries, start, end))
     return findings
 
 
@@ -1418,6 +1432,27 @@ def _i18n_type_accepts(expected: str, actual: str) -> bool:
     return short == expected
 
 
+def _shared_fallback_severity(engine: Citry | None, consumers: list[type[Component]]) -> LintSeverity:
+    """Return the strictest fallback severity among the components that share one template."""
+    # Without an app there are no settings to read, so the documented
+    # default applies.
+    if engine is None:
+        return LintSettings().rule_i18n_cross_language_fallback
+    # A template with no known owner follows the application setting.
+    if not consumers:
+        return engine.settings.lint.rule_i18n_cross_language_fallback
+    # One template can serve several components; report at the strictest of
+    # their settings, as the other shared-source rules do, so a component
+    # that requires complete translations is not silenced by a lenient one.
+    severities = {_component_lint_info(engine, component).rule_i18n_cross_language_fallback for component in consumers}
+    return "error" if "error" in severities else "warning" if "warning" in severities else "ignore"
+
+
+def _fallback_locales(entries: list[tuple[str, dict[str, Any]]]) -> list[str]:
+    """Return the requested locales whose text comes from another locale's catalog."""
+    return [locale for locale, entry in entries if entry["bundle_locale"] != locale]
+
+
 def _cross_language_findings(
     origin: str,
     source: str,
@@ -1425,17 +1460,51 @@ def _cross_language_findings(
     entries: list[tuple[str, dict[str, Any]]],
     start: int,
     end: int,
+    *,
+    severity: LintSeverity,
 ) -> list[CheckFinding]:
-    fallbacks = [locale for locale, entry in entries if entry["bundle_locale"] != locale]
+    # Plain text falls back at render time without failing, so a missing
+    # translation is a coverage note whose severity the application chooses.
+    if severity == "ignore":
+        return []
+    fallbacks = _fallback_locales(entries)
     if not fallbacks:
         return []
     return [
         _i18n_use_finding(
             origin,
             source,
-            f"i18n output {token!r} falls back to another language for: {', '.join(fallbacks)}. "
-            "Plain translated text cannot carry the selected language, so add translations for those locales.",
+            f"i18n output {token!r} has no translation for: {', '.join(fallbacks)}. "
+            "Those locales show text from a fallback locale, and plain text cannot mark its own language.",
             I18N_CROSS_LANGUAGE_FALLBACK,
+            start,
+            end,
+            severity=severity,
+        )
+    ]
+
+
+def _rich_fallback_findings(
+    origin: str,
+    source: str,
+    token: str,
+    entries: list[tuple[str, dict[str, Any]]],
+    start: int,
+    end: int,
+) -> list[CheckFinding]:
+    # <c-trans> adds no element that could carry the fallback language, so
+    # rendering it in a locale without a translation raises; this stays an
+    # error whatever the fallback setting says.
+    fallbacks = _fallback_locales(entries)
+    if not fallbacks:
+        return []
+    return [
+        _i18n_use_finding(
+            origin,
+            source,
+            f"<c-trans> output {token!r} has no translation for: {', '.join(fallbacks)}. "
+            "Rendering it in those locales fails, so add their translations.",
+            I18N_RICH_MESSAGE_FALLBACK,
             start,
             end,
         )
@@ -1443,7 +1512,10 @@ def _cross_language_findings(
 
 
 def _client_message_findings(
-    component: type[Component], manifest: dict[str, dict[str, dict[str, Any]]]
+    component: type[Component],
+    manifest: dict[str, dict[str, dict[str, Any]]],
+    *,
+    fallback_severity: LintSeverity,
 ) -> list[CheckFinding]:
     result: list[CheckFinding] = []
     i18n_config = cast("Any", component).I18n
@@ -1465,16 +1537,20 @@ def _client_message_findings(
                 )
             )
             continue
+        # The browser formats a fallback with that locale's own catalog, so a
+        # missing translation renders; it follows the same setting as tr().
+        if fallback_severity == "ignore":
+            continue
         for token in tokens:
-            fallback_locales = [
-                locale for locale, entry in _i18n_entries(manifest, token) if entry["bundle_locale"] != locale
-            ]
+            fallback_locales = _fallback_locales(_i18n_entries(manifest, token))
             if fallback_locales:
                 result.append(
                     CheckFinding(
                         _class_label(component),
-                        f"Client output {token!r} has no exact-locale output for: {', '.join(fallback_locales)}.",
-                        I18N_CLIENT_MESSAGE_INVALID,
+                        f"Client output {token!r} has no translation for: {', '.join(fallback_locales)}, "
+                        "so the browser shows text from a fallback locale in those locales.",
+                        I18N_CROSS_LANGUAGE_FALLBACK,
+                        severity=fallback_severity,
                     )
                 )
     return result
@@ -1540,6 +1616,8 @@ def _i18n_use_finding(
     code: str,
     start: int,
     end: int,
+    *,
+    severity: Literal["warning", "error"] = "error",
 ) -> CheckFinding:
     line, column = _byte_offset_coordinates(source, start)
     end_line, end_column = _byte_offset_coordinates(source, end)
@@ -1547,6 +1625,7 @@ def _i18n_use_finding(
         origin=origin,
         message=message,
         code=code,
+        severity=severity,
         start_index=start,
         end_index=end,
         line=line,

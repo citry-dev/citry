@@ -100,12 +100,11 @@ is never replaced by the visible label. See
 
 When a translation is missing, Citry falls back to another language.
 `tr()` returns only text, so the text cannot carry its own `lang`, and a
-screen reader would read it in the page's language. For this reason
-`citry check` reports an error for a `tr()` call that would fall back to
-another locale.
+screen reader reads it in the page's language. `citry check` warns about
+each `tr()` call that would fall back to another locale.
 
-Where fallback is acceptable, call `resolve()` and put its locale and
-direction on an element you control:
+To mark the fallback text with its own language, call `resolve()` and put
+its locale and direction on an element you control:
 
 ```python
 resolved = self.i18n.resolve("my-app-legal-notice")
@@ -152,9 +151,20 @@ text that needs a fixed direction, use separate elements.
 
 ### Fallback warnings
 
-`citry check` reports `citry.i18n.cross-language-fallback` when text
-would fall back to another locale and nothing can mark its `lang`. This
-covers `tr()` and `self.i18n.tr()` calls, text translated in the browser,
-and [rich messages](/i18n/rich-messages/), which have no element around
-them. Add a translation for each selectable locale, or use `resolve()`
-as shown above for server text.
+`citry check` reports a warning, `citry.i18n.cross-language-fallback`,
+when a `tr()` call, a `self.i18n.tr()` call, or a message in
+`I18n.client_messages` would fall back to another locale. The page still
+renders; the warning only points out text whose `lang` is wrong. A
+region or script change, such as `en-GB` falling back to `en-US`, also
+counts. Add the missing translations, or use `resolve()` as shown above
+for server text.
+
+To require complete translations, make the warning an error with
+`LintSettings(rule_i18n_cross_language_fallback="error")`. To hide it, set
+`"ignore"`. A component's own `Lint` class can override either setting;
+see [Translation workflow](/i18n/workflow/#change-fallback-warnings).
+
+[Rich messages](/i18n/rich-messages/#translate-all-locales) are
+different: `<c-trans>` has no element around its text, so rendering one
+in a locale without its translation fails. `citry check` reports that as
+an error, `citry.i18n.rich-message-fallback`, whatever the setting.

@@ -796,7 +796,10 @@ class TestRegistryMode:
 
         assert report.findings == ()
 
-    def test_client_message_ids_and_cross_language_plain_fallback_are_checked(self, tmp_path):
+    def test_client_message_ids_are_checked_and_plain_fallback_is_a_warning(self, tmp_path):
+        # A missing translation still renders through the fallback chain, so
+        # plain tr() text that falls back is a warning that keeps the exit
+        # code at 0; an unknown client message ID stays an error.
         engine = Citry(
             autodiscover=False,
             extensions_defaults={
@@ -809,18 +812,188 @@ class TestRegistryMode:
 
         class Host(Component):
             citry = engine
-            messages = "known-message = Known"
-            template = '{{ tr("known-message") }}'
+            messages = """
+            known-message = Known
+            """
+            template = """
+            {{ tr("known-message") }}
+            """
 
             class I18n:
                 client_messages = ("missing-client-message",)
 
         report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
 
-        assert [finding.code for finding in report.findings] == [
-            "citry.i18n.client-message-invalid",
-            "citry.i18n.cross-language-fallback",
+        assert [(finding.code, finding.severity) for finding in report.findings] == [
+            ("citry.i18n.client-message-invalid", "error"),
+            ("citry.i18n.cross-language-fallback", "warning"),
         ]
+        assert "no translation for: cs-CZ" in report.findings[1].message
+
+    def test_partial_translations_pass_check_by_default(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US", "cs-CZ"),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = """
+            greeting = Hello
+            """
+            template = """
+            {{ tr("greeting") }}
+            """
+
+            def label(self) -> str:
+                return self.i18n.tr("greeting")
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [(finding.code, finding.severity) for finding in report.findings] == [
+            ("citry.i18n.cross-language-fallback", "warning"),
+            ("citry.i18n.cross-language-fallback", "warning"),
+        ]
+        assert report.exit_code == 0
+
+    @pytest.mark.parametrize(
+        ("app_rule", "component_rule", "expected"),
+        [
+            ("error", None, ["error", "error", "error"]),
+            ("ignore", None, []),
+            ("ignore", "error", ["error", "error", "error"]),
+            ("error", "ignore", []),
+        ],
+    )
+    def test_cross_language_fallback_severity_follows_lint_settings(
+        self,
+        tmp_path,
+        app_rule,
+        component_rule,
+        expected,
+    ):
+        engine = Citry(
+            autodiscover=False,
+            lint=LintSettings(rule_i18n_cross_language_fallback=app_rule),
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US", "cs-CZ"),
+                }
+            },
+        )
+        lint = {} if component_rule is None else {"rule_i18n_cross_language_fallback": component_rule}
+
+        class Host(Component):
+            citry = engine
+            messages = """
+            greeting = Hello
+            """
+            template = """
+            {{ tr("greeting") }}
+            """
+            Lint = type("Lint", (), lint)
+
+            class I18n:
+                client_messages = ("greeting",)
+
+            def label(self) -> str:
+                return self.i18n.tr("greeting")
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        # One finding each for the client message, the Python call, and the
+        # template call.
+        assert [finding.code for finding in report.findings] == ["citry.i18n.cross-language-fallback"] * len(expected)
+        assert [finding.severity for finding in report.findings] == expected
+        assert report.exit_code == (1 if expected else 0)
+
+    def test_shared_template_reports_fallback_at_the_strictest_consumer_severity(self, tmp_path):
+        shared = tmp_path / "shared.html"
+        shared.write_text('{{ tr("greeting") }}', encoding="utf-8")
+        engine = Citry(
+            dirs=[tmp_path],
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US", "cs-CZ"),
+                }
+            },
+        )
+
+        class Lenient(Component):
+            citry = engine
+            template_file = "shared.html"
+            messages = """
+            greeting = Hello
+            """
+
+            class Lint:
+                rule_i18n_cross_language_fallback = "ignore"
+
+        class Strict(Component):
+            citry = engine
+            template_file = "shared.html"
+
+            class Lint:
+                rule_i18n_cross_language_fallback = "error"
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [(finding.code, finding.severity) for finding in report.findings] == [
+            ("citry.i18n.cross-language-fallback", "error"),
+        ]
+
+        # Once every component that shares the template ignores the rule,
+        # nothing is reported.
+        Strict.Lint.rule_i18n_cross_language_fallback = "ignore"
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert report.findings == ()
+
+    def test_rich_message_fallback_stays_an_error_when_plain_fallback_is_ignored(self, tmp_path):
+        # Rendering <c-trans> in a locale without its translation raises, so
+        # the fallback setting cannot turn this finding off.
+        engine = Citry(
+            autodiscover=False,
+            lint=LintSettings(rule_i18n_cross_language_fallback="ignore"),
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US", "cs-CZ"),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = """
+            # @param {Slot} $link
+            terms = Read { $link }.
+                .title = Terms
+            """
+            template = """
+            <c-trans message="terms" c-values="{}">
+              <c-fill name="link"><a href="/terms">terms</a></c-fill>
+            </c-trans>
+            <c-trans message="terms" attr="title" c-values="{}" />
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [(finding.code, finding.severity) for finding in report.findings] == [
+            ("citry.i18n.rich-message-fallback", "error"),
+            ("citry.i18n.rich-message-fallback", "error"),
+        ]
+        assert "'terms.title'" in report.findings[1].message
+        assert "no translation for: cs-CZ" in report.findings[0].message
+        assert report.exit_code == 1
 
     def test_expression_strings_that_look_like_templates_do_not_create_unknowns(self, tmp_path):
         engine = Citry(autodiscover=False)

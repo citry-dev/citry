@@ -267,8 +267,8 @@ resolved.used_fallback
 ```
 
 Use this to mark fallback text with its own `lang` attribute. A plain
-`tr()` call that would fall back to another locale fails `citry check`,
-because its text cannot carry a `lang`. See
+`tr()` call that would fall back to another locale gets a warning from
+`citry check`, because its text cannot carry a `lang`. See
 [Language direction and accessibility](/i18n/direction-and-bidi/#mark-fallback-text-with-its-language).
 
 ## Hover for types
