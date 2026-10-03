@@ -78,7 +78,7 @@ covers what goes there:
   `$component()`, and [`Citry.vue`](/vue/component-options/#use-citry-vue)
   for Vue's own functions.
 
-Props and events between components are on
+For props and events between components, see
 [Props and events](/vue/props-and-events/).
 [Where each value goes](/vue/#where-each-value-goes) shows which Python
 value reaches the template, the JavaScript, and the CSS.

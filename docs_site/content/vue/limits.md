@@ -8,13 +8,14 @@ description: See which Vue features Citry does not support, and fix the common e
 Something failed: the template does not load, the page shows an error, or
 a part of the page does nothing in the browser. This page lists the Vue
 features Citry does not support, then the common errors with their fixes.
-Each entry starts with what you see. When an error comes from the browser,
-start with [Diagnose failures](#diagnose-failures).
+Each common error starts with what you see. When an error comes from the
+browser, start with [Diagnose failures](#diagnose-failures).
 
 ## What is not supported { #what-is-not-supported }
 
-Each of these fails when the template loads, and the error says what to
-write instead. `citry check` and the editor report them too.
+The Vue features in this section fail when the template loads, and the
+error says what to write instead. `citry check` and the editor report them
+too.
 
 ### Vue built-in components { #vue-built-in-components }
 
@@ -26,7 +27,7 @@ write instead. `citry check` and the editor report them too.
 | --- | --- |
 | `<Transition>`, `<TransitionGroup>` | A CSS transition or animation, with the class changed by `:class`. |
 | `<KeepAlive>` | Leave the child rendered and hide it with `v-show`. |
-| `<Teleport>` | The HTML `<dialog>` element, the `popover` attribute, or Citry UI's `<c-CDialog>` and `<c-CPopover>`. |
+| `<Teleport>` | The HTML `<dialog>` element, the `popover` attribute, or [Citry UI](/ui-library/)'s `<c-CDialog>` and `<c-CPopover>`. |
 | `<Suspense>` | A loading flag in the component's data, with `v-if` and `v-else`. |
 
 ### `v-once` and `v-memo` { #v-once-and-v-memo }
@@ -60,7 +61,7 @@ $component({
   methods: {
     closeOnOutsideClick(event) {
       // A click inside the component keeps it open.
-      if (!this.$el.contains(event.target)) {
+      if (!this.$refs.root?.contains(event.target)) {
         this.open = false;
       }
     },
@@ -74,19 +75,14 @@ $component({
 });
 ```
 
-`this.$el` is the root element of the component's template, so the
-template needs exactly one root element.
+Mark the element that counts as inside with `ref="root"` in the
+template.
 
 To call a Python event handler, use an `@c-*` attribute: it accepts
 `.debounce` and `.throttle`; see
 [Bind events in templates](/events/bindings/). The
 [0.6.0 upgrade guide](/guides/upgrading-to-0-6-0/#rewrite-alpine-modifiers)
 covers the rest of the move from Alpine.
-
-### `mixins` and `extends`
-
-`$component({...})` rejects both. See
-[Unsupported options](/vue/component-options/#unsupported-options).
 
 ## Common errors { #common-errors }
 
@@ -193,8 +189,8 @@ directly in the template. See
 
 When a page fails in the browser, start with the first `[Citry]` error in
 the browser console. Later errors are often caused by the first one.
-In the causes below, the Vue host is the element Citry writes around the
-part of the page that Vue runs. Common causes:
+Citry writes the page's content inside one element, the Vue host, where
+Vue starts. Common causes:
 
 - a fragment or asset that did not load completely;
 - a Vue host or configuration script that an optimizer changed or

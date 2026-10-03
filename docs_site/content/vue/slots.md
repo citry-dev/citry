@@ -47,11 +47,11 @@ it:
 </template>
 ```
 
-## Send data to a fill { #slot-limits }
+## Scoped slots { #slot-limits }
 
-A component can hand data to the fill that the page writes, for example
-each item of a list. That data comes from Python, at render time. Write it
-as attributes on `<c-slot>`, plain or with `c-`:
+A component can hand Python data to a fill, but not its Vue values. The
+Python data is computed at render time, for example each item of a list.
+Write it as attributes on `<c-slot>`, plain or with `c-`:
 
 ```citry-html
 {# Inside ItemList #}

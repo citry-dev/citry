@@ -26,21 +26,20 @@ html = page.render().serialize(csp_nonce=request_nonce)
 ```
 
 Citry adds the nonce to the scripts and styles it places, including those
-that dependency hooks add. Your application still generates the nonce and
-sends the matching response header. A `<script>` or `<style>` tag written
+that extensions and component hooks add. Your application still generates
+the nonce and sends the matching response header. A `<script>` or `<style>` tag written
 directly in a template does not get the nonce. See
 [Use a CSP nonce](/security/#apply-a-request-csp-nonce-centrally).
 
-An interactive [HTML fragment](/advanced/html-fragments/) uses the Citry
-runtime the page already loaded. Before starting a fragment, Citry checks
-that its runtime, CSP nonce, components, and assets match the page. If they
-do not, the fragment does not start, and Citry reports an error in the
-browser console.
+Serialize an interactive [HTML fragment](/advanced/html-fragments/) with
+the same nonce as the page. Before starting a fragment, Citry checks that
+its CSP nonce, runtime, components, and assets match the page. If they do
+not, the fragment does not start, and the browser console shows an error.
 
-A page with a Content Security Policy is sent with HTML that Vue replaces
-rather than adopts, so focus and text typed before Vue starts are lost.
-That applies when you pass `csp_nonce`, or set `security_csp` to `"warn"`
-or `"strict"`. See
+On a page with a Content Security Policy, Vue builds the page again in
+the browser when it starts, so focus and text typed before then are lost.
+That applies when you pass `csp_nonce`, or when `security_csp` is
+`"warn"` or `"strict"` on `Citry` or on `serialize()`. See
 [Replaced pages](/vue/server-rendering/#pages-vue-replaces-instead-of-adopting).
 
 ### Inline style attributes { #inline-style-attributes }
@@ -93,13 +92,23 @@ template:
 </button>
 ```
 
-Citry rejects every key that Vue would read as a directive: names that
-start with `v-`, `:`, `@`, `#`, or `.`. The same applies to a directive
-written with a `c-` prefix, such as `c-v-if`, `c-@click`, or `c-:title`,
-because its value is also a Python expression.
+Citry rejects a key that Vue would read as code: a name that starts with
+`v-`, `:`, `@`, `#`, `.`, or `^`, in any letter case. Citry's own `@c-`
+and `:c-` Events bindings are allowed, and a key whose value is `None` or
+`False` adds no attribute and passes. The same check applies to a
+directive written with a `c-` prefix, such as `c-v-if`, `c-@click`, or
+`c-:title`, because its value is also a Python expression.
 
-The check runs on pages that start Vue. On a page with no Vue component,
-the attribute is written into the HTML as plain text and nothing runs it.
+When the check fails depends on where the key lands:
+
+- On a component tag, including `<c-element>`, rendering raises
+  `RuntimeError` on every page.
+- On an HTML element, serializing a page that starts Vue raises
+  `TypeError`. On a page with no Vue, the attribute is written into the
+  HTML as plain text and nothing runs it.
+
+[Keep Vue in templates](/advanced/html-attributes/#keep-vue-in-templates)
+covers the attribute mapping side of this rule.
 
 ## See also
 

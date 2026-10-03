@@ -10,8 +10,9 @@ content. Search engines, link previews, and readers without JavaScript see
 it, and you do not need to turn anything on. When Vue starts in the
 browser, it either adopts that HTML or builds the page again.
 
-This page explains what the page shows before Vue starts, what happens to a
-field the user is typing in, and what your deployment must leave untouched.
+This page explains what happens to a field the user is typing in, what
+the page shows before Vue starts, and what your deployment must leave
+untouched.
 
 ## What the server sends { #send-page-content-in-the-served-html }
 
@@ -204,10 +205,7 @@ starts, or when the browser console reports a mismatch.
 Vue replaces the whole page's server HTML when the page:
 
 - uses a Content Security Policy, `security_javascript="warn"`, script
-  integrity, or a configured i18n extension. A page counts as using a
-  Content Security Policy when you serialize it with `csp_nonce`, or with
-  `security_csp` set to `"warn"` or `"strict"`. See
-  [Security and CSP](/vue/csp/#use-content-security-policy);
+  integrity, or a configured i18n extension;
 - has a component with its own `on_dependencies()` method, or an extension
   that defines `on_dependencies()`, `on_serialize()`, `on_js_loaded()`, or
   a browser hook;
@@ -215,6 +213,10 @@ Vue replaces the whole page's server HTML when the page:
 - has a browser-only part with no element around it, such as a `v-if` at
   the top level of the page component's template;
 - contains HTML that the browser's parser would rearrange.
+
+A page uses a Content Security Policy when you pass `csp_nonce`, or when
+`security_csp` is `"warn"` or `"strict"` on `Citry` or on `serialize()`.
+See [Add a CSP nonce](/vue/csp/#use-content-security-policy).
 
 Before Vue starts, such a page shows its static HTML: both branches of a
 `v-if` and `v-else` can be visible, `v-show`, `:class`, and other Vue

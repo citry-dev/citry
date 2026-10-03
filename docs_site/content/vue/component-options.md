@@ -85,7 +85,8 @@ as `$state`.
 
 To start the browser data from a Python value, return it from
 [`Component.js_data()`][citry.Component.js_data]. Each top-level key
-becomes a reactive value: the template reads it as `name`, and the
+becomes a value Vue tracks, so the page updates when it changes. The
+template reads it as `name`, and the
 component's JavaScript reads and changes it as `this.name`:
 
 ```citry
@@ -178,7 +179,8 @@ only in the browser does not call it.
 
 Return a cleanup function to undo the work. Citry calls it before the next
 `onServerRender` call and when the component is removed. Returning
-anything other than a function or nothing is an error.
+anything other than a function or nothing throws a `TypeError`, which the
+browser console shows.
 
 Passing a function, as in `$component(callback)`, is short for passing
 `{ onServerRender: callback }`:
@@ -217,8 +219,8 @@ Vue creates a new component, which starts from `data()` again, when:
 
 - the handler returns a different component in its place; see
   [`Render` another component](/events/actions/#swap-in-a-different-component);
-- an element around it gets a different key in the new render, or a
-  parent component is created again for one of these reasons;
+- an element or component around it is created again, for example
+  because its `:key` changed in the new render;
 - the user reloads the page.
 
 A text field the user is typing in keeps its text through a render in
@@ -355,12 +357,16 @@ one of these names:
 - `$citryEvents`, which connects `@c-*` attributes to the server.
 - `$loading`, `$error`, `$state`, `$sendEvent`, and `$onEvent`, the
   [Events helpers](/reference/browser-apis/#component-events-helpers).
-- Names that an installed browser extension adds, such as i18n helpers.
-- `citryId`, a prop Citry adds to every component.
+- Names that a Citry extension adds to templates, such as the i18n
+  helpers.
 
 If a component uses one of these names, it fails with an error naming it
-when it first appears in the browser. Vue already refuses props whose name
-starts with `$`. The rules for `js_data()` keys are in
+when it first appears in the browser.
+
+Do not name a prop, `data()` key, or method `citryId` either. Citry adds a
+prop with that name to every component and replaces yours without an
+error. Vue ignores a prop whose name starts with `$`, also without an
+error. The rules for `js_data()` keys are in
 [`js_data()` initial data](#seed-browser-data-from-python).
 
 When your JavaScript needs a value from Python, return it from
@@ -377,9 +383,6 @@ the component's template, so a few Vue options do not apply:
 - A `render` function or `template` option inside `$component()` is
   ignored, without an error. Citry builds the browser's render function
   from the component's Python `template`.
-- A [reserved name](#names-citry-reserves-on-the-component-instance), or
-  a name that is also a `js_data()` key, fails with an error that names
-  it.
 
 [Browser APIs](/reference/browser-apis/#component) lists every rule.
 

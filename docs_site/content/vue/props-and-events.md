@@ -43,6 +43,12 @@ The parent passes a browser value with `:` or `v-bind`:
 `currentStatus` comes from the parent's `data()`, `setup()`, or
 `js_data()`. When the parent changes it, the child updates in the browser.
 
+The editor checks the props you pass on a child's tag. It reports a prop
+the child does not declare, a missing required prop, and a value of a type
+the prop does not accept. `citry check` reports the missing and wrong-type
+cases too. See
+[Child component props](/ide/vscode/#child-component-props).
+
 The `:` prefix is what makes `status` a Vue prop. A plain attribute, such as
 `status="ok"`, is a Python input instead: Citry passes it to the child's
 `Kwargs` when the server renders the child, and it does not change later in
@@ -106,8 +112,8 @@ $component({
 - Without `emits`, the child may emit any name, as in Vue.
 
 The editor uses these types in the parent too. In
-`<c-Lane @drop-task="move($event)" />`, `$event` has the payload's type, as
-do the parameters of an inline function such as
+`<c-Lane @drop-task="move($event)" />`, `$event` has the payload's type.
+So does the parameter of an inline function such as
 `@drop-task="(payload) => move(payload)"`, and `$event` in an
 `@c-drop-task` binding on that tag. Inside `this.$emit("")`, completion
 offers the declared names.
@@ -116,7 +122,8 @@ The function only types the payload. The Vue build Citry loads does not
 call it while the page runs, so return `true` and do not rely on it to
 reject a value.
 
-When `emits` is an array of strings or an object with plain keys, the
+When `emits` is an array of strings, or an object whose keys are written
+out as names rather than computed, the
 editor and `citry check` also check event names:
 
 - Emitting a name that `emits` does not list is an error:
@@ -127,12 +134,8 @@ editor and `citry check` also check event names:
 A prop named `on<Event>`, such as `onPing` for `ping`, also declares the
 event, as in Vue.
 
-The editor checks the props you pass on a child's tag the same way. It
-reports a prop the child does not declare, a missing required prop, and a
-value of a type the prop does not accept. `citry check` reports the missing
-and wrong-type cases too. See
-[Child component props](/ide/vscode/#child-component-props) and
-[Emitted event names](/ide/vscode/#emitted-event-names) for the details.
+See [Emitted event names](/ide/vscode/#emitted-event-names) for the
+details.
 
 ## Vue on component tags { #use-vue-directives-on-a-component-tag }
 
@@ -267,7 +270,7 @@ register a directive for every component, use a plugin; see
 
 The child's template must render exactly one root element, or the render
 fails; see
-[One root element](/vue/limits/#several-root-elements).
+[`v-show` needs one root](/vue/limits/#several-root-elements).
 
 ### `v-for` on components { #repeat-a-component }
 
@@ -282,7 +285,7 @@ A natural first attempt at a list of components is `v-for`:
 ```
 
 The template fails when it loads, with an error that says what to write
-instead. Only Python creates Citry components. Repeat the component with
+instead. Repeat the component with
 `<c-for>` over a Python value, and pass each item's data as a Python input:
 
 ```citry-html

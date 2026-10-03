@@ -71,12 +71,6 @@ these:
 Complete pages and [HTML fragments](/advanced/html-fragments/) work the
 same way.
 
-## Which Vue version
-
-Citry ships Vue 3.5.42. Each Citry release bundles one fixed Vue version,
-and you cannot swap in another. To check the version a page runs, enter
-`Citry.vue.version` in the browser console.
-
 ## Tell Python from Vue { #tell-python-from-vue }
 
 Citry runs `{{ ... }}` and `c-*` values as Python on the server, once per
@@ -115,15 +109,10 @@ value, and nothing fails. When Vue needs the value too, for example in a
 
 ## Choose `<c-if>` or `v-if` { #choose-c-if-or-v-if }
 
-Use Vue's `v-if` and `v-for` for plain HTML that the browser adds,
-removes, or repeats inside one component. Give each repeated item a
-stable `:key`.
-
-Use `<c-if>` and `<c-for>` when the branch or loop creates Citry
-components. Only Python creates Citry components, on the server, so Vue
-cannot create them in the browser. See
-[Choose `v-for` or `<c-for>`](/syntax/vue/#choose-v-for-or-c-for) for an
-example of each.
+Use Vue's `v-if` and `v-for` for plain HTML inside one component, and
+`<c-if>` and `<c-for>` when the branch or loop creates Citry components.
+[Choose `v-for` or `<c-for>`](/syntax/vue/#choose-v-for-or-c-for) explains
+why and shows an example of each.
 
 ## Where each value goes { #where-each-value-goes }
 
@@ -133,7 +122,7 @@ Each Python value goes to one place:
 | --- | --- | --- |
 | `Kwargs` | The server only. Nothing is sent to the browser. | `kwargs.name` in Python methods |
 | `template_data()` | The template, on the server | `{{ name }}` or `c-*` attributes |
-| [`js_data()`](/vue/component-options/#seed-browser-data-from-python) | The Vue instance, as JSON | `name` in Vue expressions, `this.name` in JS |
+| [`js_data()`](/vue/component-options/#seed-browser-data-from-python) | The component in the browser, as JSON | `name` in Vue expressions, `this.name` in JS |
 | [`css_data()`](/advanced/js-and-css-dependencies/#send-values-to-css) | CSS custom properties | `var(--name)` in the component's CSS |
 | [`State`](/events/state/) | The browser, through server events | `$state.name`, `this.$state.name` |
 
@@ -144,7 +133,13 @@ from all of these: the parent component passes them in the browser with
 A Vue expression cannot read a `template_data()` or `Kwargs` value. When
 the browser needs one, return it from `js_data()` too.
 
-## Vue pages
+## Which Vue version
+
+Citry ships Vue 3.5.42. Each Citry release bundles one fixed Vue version,
+and you cannot swap in another. To check the version a page runs, enter
+`Citry.vue.version` in the browser console.
+
+## Where to go next
 
 - [Vue in templates](/syntax/vue/): the `v-*` directives, `@` listeners,
   and `:` bindings you write in a template.

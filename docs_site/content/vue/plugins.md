@@ -76,7 +76,8 @@ Citry.vue.use({
     app.config.errorHandler = (error, instance, info) => {
       // With a handler set, Citry leaves logging to you.
       console.error(error);
-      reportError(error, info);
+      // sendToTracker stands for your reporting tool.
+      sendToTracker(error, info);
     };
   },
 });
@@ -84,13 +85,13 @@ Citry.vue.use({
 
 When a handler is set, Citry passes each error to it instead of the
 browser console, so log it there yourself. Errors from Citry's own browser
-work, such as a failed `@c-poll` refresh, reach the handler too, with an
-`info` text that starts with `Citry`.
+code, such as a failed `@c-poll` refresh, reach the handler too, with an
+`info` text that starts with `Citry`, as in `"Citry @c-poll"`.
 
 With or without a handler, after an error Citry stops sending server
 updates to that Vue app. Reload the page to get them again.
 
-## What plugins cannot do
+## Plugin limits
 
 A plugin runs inside a Vue app that Citry has already set up, so a few
 things work differently from a plain Vue project.
@@ -152,9 +153,9 @@ Citry.vue.use({
 
 ### No mixins
 
-A plugin cannot add a mixin to components: `$component({...})` rejects
-`mixins` and `extends` with an error. Define the data, methods, and
-computed values in the options directly.
+A plugin cannot add a mixin to components, because `$component({...})`
+rejects `mixins` and `extends`; see
+[Unsupported options](/vue/component-options/#unsupported-options).
 
 ### Ignored config options
 
