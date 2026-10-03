@@ -763,6 +763,10 @@ def _render_value(
         and "__class__" not in kind.__dict__
     ):
         return value
+    # Exact numbers are plain text unless registered for a protocol; skip
+    # the lookups below for them.
+    if (kind is int or kind is float or kind is bool) and _default_value_dispatch_for(kind):
+        return escape(value)
     # Trusted HTML wins over the component protocol, in the order the
     # template's {{ ... }} uses, so an object with both __html__ and
     # __citry_element__ renders the same in a slot as in the template.
