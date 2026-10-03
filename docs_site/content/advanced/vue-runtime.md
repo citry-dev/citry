@@ -37,8 +37,12 @@ $component({
 Then use them in the template:
 
 ```citry-html
-<button type="button" @click="toggle">Toggle details</button>
-<p v-show="open">Ships within two working days.</p>
+<button type="button" @click="toggle">
+  Toggle details
+</button>
+<p v-show="open">
+  Ships within two working days.
+</p>
 ```
 
 Citry also starts Vue for a component that has its own JavaScript, uses
