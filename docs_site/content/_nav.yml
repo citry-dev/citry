@@ -92,7 +92,7 @@ areas:
         items:
           - { title: Dynamic components, path: /advanced/dynamic-components/ }
           - { title: HTML attributes, path: /advanced/html-attributes/ }
-          - { title: Subclass components, path: /advanced/subclassing/, needs_review: true }
+          - { title: Subclass components, path: /advanced/subclassing/ }
           - { title: Discovery and startup, path: /advanced/component-discovery/ }
           - { title: Web frameworks, path: /advanced/web-frameworks/, needs_review: true }
           - { title: Component JS and CSS, path: /advanced/js-and-css-dependencies/, needs_review: true }

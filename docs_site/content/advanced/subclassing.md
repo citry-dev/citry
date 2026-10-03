@@ -106,9 +106,9 @@ The same rule applies to every nested class that describes data:
 - [`State`][citry.Component.State], the values
   [server events](/events/) keep between calls.
 
-Nested classes that hold settings, such as `Dependencies` and `Events`,
-work differently: a child's class adds to its parent's. See
-[Extend settings](#extend-settings).
+Nested classes that hold extension settings, such as `Dependencies` and
+`Events`, work differently: a child's class adds to its parent's. See
+[Extension settings](#extend-settings).
 
 ## Replace or drop inputs
 
@@ -245,10 +245,10 @@ the page, where anyone who opens the page can read them. Name the parent's class
 
 [Event state](/events/state/) explains the State settings.
 
-## Extend settings
+## Extension settings { #extend-settings }
 
-A child's settings class keeps every parent setting and adds its own,
-and a child setting with the same name wins (`Dependencies` joins its
+A child's extension settings class keeps every parent extension setting
+and adds its own, and a child extension setting with the same name wins (`Dependencies` joins its
 file lists instead; see below). This covers
 [`Events`][citry.Component.Events], `Dependencies`, `Lint`, `Cache`,
 `I18n`, `Debug`, `Preview`, and the classes that
