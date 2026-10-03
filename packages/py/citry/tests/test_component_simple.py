@@ -667,6 +667,35 @@ class Box(Component):
     assert "again</section>" in box(slots={"default": "again"}).render().serialize()
 
 
+def test_simple_slots_may_extend_the_parent_slots() -> None:
+    app = Citry()
+
+    class Box(Component):
+        citry = app
+        simple = True
+
+        class Slots:
+            default: Slot | None = None
+
+        template = """
+            <section><c-slot /></section>
+        """
+
+    # The parent's generated class in the MRO is not an authored member, so
+    # naming it as a base passes the plain-field check.
+    class FramedBox(Box):
+        class Slots(Box.Slots):
+            pass
+
+        template = """
+            <section class="framed"><c-slot /></section>
+        """
+
+    html = FramedBox(slots={"default": "body"}).render().serialize()
+    assert 'class="framed"' in html
+    assert "body</section>" in html
+
+
 def test_rebinding_slot_schema_bases_is_rejected_before_execution() -> None:
     app = Citry()
     events = []

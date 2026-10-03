@@ -139,6 +139,7 @@ def _phases(profile: CheckProfile = "full", *, parity_corpus: Path) -> list[tupl
                 # the typed-base contract test runs under mypy, not pytest
                 "packages/py/citry/tests/test_events_typing.py",
                 "packages/py/citry/tests/test_library_component_typing.py",
+                "packages/py/citry/tests/test_nested_schema_typing.py",
                 "packages/py/citry_lsp/citry_lsp",
                 "packages/py/citry_ui/citry_ui",
                 "packages/py/citry_ui/tests/typing_contract.py",
@@ -171,6 +172,7 @@ def _phases(profile: CheckProfile = "full", *, parity_corpus: Path) -> list[tupl
                 str(_REPO_ROOT / ".venv" / "bin" / "python"),
                 "packages/py/citry/tests/test_events_typing.py",
                 "packages/py/citry/tests/test_library_component_typing.py",
+                "packages/py/citry/tests/test_nested_schema_typing.py",
                 "packages/py/citry_ui/tests/typing_contract.py",
             ],
         ),

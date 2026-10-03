@@ -7,6 +7,7 @@ import gc
 import inspect
 import re
 import threading
+import warnings
 from dataclasses import is_dataclass
 from pathlib import Path
 from types import ModuleType
@@ -32,6 +33,7 @@ from citry import (
     LibraryInstallationStale,
     LibraryManifestChanged,
     LibraryNotInstalled,
+    NestedSchemaReplacedWarning,
 )
 from citry._vue.capture import render_prepared
 from citry._vue.direct_capture import assemble_typed_render
@@ -181,7 +183,7 @@ def test_definition_inheritance_zero_argument_super_and_schemas_survive():
             return {"text": kwargs.label}
 
     class CFancyControl(ControlBase):
-        class Kwargs:
+        class Kwargs(ControlBase.Kwargs):
             suffix: str = "!"
 
         template = "{{ text }}{{ suffix }}"
@@ -200,6 +202,38 @@ def test_definition_inheritance_zero_argument_super_and_schemas_survive():
 
     assert BrandedControl.citry is app
     assert str(BrandedControl(label="Run")) == "Run!"
+
+
+def test_library_definition_replacing_kwargs_warns_once_at_registration():
+    class ControlBase(LibraryComponent):
+        class Kwargs:
+            label: str
+
+    # Library definitions are not components yet, so defining one is silent.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", NestedSchemaReplacedWarning)
+
+        class CPlainControl(ControlBase):
+            class Kwargs:
+                suffix: str = "!"
+
+            template = "{{ suffix }}"
+
+    library = ComponentLibrary("plain-controls", (CPlainControl,))
+    with pytest.warns(NestedSchemaReplacedWarning) as record:
+        concrete = Citry(autodiscover=False).register_library(library)[CPlainControl]
+    assert [str(item.message) for item in record] == [
+        "Component CPlainControl: Kwargs replaces ControlBase.Kwargs and leaves out field 'label'."
+        " To keep it, write `class Kwargs(ControlBase.Kwargs):`."
+    ]
+    # The warning points at the register_library() call in user code.
+    assert record[0].filename == __file__
+    assert tuple(concrete.Kwargs.__dataclass_fields__) == ("suffix",)
+
+    # Installing the same definition into another engine does not warn again.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", NestedSchemaReplacedWarning)
+        Citry(autodiscover=False).register_library(library)
 
 
 def test_pure_library_definition_requires_an_explicit_per_class_promise():

@@ -8,7 +8,11 @@ from types import FunctionType, GetSetDescriptorType
 from typing import TYPE_CHECKING, Any, cast
 
 from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
-from citry._nested_declarations import _active_nested_class_declarations
+from citry._nested_declarations import (
+    _SYNTHESIZED_DECLARATION_ATTR,
+    _active_nested_class_declarations,
+    _nearest_data_shape_declaration,
+)
 from citry.assets import _find_pair_declaration
 
 if TYPE_CHECKING:
@@ -163,15 +167,21 @@ def validate_simple_declaration(
         if type(slots_schema) is not type:
             msg = f"Component {name} uses simple=True; Slots must be a plain field class."
             raise TypeError(msg)
-        for declaration in _active_nested_class_declarations(component_class, "Slots"):
-            for base in _static_class_mro(cast("type", declaration.value)):
-                if base is object:
-                    continue
-                namespace = _static_class_dict(base)
-                unexpected = namespace.keys() - _SLOT_DECLARATION_METADATA - {"default"}
-                if unexpected:
-                    msg = f"Component {name} uses simple=True; Slots must contain plain field declarations only."
-                    raise TypeError(msg)
+        # Only the declaration that applies is checked. A parent's generated
+        # class named as a base is skipped; its authored class follows it in
+        # the MRO and is checked in its place.
+        declaration = _nearest_data_shape_declaration(component_class, "Slots")
+        declared = declaration.value if declaration is not None else None
+        for base in _static_class_mro(declared) if isinstance(declared, type) else ():
+            if base is object:
+                continue
+            namespace = _static_class_dict(base)
+            if namespace.get(_SYNTHESIZED_DECLARATION_ATTR, False) is True:
+                continue
+            unexpected = namespace.keys() - _SLOT_DECLARATION_METADATA - {"default"}
+            if unexpected:
+                msg = f"Component {name} uses simple=True; Slots must contain plain field declarations only."
+                raise TypeError(msg)
         schema_fields = _static_class_dict(slots_schema).get("__dataclass_fields__")
         if type(schema_fields) is not dict:
             msg = f"Component {name} uses simple=True; Slots must be a plain field class."

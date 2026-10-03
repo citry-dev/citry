@@ -24,9 +24,10 @@ categories:
   - kind: generated_python
     slug: component
     title: Component
-    intro: The base class every component subclasses.
+    intro: The base class every component subclasses, and the warning Citry emits when a subclass's nested data class drops its parent's fields.
     symbols:
       - citry.Component
+      - citry.NestedSchemaReplacedWarning
 
   - kind: generated_python
     slug: component-introspection

@@ -18,7 +18,9 @@ from weakref import WeakKeyDictionary
 
 from citry._nested_declarations import (
     _active_nested_class_declarations,
+    _ancestor_with_same_declaration,
     _compose_nested_declaration_class,
+    _nearest_data_shape_declaration,
 )
 from citry.ext.events._introspection import capture_handler_introspection, inspect_events
 from citry.ext.events.bindings import compile_template_bindings, rewrite_resolved_attrs
@@ -45,6 +47,7 @@ from citry.ext.events.routes import events_routes
 from citry.ext.events.state import (
     StateMeta,
     build_state_instance,
+    check_replaced_state,
     convert_state_class,
     resolve_state_meta,
     validate_state_class,
@@ -557,27 +560,28 @@ class EventsExtension(Extension):
         return _compose_nested_declaration_class(cls, "Events")
 
     def _effective_state(self, cls: type[Component]) -> tuple[type, StateMeta] | None:
-        """Build and convert the effective State declaration for this component."""
-        declarations = _active_nested_class_declarations(cls, "State")
-        if not declarations:
+        """
+        Build and convert the effective State declaration for this component.
+
+        State is a data shape, so the nearest declaration in C3 order applies
+        and is never combined with a parent's: ``class State(Parent.State):``
+        extends the parent's fields and settings, while a plain
+        ``class State:`` replaces them.
+        """
+        nearest = _nearest_data_shape_declaration(cls, "State")
+        if nearest is None or nearest.value is None:
             return None
-        first_owner = declarations[0].declaring_class
-        inherited = _component_events_info(first_owner)
-        if (
-            first_owner is not cls
-            and inherited is not None
-            and inherited.state_cls is not None
-            and inherited.state_meta is not None
-            and declarations == _active_nested_class_declarations(first_owner, "State")
-        ):
+        ancestor = _ancestor_with_same_declaration(cls, "State", nearest)
+        inherited = _component_events_info(ancestor) if ancestor is not None else None
+        if inherited is not None and inherited.state_cls is not None and inherited.state_meta is not None:
             return inherited.state_cls, inherited.state_meta
 
-        declaration = _compose_nested_declaration_class(cls, "State")
-        declaration = cast("type", declaration)
+        declaration = cast("type", nearest.value)
         comp_name = cls.__name__
         validate_state_class(comp_name, declaration)
         converted = convert_state_class(comp_name, declaration)
         meta = resolve_state_meta(comp_name, declaration, converted)
+        check_replaced_state(cls, nearest, converted)
         type.__setattr__(cls, "State", converted)
         return converted, meta
 

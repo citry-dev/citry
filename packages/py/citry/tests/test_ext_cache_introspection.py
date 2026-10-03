@@ -161,8 +161,11 @@ class TestCacheIntrospectionSafety:
     def test_opaque_slots_schema_reports_possible_source(self) -> None:
         app = Citry(autodiscover=False)
 
+        # A plain base with its own constructor keeps that construction, so
+        # Citry cannot read which slots the schema accepts.
         class OpaqueBase:
-            pass
+            def __init__(self, **values: object) -> None:
+                self.values = values
 
         class OpaqueSlots(OpaqueBase):
             pass

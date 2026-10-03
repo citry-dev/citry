@@ -10,6 +10,7 @@ import gc
 import json
 import sys
 import typing
+import warnings
 from dataclasses import dataclass, field, fields, is_dataclass
 from datetime import timedelta
 from typing import ClassVar
@@ -19,7 +20,7 @@ import pytest
 
 import citry as citry_module
 from citry import Citry as _Citry
-from citry import Component
+from citry import Component, NestedSchemaReplacedWarning
 from citry.ext.events import EventsExtension, event
 from citry.ext.events.handlers import EventOptions, event_options
 from citry.ext.events.schemas import validate_args
@@ -232,7 +233,36 @@ class TestStateCapture:
         ext = _events_ext(app)
         assert ext.resolve(Child).state_cls is ext.resolve(Parent).state_cls
 
-    def test_child_state_declaration_automatically_extends_parent_state(self):
+    def test_child_state_naming_the_parent_extends_its_fields_and_settings(self):
+        app = _Citry()
+
+        class Parent(Component):
+            citry = app
+
+            class State:
+                parent: str = "parent"
+                secret: str = ""
+                _public = ("parent",)
+                _storage = "server"
+
+                def label(self):
+                    return self.parent
+
+        class Child(Parent):
+            class State(Parent.State):
+                child: str = "child"
+
+                def label(self):
+                    return super().label() + ":" + self.child
+
+        info = _events_ext(app).resolve(Child)
+        assert [field.name for field in fields(info.state_cls)] == ["parent", "secret", "child"]
+        assert info.state_cls().label() == "parent:child"
+        # Settings travel with the parent's class through normal inheritance.
+        assert info.state_meta.public == ("parent",)
+        assert info.state_meta.storage == "server"
+
+    def test_plain_child_state_replaces_the_parent_state(self):
         app = _Citry()
 
         class Parent(Component):
@@ -241,45 +271,124 @@ class TestStateCapture:
             class State:
                 parent: str = "parent"
 
-                def label(self):
-                    return self.parent
+        with pytest.warns(
+            NestedSchemaReplacedWarning,
+            match=r"Component Child: State replaces Parent.State and leaves out field 'parent'.",
+        ):
 
-        class Child(Parent):
-            class State:
-                child: str = "child"
-
-                def label(self):
-                    return super().label() + ":" + self.child
+            class Child(Parent):
+                class State:
+                    child: str = "child"
 
         info = _events_ext(app).resolve(Child)
-        assert [field.name for field in fields(info.state_cls)] == ["parent", "child"]
-        assert info.state_cls().label() == "parent:child"
+        assert [field.name for field in fields(info.state_cls)] == ["child"]
 
-    def test_state_multiple_inheritance_follows_component_c3(self):
+    def test_replacing_server_state_without_storage_raises(self):
         app = _Citry()
 
-        class Common(Component):
+        class Parent(Component):
             citry = app
 
             class State:
-                shared: str = "common"
+                token: str = ""
+                _storage = "server"
 
-        class Left(Common):
+        with pytest.raises(
+            ValueError, match=r"State replaces Parent.State, which keeps its values on the server"
+        ) as err:
+
+            class Child(Parent):
+                class State:
+                    token: str = ""
+
+        assert "`class State(Parent.State):`" in str(err.value)
+
+        # Setting _storage on the new State is an explicit choice, even to
+        # store the values in the page.
+        class SignedChild(Parent):
+            class State:
+                token: str = ""
+                _storage = "signed"
+
+        assert _events_ext(app).resolve(SignedChild).state_meta.storage == "signed"
+
+    def test_replacing_state_that_drops_visibility_settings_warns(self):
+        app = _Citry()
+
+        class Parent(Component):
+            citry = app
+
+            class State:
+                page: int = 1
+                secret: str = ""
+                _public = ("page",)
+                _model = ("page",)
+
+        with pytest.warns(NestedSchemaReplacedWarning) as record:
+
+            class Child(Parent):
+                class State:
+                    page: int = 1
+                    secret: str = ""
+
+        assert [str(item.message) for item in record] == [
+            "Component Child: State replaces Parent.State. It does not set _public, which Parent.State sets,"
+            " so browser code can now read every field. It does not set _model, which Parent.State sets,"
+            " so browser code can now change every field it can read. To keep the parent's fields and"
+            " settings, write `class State(Parent.State):` or copy them into the new State."
+        ]
+
+    def test_state_none_and_inherited_state_do_not_warn(self):
+        app = _Citry()
+
+        class Parent(Component):
+            citry = app
+
+            class State:
+                page: int = 1
+                _public = ("page",)
+                _storage = "server"
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NestedSchemaReplacedWarning)
+
+            class Cleared(Parent):
+                State = None
+
+            class Inherited(Parent):
+                pass
+
+        ext = _events_ext(app)
+        assert ext.resolve(Cleared).state_cls is None
+        assert ext.resolve(Inherited).state_cls is ext.resolve(Parent).state_cls
+
+    def test_state_from_two_bases_must_be_declared_on_the_child(self):
+        app = _Citry()
+
+        class Left(Component):
+            citry = app
+
             class State:
                 left: str = "left"
-                shared: str = "left-shared"
 
-        class Right(Common):
+        class Right(Component):
+            citry = app
+
             class State:
                 right: str = "right"
-                shared: str = "right-shared"
 
-        class Combined(Left, Right):
-            pass
+        with pytest.raises(
+            ValueError, match=r"its bases declare different State classes \(Left.State and Right.State\)"
+        ):
 
-        state_cls = _events_ext(app).resolve(Combined).state_cls
-        assert [field.name for field in fields(state_cls)] == ["shared", "right", "left"]
-        assert state_cls().shared == "left-shared"
+            class Combined(Left, Right):
+                pass
+
+        class Chosen(Left, Right):
+            State = Left.State
+
+        state_cls = _events_ext(app).resolve(Chosen).state_cls
+        assert [field.name for field in fields(state_cls)] == ["left"]
 
     def test_state_must_be_a_class(self):
         app = _Citry()

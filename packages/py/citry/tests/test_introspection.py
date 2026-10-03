@@ -39,6 +39,7 @@ from citry import (
     Extension,
     ExtensionVersion,
     FieldInfo,
+    NestedSchemaReplacedWarning,
     NotRegistered,
     SchemaInfo,
 )
@@ -1503,8 +1504,11 @@ class TestSchemaAdapter:
     def test_all_roles_distinguish_framework_absence_explicit_none_fields_and_opaque(self):
         app = Citry(autodiscover=False)
 
+        # A plain base with its own constructor keeps that construction, so
+        # Citry cannot read the schema's fields.
         class OpaqueBase:
-            pass
+            def __init__(self, **values: object) -> None:
+                self.values = values
 
         class OpaqueSchema(OpaqueBase):
             value: str
@@ -1544,8 +1548,14 @@ class TestSchemaAdapter:
         class MixedCard(SchemaMixin, Component):
             citry = app
 
-        class Replacement(MixedCard):
-            class Kwargs:
+        with pytest.warns(NestedSchemaReplacedWarning):
+
+            class Replacement(MixedCard):
+                class Kwargs:
+                    own: int
+
+        class Extension(MixedCard):
+            class Kwargs(MixedCard.Kwargs):
                 own: int
 
         class Reopened(MixedCard):
@@ -1553,44 +1563,42 @@ class TestSchemaAdapter:
 
         mixed = _inspect_component_schemas(MixedCard).kwargs
         replacement = _inspect_component_schemas(Replacement).kwargs
+        extension = _inspect_component_schemas(Extension).kwargs
         reopened = _inspect_component_schemas(Reopened).kwargs
 
         assert mixed.declared_on.endswith(".<locals>.SchemaMixin")
         assert [item.name for item in mixed.fields] == ["mixin"]
         assert replacement.declared_on.endswith(".<locals>.Replacement")
-        assert [item.name for item in replacement.fields] == ["mixin", "own"]
+        assert [item.name for item in replacement.fields] == ["own"]
+        assert extension.declared_on.endswith(".<locals>.Extension")
+        assert [item.name for item in extension.fields] == ["mixin", "own"]
         assert reopened.kind == "absent"
         assert reopened.declared_on.endswith(".<locals>.Reopened")
 
-    def test_multiple_branch_schema_path_names_the_effective_receiving_component(self):
+    def test_extended_schema_path_names_the_receiving_component_and_field_owners(self):
         app = Citry(autodiscover=False)
 
-        class Left(Component):
+        class Base(Component):
             citry = app
 
             class Kwargs:
                 left: str
 
-        class Right(Component):
-            citry = app
-
-            class Kwargs:
+        class Child(Base):
+            class Kwargs(Base.Kwargs):
                 right: str
 
-        class Combined(Left, Right):
-            pass
-
-        schema = _inspect_component_schemas(Combined).kwargs
+        schema = _inspect_component_schemas(Child).kwargs
 
         assert schema.declared_on is not None
-        assert schema.declared_on.endswith(".<locals>.Left")
+        assert schema.declared_on.endswith(".<locals>.Child")
         assert schema.import_path is not None
-        assert schema.import_path.endswith(".<locals>.Combined.Kwargs")
-        assert [item.name for item in schema.fields] == ["right", "left"]
+        assert schema.import_path.endswith(".<locals>.Child.Kwargs")
+        assert [item.name for item in schema.fields] == ["left", "right"]
         assert schema.fields[0].source_qualname is not None
-        assert schema.fields[0].source_qualname.endswith(".<locals>.Right.Kwargs")
+        assert schema.fields[0].source_qualname.endswith(".<locals>.Base.Kwargs")
         assert schema.fields[1].source_qualname is not None
-        assert schema.fields[1].source_qualname.endswith(".<locals>.Left.Kwargs")
+        assert schema.fields[1].source_qualname.endswith(".<locals>.Child.Kwargs")
         assert all(item.source_module == __name__ for item in schema.fields)
         assert all(item.source_file == Path(__file__).resolve() for item in schema.fields)
 
@@ -1603,16 +1611,11 @@ class TestSchemaAdapter:
         class RightKwargs:
             right: int
 
-        class Left(Component):
+        class Combined(Component):
             citry = app
-            Kwargs = LeftKwargs
 
-        class Right(Component):
-            citry = app
-            Kwargs = RightKwargs
-
-        class Combined(Left, Right):
-            pass
+            class Kwargs(LeftKwargs, RightKwargs):
+                pass
 
         # The effective schema captured these owners when the component was
         # built; later reflection must not reconstruct them from storage that
@@ -1672,14 +1675,11 @@ class TestSchemaAdapter:
         class GoodSchema:
             good: str
 
-        class BadDefinition:
-            Kwargs = BadSchema
-
-        class GoodDefinition:
-            Kwargs = GoodSchema
-
-        class Card(BadDefinition, GoodDefinition, Component):
+        class Card(Component):
             citry = app
+
+            class Kwargs(BadSchema, GoodSchema):
+                pass
 
         fields = {item.name: item for item in _inspect_component_schemas(Card).kwargs.fields}
 
@@ -1745,12 +1745,13 @@ class TestSchemaAdapter:
     def test_schema_role_rejects_a_non_class_binding(self):
         app = Citry(autodiscover=False)
 
-        class Card(Component):
-            citry = app
-            Kwargs = 42
+        # A non-class binding fails when the component is defined, before
+        # introspection could ever see it.
+        with pytest.raises(ValueError, match=r"Card\.Kwargs must be a class, or None for no Kwargs; got 42"):
 
-        with pytest.raises(TypeError, match=r"Card\.Kwargs must be a class or None"):
-            _inspect_component_schemas(Card)
+            class Card(Component):
+                citry = app
+                Kwargs = 42
 
     def test_schema_role_requires_safe_owner_and_schema_import_paths(self):
         app = Citry(autodiscover=False)

@@ -88,7 +88,7 @@ class TestPydanticKwargs:
         assert c.inspect_component(OpenV1).schemas.template_data.namespace_policy == "allow-extra"
 
     @pytest.mark.parametrize("model_base", [BaseModel, BaseModelV1])
-    def test_same_generation_models_merge_across_c3_branches(self, model_base):
+    def test_models_from_two_bases_must_be_chosen_on_the_child(self, model_base):
         c = Citry()
 
         class LeftSchema(model_base):
@@ -105,11 +105,28 @@ class TestPydanticKwargs:
             citry = c
             Kwargs = RightSchema
 
-        class Combined(Left, Right):
-            pass
+        with pytest.raises(ValueError, match="its bases declare different Kwargs classes"):
 
-        value = Combined.Kwargs()
-        assert (value.left, value.right) == ("left", "right")
+            class Combined(Left, Right):
+                pass
+
+    @pytest.mark.parametrize("model_base", [BaseModel, BaseModelV1])
+    def test_child_model_extends_the_parent_model_natively(self, model_base):
+        c = Citry()
+
+        class Parent(Component):
+            citry = c
+
+            class Kwargs(model_base):
+                title: str
+                size: int = 1
+
+        class Child(Parent):
+            class Kwargs(Parent.Kwargs):
+                label: str = "x"
+
+        value = Child.Kwargs(title="t")
+        assert (value.title, value.size, value.label) == ("t", 1, "x")
 
     def test_typed_view_is_validated_model(self):
         c = Citry()
