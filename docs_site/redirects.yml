@@ -5,7 +5,33 @@
 # Sources must be unique and vacant, destinations must be published, and chains
 # and cycles are rejected. See docs_site/_internal/redirects.py for validation.
 redirects:
+  - from: /advanced/alpine-runtime/
+    to: /vue/server-rendering/
+  - from: /advanced/vue-runtime/
+    to: /vue/server-rendering/
+  - from: /concepts/client-interactivity/
+    to: /vue/
+  - from: /syntax/alpine/
+    to: /syntax/vue/
+  - from: /syntax/dynamic-attributes/
+    to: /syntax/attributes/
   - from: /advanced/const-optimization/
-    to: /advanced/performance/
+    to: /performance/const/
+  - from: /advanced/performance/
+    to: /performance/
+  - from: /advanced/simple-components/
+    to: /performance/simple-components/
+  - from: /advanced/caching/
+    to: /performance/caching/
+  - from: /advanced/cache-backends/
+    to: /performance/cache-backends/
   - from: /ui-library/components/stack-group/
     to: /ui-library/components/col-row/
+  - from: /events/http/
+    to: /events/routes/
+  - from: /advanced/custom-component-values/
+    to: /advanced/render-custom-values/
+  - from: /cli/
+    to: /advanced/cli/
+  - from: /web-frameworks/
+    to: /advanced/web-frameworks/

@@ -25,7 +25,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
 
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
 from citry import Component
 from docs_site._internal.components.brand import CitryMark  # noqa: F401
@@ -90,7 +90,7 @@ class TocItems(Component):
               class="djc-toc__link"
               c-href="'#' + item.id"
             >
-              {{ item.name }}
+              {{ item.label_html }}
             </a>
           </span>
           <c-TocItems
@@ -482,13 +482,40 @@ class DocPage(Component):
 
           <script>
             (function () {
-              // Key matches the vendored site.js theme picker; rebranded together
-              // with the rest of the djc-* hooks later.
               var t = localStorage.getItem('djc-theme');
               if (t === 'dark' || t === 'light') {
                 document.documentElement.setAttribute('data-theme', t);
               }
             })();
+            globalThis.__citryDocsReady = new Promise(function (resolve) {
+              var readyAppIds = new Set();
+              var expectedAppId = null;
+              var settled = false;
+              var finish = function () {
+                if (settled) return;
+                settled = true;
+                document.removeEventListener('citry:ready', onCitryReady);
+                resolve();
+              };
+              var onCitryReady = function (event) {
+                var appId = event.detail && event.detail.appId;
+                if (typeof appId !== 'string') return;
+                readyAppIds.add(appId);
+                if (appId === expectedAppId) finish();
+              };
+              var inspectBody = function () {
+                var host = document.querySelector('body > [id^="citry-vue-"]');
+                if (!host) return finish();
+                expectedAppId = host.id.slice('citry-vue-'.length);
+                if (readyAppIds.has(expectedAppId)) finish();
+              };
+              document.addEventListener('citry:ready', onCitryReady);
+              if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', inspectBody, { once: true });
+              } else {
+                inspectBody();
+              }
+            });
           </script>
 
           <link
@@ -527,6 +554,24 @@ class DocPage(Component):
           </c-if>
           <meta name="djc-base-path" c-content="base_path">
           <c-css />
+          <script defer src="/static/js/site.js"></script>
+          <script defer src="/static/js/search.js"></script>
+          <c-if cond="is_playground">
+            <script type="module" src="/static/playground/playground.js"></script>
+          </c-if>
+          <c-if cond="has_interactive_live_code">
+            <script type="module" src="/static/playground/live_code.js"></script>
+          </c-if>
+          <c-if cond="is_landing">
+            <script type="module" src="/static/playground/landing_composer.js"></script>
+          </c-if>
+          <c-if cond="cloudflare_web_analytics_config">
+            <script
+              defer
+              src="https://static.cloudflareinsights.com/beacon.min.js"
+              c-data-cf-beacon="cloudflare_web_analytics_config"
+            ></script>
+          </c-if>
         </head>
         <body
           c-class="{
@@ -1301,24 +1346,6 @@ class DocPage(Component):
           />
 
           <c-js />
-          <script src="/static/js/site.js"></script>
-          <script src="/static/js/search.js"></script>
-          <c-if cond="is_playground">
-            <script type="module" src="/static/playground/playground.js"></script>
-          </c-if>
-          <c-if cond="has_interactive_live_code">
-            <script type="module" src="/static/playground/live_code.js"></script>
-          </c-if>
-          <c-if cond="is_landing">
-            <script type="module" src="/static/playground/landing_composer.js"></script>
-          </c-if>
-          <c-if cond="cloudflare_web_analytics_config">
-            <script
-              defer
-              src="https://static.cloudflareinsights.com/beacon.min.js"
-              c-data-cf-beacon="cloudflare_web_analytics_config"
-            ></script>
-          </c-if>
         </body>
       </html>
     """
@@ -1420,7 +1447,7 @@ def _project_blog_neighbor(post: Any, nav_tree: NavTree | None, version_prefix: 
 
 def _flatten_toc(toc_tokens: list) -> list[SimpleNamespace]:
     """
-    Turn python-markdown's toc tokens into the right-rail model.
+    Turn the page's normalized toc tokens (see ``toc.py``) into the right-rail model.
 
     The page H1 is unwrapped so its sections become the top level (the rail
     lists sections, not the redundant page title). Descendants retain their
@@ -1434,6 +1461,7 @@ def _flatten_toc(toc_tokens: list) -> list[SimpleNamespace]:
         return SimpleNamespace(
             id=token["id"],
             name=token["name"],
+            label_html=_toc_label_html(token),
             kind=token.get("kind", ""),
             level=level,
             level_class=f"djc-toc__level-{level}",
@@ -1455,6 +1483,19 @@ def _flatten_toc(toc_tokens: list) -> list[SimpleNamespace]:
     for token in top:
         items.append(view(token, allow_collapse=True))
     return items
+
+
+def _toc_label_html(token: dict) -> Markup:
+    """
+    Render a TOC entry's label, keeping the heading's code spans as ``<code>``.
+
+    Each part is plain text and is escaped exactly once here, and ``<code>`` is the
+    only tag added, so heading text cannot inject markup into the rail.
+    """
+    parts = token.get("label") or [(token["name"], False)]
+    return Markup(  # noqa: S704 - each part is escaped; only <code> is added
+        "".join(f"<code>{escape(text)}</code>" if is_code else str(escape(text)) for text, is_code in parts)
+    )
 
 
 def _resolve_og_image(og_image: str, site_url: str) -> str:

@@ -1,4 +1,7 @@
 const PYPI_FILES_HOST = "files.pythonhosted.org";
+// Published direct URLs are accepted only from this pinned Pyodide CDN origin.
+const APPROVED_DIRECT_URL_HOST = "cdn.jsdelivr.net";
+const PYODIDE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 function packageLabel(packageInfo) {
@@ -21,16 +24,76 @@ function requirePackageIdentity(packageInfo) {
   }
 }
 
-function resolveDirectUrl(packageInfo, baseUrl) {
-  if (typeof packageInfo.url !== "string" || packageInfo.url.length === 0) {
+function pyodidePackageBase(pyodide) {
+  if (
+    pyodide === null
+    || typeof pyodide !== "object"
+    || typeof pyodide.version !== "string"
+    || !PYODIDE_VERSION_PATTERN.test(pyodide.version)
+  ) {
+    throw new Error("The playground runtime has an invalid Pyodide version.");
+  }
+  return `/pyodide/v${pyodide.version}/full/`;
+}
+
+export function validatePyodideManifest(pyodide) {
+  const path = pyodidePackageBase(pyodide);
+  const baseUrl = `https://${APPROVED_DIRECT_URL_HOST}${path}`;
+  if (
+    typeof pyodide.python !== "string"
+    || !PYODIDE_VERSION_PATTERN.test(pyodide.python)
+    || pyodide.index_url !== baseUrl
+    || pyodide.module_url !== `${baseUrl}pyodide.mjs`
+  ) {
+    throw new Error("The playground runtime has invalid Pyodide CDN URLs.");
+  }
+}
+
+function resolveDirectUrl(packageInfo, baseUrl, pyodide) {
+  const value = packageInfo.url;
+  if (typeof value !== "string" || value.length === 0) {
     throw new Error(`${packageLabel(packageInfo)} has no runtime URL.`);
   }
-  return new URL(packageInfo.url, baseUrl).href;
+  if (
+    value.startsWith("//")
+    || value.includes("\\")
+    || value.includes("?")
+    || value.includes("#")
+    || value.includes("@")
+  ) {
+    throw new Error(`${packageLabel(packageInfo)} has an unsafe runtime URL.`);
+  }
+  const isLocal = value.startsWith("./local/") && !value.includes("..") && !value.startsWith("//");
+  const isAbsolute = /^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith("//");
+  const resolved = new URL(value, baseUrl);
+  if (isLocal) return resolved.href;
+  const expectedPath = pyodidePackageBase(pyodide);
+  const pathRemainder = resolved.pathname.startsWith(expectedPath)
+    ? resolved.pathname.slice(expectedPath.length)
+    : "";
+  if (
+    !isAbsolute
+    || resolved.protocol !== "https:"
+    || resolved.hostname !== APPROVED_DIRECT_URL_HOST
+    || resolved.username
+    || resolved.password
+    || resolved.port
+    || !pathRemainder
+    || pathRemainder.includes("/")
+  ) {
+    throw new Error(`${packageLabel(packageInfo)} has an unapproved Pyodide runtime URL.`);
+  }
+  return resolved.href;
 }
 
 async function resolvePypiUrl(packageInfo, fetchImpl) {
   const { filename, sha256 } = packageInfo;
-  if (typeof filename !== "string" || filename.length === 0 || filename.includes("/")) {
+  if (
+    typeof filename !== "string"
+    || filename.length === 0
+    || filename.includes("/")
+    || filename.includes("\\")
+  ) {
     throw new Error(`${packageLabel(packageInfo)} has an invalid wheel filename.`);
   }
   if (typeof sha256 !== "string" || !SHA256_PATTERN.test(sha256)) {
@@ -68,10 +131,10 @@ async function resolvePypiUrl(packageInfo, fetchImpl) {
 
 export async function resolvePackageUrl(
   packageInfo,
-  { baseUrl = import.meta.url, fetchImpl = fetch } = {},
+  { baseUrl = import.meta.url, fetchImpl = fetch, pyodide } = {},
 ) {
   requirePackageIdentity(packageInfo);
-  if (packageInfo.source === "url") return resolveDirectUrl(packageInfo, baseUrl);
+  if (packageInfo.source === "url") return resolveDirectUrl(packageInfo, baseUrl, pyodide);
   if (packageInfo.source === "pypi") return resolvePypiUrl(packageInfo, fetchImpl);
   throw new Error(`${packageLabel(packageInfo)} has an unsupported runtime source.`);
 }

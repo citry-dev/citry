@@ -12,10 +12,14 @@ class ClickCounter(Component):
         return {"name": kwargs.name, "count": 0}
 
     template = """
-      <button class="counter" type="button" @click="count = count + 1">
-        <span class="counter__name" x-text="name"></span>
+      <button
+        class="counter"
+        type="button"
+        @click="count = count + 1"
+      >
+        <span class="counter__name" v-text="name"></span>
         clicked
-        <span class="counter__count" x-text="count"></span>
+        <span class="counter__count" v-text="count"></span>
         times
       </button>
     """

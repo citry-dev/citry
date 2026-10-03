@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 
+from citry_setup import citry_app
+
 from citry import Component
 from citry.ext.events import EventError, actions
-
-from citry_setup import citry_app
 
 
 @dataclass
@@ -49,13 +49,15 @@ class TaskRow(Component):
 
     class Events:
         # Update the task title in TASKS.
-        # Return a message to display in the UI.
+        # Send the row a browser event so it can show a message.
         def save(self, data: RenameTaskIn, state: "TaskRow.State"):
             title = data.title.strip()
             if len(title) < 3:
                 raise EventError(
                     "Give the task a longer title.",
-                    fields={"title": "Use at least three characters."},
+                    fields={
+                        "title": "Use at least three characters.",
+                    },
                 )
 
             # Perform a "database" update.
@@ -70,10 +72,7 @@ class TaskRow(Component):
             )
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
-        return {
-            "task_id": kwargs.task_id,
-            "title": kwargs.title,
-        }
+        return {"task_id": kwargs.task_id, "title": kwargs.title}
 
     template = """
       <li class="task-row">
@@ -94,10 +93,10 @@ class TaskRow(Component):
           </button>
           <p
             role="alert"
-            x-show="$error('save')"
-            x-text="$error('save')?.fieldErrors?.title || ''"
+            v-show="$error('save')"
+            v-text="$error('save')?.fieldErrors?.title || ''"
           ></p>
-          <output x-text="saveStatus"></output>
+          <output v-text="saveStatus"></output>
         </form>
       </li>
     """
@@ -105,12 +104,23 @@ class TaskRow(Component):
     js = """
       // Display a message when this row's task title
       // is successfully saved.
-      $component(({ onEvent, scope }) => {
-        scope.saveStatus = '';
-        onEvent('TaskRow:saved', (detail) => {
-          scope.saveStatus =
-            `Saved task ${detail.taskId}: ${detail.title}`;
-        });
+      $component({
+        data() {
+          return { saveStatus: '' };
+        },
+        methods: {
+          showSaved(detail) {
+            this.saveStatus =
+              `Saved task ${detail.taskId}: ${detail.title}`;
+          },
+        },
+        onServerRender({ component, onEvent }) {
+          // Citry removes this listener before onServerRender
+          // runs again and when the component unmounts.
+          onEvent('TaskRow:saved', (detail) => {
+            component.showSaved(detail);
+          });
+        },
       });
     """
 
@@ -124,7 +134,7 @@ class TaskRows(Component):
     class Slots:
         pass
 
-    def template_data(self, kwargs, slots):
+    def template_data(self, kwargs: Kwargs, slots: Slots):
         return {"tasks": kwargs.tasks}
 
     template = """
@@ -136,10 +146,6 @@ class TaskRows(Component):
         />
       </c-for>
     """
-
-
-class FilterTasksIn:
-    hide_completed: bool
 
 
 class TaskFilterToggle(Component):
@@ -154,12 +160,11 @@ class TaskFilterToggle(Component):
     template = """
       <button
         type="button"
-        :disabled="clientProps.loading"
-        x-text="
-          clientProps.hideCompleted
-            ? 'Show all tasks'
-            : 'Hide completed tasks'
+        :disabled="loading"
+        v-text="
+          hideCompleted ? 'Show all tasks' : 'Hide completed tasks'
         "
+        @click="$emit('select')"
       ></button>
     """
 
@@ -169,11 +174,13 @@ class TaskFilterToggle(Component):
           hideCompleted: { type: Boolean, required: true },
           loading: { type: Boolean, required: true },
         },
-        init: ({ props, scope }) => {
-          scope.clientProps = props;
-        },
+        emits: ['select'],
       });
     """
+
+
+class FilterTasksIn:
+    hide_completed: bool
 
 
 class TaskList(Component):
@@ -181,6 +188,7 @@ class TaskList(Component):
 
     class Kwargs:
         tasks: list[Task]
+        hide_completed: bool = False
 
     class Slots:
         pass
@@ -190,61 +198,40 @@ class TaskList(Component):
             visible_tasks = load_tasks(
                 hide_completed=data.hide_completed,
             )
-            return [
-                actions.Dispatch(
-                    "TaskList:filter-changed",
-                    {"hideCompleted": data.hide_completed},
-                ),
-                actions.Render(
-                    TaskRows(tasks=visible_tasks),
-                    target="#task-rows",
-                    swap="inner",
-                ),
-            ]
+            task_list = TaskList(
+                tasks=visible_tasks,
+                hide_completed=data.hide_completed,
+            )
+            return actions.Render(task_list)
 
-    def template_data(self, kwargs, slots):
-        return {
-            "tasks": kwargs.tasks,
-        }
+    def template_data(self, kwargs: Kwargs, slots: Slots):
+        return {"tasks": kwargs.tasks}
+
+    def js_data(self, kwargs: Kwargs, slots: Slots):
+        return {"hideCompleted": kwargs.hide_completed}
 
     template = """
-      <section>
+      <section class="task-list">
         <c-TaskFilterToggle
-          $c-props="{
-            hideCompleted,
-            loading: $loading('filter_tasks'),
-          }"
-          @c-click="filter_tasks({
+          :hideCompleted="hideCompleted"
+          :loading="$loading('filter_tasks')"
+          @select="$sendEvent('filter_tasks', {
             hide_completed: !hideCompleted,
           })"
         />
 
-        <ul id="task-rows">
+        <ul class="task-rows">
           <c-TaskRows c-tasks="tasks" />
         </ul>
 
         <c-TaskFilterToggle
-          $c-props="{
-            hideCompleted,
-            loading: $loading('filter_tasks'),
-          }"
-          @c-click="filter_tasks({
+          :hideCompleted="hideCompleted"
+          :loading="$loading('filter_tasks')"
+          @select="$sendEvent('filter_tasks', {
             hide_completed: !hideCompleted,
           })"
         />
       </section>
-    """
-
-    js = """
-      $component(({ onEvent, scope }) => {
-        scope.hideCompleted = false;
-        onEvent(
-          'TaskList:filter-changed',
-          (detail) => {
-            scope.hideCompleted = detail.hideCompleted;
-          },
-        );
-      });
     """
 
 
@@ -257,7 +244,7 @@ class TutorialPage(Component):
     class Slots:
         pass
 
-    def template_data(self, kwargs, slots):
+    def template_data(self, kwargs: Kwargs, slots: Slots):
         return {"tasks": load_tasks()}
 
     template = """

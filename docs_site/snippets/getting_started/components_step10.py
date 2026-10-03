@@ -27,11 +27,15 @@ class ChoiceButton(Component):
         pass
 
     template = """
-      <button class="choice-button" type="button">
+      <button
+        class="choice-button"
+        type="button"
+        @click="$emit('select')"
+      >
         Choose
         <span
           class="choice-button__label"
-          x-text="clientProps.label"
+          v-text="label"
         ></span>
       </button>
     """
@@ -41,9 +45,7 @@ class ChoiceButton(Component):
         props: {
           label: { type: String, required: true },
         },
-        init: ({ props, scope }) => {
-          scope.clientProps = props;
-        },
+        emits: ['select'],
       });
     """
 
@@ -72,30 +74,14 @@ class ChoicePicker(Component):
             state.batches_loaded += 1
 
             return actions.Dispatch(
-                "choice-picker:loaded",
+                "ChoicePicker:loaded",
                 {
                     "choices": choices,
-                    "batches_loaded": state.batches_loaded,
                 },
             )
 
     template = """
-      {# New in this step: pass Python `batches_loaded` to JS. #}
-      {# `c-x-data` sets the first browser value. #}
-      {# The listener applies later values returned by Python. #}
-      <section
-        class="choice-picker"
-        c-x-data="{
-          'choices': [],
-          'choice': '',
-          'batchesLoaded': batches_loaded,
-        }"
-        @choice-picker:loaded="
-          choices = $event.detail.choices;
-          choice = choices[0];
-          batchesLoaded = $event.detail.batches_loaded;
-        "
-      >
+      <section class="choice-picker">
         <button
           type="button"
           :disabled="$loading('load_choices')"
@@ -103,38 +89,65 @@ class ChoicePicker(Component):
         >
           Load choices
         </button>
-        <span x-show="$loading('load_choices')">Loading...</span>
+        <span v-show="$loading('load_choices')">Loading...</span>
 
         {# New in this step: show the counter from Python. #}
+        {# Python renders the starting count inside <output>. #}
+        {# `$state` is State in the browser; it updates after #}
+        {# each successful Python call, and Vue shows the new #}
+        {# value. #}
         <p>
           Sets loaded:
-          <output x-text="batchesLoaded">
+          <output v-text="$state.batches_loaded">
             {{ batches_loaded }}
           </output>
         </p>
 
-        <p x-show="choices.length === 0">
+        <p v-show="choices.length === 0">
           No choices loaded yet.
         </p>
-        <div x-show="choices.length > 0">
+        <div v-show="choices.length > 0">
           <p>
             Current choice:
             <output
               class="choice-picker__value"
-              x-text="choice"
+              v-text="choice"
             ></output>
           </p>
 
           <c-ChoiceButton
-            $c-props="{ label: choice }"
-            @click="
-              choice = choices[
-                (choices.indexOf(choice) + 1) % choices.length
-              ]
-            "
+            :label="choice"
+            @select="setNextChoice"
           />
         </div>
       </section>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { choices: [], choice: '' };
+        },
+        methods: {
+          loadChoices(newChoices) {
+            this.choices = newChoices;
+            this.choice = newChoices[0];
+          },
+          setNextChoice() {
+            const oldChoiceIndex = this.choices.indexOf(this.choice);
+            this.choice = this.choices[
+              (oldChoiceIndex + 1) % this.choices.length
+            ];
+          },
+        },
+        onServerRender({ component, onEvent }) {
+          // Citry removes this listener before onServerRender
+          // runs again and when the component unmounts.
+          onEvent('ChoicePicker:loaded', (detail) => {
+            component.loadChoices(detail.choices);
+          });
+        },
+      });
     """
 
 

@@ -5,51 +5,18 @@ description: Call a Python event handler from a Citry component and update the p
 
 # Server events
 
-When a click or form submit needs Python, Citry can call a named handler on
-the component and apply its result without reloading the page. You write the
-handler, declare the small amount of [`State`][citry.Component.State] that may
-travel through the browser, and choose what the response should do.
+Some clicks and form submits need Python: save a record, run a query, check a
+permission. Server events let a button in your component call a Python method
+on that component, then update the page with the result. The page does not
+reload, and you write no JavaScript or API endpoint.
 
-Events is built in. There is no extension to install. Pages that use it load
-the client runtime automatically.
+Events are built in. There is nothing to install, and pages that use them load
+the browser code automatically.
 
-## Configure a signing secret before using State
+## Call Python on click
 
-By default, State travels through the browser in a signed token. Give your
-Citry instance a long random secret, then register and mount that same
-instance:
-
-```python
-import os
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
-
-from citry import Citry
-from citry.contrib.fastapi import mount
-
-citry_app = Citry(secret=os.environ["CITRY_SECRET"])
-
-
-@asynccontextmanager
-async def lifespan(_app):
-    citry_app.initialize()
-    yield
-
-
-web_app = FastAPI(lifespan=lifespan)
-mount(web_app, citry_app)
-```
-
-Django projects can pass `citry.contrib.django.secret()` to reuse Django's
-configured secret. Stateless handlers do not mint a State token, but using one
-configured instance consistently keeps stateful components ready. See
-[Web frameworks](/web-frameworks/) for the other mounting adapters.
-
-## Call Python from a button
-
-The smallest server interaction is a public method inside `class Events`. The
-template's `@c-click` value names it:
+Put the method in a nested `class Events`, and name it in an `@c-click`
+attribute:
 
 ```citry
 from citry import Component
@@ -79,40 +46,76 @@ class Counter(Component):
     """
 ```
 
-Clicking the button calls `increment` on the server. Returning a component
-element renders a fresh component tree and morphs it over the calling instance,
-so the button text changes without a page reload.
+Clicking the button calls `increment` on the server. The handler returns a new
+`Counter`, and Citry renders it and puts it in place of the old one, so the
+button text changes.
 
-Every public method declared on the component's own [`Events`][citry.Component.Events] class is callable.
-An underscore-prefixed method is a private helper or configuration hook.
+[`State`][citry.Component.State] holds the values the next call needs, here
+the current count. Citry sends it to the browser and back with each call.
+`citry_app` needs a signing secret for this, as the next section shows.
+
+Every public method on [`Events`][citry.Component.Events] can be called from
+the browser. A method whose name starts with an underscore cannot, so use that
+for helpers.
+
+## Set a signing secret { #configure-a-signing-secret-before-using-state }
+
+By default, Citry signs State before sending it to the browser, so it can
+detect when someone changes it. Signing needs a secret. Rendering a component
+that has State without one raises an error.
+
+Give your Citry instance a long random secret, then register and mount that
+same instance:
+
+```python
+import os
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from citry import Citry
+from citry.contrib.fastapi import mount
+
+citry_app = Citry(secret=os.environ["CITRY_SECRET"])
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    citry_app.initialize()
+    yield
+
+
+web_app = FastAPI(lifespan=lifespan)
+mount(web_app, citry_app)
+```
+
+In Django, pass `citry.contrib.django.secret()` to reuse Django's own secret.
+[Web frameworks](/advanced/web-frameworks/) shows how to mount Citry in other
+frameworks.
 
 ## Choose your next step
 
-- [Keep State between calls](/events/state/) when a later handler needs values
-  from the current component.
-- [Handle and validate forms](/events/forms/) when named controls should become
-  typed Python data.
-- [Bind events in templates](/events/bindings/) for `@c-*`, `:c-*`, polling,
-  loading feedback, and errors.
-- [Event actions](/events/actions/) for renders, browser
-  events, history changes, and stable update targets.
-- [Use event routes directly](/events/http/) for GET handlers, native forms,
-  htmx, downloads, and endpoint security.
+- [Event state](/events/state/): decide which values survive
+  from one call to the next.
+- [Handle and validate forms](/events/forms/): receive form fields as typed
+  Python data and show validation errors.
+- [Bind events in templates](/events/bindings/): call handlers on any DOM
+  event, connect inputs to State, and show loading and errors.
+- [Event actions](/events/actions/): decide what happens after the handler
+  runs, such as re-rendering, notifying other code, or redirecting.
+- [Event routes](/events/routes/): call handlers by URL from plain HTML
+  forms, htmx, or GET requests.
 
-## Coming from another server-component library?
+## Migrate from a library
 
-Each migration guide starts from the source library's own mental model and
-ends at the same Events contract:
+Each migration guide starts from how the other library works and shows the
+Citry equivalent:
 
-- [Component.View](/guides/migrate-from-component-view/) begins with the
-  verb-shaped compatibility route, then moves to named handlers.
-- [django-unicorn](/guides/migrate-from-django-unicorn/) maps public State,
-  model bindings, validation, and browser calls.
-- [Tetra](/guides/migrate-from-tetra/) maps public methods, promise results,
-  Alpine behavior, and the client callback channel.
-- [livecomponents](/guides/migrate-from-livecomponents/) uses a two-step State
-  migration: server-held first, signed per component when appropriate.
+- [Component.View](/guides/migrate-from-component-view/)
+- [django-unicorn](/guides/migrate-from-django-unicorn/)
+- [Tetra](/guides/migrate-from-tetra/)
+- [livecomponents](/guides/migrate-from-livecomponents/)
 
-Use the [Events migration parity matrix](/guides/events-migration-parity/) to
-check uploads, history, server push, and other capabilities before porting a
-component that depends on them.
+Before porting a component that uploads files, changes browser history, or
+receives updates pushed from the server, check the
+[Events migration parity matrix](/guides/events-migration-parity/).

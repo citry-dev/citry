@@ -1,10 +1,10 @@
-"""Standalone page that loads the FragmentWidget as an HTML fragment on demand."""
+"""Standalone page that loads FragmentWidget as an HTML fragment."""
 
 from citry import Component
 
 
 class FragmentsPage(Component):
-    """A page with a button that fetches a pre-rendered fragment and inserts it."""
+    """A page whose button fetches a fragment and inserts it."""
 
     class Kwargs:
         pass
@@ -18,15 +18,24 @@ class FragmentsPage(Component):
         <head>
           <meta charset="utf-8" />
           <title>Fragments example</title>
-          <!-- Load citry's client runtime up front. Its MutationObserver notices
-               the fragment's manifest when it is inserted below, then fetches and
-               runs the fragment's CSS/JS on demand. -->
+          <!-- Load citry's client runtime up front. Its
+               MutationObserver notices the fragment's manifest when
+               it is inserted below, then fetches and runs the
+               fragment's CSS/JS on demand. -->
           <script src="/citry/citry.js"></script>
+          <style>
+            body {
+              margin: 0;
+              padding: 1.5rem;
+              font-family: system-ui, sans-serif;
+            }
+          </style>
         </head>
-        <body
-          style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"
-        >
-          <p>Load a component rendered on the server and sent as an HTML fragment:</p>
+        <body>
+          <p>
+            Load a component rendered on the server and sent as an
+            HTML fragment:
+          </p>
           <button
             id="frag-load"
             type="button"
@@ -51,8 +60,9 @@ class FragmentsPage(Component):
             const status = document.getElementById("frag-status");
 
             loadButton.addEventListener("click", async () => {
-              // The static response represents one render. Block repeat clicks
-              // before fetching so it can only be inserted once in this page.
+              // The static response represents one render. Block
+              // repeat clicks before fetching, so it can only be
+              // inserted once in this page.
               if (loadButton.disabled) return;
               loadButton.disabled = true;
               status.textContent = "Loading fragment...";
@@ -61,18 +71,24 @@ class FragmentsPage(Component):
               try {
                 const url = loadButton.dataset.fragmentUrl;
                 const response = await fetch(url);
-                if (!response.ok) throw new Error("Fragment request failed");
+                if (!response.ok) {
+                  throw new Error("Fragment request failed");
+                }
                 html = await response.text();
               } catch {
-                // A failed fetch has not inserted anything, so retry is safe.
-                status.textContent = "Could not load the fragment. Try again.";
+                // A failed fetch has not inserted anything, so a
+                // retry is safe.
+                status.textContent =
+                  "Could not load the fragment. Try again.";
                 loadButton.disabled = false;
                 return;
               }
 
-              // The runtime activates the fragment after its manifests arrive.
+              // The runtime activates the fragment after its
+              // manifests arrive.
               document.getElementById("frag-target").innerHTML = html;
-              status.textContent = "Reset the demo to load the fragment again.";
+              status.textContent =
+                "Reset the demo to load the fragment again.";
               resetButton.hidden = false;
             });
 

@@ -1,4 +1,4 @@
-"""A widget that can fail on demand, used to demonstrate error boundaries."""
+"""A widget that fails on demand, to demonstrate error boundaries."""
 
 from typing import Any
 
@@ -6,7 +6,7 @@ from citry import Component
 
 
 class FlakyWidget(Component):
-    """Renders normal content, or raises during render when ``fail`` is true."""
+    """Renders normal content, or raises when ``fail`` is true."""
 
     class Kwargs:
         label: str
@@ -14,6 +14,17 @@ class FlakyWidget(Component):
 
     class Slots:
         pass
+
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
+        if kwargs.fail:
+            # Raised during render, so the surrounding
+            # <c-error-fallback> catches it.
+            raise ValueError("FlakyWidget was told to fail")
+        return {"label": kwargs.label}
 
     template = """
       <div class="flaky">
@@ -34,9 +45,3 @@ class FlakyWidget(Component):
         color: #1a7f37;
       }
     """
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
-        if kwargs.fail:
-            # Raised during render so the surrounding <c-error-fallback> catches it.
-            raise ValueError("FlakyWidget was told to fail")
-        return {"label": kwargs.label}

@@ -23,6 +23,11 @@ pytest.importorskip("pytest_playwright")
 
 pytestmark = pytest.mark.e2e
 
+# Resolve repository files (pnpm's node_modules, the docs static assets) from this
+# file rather than the working directory, which differs when pytest runs from a subfolder.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_AXE_PATH = _REPO_ROOT / "node_modules" / "axe-core" / "axe.min.js"
+
 
 def _failed_requests(page: Any, url: str) -> list[str]:
     """Navigate to ``url`` and return any request that came back 4xx/5xx."""
@@ -124,6 +129,24 @@ def test_pages_load_with_no_broken_assets(page: Any, docs_site_url: str) -> None
     ):
         bad = _failed_requests(page, docs_site_url + path)
         assert bad == [], f"{path} loaded with failed requests: {bad}"
+
+
+def test_youtube_player_is_created_only_after_activation(page: Any, docs_site_url: str) -> None:
+    youtube_requests: list[str] = []
+    page.on(
+        "request",
+        lambda request: youtube_requests.append(request.url) if "youtube" in request.url else None,
+    )
+    page.goto(docs_site_url + "/", wait_until="networkidle")
+
+    player = page.locator(".youtube-video")
+    assert player.locator("iframe").count() == 0
+    assert not youtube_requests
+
+    player.locator("[data-youtube-load]").click()
+    iframe = player.locator("iframe")
+    iframe.wait_for(state="attached")
+    assert iframe.get_attribute("src") == "https://www.youtube-nocookie.com/embed/d3nPqvDdNB0"
 
 
 def test_reference_page_has_a_populated_toc(page: Any, docs_site_url: str) -> None:
@@ -291,7 +314,7 @@ def test_ui_preview_frame_resizes_only_from_its_own_window(
                 + 'sandbox="allow-scripts" srcdoc="<p>Preview</p>"></iframe>';
         }"""
     )
-    page.add_script_tag(path=str(Path("docs_site/static/js/site.js").resolve()))
+    page.add_script_tag(path=str(_REPO_ROOT / "docs_site" / "static" / "js" / "site.js"))
     frame = page.locator("[data-ui-preview-frame]")
     frame_element = frame.element_handle()
     assert frame_element is not None
@@ -371,7 +394,7 @@ def test_search_prefixes_a_result_route_that_matches_the_deployment_base(page: A
         "<div data-search-empty></div><div data-search-noresults hidden></div>"
         "<div data-search-error hidden></div></div></div></div></body>"
     )
-    page.add_script_tag(path=str(Path("docs_site/static/js/search.js").resolve()))
+    page.add_script_tag(path=str(_REPO_ROOT / "docs_site" / "static" / "js" / "search.js"))
 
     page.locator("[data-search-open]").click()
     page.locator(".djc-search__input").fill("docs")
@@ -394,7 +417,7 @@ def test_google_search_fallback_scopes_to_the_public_site_path(page: Any, docs_s
         "<div data-search-noresults hidden></div><div data-search-error hidden></div>"
         "</div></div></div></body>"
     )
-    page.add_script_tag(path=str(Path("docs_site/static/js/search.js").resolve()))
+    page.add_script_tag(path=str(_REPO_ROOT / "docs_site" / "static" / "js" / "search.js"))
 
     page.locator("[data-search-open]").click()
     page.locator(".djc-search__input").fill("components")
@@ -513,10 +536,23 @@ def test_internal_page_link_brings_active_sidebar_item_clearly_into_view(
     assert_active_link_is_clear(first_path)
 
 
+def _review_marked_page_path() -> str:
+    """Return a page whose own sidebar group still has an entry marked for review."""
+    # Which pages still need review changes as the maintainer reviews them, so
+    # the test finds one from the nav instead of naming a page. Opening the
+    # marked page itself keeps its group expanded, so the link is visible.
+    for area in load_site_nav(config).areas:
+        for group in area.groups:
+            for item in group.items:
+                if item.needs_review:
+                    return item.path
+    pytest.skip("no navigation entry is marked for review")
+
+
 def test_navigation_status_badges_and_review_hint_render(page: Any, docs_site_url: str) -> None:
-    # Open a page in a group containing review-marked entries. On /docs/ that
-    # group is collapsed, so its links are intentionally not visible.
-    page.goto(docs_site_url + "/syntax/control-flow/")
+    # Open a review-marked page. On /docs/ its group is collapsed, so its
+    # links are intentionally not visible there.
+    page.goto(docs_site_url + _review_marked_page_path())
 
     alpha_badge = page.locator('.djc-header__nav a[href="/ui-library/"] .djc-nav-badge')
     assert alpha_badge.inner_text() == "ALPHA"
@@ -547,7 +583,7 @@ def test_active_header_underline_excludes_status_badge(page: Any, docs_site_url:
 
 def test_navigation_review_hint_stays_inside_resized_sidebar(page: Any, docs_site_url: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
-    page.goto(docs_site_url + "/syntax/control-flow/")
+    page.goto(docs_site_url + _review_marked_page_path())
 
     sidebar = page.locator("#djc-sidebar")
     sidebar.evaluate(
@@ -1772,12 +1808,10 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
     lifecycle.locator('[role="menu"]').first.wait_for(state="hidden")
     lifecycle.get_by_role("button", name="Close vault").click()
     assert lifecycle.locator('[role="menu"]:popover-open').count() == 0
-
-    axe_path = Path("node_modules/axe-core/axe.min.js").resolve()
-    assert axe_path.is_file(), "run `pnpm install` before Citry UI axe tests"
+    assert _AXE_PATH.is_file(), "run `pnpm install` before Citry UI axe tests"
     for index in range(13):
         frame = demos.nth(index).locator("[data-ui-preview-frame]").element_handle().content_frame()
-        frame.add_script_tag(path=str(axe_path))
+        frame.add_script_tag(path=str(_AXE_PATH))
         violations = frame.evaluate(
             """async () => {
               const result = await axe.run(document, { resultTypes: ['violations'] });
@@ -1837,6 +1871,9 @@ def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
     limited.locator('[data-citry-toast-id="queue-3"]').wait_for(state="visible")
 
     focus = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    # F6 only reaches a toast the region's script has already rendered, and this
+    # frame may still be starting when the earlier checks finish.
+    focus.locator('[data-citry-toast-initialized] [data-citry-toast-id="f6"]').wait_for(state="visible")
     focus.get_by_role("button", name="Focus before F6").focus()
     focus.locator("body").press("F6")
     assert focus.locator('[data-citry-toast-id="f6"]').evaluate("element => element === document.activeElement")
@@ -2402,6 +2439,10 @@ def test_tabs_example_supports_keyboard_navigation(page: Any, docs_site_url: str
     assert tabs.first.get_attribute("aria-selected") == "true"
 
 
+# The widget's own script adds "(JS ran)" to its title once Vue mounts it.
+_FRAGMENT_SCRIPT_RAN = "document.querySelector('.frag-widget__title')?.textContent.includes('(JS ran)')"
+
+
 def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> None:
     # The whole static-fragment path: the page loads the runtime from /citry/,
     # a click fetches the pre-rendered fragment, the runtime loads the component's
@@ -2446,7 +2487,7 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
     assert reset.is_hidden()
     assert page.locator(".frag-widget").count() == 0
     pending[0].continue_()
-    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    page.wait_for_function(_FRAGMENT_SCRIPT_RAN)
     # The component's CSS loaded too (the widget got its purple border).
     widget = page.locator(".frag-widget")
     assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"  # #8250df
@@ -2467,7 +2508,7 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
     assert page.evaluate("window.fragmentFetchCount") == fetch_count
     assert len(pending) == 1
     assert widget.evaluate("(el, original) => el === original", original_widget)
-    assert widget.get_attribute("data-ready") == "1"
+    assert page.evaluate(_FRAGMENT_SCRIPT_RAN)
     assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"
 
     # A document reload makes the static fragment safe to insert again.
@@ -2479,7 +2520,7 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
     assert reset.is_hidden()
     assert widget.count() == 0
     load.click()
-    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    page.wait_for_function(_FRAGMENT_SCRIPT_RAN)
     assert widget.count() == 1
     assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"
     assert errors == []
@@ -2513,7 +2554,7 @@ def test_fragment_fetch_failure_allows_retry(page: Any, docs_site_url: str, fail
     assert page.locator("#frag-target").inner_html() == ""
 
     load.click()
-    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    page.wait_for_function(_FRAGMENT_SCRIPT_RAN)
     assert page.locator(".frag-widget").count() == 1
     assert load.is_disabled()
     assert page.locator("#frag-reset").is_visible()

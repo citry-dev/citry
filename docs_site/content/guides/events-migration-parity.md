@@ -5,188 +5,254 @@ description: Compare Component.View, django-unicorn, Tetra, and livecomponents c
 
 # Events migration parity
 
-Use this matrix before porting a component that depends on more than basic
-clicks, forms, State, and targeted renders. It distinguishes behavior that is
-available in current Events code from later candidates and features Citry
-intentionally leaves to explicit application code.
+You are porting a component from another server-component library to
+Citry Events, Citry's server-events feature, and want to know: does it cover what my component relies on, and if not,
+what do I do instead? These tables answer that, one capability per row.
 
-The source-specific walkthroughs are:
+Clicks, forms, values kept between calls, and re-rendering part of the page
+all map directly. The biggest differences are deliberate: Citry does not
+re-render a component automatically after a call, does not keep the
+component's original inputs on the server, and stores only plain JSON
+between calls. File uploads, server push, and WebSockets are not built in.
+
+For step-by-step ports, start from the guide for your library:
 
 - [Component.View](/guides/migrate-from-component-view/)
 - [django-unicorn](/guides/migrate-from-django-unicorn/)
 - [Tetra](/guides/migrate-from-tetra/)
 - [livecomponents](/guides/migrate-from-livecomponents/)
 
-## Delivery labels
+## Read the tables
+
+Each row names a capability, how each library provides it, what to use in
+Citry, and a delivery label:
 
 | Label | Meaning |
 |---|---|
-| **v1** | Shipped and supported now. |
-| **v1.x** | A scoped follow-up release; the Citry answer column says whether it is shipped or planned. |
-| **v2** | A separate design decision, not a compatibility promise. |
-| **Dropped** | Intentionally represented another way or left to application code. |
+| **v1** | Built into Citry Events today. |
+| **v1.x** | Not built in. The Events design lists it as a smaller addition after v1. Use the workaround in the Citry column today. |
+| **v2** | Not built in. It needs a larger design decision of its own, such as a new transport. Use the workaround in the Citry column, if any. |
+| **Dropped** | Citry does this a different way on purpose, or leaves it to your code. The Citry column says how. |
 
-A dash in a source-framework column means that framework does not supply the
-capability as a first-class feature.
+The **v1.x** and **v2** labels describe how big the missing piece is, not a
+release date. Plan your port around the workaround.
 
-## Handlers, routes, and return values
+A dash in a library's column means that library has no built-in feature for
+it.
 
-| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry answer | Delivery |
+A few Citry terms appear throughout:
+
+- A **handler** is a public method in a component's nested `class Events`.
+  Browser code can call it by name.
+- **State** holds the values a handler needs on the next call. Citry keeps
+  them between calls, either on the server or in the page.
+- A **per-event route** is the URL of one handler. Calls made from
+  templates are usually bundled and sent to a shared **batch route** instead.
+
+## Declare handlers
+
+| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
-| Callable declaration | HTTP-verb method | Most public methods | `@public` | `@command` | Public method inside nested `Events` | **v1** |
-| Explicit allowlist | Overridden verbs | Public by default with exclusions | Decorator | Decorator | Placement in `Events`; underscore methods are private | **v1** |
+| Callable declaration | HTTP-verb method | Most public methods | `@public` | `@command` | Public method in nested `Events` | **v1** |
+| Explicit allowlist | Overridden verbs | Public by default, with exclusions | Decorator | Decorator | Methods in `Events`; underscore methods stay private | **v1** |
 | Several actions per component | Verb or query multiplexing | Named methods | Named methods | Named commands | One named handler per operation | **v1** |
-| HTTP-verb migration | Native model | - | - | - | `ViewEvents` for GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS | **v1** |
-| TRACE compatibility | Supported by old view class | - | - | - | No compatibility handler | **Dropped** |
-| Custom route pattern | Per component | Fixed message route | Fixed call route | Fixed command route | Fixed per-event, batch, and compatibility routes | **Dropped** |
-| Per-operation URL | One class URL | - | - | Command URL tag | `events.url(name)` / `get_event_url(...)` | **v1** |
-| Query and fragment URL building | `get_component_url` | - | - | Query-built command URL | `query=` and `fragment=` on the URL builders | **v1** |
-| Reverse args for custom paths | Supported | - | - | - | Stable fixed event path needs no reverse args | **Dropped** |
-| GET/read handler | Verb method | POST message route | POST call route | POST command route | `@event(methods=("GET",))`; author keeps it read-only | **v1** |
-| Raw host request | Django request | Django request | Django request | Django request | Framework-neutral `request`, with `request.native` escape | **v1** |
+| Typed input | Manual parsing | Coerced from type hints | JS arguments | Body kwargs | One strict `data` schema, with field errors | **v1** |
+| JSON return to caller | Host response | Return value | Promise result | Execution-result model | `dict` or `actions.Data` resolves the caller's promise | **v1** |
+| Raw host request | Django request | Django request | Django request | Django request | Framework-neutral `request`; `request.native` for the host object | **v1** |
+| GET (read-only) handler | Verb method | POST only | POST only | POST only | `@event(methods=("GET",))`; you keep it read-only | **v1** |
 | Async handler | Host-dependent | - | Async transport internals | - | Native under ASGI; rejected by sync hosts | **v1** |
-| Host portability | Django | Django | Django | Django | Django, FastAPI/Starlette, Flask, plain ASGI and WSGI | **v1** |
-| Typed input | Manual parsing | Hint-driven call coercion | JS arguments | Body kwargs | One strict `data` schema with field errors | **v1** |
-| ORM-primary-key revival | - | Automatic | Object token state | Stored model objects | Load by validated id and authorize explicitly | **Dropped** |
-| JSON return to caller | Host response | Return value | Promise result | Execution-result model | `dict` or `actions.Data` resolves the caller promise | **v1** |
-| OpenAPI document | - | - | - | - | Deterministic OpenAPI 3.1 CLI output | **v1** |
-| Served `openapi.json` | - | - | - | - | Planned HTTP document route | **v1.x** |
-| Native form without JavaScript | Manual | Client runtime expected | Client runtime expected | htmx expected | Per-event URL with HTML, redirect, or JSON translation | **v1** |
+| Web frameworks | Django | Django | Django | Django | Django, FastAPI/Starlette, Flask, plain ASGI and WSGI | **v1** |
+| Per-operation URL | One class URL | - | - | Command URL tag | `events.url(name)` / `get_event_url(...)` | **v1** |
+| Query and fragment in URLs | `get_component_url` | - | - | Query-built command URL | `query=` and `fragment=` on the URL builders | **v1** |
+| Plain HTML form without JavaScript | Manual | Needs client runtime | Needs client runtime | Needs htmx | Post to the per-event URL; get HTML, a redirect, or JSON | **v1** |
+| HTTP-verb handlers | Native model | - | - | - | `ViewEvents` for GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS | **v1** |
+| TRACE handler | Supported | - | - | - | No compatibility handler | **Dropped** |
+| Custom route pattern | Per component | Fixed message route | Fixed call route | Fixed command route | Fixed per-event and batch routes, plus the `ViewEvents` route | **Dropped** |
+| Reverse args for custom paths | Supported | - | - | - | Fixed event paths need no reverse args | **Dropped** |
+| Load model from primary key automatically | - | Automatic | Object token in state | Stored model objects | Load by validated id and check access yourself | **Dropped** |
+| OpenAPI document | - | - | - | - | Deterministic OpenAPI 3.1 from the CLI | **v1** |
+| Served `openapi.json` | - | - | - | - | Not served; write it with the CLI and serve the file | **v1.x** |
 
-`ViewEvents` preserves the method-selected route only. Its handler bodies still
-move to typed `data`, the neutral request, and Events return values. The
-method-only compatibility URL has no dedicated public builder;
-`events.url("post")` builds the named `/post` route.
+**HTTP-verb handlers.** `ViewEvents` keeps the route that picks a handler by
+HTTP method, so existing URLs keep working. The handler bodies still change:
+they read typed `data` and the neutral `request`, and return Events values
+instead of host responses. The method-only URL has no public URL builder;
+`events.url("post")` builds the named `/post` route instead.
 
-## State, serialization, and later renders
+## Keep State across calls
 
-| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry answer | Delivery |
+| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
-| State declaration | None | Public class attributes | Public/private component attributes | Pydantic state model | Explicit dataclass-shaped `State`, separate from `Kwargs` | **v1** |
-| Default storage | Application-owned | Client data plus checksum and cached pickle | Encrypted pickle token | Redis pickle | Full-HMAC signed strict JSON token | **v1** |
-| Server-held State | Application-owned | Cached component | - | Default | `_storage = "server"` through `Citry.cache`, strict JSON | **v1** |
-| Optional encrypted State | Application-owned | - | Default | Server-held | Optional encrypted token | **v1.x** |
-| Browser visibility control | Application-owned | `javascript_exclude` | Public/private split | Server-held | `_public` controls projection, not secrecy; server storage keeps values out of the token | **v1** |
-| Client-writable State | Application-owned | Rich public setters | Public attributes | Commands only | `_model` selects writable public fields | **v1** |
-| Rich Python values in State | Application-owned | Models and custom objects | Pickled component graph | Pickled/Pydantic values | Strict JSON only | **Dropped** |
-| Per-component expiry | Application-owned | Cache policy | Token max age | Page-session TTL | `_max_age` on signed or server State | **v1** |
-| Original kwargs on a call | Request code decides | Rehydrated object | Saved component | Stored State/context | Handler receives none; rebuild the tree explicitly | **Dropped** |
-| Original fills on a call | Request code decides | Re-rendered template | Saved component | Saved raw template | Supply fills again in the returned fresh tree | **Dropped** |
-| Saved page context | Request code decides | Partial framework context | Saved component context | Selected context in store | Reload from request, database, or explicit State | **Dropped** |
-| Implicit re-render | No | Yes | Yes by default | Dirty by default | Return a component or Render explicitly; `None` acknowledges | **Dropped** |
-| Stateless handler | Natural | Full component state | Basic component variant | Special subclass | Omit `State`; no token is minted | **v1** |
-| Mutable undeclared server bag | Natural | Yes | Private pickled attrs | Stored component State | Only declared State survives the call | **Dropped** |
-| Pluggable server store | Application-owned | Django cache | Token design | Store and serializer classes | Configure `Citry.cache`; State remains strict JSON | **v1** |
+| State declaration | None | Public class attributes | Public/private attributes | Pydantic state model | Explicit dataclass-like `State`, separate from `Kwargs` | **v1** |
+| Default storage | Your code | Client data, checksum, cached pickle | Encrypted pickle token | Redis pickle | Signed strict-JSON token (full HMAC) | **v1** |
+| State kept on the server | Your code | Cached component | - | Default | `_storage = "server"` in `Citry.cache`, strict JSON | **v1** |
+| Stateless handler | Natural | Full component state | Basic component variant | Special subclass | Omit `State`; no token is created | **v1** |
+| Control what the browser reads | Your code | `javascript_exclude` | Public/private split | Server-held | `_public` limits what browser code reads; with signed State the other fields still travel in the token | **v1** |
+| Client-writable fields | Your code | Public setters | Public attributes | Commands only | `_model` lists the writable public fields | **v1** |
+| Per-component expiry | Your code | Cache policy | Token max age | Page-session TTL | `_max_age` on signed or server State | **v1** |
+| Pluggable server store | Your code | Django cache | Token design | Store and serializer classes | Configure `Citry.cache`; State stays strict JSON | **v1** |
+| Encrypted State token | Your code | - | Default | Server-held | Not built in; use server State, with the field left out of `_public` | **v1.x** |
+| Rich Python values in State | Your code | Models, custom objects | Pickled component | Pickled/Pydantic values | Strict JSON only | **Dropped** |
+| Undeclared attributes kept on the server | Natural | Yes | Private pickled attrs | Stored State | Only declared State fields survive the call | **Dropped** |
+| Original kwargs during a call | Request code decides | Rehydrated object | Saved component | Stored State/context | Not available; pass every input to the returned component | **Dropped** |
+| Original slot fills during a call | Request code decides | Template re-render | Saved component | Saved raw template | Pass fills again in the returned component | **Dropped** |
+| Saved page context | Request code decides | Partial framework context | Saved component context | Selected context in store | Reload from the request, database, or State | **Dropped** |
+| Re-render after every call | No | Yes | Yes, by default | Dirty components | Return a component or `Render`; `None` re-renders nothing | **Dropped** |
 
-Signed State is tamper-evident, not secret. State held on the server is the v1
-choice when a value must not appear in the page token.
+!!! warning "Signed State is readable by anyone"
 
-## Bindings, Alpine, and DOM updates
+    Signing lets Citry detect a changed token, but anyone can read the
+    values in it. To keep a value out of the page, set
+    `_storage = "server"` and leave the field out of `_public`.
 
-| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry answer | Delivery |
+## Bind events
+
+| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
-| Server event in markup | Handwritten JS/htmx | `unicorn:<event>` | Alpine listener calling method | `hx-post` command | `@c-<dom-event>` | **v1** |
-| Local browser event | Handwritten | Handwritten | Ordinary Alpine | Alpine/htmx | Ordinary `@click` / `x-on:*` stays Alpine | **v1** |
-| Event arguments | Request fields | Python-like call string | JS arguments | `hx-vals` | One Alpine object expression validated as `data` | **v1** |
-| Python call expression on wire | - | Supported | - | - | Named handler plus object data | **Dropped** |
-| Property-setter expression | - | Supported | Public Alpine write | - | Named handler or local `$state` write | **Dropped** |
-| State/model binding | Handwritten | `unicorn:model` | Public Alpine attrs | Form/htmx | `:c-field` or `:c-field="handler"` | **v1** |
-| Nested dotted binding path | Handwritten | Supported | Nested JS objects | Body values | Bind one top-level declared State field | **Dropped** |
+| Server event in markup | Handwritten JS/htmx | `unicorn:<event>` | Alpine listener calls method | `hx-post` command | `@c-<dom-event>` | **v1** |
+| Browser-only event | Handwritten | Handwritten | Alpine | Alpine/htmx | Vue `@click` / `v-on:click` | **v1** |
+| Event arguments | Request fields | Python-like call string | JS arguments | `hx-vals` | One Vue object expression, validated as `data` | **v1** |
+| Bind an input to State | Handwritten | `unicorn:model` | Public Alpine attrs | Form/htmx | `:c-field` or `:c-field="handler"` | **v1** |
 | Prevent and stop | Browser/htmx | Modifiers | Alpine modifiers | htmx/Alpine | `.prevent`, `.stop` | **v1** |
 | Self, once, key filters | Browser/htmx | Partial | Alpine modifiers | Alpine modifiers | `.self`, `.once`, `.enter`, `.escape` | **v1** |
 | Debounce and throttle | Handwritten | Debounce | Decorator chain | htmx modifiers | Binding modifiers and `@event` defaults | **v1** |
-| Lazy/custom update event | Handwritten | `.lazy` | Alpine | htmx | `.lazy` and `.on:<event>` | **v1** |
-| Deferred State write | Handwritten | `.defer` | Client state | htmx values | `$state` writes and pending two-way updates ride the next call | **v1** |
-| Discard pending writes | Handwritten | `.discard` | - | - | Application decides which value to send | **Dropped** |
-| Loading UI | Handwritten | Loading directives | Lifecycle/Alpine | htmx indicator | `$loading()` / `$loading(name)` and lifecycle events | **v1** |
-| Error UI | Host response | Error context/attrs | Method-error event | HTTP error | `$error()` / `$error(name)`, field map, and error lifecycle event | **v1** |
-| Dirty-input indicator | Handwritten | `unicorn:dirty` | Alpine | htmx | Build from Alpine and lifecycle events when needed | **Dropped** |
-| Polling | Handwritten | Rich poll object | Application code | htmx | `@c-poll.<time>="handler"`, hidden-tab pause | **v1** |
-| Dynamic poll retiming | Handwritten | `PollUpdate` | Application code | htmx | Re-render a different binding or use app code | **Dropped** |
-| Viewport trigger | Handwritten | `unicorn:visible` | Alpine/plugin | htmx trigger | IntersectionObserver or Alpine integration | **Dropped** |
-| Morph opt-out | Manual | `unicorn:ignore` | Alpine morph controls | `no_morph` helper | Bare `#c-ignore` on an inner plain element | **v1** |
-| Stable item identity | Manual ids | Component key | Component id | Path id | `#c-key` within its sibling and depth window | **v1** |
-| Single element root | Not required by core | Required | Required | Root attrs required | Supported | **v1** |
-| Multi-root component | Supported by core | - | - | - | Logical root group | **v1** |
-| Text-only or empty component | Supported by core | - | - | - | Logical rootless range with lifecycle support | **v1** |
-| Focus/value/caret preservation | Handwritten | Morph-dependent | Alpine morph rules | Alpine morph | Compatible morph plus keyed identity and pending-write rules | **v1** |
-| Self render | Manual response | Automatic full component | Automatic | Dirty component | Return component or `Render(target=None)` | **v1** |
-| Target another region | Manual fragment | Partial/parent controls | Client callback | Dirty result | Ordered `Render(target=selector)` actions | **v1** |
-| Several target matches | Manual | Partials | - | OOB fragments | One logical mirrored instance with shared State | **v1** |
-| Independent target instances | Manual | Component instances | Component instances | Component ids | One Render action per target | **v1** |
-| Parent/ancestor command API | Request code | Parent controls | Child-state graph | `CallContext.parent/find_one` | Explicit target Render or Dispatch plus listener | **Dropped** |
-| Server-dispatched browser event | Handwritten | Queued JS call | `_dispatch` | `TriggerEvents` | `actions.Dispatch` and DOM/onEvent listener | **v1** |
-| Arbitrary server-selected JS call | Handwritten | Allowed call list | Callback path | htmx events | Dispatch data; client-owned code chooses behavior | **Dropped** |
-| Browser call outside markup | Fetch | `Unicorn.call` | Generated method | htmx request | `Citry.events.send`, `sendEvent`, `$sendEvent` | **v1** |
-| Python lifecycle matrix | View hooks | Hydrate/update/call/render hooks | Component lifecycle | Command lifecycle | Events extension hooks, not per-field callback parity | **Dropped** |
-| Browser lifecycle events | Handwritten | Framework events | Tetra events | htmx events | before, after, error, swapped, and stale Events lifecycle | **v1** |
-| Fragment assets activate | Manual dependency strategy | Framework runtime | Response bundle list | Manual five-part client setup | Fragment carries dependency, graph, and Events manifests | **v1** |
-| Client prerequisite | Application choice | Unicorn JS | Tetra plus Alpine | htmx, json-enc, Alpine, morph, config | Citry-managed runtimes with pinned stock Alpine and morph | **v1** |
-| Template-load validation | Limited | Mostly runtime | Mostly runtime | Mostly runtime | Literal event, State, and modifier mistakes fail early | **v1** |
-| Slot/fill scope after update | Application-owned | Template re-render | Saved component | Saved template | New fills in the returned tree; Citry graph owns client scope | **v1** |
+| Lazy or custom update event | Handwritten | `.lazy` | Alpine | htmx | `.lazy` and `.on:<event>` | **v1** |
+| Deferred State write | Handwritten | `.defer` | Client state | htmx values | `$state` writes travel with the next call | **v1** |
+| Loading indicator | Handwritten | Loading directives | Lifecycle/Alpine | htmx indicator | `$loading()` / `$loading(name)` and lifecycle events | **v1** |
+| Error display | Host response | Error context/attrs | Method-error event | HTTP error | `$error()` / `$error(name)`, field errors, error event | **v1** |
+| Polling | Handwritten | Poll object | Your code | htmx | `@c-poll.<time>="handler"`; pauses in hidden tabs | **v1** |
+| Call from JavaScript | Fetch | `Unicorn.call` | Generated method | htmx request | `Citry.events.send`, `sendEvent`, `$sendEvent` | **v1** |
+| Mistakes caught at template load | Limited | Mostly at runtime | Mostly at runtime | Mostly at runtime | Wrong literal event, State, and modifier names fail early | **v1** |
+| Python call expression | - | Supported | - | - | Named handler plus object data | **Dropped** |
+| Property-setter expression | - | Supported | Public Alpine write | - | Named handler, or a `$state` write | **Dropped** |
+| Nested dotted binding path | Handwritten | Supported | Nested JS objects | Body values | Bind one top-level State field | **Dropped** |
+| Discard pending writes | Handwritten | `.discard` | - | - | Your code decides which value to send | **Dropped** |
+| Dirty-input indicator | Handwritten | `unicorn:dirty` | Alpine | htmx | Build from Vue state and lifecycle events | **Dropped** |
+| Change poll interval from server | Handwritten | `PollUpdate` | Your code | htmx | Re-render with a different binding, or use your own code | **Dropped** |
+| Run when scrolled into view | Handwritten | `unicorn:visible` | Alpine/plugin | htmx trigger | IntersectionObserver or a Vue integration | **Dropped** |
 
-Citry still uses Alpine. The difference is automatic bundling and a Citry-owned
-logical component graph for scope, slots, multi-root groups, and rootless
-ranges. State remains under `$state`; it is not flattened into user `x-data`.
+## Update the page
 
-## Queueing, transport, and stale responses
-
-| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry answer | Delivery |
+| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
-| HTTP calls | Native view | Message POST | Call POST | Command POST | Fetch over batch or per-event route | **v1** |
-| Pending updates plus calls | Application code | Action queue | Full public data | Command body | Queue batches co-eligible calls and pending State writes | **v1** |
-| Opt out of bundling | Application code | - | - | - | `@event(bundle=False)` | **v1** |
-| Same-tick global coalescing | Application code | Queue-specific | - | - | Separate later queue optimization | **v2** |
-| Stale-response defense | Application code | Epoch | Old-value/focus checks | Session State | Epoch plus optional `latest_wins` | **v1** |
-| Call ordering | Host order | Optional serial cache | Client queue | One command, several dirty results | Same-instance order, containment dependencies, sibling parallelism | **v1** |
-| Offline replay queue | Application code | - | Shipped | - | Application-specific retry and conflict policy | **Dropped** |
-| Custom transport | Custom view | - | HTTP/WS internals | htmx | Public transport registration | **v1** |
-| postMessage bridge | Custom code | - | - | - | No built bridge yet; an explicit bridge is planned | **v1.x** |
-| WebSocket and server push | Custom code | - | Reactive components | - | Signed-topic WebSocket design decision | **v2** |
-| Server-sent events | Custom code | - | - | - | Evaluated with the push decision | **v2** |
+| Re-render the calling component | Manual response | Automatic | Automatic | Dirty component | Return the component, or `Render(target=None)` | **v1** |
+| Update another part of the page | Manual fragment | Partial/parent controls | Client callback | Dirty result | `Render` with a component or marker as `target` | **v1** |
+| Update several parts at once | Manual | Component instances | Component instances | Component ids | One `Render` per target, returned together | **v1** |
+| Stable list-item identity | Manual ids | Component key | Component id | Path id | `#c-key` | **v1** |
+| Keep focus and typed text | Handwritten | Depends on morph | Alpine morph rules | Alpine morph | Kept for reordered keyed rows and edited inputs | **v1** |
+| Keep DOM a JS library manages | Manual | `unicorn:ignore` | Alpine morph controls | `no_morph` helper | `#c-ignore` on an HTML element | **v1** |
+| Send a browser event from the server | Handwritten | Queued JS call | `_dispatch` | `TriggerEvents` | `actions.Dispatch` plus a listener | **v1** |
+| Browser lifecycle events | Handwritten | Framework events | Tetra events | htmx events | before, after, error, swapped, and stale events | **v1** |
+| Inserted HTML runs its JS and CSS | Your dependency setup | Framework runtime | Response bundle list | Manual client setup | Loads its assets and mounts its own Vue app | **v1** |
+| Client libraries to install | Your choice | Unicorn JS | Tetra plus Alpine | htmx, json-enc, Alpine, morph, config | None; Citry loads its runtime with a pinned Vue | **v1** |
+| Component root shape | Any | One element | One element | One element with root attrs | One element, several, text only, or empty | **v1** |
+| Slot fills after an update | Your code | Template re-render | Saved component | Saved template | Pass fills in the returned component | **v1** |
+| One target, several matches | Manual | Partials | - | OOB fragments | A target is one component or marker | **Dropped** |
+| Call parent or ancestor | Request code | Parent controls | Child-state graph | `CallContext.parent/find_one` | `Render` with a target, or `Dispatch` plus a listener | **Dropped** |
+| Server picks a JS function to run | Handwritten | Allowed call list | Callback path | htmx events | `Dispatch` data; browser code decides what to do | **Dropped** |
+| Per-field Python lifecycle hooks | View hooks | Hydrate/update/call/render hooks | Component lifecycle | Command lifecycle | Events extension hooks | **Dropped** |
+| Skip unchanged HTML (304) | Host code | Built in | - | - | Return `None` to acknowledge without rendering | **Dropped** |
+| Merge duplicate re-renders | Host code | Partial logic | Self render | Ancestor dedup | The order of returned actions is what runs | **Dropped** |
 
-## Security, forms, files, and navigation
+**Update several parts at once.** Put the `Render` actions next to each
+other in the returned list, one per target. The call fails if another
+action sits between them, if one uses `delay` or `wait=False`, or if two
+targets are the same or one contains the other. Nothing on the page
+changes then, although the handler has already run.
 
-| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry answer | Delivery |
+**Keep focus and typed text.** When keyed rows are reordered, the focused
+field keeps its focus, caret, and text. A text field keeps what the user
+typed until the server sends a different value.
+
+**Keep DOM a JS library manages.** An HTML element with `#c-ignore` keeps
+its server-rendered contents through later renders. On a component tag,
+`#c-ignore` raises an error when the template loads.
+
+**Slot fills after an update.** Each fill keeps the Vue scope of the
+template that wrote it.
+
+Each Citry component with browser behavior is a Vue component, so Vue
+handles its slots, several root elements, and components that render no
+element. State lives under `$state`, separate from the component's own Vue
+data.
+
+## Forms, files, links
+
+| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
 |---|---|---|---|---|---|---|
-| CSRF | Django middleware | Django middleware | Django middleware | Django header setup | Same-origin floor, host middleware, client token wiring, optional callable | **v1** |
-| Authorization hook | Handler code | Endpoint plus handler code | Handler code | Opt-in decorator | Component or handler guard plus handler checks | **v1** |
-| Custom payload codec | Host code | - | Framework protocol | JSON/form parsing | Registered payload codec | **v1** |
-| Custom return resolver | Host response | Framework return handling | Framework callbacks | Execution result classes | Registered event-result resolver | **v1** |
-| Typed form collection | Manual | Model binding | Form components | Body kwargs | Named controls into typed `data` | **v1** |
-| Django `form_class` sugar | Manual | Shipped | Form/ModelForm components | - | Convenience integration | **v1.x** |
-| Field-error map | Manual | Shipped | `form_errors` | Application code | Schema errors and `EventError.fields` in `$error(name).fieldErrors` | **v1** |
-| Error attrs/template tag | Manual | Shipped | Template state | Application code | Render from `$error(name)` explicitly | **Dropped** |
-| Multipart upload | Raw request files | Limited | Shipped | Shipped | Built-in multipart to `UploadedFile` | **v1.x** |
-| Staged multi-request upload | Application code | - | Temporary files | Upload flow | Single-request multipart is the planned scope | **Dropped** |
-| HTTP file response | Native response | - | `FileResponse` | Application response | `RouteResponse` from `@event(bundle=False)` on a per-event HTTP call | **v1** |
-| File download action | Handwritten client | - | Shipped | Header result | Shipped per-event `actions.Download` response; batches are rejected | **v1.x** |
-| Redirect | Native response | Shipped | Shipped | `RedirectPage` | `actions.Redirect` | **v1** |
-| Push/replace history | Host response | Redirect metadata | Shipped | Shipped | Shipped `PushUrl` / `ReplaceUrl` actions | **v1.x** |
-| Automatic unchanged-HTML 304 | Host code | Shipped | - | - | Explicit no-action acknowledgement | **Dropped** |
-| Automatic dirty-tree deduplication | Host code | Partial logic | Self render | Ancestor dirty-set dedup | Explicit action order is authoritative | **Dropped** |
+| Typed form fields | Manual | Model binding | Form components | Body kwargs | Named controls into typed `data` | **v1** |
+| Field-error map | Manual | Built in | `form_errors` | Your code | Schema errors and `EventError.fields`, in `$error(name).fieldErrors` | **v1** |
+| Redirect | Native response | Built in | Built in | `RedirectPage` | `actions.Redirect` | **v1** |
+| Push or replace history | Host response | Redirect metadata | Built in | Built in | `actions.PushUrl` / `actions.ReplaceUrl` | **v1** |
+| File download | Handwritten client | - | Built in | Header result | `actions.Download` from a per-event call | **v1** |
+| Raw HTTP file response | Native response | - | `FileResponse` | Your response | `RouteResponse` from an `@event(bundle=False)` handler | **v1** |
+| Django `form_class` shortcut | Manual | Built in | Form/ModelForm components | - | Not built in; validate the form and raise `EventError` | **v1.x** |
+| File upload (multipart) | Raw request files | Limited | Built in | Built in | Not parsed by default; a custom codec can pass `UploadedFile` | **v1.x** |
+| Upload across several requests | Your code | - | Temporary files | Upload flow | Not built in; keep it in your code | **Dropped** |
+| Error attrs or template tag | Manual | Built in | Template state | Your code | Render from `$error(name)` | **Dropped** |
 
-Setting `csrf=False` disables only Citry's configurable callable token check.
-It does not disable the always-on cross-site request floor or independently
-configured host middleware, and it does not change which token the browser
-runtime sends. State signatures also do not replace authorization: reload and
-authorize every record named by State or event data.
+**File download.** `actions.Download` works only on a per-event call, so
+mark the handler `@event(bundle=False)`. Return the download on its own,
+and do not change State in that handler. See
+[`Download` a file](/events/actions/#download-a-file).
+
+**File upload.** Citry's built-in payload codecs do not read
+`multipart/form-data`. To accept files now, register a custom payload codec
+that turns the uploaded parts into `UploadedFile` values for the handler.
+
+## Secure event calls
+
+| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
+|---|---|---|---|---|---|---|
+| CSRF | Django middleware | Django middleware | Django middleware | Django header setup | Same-origin check, host middleware, token sent by the client, optional callable | **v1** |
+| Authorization | Handler code | Endpoint plus handler code | Handler code | Opt-in decorator | Component or handler guard, plus checks in the handler | **v1** |
+
+**Turning off the CSRF callable.** `csrf=False` turns off only Citry's
+configurable token check. The same-origin check always runs, your host's
+CSRF middleware still runs, and the browser still sends its token.
+
+**Authorization.** A signed State token proves Citry created it, not that the
+user may act on what it names. Load and check access for every record that
+State or event data names.
+
+## Send and queue calls
+
+| Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry | Delivery |
+|---|---|---|---|---|---|---|
+| HTTP calls | Native view | Message POST | Call POST | Command POST | Fetch to the batch or per-event route | **v1** |
+| Send pending writes with a call | Your code | Action queue | All public data | Command body | Pending State writes travel with the next call | **v1** |
+| Call order | Host order | Optional serial cache | Client queue | One command at a time | One Vue app sends its calls one at a time, in order | **v1** |
+| Ignore stale responses | Your code | Epoch | Old-value/focus checks | Session State | Epoch check, plus optional `latest_wins` | **v1** |
+| Send one call on its own | Your code | - | - | - | `@event(bundle=False)` uses the per-event route | **v1** |
+| Custom transport | Custom view | - | HTTP/WS internals | htmx | Register a transport | **v1** |
+| Custom payload format | Host code | - | Framework protocol | JSON/form parsing | Register a payload codec | **v1** |
+| Custom return handling | Host response | Framework return handling | Framework callbacks | Execution result classes | Register an event-result resolver | **v1** |
+| postMessage bridge | Custom code | - | - | - | Not built in; register a transport that uses `postMessage` | **v1.x** |
+| Combine calls from the same tick | Your code | Queue-specific | - | - | Not built in; each call is sent on its own | **v2** |
+| WebSocket and server push | Custom code | - | Reactive components | - | Not built in | **v2** |
+| Server-sent events | Custom code | - | - | - | Not built in | **v2** |
+| Offline replay queue | Your code | - | Built in | - | Write your own retry and conflict rules | **Dropped** |
 
 ## Events v1 acceptance checklist
 
-The migration target is considered v1-complete when all of these remain true:
+The Citry project treats Events v1 as complete only while all of these hold.
+The items about hosts, CSRF, and the browser runtime are behavior your port
+can rely on; the rest describe how the project checks itself:
 
-- protocol examples replay against the Python dispatcher and validate against
-  the protocol schema;
-- the same event suite passes under WSGI/Django and ASGI/FastAPI hosts;
-- host CSRF and per-event middleware are exercised without exempting the
-  Events route;
-- the counter, debounced live search, and validated form pass through the real
-  browser runtime;
-- the Component.View form and fragments ports pass through native and runtime
-  paths, including fragment JavaScript, CSS, and Alpine activation;
-- State visibility, client-input, guard, and CSRF guidance is public; and
-- all four migration guides point to this maintained matrix.
+- The protocol examples replay against the Python dispatcher and validate
+  against the protocol schema, so the wire format matches its spec.
+- The same event test suite passes under WSGI/Django and ASGI/FastAPI, so a
+  handler behaves the same on either host.
+- Host CSRF and per-event middleware run on event calls. You do not need to
+  exempt the Events route.
+- The counter, debounced live search, and validated form examples pass
+  through the real browser runtime.
+- The Component.View form and fragments ports pass through both plain HTML
+  and the browser runtime, including the JavaScript, CSS, and Vue setup of
+  inserted fragments.
+- The guidance on State visibility, client input, guards, and CSRF is
+  public in [Security](/security/).
+- All four migration guides link to this page.
 
-For the API and authoring rules, continue with
+For the full API and authoring rules, continue with
 [Server events](/events/) and [Security](/security/).

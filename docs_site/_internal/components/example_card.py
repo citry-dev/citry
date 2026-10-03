@@ -18,10 +18,10 @@ from __future__ import annotations
 from typing import Any
 
 from markupsafe import Markup
-from pygments import highlight
 from pygments.formatters import HtmlFormatter
 
 from citry import Component
+from docs_site._internal.code_display import highlight_for_display
 from docs_site._internal.examples import example_not_found, get_example_registry
 from docs_site._internal.util import lstrip_outside_pre
 from pygments_citry.lexers import CitryPythonLexer
@@ -48,12 +48,12 @@ class ExampleCard(Component):
         # The citry lexer highlights the HTML/JS/CSS embedded in the example's
         # template/js/css strings, not just the Python around them.
         lexer = CitryPythonLexer()
-        component_code = highlight(
+        component_code = highlight_for_display(
             (info.example_dir / "component.py").read_text(encoding="utf-8"),
             lexer,
             formatter,
         )
-        page_code = highlight((info.example_dir / "page.py").read_text(encoding="utf-8"), lexer, formatter)
+        page_code = highlight_for_display((info.example_dir / "page.py").read_text(encoding="utf-8"), lexer, formatter)
 
         # self.id is unique per render, so two cards for the same example on one
         # page still get distinct radio ids / names / label targets (valid HTML).

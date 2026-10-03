@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import ast
 from pathlib import Path
 
 import pytest
 from lxml import html as lxml_html
 
-from citry._alpine_csp import classify_alpine_csp
-from citry.analysis import browser_expressions
-from citry_core.template_parser import parse_template
 from docs_site._internal.components.live_code import LiveCode
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
@@ -18,30 +14,6 @@ from docs_site._internal.guards import live_code as live_code_guard
 from docs_site._internal.guards.base import GuardContext
 from docs_site._internal.live_code import LiveCodeValidationError, load_live_source
 from docs_site._internal.pipeline import render_page
-
-_LIVE_SNIPPETS = Path(__file__).parents[1] / "live_snippets"
-
-
-def test_published_live_templates_are_strict_csp_compatible() -> None:
-    """Executable docs examples keep Alpine attributes inside the pinned subset."""
-    issues: list[str] = []
-    for path in sorted(_LIVE_SNIPPETS.glob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=path.as_posix())
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-                continue
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            if not any(isinstance(target, ast.Name) and target.id == "template" for target in targets):
-                continue
-            value = node.value
-            if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
-                continue
-            for expression in browser_expressions(parse_template(value.value)):
-                result = classify_alpine_csp(expression)
-                if result.outcome == "incompatible":
-                    issues.append(f"{path.name}:{node.lineno} {expression.attribute}: {result.detail}")
-
-    assert issues == []
 
 
 def _docs_config(root: Path) -> DocsConfig:
@@ -281,6 +253,19 @@ def test_live_source_accepts_modules_without_a_preview_value(tmp_path: Path, sou
     path = _snippet_path(tmp_path, source)
 
     assert load_live_source(path, repo_root=tmp_path, title="Sample") == source
+
+
+def test_live_code_block_shows_one_blank_line_from_each_run(tmp_path: Path) -> None:
+    source = "from markupsafe import Markup\n\n\nvalue = Markup('<p>x</p>')\n"
+    path = _snippet_path(tmp_path, source)
+
+    result = render_page(f'<c-live-code path="{path}" title="Sample" />', config=_docs_config(tmp_path))
+
+    tree = lxml_html.fromstring(result.html)
+    [highlight] = tree.xpath("//*[@data-live-static]//*[contains(@class, 'highlight')]")
+    # The Try live editor starts from this text, so it is also what a reader runs.
+    assert highlight.text_content() == "from markupsafe import Markup\n\nvalue = Markup('<p>x</p>')\n"
+    assert (tmp_path / path).read_text(encoding="utf-8") == source
 
 
 def test_incomplete_live_source_remains_static_and_passes_the_guard(tmp_path: Path) -> None:
