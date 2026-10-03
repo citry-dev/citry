@@ -99,6 +99,7 @@ from citry.component_registry import NotRegistered
 from citry.ext.events.extension import _component_events_info
 from citry.settings import LintSettings
 from citry.tag_rules import build_tag_rules
+from citry_core.i18n import I18nCompileError
 from citry_core.template_parser import (
     RESERVED_TAG_NAMES,
     ParseOptions,
@@ -231,39 +232,38 @@ def _check_registry(
     # Component messages make i18n available without configuring it; only a
     # configured app has format profiles and gives the browser `$i18n`.
     i18n_configured = i18n is not None and getattr(i18n, "configured", False) is True
-    if i18n is not None and getattr(i18n, "available", False):
+    if i18n is not None:
         try:
-            i18n_extension = cast("I18nExtension", i18n)
-            i18n_profiles = _i18n_profile_inventory(i18n_extension)
-            i18n_extension._load_project_sources()
-            compiled_catalog = i18n_extension._compiled_catalog
-            if compiled_catalog is None:
-                raise ValueError("The i18n compiler did not produce a project artifact.")
-            artifact = json.loads(compiled_catalog.artifact_json())
-            findings.extend(
-                CheckFinding(
-                    origin=diagnostic["path"],
-                    message=diagnostic["message"],
-                    code=diagnostic["code"],
-                    severity=diagnostic["severity"],
-                    start_index=diagnostic["start"],
-                    end_index=diagnostic["end"],
-                    line=diagnostic["line"],
-                    column=diagnostic["column"],
-                    end_line=diagnostic["line"],
-                    end_column=diagnostic["column"] + diagnostic["end"] - diagnostic["start"],
+            # Reading `available` compiles every component's messages, so an
+            # invalid catalog raises here and must become a finding, not a crash.
+            i18n_available = bool(getattr(i18n, "available", False))
+            if i18n_available:
+                i18n_extension = cast("I18nExtension", i18n)
+                i18n_profiles = _i18n_profile_inventory(i18n_extension)
+                i18n_extension._load_project_sources()
+                compiled_catalog = i18n_extension._compiled_catalog
+                if compiled_catalog is None:
+                    raise ValueError("The i18n compiler did not produce a project artifact.")
+                artifact = json.loads(compiled_catalog.artifact_json())
+                findings.extend(
+                    _i18n_diagnostic_finding(
+                        diagnostic,
+                        message=diagnostic["message"],
+                        code=diagnostic["code"],
+                        severity=diagnostic["severity"],
+                    )
+                    for diagnostic in artifact["diagnostics"]
                 )
-                for diagnostic in artifact["diagnostics"]
-            )
-            i18n_manifest = artifact["manifest"]
+                i18n_manifest = artifact["manifest"]
         except (Exception, SystemExit) as exc:  # noqa: BLE001 - one catalog error becomes one finding
-            findings.append(
-                CheckFinding(
-                    "i18n catalog",
-                    f"The project i18n catalog is invalid: {_error_detail(exc)}",
-                    I18N_CATALOG_INVALID,
-                )
-            )
+            message = f"The project i18n catalog is invalid: {_error_detail(exc)}"
+            # A compile error carries the source position of the bad message,
+            # so point the finding there when the compiler supplied one.
+            diagnostic = _i18n_compile_diagnostic(exc)
+            if diagnostic is None:
+                findings.append(CheckFinding("i18n catalog", message, I18N_CATALOG_INVALID))
+            else:
+                findings.append(_i18n_diagnostic_finding(diagnostic, message=message, code=I18N_CATALOG_INVALID))
 
     for comp_cls in components:
         if engine._is_builtin_component(comp_cls):
@@ -2336,6 +2336,52 @@ def _byte_offset_coordinates(source: str, offset: int) -> tuple[int, int]:
     line = prefix.count("\n")
     current = prefix.rsplit("\n", 1)[-1]
     return line, len(current.encode("utf-16-le")) // 2
+
+
+def _i18n_compile_diagnostic(exc: BaseException) -> dict[str, Any] | None:
+    """Return the located compiler diagnostic behind a catalog failure, if any."""
+    # The i18n extension re-raises compile errors as ValueError, so the
+    # compiler's own error is usually the cause rather than the exception itself.
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, I18nCompileError):
+            try:
+                diagnostic = json.loads(current.diagnostic_json)
+            except (TypeError, ValueError):
+                return None
+            # Only a diagnostic with a complete position can place the finding.
+            required = ("path", "start", "end", "line", "column")
+            if isinstance(diagnostic, dict) and all(diagnostic.get(key) is not None for key in required):
+                return diagnostic
+            return None
+        current = current.__cause__ or current.__context__
+    return None
+
+
+def _i18n_diagnostic_finding(
+    diagnostic: Mapping[str, Any],
+    *,
+    message: str,
+    code: str,
+    severity: Literal["warning", "error"] = "error",
+) -> CheckFinding:
+    """Place one i18n compiler diagnostic at the message source it names."""
+    return CheckFinding(
+        origin=diagnostic["path"],
+        message=message,
+        code=code,
+        severity=severity,
+        start_index=diagnostic["start"],
+        end_index=diagnostic["end"],
+        line=diagnostic["line"],
+        column=diagnostic["column"],
+        # Compiler diagnostics cover one line, so the end column follows
+        # from the span length.
+        end_line=diagnostic["line"],
+        end_column=diagnostic["column"] + diagnostic["end"] - diagnostic["start"],
+    )
 
 
 def _error_detail(exc: BaseException) -> str:

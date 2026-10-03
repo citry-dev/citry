@@ -168,6 +168,10 @@ walks through every step.
   "Unknown i18n format profile" for a formatter call in component
   JavaScript or one guarded by `self.i18n.configured`, matching the
   editor; an unguarded Python call is still reported.
+- `citry check` no longer crashes with a traceback when a component's
+  `messages` fail to compile, for example a selector variable without an
+  `@param` type. It reports `citry.i18n.catalog-invalid` at the message's
+  line and column instead.
 - Fallback text that runs in the other direction, such as English on an
   Arabic page, no longer reorders the surrounding sentence when the
   browser translates it with `$i18n.tr()`, `$c-tr`, `i18n.bind()`, or

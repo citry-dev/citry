@@ -12,8 +12,9 @@ from citry import Citry, Component, Extension, ForeignSpan, ForeignSpanSet, Lint
 from citry.__main__ import main
 from citry._app_selection import CheckAppSelection
 from citry._checker import TRANSFORM_NOTE, check_project
-from citry._diagnostic_catalog import I18N_MISSING_PARAM_TYPE, TEMPLATE_MARKER_NAME_INVALID
+from citry._diagnostic_catalog import I18N_CATALOG_INVALID, I18N_MISSING_PARAM_TYPE, TEMPLATE_MARKER_NAME_INVALID
 from citry.ext.i18n import DateFormat, FormatRegistry, NumberFormat
+from citry.ext.i18n.extension import I18nExtension
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -471,6 +472,66 @@ class TestRegistryMode:
         assert report.findings[0].severity == "warning"
         assert "without an @param" in report.findings[0].message
         assert report.exit_code == 0
+
+    def test_invalid_inline_messages_report_a_located_catalog_finding(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        # A selector variable without an @param type is a compile error, so
+        # check must report it instead of raising out of the run.
+        class Picker(Component):
+            citry = engine
+            messages = """
+                items = { $count ->
+                    [one] One item
+                   *[other] Many items
+                }
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert len(report.findings) == 1
+        finding = report.findings[0]
+        assert finding.code == I18N_CATALOG_INVALID
+        assert "selector $count must have type int or Decimal" in finding.message
+        assert finding.origin.endswith("::Picker.messages")
+        assert (finding.line, finding.column, finding.end_line, finding.end_column) == (2, 11, 2, 17)
+        assert report.exit_code == 1
+
+    def test_catalog_failure_without_a_source_position_names_the_catalog(self, tmp_path, monkeypatch):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = "known = Known"
+
+        def fail_to_load(_extension: object) -> None:
+            raise RuntimeError("catalog package unreadable")
+
+        # A failure that is not a compile error has no position to report.
+        monkeypatch.setattr(I18nExtension, "_load_project_sources", fail_to_load)
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [(finding.origin, finding.code, finding.line) for finding in report.findings] == [
+            ("i18n catalog", I18N_CATALOG_INVALID, None),
+        ]
+        assert "RuntimeError: catalog package unreadable" in report.findings[0].message
 
     def test_literal_tr_checks_attributes_arguments_and_literal_types(self, tmp_path):
         engine = Citry(
