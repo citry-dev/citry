@@ -783,17 +783,106 @@ class TestValidationErrors:
         with pytest.raises(ValueError, match=re.escape(expected)):
             self._load(f'<button @c-{event_name}.{key}="go">x</button>', events={"go": _noop})
 
-    def test_state_key_filter_accepts_any_update_event_name(self):
+    @pytest.mark.parametrize("event_name", ["keydown", "keyup", "keypress"])
+    def test_state_key_filter_accepts_keyboard_update_events(self, event_name):
         comp = self._component(
-            '<input :c-q.on:lol.escape="go">',
+            f'<input :c-q.on:{event_name}.escape="go">',
             state={"__annotations__": {"q": str}, "q": ""},
             events={"go": _noop},
         )
         _, tables, compiled = _typed_binding_tables(comp)
         [spec] = tables["controlBindings"]
         assert ":c-q" not in compiled.template
-        assert spec["on"] == "lol"
+        assert spec["on"] == event_name
         assert spec["key"] == "escape"
+
+    # A State binding's key filter checks its update event, so it follows the
+    # `@c-*` rule: the default `input`/`change` and any other `.on:` name (a
+    # custom name, or a miscased `keyDown` that never fires) carry no key, so
+    # the binding never sends. The fix names the modifier to change.
+    @pytest.mark.parametrize(
+        ("template", "attr", "key", "where", "fix"),
+        [
+            (
+                '<input :c-q.enter="go">',
+                ":c-q.enter",
+                "enter",
+                "the control's default update event 'input'",
+                "Add '.on:keydown' or '.on:keyup'",
+            ),
+            (
+                '<textarea :c-q.escape="go"></textarea>',
+                ":c-q.escape",
+                "escape",
+                "the control's default update event 'input'",
+                "Add '.on:keydown' or '.on:keyup'",
+            ),
+            (
+                '<input :c-q.lazy.escape="go">',
+                ":c-q.lazy.escape",
+                "escape",
+                "the control's default update event 'change'",
+                "Replace '.lazy' with '.on:keydown' or '.on:keyup'",
+            ),
+            (
+                '<select :c-q.enter="go"></select>',
+                ":c-q.enter",
+                "enter",
+                "the control's default update event 'change'",
+                "Add '.on:keydown' or '.on:keyup'",
+            ),
+            (
+                '<input type="checkbox" :c-q.enter="go">',
+                ":c-q.enter",
+                "enter",
+                "the control's default update event 'change'",
+                "Add '.on:keydown' or '.on:keyup'",
+            ),
+            (
+                '<input :type="t" :c-q.enter="go">',
+                ":c-q.enter",
+                "enter",
+                "the control's default update event ('input' or 'change')",
+                "Add '.on:keydown' or '.on:keyup'",
+            ),
+            (
+                '<c-element c-is="tag" :c-q.enter="go" />',
+                ":c-q.enter",
+                "enter",
+                "the control's default update event ('input' or 'change')",
+                "Add '.on:keydown' or '.on:keyup'",
+            ),
+            (
+                '<input :c-q.on:lol.escape="go">',
+                ":c-q.on:lol.escape",
+                "escape",
+                "the 'lol' update event",
+                "Change '.on:lol' to '.on:keydown' or '.on:keyup'",
+            ),
+            (
+                '<input :c-q.on:keyDown.enter="go">',
+                ":c-q.on:keyDown.enter",
+                "enter",
+                "the 'keyDown' update event",
+                "Change '.on:keyDown' to '.on:keydown' or '.on:keyup'",
+            ),
+            (
+                '<x-el :c-q.on:change.enter="go"></x-el>',
+                ":c-q.on:change.enter",
+                "enter",
+                "the 'change' update event",
+                "Change '.on:change' to '.on:keydown' or '.on:keyup'",
+            ),
+        ],
+    )
+    def test_state_key_filter_on_a_keyless_update_event_fails_to_load(self, template, attr, key, where, fix):
+        expected = (
+            f"'{attr}' uses '.{key}' on {where}. '.enter' and '.escape' work only on keyboard events"
+            f" ('keydown', 'keyup', 'keypress'), which carry the pressed key. {fix} to send on a key,"
+            f" or remove '.{key}'. (in Comp template, line 1)"
+        )
+        with pytest.raises(ValueError, match=re.escape(expected)):
+            self._load(template, state={"__annotations__": {"q": str}, "q": ""}, events={"go": _noop})
 
     def test_file_input_two_way(self):
         with pytest.raises(
@@ -1521,6 +1610,19 @@ class TestResolvedControlTypeValidation:
         comp = self._component('<input :c-q="go" c-bind="attrs">', {"attrs": {"type": "file"}})
         with pytest.raises(ValueError, match=r'<input type="file"> cannot be bound to State'):
             _rendered(comp())
+
+    def test_spread_state_key_filter_needs_a_keyboard_update_event(self):
+        # A spread binding reaches the same validator at render time.
+        accepted = self._component('<input c-bind="attrs">', {"attrs": {":c-q.on:keyup.enter": "go"}})
+        [spec] = _typed_binding_tables(accepted)[1]["controlBindings"]
+        assert (spec["on"], spec["key"]) == ("keyup", "enter")
+        rejected = self._component('<input c-bind="attrs">', {"attrs": {":c-q.enter": "go"}})
+        with pytest.raises(
+            ValueError,
+            match=r"':c-q\.enter' uses '\.enter' on the control's default update event 'input'\..*"
+            r"after dynamic attributes resolved",
+        ):
+            _rendered(rejected())
 
     def test_spread_supplying_type_and_binding_is_revalidated(self):
         comp = self._component('<input c-bind="attrs">', {"attrs": {"type": "submit", ":c-q": "go"}})

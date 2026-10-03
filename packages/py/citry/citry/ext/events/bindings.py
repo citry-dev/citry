@@ -494,6 +494,12 @@ def _build_bind_spec(
     if lazy and on_event is not None:
         _fail(location, f"{attr.name!r}: '.lazy' and '.on:' cannot be combined; choose one update event")
     _validate_two_way_control(element, lazy=lazy, on_event=on_event, attr_name=attr.name, location=location)
+    # The update event is the one whose `key` the browser checks. The default
+    # update events (`input`, `change`) and every other `.on:` name carry no
+    # key, so the binding would silently never send. Reject it when the
+    # template loads, as `_build_event_spec` does for `@c-click.enter`.
+    if key is not None and on_event not in _KEYBOARD_EVENTS:
+        _fail(location, _keyless_update_event_error(attr.name, key, on_event, element, lazy=lazy))
 
     debounce, throttle = _merged_timing(info, handler or "", debounce, throttle)
     _validate_timing_pair(debounce, throttle, attr.name, location)
@@ -507,6 +513,46 @@ def _build_bind_spec(
         "debounce": debounce,
         "throttle": throttle,
     }
+
+
+def _keyless_update_event_error(
+    attr_name: str, key: str, on_event: str | None, element: _Element, *, lazy: bool
+) -> str:
+    """Explain a ``:c-*`` key filter whose update event carries no key, naming that event and both fixes."""
+    # The fix names the modifier the author has to change, because adding
+    # `.on:` next to `.lazy` or a second `.on:` is not the right repair.
+    if on_event is not None:
+        where = f"on the {on_event!r} update event"
+        fix = f"Change '.on:{on_event}' to '.on:keydown' or '.on:keyup'"
+    else:
+        # Name the default the browser would use, so the author sees which
+        # event `.on:` replaces. When the tag or input type is resolved
+        # later (by `c-is`, `c-type`, `c-bind`, or Vue's `:type`), the default
+        # could be either keyless event.
+        default = _default_update_event(element, lazy=lazy)
+        where = (
+            f"on the control's default update event {default!r}"
+            if default is not None
+            else "on the control's default update event ('input' or 'change')"
+        )
+        fix = "Replace '.lazy' with '.on:keydown' or '.on:keyup'" if lazy else "Add '.on:keydown' or '.on:keyup'"
+    return (
+        f"{attr_name!r} uses '.{key}' {where}. '.enter' and '.escape' work only on keyboard events"
+        f" ('keydown', 'keyup', 'keypress'), which carry the pressed key. {fix} to send on a key,"
+        f" or remove '.{key}'."
+    )
+
+
+def _default_update_event(element: _Element, *, lazy: bool) -> str | None:
+    """The default update event of a known native control, or ``None`` when the tag or type is resolved later."""
+    tag = element.tag_name.lower()
+    if tag == "select":
+        return "change"
+    if tag == "textarea":
+        return "change" if lazy else "input"
+    if tag == "input" and element.type_static_known:
+        return "change" if lazy or _input_type(element) in _COMMITTED_INPUT_TYPES else "input"
+    return None
 
 
 def _resolve_state_field(info: EventsInfo, field: str, attr_name: str, location: _Location) -> None:

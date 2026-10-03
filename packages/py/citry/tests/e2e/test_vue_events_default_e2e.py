@@ -3705,6 +3705,66 @@ def test_key_filtered_binding_checks_the_key_before_prevent(page: Any, serve_liv
 
 
 @pytest.mark.e2e
+def test_key_filtered_state_binding_sends_only_for_that_key(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="vue-state-key-filter-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class Search(Component):
+        citry = engine
+        template = """
+            <main>
+              <input
+                id="authored"
+                :c-query.on:keydown.enter="authored"
+              />
+              <input id="runtime" c-bind="attrs" />
+            </main>
+        """
+
+        class State:
+            query: str = ""
+
+        class Events:
+            def authored(self, state):
+                return None
+
+            def runtime(self, state):
+                return None
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {":c-query.on:keyup.enter": "runtime"}}
+
+    dispatcher_for(engine)
+    calls: list[dict[str, Any]] = []
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "request",
+        lambda request: calls.extend(request.post_data_json["calls"])
+        if request.url.endswith("/ext/events/call") and request.post_data_json
+        else None,
+    )
+    page.goto(serve_live(engine, Search().render().serialize(), "") + "/")
+
+    for field_id, handler, text in (("authored", "authored", "ab"), ("runtime", "runtime", "cd")):
+        field = page.locator(f"#{field_id}")
+        # Typing fires the keyboard update event for every key, but only
+        # Enter passes the key filter, so nothing is sent before it.
+        field.press_sequentially(text)
+        page.wait_for_timeout(60)
+        assert not any(call["handlerName"] == handler for call in calls)
+        with page.expect_request("**/ext/events/call") as request:
+            field.press("Enter")
+        [call] = request.value.post_data_json["calls"]
+        assert call["handlerName"] == handler
+        # The call carries the value typed before Enter.
+        assert call["stateUpdates"] == {"query": text}
+
+    assert sorted(call["handlerName"] for call in calls) == ["authored", "runtime"]
+    assert faults == []
+
+
+@pytest.mark.e2e
 def test_native_runtime_event_once_survives_unrelated_binding_revisions_and_replaces_changed_handler(
     page: Any, serve_live: Any
 ) -> None:
