@@ -1058,7 +1058,7 @@ class TestSubclassTypedInputs:
         with pytest.raises(
             ValueError,
             match=(
-                r"Component Combined: its bases declare different Kwargs classes \(Left.Kwargs and"
+                r"Component Combined: its bases declare Kwargs differently \(Left.Kwargs and"
                 r" Right.Kwargs\), and Citry does not combine them. Declare Kwargs on Combined: write"
                 r" `Kwargs = Left.Kwargs`"
             ),
@@ -1100,7 +1100,7 @@ class TestSubclassTypedInputs:
             citry = c
             Kwargs = None
 
-        with pytest.raises(ValueError, match=r"\(Left.Kwargs and Right with Kwargs = None\)"):
+        with pytest.raises(ValueError, match=r"\(Left.Kwargs and Kwargs = None on Right\)"):
 
             class Combined(Left, Right):
                 pass
@@ -1122,6 +1122,79 @@ class TestSubclassTypedInputs:
             pass
 
         assert Combined.Kwargs is Left.Kwargs
+
+    def test_bases_binding_one_module_level_class_do_not_conflict(self):
+        c = Citry()
+
+        class SharedFields:
+            a: int = 1
+
+        class Left(Component):
+            citry = c
+            Kwargs = SharedFields
+
+        class Right(Component):
+            citry = c
+            Kwargs = SharedFields
+
+        class Combined(Left, Right):
+            pass
+
+        assert Combined.Kwargs is Left.Kwargs
+
+    def test_non_class_on_a_competing_base_raises_the_class_error(self):
+        c = Citry()
+
+        class Cleared(Component):
+            citry = c
+            Kwargs = None
+
+        class Mixin:
+            Kwargs = "oops"
+
+        with pytest.raises(ValueError, match=r"Mixin.Kwargs must be a class, or None for no Kwargs; got 'oops'"):
+
+            class Combined(Cleared, Mixin, Component):
+                citry = c
+
+    def test_choosing_one_base_class_does_not_warn(self):
+        c = Citry()
+
+        class Left(Component):
+            citry = c
+
+            class Kwargs:
+                a: int = 1
+
+        class Right(Component):
+            citry = c
+
+            class Kwargs:
+                b: int = 2
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NestedSchemaReplacedWarning)
+
+            class Combined(Left, Right):
+                Kwargs = Right.Kwargs
+
+        assert Combined.Kwargs is Right.Kwargs
+
+    def test_own_constructor_on_the_declared_class_is_still_converted(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = "<p>{{ size }}</p>"
+
+            class Kwargs:
+                size: int = 3
+
+                def describe(self):
+                    return f"size {self.size}"
+
+        assert "__dataclass_fields__" in Card.Kwargs.__dict__
+        assert Card().render().serialize() == '<p data-cid-c1="">3</p>'
 
     def test_diamond_uses_the_nearer_declaration_without_error(self):
         c = Citry()
@@ -1240,7 +1313,7 @@ class TestSubclassTypedInputs:
         left = type(f"{schema_name}Left", (Component,), {"citry": c, schema_name: LeftSchema})
         right = type(f"{schema_name}Right", (Component,), {"citry": c, schema_name: None})
 
-        with pytest.raises(ValueError, match=f"its bases declare different {schema_name} classes"):
+        with pytest.raises(ValueError, match=f"its bases declare {schema_name} differently"):
             type(f"{schema_name}Combined", (left, right), {})
 
     def test_plain_definition_base_schemas_are_normalized_for_the_component(self):

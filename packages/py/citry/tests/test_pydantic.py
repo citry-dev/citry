@@ -105,7 +105,7 @@ class TestPydanticKwargs:
             citry = c
             Kwargs = RightSchema
 
-        with pytest.raises(ValueError, match="its bases declare different Kwargs classes"):
+        with pytest.raises(ValueError, match="its bases declare Kwargs differently"):
 
             class Combined(Left, Right):
                 pass

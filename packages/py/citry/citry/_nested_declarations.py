@@ -17,7 +17,7 @@ import os
 import sys
 import warnings
 from copy import copy
-from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
+from dataclasses import MISSING, Field, InitVar, dataclass, fields, is_dataclass
 from pathlib import Path
 from types import new_class
 from typing import TYPE_CHECKING, Any, ClassVar, cast, get_origin
@@ -171,8 +171,30 @@ def _resolved_binding(declaration: NestedClassDeclaration) -> object:
 def _describe_binding(declaration: NestedClassDeclaration) -> str:
     owner = _safe_class_text(declaration.declaring_class, "__name__") or "<class>"
     if declaration.value is None:
-        return f"{owner} with {declaration.name} = None"
+        return f"{declaration.name} = None on {owner}"
     return f"{owner}.{declaration.name}"
+
+
+def _same_binding(first: NestedClassDeclaration, second: NestedClassDeclaration) -> bool:
+    """Whether two declarations bind the same class, authored or generated."""
+    # Two bases may bind one module-level class, which each base converts to
+    # its own generated class, or one may alias the other's generated class.
+    if first.value is second.value:
+        return True
+    return _resolved_binding(first) is _resolved_binding(second)
+
+
+def _require_class_or_none(cls: type, declaration: NestedClassDeclaration) -> None:
+    if declaration.value is None or isinstance(declaration.value, type):
+        return
+    component_name = _safe_class_text(cls, "__name__") or "Component"
+    owner = _safe_class_text(declaration.declaring_class, "__name__") or component_name
+    name = declaration.name
+    msg = (
+        f"Component {component_name}: {owner}.{name} must be a class, or None for no {name};"
+        f" got {declaration.value!r}. Declare it as `class {name}:` with annotated fields."
+    )
+    raise ValueError(msg)
 
 
 def _nearest_data_shape_declaration(cls: type, name: str) -> NestedClassDeclaration | None:
@@ -190,13 +212,7 @@ def _nearest_data_shape_declaration(cls: type, name: str) -> NestedClassDeclarat
         return None
     nearest = declarations[0]
     component_name = _safe_class_text(cls, "__name__") or "Component"
-    if nearest.value is not None and not isinstance(nearest.value, type):
-        owner = _safe_class_text(nearest.declaring_class, "__name__") or component_name
-        msg = (
-            f"Component {component_name}: {owner}.{name} must be a class, or None for no {name};"
-            f" got {nearest.value!r}. Declare it as `class {name}:` with annotated fields."
-        )
-        raise ValueError(msg)
+    _require_class_or_none(cls, nearest)
     if nearest.declaring_class is cls:
         return nearest
 
@@ -212,8 +228,9 @@ def _nearest_data_shape_declaration(cls: type, name: str) -> NestedClassDeclarat
             for other in declaring_classes
         )
     ]
-    nearest_binding = _resolved_binding(nearest)
-    conflicts = [declaration for declaration in competing[1:] if _resolved_binding(declaration) is not nearest_binding]
+    for declaration in competing[1:]:
+        _require_class_or_none(cls, declaration)
+    conflicts = [declaration for declaration in competing[1:] if not _same_binding(declaration, nearest)]
     if conflicts:
         named = [_describe_binding(declaration) for declaration in (nearest, *conflicts)]
         listed = ", ".join(named[:-1]) + f" and {named[-1]}"
@@ -221,7 +238,7 @@ def _nearest_data_shape_declaration(cls: type, name: str) -> NestedClassDeclarat
         first_class = next(declaration for declaration in (nearest, *conflicts) if isinstance(declaration.value, type))
         suggestion = f"`{name} = {_describe_binding(first_class)}`"
         msg = (
-            f"Component {component_name}: its bases declare different {name} classes ({listed}),"
+            f"Component {component_name}: its bases declare {name} differently ({listed}),"
             f" and Citry does not combine them. Declare {name} on {component_name}: write"
             f" {suggestion} to use one of them, or define the fields in module-level classes"
             f" and write `class {name}(FirstFields, SecondFields):`."
@@ -276,6 +293,13 @@ def _replaced_parent_schema(
     parent = _parent_declaration(cls, name, nearest)
     if parent is None or not isinstance(parent.value, type) or not isinstance(nearest.value, type):
         return None
+    # Choosing another base's class, as the error for two different base
+    # declarations suggests, is a deliberate choice rather than a replacement.
+    if any(
+        declaration != nearest and _same_binding(declaration, nearest)
+        for declaration in _get_nested_class_declarations(cls, name)
+    ):
+        return None
     parent_schema = _resolved_binding(parent)
     if not isinstance(parent_schema, type):
         return None
@@ -286,9 +310,14 @@ def _replaced_parent_schema(
 
 
 def _is_classvar_annotation(annotation: object) -> bool:
+    """Whether an annotation declares no instance field: a ClassVar or an InitVar."""
     if annotation is ClassVar or get_origin(annotation) is ClassVar:
         return True
-    return isinstance(annotation, str) and annotation.startswith(("ClassVar", "typing.ClassVar", "t.ClassVar"))
+    if annotation is InitVar or isinstance(annotation, InitVar):
+        return True
+    return isinstance(annotation, str) and annotation.startswith(
+        ("ClassVar", "typing.ClassVar", "t.ClassVar", "InitVar", "dataclasses.InitVar")
+    )
 
 
 def _schema_field_names(schema: type) -> tuple[str, ...] | None:
@@ -354,7 +383,6 @@ def _warn_nested_schema_replaced(nearest: NestedClassDeclaration, message: str) 
     warned = _WARNED_REPLACEMENTS.setdefault(owner, set())
     if nearest.name in warned:
         return
-    warned.add(nearest.name)
 
     # Point the warning at the first frame outside Citry: the class statement
     # for a component, or the register_library() call for a library.
@@ -364,6 +392,9 @@ def _warn_nested_schema_replaced(nearest: NestedClassDeclaration, message: str) 
         frame = frame.f_back
         stacklevel += 1
     warnings.warn(message, NestedSchemaReplacedWarning, stacklevel=stacklevel)
+    # Mark it only once the warning went out: under warnings-as-errors the
+    # first definition fails, and a later one must fail the same way.
+    warned.add(nearest.name)
 
 
 def _warn_if_fields_dropped(cls: type, name: str, nearest: NestedClassDeclaration, schema: object) -> None:
@@ -441,9 +472,10 @@ def _is_plain_field_family(declaration: type) -> bool:
     Dataclasses and plain field classes qualify, including a parent
     component's generated class and module-level field classes named as
     bases. A class that brings its own construction keeps it: classes built
-    by another metaclass (Pydantic, NamedTuple, TypedDict, ABC, Protocol),
-    built-in types, and plain classes that define a constructor, slots, or a
-    schema protocol attribute such as ``model_fields``.
+    by another metaclass (Pydantic, TypedDict, ABC, Protocol), NamedTuple and
+    other built-in type subclasses, and classes based on a plain class that
+    defines a constructor, slots, or a schema protocol attribute such as
+    ``model_fields``.
     """
     for klass in _static_class_mro(declaration):
         if klass is object:
@@ -458,7 +490,9 @@ def _is_plain_field_family(declaration: type) -> bool:
         namespace = _static_class_dict(klass)
         if "__dataclass_fields__" in namespace:
             continue
-        if not _CUSTOM_CONSTRUCTION_NAMES.isdisjoint(namespace):
+        # The declared class itself is always converted, as an authored nested
+        # field class. Only a base can bring its own construction.
+        if klass is not declaration and not _CUSTOM_CONSTRUCTION_NAMES.isdisjoint(namespace):
             return False
     return True
 
@@ -646,7 +680,7 @@ def _conversion_error(owner: type | None, name: str | None, user_cls: type, erro
     declaration = name or _safe_class_text(user_cls, "__name__") or "Schema"
     prefix = f"Component {component_name}: " if component_name else ""
     message = str(error)
-    if "frozen" in message:
+    if "cannot inherit frozen dataclass" in message or "cannot inherit non-frozen dataclass" in message:
         msg = (
             f"{prefix}{declaration} cannot mix frozen and non-frozen dataclass bases ({message})."
             " Make every dataclass base frozen, or none of them."

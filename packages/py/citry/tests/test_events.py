@@ -338,6 +338,43 @@ class TestStateCapture:
             " settings, write `class State(Parent.State):` or copy them into the new State."
         ]
 
+    def test_replacing_state_that_drops_max_age_warns(self):
+        app = _Citry()
+
+        class Parent(Component):
+            citry = app
+
+            class State:
+                page: int = 1
+                _max_age = timedelta(minutes=5)
+
+        with pytest.warns(
+            NestedSchemaReplacedWarning,
+            match=r"It does not set _max_age, which Parent.State sets, so its State tokens never expire.",
+        ):
+
+            class Child(Parent):
+                class State:
+                    page: int = 1
+
+        assert _events_ext(app).resolve(Child).state_meta.max_age is None
+
+    def test_state_extension_keeps_const_defaults(self):
+        app = _Citry()
+
+        class Parent(Component):
+            citry = app
+
+            class State:
+                page: int = citry_module.Const(1)
+
+        class Child(Parent):
+            class State(Parent.State):
+                query: str = ""
+
+        state_cls = _events_ext(app).resolve(Child).state_cls
+        assert state_cls() == state_cls(page=1, query="")
+
     def test_state_none_and_inherited_state_do_not_warn(self):
         app = _Citry()
 
@@ -377,9 +414,7 @@ class TestStateCapture:
             class State:
                 right: str = "right"
 
-        with pytest.raises(
-            ValueError, match=r"its bases declare different State classes \(Left.State and Right.State\)"
-        ):
+        with pytest.raises(ValueError, match=r"its bases declare State differently \(Left.State and Right.State\)"):
 
             class Combined(Left, Right):
                 pass

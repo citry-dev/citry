@@ -8,7 +8,7 @@ import inspect
 import re
 import threading
 import warnings
-from dataclasses import is_dataclass
+from dataclasses import InitVar, is_dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import get_type_hints
@@ -234,6 +234,45 @@ def test_library_definition_replacing_kwargs_warns_once_at_registration():
     with warnings.catch_warnings():
         warnings.simplefilter("error", NestedSchemaReplacedWarning)
         Citry(autodiscover=False).register_library(library)
+
+
+def test_library_warning_ignores_initvar_pseudo_fields():
+    class Base(LibraryComponent):
+        class Kwargs:
+            text: str
+            seed: InitVar[int] = 0
+
+    class CLeaf(Base):
+        class Kwargs:
+            text: str
+            seed: InitVar[int] = 0
+
+        template = "{{ text }}"
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", NestedSchemaReplacedWarning)
+        Citry(autodiscover=False).register_library(ComponentLibrary("initvar-controls", (CLeaf,)))
+
+
+def test_library_warning_repeats_while_warnings_are_errors():
+    class Base(LibraryComponent):
+        class Kwargs:
+            text: str
+
+    class CLeaf(Base):
+        class Kwargs:
+            other: str = ""
+
+        template = "x"
+
+    library = ComponentLibrary("strict-controls", (CLeaf,))
+    # A warning turned into an error must not count as already shown, so
+    # each later registration fails the same way.
+    for _ in range(2):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NestedSchemaReplacedWarning)
+            with pytest.raises(NestedSchemaReplacedWarning):
+                Citry(autodiscover=False).register_library(library)
 
 
 def test_pure_library_definition_requires_an_explicit_per_class_promise():

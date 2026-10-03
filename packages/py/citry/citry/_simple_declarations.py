@@ -94,6 +94,8 @@ def validate_simple_declaration(
     if effective.get("transparent", False) is not False:
         msg = f"Component {name} uses simple=True; transparent must be False."
         raise ValueError(msg)
+    # ComponentMeta already rejects a non-class data shape at definition; this
+    # keeps the check for classes validated without passing through it.
     for schema_name in ("Kwargs", "TemplateData"):
         schema = effective.get(schema_name)
         if schema is not None and not issubclass(type(schema), type):

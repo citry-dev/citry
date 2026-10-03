@@ -21,6 +21,7 @@ from typing import Any, cast
 from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _safe_class_text
 from citry._nested_declarations import (
+    _CONST_SCHEMA_DEFAULTS_ATTR,
     _SYNTHESIZED_DECLARATION_ATTR,
     _SYNTHESIZED_FIELD_OWNERS_ATTR,
     NestedClassDeclaration,
@@ -43,7 +44,9 @@ _DEFAULT_MAX_BYTES = 8192
 # underscore name: State may carry private helpers just like it carries the
 # recommended ``render()`` method. Plain values are what must be meta names.
 _DEF_LIKE = (staticmethod, classmethod, property)
-_SYNTHESIZED_STATE_NAMES = frozenset({_SYNTHESIZED_DECLARATION_ATTR, _SYNTHESIZED_FIELD_OWNERS_ATTR})
+_SYNTHESIZED_STATE_NAMES = frozenset(
+    {_SYNTHESIZED_DECLARATION_ATTR, _SYNTHESIZED_FIELD_OWNERS_ATTR, _CONST_SCHEMA_DEFAULTS_ATTR}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,8 +177,8 @@ def check_replaced_state(component_class: type, nearest: NestedClassDeclaration,
     A replacing State starts from the default settings, not the parent's.
     Moving server-kept values into the page is a security change, so it
     fails at class definition unless the new State sets ``_storage`` itself.
-    Losing the parent's fields, ``_public``, ``_model``, or ``_max_age``
-    widens or changes behavior less drastically, so it warns once.
+    Losing the parent's fields, ``_public``, ``_model``, or ``_max_age`` is
+    less severe, so it only warns, once per declaring class.
 
     Raises:
         ValueError: The parent's State sets ``_storage = "server"`` and the
@@ -210,7 +213,7 @@ def check_replaced_state(component_class: type, nearest: NestedClassDeclaration,
     consequences = {
         "_public": "browser code can now read every field",
         "_model": "browser code can now change every field it can read",
-        "_max_age": "its tokens no longer expire",
+        "_max_age": "its State tokens never expire",
     }
     for setting, consequence in consequences.items():
         if getattr(parent_schema, setting, None) is not None and not hasattr(declared, setting):
