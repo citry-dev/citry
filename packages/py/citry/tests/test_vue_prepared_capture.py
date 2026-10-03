@@ -1295,7 +1295,7 @@ def test_typed_default_never_compiles_the_removed_ordinary_target(
     assert ordinary_calls == 0
 
 
-def test_prepared_render_rejects_raw_on_render_replacement() -> None:
+def test_prepared_render_keeps_plain_on_render_replacement_as_text() -> None:
     registry = Citry()
 
     class Replaced(Component):
@@ -1305,8 +1305,10 @@ def test_prepared_render_rejects_raw_on_render_replacement() -> None:
         def on_render(self):
             return "<strong>raw</strong>"
 
-    with pytest.raises(TypeError, match="unsupported raw output"):
-        render_prepared(Replaced())
+    rendered = render_prepared(Replaced())
+    [part] = rendered.parts
+    assert isinstance(part, PreparedTextValue)
+    assert part.value == "<strong>raw</strong>"
 
 
 def test_prepared_render_accepts_empty_on_render_replacement() -> None:

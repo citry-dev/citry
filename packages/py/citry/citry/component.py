@@ -1268,9 +1268,11 @@ class Component(metaclass=ComponentMeta):
         the component's whole output instead; the template is then not
         rendered at all. Accepted content:
 
-        - a ``str``, used as-is (NOT autoescaped: it is this component's own
-          output, the same trust as its template; never concatenate untrusted
-          input into it)
+        - a plain ``str``, shown as text: Citry escapes it, as it escapes a
+          ``{{ ... }}`` value, so ``"<b>hi</b>"`` shows the tags as
+          characters
+        - [`Markup`][citry.Markup], inserted as HTML without escaping (never
+          build it from user input)
         - a composed element (``OtherComponent(title="hi")``), rendered in
           this component's place
         - an already-rendered ``CitryRender``, inlined
@@ -1280,9 +1282,12 @@ class Component(metaclass=ComponentMeta):
         Because ``None`` means "no replacement", return ``""`` to output
         literally nothing.
 
-        HTML you serialize inside the hook, such as ``str(result)`` after a
-        yield, does not carry this component's own ``data-cid-*`` attribute;
-        Citry adds it to the HTML you return.
+        HTML you turn into a string inside the hook, such as ``str(result)``
+        after a yield, is a plain ``str``, so wrap it in
+        [`Markup`][citry.Markup] before you return it. For a component that
+        runs in the browser that string holds the whole browser app, so add
+        fixed content in the template instead. Citry adds this component's
+        marker to the HTML you return.
 
         Everything the hook needs is on ``self``: ``kwargs``, ``slots``,
         ``parent``, ``inject()``. To pass data to the template, use
@@ -1298,7 +1303,7 @@ class Component(metaclass=ComponentMeta):
 
                 def on_render(self):
                     if not self.raw_kwargs.get("rows"):
-                        return "<p>No data</p>"
+                        return Markup("<p>No data</p>")
                     return None
 
         **Generator form.** Include a ``yield`` to also see the component's
@@ -1315,7 +1320,7 @@ class Component(metaclass=ComponentMeta):
                     # AFTER: result is the completed CitryRender, or None
                     # if rendering failed (then error is the exception).
                     if error is not None:
-                        return "<p>Something went wrong</p>"
+                        return Markup("<p>Something went wrong</p>")
                     return None
 
         The protocol:

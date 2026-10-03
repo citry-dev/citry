@@ -40,6 +40,7 @@ from contextlib import nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from difflib import get_close_matches
+from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast
 
 from citry._class_introspection import _component_declaration_generation, _static_class_dict, _static_class_mro
@@ -52,7 +53,14 @@ from citry._pure import (
     pure_body_lookup,
     store_pure_body,
 )
-from citry._vue.capture import coalesce_prepared_static_nodes, prepared_render_active, typed_render_scope
+from citry._vue.capture import (
+    PreparedTextValue,
+    PreparedTrustedHtmlValue,
+    coalesce_prepared_static_nodes,
+    prepared_render_active,
+    typed_render_scope,
+    vue_render_active,
+)
 from citry._vue.direct import direct_render_scope
 from citry.assets import _TEMPLATE_CACHE, load_template
 from citry.citry_context import CitryContext
@@ -104,6 +112,7 @@ from citry.util.exception import (
     set_template_origin_error_message,
     set_template_position_error_message,
 )
+from citry.util.html import Markup, escape
 from citry.util.id import gen_render_id, validate_render_id
 from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
 from citry.util.misc import get_fields, is_generator, to_dict
@@ -115,6 +124,7 @@ if TYPE_CHECKING:
 
     from citry._vue.direct import DirectExecutionFrame
     from citry._vue.leaf_program import LeafCallChildren, LeafProgramNode, PreparedLeafProgram
+    from citry.assets import HasHtml
     from citry.citry_render import OnRenderGenerator, RenderPart, RenderReplacement
     from citry.component import Component
     from citry.nodes import BodyItem, Node
@@ -2344,15 +2354,22 @@ def _send_on_render_generator(
         return generator.send(send_arg)
 
 
+# The source label on the text part a prepared (Vue) render gets when
+# on_render returns a plain str. That text has no template position, so the
+# part points into this label instead, the way Python slot text does.
+_ON_RENDER_TEXT_SOURCE = "on-render-text"
+
+
 def _replacement_parts(value: RenderReplacement, context: CitryContext, component: Component) -> list[RenderPart]:
     """
     Convert an ``on_render`` replacement value into the component's parts list.
 
     The accepted values mirror what a ``{{ ... }}`` expression accepts
-    (``_render_value`` in citry_render.py), with two differences: a ``str``
-    is the component's own output, so it is used as-is rather than
-    autoescaped, and an unsupported type is an error rather than being
-    escaped to text (docs/design/component_on_render.md section 3.1).
+    (``_render_value`` in citry_render.py): a plain ``str`` is text and is
+    escaped, while ``Markup`` (or any object with ``__html__``) is trusted
+    HTML and is inserted as-is. The one difference is that an unsupported
+    type is an error rather than being escaped to text
+    (docs/design/component_on_render.md section 3.1).
     """
     # A Const marker is unwrapped first (a replacement built from a literal
     # template attribute arrives Const-wrapped); the value becomes output
@@ -2361,8 +2378,27 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
     value = const_value(value)
     if isinstance(value, ComponentLike):
         value = _resolve_component_like(value, component.citry)
+    if type(value) is str and value == "":
+        # "" is the public way to render nothing. Every serializer, the Vue
+        # one included, treats this exact empty string as zero output.
+        return [""]
+    if getattr_static(value, "__html__", None) is not None:
+        # Trusted HTML, as in a {{ ... }} expression. The Vue target used by
+        # server events accepts HTML only as a typed part, the same one a
+        # {{ ... }} Markup value becomes there.
+        if vue_render_active():
+            return [PreparedTrustedHtmlValue(str(cast("HasHtml", value).__html__()))]
+        # Markup is already a render part; escape() turns another __html__
+        # object into Markup without escaping it.
+        return [value if isinstance(value, Markup) else escape(value)]
     if isinstance(value, str):
-        return [value]
+        # Plain text. A typed render needs a text part, which the serializer
+        # escapes and the browser renders as the same text node, so a
+        # returned "<script>" stays visible text. Renders outside a typed
+        # render scope escape it here instead.
+        if prepared_render_active():
+            return [PreparedTextValue(_ON_RENDER_TEXT_SOURCE, (0, len(_ON_RENDER_TEXT_SOURCE)), str(value))]
+        return [escape(value)]
     if isinstance(value, Slot):
         # Invoked with no data, like {{ my_slot }}. Slot content renders with
         # the scope of the component that wrote it, so its collected data is

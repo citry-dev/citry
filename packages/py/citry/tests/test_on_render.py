@@ -2,7 +2,8 @@
 Tests for the ``Component.on_render`` hook (docs/design/component_on_render.md
 sections 3-4). Plain form: returning ``None`` renders the template as usual;
 returning content (``str`` / composed element / ``CitryRender`` / ``Slot``)
-replaces the component's whole output and the template is never rendered.
+replaces the component's whole output and the template is never rendered. A
+plain ``str`` is escaped text and ``Markup`` is HTML, as in ``{{ ... }}``.
 Generator form: code before the first yield runs before the template renders,
 each yield receives the settled ``(result, error)``, and the generator may
 replace the output, catch a child's error, or raise.
@@ -10,7 +11,7 @@ replace the output, catch a child's error, or raise.
 
 import pytest
 
-from citry import Citry, CitryRender, Component, Extension
+from citry import Citry, CitryRender, Component, Extension, Markup
 from citry._vue.capture import render_prepared_direct
 from citry._vue.direct_capture import assemble_typed_render
 from citry.citry_render import DeferredComponent
@@ -76,7 +77,7 @@ class TestOnRenderPlainForm:
                 return {"tracked": tracked}
 
             def on_render(self):
-                return "<b>replaced</b>"
+                return Markup("<b>replaced</b>")
 
         html = Comp().render().serialize()
         assert ">replaced</b>" in html
@@ -84,7 +85,9 @@ class TestOnRenderPlainForm:
         # The template body was never walked.
         assert rendered_data == []
 
-    def test_str_is_not_autoescaped(self):
+    def test_plain_str_is_escaped_as_text(self):
+        # A plain str is text, as in a {{ ... }} expression, so user input
+        # returned from the hook cannot inject a script.
         c = Citry()
 
         class Comp(Component):
@@ -92,10 +95,40 @@ class TestOnRenderPlainForm:
             template = "<p>x</p>"
 
             def on_render(self):
-                return '<script>let a = "1";</script>'
+                return '<script>let a = "1";</script> & more'
+
+        html = Comp().render().serialize()
+        assert html == "&lt;script&gt;let a = &#34;1&#34;;&lt;/script&gt; &amp; more"
+
+    def test_markup_is_inserted_as_html(self):
+        c = Citry()
+
+        class Comp(Component):
+            citry = c
+            template = "<p>x</p>"
+
+            def on_render(self):
+                return Markup('<script>let a = "1";</script>')
 
         html = Comp().render().serialize()
         assert html == '<script data-cid-c1="">let a = "1";</script>'
+
+    def test_html_protocol_object_is_inserted_as_html(self):
+        # Any object with __html__ is trusted HTML, the same as in {{ ... }}.
+        c = Citry()
+
+        class Trusted:
+            def __html__(self):
+                return "<em>trusted</em>"
+
+        class Comp(Component):
+            citry = c
+            template = "<p>x</p>"
+
+            def on_render(self):
+                return Trusted()
+
+        assert Comp().render().serialize() == '<em data-cid-c1="">trusted</em>'
 
     def test_empty_str_means_empty_output(self):
         c = Citry()
@@ -230,7 +263,7 @@ class TestOnRenderPlainForm:
             citry = c
 
             def on_render(self):
-                return "<p>made up</p>"
+                return Markup("<p>made up</p>")
 
         assert str(NoTemplate()) == '<p data-cid-c1="">made up</p>'
 
@@ -242,7 +275,7 @@ class TestOnRenderPlainForm:
             template = "<i>leaf</i>"
 
             def on_render(self):
-                return "<i>hooked</i>"
+                return Markup("<i>hooked</i>")
 
         class Root(Component):
             citry = c
@@ -261,7 +294,7 @@ class TestOnRenderPlainForm:
             template = "<p>x</p>"
 
             def on_render(self):
-                return "<p>see-through</p>"
+                return Markup("<p>see-through</p>")
 
         class Root(Component):
             citry = c
@@ -356,7 +389,7 @@ class TestOnRenderGeneratorForm:
             template = "<p>template</p>"
 
             def on_render(self):
-                result, error = yield "<b>yielded</b>"
+                result, error = yield Markup("<b>yielded</b>")
                 received.append((result, error))
 
         html = Comp().render().serialize()
@@ -373,11 +406,25 @@ class TestOnRenderGeneratorForm:
 
             def on_render(self):
                 _result, _error = yield
-                return "<b>final</b>"
+                return Markup("<b>final</b>")
 
         html = Comp().render().serialize()
         assert ">final</b>" in html
         assert "template" not in html
+
+    def test_yielded_and_returned_plain_str_is_escaped(self):
+        c = Citry()
+
+        class Comp(Component):
+            citry = c
+            template = "<p>x</p>"
+
+            def on_render(self):
+                result, _error = yield "<b>first</b>"
+                assert "&lt;b&gt;first&lt;/b&gt;" in result.serialize()
+                return "<i>final</i>"
+
+        assert Comp().render().serialize() == "&lt;i&gt;final&lt;/i&gt;"
 
     def test_plain_return_keeps_output(self):
         c = Citry()
@@ -421,7 +468,7 @@ class TestOnRenderGeneratorForm:
 
             def on_render(self):
                 _result, _error = yield
-                return "<p>made up</p>"
+                return Markup("<p>made up</p>")
 
         assert NoTemplate().render().serialize() == '<p data-cid-c1="">made up</p>'
 
@@ -466,7 +513,7 @@ class TestOnRenderGeneratorForm:
             def on_render(self):
                 _result, error = yield
                 if error is not None:
-                    return "<p>fallback</p>"
+                    return Markup("<p>fallback</p>")
                 return None
 
         class Root(Component):
@@ -513,9 +560,9 @@ class TestOnRenderGeneratorForm:
             def on_render(self):
                 result_a, _ = yield
                 received.append(result_a.serialize())
-                result_b, _ = yield "<b>second</b>"
+                result_b, _ = yield Markup("<b>second</b>")
                 received.append(result_b.serialize())
-                return "<u>third</u>"
+                return Markup("<u>third</u>")
 
         html = Comp().render().serialize()
         assert ">third</u>" in html
@@ -584,7 +631,7 @@ class TestOnRenderGeneratorForm:
             def on_render(self):
                 _result, error = yield Failing()
                 if error is not None:
-                    return "<p>recovered</p>"
+                    return Markup("<p>recovered</p>")
                 return None
 
         html = Comp().render().serialize()
@@ -601,7 +648,7 @@ class TestOnRenderGeneratorForm:
             def on_render(self):
                 _result, error = yield 42
                 received.append(error)
-                return "<p>recovered</p>"
+                return Markup("<p>recovered</p>")
 
         html = Comp().render().serialize()
         assert ">recovered</p>" in html
@@ -616,7 +663,7 @@ class TestOnRenderGeneratorForm:
 
             def on_render(self):
                 if True:
-                    return "<b>early</b>"
+                    return Markup("<b>early</b>")
                 yield  # makes this a generator function
 
         html = Comp().render().serialize()
@@ -641,7 +688,7 @@ class TestOnRenderGeneratorForm:
 
             def on_render(self):
                 yield
-                return "<b>final</b>"
+                return Markup("<b>final</b>")
 
         Comp().render()
         # The extension sees only the generator's final output, once.
@@ -742,3 +789,94 @@ class TestOnRenderGeneratorForm:
         root = next(item for item in assembly.view.occurrences if item.id == assembly.view.root_id)
         assert root.prepared_data["citryText0"] == "resume"
         assert "prime" not in root.prepared_data.values()
+
+
+class TestOnRenderInteractivePage:
+    """
+    A returned value follows the same text-or-HTML rule on a page that runs
+    Vue: a plain str reaches the browser as a text node with the same text
+    the server sent, and Markup stays HTML.
+    """
+
+    USER_INPUT = "<script>alert(1)</script> & <b>bold</b>"
+
+    def _page(self, value, *, document):
+        app = Citry(autodiscover=False)
+
+        class Replaced(Component):
+            citry = app
+            template = "<p>unused</p>"
+
+            def on_render(self):
+                result, _error = yield
+                assert result is not None
+                return value
+
+        class Counter(Component):
+            citry = app
+            template = '<button @click="count += 1">{{ count }}</button>'
+
+            def template_data(self, kwargs, slots):
+                return {"count": 0}
+
+        body = "<c-Replaced /><c-Counter />"
+        if document:
+            template = f"<!doctype html><html><head></head><body>{body}</body></html>"
+        else:
+            template = f"<div>{body}</div>"
+
+        class Page(Component):
+            citry = app
+
+        Page.template = template
+        return Page
+
+    @pytest.mark.parametrize("document", [True, False], ids=["document", "fragment"])
+    def test_plain_str_is_escaped(self, document):
+        # A full page used to raise "interactive document shell received
+        # unsupported typed part str" here.
+        html = str(self._page(self.USER_INPUT, document=document)())
+        assert "&lt;script&gt;alert(1)&lt;/script&gt; &amp; &lt;b&gt;bold&lt;/b&gt;" in html
+        assert "<script>alert(1)" not in html
+        assert "<b>bold</b>" not in html
+
+    @pytest.mark.parametrize("document", [True, False], ids=["document", "fragment"])
+    def test_markup_is_inserted_as_html(self, document):
+        html = str(self._page(Markup("<b>bold</b>"), document=document)())
+        assert "<b>bold</b>" in html
+
+    def test_plain_str_reaches_vue_as_text_data(self):
+        # The browser renders the text from the same value the server
+        # escaped, so hydration sees identical text on both sides.
+        app = Citry(autodiscover=False)
+
+        class Replaced(Component):
+            citry = app
+            template = "<p>unused</p>"
+
+            def on_render(self):
+                return "<b>bold</b>"
+
+        assembly = _assemble_prepared(Replaced())
+        [occurrence] = assembly.view.occurrences
+        # Vue renders a text interpolation (never v-html) of the raw value.
+        assert assembly.compile_inputs[occurrence.definition_id].template == "{{ $citryPrepared.citryText0 }}"
+        assert occurrence.prepared_data["citryText0"] == "<b>bold</b>"
+
+    def test_markup_reaches_vue_as_trusted_html(self):
+        # Server events render through the Vue target, which takes HTML only
+        # as a typed part; returned Markup must not be rejected there.
+        app = Citry(autodiscover=False)
+
+        class Replaced(Component):
+            citry = app
+            template = "<p>unused</p>"
+
+            def on_render(self):
+                return Markup("<s>x</s>")
+
+        assembly = _assemble_prepared(Replaced())
+        [occurrence] = assembly.view.occurrences
+        template = assembly.compile_inputs[occurrence.definition_id].template
+        assert template == '<citry-opaque-html :record="$citryPrepared.opaqueHtml.citryOpaque0"></citry-opaque-html>'
+        assert occurrence.prepared_data["opaqueHtml"] == {"citryOpaque0": {"html": "<s>x</s>", "nodeCount": 1}}

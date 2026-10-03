@@ -10,7 +10,7 @@ autouse fixture in conftest.py (``c1``, ``c2``, ... in render order).
 
 # ruff: noqa: ANN
 
-from citry import Citry, Component, Extension
+from citry import Citry, Component, Extension, Markup
 
 
 class TestSingleComponent:
@@ -132,6 +132,8 @@ class TestChildIsParentRoot:
 class TestHookReturnsSerializedResult:
     """
     A hook that serializes the component's own result and returns the HTML.
+    An ``on_render`` hook wraps that HTML in ``Markup``, since a plain str
+    would be escaped as text.
 
     The returned HTML is the component's new output, so its root tags are
     marked once at the final serialization, exactly like a template's roots.
@@ -150,7 +152,7 @@ class TestHookReturnsSerializedResult:
 
             def on_render(self):
                 result, _error = yield
-                return str(result) + "<hr>"
+                return Markup(str(result) + "<hr>")  # noqa: S704 - serialized render output is trusted HTML
 
         assert (
             Card().render().serialize() == '<div data-cid-c1="">body <b data-cid-c2="">in</b></div><hr data-cid-c1="">'
@@ -171,7 +173,7 @@ class TestHookReturnsSerializedResult:
 
             def on_render(self):
                 result, _error = yield
-                return str(result) + "<hr>"
+                return Markup(str(result) + "<hr>")  # noqa: S704 - serialized render output is trusted HTML
 
         class Page(Component):
             citry = c
@@ -190,8 +192,8 @@ class TestHookReturnsSerializedResult:
 
             def on_render(self):
                 result, _error = yield
-                result, _error = yield str(result) + "<hr>"
-                return str(result) + "<br>"
+                result, _error = yield Markup(str(result) + "<hr>")  # noqa: S704 - serialized render output is trusted HTML
+                return Markup(str(result) + "<br>")  # noqa: S704 - serialized render output is trusted HTML
 
         assert Card().render().serialize() == '<p data-cid-c1="">t</p><hr data-cid-c1=""><br data-cid-c1="">'
 
@@ -204,7 +206,7 @@ class TestHookReturnsSerializedResult:
 
             def on_render(self):
                 result, _error = yield
-                return f"<section>{result}</section>"
+                return Markup(f"<section>{result}</section>")  # noqa: S704 - serialized render output is trusted HTML
 
         assert Card().render().serialize() == '<section data-cid-c1=""><p>w</p></section>'
 
@@ -241,7 +243,7 @@ class TestHookReturnsSerializedResult:
 
             def on_render(self):
                 result, _error = yield
-                return str(result) + "<hr>"
+                return Markup(str(result) + "<hr>")  # noqa: S704 - serialized render output is trusted HTML
 
         assert Card().render().serialize() == (
             '<p data-cid-c1="" data-flag="" data-probe="own">v</p><hr data-cid-c1="" data-flag="" data-probe="own">'

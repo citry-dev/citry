@@ -182,10 +182,14 @@ class SerializedRender:
 
 
 # What ``Component.on_render`` may return to replace the component's whole
-# output (docs/design/component_on_render.md section 3): final text (a ``str``, used
-# as-is, not autoescaped), a composed element (rendered in the component's
-# place), an already-rendered subtree, a ``Slot`` (invoked with no data), or a
-# ``ComponentLike`` value (resolved against the Citry instance rendering it).
+# output (docs/design/component_on_render.md section 3): text (a plain ``str``,
+# escaped like a ``{{ ... }}`` value), trusted HTML (``Markup``, which is a
+# ``str`` subclass, inserted as-is), a composed element (rendered in the
+# component's place), an already-rendered subtree, a ``Slot`` (invoked with no
+# data), or a ``ComponentLike`` value (resolved against the Citry instance
+# rendering it). Any other object with ``__html__`` is accepted as trusted HTML
+# too, the same as in ``{{ ... }}``, though the type alias has no way to
+# express it.
 # ``None`` is not part of the alias: returning ``None`` means "no
 # replacement, render the template as usual".
 RenderReplacement: TypeAlias = "str | CitryElement | CitryRender | Slot | ComponentLike"

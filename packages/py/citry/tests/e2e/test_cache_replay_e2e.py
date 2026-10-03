@@ -9,7 +9,7 @@ import pytest
 pytest.importorskip("pytest_playwright")
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from citry import Citry, Component
+from citry import Citry, Component, Markup
 from citry.ext.cache.extension import CacheExtension
 from citry.ext.events.renderers import dispatcher_for
 
@@ -308,7 +308,7 @@ initial\
 
         def on_render(self):
             yield
-            return '<button id="replacement-active">active</button>'
+            return Markup('<button id="replacement-active">active</button>')
 
     class Page(Component):
         citry = app
