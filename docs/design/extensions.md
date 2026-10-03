@@ -449,8 +449,8 @@ observation point for extensions that need metrics or diagnostics.
 `str` is convenience: it is wrapped as a single-part `CitryRender`. It follows
 the rule of a `{{ ... }}` value, the same as `on_render`: a plain `str` is text
 and is escaped, while `Markup` (or any object with `__html__`) is inserted as
-HTML. On a typed (Vue) render the plain `str` becomes a text part and `Markup`
-a trusted-HTML part, so static and interactive pages show the same thing.
+HTML. When Citry renders for Vue (an interactive page) the plain `str` becomes
+a text part and `Markup` a trusted-HTML part, so static and interactive pages show the same thing.
 Any other non-`None` value raises `TypeError`. Keeping the struct form
 available means deps stay recoverable; the `str` form is the easy path. (DJC
 used `str` only, because its render output was a string.)
@@ -459,10 +459,11 @@ used `str` only, because its render output was a string.)
 
 Receives `render: CitryRender | None` + `error`. Return a `CitryRender`/`str` to
 replace output, raise to replace the error, return `None` to keep the original.
-Threading semantics preserved from DJC. Because the hooks thread, a later
-extension can receive a plain `str` or `Markup` that an earlier one returned as
-`ctx.render`; the built-in debug extension applies the same text-or-HTML rule
-before it wraps that value.
+Threading semantics preserved from DJC. Each extension receives the result of
+the one before it, so a returned `str` or `Markup` is wrapped in a `CitryRender`
+right away, by the same text-or-HTML rule. A later extension therefore always
+sees a render (or `None`), and `str(ctx.render)` is HTML with the earlier text
+already escaped. `on_slot_rendered` threads the same way.
 
 ### 7.4 `on_template_compiled` fires at the node list, not a Template object
 

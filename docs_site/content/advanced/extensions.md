@@ -106,10 +106,11 @@ templates, JavaScript, and CSS.
 
 ### Return text or HTML
 
-`on_component_rendered()` and `on_slot_rendered()` can return new content
-for the component or slot. Citry treats a returned string like a value in
-`{{ }}`, on static and interactive pages alike: a plain `str` shows as
-text, so its tags appear as characters on the page:
+To replace a component's or slot's output from an extension, return the
+new content from `on_component_rendered()` or `on_slot_rendered()`.
+Citry treats a returned string like a value in `{{ }}`. A plain `str`
+shows as text, so its tags appear as characters on the page. This is the
+same on static and interactive pages:
 
 ```python
 def on_component_rendered(self, ctx):
@@ -122,6 +123,9 @@ def on_component_rendered(self, ctx):
 Wrap the HTML in [`Markup`][citry.Markup] to insert it as HTML:
 
 ```python
+from citry import Markup
+
+
 def on_component_rendered(self, ctx):
     if type(ctx.component).__name__ == "Checkout":
         # Right: Markup marks the string as HTML.
@@ -129,8 +133,9 @@ def on_component_rendered(self, ctx):
     return None
 ```
 
-Never build `Markup` from user input. Return user input as a plain `str`,
-which Citry escapes. `on_serialize()` is different: it returns the whole
+Never pass user input to the `Markup()` constructor. Return it as a plain
+`str`, which Citry escapes, or build the HTML with
+[`Markup.format()`](/syntax/expressions/#insert-html-you-trust). `on_serialize()` is different: it returns the whole
 page's HTML, and Citry uses that as it is.
 
 ### Handle a failed render

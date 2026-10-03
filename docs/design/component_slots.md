@@ -464,11 +464,14 @@ OnSlotRenderedContext(
 )
 ```
 
-Return semantics match `on_component_rendered`: `None` keeps the result, a
-returned `RenderPart` replaces it, raising propagates. A returned plain `str` is
+Return semantics follow `on_component_rendered`: `None` keeps the result, a
+returned `RenderPart` replaces it, raising propagates. One difference: another
+value is passed through as a render part, where `on_component_rendered` raises
+`TypeError`. A returned plain `str` is
 text and is escaped, and `Markup` (or any object with `__html__`) is HTML, the
-rule of a `{{ ... }}` value. When a direct (Vue) slot needs a whole render for
-its fill, the text or HTML part is wrapped in a `CitryRender` of its own. There is no
+rule of a `{{ ... }}` value. The manager wraps that text or HTML in a
+`CitryRender` of its own before the next extension sees it, which is also the
+shape a slot rendered for Vue needs for its fill. There is no
 `slot_is_default` field (DJC has one because of its `default` flag; in citry
 `slot_name == "default"` carries the same information).
 

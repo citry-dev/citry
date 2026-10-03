@@ -529,9 +529,9 @@ Details:
 Skip this section if your project has no custom extensions or custom
 template tags.
 
-A plain `str` that `on_component_rendered` or `on_slot_rendered` returns
-shows as text, the same as one that `on_render` returns; wrap HTML in
-`Markup`.
+In django-components, a string that `on_component_rendered` or
+`on_slot_rendered` returns is inserted as HTML. In Citry a plain `str`
+shows as text; wrap HTML in `Markup` or `mark_safe()`.
 
 | ID | django-components | Citry: what to do | Impact |
 |---|---|---|---|

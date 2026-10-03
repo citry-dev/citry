@@ -783,8 +783,66 @@ class TestHookReturnedContent:
         assert replaced not in html
 
     def test_unsupported_component_hook_value_is_rejected(self):
-        with pytest.raises(TypeError, match="on_component_rendered returned a int"):
+        with pytest.raises(TypeError, match="returned a value of type int"):
             str(self._page("component", 42, interactive=False, document=False)())
+
+    @HOOKS
+    def test_later_extension_receives_text_as_a_render(self, hook):
+        # An earlier extension's plain str is text: a later one that wraps
+        # str(...) of it in Markup still shows the tags as characters.
+        user_input = self.USER_INPUT
+
+        class First(Extension):
+            name = "first"
+
+            def on_component_rendered(self, ctx):
+                return user_input if hook == "component" else None
+
+            def on_slot_rendered(self, ctx):
+                return user_input if hook == "slot" else None
+
+        class Second(Extension):
+            name = "second"
+
+            def on_component_rendered(self, ctx):
+                if hook != "component" or ctx.render is None:
+                    return None
+                assert isinstance(ctx.render, CitryRender)
+                return Markup(f"<div>{ctx.render}</div>")  # noqa: S704 - render output is trusted HTML
+
+            def on_slot_rendered(self, ctx):
+                if hook != "slot":
+                    return None
+                assert isinstance(ctx.result, CitryRender)
+                return Markup(f"<div>{ctx.result}</div>")  # noqa: S704 - render output is trusted HTML
+
+        app = _Citry(extensions=[First, Second], autodiscover=False)
+
+        class Holder(Component):
+            citry = app
+            template = "<section><c-slot>fallback</c-slot></section>"
+
+        html = str(Holder(slots={"default": "fill"}))
+        assert self.ESCAPED in html
+        assert "<script>alert(1)" not in html
+
+    def test_python_slot_hook_plain_str_is_escaped(self):
+        # A slot filled from Python renders without the template fill path.
+        class Replace(Extension):
+            name = "replace"
+
+            def on_slot_rendered(self, ctx):
+                return "<i>x</i>"
+
+        app = _Citry(extensions=[Replace], autodiscover=False)
+
+        class Holder(Component):
+            citry = app
+            template = "<section><c-slot /></section>"
+
+        html = str(Holder(slots={"default": "fill"}))
+        assert "&lt;i&gt;x&lt;/i&gt;" in html
+        assert "<i>" not in html
 
     @HOOKS
     def test_plain_str_reaches_vue_as_text_data(self, hook):

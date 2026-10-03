@@ -883,14 +883,20 @@ class Extension:
         ``None`` to keep the original.
 
         The content follows the rule of a ``{{ ... }}`` value, on static and
-        interactive pages alike: a ``CitryRender`` is inlined, a plain ``str``
-        is shown as text (Citry escapes it), and [`Markup`][citry.Markup] is
-        inserted as HTML. Never build ``Markup`` from user input.
+        interactive pages alike: a ``CitryRender`` replaces the output, a
+        plain ``str`` is shown as text (Citry escapes it), and
+        [`Markup`][citry.Markup] is inserted as HTML. Never pass user input
+        to the ``Markup()`` constructor.
 
         HTML you serialize inside the hook, such as ``str(ctx.render)``, is a
         plain ``str``, so wrap it in ``Markup`` before you return it. It does
         not carry the component's own ``data-cid-*`` attribute; Citry adds it
         to the HTML you return.
+
+        Raises:
+            TypeError: Citry raises it when the hook returns any other
+                value that is not ``None``.
+
         """
 
     def on_slot_rendered(self, ctx: OnSlotRenderedContext) -> RenderPart | None:
@@ -899,9 +905,9 @@ class Extension:
 
         Return new content to replace the output, or ``None`` to keep the
         original. Raising propagates. As with ``on_component_rendered``, a
-        ``CitryRender`` is inlined, a plain ``str`` is shown as text (Citry
-        escapes it), and [`Markup`][citry.Markup] is inserted as HTML, on
-        static and interactive pages alike.
+        ``CitryRender`` replaces the output, a plain ``str`` is shown as text
+        (Citry escapes it), and [`Markup`][citry.Markup] is inserted as HTML,
+        on static and interactive pages alike.
         """
 
     def on_attrs_resolved(self, ctx: OnAttrsResolvedContext) -> dict[str, Any] | None:
@@ -1929,10 +1935,16 @@ class ExtensionManager:
         component: Component,
         render: CitryRender | str | None,
         error: Exception | None,
+        *,
+        context: CitryContext | None = None,
     ) -> tuple[CitryRender | str | None, Exception | None, bool]:
         """
         Thread the rendered output through the extensions; a return replaces the
         render, a raise replaces the error.
+
+        With ``context`` (the component's render context), a returned ``str``
+        or ``Markup`` becomes a render in that context before the next
+        extension sees it, so a plain ``str`` stays text along the chain.
         """
         had_error = error is not None
         extensions = self._extensions_with_hook("on_component_rendered")
@@ -1953,6 +1965,15 @@ class ExtensionManager:
                 ctx = replace(ctx, render=None, error=err)
             else:
                 if out is not None:
+                    if context is not None:
+                        # Imported lazily: component_render imports this module.
+                        from citry.component_render import (  # noqa: PLC0415
+                            _ON_COMPONENT_RENDERED_TEXT_SOURCE,
+                            _hook_content_render,
+                        )
+
+                        wrapped = _hook_content_render(out, context, _ON_COMPONENT_RENDERED_TEXT_SOURCE)
+                        out = cast("CitryRender | str", wrapped)
                     ctx = replace(ctx, render=out, error=None)
         return ctx.render, ctx.error, had_error
 
@@ -1964,30 +1985,45 @@ class ExtensionManager:
         slot_node: SlotNode,
         slot_is_required: bool,
         result: RenderPart,
+        *,
+        context: CitryContext | None = None,
     ) -> RenderPart:
         """
         Thread a slot's rendered output through the extensions; a return
         replaces the result, a raise propagates.
+
+        With ``context`` (the context of the ``<c-slot>`` site), a returned
+        ``str`` or ``Markup`` becomes a render in that context before the
+        next extension sees it, so a plain ``str`` stays text along the chain.
         """
         # Skip building the context when nothing subscribes: this fires for
         # every slot of every component, so the dataclass would otherwise be
         # built and thrown away on a hot path.
-        if not self.has_hook("on_slot_rendered"):
+        extensions = self._extensions_with_hook("on_slot_rendered")
+        if not extensions:
             return result
-        return self.emit(
-            "on_slot_rendered",
-            OnSlotRenderedContext(
-                citry=self.citry,
-                component=component,
-                slot=slot,
-                slot_name=slot_name,
-                slot_node=slot_node,
-                slot_is_required=slot_is_required,
-                result=result,
-            ),
-            result="map",
-            field="result",
+        ctx = OnSlotRenderedContext(
+            citry=self.citry,
+            component=component,
+            slot=slot,
+            slot_name=slot_name,
+            slot_node=slot_node,
+            slot_is_required=slot_is_required,
+            result=result,
         )
+        for extension in extensions:
+            out = extension.on_slot_rendered(ctx)
+            if out is None:
+                continue
+            # The slot's own output, passed back unchanged, is already a
+            # render part, even when it is an escaped str.
+            if context is not None and out is not ctx.result:
+                # Imported lazily: component_render imports this module.
+                from citry.component_render import _ON_SLOT_RENDERED_TEXT_SOURCE, _hook_content_render  # noqa: PLC0415
+
+                out = cast("RenderPart", _hook_content_render(out, context, _ON_SLOT_RENDERED_TEXT_SOURCE))
+            ctx = replace(ctx, result=out)
+        return ctx.result
 
     def has_hook(self, name: str) -> bool:
         """Whether any installed extension implements the hook ``name``."""

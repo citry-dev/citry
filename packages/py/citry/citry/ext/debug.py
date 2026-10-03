@@ -10,7 +10,6 @@ from weakref import WeakSet
 from citry.citry_context import CitryContext
 from citry.citry_render import CitryRender, RenderDecoration
 from citry.extension import Extension, ExtensionConfig
-from citry.util.html import Markup
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -52,14 +51,7 @@ def _wrap_result(result: RenderPart, *, kind: _BoundaryKind, label: str, source:
         PreparedElementOpen,
         PreparedTextValue,
     )
-    from citry.component_render import _text_or_html_part  # noqa: PLC0415
 
-    # An extension that ran earlier may have returned a plain str, which is
-    # text, or another __html__ object, which is HTML. Turn it into the same
-    # part the core would, so wrapping it does not insert the text as HTML.
-    # Markup, and the slot's own output, are already render parts.
-    if not isinstance(result, Markup) and (isinstance(result, str) or hasattr(result, "__html__")):
-        result = cast("RenderPart", _text_or_html_part(result, source))
     palette = _PALETTES[kind]
     context = result.context if isinstance(result, CitryRender) else CitryContext()
     parts = list(result.parts) if type(result) is CitryRender else [result]

@@ -678,10 +678,6 @@ def on_render(self):
     return Markup("<p>No data</p>")
 ```
 
-The same applies to a plain `str` that an extension's
-`on_component_rendered()` or `on_slot_rendered()` returns: 0.5.x inserted
-it as HTML, and 0.6.0 shows it as text. Wrap HTML there in `Markup` too.
-
 If a hook returns `str(result)` after a `yield`, that is a plain `str`
 too, so wrap it in `Markup`. For a component that runs in the browser,
 put added HTML in the template instead; see
@@ -692,6 +688,10 @@ user input, such as a name or a comment, keep the string plain: escaping
 stops that input from adding a script to the page. If it needs markup
 around the user input, write the markup in the template and pass the value
 in as a component input.
+
+The same applies to a plain `str` that an extension's
+`on_component_rendered()` or `on_slot_rendered()` returns: 0.5.x inserted
+it as HTML, and 0.6.0 shows it as text. Wrap HTML there in `Markup` too.
 
 ## Fix rejected HTML
 
@@ -986,9 +986,9 @@ argument.
     base, such as `class Kwargs(Parent.Kwargs):`. On a component whose
     parents declare one of these classes differently, declare it on the
     component itself.
-19. Wrap HTML that `on_render()` returns or yields in `Markup`, and HTML
-    that an extension's `on_component_rendered()` or `on_slot_rendered()`
-    returns. Keep a string that contains user input plain, so Citry
+19. Wrap HTML in `Markup` when `on_render()` returns or yields it, or
+    when an extension's `on_component_rendered()` or `on_slot_rendered()`
+    returns it. Keep a string that contains user input plain, so Citry
     escapes it.
 20. Close every tag in `<c-raw>` and `Markup` inside interactive
     components, and put an interactive page's content inside one

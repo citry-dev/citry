@@ -1488,7 +1488,7 @@ def test_finalize_and_merge_handle_simple_componentless_and_extension_failures()
 
     with typed_render_scope(direct=True, vue=True):
         initial = _render_one(OddPage())
-        with pytest.raises(TypeError, match="on_component_rendered returned a object"):
+        with pytest.raises(TypeError, match="returned a value of type object"):
             _finalize(initial.render, None)
 
 
@@ -1540,10 +1540,10 @@ def test_component_render_finalization_propagates_hook_failures_and_keeps_render
         template = "<p>page</p>"
 
     rendered = render_prepared_direct(Page())
-    monkeypatch.setattr(app.extensions, "on_component_rendered", lambda *_args: (None, None, False))
+    monkeypatch.setattr(app.extensions, "on_component_rendered", lambda *_args, **_kwargs: (None, None, False))
     assert _finalize(rendered, None) is rendered
 
-    def fail(*_args):
+    def fail(*_args, **_kwargs):
         raise RuntimeError("finalizer failed")
 
     monkeypatch.setattr(app.extensions, "on_component_rendered", fail)

@@ -1629,6 +1629,7 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
                 component,
                 None if error is not None else render,
                 error,
+                context=render.context,
             )
     except Exception:  # noqa: TRY203
         raise
@@ -1649,11 +1650,13 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
         replacement = _text_or_html_part(new_render, _ON_COMPONENT_RENDERED_TEXT_SOURCE)
         if replacement is None:
             msg = (
-                f"on_component_rendered returned a {type(new_render).__name__}, which Citry cannot "
-                "put on the page. Return a CitryRender, a str (shown as text), Markup (inserted as "
-                "HTML), or None to keep the output."
+                f"on_component_rendered for {type(component).__name__} returned a value of type "
+                f"{type(new_render).__name__}, which Citry cannot put on the page. Return Markup for "
+                "HTML, a str for text, a CitryRender, or None to keep the output."
             )
-            raise TypeError(msg)
+            err = TypeError(msg)
+            set_component_error_message(err, _component_path(component))
+            raise err
         return CitryRender(
             parts=[replacement],
             context=render.context,
@@ -2379,7 +2382,8 @@ def _text_or_html_part(value: object, text_source: str) -> RenderPart | None:
     ``on_render``, ``on_component_rendered``, and ``on_slot_rendered`` all
     hand content back to the page, and all follow the rule of a ``{{ ... }}``
     value, on static and interactive pages alike. ``text_source`` labels the
-    text part a typed render gets, so a diagnostic can name the hook.
+    text part used when Citry renders for Vue, so a diagnostic can name the
+    hook.
     Returns ``None`` for any other value, which the caller handles itself.
     """
     if type(value) is str and value == "":
@@ -2404,6 +2408,24 @@ def _text_or_html_part(value: object, text_source: str) -> RenderPart | None:
             return PreparedTextValue(text_source, (0, len(text_source)), str(value))
         return escape(value)
     return None
+
+
+def _hook_content_render(value: object, context: CitryContext, text_source: str) -> object:
+    """
+    Wrap text or HTML that an extension render hook returned in a ``CitryRender``.
+
+    Extensions run one after another, and each receives what the one before
+    it returned. Wrapping the content right away means the next extension
+    sees a render, never a plain ``str``, so ``str(ctx.render)`` is always
+    HTML with that text already escaped. Any other value is returned as it
+    is, for the caller to accept or reject.
+    """
+    if value is None or isinstance(value, CitryRender):
+        return value
+    part = _text_or_html_part(value, text_source)
+    if part is None:
+        return value
+    return CitryRender(parts=[part], context=context)
 
 
 def _replacement_parts(value: RenderReplacement, context: CitryContext, component: Component) -> list[RenderPart]:
