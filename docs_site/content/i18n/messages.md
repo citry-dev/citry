@@ -267,8 +267,8 @@ resolved.used_fallback
 ```
 
 Use this to mark fallback text with its own `lang` attribute. A plain
-`tr()` call that would fall back to another locale fails `citry check`,
-because its text cannot carry a `lang`. See
+`tr()` call that would fall back to another locale gets a warning from
+`citry check`, because its text cannot carry a `lang`. See
 [Language direction and accessibility](/i18n/direction-and-bidi/#mark-fallback-text-with-its-language).
 
 ## Hover for types
@@ -284,14 +284,19 @@ templates, Python, Vue `$i18n.tr()`, component JavaScript, and
 
 ### Missing `@param`
 
-For a simple variable used only on the server, a missing `@param` is a
-warning (`citry.i18n.missing-param-type`).
+Declare a type for every variable. A variable without an `@param` is
+inserted as plain text, without number or date formatting. Its value must
+be a `str`, `int`, or `Decimal` in Python, or a string or number in the
+browser, and any other value, such as a `datetime`, fails the call. This
+holds on the server and in browser calls such as `$i18n.tr()`. `citry check` reports it as a warning
+(`citry.i18n.missing-param-type`), which does not fail the check.
 [Translation workflow and tooling](/i18n/workflow/#make-a-missing-type-an-error-or-ignore-it)
 shows how to change its severity.
 
-A type is always required when the variable is used in a selector, a
-`Slot`, a formatting function, or a browser call, because Citry cannot
-check those safely without it.
+A variable used in a selector or a formatting function such as
+`NUMBER()` must have a type, or the message fails to compile. A variable
+that `<c-trans>` fills must be declared as a `Slot`, or the fill is
+rejected.
 
 ### `@param` in translations
 

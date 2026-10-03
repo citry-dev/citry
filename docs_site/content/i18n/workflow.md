@@ -61,8 +61,10 @@ configured catalog package at once. It reports problems such as:
 - a broken, duplicate, unsupported, or unused `@param` comment;
 - an unknown ID in `Component.I18n.client_messages`, the list of
   messages a component's browser code loads by runtime ID;
-- text that would fall back to another language where nothing can mark
-  its `lang`; and
+- a `<c-trans>` rich message that has no translation in some locale,
+  because rendering it there fails;
+- a `tr()` call or `I18n.client_messages` entry that would show text
+  from a fallback language, as a warning you can change; and
 - a variable without a type, at the severity you configure.
 
 `citry check --static` checks syntax only and cannot see the whole
@@ -186,9 +188,9 @@ writable source folders. Run it before building the wheel; see
 
 ## Change type warnings { #make-a-missing-type-an-error-or-ignore-it }
 
-A simple server-only variable without an `@param` comment is a warning
-by default. Change this for the whole application with
-[`LintSettings`][citry.LintSettings]:
+A variable without an `@param` comment is a warning by default, whether
+the server or the browser translates it. Change this for the whole
+application with [`LintSettings`][citry.LintSettings]:
 
 ```python
 from citry import Citry, LintSettings
@@ -209,8 +211,46 @@ class LegacyNotice(Component):
 ```
 
 The severities are `ignore`, `warning`, and `error`. Variables used in
-selectors, formatting functions, browser calls, or as a `Slot` always
-need a type, whatever the setting.
+selectors or formatting functions, and variables filled as a `Slot`,
+always need a type, whatever the setting.
+
+## Change fallback warnings { #change-fallback-warnings }
+
+A locale may stay partly translated: a message without a translation
+shows text from a fallback language. `citry check` warns about each
+`tr()` call, `self.i18n.tr()` call, and `I18n.client_messages` entry that
+would do so, because a screen reader reads that text as the page's
+language
+([why this matters](/i18n/direction-and-bidi/#mark-fallback-text-with-its-language)).
+Calls in browser code, such as `$i18n.tr()`, are not checked for
+fallback.
+
+To fail the check until every locale is complete, make it an error:
+
+```python
+from citry import Citry, LintSettings
+
+app = Citry(
+    lint=LintSettings(
+        rule_i18n_cross_language_fallback="error",
+    ),
+)
+```
+
+To hide the warning for a component that is translated later, use its
+`Lint` class:
+
+```citry
+class BetaBanner(Component):
+    class Lint:
+        rule_i18n_cross_language_fallback = "ignore"
+```
+
+A `<c-trans>` rich message without a translation is always an error,
+because rendering it in that locale fails. To fail CI only when a
+message falls back to its source language, keep the warning and use
+`coverage --fail-on-missing`, described in
+[Find untranslated text](#find-missing-translations).
 
 ## Navigate in VS Code
 

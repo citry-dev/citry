@@ -14,7 +14,7 @@ rendered component, and the browser sends them back with the next call.
 Start with [Server events](/events/) if you have not called a Python handler
 from a component yet.
 
-## Store values in State
+## `State` and `state_data()` { #store-values-in-state }
 
 When the component's inputs are already the values you need, make `State`
 inherit from `Kwargs`:
@@ -90,7 +90,7 @@ class Events:
 The rule: if the new render needs a value, the handler must get it and pass
 it in.
 
-## Bind an input to State
+## `:c-<field>` on inputs
 
 A `:c-<field>` attribute shows a State field in a form control. Give it a
 handler name, and edits update the field and call the handler. This
@@ -139,7 +139,7 @@ list in place, so the input keeps its focus and cursor position.
 [Bind events in templates](/events/bindings/#bind-controls-to-state) lists
 every control you can bind and the Python type each one sends.
 
-## Limit browser access { #limit-what-the-browser-can-read-and-change }
+## `_public` and `_model` { #limit-what-the-browser-can-read-and-change }
 
 By default, browser code can read every State field and change it, through
 the `$state` object in templates or a `:c-*` binding. Two settings narrow
@@ -186,3 +186,38 @@ browser code share a component.
     of the fields the browser can read (see
     [`$state`](/reference/browser-apis/#state)). This holds when the handler
     returns `None`, returns data, or re-renders only part of the component.
+
+## Subclass State
+
+A subclass uses its parent's `State` until it declares its own. To add
+fields, name the parent's class as a base. The subclass keeps the
+parent's fields and settings, such as `_public` and `_model`:
+
+```python
+class SortedProjectPanel(ProjectPanel):
+    class State(ProjectPanel.State):
+        sort: str = "name"
+```
+
+`ProjectPanel` is the component from
+[`State` and `state_data()`](#store-values-in-state). Because the subclass
+keeps any `_public` its parent sets, list a new field there too when
+browser code should read it.
+
+A plain `class State:` in the subclass replaces the parent's fields and
+settings. It starts from the defaults: browser code can read and change
+every field, the values are stored, signed, in the page, and the size
+limit (`_max_bytes`) is the default. Citry warns when the class is
+defined if the new State drops a parent field, or does not set a
+`_public`, `_model`, or `_max_age` that the parent sets. `_max_age` is
+how long the values stay valid.
+
+If the parent's State keeps its values on the server with
+`_storage = "server"` (see
+[Security](/security/#treat-state-as-client-input)), a plain `class State:`
+that does not set `_storage` raises `ValueError` when the class is
+defined, because its values would be stored in the page, where anyone
+who opens the page can read them. Name the parent's class, or set `_storage` yourself.
+
+[Subclass components](/advanced/subclassing/) covers the same rule for
+`Kwargs` and the other nested classes.

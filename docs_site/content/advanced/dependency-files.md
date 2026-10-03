@@ -13,7 +13,7 @@ them before any component's own JavaScript, so the component can use the
 library.
 
 Code that belongs to the component itself goes in its `js` and `css`. See
-[Component JavaScript and CSS](/advanced/js-and-css-dependencies/).
+[Component JS and CSS](/advanced/js-and-css-dependencies/).
 
 ## Add a library URL
 
@@ -81,7 +81,7 @@ class Dependencies:
 
 Each URL contains a hash of the file's content, so a changed file gets a
 new URL. Serving needs Citry's routes added to your web app (see
-[Web frameworks](/web-frameworks/)); without them, Citry puts the content
+[Web frameworks](/advanced/web-frameworks/)); without them, Citry puts the content
 into the page as before. `local_files` accepts only `"inline"` (the
 default) and `"serve"`. Any other value raises `ValueError` when a page
 that includes one of the component's project files is serialized.
@@ -147,7 +147,7 @@ Script(
 
 A script with a `type` such as `module` or `importmap` is never wrapped.
 
-## Load print styles
+## `media` print styles
 
 Use a mapping to give stylesheets a `media` attribute:
 
@@ -200,7 +200,7 @@ raises `TypeError` on an interactive page.
 ## Order and duplicates { #order-files-and-handle-duplicates }
 
 Entries from a base component come first, then the child's own entries.
-[Subclassing components](/advanced/subclassing/) shows how to extend or
+[Subclass components](/advanced/subclassing/) shows how to extend or
 replace inherited entries.
 
 Citry treats two scripts or two stylesheets as the same file when they have

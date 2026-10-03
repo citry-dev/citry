@@ -194,8 +194,11 @@ app = Citry(
 )
 ```
 
-`LintSettings` also has `rule_i18n_missing_param_type`, described in
-[Translation workflow](/i18n/workflow/#make-a-missing-type-an-error-or-ignore-it).
+`LintSettings` also has two translation rules:
+`rule_i18n_missing_param_type`
+([Change type warnings](/i18n/workflow/#make-a-missing-type-an-error-or-ignore-it))
+and `rule_i18n_cross_language_fallback`
+([Change fallback warnings](/i18n/workflow/#change-fallback-warnings)).
 
 ## Override one component
 
@@ -339,7 +342,7 @@ citry --app myproject.app:app check
 
 Warnings are printed, and included in `--format json` output, but do not fail
 the command. Any error exits with status 1. See
-[Command line](/cli/#check-component-templates).
+[Command line](/advanced/cli/#check-component-templates).
 
 ## Less common cases
 

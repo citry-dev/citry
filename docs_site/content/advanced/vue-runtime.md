@@ -37,8 +37,12 @@ $component({
 Then use them in the template:
 
 ```citry-html
-<button type="button" @click="toggle">Toggle details</button>
-<p v-show="open">Ships within two working days.</p>
+<button type="button" @click="toggle">
+  Toggle details
+</button>
+<p v-show="open">
+  Ships within two working days.
+</p>
 ```
 
 Citry also starts Vue for a component that has its own JavaScript, uses
@@ -437,6 +441,6 @@ except for details a script might notice:
 - [Vue in templates](/syntax/vue/) for directives and expressions.
 - [Client interactivity](/concepts/client-interactivity/) for data, props,
   events, slots, and lifecycle callbacks.
-- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) for
+- [Component JS and CSS](/advanced/js-and-css-dependencies/) for
   component-owned assets.
 - [HTML fragments](/advanced/html-fragments/) for interactive fragment loading.

@@ -194,7 +194,7 @@ data.
 **File download.** `actions.Download` works only on a per-event call, so
 mark the handler `@event(bundle=False)`. Return the download on its own,
 and do not change State in that handler. See
-[Download a file](/events/actions/#download-a-file).
+[`Download` a file](/events/actions/#download-a-file).
 
 **File upload.** Citry's built-in payload codecs do not read
 `multipart/form-data`. To accept files now, register a custom payload codec

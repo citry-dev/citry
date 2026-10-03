@@ -79,7 +79,7 @@ nodes. The script then loads Citry, which starts the fragment.
 
 A fragment with JavaScript or CSS loads it by URL, and an interactive
 fragment loads Citry's runtime by URL too. Add one of Citry's
-[web framework integrations](/web-frameworks/) to your app so those URLs
+[web framework integrations](/advanced/web-frameworks/) to your app so those URLs
 work.
 
 This applies when the fragment has any of these:
@@ -190,7 +190,7 @@ to the `document` and `simple` strategies.
 
 ## See also
 
-- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) for a
+- [Component JS and CSS](/advanced/js-and-css-dependencies/) for a
   component's own browser behavior and styles.
 - [Dependency files](/advanced/dependency-files/) for URLs and local files.
 - [Client interactivity](/concepts/client-interactivity/) for browser state

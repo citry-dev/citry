@@ -83,7 +83,7 @@ expression:
 
 The same applies to `action`, `src`, `class`, and any other attribute. Text
 between tags still uses `{{ expression }}`. See
-[Attributes](/syntax/dynamic-attributes/#c-dynamic-attributes).
+[Attributes](/syntax/attributes/#c-dynamic-attributes).
 
 ## Step 1: server State
 
@@ -177,7 +177,7 @@ Mark a region in the template with `<c-mark name="...">`, and target it with
 `mark:<name>`. Citry looks the name up in the template of the component whose
 handler ran. Return one `actions.Render` per region that changes, next to
 each other in the list. See
-[Update part of the page](/events/actions/#update-one-part-of-the-page).
+[`<c-mark>` partial update](/events/actions/#update-one-part-of-the-page).
 
 Citry has no `parent` or `find_one()` lookup. When Python owns the update,
 return a Render with an explicit target. To render into another component,

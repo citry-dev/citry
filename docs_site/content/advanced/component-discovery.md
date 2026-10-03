@@ -1,9 +1,9 @@
 ---
-title: Component discovery and startup
+title: Discovery and startup
 description: Find component modules and prepare Citry before serving requests.
 ---
 
-# Component discovery and startup
+# Discovery and startup
 
 A component becomes available to templates when Python runs its `class`
 statement, which happens when its module is imported. In a small project you
@@ -101,7 +101,7 @@ Importing a module only registers its classes. Citry does not render the
 components or read their template, JavaScript, or CSS files until a page
 needs them.
 
-## Initialize at startup { #initialize-before-starting-worker-threads }
+## `initialize()` at startup { #initialize-before-starting-worker-threads }
 
 Call [`initialize()`][citry.Citry.initialize] once at startup, before your
 server starts handling requests:
@@ -125,7 +125,7 @@ Start discovery from one place, at startup. A second thread that starts
 discovery or `initialize()` while one is running raises
 [`CitryLifecycleInProgress`][citry.CitryLifecycleInProgress].
 
-[Web frameworks](/web-frameworks/) shows where startup code goes in each
+[Web frameworks](/advanced/web-frameworks/) shows where startup code goes in each
 framework.
 
 ## Run discovery yourself
@@ -174,9 +174,14 @@ for dependent in graph.dependents("price"):
 
 `dependencies()` lists each component that a component's template uses,
 and `dependents()` lists each component whose template uses it. Each
-component appears once. To get every place a tag is written, with its
-location in the source, use `references_from()` and `references_to()`.
-Component names match without regard to case.
+component appears once, however many times the template uses it.
+
+To get every single use instead, such as each `<c-Price>` written in a
+template, with its file, line, and column, call `references_from()` and
+`references_to()`.
+
+You can name a component in any letter case or with hyphens between
+words: `"CheckoutPage"` and `"checkout-page"` find the same component.
 
 The graph reads each registered component's template without rendering it.
 It does not see components that Python code creates, or that a template

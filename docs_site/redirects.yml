@@ -9,6 +9,8 @@ redirects:
     to: /advanced/vue-runtime/
   - from: /syntax/alpine/
     to: /syntax/vue/
+  - from: /syntax/dynamic-attributes/
+    to: /syntax/attributes/
   - from: /advanced/const-optimization/
     to: /performance/const/
   - from: /advanced/performance/
@@ -23,3 +25,9 @@ redirects:
     to: /ui-library/components/col-row/
   - from: /events/http/
     to: /events/routes/
+  - from: /advanced/custom-component-values/
+    to: /advanced/render-custom-values/
+  - from: /cli/
+    to: /advanced/cli/
+  - from: /web-frameworks/
+    to: /advanced/web-frameworks/

@@ -44,7 +44,7 @@ def contact_detail(contact_id: int) -> HTMLResponse:
 
 The response holds the component's HTML plus what the browser needs to
 load its CSS and JavaScript. Citry must be
-[mounted on your web framework](/web-frameworks/) so it can serve those
+[mounted on your web framework](/advanced/web-frameworks/) so it can serve those
 files.
 
 ## Load HTMX and Citry

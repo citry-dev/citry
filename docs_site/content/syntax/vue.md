@@ -46,7 +46,7 @@ class Counter(Component):
 
 Each copy of the component on the page keeps its own `count`.
 
-## Set data from Python
+## `js_data()` initial data
 
 To start the browser data from a Python value, return it from
 [`Component.js_data()`][citry.Component.js_data]. Each top-level key becomes
@@ -226,7 +226,7 @@ Other directives fail when the template loads, and the error says what to
 write instead. To pass slot content, put `<c-fill name="...">` inside the
 component tag rather than `v-slot` or `#name`. To repeat a component, use
 `<c-for>` rather than `v-for`; see
-[Repeat a component](#repeat-a-component). For `v-html` or `v-text`, pass
+[`v-for` on components](#repeat-a-component). For `v-html` or `v-text`, pass
 a prop or a fill that the child renders. `v-once` and `v-memo` fail
 everywhere; see [`v-once` and `v-memo`](#v-once-and-v-memo).
 
@@ -353,7 +353,7 @@ console shows an error that names the directive and the component.
 The child's template must have exactly one root element; see
 [`v-show` needs one root](#several-root-elements).
 
-## Repeat a component
+## `v-for` on components { #repeat-a-component }
 
 A natural first attempt at a list of components is `v-for`:
 
@@ -473,7 +473,7 @@ covers the rest of the move from Alpine.
 
 The template fails when it loads. Compute a fixed value once in `data()`. To
 keep an element's contents as the server first rendered them, use
-[`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
+[`#c-ignore`](/syntax/attributes/#c-ignore-keep-contents-that-a-library-manages).
 
 ### Vue built-in components
 

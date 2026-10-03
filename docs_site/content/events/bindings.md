@@ -14,7 +14,7 @@ sync with a [`State`][citry.Component.State] field. Vue helpers such as
 A misspelled handler name, an unknown State field, or modifiers that cannot
 be combined raise an error on the component's first render.
 
-## Call handlers from HTML
+## `@c-<event>` handlers
 
 `@c-<event>="handler"` calls the handler when the element receives that DOM
 event:
@@ -50,7 +50,7 @@ handler when the child emits `select` through Vue. To let the child call
 something from its own template, pass a callback through a Vue prop instead.
 See [Client interactivity](/concepts/client-interactivity/#listen-to-child-events).
 
-## Read State and status { #read-call-state-from-vue }
+## `$state`, `$loading`, `$error` { #read-call-state-from-vue }
 
 These helpers work in the template and, through `this`, in the component's
 JavaScript:
@@ -88,7 +88,7 @@ When a call made with `$sendEvent` fails, its Promise rejects. Catch it with
 `try`/`catch` or `.catch(...)`. When the server returns an error for an
 `@c-*` call, the error goes to `$error()` and nothing else happens.
 
-## Keep changes local { #keep-rapid-local-changes-in-the-browser }
+## `$state` local changes { #keep-rapid-local-changes-in-the-browser }
 
 Not every click needs Python. [`$state`][$state] is a Vue object holding the
 component's State. A plain Vue click handler can change it without a request,
@@ -103,7 +103,7 @@ and the next server call sends the latest value along:
 The `+1` button is ordinary Vue and makes no request. Save calls the `save`
 handler, which receives the updated `count` in `state`.
 
-## Bind controls to State
+## `:c-<field>` bindings { #bind-controls-to-state }
 
 `:c-<field>` connects a form control to the State field of the same name:
 
@@ -188,7 +188,7 @@ happening on an element without a value, use an `@c-*` event binding:
 <div @c-click="refresh"></div>
 ```
 
-### When the field updates
+### `.lazy` and `.on:<event>`
 
 A two-way binding sends on one DOM event. `.lazy` switches to the event that
 fires when the user finishes editing, and `.on:<event>` names the event
@@ -218,7 +218,7 @@ server's value:
 | Other inputs, `<textarea>`, a single `<select>` | the value as text; `None` becomes empty |
 | A custom element | the value as is; `None` becomes `null` |
 
-## Call on a timer { #call-a-handler-on-a-timer }
+## `@c-poll` on a timer { #call-a-handler-on-a-timer }
 
 `@c-poll.<seconds>s` calls a handler repeatedly, for example to refresh a
 status. The first call happens after one full interval:
@@ -237,7 +237,7 @@ replaces it.
 
 ## Fix binding problems
 
-### Timing needs an element
+### `.debounce` on components
 
 `.debounce`, `.throttle`, and `@c-poll` work only on HTML elements. On a
 child component tag they raise `TypeError` when the page renders. A
@@ -303,7 +303,7 @@ If Vue later changes `:type` to a type that cannot be bound, the binding
 stops and the browser console says why. It works again once the type
 changes back.
 
-### Custom elements
+### Custom element `value`
 
 Citry reads and writes a custom element's `value` property as is, so
 numbers, lists, and objects arrive unchanged. If reading `value` throws,

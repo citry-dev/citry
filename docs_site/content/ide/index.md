@@ -53,7 +53,7 @@ citry check --static
 
 If the import fails under `--app`, Citry reports the failure, checks syntax
 only, and exits with status 2, so a CI job cannot mistake it for a full check.
-See [Command line](/cli/#check-component-templates) for every option and exit
+See [Command line](/advanced/cli/#check-component-templates) for every option and exit
 status.
 
 ## Choose what's an error

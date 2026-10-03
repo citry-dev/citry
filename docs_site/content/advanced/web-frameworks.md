@@ -55,7 +55,7 @@ For complete, runnable apps, see the
 [starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}
 for FastAPI, Django, Flask, bare ASGI, and bare WSGI.
 
-## Initialize at startup
+## `initialize()` at startup
 
 Mounting adds the routes, but it does not import your component modules.
 Call [`initialize()`][citry.Citry.initialize] once at startup, after you
@@ -72,7 +72,7 @@ JavaScript, and CSS files still load the first time a component needs them.
 Call it from your app's own startup code, as the examples below show. A
 mounted ASGI sub-app does not reliably receive startup events, so mounting
 Citry does not initialize it for you. See
-[Component discovery and startup](/advanced/component-discovery/#initialize-before-starting-worker-threads)
+[Discovery and startup](/advanced/component-discovery/#initialize-before-starting-worker-threads)
 for what happens when initialization fails, runs twice, or starts from
 two threads at once.
 

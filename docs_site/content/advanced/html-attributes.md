@@ -1,9 +1,9 @@
 ---
-title: Forward HTML attributes
+title: HTML attributes
 description: Accept an explicit attribute mapping, choose where a component applies it, and merge class and style values safely.
 ---
 
-# Forward HTML attributes
+# HTML attributes
 
 A page that uses your reusable button often needs to add something to the
 `<button>` itself: an `aria-label`, an extra class, or `disabled`. Citry
@@ -66,7 +66,7 @@ A page passes the attributes as a Python dictionary:
 />
 ```
 
-[`c-bind`](/syntax/dynamic-attributes/#c-bind-spread) adds every entry of
+[`c-bind`](/syntax/attributes/#c-bind-spread) adds every entry of
 the merged mapping to the `<button>`. The rendered button keeps the
 `action-button` class and also gets `aria-label`, the quiet class when
 `quiet` is true, and `disabled` when `unavailable` is true.
@@ -184,12 +184,12 @@ It follows the same rules as attributes in a template:
 - `True` writes the attribute name alone, as in `disabled`;
 - `False` and `None` leave the attribute out;
 - an empty `class` or `style` is left out;
-- names and values are HTML-escaped, except a value with an `__html__()`
-  method, which is inserted as trusted HTML.
+- names and values are HTML-escaped, including a
+  [`Markup`][citry.Markup] value.
 
 When Vue renders an interactive component, a `True` value on an attribute
 that is not a boolean HTML attribute renders as `data-open="true"` rather
-than a bare `data-open`. See [Toggle with `c-*`](/syntax/dynamic-attributes/#html-elements).
+than a bare `data-open`. See [`c-*` boolean attrs](/syntax/attributes/#html-elements).
 
 ## Keep Vue in templates
 
@@ -213,7 +213,7 @@ root element by Vue's usual rules for undeclared attributes.
 Read
 [Client interactivity](/concepts/client-interactivity/#pass-arbitrary-html-attributes-explicitly)
 for the component-boundary rules, and
-[Attributes](/syntax/dynamic-attributes/) for static, dynamic, and spread
+[Attributes](/syntax/attributes/) for static, dynamic, and spread
 values in templates.
 
 ## Less common cases
@@ -225,8 +225,10 @@ name that is empty or contains whitespace, `=`, `/`, `>`, `<`, or `{#`
 raises `ValueError`. `c-bind` checks names the same way when it adds a
 mapping to an element.
 
-### Unescaped values
+### Escape `Markup` values
 
-A value with an `__html__()` method is inserted without escaping. Pass one
-only when the code that produced it is trusted and escapes its own
-content.
+A value with an `__html__()` method, such as `Markup`, is escaped like
+any other value, so a `"` in it stays part of the attribute. Citry
+first reads its HTML the way a browser would, so an entity such as
+`&amp;` still stands for its character instead of showing as `&amp;`.
+Static and interactive pages set the same value.

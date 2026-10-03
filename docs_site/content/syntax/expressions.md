@@ -25,7 +25,7 @@ how values turn into HTML, and how to insert HTML you trust.
 
 `{{ ... }}` works only in the content between tags. To set an attribute from
 Python, put `c-` in front of the attribute name and write the expression
-without braces (see [Attributes](/syntax/dynamic-attributes/)):
+without braces (see [Attributes](/syntax/attributes/)):
 
 ```citry-html
 {# ✅ Text content: evaluated #}
@@ -163,7 +163,7 @@ text from users cannot add tags to the page.
     return {"table": table}
     ```
 
-## Insert HTML you trust
+## `Markup` skips escape { #insert-html-you-trust }
 
 To insert HTML without escaping, wrap it in [`Markup`][citry.Markup].
 `Markup(value)` trusts the whole value. It does not check or clean it.
@@ -200,6 +200,10 @@ class MetaTag:
         ).format(self.name, self.content)
 ```
 
+`Markup` skips escaping only between tags. In an attribute value, such as
+`c-title="value"`, Citry escapes it like any other value; see
+[Attributes](/syntax/attributes/).
+
 `citry.Markup` is
 [`markupsafe.Markup`](https://markupsafe.palletsprojects.com/en/stable/escaping/#markupsafe.Markup){: target="_blank" rel="noopener"}
 itself, so its documentation applies.
@@ -216,7 +220,7 @@ itself, so its documentation applies.
     extend-markup-names = ["citry.Markup"]
     ```
 
-### Keep HTML complete
+### `Markup` needs whole tags
 
 When any component on the page, or in an HTML fragment you insert into a
 page, runs in the browser (it has its own `js`, or uses Vue syntax such as

@@ -37,7 +37,7 @@ Citry's DiskCache and Redis classes wrap a client you create, so install
 `diskcache` or `redis` in your application. `DjangoCache` uses Django's
 own cache framework.
 
-## Use the memory store
+## `InMemoryCache` limits
 
 Every [`Citry`][citry.Citry] instance gets its own in-memory store unless
 you pass another backend:
@@ -206,7 +206,7 @@ To invalidate every worker after a deploy, change the generation. To
 remove a single rendered entry, build its key as shown in
 [Cache rendered output](/performance/caching/#update-or-remove-entries).
 
-## Write an adapter { #write-an-adapter-for-another-store }
+## `CitryCache` adapters { #write-an-adapter-for-another-store }
 
 Any object with these four synchronous methods works as a backend; the
 [`CitryCache`][citry.CitryCache] protocol describes them:

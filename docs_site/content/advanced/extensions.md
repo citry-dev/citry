@@ -104,6 +104,40 @@ templates, JavaScript, and CSS.
     `on_serialize()` result that changes, removes, or repeats that element,
     or that drops Citry's runtime script. Edit only the rest of the HTML.
 
+### Return text or HTML
+
+To replace a component's or slot's output from an extension, return the
+new content from `on_component_rendered()` or `on_slot_rendered()`.
+Citry treats a returned string like a value in `{{ }}`. A plain `str`
+shows as text, so its tags appear as characters on the page. This is the
+same on static and interactive pages:
+
+```python
+def on_component_rendered(self, ctx):
+    if type(ctx.component).__name__ == "Checkout":
+        # Wrong: the page shows "<p>Closed today</p>" as text.
+        return "<p>Closed today</p>"
+    return None
+```
+
+Wrap the HTML in [`Markup`][citry.Markup] to insert it as HTML:
+
+```python
+from citry import Markup
+
+
+def on_component_rendered(self, ctx):
+    if type(ctx.component).__name__ == "Checkout":
+        # Right: Markup marks the string as HTML.
+        return Markup("<p>Closed today</p>")
+    return None
+```
+
+Never pass user input to the `Markup()` constructor. Return it as a plain
+`str`, which Citry escapes, or build the HTML with
+[`Markup.format()`](/syntax/expressions/#insert-html-you-trust). `on_serialize()` is different: it returns the whole
+page's HTML, and Citry uses that as it is.
+
 ### Handle a failed render
 
 `on_component_rendered` also runs when a component fails to render. Then
@@ -313,7 +347,7 @@ A plain `def` handler works with every framework integration. An
 integration. To support both without blocking the event loop, pass a plain
 `handler` and its async version as `handler_async`.
 
-See [Web frameworks](/web-frameworks/) for mounting Citry's routes in your
+See [Web frameworks](/advanced/web-frameworks/) for mounting Citry's routes in your
 application.
 
 ## Add CLI commands
@@ -326,7 +360,7 @@ citry --app myproject.engine:app ext list
 citry --app myproject.engine:app ext run events openapi
 ```
 
-See [Command line](/cli/) for defining arguments and running extension
+See [Command line](/advanced/cli/) for defining arguments and running extension
 commands.
 
 ## Describe components

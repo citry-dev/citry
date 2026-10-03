@@ -61,12 +61,13 @@ $component(({ component, revision, onEvent }) => {
 Citry rejects:
 
 - `mixins` and `extends`;
-- a `render` function, because Citry generates the render function from
-  the template;
 - an `async` `setup`, or a `setup` that returns a render function. `setup`
   must return a plain object of bindings, or `undefined`;
 - a public name that is also a [`js_data()`](#js-data-members) key or an
   [Events helper](#component-events-helpers).
+
+Citry ignores a `render` function or a `template` option, because it
+generates the render function from the component's template.
 
 <h3 class="doc-heading" id="on-server-render"><code>onServerRender</code></h3>
 
@@ -470,7 +471,7 @@ requires current app, occurrence, and revision headers." A server bridge
 that calls `EventsDispatcher.dispatch` itself passes these headers in
 `TransportContext.headers`.
 
-### Events around a call { #events-fired-around-each-call }
+### `citry:events:*` events { #events-fired-around-each-call }
 
 Citry fires DOM events around each event call, so other code can show a
 spinner, log failures, or react when a result is dropped:

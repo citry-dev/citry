@@ -39,7 +39,7 @@ It also works between attributes:
 
 A Citry comment may sit between an `if` branch and its `else` branch, because
 it renders nothing. See
-[Keep branches together](/syntax/control-flow/#keep-branches-next-to-each-other).
+[`c-elif`/`c-else` order](/syntax/control-flow/#keep-branches-next-to-each-other).
 
 ## HTML `<!-- -->` comments { #write-an-html-comment }
 

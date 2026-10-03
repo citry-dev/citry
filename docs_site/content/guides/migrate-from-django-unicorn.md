@@ -85,7 +85,7 @@ expression:
 
 The same applies to `action`, `src`, `class`, and any other attribute. Text
 between tags still uses `{{ expression }}`. See
-[Attributes](/syntax/dynamic-attributes/#c-dynamic-attributes).
+[Attributes](/syntax/attributes/#c-dynamic-attributes).
 
 ## Bind values to State
 
@@ -214,7 +214,7 @@ State:
 
 The click makes no request. The next server call from this component sends
 the new value along, unless that call uses GET. See
-[Keep changes local](/events/bindings/#keep-rapid-local-changes-in-the-browser).
+[`$state` local changes](/events/bindings/#keep-rapid-local-changes-in-the-browser).
 
 ## Plan for differences
 
@@ -225,7 +225,7 @@ Python call expressions in the template. It also does not turn an id into a
 model instance for you. Declare State fields, named handlers, and typed
 `data` classes, and load records inside the handler. To control which State
 fields browser code may read or change, see
-[Limit browser access](/events/state/#limit-what-the-browser-can-read-and-change).
+[`_public` and `_model`](/events/state/#limit-what-the-browser-can-read-and-change).
 
 ### Build dirty markers
 

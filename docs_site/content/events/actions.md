@@ -13,18 +13,18 @@ Return one value for one effect, or a list of values to apply in order:
 
 | Return value | What the browser does |
 |---|---|
-| `MyComponent(...)` or `actions.Render(...)` | Re-renders the component whose handler ran, or puts a different component in its place. See [Re-render the component](#re-render-the-component). |
-| `actions.Dispatch(name, detail)` | Fires a browser event that JavaScript can listen for. See [Notify browser code](#notify-browser-code-that-something-happened). |
-| `dict` or `actions.Data(value)` | Gives the value to the JavaScript that called `$sendEvent`. See [Send data to JavaScript](#send-data-to-javascript). |
-| `actions.Redirect(url)` | Navigates to another page. See [Redirect to a page](#redirect-to-a-page). |
-| `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` | Changes the address bar without loading a page. See [Change the URL](#change-the-url). |
-| `actions.Download(...)` | Downloads a file. See [Download a file](#download-a-file). |
-| `None` | Nothing visible. State changes still reach `$state`. See [Return nothing](#return-nothing). |
+| `MyComponent(...)` or `actions.Render(...)` | Re-renders the component whose handler ran, or puts a different component in its place. See [`Render` the component](#re-render-the-component). |
+| `actions.Dispatch(name, detail)` | Fires a browser event that JavaScript can listen for. See [`Dispatch` browser events](#notify-browser-code-that-something-happened). |
+| `dict` or `actions.Data(value)` | Gives the value to the JavaScript that called `$sendEvent`. See [`Data` for JavaScript](#send-data-to-javascript). |
+| `actions.Redirect(url)` | Navigates to another page. See [`Redirect` to a page](#redirect-to-a-page). |
+| `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` | Changes the address bar without loading a page. See [`PushUrl`, `ReplaceUrl`](#change-the-url). |
+| `actions.Download(...)` | Downloads a file. See [`Download` a file](#download-a-file). |
+| `None` | Nothing visible. State changes still reach `$state`. See [`None` skips re-render](#return-nothing). |
 
 The examples below import the actions with
 `from citry.ext.events import actions`.
 
-## Re-render the component
+## `Render` the component { #re-render-the-component }
 
 Return the component with its new inputs. Citry renders it on the server and
 the browser updates the component whose handler ran, in place:
@@ -44,7 +44,7 @@ its options, such as `target` (below).
 The new render gets only the inputs you pass. See
 [Pass every input](/events/state/#pass-every-input-when-a-handler-renders-again).
 
-## Keep list items matched { #keep-list-items-matched-to-their-records }
+## `#c-key` for list items { #keep-list-items-matched-to-their-records }
 
 When a re-render adds, removes, or reorders list items, Vue matches the old
 and new items by position unless they have a key. Without one, what the user
@@ -67,7 +67,7 @@ key on the component or element that should follow the record.
 A key works only among items under the same parent. It cannot move an item
 into a different parent or wrapper element.
 
-## Swap in a component { #swap-in-a-different-component }
+## `Render` another component { #swap-in-a-different-component }
 
 A handler can return a different component from the one whose handler ran. The
 new one takes its place. Here a handler on `SignupForm` swaps the form for a
@@ -101,7 +101,7 @@ After the swap:
     Move the part that changes into a child component, or wrap it in a
     `<c-mark>` region as described next.
 
-## Update part of the page { #update-one-part-of-the-page }
+## `<c-mark>` partial update { #update-one-part-of-the-page }
 
 To replace only part of the component, wrap that part in `<c-mark>` with a
 name:
@@ -124,7 +124,7 @@ update another component instead, use `target="render:<id>"`. The render ID
 is the value of that component's `id` in the browser; see
 [Browser APIs](/reference/browser-apis/).
 
-## Notify browser code { #notify-browser-code-that-something-happened }
+## `Dispatch` browser events { #notify-browser-code-that-something-happened }
 
 Sometimes other code in the browser needs to react to the handler: your
 component's JavaScript shows a toast, or a header badge refreshes.
@@ -161,7 +161,7 @@ To hear the event anywhere else, such as in a parent component or page
 script, listen on an ancestor element, on `document`, or with
 [`Citry.events.on`](/reference/browser-apis/#citry-events-on).
 
-## Send data to JavaScript
+## `Data` for JavaScript { #send-data-to-javascript }
 
 When your JavaScript calls a handler with `$sendEvent`, return a `dict` or
 [`actions.Data`][citry.ext.events.actions.Data]:
@@ -190,7 +190,7 @@ fail.
 An `@c-*` attribute in a template does not receive the value. To let browser
 code react to such a call, return `actions.Dispatch` instead.
 
-## Redirect to a page
+## `Redirect` to a page { #redirect-to-a-page }
 
 [`actions.Redirect`][citry.ext.events.actions.Redirect] makes the browser
 load another page:
@@ -205,7 +205,7 @@ class Events:
 When a plain HTML form posts to the handler's URL, the same action becomes a
 real HTTP redirect. See [Event routes](/events/routes/).
 
-## Change the URL
+## `PushUrl`, `ReplaceUrl` { #change-the-url }
 
 [`actions.PushUrl`][citry.ext.events.actions.PushUrl] and
 [`actions.ReplaceUrl`][citry.ext.events.actions.ReplaceUrl] change the
@@ -230,7 +230,7 @@ link opens the same task.
 `ReplaceUrl` replaces the current entry. Either way, Back and Forward change
 only the address: Citry does not restore the earlier HTML or State.
 
-## Download a file
+## `Download` a file { #download-a-file }
 
 Return [`actions.Download`][citry.ext.events.actions.Download] on its own,
 and mark the handler with
@@ -262,7 +262,7 @@ A download cannot be combined with other actions in a list, and its handler
 must not change State, because the file response has no room for the new
 State. Either mistake makes the call fail.
 
-## Return nothing
+## `None` skips re-render { #return-nothing }
 
 A handler that returns `None` does not re-render the component. Use it when
 the handler only saves something, or only changes State:
@@ -276,9 +276,9 @@ class Events:
 The new State still reaches the browser, so Vue parts that read
 `$state.editing` update. Server-rendered HTML stays as it was. Only fields
 the browser can read reach `$state`; see
-[Limit browser access](/events/state/#limit-what-the-browser-can-read-and-change).
+[`_public` and `_model`](/events/state/#limit-what-the-browser-can-read-and-change).
 
-## Run several actions { #return-several-actions-in-order }
+## Action lists { #return-several-actions-in-order }
 
 Return a list to do several things. The browser applies the actions one at a
 time, in list order, and each waits for the one before it. A Dispatch after a

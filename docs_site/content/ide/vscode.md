@@ -550,7 +550,7 @@ These errors can appear a moment after Citry's own.
 
 To turn them off, set `citry.typeCheck` to `false`. To run the same check in a
 terminal or CI, use
-[`citry check --types`](/cli/#check-types-with-typescript-and-ty).
+[`citry check --types`](/advanced/cli/#check-types-with-typescript-and-ty).
 
 ### `aria-*`, `id`, `title`
 
@@ -633,7 +633,7 @@ two-space indentation.
 The template formatting matches `citry format` on the command line. The
 JavaScript and CSS output matches only when both use the same formatter,
 version, and options; `citry format` uses Biome. See
-[Command line](/cli/#format-component-files).
+[Command line](/advanced/cli/#format-component-files).
 
 ### What stays unchanged
 

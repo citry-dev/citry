@@ -143,11 +143,14 @@ A message's main text and each of its attributes fall back separately.
 A locale may translate a button's label but not its `.aria-label`; the
 `.aria-label` then comes from the fallback language.
 
-Fallback text needs its own `lang` attribute, which plain `tr()` text
-cannot carry. `citry check` therefore reports a `tr()` call that would
-fall back to another locale. See
+A locale may stay partly translated. Untranslated messages show the
+fallback text, and `citry check` warns about each `tr()` call that would
+fall back, because plain text cannot carry its own `lang` attribute. See
 [Language direction and accessibility](/i18n/direction-and-bidi/#mark-fallback-text-with-its-language)
-for how to allow fallback where you need it.
+for how to mark fallback text with its language. A
+[`<c-trans>` rich message](/i18n/rich-messages/#translate-all-locales)
+is the exception: it needs a translation in every locale that renders
+it.
 
 To list every message that falls back in a locale, run:
 

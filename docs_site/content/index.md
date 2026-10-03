@@ -103,7 +103,7 @@ Two lines of code and you're all set. If you don't need events,
 you can use Citry without a server.
 </p>
 
-See the [web framework integrations](/web-frameworks/) and
+See the [web framework integrations](/advanced/web-frameworks/) and
 [server events](/events/).
 
 <c-landing-hosts />

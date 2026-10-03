@@ -20,8 +20,11 @@ A project that only renders static HTML from Python, with no browser
 behavior, usually needs only these steps: upgrade the packages,
 [check component tag attributes](#update-attributes-on-component-tags),
 [check `#c-ignore`](#check-your-c-ignore-markers),
-[rename a component named `Mark`](#rename-reserved-names), and work
-through [Settings and extensions](#update-settings-and-extensions).
+[rename a component named `Mark`](#rename-reserved-names),
+[name the parent class](#name-the-parent-class) in subclasses that add
+inputs, [wrap HTML that `on_render()` returns](#wrap-html-returned-from-on-render),
+and work through
+[Settings and extensions](#update-settings-and-extensions).
 
 ## Upgrade the packages { #upgrade-the-packages-together }
 
@@ -282,7 +285,7 @@ fails, because these template helpers do not exist in 0.6.0.
 
 Provide a value from a component with Vue's `provide` option, and read it
 in a descendant with `inject`. See
-[Provide in the browser](/concepts/provide-and-inject/#provide-and-inject-in-client-code).
+[Vue `provide`/`inject`](/concepts/provide-and-inject/#provide-and-inject-in-client-code).
 
 ### Rename reserved names { #rename-reserved-names }
 
@@ -338,7 +341,7 @@ replace the outermost component of a page or HTML fragment. Move the part
 that changes into a child component, or into a `<c-mark>` region. Props,
 listeners, and a `ref` that the parent wrote on the old component's tag do
 not reach the new one. See
-[Swap in a component](/events/actions/#swap-in-a-different-component).
+[`Render` another component](/events/actions/#swap-in-a-different-component).
 
 ### Nested `$state` writes
 
@@ -545,6 +548,26 @@ cannot sit on an element that has any `c-*` attribute, and `:key` cannot
 sit next to `#c-key`. See
 [`c-*` with `:` bindings](/syntax/vue/#combine-class-and-style-with-c-class-and-c-style).
 
+### `Markup` attribute values { #markup-attribute-values }
+
+**What you see:** a `"` inside a `Markup` attribute value now shows as
+part of the value. In 0.5.x it ended the attribute, and the text after it
+became more attributes.
+
+Citry now escapes every attribute value, `Markup` included. `Markup` only
+says a string is safe to insert between tags. An entity in it still
+reads as its character, so `Markup("Tom &amp; Jerry")` still sets the
+attribute to `Tom & Jerry`. To set several attributes from Python, pass
+a mapping to `c-bind`:
+
+```python
+# 0.5.x: with c-title="label", the quote added data-id.
+return {"label": Markup('Saved" data-id="1')}
+
+# 0.6.0: with c-bind="attrs", one key per attribute.
+return {"attrs": {"title": "Saved", "data-id": 1}}
+```
+
 ### Inline group content
 
 **What you see:** the render stops with an error that names the component
@@ -591,7 +614,92 @@ contents can hold only HTML, `{{ }}` expressions, `<c-if>`, `<c-for>`, and
   as a plain tag, such as `<section #c-ignore>`.
 
 See
-[`#c-ignore`](/syntax/dynamic-attributes/#c-ignore-keep-contents-that-a-library-manages).
+[`#c-ignore`](/syntax/attributes/#c-ignore-keep-contents-that-a-library-manages).
+
+## Extend a parent's Kwargs { #name-the-parent-class }
+
+**What you see:** rendering a subclass fails with
+`unexpected keyword argument` naming an input its parent accepts, or
+an inherited method fails with `AttributeError` when it reads that input,
+or defining the class raises `ValueError`. Defining the class also prints a `NestedSchemaReplacedWarning` that names the
+missing fields.
+
+Since 0.3.0, a nested `Kwargs` on a subclass added its fields to its
+parent's. In 0.6.0 it replaces them, like any nested Python class. Name
+the parent's class as a base to keep its fields:
+
+```python
+# 0.5.1: SignedMessage takes `text` and `author`.
+class SignedMessage(Message):
+    class Kwargs:
+        author: str
+
+# 0.6.0: name Message.Kwargs to keep `text`.
+class SignedMessage(Message):
+    class Kwargs(Message.Kwargs):
+        author: str
+```
+
+The same applies to `Slots`, `State`, `TemplateData`, `JsData`, and
+`CssData`. A subclass that declares none of them still uses its parent's.
+`class Kwargs(Message.Kwargs):` also keeps the parent's defaults now, so
+a parent field with a default stays optional in the subclass.
+
+If a parent's `State` sets `_storage = "server"`, a subclass with its own
+plain `class State:` must set `_storage` too. Otherwise defining it raises
+`ValueError`, because the values would move into the page. Write
+`class State(Parent.State):`, or set `_storage` in the new class.
+
+A plain `class State:` also starts from the default settings, so browser
+code can read and change all of its fields. Name the parent's class to
+keep its `_public`, `_model`, and `_max_age`.
+
+A component with two parent components that declare different `Kwargs`
+raises `ValueError` when it is defined. Pick one with
+`Kwargs = Parent.Kwargs`, or list the fields of both in module-level
+classes and write `class Kwargs(FirstFields, SecondFields):`.
+
+`Events`, `Dependencies`, `Lint`, `Cache`, and other settings classes
+still add to the parent's settings, so they need no change. See
+[Subclass components](/advanced/subclassing/).
+
+## Wrap `on_render` HTML { #wrap-html-returned-from-on-render }
+
+**What you see:** HTML that a component's `on_render()` returns shows on
+the page as text, with its tags visible, such as `<p>No data</p>`.
+
+In 0.6.0, a plain `str` that `on_render()` returns or yields is text, the
+same as a value in `{{ }}`, and Citry escapes it. In 0.5.x, Citry
+inserted it as HTML. Wrap HTML in `Markup`, or return a component:
+
+```python
+from citry import Markup
+
+
+# 0.5.x: the string was inserted as HTML.
+def on_render(self):
+    return "<p>No data</p>"
+
+
+# 0.6.0: Markup marks the string as HTML.
+def on_render(self):
+    return Markup("<p>No data</p>")
+```
+
+If a hook returns `str(result)` after a `yield`, that is a plain `str`
+too, so wrap it in `Markup`. For a component that runs in the browser,
+put added HTML in the template instead; see
+[Avoid `str(result)`](/advanced/hooks/#avoid-strresult).
+
+Before you wrap a string, check where its text comes from. If it contains
+user input, such as a name or a comment, keep the string plain: escaping
+stops that input from adding a script to the page. If it needs markup
+around the user input, write the markup in the template and pass the value
+in as a component input.
+
+The same applies to a plain `str` that an extension's
+`on_component_rendered()` or `on_slot_rendered()` returns: 0.5.x inserted
+it as HTML, and 0.6.0 shows it as text. Wrap HTML there in `Markup` too.
 
 ## Fix rejected HTML
 
@@ -646,7 +754,7 @@ to `vue_asset_max_bytes` (64 MiB by default). A page always finds its own
 files right after it loads. A page left open long enough to ask for a file
 that was dropped gets the same 404, so raise the limit or configure a
 cache. See
-[Share the cache](/web-frameworks/#share-the-cache-between-worker-processes).
+[Share the cache](/advanced/web-frameworks/#share-the-cache-between-worker-processes).
 
 ## Proxies and CDNs { #proxies-and-cdns }
 
@@ -697,6 +805,21 @@ by code stops matching.
 | `citry.alpine.unknown-variable` | `citry.vue.unknown-variable` |
 | `citry.component-js.unknown-data-member` | `citry.component-js.unknown-member` |
 | `citry.browser.unknown-component-prop` | Removed |
+| `citry.i18n.cross-language-fallback` on a `<c-trans>` tag | `citry.i18n.rich-message-fallback` |
+| `citry.i18n.client-message-invalid` for a missing translation | `citry.i18n.cross-language-fallback` |
+
+### Untranslated text warns
+
+**What you see:** `citry check` passes for a `tr()` call whose message is
+not translated into every locale, and prints a
+`citry.i18n.cross-language-fallback` warning where 0.5.1 reported an
+error.
+
+A locale may now stay partly translated; the untranslated text falls back
+to another language. To keep failing the check on such text, set
+`LintSettings(rule_i18n_cross_language_fallback="error")`. A `<c-trans>`
+message still needs every translation. See
+[Change fallback warnings](/i18n/workflow/#change-fallback-warnings).
 
 ### Strict CSP mode
 
@@ -861,29 +984,39 @@ argument.
 16. Move `c-:attr`, `c-@event`, and Vue keys in `c-bind` into the
     template, set an attribute such as `title` with `c-title` or `:title`
     but not both, and write Vue-bound group content inside the group's
-    tag.
+    tag. Set several attributes with a `c-bind` mapping, not with quotes
+    inside a `Markup` value.
 17. Keep `#c-ignore` only on HTML elements whose contents a library
     manages, and move it off component tags, table row elements, and
     `<c-element>`.
-18. Close every tag in `<c-raw>` and `Markup` inside interactive
+18. In subclasses that add fields to a parent's `Kwargs`, `Slots`, `State`,
+    `TemplateData`, `JsData`, or `CssData`, name the parent's class as a
+    base, such as `class Kwargs(Parent.Kwargs):`. On a component whose
+    parents declare one of these classes differently, declare it on the
+    component itself.
+19. Wrap HTML in `Markup` when `on_render()` returns or yields it, or
+    when an extension's `on_component_rendered()` or `on_slot_rendered()`
+    returns it. Keep a string that contains user input plain, so Citry
+    escapes it.
+20. Close every tag in `<c-raw>` and `Markup` inside interactive
     components, and put an interactive page's content inside one
     `<body>`.
-19. Remove uses of `Citry.alpine`, `Citry.manager`, `Citry.i18n`,
+21. Remove uses of `Citry.alpine`, `Citry.manager`, `Citry.i18n`,
     `window.Alpine`, and `alpine:init`.
-20. On a deployment with several workers, configure a shared cache
+22. On a deployment with several workers, configure a shared cache
     backend, and let a proxy or CDN pass `Access-Control-Allow-Origin`
     through for Citry's files.
-21. Rename the Alpine lint settings and diagnostic codes, and fix any
+23. Rename the Alpine lint settings and diagnostic codes, and fix any
     output that `security_csp="strict"` now rejects.
-22. Check that dependency scripts on interactive pages are classic
+24. Check that dependency scripts on interactive pages are classic
     JavaScript, rename `ctx.before_manifest` to `ctx.early_scripts`, and
     build `OnSerializeContext` and `OnDependenciesContext` with keyword
     arguments.
-23. Pass `URLRoute(methods=...)` as a tuple of uppercase names, read
+25. Pass `URLRoute(methods=...)` as a tuple of uppercase names, read
     `parameters` from `citry.analysis` results starting at index 0, and
     remove `TemplateNode`, `citry.ownership` imports, and `ownership=`
     arguments.
-24. Remove `citry-htmx.js`, `hx-ext="citry-fragments"`, and `data-cid-*`
+26. Remove `citry-htmx.js`, `hx-ext="citry-fragments"`, and `data-cid-*`
     or `data-citry-key` selectors.
-25. Open each interactive page, reloading pages opened before the
+27. Open each interactive page, reloading pages opened before the
     upgrade, and check the browser console for `[Citry]` errors.

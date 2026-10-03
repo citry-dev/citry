@@ -1,9 +1,9 @@
 ---
-title: Custom component values
-description: Let Python objects resolve themselves into Citry components during rendering.
+title: Render custom values
+description: Let your own Python objects turn themselves into Citry components when a template renders them.
 ---
 
-# Custom component values
+# Render custom values
 
 Sometimes one of your own Python objects already knows how it should look
 on the page. A payment status, for example, always shows as a green or red
@@ -12,9 +12,16 @@ teach the object to turn itself into that component. Then a template only
 writes `{{ status }}`.
 
 When the page already knows which component it wants, call that component
-directly. It is clearer.
+directly.
 
-## Make an object render
+!!! warning "Use this sparingly"
+
+    A template that writes `{{ amount }}` shows whatever the value's class
+    turns itself into. If code passes in an object whose class defines
+    `__citry_element__`, the same template renders something very different,
+    and nothing in the template says so. Check input types where it matters.
+
+## `__citry_element__` hook
 
 Add a `__citry_element__(citry)` method to the class. Citry calls it with
 the [`Citry`][citry.Citry] instance that is rendering the page. Use that

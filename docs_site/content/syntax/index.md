@@ -37,7 +37,7 @@ one paragraph for every book.
 | You want to | Write | Read |
 |---|---|---|
 | Insert a Python value as text | `{{ user.name }}` | [Expressions](/syntax/expressions/) |
-| Set an attribute or component input from Python | `c-title="heading"` | [Attributes](/syntax/dynamic-attributes/) |
+| Set an attribute or component input from Python | `c-title="heading"` | [Attributes](/syntax/attributes/) |
 | Show, hide, or repeat content | `c-if`, `c-for` | [Conditions and loops](/syntax/control-flow/) |
 | React to clicks and typing in the browser | `@click`, `:title`, `v-*` | [Vue in templates](/syntax/vue/) |
 | Pass browser data to a child component | `:status="current"` | [Client interactivity](/concepts/client-interactivity/) |
@@ -80,7 +80,7 @@ The browser receives:
 ```
 
 `{{ ... }}` does not work inside a tag, so `title="{{ heading }}"` keeps the
-braces as literal text. [Attributes](/syntax/dynamic-attributes/) covers
+braces as literal text. [Attributes](/syntax/attributes/) covers
 classes, styles, and passing values to components.
 
 ## Write valid tags

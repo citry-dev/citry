@@ -13,7 +13,7 @@ use the component.
 Plain nested classes check input names. Add a validating model such as
 Pydantic when the values themselves must be checked too.
 
-## Declare keyword inputs
+## `Kwargs` keyword inputs
 
 Add a nested [`Kwargs`][citry.Component.Kwargs] class to a
 [`Component`][citry.Component] and list each accepted name:
@@ -86,7 +86,7 @@ button.render()
 Inputs added with a `c-bind` spread are also checked when the child renders,
 because their names are known only then.
 
-## Check value types
+## Typed `Kwargs` checks
 
 A plain `Kwargs` class checks that required names are present and unknown
 names are absent. Its type annotations are not checked when the page runs:
@@ -128,7 +128,7 @@ Python.
 You can also use a `@dataclass` or a `NamedTuple` as `Kwargs`. Like a plain
 class, these check names but not value types.
 
-## Default a list or dict
+## `field()` defaults
 
 A list, dictionary, or set written directly as a default would be shared by
 every render, so Citry rejects it when Python defines the class:
@@ -164,7 +164,7 @@ class TodoList(Component):
 A default applies only when the input is left out. Passing `None` gives the
 component `None`, not the default.
 
-## Declare slots
+## `Slots` and `SlotInput`
 
 A slot is a place in the component's template where each use of the component can insert
 its own content. List the accepted slots in a nested
@@ -194,7 +194,7 @@ same points as a wrong keyword input. A slot can also pass data to its
 fill with `SlotInput[...]`; see
 [Slots](/concepts/slots/#pass-data-from-the-component-to-the-fill).
 
-## Check returned data
+## `TemplateData`, `JsData`, `CssData`
 
 Input schemas check what goes into a component. Three more nested classes
 check what its data methods return:
@@ -233,10 +233,11 @@ conversions the model made.
 [Client interactivity](/concepts/client-interactivity/#seed-browser-data-from-python)
 shows how the browser reads `js_data()`.
 
-## Extend inputs
+## `Kwargs` in subclasses
 
-A plain `Kwargs` class in a subclass adds its fields to the ones it
-inherits:
+A subclass uses its parent's `Kwargs` until it declares its own. To add
+inputs, name the parent's class as a base, so the subclass keeps the
+parent's fields and defaults:
 
 ```citry
 from citry import Component
@@ -252,7 +253,7 @@ class Button(Component):
 
 
 class IconButton(Button):
-    class Kwargs:
+    class Kwargs(Button.Kwargs):
         icon: str
 
     template = """
@@ -260,11 +261,12 @@ class IconButton(Button):
     """
 ```
 
-`IconButton` accepts both `label` and `icon`. With several parent
-components, Citry combines them in Python's usual method resolution order.
-`Slots`, `TemplateData`, `JsData`, and `CssData` combine the same way.
+`IconButton` accepts both `label` and `icon`. A plain `class Kwargs:` in
+the subclass would replace the parent's fields instead, like any nested
+Python class, and Citry warns when that leaves out a parent field.
+`Slots`, `TemplateData`, `JsData`, and `CssData` follow the same rule.
 
-To stop a subclass from inheriting a schema, set it to `None`:
+To stop a subclass from checking inputs, set its `Kwargs` to `None`:
 
 ```python
 class FreeFormButton(Button):
@@ -272,5 +274,6 @@ class FreeFormButton(Button):
 ```
 
 `FreeFormButton` accepts any keyword name.
-[Subclassing](/advanced/subclassing/) covers how templates, JavaScript, and
-CSS combine across a component hierarchy.
+[Subclass components](/advanced/subclassing/) covers replacing inputs,
+combining two parents, and how templates, JavaScript, and CSS carry over
+to a subclass.

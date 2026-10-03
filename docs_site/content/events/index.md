@@ -90,7 +90,7 @@ mount(web_app, citry_app)
 ```
 
 In Django, pass `citry.contrib.django.secret()` to reuse Django's own secret.
-[Web frameworks](/web-frameworks/) shows how to mount Citry in other
+[Web frameworks](/advanced/web-frameworks/) shows how to mount Citry in other
 frameworks.
 
 ## Choose your next step

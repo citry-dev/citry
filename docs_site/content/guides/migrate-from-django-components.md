@@ -127,7 +127,7 @@ on one page while you migrate. It is a community project, so follow its
 README for the versions and setup it supports.
 
 For a direct port, render Citry through its
-[Django integration](/web-frameworks/#django), which mounts Citry's
+[Django integration](/advanced/web-frameworks/#django), which mounts Citry's
 rendering, asset routes, and event routes in your Django project. Replace
 a whole component subtree at a time.
 
@@ -296,7 +296,10 @@ Details:
   mapping first and the caller's mapping after it. `class` and `style`
   merge instead of overwriting. A leftover `attrs:foo=` is not rejected:
   it arrives as an input literally named `attrs:foo`, so search attribute
-  names for `:`.
+  names for `:`. A `Markup` or `mark_safe()` value is escaped like any
+  other attribute value (an entity such as `&amp;` still reads as `&`),
+  so set each attribute as its own key rather than writing several into
+  one value with quotes.
 - **DJC-002:** When a `c-bind` mapping and an explicit attribute set the
   same key, the later one wins (`foo="baz"`). `class` and `style` still
   merge.
@@ -348,10 +351,12 @@ Details:
   template output. As a generator, code before `yield` runs before the
   template renders. Write `result, error = yield`: `result` is the
   finished render (a `CitryRender`, not a string), or `None` when
-  rendering failed, and then `error` holds the exception. To append to the
-  output, `return str(result) + "..."`. Each `yield content` replaces the
-  output and receives a new `(result, error)` pair. Code that added
+  rendering failed, and then `error` holds the exception. To add content
+  after the output, put it in the template. Each `yield content` replaces
+  the output and receives a new `(result, error)` pair. Code that added
   template variables in `on_render_before` moves into `template_data`.
+  A plain `str` that `on_render` returns shows as text; wrap HTML in
+  `Markup`.
 - **DJC-071:** Move each `Defaults` attribute onto `Kwargs` with an
   annotation: `variable = "test"` becomes `variable: str = "test"`. An
   unannotated `name = value` declares nothing.
@@ -524,6 +529,10 @@ Details:
 
 Skip this section if your project has no custom extensions or custom
 template tags.
+
+In django-components, a string that `on_component_rendered` or
+`on_slot_rendered` returns is inserted as HTML. In Citry a plain `str`
+shows as text; wrap HTML in `Markup` or `mark_safe()`.
 
 | ID | django-components | Citry: what to do | Impact |
 |---|---|---|---|

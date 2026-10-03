@@ -197,7 +197,7 @@ Write `name` as a plain attribute. A computed `c-name`, or a name that
 breaks the rules above, raises `ValueError` when the component renders.
 `<c-mark>` takes no `<c-fill>`; put the content directly inside it.
 
-See [Update part of the page](/events/actions/#update-one-part-of-the-page).
+See [`<c-mark>` partial update](/events/actions/#update-one-part-of-the-page).
 
 !!! note "You cannot name a component `mark`"
 
