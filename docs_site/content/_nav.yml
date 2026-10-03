@@ -90,10 +90,9 @@ areas:
         collapsible: true
         section_style: true
         items:
-          - { title: Dynamic components, path: /advanced/dynamic-components/, needs_review: true }
-          - { title: Custom component values, path: /advanced/custom-component-values/, needs_review: true }
-          - { title: Forward HTML attributes, path: /advanced/html-attributes/, needs_review: true }
-          - { title: Subclassing components, path: /advanced/subclassing/, needs_review: true }
+          - { title: Dynamic components, path: /advanced/dynamic-components/ }
+          - { title: HTML attributes, path: /advanced/html-attributes/ }
+          - { title: Subclass components, path: /advanced/subclassing/, needs_review: true }
           - { title: Component discovery and startup, path: /advanced/component-discovery/, needs_review: true }
           - { title: Component JavaScript and CSS, path: /advanced/js-and-css-dependencies/, needs_review: true }
           - { title: Dependency files, path: /advanced/dependency-files/, needs_review: true }
@@ -104,6 +103,7 @@ areas:
           - { title: Component previews, path: /advanced/previews/, needs_review: true }
           - { title: Component hooks, path: /advanced/hooks/, needs_review: true }
           - { title: Component libraries, path: /advanced/component-libraries/, needs_review: true }
+          - { title: Custom component values, path: /advanced/custom-component-values/, needs_review: true }
           - { title: Testing components, path: /advanced/testing/, needs_review: true }
           - { title: Command line, path: /cli/, needs_review: true }
 

@@ -200,7 +200,7 @@ raises `TypeError` on an interactive page.
 ## Order and duplicates { #order-files-and-handle-duplicates }
 
 Entries from a base component come first, then the child's own entries.
-[Subclassing components](/advanced/subclassing/) shows how to extend or
+[Subclass components](/advanced/subclassing/) shows how to extend or
 replace inherited entries.
 
 Citry treats two scripts or two stylesheets as the same file when they have

@@ -12,7 +12,14 @@ teach the object to turn itself into that component. Then a template only
 writes `{{ status }}`.
 
 When the page already knows which component it wants, call that component
-directly. It is clearer.
+directly.
+
+!!! warning "Use this sparingly"
+
+    A template that writes `{{ amount }}` shows whatever the value's class
+    turns itself into. If code passes in an object whose class defines
+    `__citry_element__`, the same template renders something very different,
+    and nothing in the template says so. Check input types where it matters.
 
 ## Make an object render
 

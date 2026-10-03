@@ -1,9 +1,9 @@
 ---
-title: Subclassing components
+title: Subclass components
 description: Reuse a component contract while changing its template, browser code, styles, dependencies, or Python behavior.
 ---
 
-# Subclassing components
+# Subclass components
 
 Sometimes you need several versions of one component: a card and a linked
 card, a dialog and a confirm dialog. They take the same inputs and behave

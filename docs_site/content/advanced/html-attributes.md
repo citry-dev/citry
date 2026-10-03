@@ -1,9 +1,9 @@
 ---
-title: Forward HTML attributes
+title: HTML attributes
 description: Accept an explicit attribute mapping, choose where a component applies it, and merge class and style values safely.
 ---
 
-# Forward HTML attributes
+# HTML attributes
 
 A page that uses your reusable button often needs to add something to the
 `<button>` itself: an `aria-label`, an extra class, or `disabled`. Citry

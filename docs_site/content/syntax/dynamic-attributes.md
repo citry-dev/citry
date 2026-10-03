@@ -322,7 +322,7 @@ class Card(Component):
 # />
 ```
 
-See [Forward HTML attributes](/advanced/html-attributes/) for more.
+See [HTML attributes](/advanced/html-attributes/) for more.
 
 ## Vue `:prop` and `@event`
 
