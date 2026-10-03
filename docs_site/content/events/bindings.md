@@ -199,8 +199,10 @@ yourself:
 | Checkbox, radio, `<select>` | `change` | Not allowed: these already send on `change` |
 | A custom element | You must set `.on:<event>` | Not allowed |
 
-`.enter` and `.escape` need a keyboard event, so pair them with
-`.on:keyup` or `.on:keydown`.
+`.enter` and `.escape` need the binding to send on a keyboard event, so
+pair them with `.on:keydown` or `.on:keyup`. With the default event, or
+an `.on:` event other than `keydown`, `keyup`, or `keypress`, the
+template fails to load.
 
 ### What the control shows
 
@@ -261,6 +263,17 @@ because that event has no key to check:
 
 {# Works: send when Enter is pressed #}
 <input @c-keydown.enter="search" />
+```
+
+A `:c-*` binding checks the key of its update event, so the same rule
+applies to that event:
+
+```citry-html
+{# Fails: the default update event, input, has no key #}
+<input :c-query.enter="search" />
+
+{# Works: update query and send when Enter is pressed #}
+<input :c-query.on:keydown.enter="search" />
 ```
 
 ### `:type` stops a binding

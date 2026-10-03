@@ -404,8 +404,9 @@ fires, call `addEventListener` on an element you hold in a `ref`.
 
 ### Key filters need a keyboard event
 
-**What you see:** a `@c-*` binding such as `@c-click.enter` fails when the
-template loads, saying that only keyboard events have a key.
+**What you see:** a `@c-*` binding such as `@c-click.enter`, or a `:c-*`
+binding such as `:c-query.enter`, fails when the template loads, saying
+that only keyboard events have a key.
 
 `.enter` and `.escape` on a `@c-*` binding now need `keydown`, `keyup`, or
 `keypress`, as they do on a Vue listener. Citry 0.5.1 accepted them on any
@@ -414,6 +415,15 @@ when its object had a `key`. Listen to the keyboard event instead:
 
 ```citry-html
 <input @c-keydown.enter="search" />
+```
+
+A `:c-*` binding checks the key of its update event: by default `input`
+or `change`, or the event named in `.on:`. Citry 0.5.1 accepted `.enter`
+on any of them, and on the default events the binding never sent. Name a
+keyboard update event:
+
+```citry-html
+<input :c-query.on:keydown.enter="search" />
 ```
 
 ### Update stale listeners
@@ -797,7 +807,8 @@ argument.
     `wait: false` and unknown call options, and wait for `citry:ready`
     before calling `Citry.events.send`.
     Move `.enter` and `.escape` from a `@c-*` binding on any other event to
-    a `keydown` or `keyup` binding.
+    a `keydown` or `keyup` binding, and give a `:c-*` binding that uses
+    them `.on:keydown` in place of `.lazy` or its other `.on:` event.
 13. Set `security_csp` and `security_javascript` on the `Citry` instance
     for pages with Events.
 14. Update action lists passed to `Citry.events.applyActions`, including

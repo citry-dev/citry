@@ -1268,7 +1268,9 @@ every other modifier as a key name, and on an event without a key it drops
 the name, so the listener would run on every event while the author meant
 one key. A `@c-*` Events binding follows the same rule for `.enter` and
 `.escape`: the Events binding validator rejects them at load on any event
-other than `keydown`, `keyup`, or `keypress`.
+other than `keydown`, `keyup`, or `keypress`. A two-way `:c-*` State binding
+applies the rule to its update event, so a key filter there needs
+`.on:keydown`, `.on:keyup`, or `.on:keypress`.
 
 #### Conditions on a call
 

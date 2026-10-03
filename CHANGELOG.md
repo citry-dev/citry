@@ -55,7 +55,8 @@ walks through every step.
   `request.headers`, and a `state` action you build, for
   `Citry.events.applyActions` or an `on_event_result` hook, needs a
   `publicState` object. `.enter` and `.escape` on a `@c-*` binding work
-  only on `keydown`, `keyup`, or `keypress`
+  only on `keydown`, `keyup`, or `keypress`, and on a `:c-*` binding only
+  with `.on:keydown`, `.on:keyup`, or `.on:keypress`
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-events-code)).
 - **Handlers that return a different component:** a handler can no longer
   replace the outermost component of a page or HTML fragment with a
