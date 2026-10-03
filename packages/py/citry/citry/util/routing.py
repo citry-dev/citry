@@ -2,7 +2,7 @@
 Framework-neutral URL routes.
 
 Citry (and its extensions) serve a few things over HTTP: cached component
-JS/CSS, the client-side dependency manager, and later whole components. Citry
+JS/CSS, Citry's browser runtime, event calls, and component previews. Citry
 itself cannot listen on a port, so it describes its endpoints as
 :class:`URLRoute` objects, and a thin adapter per web framework
 (``citry.contrib.asgi``, ``citry.contrib.wsgi``, ``citry.contrib.fastapi``,
@@ -170,8 +170,24 @@ class URLRoute:
 
     Example::
 
-        URLRoute("cache/{class_id}.{script_type}", handler=serve_script, name="citry_cached_script")
-        URLRoute("ext/", children=[URLRoute("my_ext/status", handler=status)])
+        URLRoute(
+            "cache/{class_id}.{script_type}",
+            handler=serve_script,
+            name="citry_cached_script",
+        )
+        URLRoute(
+            "ext/",
+            children=[URLRoute("my_ext/status", handler=status)],
+        )
+
+    ``methods`` is always a non-empty tuple of uppercase HTTP method names
+    (``("GET",)``, ``("POST", "PUT")``), so an adapter can iterate it to
+    register or check the route. Any other value raises ``TypeError`` (not a
+    tuple of strings) or ``ValueError`` (empty, or a name that is not an
+    uppercase HTTP method token such as ``"get"``) when the route is built.
+    Adapters answer any other method with 405 (``HEAD`` is always
+    admitted). When a route admits more methods than its handler serves,
+    the handler answers 405 for the rest.
     """
 
     path: str
@@ -198,6 +214,32 @@ class URLRoute:
                 " route served only under ASGI, pass the async function as handler instead."
             )
             raise ValueError(msg)
+        _validate_route_methods(self.methods)
+
+
+# An HTTP method is an RFC 9110 token. Adapters compare the request's method
+# with these names exactly, so a lowercase name would never match and the
+# route would answer 405 to every request; only uppercase tokens are accepted.
+_ROUTE_METHOD_RE = re.compile(r"[!#$%&'*+.^_`|~0-9A-Z-]+")
+
+
+def _validate_route_methods(methods: object) -> None:
+    """Reject a ``URLRoute.methods`` value the adapters could not register."""
+    # A bare string is iterable, so ("GET") silently becoming "G", "E", "T" is caught here first.
+    if not isinstance(methods, tuple) or not all(isinstance(method, str) for method in methods):
+        msg = f'URLRoute(methods=...) must be a tuple of HTTP method names, e.g. ("POST",); got {methods!r}.'
+        raise TypeError(msg)
+    # A route that admits no method could never be reached.
+    if not methods:
+        msg = "URLRoute(methods=...) must name at least one HTTP method; got an empty tuple."
+        raise ValueError(msg)
+    invalid = next((method for method in methods if _ROUTE_METHOD_RE.fullmatch(method) is None), None)
+    if invalid is not None:
+        msg = (
+            f"URLRoute(methods=...) contains {invalid!r}, which is not an uppercase HTTP method name."
+            ' Write method names in uppercase, e.g. ("GET", "POST").'
+        )
+        raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,6 +264,25 @@ def flatten_routes(routes: Iterable[URLRoute]) -> list[tuple[str, URLRoute]]:
 
     walk("", routes)
     return flat
+
+
+def normalize_mount_prefix(prefix: str) -> str:
+    """
+    Check a mount prefix and return it without a trailing ``/``.
+
+    Every host adapter calls this before it changes the host app or the Citry
+    instance, so a bad prefix fails with the same ``ValueError`` everywhere and
+    leaves nothing half-mounted. ``"/citry/"`` and ``"/citry"`` mount at the
+    same place, and ``"/"`` becomes ``""`` (the host's root).
+
+    Raises:
+        ValueError: If ``prefix`` does not start with ``/``.
+
+    """
+    if not prefix.startswith("/"):
+        msg = f"Mount prefix must start with '/', got {prefix!r}"
+        raise ValueError(msg)
+    return prefix.rstrip("/")
 
 
 # A path parameter: `{name}` where name is a Python identifier.

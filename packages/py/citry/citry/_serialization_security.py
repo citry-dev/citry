@@ -11,6 +11,7 @@ from secrets import token_hex
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal
 
+from citry._owned_resource import OWNED_ASSET_CROSSORIGIN
 from citry.attrs import format_attrs
 from citry.citry_render import SerializedScriptSecurity
 from citry.ext.dependencies.types import _JAVASCRIPT_MIME_TYPES, Dependency, Script, Style
@@ -373,6 +374,11 @@ class _ScriptSecurityMaterializer:
                 digests = (*digests, computed)
             else:
                 attrs["integrity"] = declared or computed
+            # The browser checks integrity only on a CORS response. Citry's
+            # own routes allow CORS reads, so ask for one; a crossorigin value the
+            # author set on purpose stays as written.
+            if _canonicalize_html_attr(attrs, "crossorigin", "Script") is None:
+                attrs["crossorigin"] = OWNED_ASSET_CROSSORIGIN
             provenance: Literal["citry-computed", "declared-verified"] = (
                 "citry-computed" if declared is None else "declared-verified"
             )
@@ -546,6 +552,53 @@ def _parse_integrity(value: str) -> tuple[tuple[str, str, str, bytes], ...]:
     if not parsed:
         raise ValueError("A Script integrity attribute must contain at least one digest.")
     return tuple(parsed)
+
+
+def _browser_loader_descriptor(dependency: Dependency) -> dict[str, object]:
+    """Validate one exact dependency for deferred browser loading without a response nonce."""
+    if type(dependency) not in (Script, Style):
+        raise TypeError("Prepared browser assets must be exact Script or Style values.")
+    tag, raw_attrs, content = dependency._render()
+    expected = "script" if type(dependency) is Script else ("link" if dependency.url else "style")
+    if tag != expected or type(raw_attrs) is not dict:
+        raise TypeError("Prepared browser assets must retain their canonical dependency rendering.")
+    attrs = _copy_exact_attrs(raw_attrs, type(dependency).__name__)
+    if type(dependency) is Script:
+        delayed = [key for key in attrs if key.translate(_ASCII_LOWER) in {"async", "defer", "nomodule"}]
+        if delayed:
+            raise ValueError(
+                "Prepared browser scripts must be ordered classic scripts without async, defer, or nomodule."
+            )
+        type_keys = [key for key in attrs if key.translate(_ASCII_LOWER) == "type"]
+        if len(type_keys) > 1:
+            raise ValueError("A prepared browser Script cannot declare type more than once.")
+        if type_keys:
+            value = attrs[type_keys[0]]
+            if type(value) is not str:
+                raise ValueError("A prepared browser Script type must be a classic JavaScript MIME string.")
+            essence = value.strip(" \t\n\r\f").translate(_ASCII_LOWER).partition(";")[0].rstrip(" \t\n\r\f")
+            if essence not in _JAVASCRIPT_MIME_TYPES:
+                raise ValueError("Prepared browser scripts must use a classic JavaScript MIME type.")
+    nonce = _canonicalize_html_attr(attrs, "nonce", type(dependency).__name__)
+    if nonce is not None:
+        raise ValueError("Prepared browser assets cannot declare a revision nonce.")
+    url_attr = "src" if type(dependency) is Script else "href"
+    url = _canonicalize_html_attr(attrs, url_attr, type(dependency).__name__)
+    if dependency.url is None:
+        if url is not None:
+            raise ValueError("Inline prepared browser assets cannot declare an external URL attribute.")
+        if _canonicalize_html_attr(attrs, "integrity", type(dependency).__name__) is not None:
+            raise ValueError("Inline prepared browser assets cannot declare integrity metadata.")
+        return {"kind": "inline", "content": content, "attrs": attrs}
+    if type(url) is not str or url != dependency.url:
+        raise ValueError("Prepared browser asset URL differs from its structured dependency URL.")
+    attrs.pop(url_attr)
+    integrity = _canonicalize_html_attr(attrs, "integrity", type(dependency).__name__)
+    if integrity is not None:
+        if type(integrity) is not str:
+            raise ValueError("Prepared browser asset integrity must be a string.")
+        _parse_integrity(integrity)
+    return {"kind": "external", "url": dependency.url, "attrs": attrs}
 
 
 def _is_executable(attrs: Mapping[str, object]) -> bool:

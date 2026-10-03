@@ -36,10 +36,11 @@ from existing design prose.
 
 - Component class creation already recognizes `Kwargs`, `Slots`,
   `TemplateData`, `JsData`, and `CssData` as inherited schemas
-  ([`component.py:93`](../../packages/py/citry/citry/component.py#L93),
-  [`component.py:427`](../../packages/py/citry/citry/component.py#L427)). Plain
-  field classes become composed slotted dataclasses
-  ([`_nested_declarations.py:136`](../../packages/py/citry/citry/_nested_declarations.py#L136)).
+  ([`component.py:100`](../../packages/py/citry/citry/component.py#L100),
+  [`component.py:479`](../../packages/py/citry/citry/component.py#L479)). The
+  nearest declaration applies, as in ordinary Python inheritance, and plain
+  field classes become slotted dataclasses
+  ([`_nested_declarations.py:572`](../../packages/py/citry/citry/_nested_declarations.py#L572)).
 - The base `Component.template_data()` already returns the effective `Kwargs`
   values ([`component.py:795`](../../packages/py/citry/citry/component.py#L795),
   [`component.py:807`](../../packages/py/citry/citry/component.py#L807)). In

@@ -40,9 +40,9 @@ def compile_template(
 
             from citry_core.template_parser import parse_template, compile_template
             from citry.nodes import (
-                ExprNode, ElementKeyNode, ComponentNode, IfNode, ForNode,
-                SlotNode, FillNode, StaticHtmlAttr, ExprHtmlAttr,
-                TemplateHtmlAttr, TemplateNode,
+                ExprNode, ElementAttrsNode, ElementKeyNode, ComponentNode,
+                IfNode, ForNode, SlotNode, FillNode, StaticHtmlAttr,
+                ExprHtmlAttr, TemplateHtmlAttr,
             )
 
             t = parse_template('<c-Card title="Hi">body</c-Card>')
@@ -51,6 +51,7 @@ def compile_template(
             ns = {
                 "source": '<c-Card title="Hi">body</c-Card>',
                 "ExprNode": ExprNode,
+                "ElementAttrsNode": ElementAttrsNode,
                 "ElementKeyNode": ElementKeyNode,
                 "ComponentNode": ComponentNode,
                 "IfNode": IfNode,
@@ -60,7 +61,6 @@ def compile_template(
                 "StaticHtmlAttr": StaticHtmlAttr,
                 "ExprHtmlAttr": ExprHtmlAttr,
                 "TemplateHtmlAttr": TemplateHtmlAttr,
-                "TemplateNode": TemplateNode,
             }
             exec(code, ns)
             body = ns["generate_template"]()
@@ -68,3 +68,11 @@ def compile_template(
 
     """
     return _rust.template_parser.compile_template(template, lang)
+
+
+def _compile_prepared_template(
+    template: _rust.template_parser.Template,
+    lang: str | None = None,
+) -> str:
+    """Compile a parsed template into Citry's private prepared-render nodes."""
+    return _rust.template_parser._compile_prepared_template(template, lang)

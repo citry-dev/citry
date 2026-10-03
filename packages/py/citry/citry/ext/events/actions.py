@@ -2,20 +2,24 @@
 The action constructors of the ``events`` extension: what a handler returns.
 
 An event handler's return value is its whole response, and what flows back to
-the browser is **actions**: self-addressed instructions the client runtime
-applies in order (design ``docs/design/events.md`` 3.4). The capitalized
-constructors here build those action values; calling one performs nothing.
-Import the namespace once and return what you build::
+the browser is **actions**: instructions the browser applies in the order the
+handler returned them. The capitalized constructors here build those action
+values; calling one performs nothing. Import the namespace once and return
+what you build::
 
     from citry.ext.events import actions
 
-    class Events:
-        def save(self, state):
-            order = create_order(state.draft_id)
-            return [
-                actions.Dispatch("order-saved", {"id": order.id}),
-                actions.Redirect(f"/orders/{order.id}"),
-            ]
+    class Checkout(Component):
+        class Events:
+            def save(self, state):
+                order = create_order(state.draft_id)
+                return [
+                    actions.Dispatch(
+                        "Checkout:order-saved",
+                        {"id": order.id},
+                    ),
+                    actions.Redirect(f"/orders/{order.id}"),
+                ]
 
 Every envelope action accepts ``delay`` (seconds before the client applies the
 action). Most also accept ``wait`` (whether later actions hold for it). A
@@ -23,9 +27,9 @@ action). Most also accept ``wait`` (whether later actions hold for it). A
 promise. ``Download`` is not an envelope action; it constructs a raw HTTP
 response result.
 
-Turning return values into these actions (dicts, elements, resolver-claimed
-values) and encoding them for the wire lives in the sibling ``results``
-module; this module is only the vocabulary.
+A handler may also return a bare ``dict`` (a ``Data`` action), a component
+element or ``CitryRender`` (a ``Render`` action), or a value that one of the
+``event_result_resolvers`` converts into actions.
 """
 
 from __future__ import annotations
@@ -118,23 +122,32 @@ class Action:
 @dataclass(frozen=True)
 class Render(Action):
     """
-    Render a component element server-side and morph it into the page.
+    Render a component element on the server and update the page with it.
 
-    The element renders as a citry fragment (markup plus its dependency and
-    events manifests), and the client swaps it into ``target``. A handler
-    builds a fresh tree to render; nothing of the instance's original render
-    is replayed (design ``events.md`` 7.5).
+    Citry renders the element, and the browser updates ``target`` with the
+    result through Vue. A handler builds a fresh tree to render; nothing of
+    the instance's original render is replayed.
+
+    Several independent targets may be updated by one contiguous run of
+    immediate, blocking Render actions. Every Render in that run must omit
+    ``delay`` or use ``0`` and must keep ``wait=True``. Deferred or interleaved
+    multi-target runs, duplicate targets, and overlapping ancestor and
+    descendant targets are rejected before the response changes State.
 
     Attributes:
         element: What to render: a component element (``MyComponent(...)``)
             or an already-rendered
             [`CitryRender`][citry.CitryRender].
-        target: Where the rendered HTML goes: a CSS selector string (applied
-            to every match), or ``None`` (the default) for the component
-            instance whose event was called.
-        swap: How the HTML is applied: ``"morph"`` (the default, a minimal
-            in-place diff), ``"replace"``, ``"inner"``, ``"append"``,
-            ``"prepend"``, ``"remove"``, or ``"none"``.
+        target: The component address ``render:<id>``, the caller-relative
+            marker address ``mark:<name>``, or ``None`` for the calling
+            component instance.
+        swap: How the browser applies the rendered component. The Vue
+            browser runtime supports only ``"morph"`` (the default), which
+            updates the existing content in place. Another value raises
+            ``ValueError`` when you build the action if Citry does not know
+            the value or you also pass a ``target``. Otherwise the Vue
+            renderer raises it when Citry builds a response for the browser
+            runtime.
         delay: Seconds the client waits before applying the action.
         wait: Whether later actions hold until this one has applied.
 
@@ -144,7 +157,7 @@ class Render(Action):
             cart = add_item(context.user, data.product_id)
             return actions.Render(
                 CartBadge(count=cart.count),
-                target="#cart-badge",
+                target="mark:cart-badge",
             )
         ```
 
@@ -172,8 +185,8 @@ class Render(Action):
             raise ValueError(msg)  # noqa: TRY004
         if self.target is not None and (not isinstance(self.target, str) or not self.target):
             msg = (
-                f"actions.Render: target must be a CSS selector string, or None for the calling"
-                f" instance; got {self.target!r}."
+                "actions.Render: target must be 'render:<id>', 'mark:<name>', or None for the"
+                f" calling instance; got {self.target!r}."
             )
             raise ValueError(msg)
         if self.target is not None and self.target.startswith("render:"):
@@ -185,9 +198,23 @@ class Render(Action):
                     f" render ID; got {self.target!r}."
                 )
                 raise ValueError(msg) from error
+        elif self.target is not None and self.target.startswith("mark:"):
+            from citry.components.mark import validate_mark_name  # noqa: PLC0415
+
+            try:
+                validate_mark_name(self.target[5:])
+            except (TypeError, ValueError) as error:
+                msg = f"actions.Render: a marker target must be 'mark:<name>'; got {self.target!r}."
+                raise ValueError(msg) from error
+        elif self.target is not None:
+            raise ValueError(
+                "actions.Render: target must be 'render:<id>', 'mark:<name>', or None for the calling instance."
+            )
         if self.swap not in SWAPS:
             msg = f"actions.Render: swap must be one of {', '.join(repr(s) for s in SWAPS)}; got {self.swap!r}."
             raise ValueError(msg)
+        if self.target is not None and self.swap != "morph":
+            raise ValueError("actions.Render: addressed component and marker targets support only swap='morph'.")
         super().__post_init__()
 
 
@@ -228,16 +255,26 @@ class Data(Action):
 @dataclass(frozen=True)
 class Dispatch(Action):
     """
-    Dispatch a named browser event (a DOM ``CustomEvent``).
+    Send a named event to the browser.
 
-    The event fires under the exact given name on the calling instance's first
-    live root (or on ``document`` when the call carries no instance), bubbles,
-    and reaches ``onEvent`` listeners and plain ``addEventListener`` alike. A
-    multi-root or mirrored instance deliberately uses one canonical root so a
-    logical dispatch reaches document-level listeners only once.
-    Names starting with ``citry:`` are reserved for the runtime's own events;
-    the documented convention is prefixing with the component name
-    (``"MyCard:submit"``).
+    The browser delivers the event under the exact given name in two ways.
+    Listeners that the calling component registered with ``this.$onEvent``
+    in its Vue code, or with ``onEvent`` in its ``$component`` callback,
+    receive ``detail``. Citry also dispatches a bubbling DOM
+    ``CustomEvent`` on the first element the calling component currently
+    renders, so listeners on that element, its ancestors, or ``document``
+    receive it. If the component renders no element (only text, for
+    example), the event goes to the component's root DOM node instead. A
+    component that renders several top-level elements still dispatches one
+    event, on the first of them, so a ``document`` listener runs once. When
+    page code makes the call without a component (a hand-written ``fetch``,
+    for example) and applies the returned actions itself with
+    ``Citry.events.applyActions``, the event is dispatched only on
+    ``document``, and no ``$onEvent`` listener is called.
+
+    Prefix the name with the component name, such as ``"MyCard:submit"``,
+    so events from different components do not collide. Names starting with
+    ``citry:`` are reserved for Citry's own events and raise ``ValueError``.
 
     Attributes:
         name: The event name, dispatched verbatim.
@@ -245,6 +282,10 @@ class Dispatch(Action):
             value; ``None`` (the default) sends no detail.
         delay: Seconds the client waits before applying the action.
         wait: Whether later actions hold until this one has applied.
+
+    Raises:
+        ValueError: If ``name`` is empty or starts with ``citry:``, or a
+            timing value is invalid.
 
     """
 

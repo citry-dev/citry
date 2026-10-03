@@ -334,9 +334,9 @@ dependency flow (see the implementation log in
    `CitryRender` holding a parts list plus the context; `serialize()` joins the
    parts; `str()`/`bytes()` coercions; `str(CitryElement)` convenience. No deps
    yet.
-2. **Done.** Value nodes render against `CitryContext`: `ExprNode` and
-   `TemplateNode`, with embedded-`CitryRender`/`CitryElement` detection and the
-   merge boundary (section 3.1). Note: a dynamic attribute on a *plain HTML element*
+2. **Done.** The value node `ExprNode` renders against `CitryContext`, with
+   embedded-`CitryRender`/`CitryElement` detection and the merge boundary
+   (section 3.1). Note: a dynamic attribute on a *plain HTML element*
    is compiled to an inline `ExprNode` (between literal quote strings), not an
    attribute node; the attribute nodes are component inputs and were done with
    phase 3.

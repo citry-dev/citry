@@ -56,28 +56,32 @@ Example:
 from __future__ import annotations
 
 from contextvars import ContextVar
+from difflib import get_close_matches
 from hashlib import md5
 from re import sub
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
-from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
+from citry._class_introspection import (
+    _advance_component_declaration_generation,
+    _safe_class_text,
+    _static_class_dict,
+    _static_class_mro,
+)
 from citry._linting import _validate_component_lint
 from citry._nested_declarations import (
-    NestedClassDeclaration,
-    _active_nested_class_declarations,
+    _ancestor_with_same_declaration,
     _capture_nested_declarations,
-    _compose_nested_declaration_class,
-    _convert_to_slotted_dataclass,
+    _effective_data_schema,
     _get_nested_class_declarations,
-    _is_dataclass_family,
-    _nested_declaration_bases,
+    _nearest_data_shape_declaration,
+    _warn_if_fields_dropped,
 )
 from citry._simple_declarations import validate_simple_declaration
 from citry.assets import _find_pair_declaration, load_css, load_js, load_messages, load_template, validate_asset_pairs
 from citry.assets import reset_files as _reset_files_impl
 from citry.assets import reset_template as _reset_template_impl
 from citry.citry import Citry, citry
-from citry.citry_element import CitryElement, _ElementMorphMetadata
+from citry.citry_element import CitryElement, _ElementMorphMetadata, _PreparedCallMetadata
 from citry.constness import _const_mapping, _ConstMapping, _construct_data_schema, _restore_const_identities
 from citry.ext.dependencies import get_dependencies as _get_dependencies_impl
 from citry.introspection import _new_definition_id
@@ -94,6 +98,20 @@ from citry.util.misc import get_import_path, to_dict
 
 _DEFER_INPUT_FINALIZATION: ContextVar[bool] = ContextVar("citry_defer_input_finalization", default=False)
 _DATA_SCHEMA_NAMES = ("Kwargs", "Slots", "TemplateData", "JsData", "CssData")
+# Class attributes that the asset loaders fill as caches of loaded content.
+# Writing one does not change what the class declares, so it leaves the
+# declaration count alone; otherwise every first render would invalidate the
+# caches built from class declarations.
+_LOADED_CONTENT_CACHE_NAMES = frozenset(
+    {
+        "_citry_template",
+        "_resolved_js",
+        "_resolved_css",
+        "_resolved_messages",
+        "_citry_simple_template",
+        "_citry_component_script_capture",
+    }
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -101,118 +119,69 @@ if TYPE_CHECKING:
     from citry._simple_declarations import SimpleDeclaration
     from citry.citry_render import OnRenderGenerator, RenderReplacement
     from citry.citry_template import CitryTemplate
+    from citry.client_directives import ComponentTagClientBinding, RuntimeComponentEventBinding
     from citry.ext.cache import CacheConfig
     from citry.ext.dependencies import CitryDependencies, DependenciesConfig, Dependency
     from citry.ext.events.config import Events as EventsConfig
     from citry.ext.i18n import I18n as I18nConfig
-    from citry.ownership import ComponentInvocationId, ComponentTagClientBindingRecord, OwnershipGraph
 
 
-def _schema_adapter_family(schema: type) -> str:
-    """Classify the runtime construction protocol of one authored schema."""
-    namespace = _static_class_dict(schema)
-    if "__dataclass_fields__" in namespace:
-        return "dataclass"
-    schema_mro = _static_class_mro(schema)
-    if tuple in schema_mro and "_fields" in namespace:
-        return "namedtuple"
-    mro_namespaces = (_static_class_dict(candidate) for candidate in schema_mro)
-    protocol_names = {name for candidate_namespace in mro_namespaces for name in candidate_namespace}
-    if "model_fields" in protocol_names:
-        return "pydantic-v2"
-    if "__fields__" in protocol_names:
-        return "pydantic-v1"
-    return "plain"
+def _enrich_unexpected_schema_key(error: TypeError, schema: type, supplied: dict[str, Any]) -> None:
+    """Append one bounded field suggestion to a constructor-binding error."""
+    from citry._schema_introspection import _read_schema_fields, _schema_namespace_policy  # noqa: PLC0415
 
-
-def _validate_schema_composition(
-    component_class: type,
-    name: str,
-    declarations: tuple[NestedClassDeclaration, ...],
-) -> bool:
-    """Reject adapter combinations whose constructors cannot represent every C3 branch."""
-    declaration_bases = _nested_declaration_bases(declarations)
-    if len(declaration_bases) < 2:
-        return False
-
-    families = {_schema_adapter_family(schema) for schema in declaration_bases}
-    component_name = _safe_class_text(component_class, "__name__") or "Component"
-    dataclass_family = families <= {"plain", "dataclass"}
-    if len(families) > 1 and not dataclass_family:
-        rendered = ", ".join(sorted(families))
-        msg = (
-            f"Component {component_name}: nested {name} declarations from multiple C3 branches"
-            f" use incompatible schema adapters ({rendered}). Use one adapter family across the branches."
-        )
-        raise ValueError(msg)
-    family = "dataclass" if dataclass_family else next(iter(families))
-    if family == "namedtuple":
-        msg = (
-            f"Component {component_name}: NamedTuple {name} declarations from multiple C3 branches"
-            " cannot be combined without silently dropping fields. Use plain nested field classes"
-            " or one explicitly composed schema."
-        )
-        raise ValueError(msg)
-    if family != "dataclass":
-        return False
-    if sum("__slots__" in _static_class_dict(schema) for schema in declaration_bases) > 1:
-        msg = (
-            f"Component {component_name}: slotted dataclass {name} declarations from multiple C3 branches"
-            " have incompatible instance layouts. Use plain nested field classes or unslotted dataclasses."
-        )
-        raise ValueError(msg)
-    dataclass_params = [
-        _static_class_dict(schema).get("__dataclass_params__")
-        for schema in declaration_bases
-        if "__dataclass_fields__" in _static_class_dict(schema)
-    ]
-    frozen_modes = {bool(getattr(params, "frozen", False)) for params in dataclass_params}
-    if len(frozen_modes) > 1:
-        msg = (
-            f"Component {component_name}: frozen and non-frozen dataclass {name} declarations"
-            " from multiple C3 branches cannot share one generated constructor."
-        )
-        raise ValueError(msg)
-    return frozen_modes == {True}
+    traceback = error.__traceback__
+    if (
+        traceback is None
+        or traceback.tb_next is None
+        or traceback.tb_next.tb_next is not None
+        or _schema_namespace_policy(schema) != "closed"
+    ):
+        return
+    fields = _read_schema_fields(schema)
+    if fields is None:
+        return
+    names = tuple(field.name for field in fields)
+    if not error.args or type(error.args[0]) is not str:
+        return
+    # Python 3.14 may append its own suggestion before Citry sees the binder
+    # error. Normalize it so Citry's bounded one-unknown-key policy stays
+    # deterministic across supported Python versions.
+    message = sub(r" Did you mean ['\"][^'\"]+['\"]\?$", "", error.args[0])
+    error.args = (message, *error.args[1:])
+    unknown = [name for name in supplied if name not in names]
+    if len(unknown) != 1:
+        return
+    name = unknown[0]
+    if f"got an unexpected keyword argument {name!r}" not in message:
+        return
+    close = get_close_matches(name, names, n=1, cutoff=0.7)
+    if close:
+        error.args = (f"{message} Did you mean {close[0]!r}?", *error.args[1:])
 
 
 def _build_component_data_schema(component_class: type, name: str) -> object:
-    """Build one effective core schema from its authored C3 declaration chain."""
-    raw_declarations = _get_nested_class_declarations(component_class, name)
-    if raw_declarations:
-        nearest_value = raw_declarations[0].value
-        if nearest_value is None or not isinstance(nearest_value, type):
-            return nearest_value
+    """
+    Return the effective data-shape class for one component class.
 
-    declarations = _active_nested_class_declarations(component_class, name)
-    if not declarations:
+    The nearest declaration in C3 order applies, as in ordinary Python
+    inheritance: a subclass's own ``class Kwargs:`` replaces its parent's,
+    ``class Kwargs(Parent.Kwargs):`` extends it, and a subclass that
+    declares nothing keeps its parent's generated class by identity.
+    """
+    nearest = _nearest_data_shape_declaration(component_class, name)
+    if nearest is None or nearest.value is None:
         return None
-    frozen = _validate_schema_composition(component_class, name, declarations)
 
-    first_owner = declarations[0].declaring_class
-    if first_owner is not component_class:
-        owner_namespace = _static_class_dict(first_owner)
-        if (
-            "_citry_raw_nested_declarations" in owner_namespace
-            and declarations == _active_nested_class_declarations(first_owner, name)
-            and name in owner_namespace
-        ):
-            inherited = owner_namespace[name]
-            if inherited is None or isinstance(inherited, type):
-                return inherited
+    # Reusing the class an ancestor already generated keeps one identity for
+    # isinstance() checks and avoids warning twice for the same declaration.
+    ancestor = _ancestor_with_same_declaration(component_class, name, nearest)
+    if ancestor is not None:
+        return _static_class_dict(ancestor)[name]
 
-    effective = _compose_nested_declaration_class(component_class, name)
-    effective = cast("type", effective)
-
-    # An explicitly decorated dataclass keeps its authored options when it is
-    # the whole declaration. Supported plain and dataclass combinations become
-    # one slotted effective class after the adapter compatibility check above.
-    effective_namespace = _static_class_dict(effective)
-    if len(_nested_declaration_bases(declarations)) == 1 and "__dataclass_fields__" in effective_namespace:
-        return effective
-    if all(_is_dataclass_family(declaration.value) for declaration in declarations):  # type: ignore[arg-type]
-        return _convert_to_slotted_dataclass(effective, owner=component_class, name=name, frozen=frozen)
-    return effective
+    schema = _effective_data_schema(component_class, name, cast("type", nearest.value))
+    _warn_if_fields_dropped(component_class, name, nearest, schema)
+    return schema
 
 
 class ComponentMeta(LibraryComponentMeta):
@@ -221,9 +190,14 @@ class ComponentMeta(LibraryComponentMeta):
 
     At class definition time, this metaclass:
     1. Reads the ``citry`` field (or uses the default Citry instance).
-    2. Registers the component class with its Citry instance.
-    3. Combines inner data classes (Kwargs, Slots, etc.) through the component
-       C3 MRO and converts plain field declarations to slotted dataclasses.
+    2. Resolves each nested data class (``Kwargs``, ``Slots``,
+       ``TemplateData``, ``JsData``, ``CssData``) to the nearest declaration
+       in the class's MRO, the same as a Python attribute lookup, and
+       converts plain field declarations to slotted dataclasses. It rejects
+       a non-class value and two bases that declare different classes, and
+       emits [`NestedSchemaReplacedWarning`][citry.NestedSchemaReplacedWarning]
+       when a subclass's own class drops fields its parent declared.
+    3. Registers the component class with its Citry instance.
     """
 
     # Per-class cache for the class_id property (stored on each component
@@ -287,6 +261,10 @@ class ComponentMeta(LibraryComponentMeta):
             )
             raise AttributeError(msg)
         super().__setattr__(name, value)
+        # Caches built from class declarations (simple='vue' admission) key on
+        # this count, so a changed declaration is checked again on next use.
+        if name not in _LOADED_CONTENT_CACHE_NAMES:
+            _advance_component_declaration_generation()
 
     def __delattr__(cls, name: str) -> None:  # noqa: N805
         """Keep the concrete component's owning Citry attribute present."""
@@ -324,6 +302,10 @@ class ComponentMeta(LibraryComponentMeta):
             )
             raise AttributeError(msg)
         super().__delattr__(name)
+        # A removed declaration can re-expose an inherited one, so caches
+        # built from class declarations must be rebuilt as well.
+        if name not in _LOADED_CONTENT_CACHE_NAMES:
+            _advance_component_declaration_generation()
 
     @property
     def class_id(cls) -> str:  # noqa: N805
@@ -440,8 +422,8 @@ class ComponentMeta(LibraryComponentMeta):
             ),
             False,
         )
-        if type(simple) is not bool:
-            msg = f"Component {name}.simple must be an exact bool; got {simple!r}."
+        if not (type(simple) is bool or (type(simple) is str and simple == "vue")):
+            msg = f"Component {name}.simple must be False, True, or 'vue'; got {simple!r}."
             raise ValueError(msg)
         type.__setattr__(cls, "_definition_id", _new_definition_id())
         # Purity never inherits implicitly: a subclass may add ambient reads
@@ -490,10 +472,10 @@ class ComponentMeta(LibraryComponentMeta):
         # declarations without converting it into a runtime dataclass.
         _validate_component_lint(cls)
 
-        # Core schemas use the same declaration chain as extension configs.
-        # Plain field classes become one slotted dataclass after composition;
-        # explicit adapters such as Pydantic and NamedTuple keep their own
-        # construction model.
+        # Data shapes resolve to their nearest declaration, unlike extension
+        # configs, which combine every declaration. Plain field classes become
+        # one slotted dataclass; explicit adapters such as Pydantic and
+        # NamedTuple keep their own construction model.
         for data_class_name in _DATA_SCHEMA_NAMES:
             if _get_nested_class_declarations(cls, data_class_name):
                 type.__setattr__(cls, data_class_name, _build_component_data_schema(cls, data_class_name))
@@ -508,7 +490,7 @@ class ComponentMeta(LibraryComponentMeta):
             extensions.on_component_class_created(cls)
             extensions._init_component_class(cls)
 
-            if simple:
+            if simple is True:
                 declaration = validate_simple_declaration(
                     cls, Component, extension_names=(ext.class_name for ext in extensions._extensions)
                 )
@@ -650,23 +632,25 @@ class Component(metaclass=ComponentMeta):
     the same as for any component.
     """
 
-    simple: ClassVar[bool] = False
+    simple: ClassVar[bool | Literal["vue"]] = False
     """
-    Render a presentation template under its caller's ownership.
+    Render a presentation template inside its caller's render frame.
 
-    A simple component has no independent instance, component hooks or browser
-    identity. Unsupported declarations and invocations raise errors. The flag
-    inherits to subclasses, which are checked independently, and is fixed after
-    class definition.
+    ``simple=True`` renders in its caller's HTML frame. ``simple="vue"`` opts
+    into an instance-free Vue occurrence with its own browser identity.
+    Unsupported declarations and invocations raise errors. The setting inherits
+    to subclasses and is fixed after class definition.
 
-    Use the default data method or a synchronous static ``template_data(kwargs,
-    slots)`` method. A template can accept optional default content, but the
-    class cannot declare its own JS, CSS, messages, instance hooks or instance
-    configuration. The data callback still runs for each invocation; this flag
-    does not make the component pure.
+    For ``simple="vue"``, use the default data method or a synchronous static
+    ``template_data(kwargs, slots)`` method. Authored component JS/CSS and static
+    ``js_data`` or ``css_data`` callbacks are supported; slots, child calls
+    that pass content, provide/inject, instance hooks and instance
+    configuration are not. The data callback runs for every invocation;
+    neither mode makes the component pure.
 
-    See [Simple components](/advanced/simple-components/) for the full contract
-    and [Performance](/advanced/performance/) to compare the available options.
+    See [Simple components](/performance/simple-components/) for the full contract
+    and the [Performance overview](/performance/) to compare the available
+    options.
     """
 
     pure: ClassVar[bool] = False
@@ -675,17 +659,20 @@ class Component(metaclass=ComponentMeta):
     Set ``pure = True`` only when rendering the template is a deterministic,
     side-effect-free function of its template variables. The memo lives for
     one root render. It can reuse safe strings around a child or Slot, but the
-    child, Slot, ordinary component instances, IDs, ownership, and i18n work
+    child, Slot, ordinary component instances, IDs, and i18n work
     still run for every occurrence. A separately declared simple component keeps
     its restricted instance-free contract. A subclass must declare purity again rather than
-    inheriting the promise.
+    inheriting the promise. See [Pure components](/performance/pure/) for the
+    full contract.
     """
 
     name: ClassVar[str | None] = None
     """Override the name under which this component is registered.
 
-    By default, the class name is used (lowercased + kebab-case).
-    Set this to register under a specific name instead::
+    By default, a component registers under its class name, so
+    ``MyWidget`` is used as ``<c-MyWidget>``. Letter case does not matter,
+    and ``<c-my-widget>`` works too. Set ``name`` to register under a
+    specific name instead::
 
         class MyWidget(Component):
             name = "fancy-widget"
@@ -777,18 +764,34 @@ class Component(metaclass=ComponentMeta):
     Kwargs: ClassVar[type | None] = None
     """Optional typed keyword arguments.
 
-    Define as a plain class with type annotations. The metaclass
-    combines it with parent component declarations and converts the result to
-    a dataclass (with slots) automatically::
+    Define as a plain class with type annotations. Citry converts it to a
+    dataclass (with slots) automatically::
 
         class Card(Component):
             class Kwargs:
                 title: str
                 body: str = ""
+
+    A subclass inherits its parent's ``Kwargs`` unless it declares its own.
+    Its own plain ``class Kwargs:`` replaces the parent's class, like any
+    nested Python class, so the parent's fields are dropped and Citry emits
+    [`NestedSchemaReplacedWarning`][citry.NestedSchemaReplacedWarning]. To
+    keep them and add more, name the parent's class as the base::
+
+        class ImageCard(Card):
+            class Kwargs(Card.Kwargs):
+                image_url: str = ""
+
+    ``Kwargs = None`` declares no schema, so the component accepts any
+    keyword argument. Any other value that is not a class raises
+    ``ValueError`` when the class is defined. ``Slots``, ``State``,
+    ``TemplateData``, ``JsData``, and ``CssData`` follow the same rule.
     """
 
     Slots: ClassVar[type | None] = None
-    """Optional typed slot definitions, inherited like [`Kwargs`][citry.Component.Kwargs].
+    """Optional typed slot definitions.
+
+    They are inherited, replaced, or extended like [`Kwargs`][citry.Component.Kwargs].
 
     Use [`SlotInput`][citry.SlotInput] for places where people can add content.
     A field without a default must be filled whenever the component is used.
@@ -800,8 +803,7 @@ class Component(metaclass=ComponentMeta):
     """Optional typed values that survive between server event calls.
 
     Define ``State`` as a plain nested class with type annotations. The Events
-    extension combines inherited declarations and converts the result to a
-    mutable, slotted dataclass automatically::
+    extension converts it to a mutable, slotted dataclass automatically::
 
         class Search(Component):
             class State:
@@ -817,8 +819,15 @@ class Component(metaclass=ComponentMeta):
 
     Citry starts State from same-named keyword arguments and field defaults.
     Define ``state_data(self, kwargs, slots)`` when the values need to be
-    derived instead. Assign ``State = None`` on a subclass to stop inheriting
-    its parent's State declaration.
+    derived instead.
+
+    A subclass inherits its parent's State the same way as
+    [`Kwargs`][citry.Component.Kwargs]. ``class State(Parent.State):`` keeps
+    the parent's fields and settings, while a plain ``class State:`` starts
+    from the default settings. Replacing a parent State that sets
+    ``_storage = "server"`` without setting ``_storage`` raises
+    ``ValueError``, because the values would move into the page. Assign
+    ``State = None`` on a subclass to declare no State.
     """
 
     Events: ClassVar[type | None] = None
@@ -850,24 +859,32 @@ class Component(metaclass=ComponentMeta):
     Lint: ClassVar[type | None] = None
     """Optional per-component template-lint settings.
 
-    Define a nested ``Lint`` class with
-    ``rule_unknown_template_variable`` and/or ``template_variables``. Nested
-    declarations compose through the component C3 order. Assign ``None`` to
+    Define a nested ``Lint`` class with any of the rule severities
+    (``rule_*``) and variable mappings that [`LintSettings`][citry.LintSettings]
+    accepts. Nested declarations compose in the same order Python uses to
+    resolve methods across base classes. Assign ``None`` to
     return to the Citry instance's application lint policy.
     """
 
     TemplateData: ClassVar[type | None] = None
-    """Optional typed template data output, inherited like [`Kwargs`][citry.Component.Kwargs]."""
+    """Optional typed template data output.
+
+    It is inherited, replaced, or extended like [`Kwargs`][citry.Component.Kwargs].
+    """
 
     JsData: ClassVar[type | None] = None
-    """Optional typed schema for the ``js_data()`` output. Like
-    ``TemplateData``, it inherits through component C3 and a plain annotated
-    class converts to a dataclass."""
+    """Optional typed schema for the ``js_data()`` output.
+
+    A plain annotated class converts to a dataclass. It is inherited,
+    replaced, or extended like [`Kwargs`][citry.Component.Kwargs].
+    """
 
     CssData: ClassVar[type | None] = None
-    """Optional typed schema for the ``css_data()`` output. Like
-    ``TemplateData``, it inherits through component C3 and a plain annotated
-    class converts to a dataclass."""
+    """Optional typed schema for the ``css_data()`` output.
+
+    A plain annotated class converts to a dataclass. It is inherited,
+    replaced, or extended like [`Kwargs`][citry.Component.Kwargs].
+    """
 
     _citry_dynamic_selector: ClassVar[bool] = False
     _citry_simple_declaration: ClassVar[SimpleDeclaration]
@@ -974,7 +991,7 @@ class Component(metaclass=ComponentMeta):
     descendants and never visible to this component's own ``inject``.
     """
 
-    _component_tag_client_bindings: tuple[ComponentTagClientBindingRecord, ...]
+    _component_tag_client_bindings: tuple[ComponentTagClientBinding | RuntimeComponentEventBinding, ...]
     """Client bindings from the nested component tag, kept separate from kwargs."""
 
     _selector_call_shape: tuple[bool, bool]
@@ -983,11 +1000,17 @@ class Component(metaclass=ComponentMeta):
     _element_morph_metadata: _ElementMorphMetadata | None
     """Private metadata for the dynamic ordinary-element built-in."""
 
-    _ownership_invocation_id: ComponentInvocationId | None
-    """Internal invocation record selected for this rendered instance."""
+    _prepared_call_metadata: _PreparedCallMetadata | None
+    """Private lexical call-site identity used only by prepared rendering."""
 
-    _ownership_graph: OwnershipGraph
-    """Internal graph that owns this rendered instance's typed records."""
+    _citry_mark_replacement: bool = False
+    """Set on the instance that stands in for a synthetic mark element."""
+
+    _citry_mark_names: set[str] | None = None
+    """Names of the ``<c-mark>`` tags this component wrote that have rendered so far."""
+
+    _citry_mark_name_repeated: bool = False
+    """Set when a ``<c-mark>`` name rendered twice, so the render loop checks the settled output."""
 
     _citry_class_id: str
     """Stable class identity cached once for this render instance's hot path."""
@@ -1062,16 +1085,22 @@ class Component(metaclass=ComponentMeta):
         # as an empty dict.
         self._provides_own = None
         self._element_morph_metadata = None
+        self._prepared_call_metadata = None
 
     def _finalize_inputs(self) -> None:
         """Normalize hook-mutated slots and publish both typed inputs atomically."""
         cls = type(self)
         raw_slots = normalize_slot_fills(self.raw_slots, component_name=cls.__name__) if self.raw_slots else {}
-        typed_kwargs, kwargs_const = _construct_data_schema(
-            self.raw_kwargs,
-            cls.Kwargs,
-            provenance_only=True,
-        )
+        try:
+            typed_kwargs, kwargs_const = _construct_data_schema(
+                self.raw_kwargs,
+                cls.Kwargs,
+                provenance_only=True,
+            )
+        except TypeError as error:
+            if cls.Kwargs is not None:
+                _enrich_unexpected_schema_key(error, cls.Kwargs, self.raw_kwargs)
+            raise
         # An input hook or schema default may establish a newer explicit
         # promise for a name. Keep original candidates too: final template data
         # may deliberately return that original object after an intermediate
@@ -1141,12 +1170,16 @@ class Component(metaclass=ComponentMeta):
         """
         Return the JS variables for this render.
 
-        Override this to expose per-render data to the component's browser
-        behavior. The dict is serialized to strict JSON, seeded into the
-        component's Alpine scope, and delivered to its ``$component`` callback
-        as ``data`` when one exists. Identical JSON is transported only once,
-        while every rendered instance receives a fresh mutable value graph.
-        Consumed by the built-in ``dependencies`` extension.
+        Override this to expose per-render data on the component's Vue
+        instance. The mapping is serialized to strict JSON, and its keys
+        become reactive fields on that rendered component's public instance.
+        Component JavaScript can read them from ``component`` in
+        ``onServerRender({component})``, and Vue template expressions can read
+        them as instance values. Each rendered occurrence receives its own
+        mutable value graph.
+
+        A key cannot start with ``$`` or ``_``, and cannot be ``citryId``,
+        because Vue and Citry already use those names on the instance.
 
         Args:
             kwargs: The keyword arguments passed to the component.
@@ -1154,6 +1187,11 @@ class Component(metaclass=ComponentMeta):
 
         Returns:
             A dict of JS variables, or None for no variables.
+
+        Raises:
+            ValueError: When rendering, if a returned key starts with ``$``
+                or ``_`` or is ``citryId``. The message names the component
+                and the key.
 
         """
         return None
@@ -1230,9 +1268,11 @@ class Component(metaclass=ComponentMeta):
         the component's whole output instead; the template is then not
         rendered at all. Accepted content:
 
-        - a ``str``, used as-is (NOT autoescaped: it is this component's own
-          output, the same trust as its template; never concatenate untrusted
-          input into it)
+        - a plain ``str``, shown as text: Citry escapes it, as it escapes a
+          ``{{ ... }}`` value, so ``"<b>hi</b>"`` shows the tags as
+          characters
+        - [`Markup`][citry.Markup], inserted as HTML without escaping (never
+          build it from user input)
         - a composed element (``OtherComponent(title="hi")``), rendered in
           this component's place
         - an already-rendered ``CitryRender``, inlined
@@ -1241,6 +1281,13 @@ class Component(metaclass=ComponentMeta):
 
         Because ``None`` means "no replacement", return ``""`` to output
         literally nothing.
+
+        HTML you turn into a string inside the hook, such as ``str(result)``
+        after a yield, is a plain ``str``, so wrap it in
+        [`Markup`][citry.Markup] before you return it. For a component that
+        runs in the browser that string holds the whole browser app, so add
+        fixed content in the template instead. Citry adds this component's
+        marker to the HTML you return.
 
         Everything the hook needs is on ``self``: ``kwargs``, ``slots``,
         ``parent``, ``inject()``. To pass data to the template, use
@@ -1256,7 +1303,7 @@ class Component(metaclass=ComponentMeta):
 
                 def on_render(self):
                     if not self.raw_kwargs.get("rows"):
-                        return "<p>No data</p>"
+                        return Markup("<p>No data</p>")
                     return None
 
         **Generator form.** Include a ``yield`` to also see the component's
@@ -1273,7 +1320,7 @@ class Component(metaclass=ComponentMeta):
                     # AFTER: result is the completed CitryRender, or None
                     # if rendering failed (then error is the exception).
                     if error is not None:
-                        return "<p>Something went wrong</p>"
+                        return Markup("<p>Something went wrong</p>")
                     return None
 
         The protocol:

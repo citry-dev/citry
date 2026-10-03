@@ -1798,7 +1798,7 @@ async def test_stdio_syntax_only_hover_serves_citry_documentation(syntax_lsp_cli
     assert result is not None
     assert isinstance(result.contents, types.MarkupContent)
     assert "`required`" in result.contents.value
-    assert "https://citry.dev/concepts/slots/#supply-fallback-content" in result.contents.value
+    assert "https://citry.dev/concepts/slots/#require-a-slot-conditionally" in result.contents.value
     assert result.range == types.Range(
         types.Position(0, source.index("required")),
         types.Position(0, source.index("required") + len("required")),

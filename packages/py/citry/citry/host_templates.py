@@ -88,7 +88,6 @@ def render_compiled_body(
         component=context.component,
         provides=context.provides,
         sandboxed=context.sandboxed,
-        ownership=context.ownership,
         template_record=context.template_record,
     )
     parts = _render_body(body._items, child_context)
@@ -115,7 +114,6 @@ def collect_compiled_body_fills(
         component=context.component,
         provides=context.provides,
         sandboxed=context.sandboxed,
-        ownership=context.ownership,
         template_record=context.template_record,
     )
     collect_fills_from_body(body._items, child_context, sink)

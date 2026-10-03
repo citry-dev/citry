@@ -90,8 +90,9 @@ same path for the inherited default `return kwargs` behavior.
 
 The runtime catalog preserves that source path across Python's two annotation
 models. Component construction snapshots each effective field's authored owner
-while it builds the schema, including every distinct owner in a C3-composed
-`TemplateData` or `Kwargs`. Python 3.14 deferred annotations use the
+while it builds the schema, including every distinct owner when a
+`TemplateData` or `Kwargs` names other classes as bases (such as
+`class Kwargs(Parent.Kwargs):`). Python 3.14 deferred annotations use the
 `ForwardRef` annotation format, so one unavailable annotation name does not
 erase the field or its owner. The isolated app worker copies only the resulting
 field metadata. The long-lived LSP never calls the project's deferred

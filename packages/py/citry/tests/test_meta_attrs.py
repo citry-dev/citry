@@ -1,36 +1,66 @@
 """
-Tests for the rendered output of the ``#c-*`` framework-metadata channel.
+Tests for authored metadata in the typed prepared Vue render.
 
-On a plain element, ``#c-key="expr"`` renders as the element-only
-``data-citry-key=":<evaluated key>"`` attribute. On a component tag, metadata
-lives on the comment-delimited virtual component range and never becomes a
-root attribute. Element ``#c-ignore`` renders as
-``data-citry-morph="ignore"``; component ``#c-ignore`` becomes graph
-``morphMode`` metadata.
-The plain ``key`` attribute and the ``key`` / ``c-key`` component inputs stay
-completely ordinary. See
-docs/design/component_ranges_plan.md; the parse-time rules are covered
-by the Rust suite (``tag_parser_meta_attrs.rs``).
-
-Render ids are made deterministic per test by the autouse fixture in
-conftest.py (``c1``, ``c2``, ... in render order).
+Element ``#c-key`` values are carried by generated prepared-data bindings;
+component ``#c-key`` values stay in typed call frames and affect generated
+occurrence identities. An element's ``#c-ignore`` turns its contents into one
+pinned opaque HTML block that the browser keeps; on a component tag it is an
+error. The plain ``key`` attribute and ``key`` /
+``c-key`` component inputs remain ordinary HTML and component inputs.
 """
 
 import json
+import re
 
 import pytest
 
 from citry import Citry, Component
+from citry._vue.capture import render_prepared_direct
+from citry._vue.direct_capture import UnsupportedPreparedView, assemble_typed_render
+from citry.citry_render import CitryRender
 from citry.constness import Const
+from citry.ext.events.renderers import dispatcher_for
+
+SIGNING_KEY = "component-ignore-secret"
 
 
-def _manifest_of(html: str) -> dict:
-    marker = '<script type="application/json" data-citry-graph>'
-    return json.loads(html.split(marker, 1)[1].split("</script>", 1)[0])
+def _assemble_render(render: CitryRender):
+    return assemble_typed_render(
+        render,
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
 
 
-def _markup_of(html: str) -> str:
-    return html.split("<script", 1)[0]
+def _assemble(component: Component):
+    return _assemble_render(render_prepared_direct(component))
+
+
+def _renders(render: CitryRender):
+    yield render
+    for part in render.parts:
+        if isinstance(part, CitryRender):
+            yield from _renders(part)
+
+
+def _component_keys(render: CitryRender) -> list[str | None]:
+    return [
+        metadata.call.explicit_key
+        for item in _renders(render)
+        if (metadata := item.frame.prepared_occurrence) is not None and metadata.call is not None
+    ]
+
+
+def _element_keys(assembly, occurrence) -> list[object]:
+    compile_input = assembly.compile_inputs[occurrence.definition_id]
+    keys = [item["keyBindingKey"] for item in compile_input.element_bindings if item["keyBindingKey"] is not None]
+    return [occurrence.prepared_data[key] for key in keys]
+
+
+def _called_occurrence_ids(occurrence) -> list[str]:
+    values = [item["id"] for item in occurrence.prepared_data.get("calls", {}).values()]
+    values.extend(child_id for run in occurrence.prepared_data.get("callRuns", {}).values() for child_id in run)
+    return values
 
 
 class TestElementKey:
@@ -44,7 +74,13 @@ class TestElementKey:
             def template_data(self, kwargs, slots):
                 return {"ident": kwargs["ident"]}
 
-        assert Page(ident=7).render().serialize() == '<div data-citry-key=":7" data-cid-c1="">x</div>'
+        assembly = _assemble(Page(ident=7))
+        root = assembly.view.occurrences[0]
+        compile_input = assembly.compile_inputs[root.definition_id]
+
+        assert _element_keys(assembly, root) == ["7"]
+        assert ':key="$citryPrepared.citryKey0"' in compile_input.template
+        assert "data-citry-key" not in compile_input.template
 
     def test_key_inside_c_for_evaluates_per_item(self):
         c = Citry()
@@ -56,12 +92,14 @@ class TestElementKey:
             def template_data(self, kwargs, slots):
                 return {"items": kwargs["items"]}
 
-        assert (
-            KeyedList(items=[1, 2]).render().serialize()
-            == '<ul data-cid-c1=""><li data-citry-key=":1">x</li><li data-citry-key=":2">x</li></ul>'
-        )
+        assembly = _assemble(KeyedList(items=[1, 2]))
+        root = assembly.view.occurrences[0]
+        compile_input = assembly.compile_inputs[root.definition_id]
 
-    def test_key_value_is_html_escaped(self):
+        assert _element_keys(assembly, root) == ["1", "2"]
+        assert compile_input.template.count(':key="$citryPrepared.citryKey') == 2
+
+    def test_key_value_stays_in_prepared_data_not_compiled_template(self):
         c = Citry()
 
         class Page(Component):
@@ -71,9 +109,15 @@ class TestElementKey:
             def template_data(self, kwargs, slots):
                 return {"raw": "a<b>&c"}
 
-        assert Page().render().serialize() == '<div data-citry-key=":a&lt;b&gt;&amp;c" data-cid-c1="">x</div>'
+        assembly = _assemble(Page())
+        root = assembly.view.occurrences[0]
+        compile_input = assembly.compile_inputs[root.definition_id]
 
-    def test_none_key_omits_element_key(self):
+        assert _element_keys(assembly, root) == ["a<b>&c"]
+        assert "a<b>&c" not in compile_input.template
+        assert "data-citry-key" not in compile_input.template
+
+    def test_none_element_key_is_carried_as_null(self):
         c = Citry()
 
         class Page(Component):
@@ -83,7 +127,10 @@ class TestElementKey:
             def template_data(self, kwargs, slots):
                 return {"missing": None}
 
-        assert Page().render().serialize() == '<div data-cid-c1="">x</div>'
+        assembly = _assemble(Page())
+        root = assembly.view.occurrences[0]
+
+        assert _element_keys(assembly, root) == [None]
 
     @pytest.mark.parametrize(
         ("value", "rendered"),
@@ -103,7 +150,10 @@ class TestElementKey:
             def template_data(self, kwargs, slots):
                 return {"key": kwargs["key"]}
 
-        assert Page(key=value).render().serialize() == (f'<div data-citry-key=":{rendered}" data-cid-c1="">x</div>')
+        assembly = _assemble(Page(key=value))
+        root = assembly.view.occurrences[0]
+
+        assert _element_keys(assembly, root) == [rendered]
 
     def test_optional_keys_inside_c_for_omit_only_none(self):
         c = Citry()
@@ -115,10 +165,10 @@ class TestElementKey:
             def template_data(self, kwargs, slots):
                 return {"items": kwargs["items"]}
 
-        assert KeyedList(items=[None, False, 0, ""]).render().serialize() == (
-            '<ul data-cid-c1=""><li>x</li><li data-citry-key=":False">x</li>'
-            '<li data-citry-key=":0">x</li><li data-citry-key=":">x</li></ul>'
-        )
+        assembly = _assemble(KeyedList(items=[None, False, 0, ""]))
+        root = assembly.view.occurrences[0]
+
+        assert _element_keys(assembly, root) == [None, "False", "0", ""]
 
     def test_none_element_key_survives_const_precomputation(self):
         c = Citry()
@@ -130,23 +180,163 @@ class TestElementKey:
             def template_data(self, kwargs, slots):
                 return {"key": Const(None)}
 
-        assert Page().render().serialize() == '<div data-cid-c1="">x</div>'
-        assert Page().render().serialize() == '<div data-cid-c2="">x</div>'
+        for _ in range(2):
+            assembly = _assemble(Page())
+            root = assembly.view.occurrences[0]
+            assert _element_keys(assembly, root) == [None]
 
 
 class TestElementIgnore:
-    def test_ignore_renders_morph_marker(self):
+    def test_contents_become_one_pinned_opaque_block(self):
         c = Citry()
 
         class Page(Component):
             citry = c
-            template = "<div><p #c-ignore>chart</p></div>"
+            template = (
+                '<section :class="cls"><div #c-ignore class="chart"><canvas></canvas>{{ label }}'
+                '<c-if cond="flag"><b>yes</b></c-if><ul><li c-for="x in xs">{{ x }}</li></ul></div>'
+                "<p>after</p></section>"
+            )
 
-        assert Page().render().serialize() == '<div data-cid-c1=""><p data-citry-morph="ignore">chart</p></div>'
+            def template_data(self, kwargs, slots):
+                return {"label": "L<", "flag": True, "xs": [1, 2]}
+
+        assembly = _assemble(Page())
+        root = assembly.view.occurrences[0]
+        compile_input = assembly.compile_inputs[root.definition_id]
+        # The element itself stays in the Vue template; its contents do not.
+        assert compile_input.template == (
+            '<section :class="cls"><div class="chart">'
+            '<citry-opaque-html :record="$citryPrepared.opaqueHtml.citryOpaque0"></citry-opaque-html>'
+            "</div><p>after</p></section>"
+        )
+        assert root.prepared_data["opaqueHtml"] == {
+            "citryOpaque0": {
+                "html": "<canvas></canvas>L&lt;<b>yes</b><ul><li>1</li><li>2</li></ul>",
+                "nodeCount": 4,
+                "pinned": True,
+            }
+        }
+
+    def test_static_page_renders_the_element_and_its_contents(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<div #c-ignore class="chart"><canvas></canvas>{{ label }}</div><p>after</p>'
+
+            def template_data(self, kwargs, slots):
+                return {"label": "a<b"}
+
+        # The component-root markers are the only additions to the authored markup.
+        html = re.sub(r' data-cid-[a-z0-9]+=""', "", str(Page()))
+        assert html == '<div class="chart"><canvas></canvas>a&lt;b</div><p>after</p>'
+        assert "citry-opaque-html" not in html
+
+    def test_a_component_arriving_as_a_value_is_rejected_with_the_fix(self):
+        c = Citry()
+
+        class Kid(Component):
+            citry = c
+            template = "<span>kid</span>"
+
+        class Page(Component):
+            citry = c
+            template = "<div #c-ignore>{{ kid }}</div>"
+
+            def template_data(self, kwargs, slots):
+                return {"kid": Kid()}
+
+        with pytest.raises(UnsupportedPreparedView) as excinfo:
+            _assemble(Page())
+        message = str(excinfo.value)
+        assert message.startswith(
+            "'#c-ignore' on the <div> element that starts at line 1, column 1, keeps the element's contents"
+        )
+        assert "cannot hold the component Kid." in message
+        assert "Move it outside the <div> element." in message
+
+    def test_placements_without_element_contents_fail_on_static_pages_too(self):
+        c = Citry()
+
+        class InSvg(Component):
+            citry = c
+            template = '<svg><g #c-ignore><circle r="1"></circle></g></svg>'
+
+        class OnTextarea(Component):
+            citry = c
+            template = "<div><textarea #c-ignore>x</textarea></div>"
+
+        # The parser rejects both when the template loads, before any Vue decision.
+        with pytest.raises(Exception, match="wraps the <svg> or <math> element"):
+            str(InSvg())
+        with pytest.raises(Exception, match="holds text, not elements"):
+            str(OnTextarea())
+
+    @pytest.mark.parametrize(
+        "template",
+        [
+            '<main :class="cls"><div #c-ignore><span c-bind="attrs">a</span></div><p>after</p></main>',
+            '<main :class="cls"><div #c-ignore c-bind="attrs"><span>a</span></div><p>after</p></main>',
+        ],
+    )
+    def test_a_spread_inside_or_on_the_element_keeps_the_contents_pinned(self, template):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": {"title": "x"}}
+
+        Page.template = template
+        assembly = _assemble(Page())
+        root = assembly.view.occurrences[0]
+        [record] = root.prepared_data["opaqueHtml"].values()
+        assert record["pinned"] is True
+        assert record["html"] in {'<span title="x">a</span>', "<span>a</span>"}
+        assert "<p>after</p>" in assembly.compile_inputs[root.definition_id].template
+
+    def test_a_spread_in_an_events_component_is_kept_unless_it_adds_a_binding(self):
+        c = Citry(secret=SIGNING_KEY)
+        c.set_mounted_prefix("/citry")
+
+        class Page(Component):
+            citry = c
+            template = """
+                <main>
+                  <button @c-click="go">x</button>
+                  <div #c-ignore><span c-bind="attrs">a</span></div>
+                </main>
+            """
+
+            class Events:
+                def go(self) -> None:
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": kwargs.get("attrs", {"title": "t"})}
+
+        dispatcher_for(c)
+        root = _assemble(Page()).view.occurrences[0]
+        assert root.prepared_data["opaqueHtml"]["citryOpaque0"]["html"] == '<span title="t">a</span>'
+        with pytest.raises(UnsupportedPreparedView, match="cannot hold a Vue or Events binding on <span>"):
+            _assemble(Page(attrs={"@c-click": "go"}))
+
+    def test_vue_binding_inside_is_a_template_error(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<div #c-ignore><button @click="go();">x</button></div>'
+
+        # The parser rejects it when the template loads, on static pages too.
+        with pytest.raises(Exception, match="so the browser never runs '@click' on <button>"):
+            str(Page())
 
 
 class TestComponentKey:
-    def test_single_root_child_key_lives_on_the_invocation_range(self):
+    def test_single_root_child_key_lives_in_prepared_call_data(self):
         c = Citry()
 
         class Row(Component):
@@ -160,13 +350,18 @@ class TestComponentKey:
             citry = c
             template = '<div><c-Row #c-key="1" c-label="\'one\'" /></div>'
 
-        rendered = Parent().render()
-        assert rendered.context.ownership.snapshot().component_invocations[0].morph_key == "1"
-        html = rendered.serialize()
-        assert "data-citry-key" not in _markup_of(html)
-        assert _manifest_of(html)["graphs"][0]["nestedComponents"][0]["morphKey"] == "1"
+        rendered = render_prepared_direct(Parent())
+        assembly = _assemble_render(rendered)
+        root = assembly.view.occurrences[0]
+        child = next(item for item in assembly.view.occurrences if item.parent_id == root.id)
 
-    def test_multi_root_child_uses_one_keyed_range_without_root_stamps(self):
+        assert _component_keys(rendered) == ["1"]
+        assert _called_occurrence_ids(root) == [child.id]
+        assert child.parent_id == root.id
+        call_key = next(iter(root.prepared_data["calls"]))
+        assert f':key="$citryPrepared.calls.{call_key}.key"' in assembly.compile_inputs[root.definition_id].template
+
+    def test_multi_root_child_stays_one_prepared_call(self):
         c = Citry()
 
         class TwoRoots(Component):
@@ -177,17 +372,17 @@ class TestComponentKey:
             citry = c
             template = "<section><c-TwoRoots #c-key=\"'k1'\" /></section>"
 
-        html = Parent().render().serialize()
-        assert "data-citry-key" not in _markup_of(html)
-        manifest = _manifest_of(html)
-        invocation = manifest["graphs"][0]["nestedComponents"][0]
-        assert invocation["morphKey"] == "k1"
-        child = next(item for item in manifest["graphs"][0]["componentInstances"] if item["instanceId"] == 2)
-        prefix = f"citry:g1:{manifest['revision'][:8]}:0:i:{child['instanceId']}"
-        assert html.count(f"<!--{prefix}:s-->") == 1
-        assert html.count(f"<!--{prefix}:e-->") == 1
+        rendered = render_prepared_direct(Parent())
+        assembly = _assemble_render(rendered)
+        root = assembly.view.occurrences[0]
+        child = next(item for item in assembly.view.occurrences if item.parent_id == root.id)
 
-    def test_keyed_children_inside_c_for(self):
+        assert _component_keys(rendered) == ["k1"]
+        assert _called_occurrence_ids(root) == [child.id]
+        assert assembly.compile_inputs[root.definition_id].local_calls
+        assert assembly.compile_inputs[child.definition_id].template == "<div>a</div><p>b</p>"
+
+    def test_keyed_children_inside_c_for_reorder_by_explicit_identity(self):
         c = Citry()
 
         class Row(Component):
@@ -204,11 +399,41 @@ class TestComponentKey:
             def template_data(self, kwargs, slots):
                 return {"items": kwargs["items"]}
 
-        html = Parent(items=["a", "b"]).render().serialize()
-        assert "data-citry-key" not in _markup_of(html)
-        assert [item["morphKey"] for item in _manifest_of(html)["graphs"][0]["nestedComponents"]] == ["a", "b"]
+        identities_by_order = []
+        for items in (["a", "b"], ["b", "a"]):
+            rendered = render_prepared_direct(Parent(items=items))
+            assembly = _assemble_render(rendered)
+            root = assembly.view.occurrences[0]
+            children = [item for item in assembly.view.occurrences if item.parent_id == root.id]
+            call_keys = _component_keys(rendered)
+            call_ids = _called_occurrence_ids(root)
 
-    def test_component_key_is_exact_graph_data_and_script_safe(self):
+            assert call_keys == items
+            assert call_ids == [item.id for item in children]
+            assert len(set(call_ids)) == 2
+            assert len(assembly.compile_inputs[root.definition_id].local_call_runs) == 1
+            identities_by_order.append(dict(zip(call_keys, call_ids, strict=True)))
+
+        assert identities_by_order[0] == identities_by_order[1]
+
+    def test_duplicate_explicit_keys_in_one_loop_are_rejected(self):
+        c = Citry()
+
+        class Row(Component):
+            citry = c
+            template = "<span>x</span>"
+
+        class Parent(Component):
+            citry = c
+            template = '<c-for each="item in items"><c-Row #c-key="item" /></c-for>'
+
+            def template_data(self, kwargs, slots):
+                return {"items": kwargs["items"]}
+
+        with pytest.raises(UnsupportedPreparedView, match="duplicate explicit #c-key"):
+            _assemble(Parent(items=["same", "same"]))
+
+    def test_component_key_is_kept_out_of_prepared_wire_and_compile_source(self):
         c = Citry()
 
         class Row(Component):
@@ -222,10 +447,23 @@ class TestComponentKey:
             def template_data(self, kwargs, slots):
                 return {"raw": '</script><x>&"π'}
 
-        html = Parent().render().serialize()
-        graph_text = html.split('<script type="application/json" data-citry-graph>', 1)[1].split("</script>", 1)[0]
-        assert "<" not in graph_text
-        assert _manifest_of(html)["graphs"][0]["nestedComponents"][0]["morphKey"] == '</script><x>&"π'
+        rendered = render_prepared_direct(Parent())
+        assembly = _assemble_render(rendered)
+        root = assembly.view.occurrences[0]
+        child = next(item for item in assembly.view.occurrences if item.parent_id == root.id)
+        prepared_wire_data = json.dumps([item.prepared_data for item in assembly.view.occurrences])
+        compiled_templates = "".join(item.template for item in assembly.compile_inputs.values())
+
+        assert _component_keys(rendered) == ['</script><x>&"π']
+        assert _called_occurrence_ids(root) == [child.id]
+        # The key must not reach the browser in any spelling: raw, as a JSON
+        # string, or in pieces. Prepared data carries no markup at all, so no
+        # piece of the key can hide inside an HTML value either.
+        key_as_json = json.dumps('</script><x>&"π')[1:-1]
+        for fragment in ('</script><x>&"π', key_as_json, "</script>", "<x>", "\\u03c0"):
+            assert fragment not in prepared_wire_data
+        assert '</script><x>&"π' not in compiled_templates
+        assert "<" not in prepared_wire_data
 
     def test_none_key_omits_component_key(self):
         c = Citry()
@@ -241,9 +479,13 @@ class TestComponentKey:
             def template_data(self, kwargs, slots):
                 return {"key": None}
 
-        rendered = Parent().render()
-        assert rendered.context.ownership.snapshot().component_invocations[0].morph_key is None
-        assert rendered.serialize() == '<section data-cid-c1=""><span data-cid-c2="">x</span></section>'
+        rendered = render_prepared_direct(Parent())
+        assembly = _assemble_render(rendered)
+        root = assembly.view.occurrences[0]
+        child = next(item for item in assembly.view.occurrences if item.parent_id == root.id)
+
+        assert _component_keys(rendered) == [None]
+        assert _called_occurrence_ids(root) == [child.id]
 
     @pytest.mark.parametrize(
         ("value", "rendered"),
@@ -267,16 +509,17 @@ class TestComponentKey:
             def template_data(self, kwargs, slots):
                 return {"key": kwargs["key"]}
 
-        component_render = Parent(key=value).render()
-        assert component_render.context.ownership.snapshot().component_invocations[0].morph_key == rendered
-        html = component_render.serialize()
-        assert "data-citry-key" not in _markup_of(html)
-        assert _manifest_of(html)["graphs"][0]["nestedComponents"][0]["morphKey"] == rendered
+        component_render = render_prepared_direct(Parent(key=value))
+        assembly = _assemble_render(component_render)
+        root = assembly.view.occurrences[0]
+        child = next(item for item in assembly.view.occurrences if item.parent_id == root.id)
 
-    def test_key_survives_the_const_body_cache(self):
-        # A keyed component whose body precomputes (a Const variable) is
-        # rebuilt by the const optimization; the key must ride along, on the
-        # first render and on a cache-hit render alike.
+        assert _component_keys(component_render) == [rendered]
+        assert _called_occurrence_ids(root) == [child.id]
+
+    def test_key_survives_constant_body_capture(self):
+        # A constant body can be precomputed while the invocation identity
+        # stays in its typed call frame.
         c = Citry()
 
         class Row(Component):
@@ -291,28 +534,29 @@ class TestComponentKey:
                 return {"label": Const("hi")}
 
         for _ in range(2):
-            html = Parent().render().serialize()
-            assert "data-citry-key" not in _markup_of(html)
-            assert _manifest_of(html)["graphs"][0]["nestedComponents"][0]["morphKey"] == "k"
+            rendered = render_prepared_direct(Parent())
+            assembly = _assemble_render(rendered)
+            root = assembly.view.occurrences[0]
+            child = next(item for item in assembly.view.occurrences if item.parent_id == root.id)
 
-    def test_key_on_transparent_component_uses_its_virtual_range(self):
+            assert _component_keys(rendered) == ["k"]
+            assert _called_occurrence_ids(root) == [child.id]
+
+    def test_transparent_component_key_reaches_native_subtree_identity(self):
         c = Citry()
 
         class Page(Component):
             citry = c
-            template = '<c-provide key="theme" c-data="{}" #c-key="\'p\'">x</c-provide>'
+            template = '<c-provide key="theme" c-data="{}" #c-key="\'p\'"><span>x</span></c-provide>'
 
-        html = Page().render().serialize()
-        manifest = _manifest_of(html)
-        invocation = manifest["graphs"][0]["nestedComponents"][0]
-        assert invocation["morphKey"] == "p"
-        target = next(
-            item
-            for item in manifest["graphs"][0]["componentInstances"]
-            if item["renderId"] == invocation["targetRenderId"]
-        )
-        assert target["transparent"] is True
-        assert "data-citry-key" not in _markup_of(html)
+        rendered = render_prepared_direct(Page())
+        assembly = _assemble_render(rendered)
+        root = assembly.view.occurrences[0]
+        compile_input = assembly.compile_inputs[root.definition_id]
+
+        assert _component_keys(rendered) == ["p"]
+        assert compile_input.template.count(":key=") == 1
+        assert "<span" in compile_input.template
 
     def test_key_on_dynamic_component_belongs_to_the_selected_target_range(self):
         c = Citry()
@@ -328,12 +572,14 @@ class TestComponentKey:
             def template_data(self, kwargs, slots):
                 return {"target": Row}
 
-        html = Page().render().serialize()
-        invocation = _manifest_of(html)["graphs"][0]["nestedComponents"][0]
-        assert invocation["tagName"] == "component"
-        assert invocation["targetClassId"] == Row.class_id
-        assert invocation["morphKey"] == "k"
-        assert "data-citry-key" not in _markup_of(html)
+        rendered = render_prepared_direct(Page())
+        assembly = _assemble_render(rendered)
+        root = assembly.view.occurrences[0]
+        child = next(item for item in assembly.view.occurrences if item.parent_id == root.id)
+
+        assert _component_keys(rendered) == ["k", "k"]
+        assert child.type_key == Row.class_id
+        assert _called_occurrence_ids(root) == [child.id]
 
     def test_component_and_its_root_element_have_independent_keys(self):
         c = Citry()
@@ -346,10 +592,14 @@ class TestComponentKey:
             citry = c
             template = "<c-Row #c-key=\"'component'\" />"
 
-        html = Page().render().serialize()
-        assert html.count('data-citry-key=":own"') == 1
-        assert f'data-citry-key="{Row.class_id}:component"' not in html
-        assert _manifest_of(html)["graphs"][0]["nestedComponents"][0]["morphKey"] == "component"
+        rendered = render_prepared_direct(Page())
+        assembly = _assemble_render(rendered)
+        root = assembly.view.occurrences[0]
+        child = next(item for item in assembly.view.occurrences if item.parent_id == root.id)
+
+        assert _component_keys(rendered) == ["component"]
+        assert _element_keys(assembly, child) == ["own"]
+        assert _called_occurrence_ids(root) == [child.id]
 
     def test_empty_component_can_be_keyed(self):
         c = Citry()
@@ -362,15 +612,17 @@ class TestComponentKey:
             citry = c
             template = "<main>before<c-Blank #c-key=\"'empty'\" />after</main>"
 
-        html = Page().render().serialize()
-        manifest = _manifest_of(html)
-        assert manifest["graphs"][0]["nestedComponents"][0]["morphKey"] == "empty"
-        assert "before<!--citry:g1:" in html
-        assert ":e-->after" in html
+        rendered = render_prepared_direct(Page())
+        assembly = _assemble_render(rendered)
+        root = assembly.view.occurrences[0]
+        child = next(item for item in assembly.view.occurrences if item.parent_id == root.id)
+
+        assert _component_keys(rendered) == ["empty"]
+        assert _called_occurrence_ids(root) == [child.id]
 
 
 class TestComponentIgnore:
-    def test_source_range_ignore_reaches_ownership_and_the_manifest(self):
+    def test_source_range_ignore_is_explicitly_unsupported_in_prepared_vue(self):
         c = Citry()
 
         class Child(Component):
@@ -381,14 +633,70 @@ class TestComponentIgnore:
             citry = c
             template = "<c-child #c-ignore />"
 
-        rendered = Page().render()
-        invocation = rendered.context.ownership.snapshot().component_invocations[0]
-        assert invocation.morph_key is None
-        assert invocation.morph_mode == "ignore"
+        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-child>"):
+            render_prepared_direct(Page())
 
-        html = rendered.serialize()
-        assert "data-citry-morph" not in _markup_of(html)
-        assert _manifest_of(html)["graphs"][0]["nestedComponents"][0]["morphMode"] == "ignore"
+    def test_ignore_inside_an_interactive_parent_is_rejected(self):
+        c = Citry(secret=SIGNING_KEY)
+        c.set_mounted_prefix("/citry")
+
+        class Child(Component):
+            citry = c
+            template = "<span>child</span>"
+
+        class Parent(Component):
+            citry = c
+
+            class Events:
+                def go(self) -> None:
+                    return None
+
+            template = """
+                <div @click="go">
+                    <c-Child #c-ignore />
+                </div>
+            """
+
+        # A plain page render decides on Vue only at serialization; the tag
+        # must still fail instead of rendering without the directive.
+        with pytest.raises(TypeError) as excinfo:
+            str(Parent())
+
+        message = str(excinfo.value)
+        # The message quotes the tag as the template spells it.
+        assert "'#c-ignore' is not supported on the component tag <c-Child>" in message
+        assert "put it on the HTML element inside the component's template" in message
+
+    def test_ignore_inside_a_static_parent_is_rejected(self):
+        c = Citry()
+
+        class Child(Component):
+            citry = c
+            template = "<span>child</span>"
+
+        class Page(Component):
+            citry = c
+            template = "<div><c-Child #c-ignore /></div>"
+
+        # A page that never becomes a Vue app still rejects the directive.
+        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-Child>"):
+            str(Page())
+
+    def test_ignore_in_a_branch_that_does_not_run_is_rejected(self):
+        c = Citry()
+
+        class Child(Component):
+            citry = c
+            template = "<span>child</span>"
+
+        class Page(Component):
+            citry = c
+            template = '<c-if cond="False"><c-Child #c-ignore /></c-if>'
+
+        # The check runs when the template loads, so a branch that never
+        # renders cannot hide the directive.
+        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-Child>"):
+            str(Page())
 
 
 class TestTemplateAuthoredOnly:
@@ -428,7 +736,7 @@ class TestTemplateAuthoredOnly:
             RuntimeError,
             match=r"'#c-key' arrived on <c-row> through an attribute spread or a dynamic attribute\. "
             r"'#c-\*' framework attributes are template-authored only: "
-            r"write the attribute directly on the component tag in the template\.",
+            r"write the attribute in the template itself, where Citry checks that the tag allows it\.",
         ):
             Page().render().serialize()
 
@@ -518,8 +826,8 @@ class TestOrdinaryKeyStaysOrdinary:
             citry = c
             template = '<input key="" /><input key="v" />'
 
-        # `key=""` normalizes to the boolean attribute, `key="v"` passes through.
-        assert Page().render().serialize() == '<input key data-cid-c1=""/><input key="v" data-cid-c1=""/>'
+        # The ordinary empty value stays an ordinary empty attribute value.
+        assert Page().render().serialize() == '<input key="" data-cid-c1=""/><input key="v" data-cid-c1=""/>'
 
     def test_key_and_c_key_component_inputs(self):
         c = Citry()

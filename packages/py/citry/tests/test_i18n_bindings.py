@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
-import json
 import re
+from typing import TYPE_CHECKING
 
 import pytest
+from markupsafe import Markup
 
 from citry import Citry, Component
+from citry._vue.capture import PreparedElementOpen, PreparedTextValue, render_prepared_direct
+from citry._vue.direct_capture import assemble_typed_render
+from citry._vue.events import default_events_producer
+from citry.citry_render import CitryRender
 from citry.ext.i18n.usage import CLIENT_CONTEXT_KEY, EXTRA_KEY
 
-_MANIFEST = re.compile(r'<script type="application/json" data-citry-i18n>(.*?)</script>', re.DOTALL)
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from citry.citry_element import CitryElement
 
 
 def _app() -> Citry:
@@ -24,10 +32,36 @@ def _app() -> Citry:
     )
 
 
-def _manifest(html: str) -> dict[str, object]:
-    match = _MANIFEST.search(html)
-    assert match is not None
-    return json.loads(match.group(1))
+def _prepared_i18n(
+    component: CitryElement,
+    *,
+    provides: Mapping[str, object] | None = None,
+) -> tuple[CitryRender, dict[str, object]]:
+    """Read i18n metadata from the actual Vue producer and retain typed parts."""
+    app = component.comp_cls.citry
+    rendered = render_prepared_direct(component, provides=provides)
+    manifest = default_events_producer(app).prepare_from_render(
+        rendered,
+        citry=app,
+        app_id="i18n-bindings-unit",
+        revision=0,
+    )
+    extensions = manifest["extensions"]
+    assert type(extensions) is dict
+    extension = extensions["i18n"]
+    assert type(extension) is dict
+    assert extension["schemaVersion"] == 1
+    payload = extension["payload"]
+    assert type(payload) is dict
+    return rendered, payload
+
+
+def _prepared_parts(value: object):
+    if isinstance(value, CitryRender):
+        for part in value.parts:
+            yield from _prepared_parts(part)
+        return
+    yield value
 
 
 def test_attribute_binding_emits_only_opaque_marker_and_checked_record() -> None:
@@ -42,11 +76,12 @@ def test_attribute_binding_emits_only_opaque_marker_and_checked_record() -> None
 """
         messages = "save = Save"
 
-    html = Page().render().serialize()
+    rendered, manifest = _prepared_i18n(Page())
+    html = rendered.serialize(deps_strategy="ignore")
     assert "$c-tr" not in html
     marker = re.search(r'data-citry-i18n-binding="([^"]+)"', html)
     assert marker is not None
-    requirement = _manifest(html)["requirements"][0]
+    requirement = manifest["requirements"][0]
     assert requirement["rendered_locale"] == "en-US"
     assert requirement["outputs"] == ["save"]
     assert requirement["bindings"] == [
@@ -57,6 +92,13 @@ def test_attribute_binding_emits_only_opaque_marker_and_checked_record() -> None
             "values": {},
         }
     ]
+    binding_id = requirement["bindings"][0]["id"]
+    assert marker.group(1) == binding_id
+    assert any(
+        isinstance(part, PreparedElementOpen)
+        and any(binding.operand == binding_id for binding in part.browser_bindings)
+        for part in _prepared_parts(rendered)
+    )
 
 
 def test_text_binding_requires_and_captures_one_complete_translation() -> None:
@@ -69,10 +111,80 @@ def test_text_binding_requires_and_captures_one_complete_translation() -> None:
 """
         messages = "loading = Loading"
 
-    html = Page().render().serialize()
+    rendered, manifest = _prepared_i18n(Page())
+    html = rendered.serialize(deps_strategy="ignore")
     assert ">Loading</span>" in html
-    binding = _manifest(html)["requirements"][0]["bindings"][0]
+    binding = manifest["requirements"][0]["bindings"][0]
     assert binding["target"] == {"kind": "text"}
+    assert any(
+        isinstance(part, PreparedTextValue)
+        and part.value == "Loading"
+        and part.browser_binding is not None
+        and part.browser_binding.operand == binding["id"]
+        for part in _prepared_parts(rendered)
+    )
+
+
+def test_prepared_text_binding_escapes_translation_without_compiling_vue_syntax() -> None:
+    app = _app()
+
+    class Page(Component):
+        citry = app
+        template = """\
+<c-i18n c-client="True" tag="main"><span $c-tr:literal>{{ tr("literal") }}</span></c-i18n>\
+"""
+        messages = 'literal = Angle < & {"{{ state }}"}'
+
+    rendered, manifest = _prepared_i18n(Page())
+    omitted = rendered.serialize(security_javascript="omit")
+
+    binding = manifest["requirements"][0]["bindings"][0]
+    assert binding["target"] == {"kind": "text"}
+    assert any(
+        isinstance(part, PreparedTextValue)
+        and part.value == "Angle < & {{ state }}"
+        and part.browser_binding is not None
+        and part.browser_binding.operand == binding["id"]
+        for part in _prepared_parts(rendered)
+    )
+    assert ">Angle &lt; &amp; {{ state }}</span>" in omitted
+    assembly = assemble_typed_render(
+        rendered,
+        revision=0,
+        tag_for_type=lambda key: "x-" + key.lower().replace("_", "-"),
+        template_context_names=("$citryI18nBinding", "$i18n"),
+    )
+    templates = [value.template for value in assembly.compile_inputs.values()]
+    assert all("{{ state }}" not in template for template in templates)
+
+
+def test_prepared_inactive_text_binding_keeps_plain_text_typed_without_trusting_html() -> None:
+    app = _app()
+
+    class Page(Component):
+        citry = app
+        template = """\
+<c-i18n c-client="True" tag="main">
+  <span c-$c-tr:save="enabled">{{ label }}</span>
+</c-i18n>\
+"""
+        messages = "save = Save"
+
+        def template_data(self, kwargs, slots):
+            return {"enabled": False, "label": kwargs["label"]}
+
+    def leaves(value: object):
+        if isinstance(value, CitryRender):
+            for part in value.parts:
+                yield from leaves(part)
+            return
+        yield value
+
+    plain = tuple(leaves(render_prepared_direct(Page(label="Plain & safe"))))
+
+    assert any(isinstance(part, PreparedTextValue) and part.value == "Plain & safe" for part in plain)
+    with pytest.raises(TypeError, match="unsupported raw output: Markup"):
+        render_prepared_direct(Page(label=Markup("<strong>Trusted</strong>")))
 
 
 def test_ordinary_spread_before_one_expression_does_not_create_a_text_binding() -> None:
@@ -131,7 +243,8 @@ def test_server_dynamic_and_spread_forms_preserve_values_expression() -> None:
                 "title": "Notice",
             }
 
-    bindings = _manifest(Page().render().serialize())["requirements"][0]["bindings"]
+    _rendered, manifest = _prepared_i18n(Page())
+    bindings = manifest["requirements"][0]["bindings"]
     assert [binding["values_expression"] for binding in bindings] == [
         "{ title: toast.title }",
         "{ title: toast.title }",
@@ -181,10 +294,12 @@ def test_binding_constness_stays_render_local_in_both_provider_orders() -> None:
         }
 
         def render_client() -> str:
-            return Bound().render(provides=client_provides).serialize(deps_strategy="fragment")
+            rendered, payload = _prepared_i18n(Bound(), provides=client_provides)
+            assert payload["requirements"][0]["bindings"]
+            return rendered.serialize(deps_strategy="ignore")
 
         def render_server() -> str:
-            return Bound().render().serialize(deps_strategy="fragment")
+            return render_prepared_direct(Bound()).serialize(deps_strategy="ignore")
 
         return (render_client(), render_server()) if client_first else (render_server(), render_client())
 
@@ -210,9 +325,11 @@ def test_later_spread_false_removes_a_direct_binding_destination() -> None:
 """
         messages = "save = Save"
 
-    html = Page().render().serialize()
+    rendered, manifest = _prepared_i18n(Page())
+    html = rendered.serialize(deps_strategy="ignore")
     assert 'title="Save"' in html
     assert re.search(r"<button\b[^>]*\bdata-citry-i18n-binding=", html) is None
+    assert manifest["requirements"] == []
 
 
 def test_dynamic_true_enables_a_binding_without_a_values_expression() -> None:
@@ -231,7 +348,8 @@ def test_dynamic_true_enables_a_binding_without_a_values_expression() -> None:
         def template_data(self, kwargs, slots):
             return {"enabled": True}
 
-    bindings = _manifest(Page().render().serialize())["requirements"][0]["bindings"]
+    _rendered, manifest = _prepared_i18n(Page())
+    bindings = manifest["requirements"][0]["bindings"]
     assert len(bindings) == 2
     assert all("values_expression" not in binding for binding in bindings)
 
@@ -252,6 +370,27 @@ def test_binding_rejects_a_different_server_translation() -> None:
         Page().render()
 
 
+def test_binding_rejects_equal_text_replacement_without_translation_identity() -> None:
+    app = _app()
+
+    class Page(Component):
+        citry = app
+        template = """\
+<c-i18n c-client="True" tag="main">
+  <button c-title="tr('save')" $c-tr:save[title] c-bind="{'title': tr('save') + ''}"></button>
+</c-i18n>\
+"""
+        messages = "save = Save"
+
+    # The spread produces the same visible string from the same message ID,
+    # but its concatenation loses the captured translation identity.
+    with pytest.raises(
+        RuntimeError,
+        match=r"must pair with the complete winning 'title' value returned directly by tr\(\)",
+    ):
+        Page().render()
+
+
 def test_events_compilation_preserves_neighboring_translation_binding() -> None:
     app = _app()
 
@@ -269,9 +408,14 @@ def test_events_compilation_preserves_neighboring_translation_binding() -> None:
 """
         messages = "save = Save"
 
-    html = Page().render().serialize()
-    assert "data-cev-on" in html
-    assert "data-citry-i18n-binding" in html
+    rendered, manifest = _prepared_i18n(Page())
+    event_openings = [
+        part
+        for part in _prepared_parts(rendered)
+        if isinstance(part, PreparedElementOpen) and part.event_bindings and part.browser_bindings
+    ]
+    assert len(event_openings) == 1
+    assert manifest["requirements"][0]["bindings"]
 
 
 @pytest.mark.parametrize(

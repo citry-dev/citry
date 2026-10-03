@@ -17,7 +17,6 @@ Keys follow django-components' scheme with a citry prefix::
     citry:<class_id>:css             the class's Component.css
     citry:<class_id>:js:component:<hash>   one content-addressed JS version
     citry:<class_id>:css:component:<hash>  one content-addressed CSS version
-    citry:<class_id>:js:<hash>       a generated js_data() variables script
     citry:<class_id>:css:<hash>      a generated css_data() variables stylesheet
 
 Design: docs/design/dependencies.md section 4.
@@ -25,7 +24,7 @@ Design: docs/design/dependencies.md section 4.
 
 from __future__ import annotations
 
-import base64
+import hashlib
 import json
 from dataclasses import dataclass
 from hashlib import md5, sha256
@@ -436,10 +435,25 @@ def _scan_js_code(
 
 
 def _component_call_spans(js_content: str) -> list[tuple[int, int, int]]:
-    """Return source spans for live, bare ``$component(...)`` calls."""
-    spans: list[tuple[int, int, int]] = []
-    _scan_js_code(js_content, 0, spans)
-    return spans
+    """Return OXC-authenticated spans for live, bare ``$component(...)`` calls."""
+    from citry._browser_expressions import analyze_browser_component_source  # noqa: PLC0415
+
+    analysis = analyze_browser_component_source(js_content)
+    if not analysis.valid:
+        return []
+    encoded = js_content.encode("utf-8")
+
+    def char_index(byte_index: int) -> int:
+        return len(encoded[:byte_index].decode("utf-8"))
+
+    return [
+        (
+            char_index(call.callee_start_index),
+            char_index(call.callee_end_index),
+            char_index(call.open_paren_end_index),
+        )
+        for call in analysis.component_calls
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -480,11 +494,11 @@ def transform_component(js_content: str, class_id: str) -> str:
     """
     Expand the ``$component(`` sugar in a component's JS.
 
-    ``$component(({ els, id, data }) => { ... })`` becomes
-    ``Citry.manager.registerComponent("<class_id>", ...)``: the callback is
-    registered with the client-side manager, which runs it for every rendered
-    instance of this component (the elements carrying the instance's
-    ``data-cid-<id>`` marker, with the instance's ``js_data()`` result).
+    ``$component({...})`` becomes a partially applied
+    ``__citryRuntime.registerTypeOptions`` call carrying the component class ID
+    and a content digest. Repeated pages may register the same trusted Options
+    source without replacing it, while different source under the same type
+    identity remains a collision.
     """
     spans = _component_call_spans(js_content)
     if not spans:
@@ -499,7 +513,8 @@ def _transform_component_spans(
     spans: list[tuple[int, int, int]],
 ) -> str:
     """Expand already-scanned ``$component`` calls without a second JS pass."""
-    replacement = f'Citry.manager.registerComponent("{class_id}", '
+    source_hash = hashlib.sha256(js_content.encode()).hexdigest()
+    replacement = f'__citryRuntime.registerTypeOptions.bind(null, "{class_id}", "{source_hash}")('
     parts: list[str] = []
     previous_end = 0
     for start, identifier_end, end in spans:
@@ -722,21 +737,6 @@ def _canonical_variables_json(source_json: str) -> dict[str, object]:
     return data
 
 
-def _js_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCapture:
-    _canonical_variables_json(source_json)
-    variables_hash = sha256(source_json.encode()).hexdigest()[:32]
-    encoded = base64.b64encode(source_json.encode()).decode()
-    # Keep the content-addressed transport deduplicated, but hand the manager
-    # canonical JSON text so it can parse a fresh graph for every instance.
-    content = f'Citry.manager.registerComponentData("{class_id}", "{variables_hash}", atob("{encoded}"));'
-    script = Script(kind="variables", content=content, origin_class_id=class_id)
-    return _VariablesScriptCapture(
-        source_json=source_json,
-        variables_hash=variables_hash,
-        cache_value=json.dumps(script.to_json()),
-    )
-
-
 def _css_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCapture:
     data = _canonical_variables_json(source_json)
     variables_hash = sha256(source_json.encode()).hexdigest()[:32]
@@ -756,19 +756,6 @@ def _css_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCaptur
         variables_hash=variables_hash,
         cache_value=json.dumps(style.to_json()),
     )
-
-
-def _cache_component_js_vars_capture(
-    comp_cls: type[Component],
-    js_data: Mapping[str, object],
-) -> _VariablesScriptCapture:
-    source_json, _variables_hash = _hash_vars(js_data)
-    capture = _js_vars_capture(comp_cls.class_id, source_json)
-    cache = comp_cls.citry.cache
-    key = gen_cache_key(comp_cls.class_id, "js", capture.variables_hash)
-    if cache.get(key) != capture.cache_value:
-        cache.set(key, capture.cache_value)
-    return capture
 
 
 def _cache_component_css_vars_capture(
@@ -798,21 +785,6 @@ def _cache_component_css_vars_capture(
     if cache.get(key) != capture.cache_value:
         cache.set(key, capture.cache_value)
     return capture
-
-
-def cache_component_js_vars(comp_cls: type[Component], js_data: Mapping[str, object]) -> str:
-    """
-    Cache the script delivering one distinct ``js_data()`` result, returning its hash.
-
-    The script registers the data with the client-side manager
-    (``Citry.manager.registerComponentData``); the manager hands it to the
-    component's ``$component`` callback and/or automatic Alpine scope for each
-    instance rendered with this data. The JSON rides as base64, so data values
-    cannot break out of the ``<script>`` tag. The generated script remains
-    content-addressed even though the browser parses a fresh graph per call.
-    """
-    capture = _cache_component_js_vars_capture(comp_cls, js_data)
-    return capture.variables_hash
 
 
 def cache_component_css_vars(comp_cls: type[Component], css_data: Mapping[str, object]) -> str | None:

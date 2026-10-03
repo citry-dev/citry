@@ -22,9 +22,12 @@ export type EventActionKind =
 	| "redirect"
 	| "url";
 
+export type EventRenderer = "html-fragment/1" | "vue-prepared/1";
+
 export interface EventsCapabilities {
 	swaps?: EventSwap[];
 	actions?: EventActionKind[];
+	renderers?: EventRenderer[];
 }
 
 export interface EventCall {
@@ -71,12 +74,40 @@ export interface ActionTiming {
 	wait?: false;
 }
 
-export interface RenderAction extends ActionTiming {
+/** render:<renderId> or mark:<callerRenderId>:<name>. */
+export type RenderActionTarget =
+	| `render:${string}`
+	| `mark:${string}:${string}`;
+/** render:<renderId> of the component that dispatches the DOM event. */
+export type EventActionTarget = `render:${string}`;
+
+export interface LegacyRenderAction extends ActionTiming {
 	action: "render";
-	target: string;
+	target: RenderActionTarget;
 	swap: EventSwap;
 	html: string;
 }
+
+export interface HtmlRenderAction extends ActionTiming {
+	action: "render";
+	target: RenderActionTarget;
+	swap: EventSwap;
+	renderer: "html-fragment/1";
+	html: string;
+}
+
+export interface PreparedRenderAction extends ActionTiming {
+	action: "render";
+	target: RenderActionTarget;
+	swap: "morph";
+	renderer: "vue-prepared/1";
+	prepared: JsonObject;
+}
+
+export type RenderAction =
+	| LegacyRenderAction
+	| HtmlRenderAction
+	| PreparedRenderAction;
 
 export interface DataAction {
 	action: "data";
@@ -88,13 +119,14 @@ export interface StateAction extends ActionTiming {
 	action: "state";
 	targetRenderId: string;
 	stateToken: string;
+	publicState: JsonObject;
 }
 
 export interface DispatchEventAction extends ActionTiming {
 	action: "event";
 	eventName: string;
 	detail?: JsonValue;
-	target?: string;
+	target?: EventActionTarget;
 }
 
 export interface RedirectAction extends ActionTiming {
@@ -179,7 +211,6 @@ export interface EventComponentInstance {
 
 export interface EventsManifest {
 	protocol: "citry-events/1";
-	clientGraphRevision: string | null;
 	componentClasses: EventComponentClass[];
 	componentInstances: EventComponentInstance[];
 }

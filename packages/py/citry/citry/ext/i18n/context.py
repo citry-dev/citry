@@ -190,8 +190,9 @@ class TimeParseResult:
     """
     Keep one localized time edit and its canonical wall-clock value separate.
 
-    The result is a zone-free [`datetime.time`][datetime.time]. Converting it
-    to an instant requires a date and time zone.
+    The result is a zone-free
+    [`datetime.time`](https://docs.python.org/3/library/datetime.html#datetime.time).
+    Converting it to an instant requires a date and time zone.
     """
 
     input: str | TimeSegments

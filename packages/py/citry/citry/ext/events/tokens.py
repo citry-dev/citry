@@ -20,9 +20,10 @@ way (it only stores and echoes the string):
   The HMAC binds the payload to the class id and the protocol version, so a
   token cannot be tampered with or moved to another component. Nothing lives
   on the server between calls.
-- ``"server"``: the State lives in ``Citry.cache`` under a random, unguessable
-  key, and the token is just ``ces1.<key>`` (a distinct prefix from the signed
-  form so verification can tell them apart). This is the opt-in mode for State
+- ``"server"``: the State lives in ``Citry.cache`` under
+  ``citry:state:<key>``, where ``<key>`` is random and unguessable, and the
+  token is just ``ces1.<key>`` (a distinct prefix from the signed form so
+  verification can tell them apart). This is the opt-in mode for State
   too large to ship on every call, State that must not be readable in the page
   source, and step one of the livecomponents migration (design section 10).
   It needs a shared cache backend across workers, the same constraint the
@@ -77,6 +78,11 @@ __all__ = [
 # verification dispatches on it without ever having to guess the storage mode.
 _SIGNED_PREFIX = "cev1"
 _SERVER_PREFIX = "ces1"
+# Server-storage State lives in ``Citry.cache`` under this namespace, beside
+# Citry's other ``citry:``-prefixed keys. Prefixing the key read back from a
+# token also means a forged token can only name another State entry, never a
+# render, script, or user key in a shared cache.
+_STATE_CACHE_PREFIX = "citry:state:"
 
 _PROTOCOL_VERSION = 1
 
@@ -304,7 +310,7 @@ def _prepare_state_token_values(
         ttl = max_age.total_seconds() if max_age is not None else None
         return PreparedStateToken(
             token=f"{_SERVER_PREFIX}.{key}",
-            cache_key=key,
+            cache_key=_state_cache_key(key),
             cache_value=_canonical_json(payload),
             ttl=ttl,
         )
@@ -625,6 +631,11 @@ def _check_expiry(payload: dict[str, Any]) -> None:
         raise StaleStateError(msg)
 
 
+def _state_cache_key(token_key: str) -> str:
+    """The ``Citry.cache`` key holding the State for the random key in a ``ces1.<key>`` token."""
+    return _STATE_CACHE_PREFIX + token_key
+
+
 def _load_server_payload(key: str, cache: CitryCache | None) -> dict[str, Any]:
     """Load a server-storage token's payload from the cache, or map the miss to stale."""
     if cache is None:
@@ -632,7 +643,7 @@ def _load_server_payload(key: str, cache: CitryCache | None) -> dict[str, Any]:
         # (for example a signed-storage component being sent a token it never
         # minted). Treat it as invalid rather than crash.
         raise InvalidStateError(_MALFORMED_MSG)
-    raw = cache.get(key)
+    raw = cache.get(_state_cache_key(key))
     if raw is None:
         msg = (
             "The server-side state for this component is no longer available (it expired or was"

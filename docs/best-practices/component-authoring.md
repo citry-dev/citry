@@ -240,15 +240,11 @@ provide/inject channel, and neither puts the value into template variables.
 
 Keep Python names in `snake_case`. This includes template expressions, event
 handler names, and payload keys written by Python. Use `camelCase` for
-JavaScript variables, Alpine state, methods, and browser-side scope names.
+JavaScript variables, Vue state, methods, and browser-side scope names.
 Translate explicitly where a value crosses between them:
 
 ```citry-html
-<section
-  c-x-data="{
-    'batchesLoaded': batches_loaded,
-  }"
->
+<section>
   {{ batches_loaded }}
   <button
     type="button"
@@ -258,6 +254,9 @@ Translate explicitly where a value crosses between them:
   </button>
 </section>
 ```
+
+Seed `batchesLoaded` with `Component.js_data()` or Vue `data()` in the
+component's `$component` options.
 
 Here, `batches_loaded` is a Python name and `batchesLoaded` is a browser name.
 Name a value for the side that owns it, even when both names appear in the
@@ -319,7 +318,7 @@ CButton(
 </c-CButton>
 ```
 
-Keep `attrs` for other native, ARIA, Alpine, and `data-*` attributes. Existing
+Keep `attrs` for other native, ARIA, Vue, and `data-*` attributes. Existing
 class/style values in `attrs` remain valid and merge with the direct inputs
 through Citry's ordinary HTML attribute rules. A compound declaration
 component carries these inputs to the concrete element it declares.
@@ -327,7 +326,7 @@ component carries these inputs to the concrete element it declares.
 ## Separate component callbacks from native browser events
 
 Expose a component-authored browser notification as an optional callback input
-through `$c-props`, such as `onValueChange`. Use Alpine `@click`,
+through a native Vue binding such as `:onValueChange`. Use Vue `@click`,
 `@keydown`, `@input`, `@change`, and similar listeners for the native events
 already emitted by the component's HTML. Do not dispatch a second custom DOM
 event that duplicates a component callback or a native event.
@@ -424,9 +423,9 @@ When an optional client prop should fall back to the server value, declare no
 JavaScript default. Citry uses `undefined` for an omitted optional prop, so the
 component can resolve a configuration value as "valid prop when supplied,
 otherwise `js_data()` fallback." `null`, `false`, `0`, and `""` are supplied
-values and require explicit component semantics or validation. The complete
-props omission and recovery contract lives in
-[`alpinejs.md`](../design/alpinejs.md#43-prop-declaration-and-updates).
+values and require explicit component semantics or validation. The contract
+for omitted props and their server fallback lives in
+[`vue_migration.md`](../design/vue_migration.md#browser-authoring-contracts).
 
 Citry skips a component's first client initialization when its prop declaration
 rejects the initial supply. If a component promises that an invalid individual

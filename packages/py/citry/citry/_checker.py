@@ -22,7 +22,6 @@ from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_INVALID_STATE_BINDING_TARGET,
     BROWSER_MISSING_COMPONENT_PROP,
-    BROWSER_UNKNOWN_COMPONENT_PROP,
     BROWSER_UNKNOWN_SERVER_EVENT,
     BROWSER_UNKNOWN_STATE_FIELD,
     CHECK_PYTHON_SOURCE_UNREADABLE,
@@ -36,49 +35,71 @@ from citry._diagnostic_catalog import (
     I18N_CATALOG_INVALID,
     I18N_CLIENT_MESSAGE_INVALID,
     I18N_CROSS_LANGUAGE_FALLBACK,
+    I18N_RICH_MESSAGE_FALLBACK,
     I18N_UNKNOWN_MESSAGE,
     JS_DATA_UNSUPPORTED_TYPE,
     PARSE_CONFIGURATION,
+    TEMPLATE_MARKER_NAME_INVALID,
     TEMPLATE_UNKNOWN_COMPONENT,
 )
 from citry._diagnostics import render_diagnostic
+from citry._i18n_guards import i18n_configured_guarded_calls
 from citry._inline_assets import normalize_inline_asset
 from citry._linting import _component_lint_info
 from citry._template_data_source import TemplateDataSourceShape, analyze_template_data_source
+from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
-    AlpineLintConsumer,
+    AlpineAttributeFinding,
+    AlpineAttributeLintConsumer,
+    AttributeValueFinding,
+    AttributeValueLintConsumer,
+    BrowserComponentPropContribution,
+    BrowserComponentPropSite,
     BrowserExpression,
     BrowserProp,
     ComponentJsLintConsumer,
     JsonWireType,
     TemplateLintConsumer,
+    VueLintConsumer,
+    analyze_browser_component_source,
     analyze_js_data_source,
-    browser_client_prop_accepts,
-    browser_component_prop_uses,
+    browser_component_prop_findings,
+    browser_component_prop_sites,
     browser_component_props,
-    browser_component_scope_writes,
     browser_declarative_events,
     browser_expressions,
     browser_i18n_binding_directives,
+    browser_i18n_calls_checkable,
     browser_i18n_profile_calls,
     browser_literal_calls,
     browser_literal_wire_type,
     browser_state_binding_target_errors,
     browser_state_bindings,
+    component_js_i18n_owners,
     discover_python_templates,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
+    lint_alpine_attributes,
+    lint_attribute_values,
     lint_csp_compatibility,
-    lint_unknown_alpine_variables,
+    lint_undeclared_component_js_emits,
+    lint_undeclared_component_listeners,
+    lint_undeclared_template_emits,
     lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
+    lint_unknown_vue_variables,
+    lint_vue_python_variables,
+    mark_literal_findings,
 )
 from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
 from citry.autodiscovery import _iter_py_files
+from citry.component_registry import NotRegistered
 from citry.ext.events.extension import _component_events_info
+from citry.settings import LintSettings
 from citry.tag_rules import build_tag_rules
+from citry_core.i18n import I18nCompileError
 from citry_core.template_parser import (
     RESERVED_TAG_NAMES,
     ParseOptions,
@@ -96,6 +117,7 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.component import Component
     from citry.ext.i18n.extension import I18nExtension
+    from citry.settings import LintSeverity
     from citry_core.template_parser import TagRules, Template
 
 
@@ -198,7 +220,6 @@ def _check_registry(
 ) -> list[CheckFinding]:
     """Read each authored registry template directly and continue after failures."""
     known_names = {name.lower() for name in registrations}
-    registered_components = {name.lower(): component for name, component in registrations.items()}
     unique_classes = {id(comp_cls): comp_cls for comp_cls in registrations.values()}
     components = sorted(unique_classes.values(), key=_class_label)
     findings: list[CheckFinding] = []
@@ -208,46 +229,60 @@ def _check_registry(
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None
 
     i18n = engine.extensions._extensions_by_name.get("i18n")
-    if i18n is not None and getattr(i18n, "available", False):
+    # Component messages make i18n available without configuring it; only a
+    # configured app has format profiles and gives the browser `$i18n`.
+    i18n_configured = i18n is not None and getattr(i18n, "configured", False) is True
+    if i18n is not None:
         try:
-            i18n_extension = cast("I18nExtension", i18n)
-            i18n_profiles = _i18n_profile_inventory(i18n_extension)
-            i18n_extension._load_project_sources()
-            compiled_catalog = i18n_extension._compiled_catalog
-            if compiled_catalog is None:
-                raise ValueError("The i18n compiler did not produce a project artifact.")
-            artifact = json.loads(compiled_catalog.artifact_json())
-            findings.extend(
-                CheckFinding(
-                    origin=diagnostic["path"],
-                    message=diagnostic["message"],
-                    code=diagnostic["code"],
-                    severity=diagnostic["severity"],
-                    start_index=diagnostic["start"],
-                    end_index=diagnostic["end"],
-                    line=diagnostic["line"],
-                    column=diagnostic["column"],
-                    end_line=diagnostic["line"],
-                    end_column=diagnostic["column"] + diagnostic["end"] - diagnostic["start"],
+            # Reading `available` compiles every component's messages, so an
+            # invalid catalog raises here and must become a finding, not a crash.
+            i18n_available = bool(getattr(i18n, "available", False))
+            if i18n_available:
+                i18n_extension = cast("I18nExtension", i18n)
+                i18n_profiles = _i18n_profile_inventory(i18n_extension)
+                i18n_extension._load_project_sources()
+                compiled_catalog = i18n_extension._compiled_catalog
+                if compiled_catalog is None:
+                    raise ValueError("The i18n compiler did not produce a project artifact.")
+                artifact = json.loads(compiled_catalog.artifact_json())
+                findings.extend(
+                    _i18n_diagnostic_finding(
+                        diagnostic,
+                        message=diagnostic["message"],
+                        code=diagnostic["code"],
+                        severity=diagnostic["severity"],
+                    )
+                    for diagnostic in artifact["diagnostics"]
                 )
-                for diagnostic in artifact["diagnostics"]
-            )
-            i18n_manifest = artifact["manifest"]
+                i18n_manifest = artifact["manifest"]
         except (Exception, SystemExit) as exc:  # noqa: BLE001 - one catalog error becomes one finding
-            findings.append(
-                CheckFinding(
-                    "i18n catalog",
-                    f"The project i18n catalog is invalid: {_error_detail(exc)}",
-                    I18N_CATALOG_INVALID,
-                )
-            )
+            message = f"The project i18n catalog is invalid: {_error_detail(exc)}"
+            # A compile error carries the source position of the bad message,
+            # so point the finding there when the compiler supplied one.
+            diagnostic = _i18n_compile_diagnostic(exc)
+            if diagnostic is None:
+                findings.append(CheckFinding("i18n catalog", message, I18N_CATALOG_INVALID))
+            else:
+                findings.append(_i18n_diagnostic_finding(diagnostic, message=message, code=I18N_CATALOG_INVALID))
 
     for comp_cls in components:
         if engine._is_builtin_component(comp_cls):
             continue
         if i18n_manifest is not None:
-            findings.extend(_client_message_findings(comp_cls, i18n_manifest))
-            findings.extend(_i18n_python_findings(comp_cls, i18n_manifest, i18n_profiles or {}))
+            # Text that falls back to another language still renders, so the
+            # component's own Lint class or the app setting decides how loudly
+            # check reports it.
+            fallback_severity = _component_lint_info(engine, comp_cls).rule_i18n_cross_language_fallback
+            findings.extend(_client_message_findings(comp_cls, i18n_manifest, fallback_severity=fallback_severity))
+            findings.extend(
+                _i18n_python_findings(
+                    comp_cls,
+                    i18n_manifest,
+                    i18n_profiles or {},
+                    i18n_configured=i18n_configured,
+                    fallback_severity=fallback_severity,
+                )
+            )
         findings.extend(_check_js_data_types(engine, comp_cls))
         _collect_browser_source(engine, comp_cls, browser_sources)
         class_label = _class_label(comp_cls)
@@ -347,21 +382,24 @@ def _check_registry(
         else:
             existing.consumers.append(comp_cls)
 
-    scope_names: dict[int, set[str]] = {}
+    component_props: dict[type[Component], tuple[BrowserProp, ...] | None] = {}
     for browser_source in browser_sources.values():
-        names = {write.name for write in browser_component_scope_writes(browser_source.content)}
-        for component in browser_source.consumers:
-            scope_names.setdefault(id(component), set()).update(names)
+        declared = browser_component_props(browser_source.content)
+        for consumer in browser_source.consumers:
+            if consumer not in component_props:
+                component_props[consumer] = declared
+            elif component_props[consumer] != declared:
+                component_props[consumer] = None
 
     for source in sources.values():
         try:
             lint_consumers = tuple(_checker_lint_consumer(engine, component) for component in source.consumers)
+            vue_lint_consumers = tuple(_checker_vue_lint_consumer(engine, component) for component in source.consumers)
             alpine_lint_consumers = tuple(
-                _checker_alpine_lint_consumer(
-                    engine,
-                    component,
-                    scope_names.get(id(component), set()),
-                )
+                _checker_alpine_lint_consumer(engine, component) for component in source.consumers
+            )
+            attribute_value_lint_consumers = tuple(
+                AttributeValueLintConsumer(_component_lint_info(engine, component).rule_invalid_attribute_value)
                 for component in source.consumers
             )
             foreign_options = _checker_foreign_options(
@@ -396,18 +434,23 @@ def _check_registry(
                 source,
                 rules=rules,
                 known_names=known_names,
-                registered_components=registered_components,
                 engine=engine,
                 lint_consumers=lint_consumers,
+                vue_lint_consumers=vue_lint_consumers,
                 alpine_lint_consumers=alpine_lint_consumers,
+                attribute_value_lint_consumers=attribute_value_lint_consumers,
                 i18n_manifest=i18n_manifest,
                 i18n_profiles=i18n_profiles,
+                i18n_configured=i18n_configured,
                 foreign_options=foreign_options,
                 nested_foreign_options=nested_foreign_options,
+                component_props=component_props,
             )
         )
     for browser_source in browser_sources.values():
-        findings.extend(_check_browser_source(engine, browser_source, i18n_profiles or {}))
+        findings.extend(
+            _check_browser_source(engine, browser_source, i18n_profiles or {}, i18n_configured=i18n_configured)
+        )
     return findings
 
 
@@ -503,14 +546,17 @@ def _check_template(
     *,
     rules: Mapping[str, TagRules] | None = None,
     known_names: set[str] | None = None,
-    registered_components: Mapping[str, type[Component]] | None = None,
     engine: Citry | None = None,
     lint_consumers: tuple[TemplateLintConsumer, ...] = (),
-    alpine_lint_consumers: tuple[AlpineLintConsumer, ...] = (),
+    vue_lint_consumers: tuple[VueLintConsumer, ...] = (),
+    alpine_lint_consumers: tuple[AlpineAttributeLintConsumer, ...] = (),
+    attribute_value_lint_consumers: tuple[AttributeValueLintConsumer, ...] = (),
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None,
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None,
+    i18n_configured: bool = False,
     foreign_options: ParseOptions | None = None,
     nested_foreign_options: Callable[[str], ParseOptions | None] | None = None,
+    component_props: Mapping[type[Component], tuple[BrowserProp, ...] | None] | None = None,
 ) -> list[CheckFinding]:
     """Parse one source and, in registry mode, inspect component tag names."""
     try:
@@ -542,6 +588,22 @@ def _check_template(
         user_rules=dict(rules) if rules is not None else None,
         options=nested_foreign_options(value) if nested_foreign_options is not None else None,
     )
+    for marker_finding in mark_literal_findings(template, parse_nested=nested_parser):
+        line, column = _byte_offset_coordinates(source.content, marker_finding.start_index)
+        end_line, end_column = _byte_offset_coordinates(source.content, marker_finding.end_index)
+        findings.append(
+            CheckFinding(
+                source.origin,
+                render_diagnostic(TEMPLATE_MARKER_NAME_INVALID, variant=marker_finding.reason),
+                TEMPLATE_MARKER_NAME_INVALID,
+                start_index=marker_finding.start_index,
+                end_index=marker_finding.end_index,
+                line=line,
+                column=column,
+                end_line=end_line,
+                end_column=end_column,
+            )
+        )
     findings.extend(
         _i18n_binding_findings(
             source.origin,
@@ -560,6 +622,7 @@ def _check_template(
                 i18n_manifest,
                 known_types=_known_template_types(engine, source.consumers),
                 profiles=i18n_profiles or {},
+                fallback_severity=_shared_fallback_severity(engine, source.consumers),
             )
         )
     if not (foreign_options is not None and any(span.may_control_body for span in foreign_options.foreign_spans)):
@@ -578,10 +641,93 @@ def _check_template(
             )
             for finding in lint_unknown_template_variables(template, lint_consumers)
         )
+    # Static mode has no consumers here, and the Alpine rules then use their
+    # built-in severities because they need no component namespace.
+    # The attribute-value rule likewise needs no namespace, so static mode
+    # checks enumerated HTML attribute values with the default severity.
+    attribute_findings: list[AlpineAttributeFinding | AttributeValueFinding] = [
+        *lint_alpine_attributes(template, alpine_lint_consumers, parse_nested=nested_parser),
+        *lint_attribute_values(template, attribute_value_lint_consumers, parse_nested=nested_parser),
+    ]
+    for attribute_finding in attribute_findings:
+        line, column = _byte_offset_coordinates(source.content, attribute_finding.start_index)
+        end_line, end_column = _byte_offset_coordinates(source.content, attribute_finding.end_index)
+        findings.append(
+            CheckFinding(
+                origin=source.origin,
+                message=attribute_finding.message,
+                code=attribute_finding.code,
+                severity=attribute_finding.severity,
+                start_index=attribute_finding.start_index,
+                end_index=attribute_finding.end_index,
+                line=line,
+                column=column,
+                end_line=end_line,
+                end_column=end_column,
+            )
+        )
     browser_hosts = browser_expressions(template, parse_nested=nested_parser)
+    if engine is not None and component_props is not None:
+        sites = browser_component_prop_sites(template, parse_nested=nested_parser)
+
+        def declared_props(site: BrowserComponentPropSite) -> tuple[BrowserProp, ...] | None:
+            try:
+                component = engine.get(site.tag.lower().removeprefix("c-"))
+            except NotRegistered:
+                return None
+            return component_props.get(component)
+
+        def literal_value_type(contribution: BrowserComponentPropContribution) -> JsonWireType:
+            return browser_literal_wire_type(contribution.source)
+
+        for prop_finding in browser_component_prop_findings(
+            sites,
+            declared_props=declared_props,
+            value_type=literal_value_type,
+        ):
+            code = (
+                BROWSER_MISSING_COMPONENT_PROP
+                if prop_finding.kind == "missing"
+                else BROWSER_INCOMPATIBLE_COMPONENT_PROP
+            )
+            parameters = (
+                {"name": prop_finding.name, "tag": prop_finding.tag}
+                if prop_finding.kind == "missing"
+                else {
+                    "name": prop_finding.name,
+                    "expected": prop_finding.expected,
+                    "actual": prop_finding.actual,
+                }
+            )
+            line, column = _byte_offset_coordinates(source.content, prop_finding.start_index)
+            end_line, end_column = _byte_offset_coordinates(source.content, prop_finding.end_index)
+            findings.append(
+                CheckFinding(
+                    source.origin,
+                    render_diagnostic(code, **parameters),
+                    code,
+                    start_index=prop_finding.start_index,
+                    end_index=prop_finding.end_index,
+                    line=line,
+                    column=column,
+                    end_line=end_line,
+                    end_column=end_column,
+                )
+            )
     for expression in browser_hosts:
-        findings.extend(_browser_i18n_profile_findings(source.origin, source.content, expression, i18n_profiles or {}))
-    for finding in lint_unknown_alpine_variables(browser_hosts, alpine_lint_consumers):
+        findings.extend(
+            _browser_i18n_profile_findings(
+                source.origin,
+                source.content,
+                expression,
+                i18n_profiles or {},
+                i18n_configured=i18n_configured,
+            )
+        )
+    for finding in (
+        *lint_unknown_vue_variables(browser_hosts, vue_lint_consumers),
+        *lint_vue_python_variables(browser_hosts, vue_lint_consumers),
+    ):
         line, column = _byte_offset_coordinates(source.content, finding.start_index)
         end_line, end_column = _byte_offset_coordinates(source.content, finding.end_index)
         findings.append(
@@ -598,8 +744,10 @@ def _check_template(
                 end_column=end_column,
             )
         )
+    if engine is not None and source.consumers:
+        findings.extend(_emit_findings(engine, source, browser_hosts))
     csp_mode = engine.settings.security_csp if engine is not None else None
-    for csp_finding in lint_csp_compatibility(browser_hosts, alpine_lint_consumers, csp_mode):
+    for csp_finding in lint_csp_compatibility(browser_hosts, vue_lint_consumers, csp_mode):
         line, column = _byte_offset_coordinates(source.content, csp_finding.start_index)
         end_line, end_column = _byte_offset_coordinates(source.content, csp_finding.end_index)
         findings.append(
@@ -654,63 +802,6 @@ def _check_template(
                         event.name,
                         event.start_index,
                         event.end_index,
-                    )
-                )
-    if registered_components is not None:
-        for props_use in browser_component_prop_uses(template, parse_nested=nested_parser):
-            target = registered_components.get(props_use.tag_name.removeprefix("c-").lower())
-            if target is None:
-                continue
-            if engine is None:
-                continue
-            contract = _checker_component_props(engine, target)
-            if contract is None:
-                continue
-            by_name = {prop.name: prop for prop in contract}
-            explicit = {property_.name for property_ in props_use.properties}
-            for property_ in props_use.properties:
-                expected = by_name.get(property_.name)
-                if expected is not None:
-                    actual = browser_literal_wire_type(property_.value_source)
-                    if actual.kind != "unknown" and not browser_client_prop_accepts(expected.javascript, actual):
-                        findings.append(
-                            _browser_template_finding(
-                                source.origin,
-                                source.content,
-                                property_.value_start_index,
-                                property_.value_end_index,
-                                BROWSER_INCOMPATIBLE_COMPONENT_PROP,
-                                name=property_.name,
-                                expected=expected.javascript,
-                                actual=actual.javascript,
-                            )
-                        )
-                    continue
-                findings.append(
-                    _browser_template_finding(
-                        source.origin,
-                        source.content,
-                        property_.start_index,
-                        property_.end_index,
-                        BROWSER_UNKNOWN_COMPONENT_PROP,
-                        name=property_.name,
-                        tag=props_use.tag_name,
-                    )
-                )
-            if props_use.has_dynamic_keys:
-                continue
-            for prop in contract:
-                if not prop.required or prop.name in explicit:
-                    continue
-                findings.append(
-                    _browser_template_finding(
-                        source.origin,
-                        source.content,
-                        props_use.start_index,
-                        props_use.end_index,
-                        BROWSER_MISSING_COMPONENT_PROP,
-                        name=prop.name,
-                        tag=props_use.tag_name,
                     )
                 )
     return findings
@@ -804,11 +895,21 @@ def _browser_i18n_profile_findings(
     expression: BrowserExpression,
     profiles: dict[str, dict[str, frozenset[str]]],
     *,
+    i18n_configured: bool,
     owners: frozenset[str] = frozenset({"$i18n"}),
+    proven_owner_spans: frozenset[tuple[int, int]] | None = None,
 ) -> list[CheckFinding]:
+    # The editor applies the same rule, so both report the same browser calls.
+    if not browser_i18n_calls_checkable(
+        expression,
+        owners,
+        i18n_configured=i18n_configured,
+        proven_owner_spans=proven_owner_spans,
+    ):
+        return []
     findings: list[CheckFinding] = []
     operation_names = {"relativeTime": "relative_time"}
-    for call in browser_i18n_profile_calls(expression, owners):
+    for call in browser_i18n_profile_calls(expression, owners, proven_owner_spans=proven_owner_spans):
         operation = operation_names.get(call.operation, call.operation)
         known = profiles.get(call.namespace, {}).get(operation)
         if known is None or call.profile in known:
@@ -855,6 +956,7 @@ def _literal_tr_call_findings(
     end: int,
     *,
     known_types: dict[str, str],
+    fallback_severity: LintSeverity,
 ) -> list[CheckFinding]:
     target = _literal_tr_target(expression)
     if target is None:
@@ -924,7 +1026,7 @@ def _literal_tr_call_findings(
                     end,
                 )
             )
-    findings.extend(_cross_language_findings(origin, source, token, entries, start, end))
+    findings.extend(_cross_language_findings(origin, source, token, entries, start, end, severity=fallback_severity))
     return findings
 
 
@@ -932,6 +1034,9 @@ def _i18n_python_findings(
     component: type[Component],
     manifest: dict[str, dict[str, dict[str, Any]]],
     profiles: dict[str, dict[str, frozenset[str]]],
+    *,
+    i18n_configured: bool,
+    fallback_severity: LintSeverity,
 ) -> list[CheckFinding]:
     source_file = _loaded_python_file(component)
     qualname = _safe_class_text(component, "__qualname__")
@@ -948,6 +1053,10 @@ def _i18n_python_findings(
         return []
     origin = f"{source_file} ({_class_label(component)})"
     findings: list[CheckFinding] = []
+    # Without i18n settings no profile exists, so a formatter call fails when
+    # it runs, unless the component only calls it when i18n is configured.
+    # The language server skips the same guarded calls.
+    guarded = frozenset() if i18n_configured else i18n_configured_guarded_calls(scope)
     for node in _component_i18n_calls(scope):
         start, end = _python_ast_byte_range(source, node)
         if _is_self_i18n_tr(node.func):
@@ -960,8 +1069,11 @@ def _i18n_python_findings(
                     start,
                     end,
                     known_types={},
+                    fallback_severity=fallback_severity,
                 )
             )
+            continue
+        if id(node) in guarded:
             continue
         profile_finding = _literal_i18n_profile_finding(origin, source, node, profiles, start, end)
         if profile_finding is not None:
@@ -1041,6 +1153,7 @@ def _i18n_template_findings(
     *,
     known_types: dict[str, str],
     profiles: dict[str, dict[str, frozenset[str]]],
+    fallback_severity: LintSeverity,
 ) -> list[CheckFinding]:
     """Check literal i18n calls against compiled outputs and typed source interfaces."""
     findings: list[CheckFinding] = []
@@ -1087,6 +1200,7 @@ def _i18n_template_findings(
                 use.start_index,
                 end,
                 known_types=known_types,
+                fallback_severity=fallback_severity,
             )
         )
     for node in _trans_nodes(template):
@@ -1107,7 +1221,7 @@ def _i18n_template_findings(
             findings.append(_i18n_message_finding(origin, source, token, start, end))
         else:
             findings.extend(_trans_contract_findings(origin, source, node, attrs, token, entries[0][1], start, end))
-            findings.extend(_cross_language_findings(origin, source, token, entries, start, end))
+            findings.extend(_rich_fallback_findings(origin, source, token, entries, start, end))
     return findings
 
 
@@ -1318,6 +1432,27 @@ def _i18n_type_accepts(expected: str, actual: str) -> bool:
     return short == expected
 
 
+def _shared_fallback_severity(engine: Citry | None, consumers: list[type[Component]]) -> LintSeverity:
+    """Return the strictest fallback severity among the components that share one template."""
+    # Without an app there are no settings to read, so the documented
+    # default applies.
+    if engine is None:
+        return LintSettings().rule_i18n_cross_language_fallback
+    # A template with no known owner follows the application setting.
+    if not consumers:
+        return engine.settings.lint.rule_i18n_cross_language_fallback
+    # One template can serve several components; report at the strictest of
+    # their settings, as the other shared-source rules do, so a component
+    # that requires complete translations is not silenced by a lenient one.
+    severities = {_component_lint_info(engine, component).rule_i18n_cross_language_fallback for component in consumers}
+    return "error" if "error" in severities else "warning" if "warning" in severities else "ignore"
+
+
+def _fallback_locales(entries: list[tuple[str, dict[str, Any]]]) -> list[str]:
+    """Return the requested locales whose text comes from another locale's catalog."""
+    return [locale for locale, entry in entries if entry["bundle_locale"] != locale]
+
+
 def _cross_language_findings(
     origin: str,
     source: str,
@@ -1325,17 +1460,51 @@ def _cross_language_findings(
     entries: list[tuple[str, dict[str, Any]]],
     start: int,
     end: int,
+    *,
+    severity: LintSeverity,
 ) -> list[CheckFinding]:
-    fallbacks = [locale for locale, entry in entries if entry["bundle_locale"] != locale]
+    # Plain text falls back at render time without failing, so a missing
+    # translation is a coverage note whose severity the application chooses.
+    if severity == "ignore":
+        return []
+    fallbacks = _fallback_locales(entries)
     if not fallbacks:
         return []
     return [
         _i18n_use_finding(
             origin,
             source,
-            f"i18n output {token!r} falls back to another language for: {', '.join(fallbacks)}. "
-            "Plain translated text cannot carry the selected language, so add translations for those locales.",
+            f"i18n output {token!r} has no translation for: {', '.join(fallbacks)}. "
+            "Those locales show text from a fallback locale, and plain text cannot mark its own language.",
             I18N_CROSS_LANGUAGE_FALLBACK,
+            start,
+            end,
+            severity=severity,
+        )
+    ]
+
+
+def _rich_fallback_findings(
+    origin: str,
+    source: str,
+    token: str,
+    entries: list[tuple[str, dict[str, Any]]],
+    start: int,
+    end: int,
+) -> list[CheckFinding]:
+    # <c-trans> adds no element that could carry the fallback language, so
+    # rendering it in a locale without a translation raises; this stays an
+    # error whatever the fallback setting says.
+    fallbacks = _fallback_locales(entries)
+    if not fallbacks:
+        return []
+    return [
+        _i18n_use_finding(
+            origin,
+            source,
+            f"<c-trans> output {token!r} has no translation for: {', '.join(fallbacks)}. "
+            "Rendering it in those locales fails, so add their translations.",
+            I18N_RICH_MESSAGE_FALLBACK,
             start,
             end,
         )
@@ -1343,7 +1512,10 @@ def _cross_language_findings(
 
 
 def _client_message_findings(
-    component: type[Component], manifest: dict[str, dict[str, dict[str, Any]]]
+    component: type[Component],
+    manifest: dict[str, dict[str, dict[str, Any]]],
+    *,
+    fallback_severity: LintSeverity,
 ) -> list[CheckFinding]:
     result: list[CheckFinding] = []
     i18n_config = cast("Any", component).I18n
@@ -1365,16 +1537,20 @@ def _client_message_findings(
                 )
             )
             continue
+        # The browser formats a fallback with that locale's own catalog, so a
+        # missing translation renders; it follows the same setting as tr().
+        if fallback_severity == "ignore":
+            continue
         for token in tokens:
-            fallback_locales = [
-                locale for locale, entry in _i18n_entries(manifest, token) if entry["bundle_locale"] != locale
-            ]
+            fallback_locales = _fallback_locales(_i18n_entries(manifest, token))
             if fallback_locales:
                 result.append(
                     CheckFinding(
                         _class_label(component),
-                        f"Client output {token!r} has no exact-locale output for: {', '.join(fallback_locales)}.",
-                        I18N_CLIENT_MESSAGE_INVALID,
+                        f"Client output {token!r} has no translation for: {', '.join(fallback_locales)}, "
+                        "so the browser shows text from a fallback locale in those locales.",
+                        I18N_CROSS_LANGUAGE_FALLBACK,
+                        severity=fallback_severity,
                     )
                 )
     return result
@@ -1440,6 +1616,8 @@ def _i18n_use_finding(
     code: str,
     start: int,
     end: int,
+    *,
+    severity: Literal["warning", "error"] = "error",
 ) -> CheckFinding:
     line, column = _byte_offset_coordinates(source, start)
     end_line, end_column = _byte_offset_coordinates(source, end)
@@ -1447,6 +1625,7 @@ def _i18n_use_finding(
         origin=origin,
         message=message,
         code=code,
+        severity=severity,
         start_index=start,
         end_index=end,
         line=line,
@@ -1490,16 +1669,23 @@ def _checker_lint_consumer(engine: Citry, component: type[Component]) -> Templat
     )
 
 
-def _checker_alpine_lint_consumer(
+def _checker_alpine_lint_consumer(engine: Citry, component: type[Component]) -> AlpineAttributeLintConsumer:
+    """Read one component's effective Alpine-attribute severities."""
+    lint = _component_lint_info(engine, component)
+    return AlpineAttributeLintConsumer(
+        rule_alpine_attribute=lint.rule_alpine_attribute,
+        rule_alpine_cloak=lint.rule_alpine_cloak,
+    )
+
+
+def _checker_vue_lint_consumer(
     engine: Citry,
     component: type[Component],
-    scope_names: set[str],
-) -> AlpineLintConsumer:
+) -> VueLintConsumer:
     """Build the strict browser namespace shared with editor analysis."""
     component_info = engine.inspect_component(component)
     lint = _component_lint_info(engine, component)
-    known_names = {variable.name for variable in lint.alpine_variables}
-    known_names.update(scope_names)
+    known_names = {variable.name for variable in lint.vue_variables}
     schema = component_info.schemas.js_data
     if schema.kind == "fields":
         known_names.update(field.name for field in schema.fields)
@@ -1507,10 +1693,81 @@ def _checker_alpine_lint_consumer(
         analyzed = _disk_js_data_shape(component)
         if analyzed is not None:
             known_names.update(root.name for root in analyzed[2].roots)
-    return AlpineLintConsumer(
+    native_names, namespace_policy = _disk_vue_options_namespace(engine, component)
+    known_names.update(native_names)
+    return VueLintConsumer(
         known_names=frozenset(known_names),
-        rule_unknown_alpine_variable=lint.rule_unknown_alpine_variable,
+        rule_unknown_vue_variable=lint.rule_unknown_vue_variable,
+        namespace_policy=namespace_policy,
+        rule_vue_python_variable=lint.rule_vue_python_variable,
     )
+
+
+def _emit_findings(
+    engine: Citry,
+    source: _TemplateSource,
+    browser_hosts: tuple[BrowserExpression, ...],
+) -> list[CheckFinding]:
+    """Check `$emit` names against the owners' `emits`, and child listeners against the child's."""
+    owner_sources = [_disk_component_js_source(engine, component) for component in source.consumers]
+
+    def child_source(tag: str) -> str | None:
+        try:
+            child = engine.get(tag.lower().removeprefix("c-"))
+        except NotRegistered:
+            return None
+        return _disk_component_js_source(engine, child)
+
+    return [
+        _browser_source_finding(
+            source.origin,
+            source.content,
+            finding.start_index,
+            finding.end_index,
+            finding.code,
+            finding.message,
+            finding.severity,
+        )
+        for finding in (
+            # An owner without readable JavaScript declares no `emits`, so it
+            # accepts every name and nothing can be reported for the template.
+            *lint_undeclared_template_emits(
+                browser_hosts,
+                () if None in owner_sources else [text for text in owner_sources if text is not None],
+            ),
+            *lint_undeclared_component_listeners(browser_hosts, child_source),
+        )
+    ]
+
+
+def _disk_component_js_source(engine: Citry, component: type[Component]) -> str | None:
+    """Return the one JavaScript source a component runs, without executing an asset loader."""
+    sources: dict[tuple[object, ...], _BrowserSource] = {}
+    _collect_browser_source(engine, component, sources)
+    matching = [source for source in sources.values() if component in source.consumers]
+    return matching[0].content if len(matching) == 1 else None
+
+
+def _disk_vue_options_namespace(
+    engine: Citry,
+    component: type[Component],
+) -> tuple[frozenset[str], Literal["closed", "unknown"]]:
+    """Resolve public native Options names without executing an asset loader."""
+    sources: dict[tuple[object, ...], _BrowserSource] = {}
+    _collect_browser_source(engine, component, sources)
+    matching = [source for source in sources.values() if component in source.consumers]
+    if not matching:
+        try:
+            _owner, inline, filepath = _find_pair_declaration(component, "js", "js_file")
+        except (Exception, SystemExit):  # noqa: BLE001 - conservative unknown namespace
+            return frozenset(), "unknown"
+        return (frozenset(), "closed") if inline is None and filepath is None else (frozenset(), "unknown")
+    if len(matching) != 1:
+        return frozenset(), "unknown"
+    analysis = analyze_browser_component_source(matching[0].content)
+    names = frozenset(item.exposed_name for item in analysis.public_names)
+    unknown = not analysis.valid or any(section.state == "unknown" for section in analysis.sections)
+    return names, "unknown" if unknown else "closed"
 
 
 def _disk_template_data_shape(
@@ -1568,8 +1825,9 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
     source_file, source, shape = analyzed
     member_types: dict[str, dict[str, JsonWireType]] = {}
     kwargs_schema = component_info.schemas.kwargs
-    if len(shape.parameters) >= 2 and kwargs_schema.kind == "fields":
-        member_types[shape.parameters[1]] = {
+    # parameters[0] is the kwargs parameter for instance, class, and static methods alike.
+    if shape.parameters and kwargs_schema.kind == "fields":
+        member_types[shape.parameters[0]] = {
             field.name: (
                 json_wire_type_from_annotation(field.type_display)
                 if field.type_display is not None
@@ -1577,9 +1835,18 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
             )
             for field in kwargs_schema.fields
         }
+    # The language server's app worker copies the same class facts, so both
+    # type a value such as `kwargs.task.lane` from `Task.lane`.
+    wire_classes = kwargs_wire_classes(component) if member_types else KwargsWireClasses()
+    member_annotations = {name: wire_classes.members for name in member_types}
     for root in shape.roots:
         wire_types = [
-            json_wire_type_from_expression(value, member_types=member_types)
+            json_wire_type_from_expression(
+                value,
+                member_types=member_types,
+                member_annotations=member_annotations,
+                classes=wire_classes.classes,
+            )
             for definition in root.definitions
             if (value := _range_source(source, definition.value_range)) is not None
         ]
@@ -1669,49 +1936,20 @@ def _collect_browser_source(
         existing.consumers.append(component)
 
 
-def _checker_component_props(
-    engine: Citry,
-    component: type[Component],
-) -> tuple[BrowserProp, ...] | None:
-    """Read one current static `$component({props})` contract from disk."""
-    try:
-        owner, inline, filepath = _find_pair_declaration(component, "js", "js_file")
-    except (Exception, SystemExit):  # noqa: BLE001 - project code failures degrade this check
-        return None
-    if _effective_class_value(component, "js_lang") is not None:
-        return None
-    if type(inline) is str:
-        return browser_component_props(normalize_inline_asset(inline))
-    if not isinstance(filepath, (str, Path)):
-        return None
-    try:
-        inspection = _inspect_asset_path(
-            filepath,
-            owner_dir=module_dir(owner),
-            search_dirs=engine.settings.dirs,
-        )
-        if inspection.resolved_path is None:
-            return None
-        source = inspection.resolved_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return None
-    return browser_component_props(source)
-
-
 def _check_browser_source(
     engine: Citry,
     source: _BrowserSource,
     profiles: dict[str, dict[str, frozenset[str]]],
+    *,
+    i18n_configured: bool = False,
 ) -> list[CheckFinding]:
     """Check component initializer variables and literal server calls."""
     consumers: list[ComponentJsLintConsumer] = []
-    i18n = engine.extensions.get_extension("i18n")
-    i18n_configured = getattr(i18n, "configured", False) is True
+    member_rules: set[str] = set()
     for component in source.consumers:
         lint = _component_lint_info(engine, component)
+        member_rules.add(lint.rule_unknown_component_js_member)
         known_names = {variable.name for variable in lint.component_js_globals}
-        if i18n_configured:
-            known_names.add("i18n")
         consumers.append(
             ComponentJsLintConsumer(
                 known_names=frozenset(known_names),
@@ -1730,8 +1968,18 @@ def _check_browser_source(
         )
         for finding in lint_unknown_component_js_variables(source.content, consumers)
     ]
-    # Shared assets must have a closed data contract for every consumer before
-    # a missing key becomes an error; runtime-only shapes remain unchecked.
+    # A missing instance member is reported only when every consumer's
+    # js_data() keys are known ahead of time; a component whose keys are only
+    # set at run time is not checked. One source can serve several components,
+    # so the strictest of their member severities applies, as for the variable
+    # rule above, and the language server resolves it the same way.
+    member_severity: Literal["ignore", "warning", "error"] = (
+        "error"
+        if "error" in member_rules or not member_rules
+        else "warning"
+        if "warning" in member_rules
+        else "ignore"
+    )
     findings.extend(
         _browser_source_finding(
             source.origin,
@@ -1743,7 +1991,9 @@ def _check_browser_source(
             finding.severity,
         )
         for finding in lint_unknown_component_js_members(
-            source.content, _shared_js_data_names(engine, source.consumers)
+            source.content,
+            _shared_js_data_names(engine, source.consumers),
+            severity=member_severity,
         )
     )
     expression = BrowserExpression(
@@ -1753,14 +2003,31 @@ def _check_browser_source(
         "statement",
         "component-js",
     )
+    # Only reads the analyzer proves hold `component.$i18n` or `this.$i18n`
+    # are i18n calls; another object that happens to be named `i18n` is not.
+    i18n_owners, i18n_owner_spans = component_js_i18n_owners(source.content)
     findings.extend(
         _browser_i18n_profile_findings(
             source.origin,
             source.content,
             expression,
             profiles,
-            owners=frozenset({"i18n"}),
+            i18n_configured=i18n_configured,
+            owners=i18n_owners,
+            proven_owner_spans=i18n_owner_spans,
         )
+    )
+    findings.extend(
+        _browser_source_finding(
+            source.origin,
+            source.content,
+            finding.start_index,
+            finding.end_index,
+            finding.code,
+            finding.message,
+            finding.severity,
+        )
+        for finding in lint_undeclared_component_js_emits(source.content)
     )
     event_names = _shared_event_names(source.consumers)
     if event_names is None:
@@ -2069,6 +2336,54 @@ def _byte_offset_coordinates(source: str, offset: int) -> tuple[int, int]:
     line = prefix.count("\n")
     current = prefix.rsplit("\n", 1)[-1]
     return line, len(current.encode("utf-16-le")) // 2
+
+
+def _i18n_compile_diagnostic(exc: BaseException) -> dict[str, Any] | None:
+    """Return the located compiler diagnostic behind a catalog failure, if any."""
+    # The i18n extension re-raises compile errors as ValueError, so the
+    # compiler's own error is usually the cause rather than the exception itself.
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, I18nCompileError):
+            try:
+                diagnostic = json.loads(current.diagnostic_json)
+            except (TypeError, ValueError):
+                return None
+            # Only a diagnostic with a complete position can place the finding.
+            required = ("path", "start", "end", "line", "column")
+            if isinstance(diagnostic, dict) and all(diagnostic.get(key) is not None for key in required):
+                return diagnostic
+            return None
+        # Follow only an explicit `raise ... from`, so an unrelated error raised
+        # while handling another one cannot lend its position.
+        current = current.__cause__
+    return None
+
+
+def _i18n_diagnostic_finding(
+    diagnostic: Mapping[str, Any],
+    *,
+    message: str,
+    code: str,
+    severity: Literal["warning", "error"] = "error",
+) -> CheckFinding:
+    """Place one i18n compiler diagnostic at the message source it names."""
+    return CheckFinding(
+        origin=diagnostic["path"],
+        message=message,
+        code=code,
+        severity=severity,
+        start_index=diagnostic["start"],
+        end_index=diagnostic["end"],
+        line=diagnostic["line"],
+        column=diagnostic["column"],
+        # Compiler diagnostics cover one line, so the end column follows
+        # from the span length.
+        end_line=diagnostic["line"],
+        end_column=diagnostic["column"] + diagnostic["end"] - diagnostic["start"],
+    )
 
 
 def _error_detail(exc: BaseException) -> str:

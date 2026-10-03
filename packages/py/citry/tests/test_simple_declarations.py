@@ -235,9 +235,10 @@ def test_slot_field_must_accept_a_constructor_input() -> None:
 
 @pytest.mark.parametrize("name", ["Kwargs", "TemplateData"])
 def test_data_schema_is_a_class_or_none(name: str) -> None:
-    component = type("InvalidSchema", (Component,), {"citry": Citry(), name: 42})
-    with pytest.raises(TypeError, match=f"{name} must be a class or None"):
-        validate_simple_declaration(component, Component)
+    # Every component rejects a non-class data shape when it is defined, so
+    # a simple component never reaches its own declaration check with one.
+    with pytest.raises(ValueError, match=f"InvalidSchema.{name} must be a class, or None for no {name}; got 42"):
+        type("InvalidSchema", (Component,), {"citry": Citry(), "simple": True, name: 42})
 
 
 @pytest.mark.parametrize("name", ["__dict__", "__weakref__"])

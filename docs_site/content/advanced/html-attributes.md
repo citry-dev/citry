@@ -1,21 +1,25 @@
 ---
-title: Forward HTML attributes
+title: HTML attributes
 description: Accept an explicit attribute mapping, choose where a component applies it, and merge class and style values safely.
 ---
 
-# Forward HTML attributes
+# HTML attributes
 
-A component does not copy arbitrary inputs onto its first HTML element. That
-would be ambiguous for a component with several roots, and it could place an
-accessibility or browser attribute on the wrong element.
+A page that uses your reusable button often needs to add something to the
+`<button>` itself: an `aria-label`, an extra class, or `disabled`. Citry
+does not copy unknown inputs onto a component's first element, because a
+component can have several root elements, and the attribute could land on
+the wrong one.
 
-Give a reusable component an explicit attribute mapping, then choose the
-element that receives it.
+Instead, the component accepts the attributes as one mapping and decides
+which element receives them. This page shows how, and how to combine
+`class` and `style` values from several places.
 
-## Accept and apply an attribute mapping
+## Accept attributes
 
-This button combines its own required attributes with values supplied by the
-template using it:
+Give the component an `attrs` input. In `template_data()`, combine it with
+the component's own attributes, then apply the result to the element with
+`c-bind`:
 
 ```citry
 from dataclasses import field
@@ -49,7 +53,7 @@ class ActionButton(Component):
     """
 ```
 
-Pass the mapping as a Python expression:
+A page passes the attributes as a Python dictionary:
 
 ```citry-html
 <c-ActionButton
@@ -62,15 +66,23 @@ Pass the mapping as a Python expression:
 />
 ```
 
-[`c-bind`](/syntax/dynamic-attributes/#c-bind-spread) applies
-the final mapping to the `<button>`. The component could apply separate
-mappings to separate roots, or place the public attributes on a nested input
-instead.
+[`c-bind`](/syntax/attributes/#c-bind-spread) adds every entry of
+the merged mapping to the `<button>`. The rendered button keeps the
+`action-button` class and also gets `aria-label`, the quiet class when
+`quiet` is true, and `disabled` when `unavailable` is true.
 
-The order in `merge_attrs()` is deliberate. Values supplied by the template
-come last, so they may replace `type`. The `class` values combine, preserving
-the component's own class. Reverse the two mappings when an attribute must stay
-under the component's control:
+You choose the element. A component with two root elements can accept two
+mappings, and a form field can put the attributes on its inner `<input>`
+rather than on its wrapper.
+
+## Choose who wins
+
+In the example above, the page's mapping comes last in `merge_attrs()`,
+so a page can replace `type` while the component's `action-button` class
+stays.
+
+Put the component's mapping last when the page must not change an
+attribute:
 
 ```python
 button_attrs = merge_attrs(
@@ -79,13 +91,13 @@ button_attrs = merge_attrs(
 )
 ```
 
-Here the caller can add classes, but cannot change `type`.
+Now a page can add classes, but `type` is always `button`.
 
-## Merge mappings from left to right
+## Merge mappings
 
-[`merge_attrs()`][citry.merge_attrs] keeps the last ordinary value for each
-name. `class` and `style` are different: every contribution is collected and
-normalized.
+[`merge_attrs()`][citry.merge_attrs] keeps the last value for each
+attribute name. For `class` and `style` it keeps every value and combines
+them:
 
 ```python
 from citry import merge_attrs
@@ -101,14 +113,16 @@ assert attrs == {
 }
 ```
 
-A name keeps the position where it first appeared, even when a later mapping
-replaces its value. This makes the resulting attribute order predictable.
+Each attribute keeps the position where it first appeared, even when a
+later mapping replaces its value, so the order in the HTML stays
+predictable.
 
-## Build class and style values
+## Build class and style
 
-[`normalize_class()`][citry.normalize_class] accepts a string, a mapping, or a
-nested list or tuple of those forms. A truthy mapping value keeps its name. A
-later falsy value removes a class that appeared earlier:
+[`normalize_class()`][citry.normalize_class] turns a string, a mapping,
+or a list or tuple of those (nested ones work too) into one class string. In a
+mapping, a class with a true value is kept. A later false value removes a
+class added earlier:
 
 ```python
 from citry import normalize_class
@@ -121,9 +135,10 @@ classes = normalize_class([
 assert classes == "button is-active"
 ```
 
-[`normalize_style()`][citry.normalize_style] accepts CSS text, a mapping, or a
-nested sequence of either. Later values replace earlier properties. `None`
-leaves an earlier value in place, while `False` removes the property:
+[`normalize_style()`][citry.normalize_style] does the same for CSS text,
+mappings, and lists of them. A later value replaces an earlier one for the
+same property. `None` keeps the earlier value, and `False` removes the
+property:
 
 ```python
 from citry import normalize_style
@@ -136,16 +151,17 @@ styles = normalize_style([
 assert styles == "color: green;"
 ```
 
-Passing another kind of value, such as an integer, raises `TypeError` from the
-matching normalizer.
+Any other kind of value, such as an integer, raises `TypeError`.
 
-[`parse_string_style()`][citry.parse_string_style] turns inline CSS into a
-property mapping. It removes CSS comments, keeps semicolons inside functions
-such as `url(...)`, and ignores a declaration without a colon.
+To read inline CSS as a dictionary, use
+[`parse_string_style()`][citry.parse_string_style]. It removes CSS
+comments, keeps semicolons inside functions such as `url(...)`, and skips a
+declaration without a colon.
 
-## Turn a mapping into HTML
+## Format as HTML
 
-[`format_attrs()`][citry.format_attrs] formats a mapping as an escaped HTML
+When you need the attributes as text rather than through `c-bind`,
+[`format_attrs()`][citry.format_attrs] turns a mapping into an escaped HTML
 attribute string:
 
 ```python
@@ -163,30 +179,56 @@ assert attrs == (
 )
 ```
 
-The formatting rules are:
+It follows the same rules as attributes in a template:
 
-- `True` produces a bare attribute;
+- `True` writes the attribute name alone, as in `disabled`;
 - `False` and `None` leave the attribute out;
 - an empty `class` or `style` is left out;
-- names and values are HTML-escaped;
-- a value with `__html__()` is treated as trusted HTML.
+- names and values are HTML-escaped, including a
+  [`Markup`][citry.Markup] value.
 
-Attribute names must be strings. A non-string key raises `TypeError`.
-An empty name, whitespace, `=`, `/`, `>`, `<`, or the template-comment opener
-`{#` in a name raises `ValueError`. The same validation applies when `c-bind`
-produces an HTML attribute at render time.
+When Vue renders an interactive component, a `True` value on an attribute
+that is not a boolean HTML attribute renders as `data-open="true"` rather
+than a bare `data-open`. See [`c-*` boolean attrs](/syntax/attributes/#html-elements).
 
-Treat `__html__()` values as an escape hatch. Only pass one when the producing
-code is trusted and is responsible for its own escaping.
+## Keep Vue in templates
 
-## Keep browser attributes explicit too
+An attribute mapping carries plain HTML attributes only. Citry never runs
+a name from the mapping as Vue code. A name that starts with `v-`, `@`,
+`:`, `.`, `^`, or `#`, in any letter case, such as `:title` or `@click`,
+is Vue syntax. On a page that uses Vue, such a name on an HTML element
+raises `TypeError`, unless its value is `None` or `False`. It fails even
+when the template writes the same binding on the element. Write Vue
+bindings and event listeners directly on the element in the template,
+and remove them from the mapping.
 
-Alpine directives and browser event handlers are ordinary HTML attributes
-when a component deliberately spreads them onto an HTML element. They do not
-fall through a `<c-Component>` tag automatically.
+Citry's own `@c-` and `:c-` Events bindings are the exception: a mapping
+may set them. See [Bind events in templates](/events/bindings/).
+
+Vue bindings written on a component tag, such as `@click` on
+`<c-ActionButton>`, do not reach the component's Python `attrs` input. Vue
+passes them to the component as props or listeners, or adds them to its
+root element by Vue's usual rules for undeclared attributes.
 
 Read
-[Client interactivity](/concepts/client-interactivity/#pass-arbitrary-html-attributes-explicitly)
+[Pass HTML attributes](/vue/props-and-events/#pass-arbitrary-html-attributes-explicitly)
 for the component-boundary rules, and
-[Attributes](/syntax/dynamic-attributes/) for static, dynamic, and spread
+[Attributes](/syntax/attributes/) for static, dynamic, and spread
 values in templates.
+
+## Less common cases
+
+### Invalid names
+
+An attribute name must be a string. Any other key raises `TypeError`. A
+name that is empty or contains whitespace, `=`, `/`, `>`, `<`, or `{#`
+raises `ValueError`. `c-bind` checks names the same way when it adds a
+mapping to an element.
+
+### Escape `Markup` values
+
+A value with an `__html__()` method, such as `Markup`, is escaped like
+any other value, so a `"` in it stays part of the attribute. Citry
+first reads its HTML the way a browser would, so an entity such as
+`&amp;` still stands for its character instead of showing as `&amp;`.
+Static and interactive pages set the same value.

@@ -42,6 +42,7 @@ from citry.component_like import ComponentLike
 from citry.util.html import Markup, escape
 
 if TYPE_CHECKING:
+    from citry._vue.direct import DirectFillSource
     from citry.citry_render import CitryRender, RenderPart
 
 TSlotData = TypeVar("TSlotData")
@@ -101,6 +102,10 @@ class SlotData(Mapping[str, Any]):
 
 
 _EMPTY_SLOT_DATA = SlotData()
+
+
+class _EscapedSlotText(Markup):
+    """String-compatible proof that Slot itself escaped one exact scalar."""
 
 
 def _normalize_slot_data(data: Mapping[str, Any] | SlotData | None) -> SlotData:
@@ -207,6 +212,8 @@ class Slot(Generic[TSlotData]):
 
     __slots__ = (
         "__weakref__",
+        "_default_content_func",
+        "_direct_fill_source",
         "component_name",
         "content_func",
         "contents",
@@ -242,7 +249,9 @@ class Slot(Generic[TSlotData]):
         """The ``(start, end)`` span of the ``<c-fill>`` in its template, if any."""
         self.extra: dict[str, Any] = extra if extra is not None else {}
         """Scratch space for extensions to attach per-slot metadata."""
+        self._direct_fill_source: DirectFillSource | None = None
 
+        self._default_content_func = content_func is None and not callable(contents)
         if content_func is None:
             content_func = self._resolve_content_func(contents)
         if not callable(content_func):
@@ -281,15 +290,39 @@ class Slot(Generic[TSlotData]):
             provides=provides,
         )
 
+        from citry._vue.direct import direct_fill_source, direct_session  # noqa: PLC0415
+
+        direct_source = direct_fill_source(self)
+        session = direct_session()
+
         def invoke() -> RenderPart:
             result = self.content_func(ctx)
-            return _render_value(result, provides=provides)
+            rendered = _render_value(result, provides=provides)
+            original = self.contents if self._default_content_func else result
+            if type(original) in {str, int, float, bool} or original is None:
+                return _EscapedSlotText(rendered)
+            return rendered
 
-        # Imported lazily so Slot remains usable without pulling the render
-        # ownership module into the slots/citry_render import cycle.
-        from citry.ownership import capture_current_slot_call  # noqa: PLC0415
+        if direct_source is not None:
+            if not direct_source.session.active:
+                if direct_source.strict_session:
+                    raise RuntimeError("a prepared Slot cannot run after its direct render session closed")
+                return invoke()
+            if session is not direct_source.session:
+                if direct_source.strict_session:
+                    raise RuntimeError("a prepared Slot belongs to a different direct render session")
+                return invoke()
+        if session is not None and direct_source is not None:
+            from citry._vue.direct import capture_slot_call  # noqa: PLC0415
 
-        return capture_current_slot_call(self, invoke)
+            return capture_slot_call(self, invoke)
+
+        result = invoke()
+        if session is not None and direct_source is None:
+            from citry._vue.direct import wrap_python_composition_result  # noqa: PLC0415
+
+            return wrap_python_composition_result(result)
+        return result
 
     def __str__(self) -> str:
         """
@@ -299,30 +332,13 @@ class Slot(Generic[TSlotData]):
         longer merge its collected data (JS/CSS dependencies) into another
         tree. Keep the value a Slot for as long as you compose.
         """
-        from citry.citry_render import (  # noqa: PLC0415
-            CitryRender,
-            _PhysicalRegion,
-            unwrap_physical_region,
-        )
+        from citry.citry_render import CitryRender  # noqa: PLC0415
 
         part = self()
-        unwrapped = unwrap_physical_region(part)
-        if isinstance(unwrapped, CitryRender):
-            # A template-defined fill returns an interior render. When the
-            # Slot is invoked as part of its owning page, that page's render
-            # queue settles deferred components in the fill body. Invoked
-            # standalone, there is no outer queue, so settle those descendants
-            # here before serialization without finalizing the already-rendered
-            # owner component a second time.
+        if isinstance(part, CitryRender):
             from citry.component_render import _settle_render  # noqa: PLC0415
-            from citry.ownership import resume_ownership_graph  # noqa: PLC0415
 
-            with resume_ownership_graph(unwrapped.context.ownership):
-                settled = _settle_render(unwrapped, finalize_root=False)
-                if isinstance(part, _PhysicalRegion):
-                    part.part = settled
-                    return CitryRender(parts=[part], context=settled.context).serialize()
-                return settled.serialize()
+            return _settle_render(part, finalize_root=False).serialize()
         return str(part)
 
     def __repr__(self) -> str:
@@ -411,7 +427,7 @@ def normalize_slot_fills(
                 continue
             # Copy the Slot (so the caller's instance is not mutated) and fill
             # in the missing names for tracing.
-            norm_fills[slot_name] = Slot(
+            copied = Slot(
                 content.contents,
                 content_func=content.content_func,
                 component_name=content.component_name or component_name,
@@ -419,6 +435,9 @@ def normalize_slot_fills(
                 source_position=content.source_position,
                 extra=dict(content.extra),
             )
+            copied._default_content_func = content._default_content_func
+            copied._direct_fill_source = content._direct_fill_source
+            norm_fills[slot_name] = copied
             continue
 
         # A function, or a static value (string, element, render, scalar).

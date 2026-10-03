@@ -548,6 +548,43 @@ body {
   background: #000;
 }
 
+.youtube-video__facade {
+  display: flex;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.625rem;
+  padding: 1rem;
+  color: #fff;
+  background: linear-gradient(135deg, #242424, #050505);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.youtube-video__facade:hover {
+  background: linear-gradient(135deg, #353535, #111);
+}
+
+.youtube-video__facade:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 3px;
+}
+
+.youtube-video__play {
+  display: inline-grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #e62117;
+  font-size: 1.1rem;
+}
+
 .youtube-video__caption {
   margin-top: 0.5rem;
   color: var(--c-fg-subtle);
@@ -1264,14 +1301,14 @@ body {
   margin-bottom: 1.5rem;
 }
 
-/* Area groups that use the old always-open section presentation keep the
-   spacing the former top-level section wrappers provided. */
+/* Always-open area groups get a gap above and below, so each group's
+   label reads as the start of a new block of links. */
 .djc-sidebar__subsection:not(.djc-sidebar__group) {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .djc-sidebar__items + .djc-sidebar__subsection:not(.djc-sidebar__group) {
-  margin-top: 1.5rem;
+  margin-top: 1rem;
 }
 
 .djc-sidebar__label {
@@ -1934,6 +1971,13 @@ a.djc-sidebar__label:hover {
   font-weight: 500;
 }
 
+/* A heading's code span keeps its code font in the rail but inherits the link's
+   color, so the active and hover states still read as one entry. */
+.djc-toc__link code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
 /* ------------------------------------------------------------------ */
 /* Reference TOC: collapsible class -> members, with symbol badges     */
 /* ------------------------------------------------------------------ */
@@ -2459,4 +2503,213 @@ body.djc-drawer-open .djc-drawer-overlay {
 .prose .doc-unresolved {
   color: var(--c-fg-muted);
   font-style: italic;
+}
+
+/* ------------------------------------------------------------------ */
+/* Benchmark chart (<c-benchmark-chart />)                              */
+/* ------------------------------------------------------------------ */
+/* Each row is a name, a bar track, and a total. The grid lines, the
+   reference line, and the axis labels sit over the bar track only, so they
+   share its left and right offsets through these variables. */
+.bench-chart {
+  --bench-name: 11rem;
+  --bench-total: 4.5rem;
+  --bench-gap: 0.75rem;
+  --bench-top: 1.6rem;
+  --bench-axis: 1.6rem;
+  /* Group headings, framework names, and totals share one size so a
+     heading does not look larger than the rows under it. */
+  --bench-label: 0.8125rem;
+  margin: 1.5rem 0 2.5rem;
+  font-size: 0.875rem;
+}
+
+.bench-chart__title {
+  margin-bottom: 0.5rem;
+  color: var(--c-fg);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.prose .bench-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  color: var(--c-fg-muted);
+  font-size: 0.8125rem;
+  list-style: none;
+}
+
+.prose .bench-chart__legend li {
+  margin: 0;
+}
+
+.bench-chart__swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: 0.3rem;
+  border-radius: 2px;
+  vertical-align: -0.05rem;
+}
+
+.bench-chart__plot {
+  position: relative;
+  padding: var(--bench-top) 0 var(--bench-axis);
+}
+
+.bench-chart__guides,
+.bench-chart__axis {
+  position: absolute;
+  left: calc(var(--bench-name) + var(--bench-gap));
+  right: calc(var(--bench-total) + var(--bench-gap));
+}
+
+.bench-chart__guides {
+  top: 0;
+  bottom: var(--bench-axis);
+  pointer-events: none;
+}
+
+.bench-chart__gridline {
+  position: absolute;
+  top: var(--bench-top);
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in oklab, var(--c-fg) 14%, transparent);
+}
+
+/* The dashed line at the first row's total lets a reader see which bars end
+   before it (faster) and which end after it (slower). */
+.bench-chart__reference {
+  position: absolute;
+  /* Starts just under its label, which sits in the plot's top padding. */
+  top: 1.1rem;
+  bottom: 0;
+  border-left: 2px dashed var(--c-accent);
+  transform: translateX(-1px);
+}
+
+.bench-chart__reference-label {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  color: var(--c-accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.bench-chart__heading {
+  width: var(--bench-name);
+  padding: 0.6rem 0 0.1rem;
+  color: var(--c-fg);
+  font-size: var(--bench-label);
+  font-weight: 700;
+  text-align: right;
+}
+
+.bench-chart__row {
+  display: grid;
+  grid-template-columns: var(--bench-name) 1fr var(--bench-total);
+  gap: 0 var(--bench-gap);
+  align-items: center;
+  min-height: 1.75rem;
+}
+
+/* Long names wrap onto a second line on a phone rather than being cut off. */
+.bench-chart__name {
+  color: var(--c-fg);
+  font-size: var(--bench-label);
+  line-height: 1.2;
+  text-align: right;
+}
+
+.bench-chart__row--reference .bench-chart__name {
+  font-weight: 700;
+}
+
+/* The bar sits above the grid lines; the track itself stays transparent. */
+.bench-chart__bar {
+  position: relative;
+  display: flex;
+  height: 1rem;
+}
+
+.bench-chart__segment {
+  flex: none;
+  height: 100%;
+}
+
+/* A thin page-coloured gap marks where one phase ends and the next
+   begins. */
+.bench-chart__segment + .bench-chart__segment {
+  box-shadow: inset 1px 0 0 var(--c-bg);
+}
+
+.bench-chart__segment:last-child {
+  border-radius: 0 3px 3px 0;
+}
+
+.bench-chart__total {
+  color: var(--c-fg);
+  font-size: var(--bench-label);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bench-chart__axis {
+  bottom: 0;
+  height: 1.2rem;
+}
+
+.bench-chart__tick {
+  position: absolute;
+  top: 0;
+  color: var(--c-fg-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.prose .bench-chart__details {
+  margin-top: 0.75rem;
+}
+
+.prose .bench-chart__details summary {
+  color: var(--c-link);
+  cursor: pointer;
+}
+
+.bench-chart__table-wrap {
+  overflow-x: auto;
+}
+
+.prose .bench-chart__table-wrap table {
+  font-size: 0.8125rem;
+}
+
+.prose .bench-chart__table-wrap td {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* On a phone the name and total columns shrink and every other axis label
+   drops out, so the remaining labels do not run into each other. */
+@media (max-width: 640px) {
+  .bench-chart {
+    --bench-name: 7.5rem;
+    --bench-total: 3.75rem;
+    --bench-gap: 0.5rem;
+    font-size: 0.8125rem;
+  }
+
+  .bench-chart__tick:nth-child(even) {
+    visibility: hidden;
+  }
 }

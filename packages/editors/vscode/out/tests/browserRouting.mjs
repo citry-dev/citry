@@ -217,7 +217,7 @@ function scanStartTag(source, start, limit, ranges) {
 }
 function isBrowserAttribute(name) {
   const base = name.split(".", 1)[0] ?? name;
-  return name === "$c-props" || name.startsWith("@") || name.startsWith(":") && !name.startsWith(":c-") || base.startsWith("x-");
+  return name.startsWith("@") || name.startsWith(":") && !name.startsWith(":c-") || name.startsWith("#") && !name.startsWith("#c-") || base.startsWith("v-");
 }
 function skipWhitespace(source, index) {
   while (/\s/u.test(source[index] ?? "")) {

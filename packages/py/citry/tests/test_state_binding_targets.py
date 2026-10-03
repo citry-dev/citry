@@ -1,5 +1,6 @@
 """Portable State target checks agree with the runtime control contract."""
 
+import json
 import re
 
 import pytest
@@ -11,6 +12,7 @@ from citry_core.template_parser import parse_template
 
 def _render(source):
     app = Citry(secret="test-secret")  # noqa: S106 - isolated test signing key
+    app.set_mounted_prefix("/citry")
 
     class Target(Component):
         citry = app
@@ -65,7 +67,20 @@ def test_portable_target_error_matches_runtime_wording(source):
 )
 def test_supported_target_has_no_error_and_renders(source):
     assert browser_state_binding_target_errors(parse_template(source)) == ()
-    assert "data-cev-bind" in _render(source)
+    manifest = _start_manifest(_render(source))
+    # The browser binds a control through the v-citry-control directive,
+    # driven by the one controlBindings entry that names the State field.
+    (definition,) = manifest["definitions"]
+    assert [entry["name"] for entry in definition["directiveSignature"]] == ["v-citry-control"]
+    (occurrence,) = manifest["occurrences"]
+    (binding,) = occurrence["preparedData"]["controlBindings"].values()
+    assert binding["field"] == "q"
+
+
+def _start_manifest(html):
+    """Return the manifest the page hands to the browser runtime at startup."""
+    payload = html.split(" data-citry-vue-document=", 1)[1].split(">", 1)[1].split("</script>", 1)[0]
+    return json.loads(payload)["manifest"]
 
 
 @pytest.mark.parametrize(

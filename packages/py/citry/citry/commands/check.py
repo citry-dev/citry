@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, ClassVar, NoReturn, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message, load_app
-from citry._checker import CheckReport, check_project
+from citry._checker import CheckFinding, CheckReport, _lsp_range_coordinates, check_project
 from citry.command import CommandArg
 from citry.extension import ExtensionCommand
 
@@ -45,6 +45,16 @@ class CheckCommand(ExtensionCommand):
     exits with status 2 without importing the app or scanning source.
     ``build_check_command`` binds the per-invocation app-selection state used by
     :meth:`handle`.
+
+    ``--types`` also type-checks the components whose source is in the
+    current directory, as the editor does. TypeScript checks their JavaScript
+    and Vue template expressions and reports ``citry.typescript.*`` errors,
+    and ty, the Python type checker that ``citry-lsp`` installs, checks their
+    Python template expressions and reports ``citry.python.*`` findings. It
+    needs registry mode, the ``citry-lsp`` package, and Node.js with the
+    ``tsc`` compiler in the project's ``node_modules`` or on ``PATH``. When
+    one of them is missing, or ty cannot start, the command says what to
+    install or fix and exits with status 2.
     """
 
     name = "check"
@@ -56,6 +66,14 @@ class CheckCommand(ExtensionCommand):
             help="Check limited inline template candidates without importing an app.",
         ),
         CommandArg(
+            "--types",
+            action="store_true",
+            help=(
+                "Also type-check component JavaScript and Vue expressions with TypeScript, "
+                "and Python template expressions with ty (needs citry-lsp, Node.js, and tsc)."
+            ),
+        ),
+        CommandArg(
             "--format",
             choices=("text", "json"),
             default="text",
@@ -64,13 +82,22 @@ class CheckCommand(ExtensionCommand):
     )
     selection: ClassVar[CheckAppSelection] = CheckAppSelection()
 
-    def handle(self, *, static: bool = False, format: str = "text", **_kwargs: Any) -> None:  # noqa: A002
+    def handle(
+        self,
+        *,
+        static: bool = False,
+        types: bool = False,
+        format: str = "text",  # noqa: A002
+        **_kwargs: Any,
+    ) -> None:
         """Run the conservative checker and preserve the CLI handler contract."""
         app_selected = any(
             value is not None for value in (self.selection.spec, self.selection.engine, self.selection.failure)
         )
         if static and app_selected:
             _mode_error("--static cannot be combined with an app selection")
+        if static and types:
+            _mode_error("--types needs the app's registry; use 'citry --app module:engine check --types'")
         if not static and not app_selected:
             _mode_error(
                 "choose 'citry --app module:engine check' for registry-backed checking "
@@ -87,6 +114,11 @@ class CheckCommand(ExtensionCommand):
                 selection = CheckAppSelection(spec=selection.spec, engine=engine)
 
         report = check_project(selection, Path.cwd())
+        if types and report.app_failure is None and selection.spec is not None:
+            report = _with_type_findings(report, selection.spec, Path.cwd())
+        elif types:
+            # A registry that failed to load has no components to type-check.
+            report = CheckReport(report.findings, report.app_failure, (*report.notes, TYPES_SKIPPED_NOTE))
         if format == "json":
             print(_json_report(report, static=static, app_spec=selection.spec))
         else:
@@ -95,7 +127,15 @@ class CheckCommand(ExtensionCommand):
             for note in report.notes:
                 sys.stderr.write(f"citry check: note: {note}\n")
             for finding in report.findings:
-                sys.stderr.write(f"{finding.origin}: {finding.severity}: {finding.message}\n")
+                # The checker's own spelling of its code leads the message, as
+                # `tsc` and `ty` print it.
+                if finding.code.startswith(TYPESCRIPT_CODE_PREFIX):
+                    code = f"{finding.code.removeprefix(TYPESCRIPT_CODE_PREFIX).upper()}: "
+                elif finding.code.startswith(PYTHON_CODE_PREFIX):
+                    code = f"{finding.code.removeprefix(PYTHON_CODE_PREFIX)}: "
+                else:
+                    code = ""
+                sys.stderr.write(f"{finding.origin}: {finding.severity}: {code}{finding.message}\n")
         if report.exit_code:
             raise SystemExit(report.exit_code)
 
@@ -131,6 +171,87 @@ def _json_report(report: CheckReport, *, static: bool, app_spec: str | None) -> 
         ],
     }
     return json.dumps(payload, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":"))
+
+
+# The code prefix of a TypeScript finding; the rest is TypeScript's number, such as `ts2322`.
+TYPESCRIPT_CODE_PREFIX = "citry.typescript."
+# The code prefix of a ty finding; the rest is ty's rule name, such as `invalid-argument-type`.
+PYTHON_CODE_PREFIX = "citry.python."
+TYPES_SKIPPED_NOTE = "--types did not run TypeScript or ty; it needs an app loaded from 'citry --app module:engine'"
+# How long `citry check --types` waits for the app's components to load.
+_TYPE_CHECK_APP_LOAD_TIMEOUT_SECONDS = 300.0
+
+
+def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckReport:
+    """Add TypeScript's and ty's findings for the components in `cwd` to `report`."""
+    # citry-lsp is an optional companion package that itself imports citry, so
+    # it can only be imported here, once the command needs it.
+    try:
+        from lsprotocol.types import DiagnosticSeverity  # noqa: PLC0415
+
+        from citry_lsp.project import load_project  # noqa: PLC0415
+        from citry_lsp.project_check import check_project_python_types, project_documents  # noqa: PLC0415
+        from citry_lsp.type_analysis import TyUnavailableError  # noqa: PLC0415
+        from citry_lsp.typescript import (  # noqa: PLC0415
+            TypeScriptUnavailableError,
+            check_project_types,
+            find_typescript_compiler,
+        )
+    except ImportError:
+        _type_check_error(
+            "it needs a citry-lsp release with TypeScript checks; "
+            "install or upgrade it with 'python -m pip install --upgrade citry-lsp'"
+        )
+    try:
+        command = find_typescript_compiler(cwd)
+    except TypeScriptUnavailableError as exc:
+        _type_check_error(str(exc))
+    # The language server's project loader reads the same registry facts the editor uses.
+    # The editor gives up on a slow app after a short limit so typing stays
+    # responsive; a one-off command has no such need, and a large library on a
+    # busy CI machine can take longer than that limit to import.
+    project = load_project(cwd, app_spec, timeout=_TYPE_CHECK_APP_LOAD_TIMEOUT_SECONDS)
+    if not project.status.registry_ready:
+        _type_check_error(project.status.message or "the app's component registry is unavailable")
+    # Both checkers read the same component files, so they are read once.
+    documents = project_documents(project, cwd.resolve())
+    # ty runs first: it also types the js_data() values that the TypeScript
+    # check then reads.
+    try:
+        python_found = check_project_python_types(project, cwd, documents)
+    except TyUnavailableError as exc:
+        _type_check_error(str(exc), checker="ty")
+    try:
+        found = check_project_types(project, cwd, command, documents)
+    except TypeScriptUnavailableError as exc:
+        _type_check_error(str(exc))
+    findings = list(report.findings)
+    for item in (*found, *python_found):
+        # TypeScript findings are errors. A ty warning stays a warning, and
+        # an information or hint finding, which the editor shows as a faint
+        # mark, is left out of the report.
+        severity = item.diagnostic.severity
+        if severity in {DiagnosticSeverity.Information, DiagnosticSeverity.Hint}:
+            continue
+        start = item.diagnostic.range.start
+        code = str(item.diagnostic.code)
+        coordinates = _lsp_range_coordinates(item.source, item.diagnostic.range)
+        findings.append(
+            CheckFinding(
+                f"{item.path}:{start.line + 1}:{start.character + 1}",
+                item.diagnostic.message,
+                code,
+                "warning" if severity == DiagnosticSeverity.Warning else "error",
+                *(coordinates or ()),
+            )
+        )
+    return CheckReport(tuple(findings), report.app_failure, report.notes)
+
+
+def _type_check_error(message: str, *, checker: str = "TypeScript") -> NoReturn:
+    """Stop `--types` with a message that says what to install or fix."""
+    sys.stderr.write(f"citry check: error: --types cannot run {checker}: {message}\n")
+    raise SystemExit(2)
 
 
 def _mode_error(message: str) -> NoReturn:

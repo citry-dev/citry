@@ -5,8 +5,10 @@ from __future__ import annotations
 import ast
 import gc
 import inspect
+import re
 import threading
-from dataclasses import is_dataclass
+import warnings
+from dataclasses import InitVar, is_dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import get_type_hints
@@ -31,7 +33,10 @@ from citry import (
     LibraryInstallationStale,
     LibraryManifestChanged,
     LibraryNotInstalled,
+    NestedSchemaReplacedWarning,
 )
+from citry._vue.capture import render_prepared
+from citry._vue.direct_capture import assemble_typed_render
 
 
 def test_definition_is_inert_and_call_defensively_copies_inputs():
@@ -178,7 +183,7 @@ def test_definition_inheritance_zero_argument_super_and_schemas_survive():
             return {"text": kwargs.label}
 
     class CFancyControl(ControlBase):
-        class Kwargs:
+        class Kwargs(ControlBase.Kwargs):
             suffix: str = "!"
 
         template = "{{ text }}{{ suffix }}"
@@ -197,6 +202,77 @@ def test_definition_inheritance_zero_argument_super_and_schemas_survive():
 
     assert BrandedControl.citry is app
     assert str(BrandedControl(label="Run")) == "Run!"
+
+
+def test_library_definition_replacing_kwargs_warns_once_at_registration():
+    class ControlBase(LibraryComponent):
+        class Kwargs:
+            label: str
+
+    # Library definitions are not components yet, so defining one is silent.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", NestedSchemaReplacedWarning)
+
+        class CPlainControl(ControlBase):
+            class Kwargs:
+                suffix: str = "!"
+
+            template = "{{ suffix }}"
+
+    library = ComponentLibrary("plain-controls", (CPlainControl,))
+    with pytest.warns(NestedSchemaReplacedWarning) as record:
+        concrete = Citry(autodiscover=False).register_library(library)[CPlainControl]
+    assert [str(item.message) for item in record] == [
+        "Component CPlainControl: Kwargs replaces ControlBase.Kwargs and leaves out field 'label'."
+        " To keep it, write `class Kwargs(ControlBase.Kwargs):`."
+    ]
+    # The warning points at the register_library() call in user code.
+    assert record[0].filename == __file__
+    assert tuple(concrete.Kwargs.__dataclass_fields__) == ("suffix",)
+
+    # Installing the same definition into another engine does not warn again.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", NestedSchemaReplacedWarning)
+        Citry(autodiscover=False).register_library(library)
+
+
+def test_library_warning_ignores_initvar_pseudo_fields():
+    class Base(LibraryComponent):
+        class Kwargs:
+            text: str
+            seed: InitVar[int] = 0
+
+    class CLeaf(Base):
+        class Kwargs:
+            text: str
+            seed: InitVar[int] = 0
+
+        template = "{{ text }}"
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", NestedSchemaReplacedWarning)
+        Citry(autodiscover=False).register_library(ComponentLibrary("initvar-controls", (CLeaf,)))
+
+
+def test_library_warning_repeats_while_warnings_are_errors():
+    class Base(LibraryComponent):
+        class Kwargs:
+            text: str
+
+    class CLeaf(Base):
+        class Kwargs:
+            other: str = ""
+
+        template = "x"
+
+    library = ComponentLibrary("strict-controls", (CLeaf,))
+    # A warning turned into an error must not count as already shown, so
+    # each later registration fails the same way.
+    for _ in range(2):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NestedSchemaReplacedWarning)
+            with pytest.raises(NestedSchemaReplacedWarning):
+                Citry(autodiscover=False).register_library(library)
 
 
 def test_pure_library_definition_requires_an_explicit_per_class_promise():
@@ -220,6 +296,67 @@ def test_pure_library_definition_requires_an_explicit_per_class_promise():
 
     concrete = app.register_library(ComponentLibrary("pure-library", (CLeaf,)))[CLeaf]
     assert concrete.pure is True
+
+
+def test_simple_vue_library_leaf_materializes_as_distinct_instance_free_occurrences(monkeypatch: pytest.MonkeyPatch):
+    app = Citry(autodiscover=False)
+    callback_calls: list[dict[str, object]] = []
+
+    class Leaf(LibraryComponent):
+        simple = "vue"
+        template = "<button>{{ label }}</button>"
+        js = "$component({data(){return {open:true}}})"
+
+        @staticmethod
+        def template_data(kwargs: dict[str, object], _slots: object) -> dict[str, object]:
+            callback_calls.append(kwargs)
+            return kwargs
+
+    installation = app.register_library(ComponentLibrary("simple-vue-leaf", (Leaf,)))
+    concrete_leaf = installation[Leaf]
+    assert concrete_leaf.simple == "vue"
+
+    class Page(Component):
+        citry = app
+        template = '<main><c-leaf label="one"/><c-leaf label="two"/></main>'
+
+    from citry.component import Component as ComponentBase
+
+    component_init = ComponentBase.__init__
+    leaf_instances: list[object] = []
+
+    def observe_init(self: object, *args: object, **kwargs: object) -> None:
+        if type(self) is concrete_leaf:
+            leaf_instances.append(self)
+        component_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(ComponentBase, "__init__", observe_init)
+
+    html = Page().render().serialize()
+
+    assert len(callback_calls) == 2
+    assert leaf_instances == []
+    assert "one" in html
+    assert "two" in html
+    assert "open:true" in html
+    occurrence_ids = re.findall(r'"renderId":"([^"]+)","serverData":\{\},"typeKey":"Leaf_', html)
+    assert len(occurrence_ids) == 2
+    assert len(set(occurrence_ids)) == 2
+
+
+def test_library_simple_declaration_accepts_only_exact_public_modes():
+    class VueLeaf(LibraryComponent):
+        simple = "vue"
+
+    assert VueLeaf.simple == "vue"
+    # Build "vue" at runtime so the test proves the check compares the
+    # value, not object identity with the interned literal.
+    VueLeaf.simple = "".join(("v", "ue"))  # noqa: FLY002
+
+    with pytest.raises(ValueError, match="simple must be False, True, or 'vue'"):
+
+        class InvalidLeaf(LibraryComponent):
+            simple = "True"
 
 
 def test_separately_installed_parent_and_child_keep_authored_not_concrete_inheritance():
@@ -253,7 +390,18 @@ def test_primary_files_resolve_beside_the_inert_definition_module():
 
     concrete = app.register_library(ComponentLibrary("file-notices", (CFileNotice,)))[CFileNotice]
 
-    assert '<p data-cid-c1="">From file</p>' in str(CFileNotice(label="From file").render(citry=app))
+    rendered = render_prepared(concrete(label="From file"))
+    assembly = assemble_typed_render(
+        rendered,
+        revision=0,
+        tag_for_type=lambda type_key: f"x-{type_key.lower().replace('_', '-')}",
+        expected_citry=app,
+    )
+    [occurrence] = assembly.view.occurrences
+    template = assembly.compile_inputs[occurrence.definition_id].template
+    assert concrete.get_template().source == "<p>{{ label }}</p>\n"
+    assert template.startswith("<p>{{ $citryPrepared.")
+    assert "From file" in occurrence.prepared_data.values()
     assert concrete.get_js() == 'console.log("library component");\n'
     assert concrete.get_css() == ".library-component { color: blue; }\n"
     info = app.inspect_component(concrete, resolve_assets=True)

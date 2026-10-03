@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "citry-events/1 component class descriptor",
-  "description": "One strict component-class record from a data-citry-events manifest.",
+  "description": "One strict component-class record from an Events manifest.",
   "type": "object",
   "additionalProperties": false,
   "required": ["componentClassId", "eventHandlers"],

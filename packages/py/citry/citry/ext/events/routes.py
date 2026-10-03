@@ -7,8 +7,7 @@ their paths directly; see ``ExtensionManager.urls``), fixed by design
 
     POST      <prefix>/ext/events/call                  batch endpoint (envelope with calls[])
     GET       <prefix>/ext/events/runtime.js            standard events client runtime
-    GET       <prefix>/ext/events/runtime-csp.js        CSP events client runtime
-    GET|POST  <prefix>/ext/events/e/{class_id}/{event}  per-event dispatch
+    declared  <prefix>/ext/events/e/{class_id}/{event}  per-event handler methods
 
 The route handlers are the HTTP transport of the dispatcher: they pick a
 payload codec (``codecs.py``), build the transport context and the CSRF
@@ -24,10 +23,8 @@ HTML is the body, a redirect becomes HTTP 303, a data action answers as
 plain JSON, and errors carry their HTTP status as plain text.
 
 This module also owns event URL building:
-[`get_event_url`][citry.ext.events.routes.get_event_url] anywhere, and the
-``component.events.url(...)`` method the extension attaches to the woven
-config class (the component's ``Events`` class as the extension manager
-rebuilt it on the config base).
+[`get_event_url`][citry.ext.events.routes.get_event_url] builds a handler's
+URL anywhere, and [`Events.url`][citry.Events.url] calls it during a render.
 
 The primary handlers are plain ``def``: the same route table must mount
 under sync Django and WSGI (which reject ``async def`` route handlers at
@@ -48,6 +45,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._owned_resource import PUBLIC_ASSET_CORS_HEADERS, _OwnedResource
 from citry._protocol.events import (
     ProtocolValueError,
     add_route_identity,
@@ -59,6 +57,7 @@ from citry.ext.events.codecs import decode_request
 from citry.ext.events.csrf import build_csrf_check
 from citry.ext.events.dispatcher import EventRequest, EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError, wire_error
+from citry.ext.events.handlers import EVENT_ROUTE_METHODS
 from citry.util.misc import format_url
 from citry.util.routing import RouteResponse, URLRoute
 
@@ -67,19 +66,18 @@ if TYPE_CHECKING:
 
     from citry.citry import Citry
     from citry.component import Component
-    from citry.ext.events.config import Events
     from citry.ext.events.extension import EventHandler, EventsExtension
     from citry.util.routing import RouteRequest
 
 __all__ = [
     "CALL_PATH",
-    "CSP_RUNTIME_PATH",
-    "EVENTS_CSP_RUNTIME_SRC",
+    "DEFINITION_PATH",
     "EVENTS_RUNTIME_SRC",
     "EVENT_PATH",
+    "EVENT_ROUTE_METHODS",
     "MAX_ENVELOPE_BYTES",
     "RUNTIME_PATH",
-    "events_config_url",
+    "STYLE_ASSET_PATH",
     "events_routes",
     "get_event_url",
 ]
@@ -88,13 +86,16 @@ __all__ = [
 # serialize-time emission points the runtime script tag at
 # (citry/ext/events/emission.py; the path is design-pinned on both sides).
 CALL_PATH = "ext/events/call"
+DEFINITION_PATH = "ext/events/definitions/{digest}.js"
+STYLE_ASSET_PATH = "ext/events/assets/{digest}.css"
 RUNTIME_PATH = "ext/events/runtime.js"
-CSP_RUNTIME_PATH = "ext/events/runtime-csp.js"
 EVENT_PATH = "ext/events/e/{class_id}/{event}"
+# EVENT_PATH admits EVENT_ROUTE_METHODS, the same fixed set a handler may
+# declare with ``@event(methods=...)``; ``handlers.py`` explains why the set
+# is fixed and defines it there so the decorator can check against it.
 
 # The committed browser bundle built from packages/js/citry-client.
-EVENTS_RUNTIME_SRC = Path(__file__).parent / "client" / "citry-events.js"
-EVENTS_CSP_RUNTIME_SRC = Path(__file__).parent / "client" / "citry-events-csp.js"
+EVENTS_RUNTIME_SRC = Path(__file__).parents[2] / "_vue" / "runtime.js"
 
 # The default transport-layer byte cap on one envelope (design 7.4 abuse
 # limits; oversized bodies answer payload_too_large without being parsed).
@@ -158,42 +159,6 @@ def get_event_url(
     return format_url(url, query=query, fragment=fragment)
 
 
-def events_config_url(
-    self: Events,
-    name: str,
-    *,
-    query: dict[str, Any] | None = None,
-    fragment: str | None = None,
-) -> str:
-    """
-    Build the URL of one of this component's events (``component.events.url``).
-
-    Available during render as ``self.events.url("submit")`` on the
-    component (typically from ``template_data``, to feed a form's action
-    URL). Same behavior as
-    [`get_event_url`][citry.ext.events.routes.get_event_url], with the
-    component class taken from the config instance.
-
-    Args:
-        self: The per-component Events config instance (``component.events``).
-        name: The handler's wire name.
-        query: Optional query parameters to append.
-        fragment: Optional ``#fragment`` to append.
-
-    Returns:
-        The absolute URL path of the per-event route.
-
-    """
-    comp_cls = getattr(self, "component_class", None)
-    if comp_cls is None:
-        msg = (
-            "Events.url() needs the component class, which only the per-component Events config"
-            " carries; call it as component.events.url(...) (or use get_event_url(MyComponent, ...))."
-        )
-        raise RuntimeError(msg)
-    return get_event_url(comp_cls, name, query=query, fragment=fragment)
-
-
 ################################################
 # THE ROUTE TABLE
 ################################################
@@ -201,17 +166,44 @@ def events_config_url(
 
 def events_routes(citry: Citry) -> list[URLRoute]:
     """The extension's route table, with handlers bound to one ``Citry`` instance."""
-    dispatcher = EventsDispatcher()
+    from citry.ext.events.renderers import dispatcher_for  # noqa: PLC0415
+
+    dispatcher = dispatcher_for(citry)
 
     def serve_runtime(_request: RouteRequest) -> RouteResponse:
-        from citry.ext.events.emission import _runtime_resource  # noqa: PLC0415
+        return _runtime_resource(citry).response()
 
-        return _runtime_resource(citry, "standard").response()
+    def serve_definition(_request: RouteRequest, *, digest: str) -> RouteResponse:
+        from citry._vue.events import definition_bundle  # noqa: PLC0415
 
-    def serve_csp_runtime(_request: RouteRequest) -> RouteResponse:
-        from citry.ext.events.emission import _runtime_resource  # noqa: PLC0415
+        if len(digest) != 64 or any(value not in "0123456789abcdef" for value in digest):
+            return RouteResponse("", status=404, content_type="text/plain")
+        content = definition_bundle(citry, digest)
+        if content is None:
+            return RouteResponse("", status=404, content_type="text/plain")
+        return RouteResponse(
+            content.decode(),
+            content_type="text/javascript",
+            # Content-addressed and public; the CORS header lets the browser
+            # check the integrity the runtime puts on this request.
+            headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", "public, max-age=31536000, immutable")),
+        )
 
-        return _runtime_resource(citry, "csp").response()
+    def serve_style_asset(_request: RouteRequest, *, digest: str) -> RouteResponse:
+        from citry._vue.events import style_asset  # noqa: PLC0415
+
+        if len(digest) != 64 or any(value not in "0123456789abcdef" for value in digest):
+            return RouteResponse("", status=404, content_type="text/plain")
+        content = style_asset(citry, digest)
+        if content is None:
+            return RouteResponse("", status=404, content_type="text/plain")
+        return RouteResponse(
+            content.decode(),
+            content_type="text/css",
+            # Content-addressed and public; the CORS header lets the browser
+            # check the integrity the runtime puts on this request.
+            headers=(*PUBLIC_ASSET_CORS_HEADERS, ("Cache-Control", "public, max-age=31536000, immutable")),
+        )
 
     # Each dispatch route is a sync/async pair: the plain handler is what the
     # sync hosts (WSGI, sync Django) mount and run, and the async twin rides
@@ -239,9 +231,15 @@ def events_routes(citry: Citry) -> list[URLRoute]:
         ),
         URLRoute(RUNTIME_PATH, handler=serve_runtime, name="citry_events_runtime", methods=("GET",)),
         URLRoute(
-            CSP_RUNTIME_PATH,
-            handler=serve_csp_runtime,
-            name="citry_events_runtime_csp",
+            DEFINITION_PATH,
+            handler=serve_definition,
+            name="citry_vue_definition",
+            methods=("GET",),
+        ),
+        URLRoute(
+            STYLE_ASSET_PATH,
+            handler=serve_style_asset,
+            name="citry_vue_style_asset",
             methods=("GET",),
         ),
         URLRoute(
@@ -249,9 +247,19 @@ def events_routes(citry: Citry) -> list[URLRoute]:
             handler=serve_event,
             handler_async=serve_event_async,
             name="citry_events_dispatch",
-            methods=("GET", "POST"),
+            methods=EVENT_ROUTE_METHODS,
         ),
     ]
+
+
+def _runtime_resource(citry: Citry) -> _OwnedResource:
+    """Serve the same committed Vue runtime used by document serialization."""
+    return _OwnedResource(
+        url=citry.build_url(RUNTIME_PATH),
+        content=EVENTS_RUNTIME_SRC.read_text(encoding="utf8"),
+        content_type="text/javascript",
+        headers=(("Cache-Control", "no-store"),),
+    )
 
 
 @dataclass(frozen=True, slots=True)

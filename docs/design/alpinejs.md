@@ -1,6 +1,11 @@
 # Design: AlpineJS and the Citry client component model
 
-**Status (2026-08-04): normative landed design; A0 through A10, client
+**Historical design for the Alpine release.** The current worktree follows
+[`vue.md`](vue.md); its migration status and retained architectural findings are in that design. The architecture
+below describes the earlier implementation and is not a current implementation
+instruction.
+
+**Historical status (2026-08-04): normative landed design; A0 through A10, client
 ambient context, and ComponentRange morphing implemented.** The maintainer selected
 the Citry graph-first Alpine architecture and the
 `$c-props` component-boundary directive after the research and spike program indexed in
@@ -750,7 +755,7 @@ restore arbitrary pre-morph DOM after such a runtime failure.
 
 ### 6.1 Version and boot ownership
 
-Citry embeds exact Alpine 3.16.1 and `@alpinejs/morph` 3.16.1 today. The
+Citry embeds exact Alpine 3.17.1 and `@alpinejs/morph` 3.17.1 today. The
 runtime follows the Livewire ownership pattern:
 
 - one bundled Alpine instance serves the page;
@@ -772,6 +777,41 @@ public extension point for plugins, custom magics, directives, and data
 providers; late registration fails pointedly. Duplicate Citry bundles and a
 foreign Alpine preserve the first Citry-owned instance and cannot stack
 interceptors, selectors, observers, magics, or startup calls.
+
+Manifest discovery has a dedicated mutation observer. Before initializing an
+element, Citry consumes pending insertion records and processes new graph,
+extension and dependency candidates in that order. This establishes component
+initialization holds even when external code inserts a fragment and immediately
+calls `Alpine.initTree`. Startup performs a document-wide catch-up; ordinary
+element initialization only checks pending candidates. Reentrant component
+callbacks can add candidates while discovery runs.
+
+The general mutation observer retains its own records and asynchronous cleanup
+schedule. Synchronous manifest discovery must not retire a component or provider
+temporarily detached during a same-task move. Manifest validation, parser-time
+graph deferral and late extension catch-up keep their existing error behavior.
+
+During owned Alpine startup, Citry avoids repeating a whole-document lifecycle
+pass at every unchanged component root. A startup-only observer invalidates the
+completed pass for ownership-relevant element or comment changes and membership
+attributes. Reuse also requires every registered physical cap and active root,
+plus the current boundary, to remain connected in the observed document. A
+full path applies when reconciliation is scheduled, the observer is
+missing, a registered cap is detached, or a registered cap, active lifecycle
+root, or current boundary is under a shadow root or another document. Even on
+reuse, Citry isolates the current root before flushing callbacks, and the
+ordinary after-start global pass still runs.
+
+Post-start fragment initialization applies the same principle within one
+synchronous boundary batch. The first boundary opens a task-scoped observer
+only when a final global reconciliation is already queued, and it still runs a
+complete pass. Later boundaries may reuse that result while no relevant DOM or
+logical change is pending and every physical alternative, parent, and active
+lifecycle root that the complete pass can read remains in the observed
+document. A referenced detached, shadow-root, or foreign-document range forces
+the complete path. The observer is discarded at the next microtask, the queued
+final reconciliation is never cancelled, and an error escaping boundary
+processing prevents any further reuse in that batch.
 
 ### 6.2 Private APIs
 
@@ -935,6 +975,13 @@ cannot resurrect. Each range keeps the topology mode validated at adoption;
 the narrow Document-to-body parser exception cannot be entered later by
 moving one cap. Roots for that exception are still filtered to the exact
 start/end interval, never admitted by an unbounded document marker query.
+
+Alpine removal reconciliation uses the same document tree that its mutation
+observer watches. A temporarily detached node keeps its Alpine directives and
+local scope when it has returned to that document by the cleanup checkpoint.
+This document-liveness exception does not retain a node that remains detached,
+is adopted into another document, or moves under an unobserved shadow root.
+Alpine's existing same-batch added-node reconciliation remains unchanged.
 
 Props, init, managed effects, scope, polling, State, and cleanup do not need a
 physical element. A component-tag Alpine handler or DOM-event `@c-*` binding

@@ -124,7 +124,7 @@ function scanStartTag(
 			ranges.push({ start: valueStart, end: valueEnd });
 		}
 		// Nested templates use the opposite quote, so a recursive pass can
-		// discover their Alpine hosts without mistaking ordinary HTML for one.
+		// discover their Vue hosts without mistaking ordinary HTML for one.
 		if (source.slice(valueStart, valueEnd).trimStart().startsWith("<")) {
 			ranges.push(...browserRanges(source, valueStart, valueEnd));
 		}
@@ -135,10 +135,10 @@ function scanStartTag(
 function isBrowserAttribute(name: string): boolean {
 	const base = name.split(".", 1)[0] ?? name;
 	return (
-		name === "$c-props" ||
 		name.startsWith("@") ||
 		(name.startsWith(":") && !name.startsWith(":c-")) ||
-		base.startsWith("x-")
+		(name.startsWith("#") && !name.startsWith("#c-")) ||
+		base.startsWith("v-")
 	);
 }
 

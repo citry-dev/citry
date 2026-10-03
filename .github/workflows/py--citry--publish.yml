@@ -133,10 +133,17 @@ jobs:
         run: python scripts/verify_citry_distribution.py --dist-dir dist
       - name: Rebuild the sdist and smoke the selected dependency closure
         if: contains(inputs.workspace_dependencies, 'citry-core')
-        run: >-
-          python scripts/verify_citry_distribution.py
-          --dist-dir dist
-          --core-wheel "$(find core-dist -name '*.whl' -print -quit)"
+        shell: bash
+        run: |
+          set -euo pipefail
+          core_wheels=(core-dist/*.whl)
+          if [[ ${#core_wheels[@]} -ne 1 || ! -f ${core_wheels[0]} ]]; then
+            printf 'Expected exactly one candidate Core wheel, found: %s\n' "${core_wheels[*]}" >&2
+            exit 1
+          fi
+          python scripts/verify_citry_distribution.py \
+            --dist-dir dist \
+            --core-wheel "${core_wheels[0]}"
 
   verify-distributions:
     if: ${{ inputs.operation == 'qualify' }}
@@ -174,11 +181,18 @@ jobs:
           --stage-output-dir verified
       - name: Verify and stage with the selected Core dependency
         if: contains(inputs.workspace_dependencies, 'citry-core')
-        run: >-
-          python scripts/verify_citry_distribution.py
-          --dist-dir dist
-          --core-wheel "$(find core-dist -name '*.whl' -print -quit)"
-          --stage-output-dir verified
+        shell: bash
+        run: |
+          set -euo pipefail
+          core_wheels=(core-dist/*.whl)
+          if [[ ${#core_wheels[@]} -ne 1 || ! -f ${core_wheels[0]} ]]; then
+            printf 'Expected exactly one candidate Core wheel, found: %s\n' "${core_wheels[*]}" >&2
+            exit 1
+          fi
+          python scripts/verify_citry_distribution.py \
+            --dist-dir dist \
+            --core-wheel "${core_wheels[0]}" \
+            --stage-output-dir verified
       - name: Verify the predeclared playground wheel when this version is selected
         run: >-
           python scripts/verify_playground_release.py

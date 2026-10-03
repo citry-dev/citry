@@ -18,13 +18,19 @@ def make_cache_component(citry_instance: Citry) -> type[Component]:
 
     class Cache(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
         """
-        Cache and replay one named transparent template region.
+        Save the HTML of the wrapped part of a template and reuse it on later renders.
 
-        ``key`` is a required stable fragment name. ``vary`` contains every
-        caller-dependent value that can change the body, ``ttl`` controls expiry,
-        ``version`` selects an author-controlled invalidation family, and
-        ``enabled=False`` bypasses caching. The body is not inspected or included
-        in the key, and a hit emits no wrapper element.
+        ``key`` (required) names the cached part. Templates that use the same
+        ``key`` share saved HTML, so list in ``vary`` every value that can
+        change the output, such as the user id or the locale: each
+        combination gets its own saved copy. ``ttl`` is how many seconds a
+        copy stays saved (by default, the app's cache setting); with
+        ``None`` it never expires, and
+        ``0`` turns caching off. Change ``version`` to stop reusing the
+        copies saved under the old value, for example after you change what
+        the wrapped part shows. ``enabled=False`` also turns caching off.
+        Citry does not look at the wrapped content when it builds the key,
+        and the tag adds no HTML of its own.
         """
 
         citry = citry_instance

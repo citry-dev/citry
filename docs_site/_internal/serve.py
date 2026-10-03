@@ -39,6 +39,7 @@ from docs_site._internal.local_playground_runtime import (
     LocalPlaygroundRuntime,
     LocalPlaygroundRuntimeError,
     build_local_playground_runtime,
+    playground_core_wheel_from_environment,
 )
 from docs_site._internal.paths import md_to_url, url_to_md
 from docs_site._internal.pipeline import render_page
@@ -384,15 +385,36 @@ def create_app(
 
 
 def create_local_app() -> Starlette:
-    """Add workspace Citry UI to the pinned browser runtime, or serve the docs without it."""
+    """
+    Serve the docs with workspace wheels in the browser playground.
+
+    By default, Citry UI comes from the workspace, and the server falls back
+    to the committed runtime when that Citry UI rejects the published Citry.
+    When ``CITRY_PLAYGROUND_CORE_WHEEL`` names a Pyodide build of the workspace
+    Citry Core, Citry and Citry Core come from the workspace too, and any
+    failure stops the server.
+    """
+    # Read the environment variable before building anything so a mistyped path fails the
+    # server start instead of silently serving the published Citry.
+    core_wheel = playground_core_wheel_from_environment()
     owner = tempfile.TemporaryDirectory(prefix="citry-docs-playground-")
-    print("Building the local Citry UI wheel for the browser playground...")
+    if core_wheel is None:
+        print("Building the local Citry UI wheel for the browser playground...")
+    else:
+        print(f"Building local Citry and Citry UI wheels to run with {core_wheel.name}...")
     try:
         local_runtime = build_local_playground_runtime(
             repo_root=default_config.repo_root,
             output_dir=Path(owner.name),
+            core_wheel=core_wheel,
         )
     except LocalPlaygroundRuntimeError as error:
+        if core_wheel is not None:
+            # The developer asked for this checkout's Citry. Serving the
+            # published one instead would make every browser check test the
+            # wrong code, so stop with the reason.
+            owner.cleanup()
+            raise
         # The workspace Citry UI usually needs a Citry newer than the pinned
         # release, and stays that way for the whole stretch between releases.
         # Every page still renders without the local wheel, so keep serving
@@ -402,7 +424,8 @@ def create_local_app() -> Starlette:
         print(
             "Serving the committed playground runtime instead. Citry UI examples show their code "
             "without a live preview until docs_site/static/playground/runtime.json pins a Citry "
-            "release that the workspace Citry UI accepts."
+            "release that the workspace Citry UI accepts, or until you set CITRY_PLAYGROUND_CORE_WHEEL "
+            "to run this checkout's Citry."
         )
         return create_app()
     local_app = create_app(local_playground_runtime=local_runtime)
@@ -412,5 +435,19 @@ def create_local_app() -> Starlette:
     return local_app
 
 
-# Plain module-level app for ASGI imports that want the committed runtime.
-app = create_app()
+def __getattr__(name: str) -> Starlette:
+    """
+    Build ``app`` for ASGI servers that import ``docs_site._internal.serve:app``.
+
+    ``create_app()`` records a mount prefix on the shared Citry instance, which
+    changes how every later render in the process loads component code. Doing
+    that when the module is first read would change the output of any code
+    that merely imports this module, so the app is built on first access and
+    then kept for the rest of the process.
+    """
+    if name == "app":
+        built = create_app()
+        globals()["app"] = built
+        return built
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)

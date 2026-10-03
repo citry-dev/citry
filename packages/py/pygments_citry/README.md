@@ -75,12 +75,11 @@ in their own language:
   (the built-ins `c-if`, `c-for`, `c-slot`, `<c-raw>`, and so on).
 - Server-side Python in `c-*` dynamic attributes and `#c-key`, including a
   nested Citry template used as a dynamic attribute value.
-- Browser-side JavaScript in `$c-props` and Alpine attributes such as `x-data`,
-  `x-show`, `@click`, and `:class`. The server-dynamic forms such as
-  `c-$c-props` and `c-@click` remain Python.
+- Browser-side JavaScript in Vue attributes such as `v-show`, `@click`, and
+  `:class`. Server-dynamic forms such as `c-@click` remain Python.
 - Server handler references in Events attributes such as `@c-click="save"`
   and `:c-query.debounce.300ms="refresh"`. An optional parenthesized argument
-  on an `@c-*` handler is highlighted as an Alpine/JavaScript expression.
+  on an `@c-*` handler is highlighted as a Vue/JavaScript expression.
 - The bare `#c-ignore` framework marker.
 - `{{ ... }}` interpolation, whose body is a Python expression.
 - `{# ... #}` template comments.

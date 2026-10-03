@@ -1,6 +1,5 @@
 {
   "protocol": "citry-events/1",
-  "clientGraphRevision": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "componentClasses": [
     {
       "componentClassId": "Counter_a1b2c3",
@@ -10,7 +9,9 @@
           "usesState": true
         }
       },
-      "writableStateFields": ["count"]
+      "writableStateFields": [
+        "count"
+      ]
     }
   ],
   "componentInstances": [

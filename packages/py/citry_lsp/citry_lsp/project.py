@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Literal, cast
 from packaging.version import InvalidVersion, Version
 
 from citry import TemplateAnalysis
+from citry._wire_classes import KwargsWireClasses
 from citry_lsp.catalog import CatalogIndex
 from citry_lsp.environment import EnvironmentFileError, worker_environment
 from citry_lsp.protocol import (
@@ -24,6 +25,9 @@ from citry_lsp.protocol import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from citry.analysis import JsonWireType
     from citry_lsp.catalog import ComponentRecord
 
 WORKER_TIMEOUT_SECONDS = 15.0
@@ -362,6 +366,7 @@ class SourceStateFieldRecord:
     name: str
     type_display: str | None
     description: str | None
+    client_writable: bool
     module: str
     qualname: str
     source_file: Path
@@ -377,6 +382,7 @@ class SourceAnalysisIndex:
         "_js_asset",
         "_js_data",
         "_js_schema",
+        "_kwargs_classes",
         "_state",
         "_state_resolution",
         "_template_asset",
@@ -403,6 +409,7 @@ class SourceAnalysisIndex:
         state_resolution: dict[str, tuple[SourceClassRecord, ...] | None] = {}
         js_schema: dict[str, tuple[SourceClassRecord, ...] | None] = {}
         template_lint: dict[str, dict[str, SourceLintRecord]] = {}
+        kwargs_classes: dict[str, KwargsWireClasses] = {}
         for raw_component in raw_components:
             (
                 definition_id,
@@ -417,6 +424,7 @@ class SourceAnalysisIndex:
                 state_chain,
                 js_schema_chain,
                 lint_variables,
+                wire_classes,
             ) = _source_component(raw_component)
             if definition_id in template_data:
                 raise ValueError(f"duplicate source analysis definition id {definition_id!r}")
@@ -431,6 +439,7 @@ class SourceAnalysisIndex:
             state_resolution[definition_id] = state_chain
             js_schema[definition_id] = js_schema_chain
             template_lint[definition_id] = lint_variables
+            kwargs_classes[definition_id] = wire_classes
         expected = {component.definition_id for component in catalog.components}
         if set(template_data) != expected:
             raise ValueError("source analysis definition ids do not match the component catalog")
@@ -445,6 +454,7 @@ class SourceAnalysisIndex:
         self._state_resolution = state_resolution
         self._js_schema = js_schema
         self._template_lint = template_lint
+        self._kwargs_classes = kwargs_classes
 
     def template_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return copied provenance for one exact catalog component."""
@@ -465,6 +475,10 @@ class SourceAnalysisIndex:
     def js_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return copied provenance for the effective ``js_data`` method."""
         return self._js_data.get(component.definition_id)
+
+    def kwargs_wire_classes(self, component: ComponentRecord) -> KwargsWireClasses:
+        """Return the classes ``js_data()`` can read through from the component's Kwargs fields."""
+        return self._kwargs_classes.get(component.definition_id, KwargsWireClasses())
 
     def js_asset_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return concrete-to-owner provenance for the effective JS asset."""
@@ -506,8 +520,9 @@ def _source_component(
     tuple[SourceClassRecord, ...] | None,
     tuple[SourceClassRecord, ...] | None,
     dict[str, SourceLintRecord],
+    KwargsWireClasses,
 ]:
-    if type(value) is not dict or set(value) - {"js_schema"} != {
+    if type(value) is not dict or set(value) - {"js_schema", "kwargs_classes"} != {
         "definition_id",
         "css_data",
         "css_asset",
@@ -533,6 +548,7 @@ def _source_component(
         *_source_event_info(value.get("events"), definition_id),
         _source_resolution_chain(value["js_schema"], definition_id, "js_schema") if "js_schema" in value else None,
         _source_lint_variables(value.get("template_lint"), definition_id),
+        KwargsWireClasses.from_dict(value["kwargs_classes"]) if "kwargs_classes" in value else KwargsWireClasses(),
     )
 
 
@@ -592,6 +608,7 @@ def _source_event_info(
             "name",
             "type_display",
             "description",
+            "client_writable",
             "module",
             "qualname",
             "file",
@@ -600,6 +617,7 @@ def _source_event_info(
         field_name = raw_field.get("name")
         type_display = raw_field.get("type_display")
         description = raw_field.get("description")
+        client_writable = raw_field.get("client_writable")
         field_module = raw_field.get("module")
         field_qualname = raw_field.get("qualname")
         field_file = raw_field.get("file")
@@ -608,6 +626,7 @@ def _source_event_info(
             or not field_name
             or (type_display is not None and type(type_display) is not str)
             or (description is not None and type(description) is not str)
+            or type(client_writable) is not bool
             or type(field_module) is not str
             or not field_module
             or type(field_qualname) is not str
@@ -627,6 +646,7 @@ def _source_event_info(
                 field_name,
                 type_display,
                 description,
+                client_writable,
                 field_module,
                 field_qualname,
                 path.resolve(),
@@ -714,9 +734,17 @@ class ProjectState:
     i18n: I18nProjectIndex | None = None
     security_csp: Literal["off", "warn", "strict"] | None = None
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)
+    # ty's types for `js_data()` value parts, per file, source text, and class.
+    _js_data_inferred: dict[tuple[Path, str, str], Mapping[tuple[int, int], JsonWireType]] = field(
+        init=False, repr=False, compare=False
+    )
+    # Answers copied from the project before a reload: used until ty answers again.
+    _js_data_stale: set[tuple[Path, str, str]] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Index portable slot-data rules once for completion and hover."""
+        object.__setattr__(self, "_js_data_inferred", {})
+        object.__setattr__(self, "_js_data_stale", set())
         indexed: dict[str, dict[str, tuple[str, ...]]] = {}
         if self.analysis is not None:
             raw_rules = self.analysis.to_dict().get("tag_rules")
@@ -737,6 +765,54 @@ class ProjectState:
                             slots[slot_name] = tuple(raw_fields)
                     indexed[tag_name.lower()] = slots
         object.__setattr__(self, "_slot_data_fields", indexed)
+
+    def js_data_inferred_types(
+        self,
+        source_file: Path,
+        source: str,
+        qualname: str,
+    ) -> Mapping[tuple[int, int], JsonWireType]:
+        """
+        Return ty's types for the `js_data()` value parts of one class, keyed by their offsets in `source`.
+
+        The answer belongs to this exact source text, so an edit makes the
+        parts unknown again until ty is asked about the new text.
+        """
+        return self._js_data_inferred.get((source_file.resolve(), source, qualname), {})
+
+    def has_js_data_inferred_types(self, source_file: Path, source: str, qualname: str) -> bool:
+        """Return whether ty has answered for this exact source in this project generation."""
+        key = (source_file.resolve(), source, qualname)
+        return key in self._js_data_inferred and key not in self._js_data_stale
+
+    def adopt_js_data_inferred_types(self, previous: ProjectState, *, stale: bool) -> None:
+        """
+        Copy ty's answers from the project this one replaces.
+
+        A reload can change the types ty sees, so with `stale` the copied
+        answers are used only until ty is asked again; until then, values
+        keep their earlier types rather than becoming `any`.
+        """
+        for key, inferred in previous._js_data_inferred.items():
+            self._js_data_inferred.setdefault(key, inferred)
+            if stale or key in previous._js_data_stale:
+                self._js_data_stale.add(key)
+
+    def store_js_data_inferred_types(
+        self,
+        source_file: Path,
+        source: str,
+        qualname: str,
+        inferred: Mapping[tuple[int, int], JsonWireType],
+    ) -> None:
+        """Remember ty's answers for one source text, dropping answers for its older texts."""
+        key = (source_file.resolve(), source, qualname)
+        # Only the newest text of each class is useful, so an edited file
+        # does not keep every earlier version alive.
+        for stale in [item for item in self._js_data_inferred if item[0] == key[0] and item[2] == qualname]:
+            del self._js_data_inferred[stale]
+            self._js_data_stale.discard(stale)
+        self._js_data_inferred[key] = dict(inferred)
 
     def component_slot_data_fields(
         self,
@@ -785,6 +861,11 @@ def load_project(
             check=False,
             env=environment,
             text=True,
+            # app_worker writes its JSON envelope as UTF-8 explicitly.  Do
+            # not let Windows' active code page reinterpret non-ASCII catalog
+            # and source-analysis values before the protocol parser sees them.
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
@@ -869,12 +950,14 @@ def _project_from_worker_output(
     workspace: Path,
     app: str,
     returncode: int | None,
-    stdout: str,
-    stderr: str,
+    stdout: str | None,
+    stderr: str | None,
     *,
     environment_file: Path | None = None,
 ) -> ProjectState:
     """Validate one completed worker response for sync and async callers."""
+    stdout = stdout or ""
+    stderr = stderr or ""
     if not stdout.strip():
         detail = stderr.strip()
         message = f"App worker exited with status {returncode} without a response."

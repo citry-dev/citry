@@ -3,6 +3,7 @@
 import copy
 import importlib
 import json
+import os
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -280,6 +281,9 @@ def test_preflight_missing_playwright_is_actionable(catalog, tmp_path, monkeypat
 
 def test_real_preflight_driver_shutdown_has_no_pending_tasks(tmp_path):
     pytest.importorskip("playwright.sync_api")
+    # Node warns on stderr when the shell sets both color variables, which
+    # would read as a shutdown warning, so the child gets neither.
+    env = {key: value for key, value in os.environ.items() if key not in {"FORCE_COLOR", "NO_COLOR"}}
     # A subprocess exposes shutdown warnings that fake drivers cannot reproduce.
     result = subprocess.run(
         [
@@ -303,6 +307,7 @@ except CaptureError:
         text=True,
         check=False,
         timeout=30,
+        env=env,
     )
     assert result.returncode == 0, result.stderr
     assert result.stderr == ""

@@ -30,10 +30,9 @@ each entry to one paragraph and link to longer docs rather than copying them.
 | HTML attribute transformer | [`crates/citry_html_transform/AGENTS.md`](../../crates/citry_html_transform/AGENTS.md) |
 | Python package surface (`citry_core` on PyPI) | [`packages/py/citry_core/AGENTS.md`](../../packages/py/citry_core/AGENTS.md) |
 | Monorepo dev / build / release conventions | [`docs/codebase.md`](../codebase.md) |
-| Alpine, browser ownership graph, props, boundary handlers, slots, and morph lifecycle | [`docs/design/alpinejs.md`](../design/alpinejs.md) |
-| Browser CSP, nonces, Alpine's CSP build, and JavaScript-free delivery | [`docs/design/security_csp.md`](../design/security_csp.md) |
+| Vue rendering, native slots, component identity, server revisions, and cutover status | [`docs/design/vue.md`](../design/vue.md) |
+| Browser CSP, nonces, and JavaScript-free delivery | [`docs/design/vue.md`](../design/vue.md), [`security_csp.md`](../design/security_csp.md) for the existing delivery contract |
 | CSRF ownership, Events token wiring, and native forms | [`docs/design/security_csrf.md`](../design/security_csrf.md) |
-| ComponentRange identity, physical placements, matching, and range-level morph policy | [`docs/design/component_ranges.md`](../design/component_ranges.md) |
 | Static authored component dependencies and reverse references | [`docs/design/component_graph.md`](../design/component_graph.md) |
 | Internationalization: locale context, messages, formatting, direction, tooling, and Citry UI | [`docs/design/i18n.md`](../design/i18n.md) |
 
@@ -65,13 +64,16 @@ rules, release tags, and CI workflow naming are documented in
 
 ### Browser wire protocols
 
-The language-neutral contracts for server/browser JSON are
-[`citry-events/1`](../../packages/protocol/events/v1/README.md) and
-[`citry-client-graph/1`](../../packages/protocol/client_graph/v1/README.md).
-Their standard-library-only Python packages are copied byte for byte into
-`citry._protocol`, while their TypeScript packages build into the two browser
-artifacts. Product code chooses application data and DOM behavior; the
-protocol packages own fixed record construction and remote-input validation.
+The language-neutral Events contract is
+[`citry-events/1`](../../packages/protocol/events/v1/README.md).
+Its standard-library-only Python package is copied byte for byte into
+`citry._protocol`; its TypeScript package supplies browser-side protocol types
+and validation. `packages/js/citry-client` supplies the Events bridge.
+Vue definitions and occurrence revisions currently use the internal prepared
+protocol in `citry._vue.protocol`, with browser validation in `_vue/client.js`.
+The [Vue design](../design/vue.md) records its contracts and unfinished cutover
+work. Product code chooses application data and browser behavior; protocol
+code owns fixed record construction and remote-input validation.
 The copy, build, constraint-ownership, and distribution checks are documented
 in [`docs/codebase.md`](../codebase.md#protocol-packages-and-shipped-copies).
 
@@ -92,7 +94,7 @@ stronger promise made by one exact component class: its complete template body
 is deterministic and side-effect-free for its template variables. Pure-body
 memoization lasts only for one root render and rebuilds fresh frames and IDs.
 It reuses safe strings and transparent control-flow structure while child,
-slot, ownership, and i18n work remains live on every occurrence. The promise
+slot, component relationship, and i18n work remains live on every occurrence. The promise
 never inherits to a subclass. The contracts, keying, falsifiers, and measurements are in
 [`component_constness.md`](../design/component_constness.md) section 16.
 

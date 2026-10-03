@@ -10,9 +10,23 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from lsprotocol import types
 
-from citry_lsp.engine import DocumentState, expression_shadows, i18n_diagnostics, template_variable_hover
+from citry.analysis import (
+    TemplatePythonQuery,
+    TemplatePythonRoot,
+    TemplatePythonValueType,
+    build_inferred_template_shadow,
+    build_schema_template_shadow,
+)
+from citry_lsp.engine import (
+    DocumentState,
+    _insert_shadow_preamble,
+    expression_shadows,
+    i18n_diagnostics,
+    template_variable_hover,
+)
 from citry_lsp.project import load_project
 from citry_lsp.semantic import (
+    _generated_query_function_bounds,
     semantic_completions,
     semantic_definition,
     semantic_diagnostics,
@@ -1234,8 +1248,20 @@ async def test_default_template_data_gets_types_from_effective_kwargs(tmp_path: 
     assert "lower" in {item.label for item in items}
 
 
+# Each method form Citry can call as component.method(kwargs, slots): the
+# decorator line (if any) and the receiver parameter that precedes kwargs.
+_METHOD_FORMS = pytest.mark.parametrize(
+    ("decorator", "receiver"),
+    [("", "self, "), ("    @staticmethod\n", ""), ("    @classmethod\n", "cls, ")],
+    ids=["instance", "staticmethod", "classmethod"],
+)
+
+
+@_METHOD_FORMS
 @pytest.mark.asyncio
-async def test_inferred_kwargs_type_survives_same_named_method_local(tmp_path: Path) -> None:
+async def test_inferred_kwargs_type_survives_same_named_method_local(
+    tmp_path: Path, decorator: str, receiver: str
+) -> None:
     template_file = tmp_path / "card.html"
     template_source = "{{ title.lo }}"
     template_file.write_text(template_source, encoding="utf-8")
@@ -1248,7 +1274,8 @@ async def test_inferred_kwargs_type_survives_same_named_method_local(tmp_path: P
         "    template_file = 'card.html'\n"
         "    class Kwargs:\n"
         "        title: str\n"
-        "    def template_data(self, kwargs, slots):\n"
+        f"{decorator}"
+        f"    def template_data({receiver}kwargs, slots):\n"
         "        Card = int\n"
         "        return kwargs\n",
         encoding="utf-8",
@@ -1280,17 +1307,15 @@ async def test_composed_template_data_keeps_each_declaring_field_type(tmp_path: 
         "from pathlib import Path\n"
         "from citry import Citry, Component\n"
         "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
-        "class Titled(Component):\n"
+        "class TitleFields:\n"
+        "    title: str\n"
+        "class CountFields:\n"
+        "    count: int\n"
+        "class Card(Component):\n"
         "    citry = engine\n"
-        "    class TemplateData:\n"
-        "        title: str\n"
-        "class Counted(Component):\n"
-        "    citry = engine\n"
-        "    class TemplateData:\n"
-        "        count: int\n"
-        "class Card(Titled, Counted):\n"
-        "    citry = engine\n"
-        "    template_file = 'card.html'\n",
+        "    template_file = 'card.html'\n"
+        "    class TemplateData(TitleFields, CountFields):\n"
+        "        pass\n",
         encoding="utf-8",
     )
     project = load_project(tmp_path, "app:engine")
@@ -1328,17 +1353,15 @@ async def test_composed_kwargs_type_the_inherited_default_roots(tmp_path: Path) 
         "from pathlib import Path\n"
         "from citry import Citry, Component\n"
         "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
-        "class Titled(Component):\n"
+        "class TitleFields:\n"
+        "    title: str\n"
+        "class CountFields:\n"
+        "    count: int\n"
+        "class Card(Component):\n"
         "    citry = engine\n"
-        "    class Kwargs:\n"
-        "        title: str\n"
-        "class Counted(Component):\n"
-        "    citry = engine\n"
-        "    class Kwargs:\n"
-        "        count: int\n"
-        "class Card(Titled, Counted):\n"
-        "    citry = engine\n"
-        "    template_file = 'card.html'\n",
+        "    template_file = 'card.html'\n"
+        "    class Kwargs(TitleFields, CountFields):\n"
+        "        pass\n",
         encoding="utf-8",
     )
     project = load_project(tmp_path, "app:engine")
@@ -2083,3 +2106,394 @@ async def test_nested_expression_uses_the_registry_parser_recursively(
         _position(template_source, "item.up", len("item.")),
         _position(template_source, "item.up", len("item.up")),
     )
+
+
+@pytest.mark.asyncio
+async def test_semantic_diagnostics_check_c_values_against_their_target_types(tmp_path: Path) -> None:
+    # The child's annotation is postponed and names a class from another
+    # module, so the check must read it where the child declares it.
+    (tmp_path / "models.py").write_text(
+        "from dataclasses import dataclass\n@dataclass\nclass Task:\n    lane: str\n",
+        encoding="utf-8",
+    )
+    template_file = tmp_path / "board.html"
+    template_source = (
+        '<c-TaskCard c-task="1" />'
+        '<c-TaskCard c-task="task" c-title="task.lane" />'
+        '<c-TaskCard c-task="task" c-title="task" />'
+        "<div c-class=\"1\" c-style=\"{'color': 'red'}\"></div>"
+        "<div c-class=\"['a', {'b': task}]\"></div>"
+        '<c-OtherCard c-task="task" /><c-OtherCard c-task="1" />'
+    )
+    # An unrelated top-level `store` module must not be mistaken for the
+    # `store` alias the child's annotation names.
+    (tmp_path / "store.py").write_text("class Task:\n    pass\n", encoding="utf-8")
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from __future__ import annotations\n"
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "from models import Task\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class TaskCard(Component):\n"
+        "    citry = engine\n"
+        "    template = '<p></p>'\n"
+        "    class Kwargs:\n"
+        "        task: Task\n"
+        "        title: str = ''\n"
+        # A dotted name in a postponed annotation names the module alias
+        # imported here, not a top-level `store` module.
+        "import models as store\n"
+        "class OtherCard(Component):\n"
+        "    citry = engine\n"
+        "    template = '<p></p>'\n"
+        "    class Kwargs:\n"
+        "        task: store.Task\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    class TemplateData:\n"
+        "        task: Task\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    analyzer = TyAnalyzer(tmp_path)
+    try:
+        findings = await semantic_diagnostics(analyzer, document, project, {document.uri: document})
+    finally:
+        await analyzer.close()
+
+    # Each mismatch marks the authored value; the omitted `title` on the first
+    # tag is not reported here, because it has a default.
+    assert [(item.code, item.range) for item in findings] == [
+        (
+            "citry.python.invalid-assignment",
+            types.Range(_position(template_source, 'c-task="1"', 8), _position(template_source, 'c-task="1"', 9)),
+        ),
+        (
+            "citry.python.invalid-assignment",
+            types.Range(
+                _position(template_source, 'c-title="task"', 9),
+                _position(template_source, 'c-title="task"', 13),
+            ),
+        ),
+        (
+            "citry.python.invalid-assignment",
+            types.Range(_position(template_source, 'c-class="1"', 9), _position(template_source, 'c-class="1"', 10)),
+        ),
+        (
+            "citry.python.invalid-assignment",
+            types.Range(
+                _position(template_source, '<c-OtherCard c-task="1"', 21),
+                _position(template_source, '<c-OtherCard c-task="1"', 22),
+            ),
+        ),
+    ]
+    assert "`Task`" in findings[0].message
+
+
+async def _python_findings_in(
+    tmp_path: Path,
+    template_source: str,
+    module_source: str,
+) -> list[tuple[str | int | None, str, str]]:
+    """Run ty over `board.html` and return each finding's code, marked template text, and message."""
+    template_file = tmp_path / "board.html"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(module_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    analyzer = TyAnalyzer(tmp_path)
+    try:
+        findings = await semantic_diagnostics(analyzer, document, project, {document.uri: document})
+    finally:
+        await analyzer.close()
+    lines = template_source.splitlines(keepends=True)
+
+    def marked(item: types.Diagnostic) -> str:
+        start, end = item.range.start, item.range.end
+        assert start.line == end.line
+        return lines[start.line][start.character : end.character]
+
+    # ty may add `info:` lines after the first; the first line names the types.
+    return [(item.code, marked(item), item.message.split("\n", 1)[0]) for item in findings]
+
+
+# A child whose input takes three sizes, for the data shapes below.
+_SIZED_CARD = (
+    "from __future__ import annotations\n"
+    "from pathlib import Path\n"
+    "from typing import Literal, TypedDict, cast\n"
+    "from citry import Citry, Component\n"
+    "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+    "Size = Literal['sm', 'md', 'lg']\n"
+    "class Card(Component):\n"
+    "    citry = engine\n"
+    "    template = '<p></p>'\n"
+    "    class Kwargs:\n"
+    "        size: Size\n"
+)
+
+
+@pytest.mark.asyncio
+async def test_template_loop_variable_does_not_take_a_same_named_template_data_local(tmp_path: Path) -> None:
+    # `resolved` is also a declared local of template_data. The template loop
+    # variable is one row, not the list the local is declared as.
+    module_source = (
+        f"{_SIZED_CARD}"
+        "class Row(TypedDict):\n"
+        "    size: Size\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        resolved: list[Row] = [{'size': 'sm'}]\n"
+        "        label: int = 1\n"
+        "        return {'items': resolved, 'count': label}\n"
+    )
+    template_source = (
+        '<c-for each="resolved in items"><c-Card c-size="resolved[\'size\']" /></c-for>\n'
+        '<c-Card c-size="label" />\n'
+        '<c-Card c-size="1" />\n'
+    )
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    # Inside the loop `resolved` is one `Row`. `label` is a local, not a
+    # template variable, so it has no type to check; the template's own
+    # unknown-variable rule reports it instead. The last tag proves ty ran.
+    assert [(code, text) for code, text, _message in findings] == [("citry.python.invalid-assignment", "1")]
+
+
+@pytest.mark.asyncio
+async def test_c_value_check_keeps_each_returned_key_type(tmp_path: Path) -> None:
+    module_source = (
+        f"{_SIZED_CARD}"
+        "class Picked(TypedDict):\n"
+        "    size: Size\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        annotated: Size = 'md'\n"
+        "        loose = str(kwargs)\n"
+        "        picked: Picked = {'size': 'lg'}\n"
+        "        return {\n"
+        "            'plain': 'sm',\n"
+        "            'casted': cast(Size, loose),\n"
+        "            'annotated': annotated,\n"
+        "            'picked': picked,\n"
+        "            'nested': {'size': 'sm', 'count': 1},\n"
+        "            'loose': loose,\n"
+        "            'count': 1,\n"
+        "        }\n"
+    )
+    template_source = (
+        '<c-Card c-size="plain" />\n'
+        '<c-Card c-size="casted" />\n'
+        '<c-Card c-size="annotated" />\n'
+        "<c-Card c-size=\"picked['size']\" />\n"
+        "<c-Card c-size=\"nested['size']\" />\n"
+        '<c-Card c-size="loose" />\n'
+    )
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    # Each top-level key keeps its own type, so neither the `str` of `loose`
+    # nor the `int` of `count` leaks into the other keys. A dict nested in
+    # the returned dict is typed as a whole, and its values merge into one
+    # union, which the docs ask authors to replace with a TypedDict.
+    assert findings == [
+        (
+            "citry.python.invalid-assignment",
+            "nested['size']",
+            'Object of type `str | int` is not assignable to `Literal["sm", "md", "lg"]`',
+        ),
+        (
+            "citry.python.invalid-assignment",
+            "loose",
+            'Object of type `str` is not assignable to `Literal["sm", "md", "lg"]`',
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_c_value_check_keeps_key_types_of_a_returned_variable(tmp_path: Path) -> None:
+    module_source = (
+        f"{_SIZED_CARD}"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        data = {'size': 'lg', 'count': 2}\n"
+        "        return data\n"
+    )
+
+    findings = await _python_findings_in(tmp_path, '<c-Card c-size="size" />\n<c-Card c-size="1" />\n', module_source)
+
+    # Read through a second name, `size` would be `str | int`; read from
+    # `data` itself it is `Literal["lg"]`. The second tag proves ty ran.
+    assert [(code, text) for code, text, _message in findings] == [("citry.python.invalid-assignment", "1")]
+
+
+@pytest.mark.asyncio
+async def test_c_value_check_keeps_the_type_of_a_key_only_some_returns_have(tmp_path: Path) -> None:
+    module_source = (
+        f"{_SIZED_CARD}"
+        "class Wide(Component):\n"
+        "    citry = engine\n"
+        "    template = '<p></p>'\n"
+        "    class Kwargs:\n"
+        "        size: Size | int | None\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        if kwargs:\n"
+        "            return {'size': 'sm', 'extra': 'md', 'count': 1}\n"
+        "        return {'count': 2}\n"
+    )
+
+    findings = await _python_findings_in(tmp_path, '<c-Wide c-size="extra" />\n<c-Card c-size="1" />\n', module_source)
+
+    # Where `extra` is returned it is `Literal["md"]`; `dict.get()` would
+    # have merged it with `count` into `str | int | None`. Where it is
+    # missing, the value is `int | None`, which `Wide` also accepts.
+    assert [(code, text) for code, text, _message in findings] == [("citry.python.invalid-assignment", "1")]
+
+
+_RECORDED_BOUNDS_MODULE = (
+    '"""Cards."""\n'
+    "from __future__ import annotations\n"
+    "from . import helpers\n"
+    "class Card:\n"
+    "    class Kwargs:\n"
+    "        title: str\n"
+    "    @staticmethod\n"
+    "    def template_data(kwargs, slots):\n"
+    "        if kwargs:\n"
+    "            return {'title': kwargs.title}\n"
+    "        return {'title': helpers.TITLE}\n"
+    "class Board:\n"
+    "    class TemplateData:\n"
+    "        title: str\n"
+)
+
+
+@pytest.mark.parametrize("preamble", ["", "class Formatter:\n    pass\n"])
+@pytest.mark.parametrize(
+    "build",
+    [
+        # A decorated method with a relative import, a kwargs class from
+        # another module, a value check, and two returns.
+        lambda query: build_inferred_template_shadow(
+            _RECORDED_BOUNDS_MODULE,
+            "Card",
+            (TemplatePythonRoot("title", "always"),),
+            query,
+            source_module="app.cards",
+            kwargs_type=("app.schemas", "Kwargs"),
+            value_type=TemplatePythonValueType("app.store.Title | None"),
+        ),
+        # A schema function after its own type imports.
+        lambda query: build_schema_template_shadow(
+            _RECORDED_BOUNDS_MODULE,
+            "Board.TemplateData",
+            (TemplatePythonRoot("title", "always", "attribute", "app.cards", "Board.TemplateData"),),
+            query,
+            source_module="app.cards",
+        ),
+    ],
+)
+def test_recorded_query_function_bounds_match_a_parse_of_the_shadow(build, preamble: str) -> None:
+    query = TemplatePythonQuery("title.upper()", 0, 13, "interpolation", free_names=("title",))
+    document = build(query)
+    assert document is not None
+    document = _insert_shadow_preamble(document, preamble, _RECORDED_BOUNDS_MODULE)
+
+    # The batch check cuts the function out by these bounds, so they must
+    # match a parse of the shadow.
+    assert document.query_function is not None
+    assert document.query_function == _generated_query_function_bounds(document.source)
+
+
+@pytest.mark.asyncio
+async def test_static_component_inputs_are_checked_against_their_target_types(tmp_path: Path) -> None:
+    module_source = (
+        f"{_SIZED_CARD}"
+        "class Counter(Component):\n"
+        "    citry = engine\n"
+        "    template = '<p></p>'\n"
+        "    class Kwargs:\n"
+        "        count: int = 0\n"
+        "        label: str = ''\n"
+        "        shown: bool = False\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return {}\n"
+    )
+    # The walrus makes later Python values unsafe to check, but a static
+    # string reads no template variable, so the static values still are.
+    template_source = (
+        '<p c-title="(seen := 1)"></p>\n'
+        '<c-Card size="sm" />\n'
+        "<c-Card size='xl' />\n"
+        '<c-Counter count="3" label="a&amp;b" shown />\n'
+    )
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    # A static value is a string, so `xl` is not a size and `"3"` is not an
+    # int. `shown` without a value passes `True`, which is not checked here.
+    assert findings == [
+        (
+            "citry.python.invalid-assignment",
+            "'xl'",
+            'Object of type `Literal["xl"]` is not assignable to `Literal["sm", "md", "lg"]`',
+        ),
+        (
+            "citry.python.invalid-assignment",
+            '"3"',
+            'Object of type `Literal["3"]` is not assignable to `int`',
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_c_value_check_reads_a_class_nested_in_another_class(tmp_path: Path) -> None:
+    # `models.Board.Row` does not say where the module ends, so the check
+    # must learn from the app that `models` is the module.
+    (tmp_path / "models.py").write_text(
+        "from dataclasses import dataclass\nclass Board:\n    @dataclass\n    class Row:\n        title: str\n",
+        encoding="utf-8",
+    )
+    module_source = (
+        "from __future__ import annotations\n"
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "from models import Board\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class RowCard(Component):\n"
+        "    citry = engine\n"
+        "    template = '<p></p>'\n"
+        "    class Kwargs:\n"
+        "        row: Board.Row\n"
+        "class Page(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    class TemplateData:\n"
+        "        row: Board.Row\n"
+    )
+
+    findings = await _python_findings_in(
+        tmp_path, '<c-RowCard c-row="row" />\n<c-RowCard c-row="1" />\n', module_source
+    )
+
+    assert findings == [
+        ("citry.python.invalid-assignment", "1", "Object of type `Literal[1]` is not assignable to `Row`"),
+    ]

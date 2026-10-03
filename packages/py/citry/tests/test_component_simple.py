@@ -4,7 +4,26 @@ from __future__ import annotations
 
 import pytest
 
-from citry import Citry, Component, ComponentLibrary, LibraryComponent, Slot
+from citry import (
+    Citry,
+    Component,
+    ComponentLibrary,
+    Extension,
+    LibraryComponent,
+    OnTemplateCompiledContext,
+    Slot,
+)
+
+
+def test_simple_raw_body_keeps_exact_opaque_content_on_static_path() -> None:
+    app = Citry()
+
+    class Example(Component):
+        citry = app
+        simple = True
+        template = "<div><c-raw><c-Missing/>{{ untouched }}</c-raw></div>"
+
+    assert Example().render().serialize(deps_strategy="ignore") == "<div><c-Missing/>{{ untouched }}</div>"
 
 
 def test_simple_attribute_spreads_preserve_merging_and_text_expressions() -> None:
@@ -63,7 +82,6 @@ def test_simple_rejects_translation_binding_in_later_attribute_spread() -> None:
 
 
 def test_simple_spread_keeps_callers_translation_bindings_separate() -> None:
-    import json
     import re
 
     app = Citry(extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}})
@@ -91,12 +109,15 @@ def test_simple_spread_keeps_callers_translation_bindings_separate() -> None:
         """
 
     html = Page(attrs={"title": "ordinary"}).render().serialize()
-    assert 'title="ordinary">plain</span>' in html
-    wire = re.search(r'<script type="application/json" data-citry-i18n>(.*?)</script>', html, re.DOTALL)
-    assert wire is not None
-    bindings = [binding for requirement in json.loads(wire[1])["requirements"] for binding in requirement["bindings"]]
-    assert len(bindings) == 2
-    assert len({binding["id"] for binding in bindings}) == 2
+    # Interactive prepared renders serialize an inert host plus their typed
+    # manifest.  Keep checking that the simple output remains typed data in
+    # that manifest; browser mounting is covered by the native i18n e2e case.
+    assert '"title":"ordinary"' in html
+    assert '"plain"' in html
+    assert "PreparedTextValue(" not in html
+    binding_ids = re.findall(r'"id":"([^"]+~i18n-[^"]+)"', html)
+    assert len(binding_ids) == 2
+    assert len(set(binding_ids)) == 2
     with pytest.raises(TypeError, match=r"Label uses simple=True; \$c-tr bindings are unsupported"):
         Page(attrs={"$c-tr:save[title]": False}).render()
 
@@ -124,7 +145,6 @@ def test_simple_root_and_direct_tag_render_without_a_simple_instance() -> None:
     assert type(root.context.component) is not Label
     nested = Page(text="<value>").render()
     assert "<span>&lt;value&gt;</span>" in nested.serialize()
-    assert all(record.class_id != Label.class_id for record in nested.context.ownership.snapshot().logical_instances)
 
 
 def test_default_content_preserves_caller_variables_and_receives_a_real_slot() -> None:
@@ -181,10 +201,12 @@ def test_simple_data_runs_again_for_changed_inputs_and_globals() -> None:
     assert calls == ["a", "b", "c"]
 
 
-@pytest.mark.parametrize("simple", [1, None, "true", property(lambda _self: True)])
+@pytest.mark.parametrize("simple", [1, None, "true", "Vue", property(lambda _self: True)])
 def test_invalid_flag_rejected_before_registration(simple: object) -> None:
     app = Citry()
-    with pytest.raises(ValueError, match="simple must be an exact bool"):
+    # `simple` accepts exactly False, True, or the string "vue"; anything
+    # else, including a near-miss spelling, fails before registration.
+    with pytest.raises(ValueError, match=r"simple must be False, True, or 'vue'"):
         type("BadFlag", (Component,), {"citry": app, "simple": simple})
     assert not app.has("BadFlag")
 
@@ -264,7 +286,6 @@ def test_python_value_uses_its_insertion_owner() -> None:
 
     rendered = Page(label=Label(text="value")).render()
     assert "<span>value</span>" in rendered.serialize()
-    assert len(rendered.context.ownership.snapshot().logical_instances) == 1
 
 
 def test_library_simple_definition_works_as_a_python_value() -> None:
@@ -463,7 +484,6 @@ def test_python_default_content_simple_value_keeps_the_insertion_owner() -> None
 
     result = Page(box=Box(slots={"default": Label()})).render()
     assert "<section><span>label</span></section>" in result.serialize().replace("\n", "")
-    assert len(result.context.ownership.snapshot().logical_instances) == 1
 
 
 def test_simple_source_locations_and_error_headers_name_the_lexical_class() -> None:
@@ -488,9 +508,7 @@ def test_simple_source_locations_and_error_headers_name_the_lexical_class() -> N
             <main><c-shell c-divisor="divisor" /></main>
         """
 
-    rendered = Page(divisor=1).render()
-    locations = rendered.context.ownership.snapshot().source_locations
-    assert any(location.origin.endswith("::Shell") for location in locations)
+    Page(divisor=1).render()
     with pytest.raises(ZeroDivisionError, match="In template of 'Shell'"):
         Page(divisor=0).render()
 
@@ -565,7 +583,6 @@ def test_python_slot_expression_uses_the_insertion_owner(expression: str, pure: 
     page_class = type("Page", (Component,), {"citry": app, "pure": pure, "template": "{{ " + expression + " }}"})
     rendered = page_class(value=Slot(Label())).render()
     assert "<span" in rendered.serialize()
-    assert len(rendered.context.ownership.snapshot().logical_instances) == 1
 
 
 @pytest.mark.parametrize("wrap_result", [False, True])
@@ -650,6 +667,35 @@ class Box(Component):
     assert "again</section>" in box(slots={"default": "again"}).render().serialize()
 
 
+def test_simple_slots_may_extend_the_parent_slots() -> None:
+    app = Citry()
+
+    class Box(Component):
+        citry = app
+        simple = True
+
+        class Slots:
+            default: Slot | None = None
+
+        template = """
+            <section><c-slot /></section>
+        """
+
+    # The parent's generated class in the MRO is not an authored member, so
+    # naming it as a base passes the plain-field check.
+    class FramedBox(Box):
+        class Slots(Box.Slots):
+            pass
+
+        template = """
+            <section class="framed"><c-slot /></section>
+        """
+
+    html = FramedBox(slots={"default": "body"}).render().serialize()
+    assert 'class="framed"' in html
+    assert "body</section>" in html
+
+
 def test_rebinding_slot_schema_bases_is_rejected_before_execution() -> None:
     app = Citry()
     events = []
@@ -690,46 +736,6 @@ def test_library_simple_flag_uses_the_merged_mro() -> None:
     assert Label.simple is True
 
 
-def test_simple_interiors_and_fills_share_the_transparent_callers_boundary() -> None:
-    import json
-    import re
-
-    app = Citry()
-
-    class Receiver(Component):
-        citry = app
-        template = """
-            <section><c-slot /></section>
-        """
-        js = """
-            $component(() => {});
-        """
-
-    class Box(Component):
-        citry = app
-        simple = True
-        template = """
-            <div><c-receiver><b x-data="{name: 'hello'}" x-text="name"></b></c-receiver></div>
-        """
-
-    class Page(Component):
-        citry = app
-        transparent = True
-        template = """
-            <c-box />
-        """
-
-    html = Page().render().serialize()
-    match = re.search(r'<script type="application/json" data-citry-graph>(.*?)</script>', html, re.DOTALL)
-    assert match is not None
-    manifest = json.loads(match.group(1))
-    graph = manifest["graphs"][0]
-    assert len(graph["componentInstances"]) == 2
-    instance = next(record for record in graph["componentInstances"] if record["transparent"])
-    for side in ("s", "e"):
-        assert html.count(f"<!--citry:g1:{manifest['revision'][:8]}:0:i:{instance['instanceId']}:{side}-->") == 1
-
-
 @pytest.mark.parametrize("use_name", [False, True])
 def test_dynamic_selector_can_own_a_simple_target(use_name: bool) -> None:
     app = Citry()
@@ -749,15 +755,19 @@ def test_dynamic_selector_can_own_a_simple_target(use_name: bool) -> None:
 
     rendered = Page(target="Label" if use_name else Label).render()
     assert "label:" in rendered.serialize()
-    snapshot = rendered.context.ownership.snapshot()
-    assert [record.class_name for record in snapshot.logical_instances] == ["Page", "DynamicComponent"]
-    (invocation,) = snapshot.component_invocations
-    assert invocation.target_render_id == snapshot.logical_instances[1].render_id
-    assert snapshot.render_queue[0].state.value == "settled"
 
 
-@pytest.mark.parametrize("attribute", ['#c-key="None"', "#c-ignore", '@click="pressed = true"'])
-def test_dynamic_simple_target_rejects_instance_directives(attribute: str) -> None:
+@pytest.mark.parametrize(
+    ("attribute", "message"),
+    [
+        ('#c-key="None"', r"simple=True"),
+        # `#c-ignore` is rejected on every component tag when the template
+        # loads, before the dynamic target is known.
+        ("#c-ignore", r"'#c-ignore' is not supported on the component tag <c-component>"),
+        ('@click="pressed = true"', r"simple=True|component-boundary client bindings"),
+    ],
+)
+def test_dynamic_simple_target_rejects_instance_directives(attribute: str, message: str) -> None:
     app = Citry()
 
     class Label(Component):
@@ -768,7 +778,7 @@ def test_dynamic_simple_target_rejects_instance_directives(attribute: str) -> No
         """
 
     page = type("Page", (Component,), {"citry": app, "template": f'<c-component c-is="target" {attribute} />'})
-    with pytest.raises(TypeError, match="simple=True"):
+    with pytest.raises(TypeError, match=message):
         page(target=Label).render()
 
 
@@ -868,7 +878,6 @@ def test_python_root_selector_binds_default_supply_once() -> None:
 
     rendered = app.get("component")(**{"is": Label, "slots": {"default": "text"}}).render()
     assert "text</span>" in rendered.serialize()
-    assert len(rendered.context.ownership.snapshot().logical_fills) == 1
 
 
 def test_manual_selector_metadata_is_rejected_for_simple_target() -> None:
@@ -928,3 +937,43 @@ def test_kwargs_adapter_cannot_replace_the_checked_slot_constructor() -> None:
     with pytest.raises(TypeError, match="Slots declaration changed"):
         Box().render()
     assert calls == []
+
+
+def test_simple_renders_template_valued_attributes_and_compiles_each_once() -> None:
+    nested_compiles: list[str] = []
+
+    class CountNested(Extension):
+        name = "count_nested"
+
+        def on_template_compiled(self, ctx: OnTemplateCompiledContext) -> None:
+            if ctx.template_kind == "nested":
+                nested_compiles.append(ctx.component_class.__name__)
+
+    app = Citry(extensions=[CountNested])
+
+    class Card(Component):
+        citry = app
+
+        template = """
+            <section>{{ body }}</section>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"body": kwargs["body"]}
+
+    class Example(Component):
+        citry = app
+        simple = True
+
+        template = """
+            <div c-title="<b>{{ x }}</b>"><c-Card c-body="<span>{{ x }}</span>" /></div>
+        """
+
+    # The simple path checks each nested template before rendering it, and the
+    # render reuses that compiled result instead of compiling it again.
+    for _ in range(2):
+        html = Example(x="hi").render().serialize(deps_strategy="ignore")
+        assert 'title="&lt;b&gt;hi&lt;/b&gt;"' in html
+        assert "<section" in html
+        assert "<span>hi</span></section>" in html
+    assert nested_compiles == ["Example", "Example"]

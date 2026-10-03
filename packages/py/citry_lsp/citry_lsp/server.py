@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import time
 import uuid
 from contextlib import suppress
 from dataclasses import replace
@@ -19,6 +21,7 @@ from citry_core.template_formatter import EmbeddedFormatResult
 from citry_lsp.engine import (
     DocumentState,
     ParsedRegion,
+    TypeCheckProjection,
     browser_diagnostics,
     browser_projection,
     completion_result,
@@ -32,6 +35,7 @@ from citry_lsp.engine import (
     semantic_dependencies,
     template_lint_diagnostics,
     template_variable_hover,
+    type_check_projections,
 )
 from citry_lsp.environment import EnvironmentFileError, resolve_environment_file
 from citry_lsp.formatting import (
@@ -52,10 +56,12 @@ from citry_lsp.protocol import (
     HTML_PROJECTION_METHOD,
     PROTOCOL_VERSION,
     SERVER_VERSION,
+    TYPE_CHECK_METHOD,
     EmbeddedFormattingCapability,
     ProjectStatus,
 )
 from citry_lsp.semantic import (
+    infer_js_data_value_types,
     semantic_completions,
     semantic_definition,
     semantic_diagnostics,
@@ -65,6 +71,16 @@ from citry_lsp.semantic import (
     semantic_variable_hover,
 )
 from citry_lsp.type_analysis import TyAnalyzer
+from citry_lsp.typescript import (
+    TYPE_CHECK_CLIENT_VERSION,
+    TypeScriptFinding,
+    TypeScriptUnavailableError,
+    find_typescript_compiler,
+    map_type_check_findings,
+    parse_type_check_response,
+    run_typescript_compiler_async,
+    type_check_request_params,
+)
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
@@ -78,6 +94,10 @@ _MISSING = object()
 _EMBEDDED_REQUEST_TIMEOUT_SECONDS = 30.0
 _RELOAD_DEBOUNCE_SECONDS = 0.15
 _SEMANTIC_DIAGNOSTIC_DEBOUNCE_SECONDS = 0.15
+# How long one TypeScript check may take, in the client or in `tsc`.
+_TYPE_CHECK_TIMEOUT_SECONDS = 30.0
+# How long to wait before looking for a missing `tsc` again.
+_TSC_SEARCH_INTERVAL = 60.0
 logger = logging.getLogger(__name__)
 
 
@@ -118,6 +138,23 @@ class CitryLanguageServer(LanguageServer):
         self._semantic_refresh_deferred = False
         self._close_task: asyncio.Task[None] | None = None
         self._closing = False
+        # TypeScript findings forwarded into Citry documents (`typeCheck`).
+        self.type_check = True
+        # The client runs TypeScript itself and answers `citry/typeCheck`.
+        self.type_check_client = False
+        self._typescript_command: tuple[str, ...] | None = None
+        # When `tsc` was last looked for without success, so it is looked for again later.
+        self._typescript_missing_since: float | None = None
+        # Each distinct TypeScript failure is logged once.
+        self._type_check_failures: set[str] = set()
+        # The latest TypeScript findings per document and the text they were computed on.
+        self.type_findings: dict[str, tuple[types.Diagnostic, ...]] = {}
+        self._type_findings_source: dict[str, str] = {}
+        # TypeScript's last raw answer per document and the generated files it
+        # checked, so unchanged files are not checked again after every hover.
+        # The answer is mapped again each time, because Citry's own findings
+        # decide which TypeScript findings are dropped as duplicates.
+        self._type_check_cache: dict[str, tuple[tuple[str, ...], tuple[TypeScriptFinding, ...]]] = {}
 
     def configure(self, params: types.InitializeParams) -> None:
         """Validate initialization options before asynchronous project loading."""
@@ -152,6 +189,12 @@ class CitryLanguageServer(LanguageServer):
         )
         self.completion_snippets = bool(completion_item is not None and completion_item.snippet_support is True)
         self.embedded_formatting = _embedded_formatting_capability(options)
+        type_check = options.get("typeCheck", True)
+        if type(type_check) is not bool:
+            msg = "Citry initializationOptions.typeCheck must be a boolean"
+            raise JsonRpcInvalidParams(msg)
+        self.type_check = type_check
+        self.type_check_client = _type_check_client_capability(options)
         self.workspace_uri = _workspace_uri(params)
         self.workspace_path = _workspace_path(params)
         environment_file = options.get("envFile")
@@ -214,12 +257,27 @@ class CitryLanguageServer(LanguageServer):
         document.update(source, version, self.project)
         self.publish(document)
 
-    async def publish_semantic_diagnostics(self, uri: str, version: int | None) -> None:
-        """Publish mapped type findings only for the generation that requested them."""
+    async def publish_semantic_diagnostics(
+        self,
+        uri: str,
+        version: int | None,
+        *,
+        check_types: bool = True,
+    ) -> Callable[[], Awaitable[None]] | None:
+        """
+        Publish mapped type findings only for the generation that requested them.
+
+        With `check_types=False` the TypeScript check does not run here; the
+        returned function runs it later, so a caller refreshing several
+        documents can publish every document's own findings first.
+        """
         document = self.documents.get(uri)
         if document is None:
-            return
+            return None
         generation = self.analysis_generation
+        # ty types the js_data() values Citry's rules cannot, before anything
+        # below reads the js_data() keys' types.
+        await infer_js_data_value_types(self.type_analyzer, self.project, self.documents)
         findings = await semantic_diagnostics(
             self.type_analyzer,
             document,
@@ -231,21 +289,193 @@ class CitryLanguageServer(LanguageServer):
         i18n_findings = i18n_diagnostics(document, self.project, self.documents)
         current = self.documents.get(uri)
         if current is not document or current.version != version or self.analysis_generation != generation:
-            return
+            return None
         _report_type_analysis_failure(self)
+        citry_findings = (*document.diagnostics, *lint_findings, *browser_findings, *i18n_findings, *findings)
+        # Citry's own findings go out at once. TypeScript's take longer, so
+        # the previous ones stay visible until the new check finishes.
         self.text_document_publish_diagnostics(
             types.PublishDiagnosticsParams(
-                uri,
-                (*document.diagnostics, *lint_findings, *browser_findings, *i18n_findings, *findings),
-                version=version,
+                uri, (*citry_findings, *self._previous_type_findings(document)), version=version
+            )
+        )
+        if not self.type_check:
+            return None
+
+        async def publish_types() -> None:
+            # A mistake Citry reports itself, in browser code or in an
+            # attribute value, keeps only Citry's finding.
+            typescript_findings = await self.typescript_diagnostics(document, (*browser_findings, *lint_findings))
+            current = self.documents.get(uri)
+            if (
+                typescript_findings is None
+                or current is not document
+                or current.version != version
+                or self.analysis_generation != generation
+            ):
+                return
+            self.type_findings[uri] = typescript_findings
+            self._type_findings_source[uri] = document.source
+            self.text_document_publish_diagnostics(
+                types.PublishDiagnosticsParams(uri, (*citry_findings, *typescript_findings), version=version)
+            )
+
+        if check_types:
+            await publish_types()
+            return None
+        return publish_types
+
+    async def typescript_diagnostics(
+        self,
+        document: DocumentState,
+        citry_findings: tuple[types.Diagnostic, ...],
+    ) -> tuple[types.Diagnostic, ...] | None:
+        """
+        Run TypeScript over one document's projections and map its findings back.
+
+        The client runs TypeScript when it offers to (VS Code uses its own
+        TypeScript server); otherwise the project's `tsc` runs here. `None`
+        means no answer this time, so the previous findings stay.
+        """
+        projections = type_check_projections(document, self.project, self.documents)
+        if not projections:
+            return ()
+        sources = tuple(projection.source for projection in projections)
+        cached = self._type_check_cache.get(document.uri)
+        if cached is not None and cached[0] == sources:
+            return map_type_check_findings(projections, cached[1], citry_findings)
+        if self.type_check_client:
+            raw = await self._client_type_check(document, projections)
+        else:
+            command = self._typescript_compiler()
+            if command is None:
+                return ()
+            try:
+                raw = await run_typescript_compiler_async(
+                    command,
+                    [(projection.identity, projection.source) for projection in projections],
+                    timeout=_TYPE_CHECK_TIMEOUT_SECONDS,
+                )
+            except TypeScriptUnavailableError as error:
+                self._report_type_check_failure(str(error))
+                return None
+        if raw is None:
+            return None
+        self._type_check_cache[document.uri] = (sources, raw)
+        return map_type_check_findings(projections, raw, citry_findings)
+
+    def _previous_type_findings(self, document: DocumentState) -> tuple[types.Diagnostic, ...]:
+        """
+        Keep the previous TypeScript findings whose lines the edit did not touch.
+
+        They stay visible until the new check answers. A finding is kept only
+        while the document has the same number of lines and its own lines are
+        unchanged, so an edit never leaves one on the wrong text.
+        """
+        findings = self.type_findings.get(document.uri, ())
+        checked = self._type_findings_source.get(document.uri)
+        if not findings or checked is None:
+            return ()
+        # Split lines as LSP counts them.
+        before = re.split(r"\r\n|\r|\n", checked)
+        after = re.split(r"\r\n|\r|\n", document.source)
+        if len(before) != len(after):
+            return ()
+        return tuple(
+            finding
+            for finding in findings
+            if before[finding.range.start.line : finding.range.end.line + 1]
+            == after[finding.range.start.line : finding.range.end.line + 1]
+        )
+
+    async def _client_type_check(
+        self,
+        document: DocumentState,
+        projections: tuple[TypeCheckProjection, ...],
+    ) -> tuple[TypeScriptFinding, ...] | None:
+        """Ask the client to type-check the projection files, as `citry/formatEmbedded` asks it to format."""
+        request_id = str(uuid.uuid4())
+        pending = self.protocol.send_request_async(
+            TYPE_CHECK_METHOD,
+            type_check_request_params(document, projections),
+            msg_id=request_id,
+        )
+        try:
+            response = await asyncio.wait_for(asyncio.shield(pending), timeout=_TYPE_CHECK_TIMEOUT_SECONDS)
+        except asyncio.CancelledError:
+            # A newer edit replaced this check; tell the client to stop too.
+            self.protocol.notify(types.CANCEL_REQUEST, types.CancelParams(id=request_id))
+            pending.add_done_callback(_consume_cancelled_client_response)
+            raise
+        except Exception as error:  # noqa: BLE001 - a failing client must not stop Citry's own diagnostics
+            if isinstance(error, asyncio.TimeoutError):
+                self.protocol.notify(types.CANCEL_REQUEST, types.CancelParams(id=request_id))
+                pending.add_done_callback(_consume_cancelled_client_response)
+            logger.warning("The client's TypeScript check failed: %s", error)
+            return None
+        try:
+            return parse_type_check_response(
+                _plain_wire_value(response), [projection.identity for projection in projections]
+            )
+        except ValueError as error:
+            logger.warning("The client's TypeScript check answered an invalid result: %s", error)
+            return None
+
+    def _typescript_compiler(self) -> tuple[str, ...] | None:
+        """
+        Find `tsc`, looking again a minute after a failed search.
+
+        Installing TypeScript while the editor runs then takes effect without
+        a restart, without searching `PATH` on every keystroke.
+        """
+        if self._typescript_command is not None:
+            return self._typescript_command
+        now = time.monotonic()
+        if self._typescript_missing_since is not None and now - self._typescript_missing_since < _TSC_SEARCH_INTERVAL:
+            return None
+        try:
+            self._typescript_command = find_typescript_compiler(self.workspace_path)
+        except TypeScriptUnavailableError as error:
+            self._typescript_missing_since = now
+            self._report_type_check_failure(f"{error} Citry looks again every minute.")
+        return self._typescript_command
+
+    def _report_type_check_failure(self, message: str) -> None:
+        if message in self._type_check_failures:
+            return
+        self._type_check_failures.add(message)
+        self.window_log_message(
+            types.LogMessageParams(
+                types.MessageType.Warning,
+                f"Citry cannot check component JavaScript and templates with TypeScript: {message}",
             )
         )
 
     async def publish_semantic_dependents(self, changed: DocumentState) -> None:
-        """Refresh the changed document and templates that depend on Python source."""
-        await self.publish_semantic_diagnostics(changed.uri, changed.version)
+        """Refresh the changed document and the documents whose findings depend on it."""
+        await self._publish_documents((changed, *self._dependent_documents(changed)))
+
+    async def _publish_documents(self, documents: Sequence[DocumentState]) -> None:
+        """Publish each document's own findings, then run their TypeScript checks."""
+        type_checks = [
+            await self.publish_semantic_diagnostics(document.uri, document.version, check_types=False)
+            for document in documents
+        ]
+        for check in type_checks:
+            if check is not None:
+                await check()
+
+    def _dependent_documents(self, changed: DocumentState) -> list[DocumentState]:
+        """
+        Return the other open documents whose findings a change to `changed` can alter.
+
+        A Python change reaches every template that reads its schemas. A
+        template or JavaScript change reaches the component's other open
+        assets, because a template is type-checked against its component's
+        JavaScript, and the JavaScript's `$el` against its template.
+        """
         if changed.language_id != "python":
-            return
+            return self._component_asset_documents(changed)
         try:
             changed_path = file_uri_path(changed.uri)
             changed_uri = changed_path.resolve().as_uri() if changed_path is not None else changed.uri
@@ -261,8 +491,26 @@ class CitryLanguageServer(LanguageServer):
                 direct.append(document)
             elif not dependencies.complete:
                 fallback.append(document)
-        for document in (*direct, *fallback):
-            await self.publish_semantic_diagnostics(document.uri, document.version)
+        return [*direct, *fallback]
+
+    def _component_asset_documents(self, changed: DocumentState) -> list[DocumentState]:
+        """Return the open documents that hold another asset of a component `changed` belongs to."""
+        catalog = self.project.catalog
+        if catalog is None:
+            return []
+        owners = (*catalog.asset_owners(changed.uri, "template"), *catalog.asset_owners(changed.uri, "js"))
+        paths: set[Path] = set()
+        for component in owners:
+            for asset in (component.assets.template, component.assets.js):
+                source = asset.owner_file if asset.kind == "inline" else asset.resolved_path
+                if source is not None:
+                    paths.add(source.resolve())
+        related: list[DocumentState] = []
+        for document in tuple(self.documents.values()):
+            path = file_uri_path(document.uri)
+            if document is not changed and path is not None and path.resolve() in paths:
+                related.append(document)
+        return related
 
     def schedule_semantic_dependents(self, changed: DocumentState) -> None:
         """Debounce semantic diagnostics so interactive requests get priority."""
@@ -319,8 +567,7 @@ class CitryLanguageServer(LanguageServer):
 
     async def _delayed_all_semantic_diagnostics(self) -> None:
         await asyncio.sleep(_SEMANTIC_DIAGNOSTIC_DEBOUNCE_SECONDS)
-        for document in tuple(self.documents.values()):
-            await self.publish_semantic_diagnostics(document.uri, document.version)
+        await self._publish_documents(tuple(self.documents.values()))
 
     async def wait_for_semantic_refresh(self) -> None:
         """Await the currently scheduled refresh, primarily for focused tests."""
@@ -430,7 +677,11 @@ class CitryLanguageServer(LanguageServer):
         semantic = self._semantic_task
         if semantic is not None and not semantic.done():
             semantic.cancel()
+        previous = self.project
         self.project = _project_with_embedded_capability(project, self.embedded_formatting)
+        # ty's earlier js_data() answers stay in use until it answers for the
+        # reloaded project, so types do not flicker to `any` after a save.
+        self.project.adopt_js_data_inferred_types(previous, stale=True)
         self._reload_applied_generation = generation
         for uri, document in tuple(self.documents.items()):
             snapshot = prepared.get(uri)
@@ -609,12 +860,35 @@ def _embedded_formatting_capability(options: dict[str, object]) -> EmbeddedForma
     )
 
 
+def _type_check_client_capability(options: dict[str, object]) -> bool:
+    """Return whether the client offers to run TypeScript through `citry/typeCheck`."""
+    raw = options.get("typeCheckClient", _MISSING)
+    if raw is _MISSING:
+        return False
+    if type(raw) is not dict or type(raw.get("version")) is not int:
+        msg = "Citry initializationOptions.typeCheckClient must be an object with an integer version"
+        raise JsonRpcInvalidParams(msg)
+    # A newer client may offer a request shape this server does not know; it
+    # then runs TypeScript itself rather than refusing to start.
+    if raw["version"] != TYPE_CHECK_CLIENT_VERSION:
+        logger.warning(
+            "The client offers citry/typeCheck version %s; this server knows version %s, so it runs tsc itself.",
+            raw["version"],
+            TYPE_CHECK_CLIENT_VERSION,
+        )
+        return False
+    return True
+
+
 def _project_with_embedded_capability(
     project: ProjectState,
     capability: EmbeddedFormattingCapability | None,
 ) -> ProjectState:
     status = replace(project.status, embedded_formatting=capability)
-    return replace(project, status=status)
+    updated = replace(project, status=status)
+    # Only the formatting capability changed, so ty's answers are still current.
+    updated.adopt_js_data_inferred_types(project, stale=False)
+    return updated
 
 
 @server.feature(types.TEXT_DOCUMENT_DID_OPEN)
@@ -643,6 +917,9 @@ async def did_close(ls: CitryLanguageServer, params: types.DidCloseTextDocumentP
     """Drop document state and clear its diagnostics."""
     ls.analysis_generation += 1
     closed = ls.documents.pop(params.text_document.uri, None)
+    ls.type_findings.pop(params.text_document.uri, None)
+    ls._type_findings_source.pop(params.text_document.uri, None)
+    ls._type_check_cache.pop(params.text_document.uri, None)
     await ls.type_analyzer.close_document(params.text_document.uri)
     ls.text_document_publish_diagnostics(types.PublishDiagnosticsParams(params.text_document.uri, ()))
     if closed is not None and closed.language_id == "python":
@@ -1405,6 +1682,17 @@ def _projection_request_params(
     if type(line) is not int or type(character) is not int or line < 0 or character < 0:
         raise JsonRpcInvalidParams(f"{label} position is invalid")
     return uri, version, types.Position(line, character)
+
+
+def _plain_wire_value(value: object) -> object:
+    """Turn the objects Pygls decodes a client response into back into plain dicts and lists."""
+    if _is_wire_object(value) and type(value) is not dict:
+        return {name: _plain_wire_value(getattr(value, name)) for name in getattr(value, "_fields", ())}
+    if type(value) is dict:
+        return {key: _plain_wire_value(item) for key, item in value.items()}
+    if type(value) is list:
+        return [_plain_wire_value(item) for item in value]
+    return value
 
 
 def _is_wire_object(value: object) -> bool:

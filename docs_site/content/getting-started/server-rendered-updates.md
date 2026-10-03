@@ -1,186 +1,97 @@
 ---
 title: Update page from Python
-description: Render a new component into one chosen part of the page, including its browser data and CSS.
+description: Replace a component with freshly rendered HTML, browser data, and CSS from a Python event handler.
 ---
 
 # Update page from Python
 
-The form currently reports success by changing a line of text in the browser.
-For the final step, Python will render a new `Confirmation` component into the
-result area.
+Sometimes the result of a call is easier to show as new HTML than as browser
+data: a confirmation, an updated table, a different view. A handler can
+return a component, and Citry renders it on the server and puts it on the
+page.
 
-The form itself will stay where it is. Only the chosen part of the page will
-change.
+In the last step, the form showed the accepted address with browser data. In
+this step, Python replaces the whole `SignupForm` with a `Confirmation`
+component.
 
-Continue from [Handle and validate a
-form](/getting-started/forms/). Keep `citry_setup.py` and `app.py` unchanged.
-
-## Return a rendered update
-
-Replace `components.py` with the finished version:
-
-The file stays focused on the form. The `New in this step` comments mark the
-complete change:
-
-- a new `Confirmation` component
-- form's new success action and result area
-- two places where the page collects component CSS and JavaScript
+Replace `components.py` with:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step12.py" language="citry" />
 
-Open `http://127.0.0.1:8000/`. Try `ada@elsewhere.test` once more to confirm
-that the field error still works. Then submit `ada@example.com`.
+Submit an invalid address to check that validation still works, then submit
+`ada@example.com`. The form becomes a bordered confirmation.
 
-The placeholder inside the result area becomes a bordered confirmation. Its
-status changes to “Confirmation ready for ada@example.com.” The email form
-remains above it.
-
-## Confirmation fragment
-
-`Confirmation` is an ordinary component. Focusing only on its input and
-visible HTML, it looks like this:
-
-```citry
-class Confirmation(Component):
-    class Kwargs:
-        email: str
-
-    template = """
-      <section class="confirmation">
-        <strong>Request received</strong>
-        <p>We will write to {{ email }}.</p>
-        <p
-          class="confirmation__status"
-          x-text="'Confirmation ready for ' + email"
-        >
-          Preparing confirmation...
-        </p>
-      </section>
-    """
-```
-
-The complete class above also includes its Citry instance, `Slots`, browser
-data, and CSS. This smaller excerpt shows the first connection:
-`Confirmation(email=email)` supplies the value that `{{ email }}` inserts.
-
-## Render action
-
-The successful handler now returns an
-[`actions.Render`][citry.ext.events.actions.Render] action:
+## Return a new component
 
 ```python
-return actions.Render(
-    Confirmation(email=email),
-    target="#signup-result",
-    swap="inner",
-)
+confirmation = Confirmation(email=email)
+return actions.Render(confirmation)
 ```
 
-`Confirmation(email=email)` builds a fresh component for this response. Citry
-renders it as a browser update, including the information needed for that
-component's CSS and browser data. The validation path still raises the same
-`EventError`; only a successful submission reaches this return statement.
+[`actions.Render`][citry.ext.events.actions.Render] renders `Confirmation`
+on the server and puts it in place of the component whose handler ran, here
+`SignupForm`. The response carries everything the new component needs: its
+HTML, its browser data, and its CSS.
 
-## Swap target selector
+To update a different part of the page instead, pass a `target`, as
+[`<c-mark>` partial update](/events/actions/#update-one-part-of-the-page)
+shows.
 
-The form contains a stable result area:
+The swap happens only in the open browser tab. Reloading the page shows the
+form again, because `TutorialPage` still renders `SignupForm`.
+
+## Announce the change
+
+`TutorialPage` wraps the form in an `aria-live` region:
 
 ```citry-html
-<div id="signup-result" aria-live="polite">
-  <p>Your confirmation will appear here.</p>
+<div aria-live="polite">
+  <c-SignupForm />
 </div>
 ```
 
-[`target="#signup-result"`][citry.ext.events.actions.Render.target] points to
-that element with a CSS selector.
-[`swap="inner"`][citry.ext.events.actions.Render.swap] replaces its contents
-while keeping the `<div id="signup-result">` itself. The form, input, and
-button remain where they are. `aria-live="polite"` also lets assistive
-technology announce the new confirmation without moving keyboard focus.
+The region belongs to `TutorialPage`, which stays on the page. When
+`Confirmation` takes the form's place inside it, screen readers announce the
+confirmation.
 
-Use a selector that identifies the intended area without matching unrelated
-elements.
+## Set its browser data
 
-## Confirmation browser data
-
-The confirmation sends its email address to browser code through
-[`js_data()`][citry.Component.js_data]:
+`Confirmation` has its own [`js_data()`][citry.Component.js_data]:
 
 ```python
 def js_data(self, kwargs: Kwargs, slots: Slots):
     return {"email": kwargs.email}
 ```
 
-Citry seeds the top-level `email` key directly into this component's Alpine
-scope. The template can use it without a `$component` callback:
+Vue can use `email` as soon as the new component is on the page:
 
 ```citry-html
 <p
   class="confirmation__status"
-  x-text="'Confirmation ready for ' + email"
+  v-text="'Confirmation ready for ' + email"
 >
   Preparing confirmation...
 </p>
 ```
 
-When the new component starts, Alpine replaces “Preparing confirmation...”
-with the finished status. Use `$component` only when a component also needs
-imperative JavaScript setup, client prop declarations, effects, or cleanup.
+The text Python rendered shows until Vue starts. Then `v-text` replaces it.
 
-!!! note
+## Load its CSS and JS
 
-    The value returned by `js_data()` must be JSON-serializable.
+`TutorialPage` now places `<c-css />` in the head and `<c-js />` at the end
+of the body. These tags mark where Citry puts the CSS and JavaScript that the
+page's components need.
 
-## Confirmation CSS
-
-`Confirmation` also owns the border that makes the new result visible:
-
-```css
-.confirmation {
-  border: 2px solid #2f855a;
-  border-radius: 0.5rem;
-  padding: 1rem;
-}
-```
-
-## Asset and data loading order
-
-There are two steps when component assets and browser data reach the page:
-
-### 1. First response - Full page
-
-When you first loaded the entire page, `TutorialPage`, Citry automatically
-collected its CSS and JavaScript assets and inserted them into the HTML.
-
-You can customize where to insert the assets with [`<c-css />`][c-css] and [`<c-js />`][c-js]. Adding the tags makes the positions explicit. Read more about [asset placement](/advanced/asset-placement/).
-
-```citry-html
-<head>
-  ...
-  <c-css />
-</head>
-<body>
-  ...
-  <c-js />
-</body>
-```
-
-### 2. Second response - Fragment
-
-`Confirmation` is created later. Its CSS and browser data arrive in the
-**second** response when the server responds to the form submission, so it
-never sees the `<c-css />` and `<c-js />` tags from the first render.
-
-The second response inserts `Confirmation` into the page. Citry collects the
-inserted fragment's assets, loads what is still missing, and seeds its Alpine
-scope before the new component starts.
-
-That is why the green border appears and the status changes after the confirmation enters the page.
-
-See [Event actions](/events/actions/) for the other results a handler can
-return, and [HTML fragments](/advanced/html-fragments/) for a deeper look at
-rendering and inserting partial HTML.
+`Confirmation` was not on the first page, so its CSS was not loaded. Citry
+sends the missing CSS and JavaScript with the response and loads them before
+it shows the new component. That is why the border appears right away.
 
 ## Next steps
 
-You now know how to build a single page with a view events. Next, let's build a [CRUD admin table](/getting-started/build-crud-pages/) to learn how to manage a page with tens to hundreds of components.
+[Event actions](/events/actions/) lists other things a handler can return,
+and [`Render` another component](/events/actions/#swap-in-a-different-component)
+lists what the new component does not keep from the old one. [HTML
+fragments](/advanced/html-fragments/) covers rendering part of a page in more
+depth.
+
+Next, [build a CRUD task list](/getting-started/build-crud-pages/).

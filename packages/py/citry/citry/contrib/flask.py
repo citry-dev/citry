@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from citry.contrib.wsgi import wsgi_app
+from citry.util.routing import normalize_mount_prefix
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -36,18 +37,39 @@ def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     """
     Mount ``citry_instance``'s routes into a Flask ``app`` at ``prefix``, and
     record the prefix on the instance.
+
+    A trailing ``/`` on ``prefix`` is dropped, so ``"/citry/"`` serves the
+    same paths as ``"/citry"``.
+
+    Raises:
+        ValueError: If ``prefix`` does not start with ``/``, or is the root
+            ``"/"``. The app is left unchanged.
+
     """
+    # Validate before touching the app: a failure after the wsgi_app swap
+    # would leave the app routing to a Citry instance that never recorded
+    # its prefix. Normalizing also keeps "/citry/" from matching only
+    # "/citry//..." paths below.
+    mount_path = normalize_mount_prefix(prefix)
+    # Every request matches a root mount, so the Flask app's own routes
+    # would never run.
+    if not mount_path:
+        msg = (
+            f"Flask mount() needs a prefix below the root, such as '/citry', got {prefix!r}. "
+            "A root prefix would send every request to Citry and none to the Flask app."
+        )
+        raise ValueError(msg)
     citry_wsgi = wsgi_app(citry_instance)
     host_wsgi = app.wsgi_app
 
     def dispatch(environ: dict[str, Any], start_response: StartResponse) -> Iterable[bytes]:
         path = environ.get("PATH_INFO", "")
-        if path == prefix or path.startswith(prefix + "/"):
+        if path == mount_path or path.startswith(mount_path + "/"):
             # The WSGI convention for sub-mounting: the prefix moves into
             # SCRIPT_NAME, PATH_INFO keeps the remainder.
             forwarded = dict(environ)
-            forwarded["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + prefix
-            forwarded["PATH_INFO"] = path[len(prefix) :]
+            forwarded["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + mount_path
+            forwarded["PATH_INFO"] = path[len(mount_path) :]
             return citry_wsgi(forwarded, start_response)
         return host_wsgi(environ, start_response)
 

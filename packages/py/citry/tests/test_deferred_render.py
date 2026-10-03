@@ -3,16 +3,17 @@ Tests for deferred component rendering (docs/design/component_rendering_defer.md
 
 ``ComponentNode`` no longer recurses; it returns a ``DeferredComponent`` part,
 and ``render_impl`` drives a heap-bound, depth-first queue that resolves every
-deferred component. This makes render depth unbounded, keeps loop-variable kwargs
-correct, fires ``on_component_rendered`` children-first the moment each subtree is
-complete, and bubbles dependencies up at finalize time.
+deferred component. This frees render depth from Python's recursion limit
+(``max_component_depth`` bounds it instead), keeps loop-variable kwargs
+correct, fires ``on_component_rendered`` children-first the moment each
+subtree is complete, and bubbles dependencies up at finalize time.
 """
 
 # ruff: noqa: ANN
 
 import pytest
 
-from citry import Citry, CitryContext, CitryRender, Component
+from citry import Citry, CitryContext, CitryRender, Component, Markup
 from citry.citry_render import DeferredComponent
 from citry.extension import Extension
 
@@ -75,6 +76,160 @@ class TestSelfRecursion:
             '<div data-cid-c7=""><span>d7;</span>'
             "</div></div></div></div></div></div></div>"
         )
+
+
+def _tree_class(app, *, simple=False):
+    """A component that renders itself once per child of its ``node`` input."""
+    attrs = {
+        "citry": app,
+        "simple": simple,
+        "template": """
+            <div>
+              {{ label }}
+              <c-for each="child in children">
+                <c-tree c-node="child" />
+              </c-for>
+            </div>
+        """,
+    }
+
+    def data(kwargs, slots):
+        node = kwargs["node"]
+        return {"label": node["label"], "children": node.get("children", [])}
+
+    def method(self, kwargs, slots):
+        return data(kwargs, slots)
+
+    # A simple component's template_data takes no instance.
+    attrs["template_data"] = staticmethod(data) if simple else method
+    return type("Tree", (Component,), attrs)
+
+
+def _chain(depth):
+    """A tree with one node per level, ``depth`` levels deep."""
+    node = {"label": "leaf"}
+    for level in range(depth - 1):
+        node = {"label": f"n{level}", "children": [node]}
+    return node
+
+
+def _self_containing_tree():
+    """A tree listed among its own children, so it never reaches a leaf."""
+    tree = {"label": "root", "children": []}
+    tree["children"].append(tree)
+    return tree
+
+
+class TestNestingLimit:
+    def test_self_containing_data_fails_with_the_repeating_component(self):
+        # Without the limit, the work list grows forever (memory climbs until
+        # the process dies). The default limit must stop it with an error
+        # that names the component and shortens the chain of ancestors.
+        Tree = _tree_class(Citry())
+
+        with pytest.raises(RecursionError) as caught:
+            Tree(node=_self_containing_tree()).render()
+
+        assert str(caught.value).startswith(
+            "Component Tree is nested more than 2000 components deep (Tree > Tree > ... > Tree > Tree > Tree). "
+        )
+        assert "max_component_depth" in str(caught.value)
+
+    @pytest.mark.parametrize("simple", [False, True, "vue"])
+    def test_limit_allows_exactly_max_component_depth_levels(self, simple):
+        # Ordinary, simple=True, and simple="vue" children reach the work
+        # list differently; each must count one level per component.
+        Tree = _tree_class(Citry(max_component_depth=5), simple=simple)
+
+        html = Tree(node=_chain(5)).render().serialize()
+        assert "leaf" in html
+        with pytest.raises(RecursionError, match="nested more than 5 components deep"):
+            Tree(node=_chain(6)).render()
+
+    def test_deep_finite_tree_renders_under_the_default_limit(self):
+        Tree = _tree_class(Citry())
+
+        html = Tree(node=_chain(500)).render().serialize()
+        assert html.count("<div") == 500
+        assert "leaf" in html
+
+    def test_recursion_through_slot_content_is_limited(self):
+        # The recursive call sits in fill content that another component
+        # renders, so the child reaches the work list through a slot.
+        c = Citry(max_component_depth=20)
+
+        class Wrap(Component):
+            citry = c
+            template = """
+                <section><c-slot /></section>
+            """
+
+        class SlotTree(Component):
+            citry = c
+            template = """
+                <div>
+                  <c-for each="child in children">
+                    <c-wrap><c-slot-tree c-node="child" /></c-wrap>
+                  </c-for>
+                </div>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"children": kwargs["node"].get("children", [])}
+
+        with pytest.raises(RecursionError, match="SlotTree is nested more than 20 components deep"):
+            SlotTree(node=_self_containing_tree()).render()
+
+    def test_error_boundary_cannot_catch_the_nesting_error(self):
+        # A node listed twice among its own children, under an error
+        # boundary at every level: if a boundary swallowed the error, the
+        # next sibling would recurse again and the work would double with
+        # each level. The error must end the whole render instead.
+        c = Citry(max_component_depth=20)
+        rendered = []
+
+        class Tree(Component):
+            citry = c
+            template = """
+                <div>
+                  <c-error-fallback fallback="!">
+                    <c-for each="child in children">
+                      <c-tree c-node="child" />
+                    </c-for>
+                  </c-error-fallback>
+                </div>
+            """
+
+            def template_data(self, kwargs, slots):
+                rendered.append(1)
+                return {"children": kwargs["node"]["children"]}
+
+        tree = {"children": []}
+        tree["children"].extend([tree, tree])
+
+        with pytest.raises(RecursionError, match="nested more than 20 components deep"):
+            Tree(node=tree).render()
+        # One straight path down to the limit, no retries through siblings:
+        # each level is a Tree plus its error boundary, so 20 levels hold
+        # 10 Trees.
+        assert len(rendered) == 10
+
+    def test_on_render_that_returns_itself_is_limited(self):
+        # Each replacement is a new component inside the previous one, so a
+        # replacement that always returns the same component nests forever.
+        c = Citry(max_component_depth=20)
+
+        class Again(Component):
+            citry = c
+            template = """
+                <p>never shown</p>
+            """
+
+            def on_render(self):
+                return Again()
+
+        with pytest.raises(RecursionError, match="Again is nested more than 20 components deep"):
+            Again().render()
 
 
 class TestLoopVarKwargs:
@@ -208,7 +363,7 @@ class TestNestedRenderedHook:
 
             def on_component_rendered(self, ctx):
                 if type(ctx.component).__name__ == "Leaf":
-                    return "<leaf-wrapped/>"
+                    return Markup("<leaf-wrapped/>")
                 return None
 
         c = Citry(extensions=[WrapLeaf])

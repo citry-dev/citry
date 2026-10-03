@@ -16,7 +16,6 @@ import type {
 } from "./types";
 
 const HTTP_METHOD = /^[!#$%&'*+.^_`|~0-9A-Z-]+$/;
-const REVISION = /^[0-9a-f]{64}$/;
 const DESCRIPTOR_FIELDS = new Set([
 	"componentClassId",
 	"eventHandlers",
@@ -38,7 +37,6 @@ const INSTANCE_FIELDS = new Set([
 ]);
 const MANIFEST_FIELDS = new Set([
 	"protocol",
-	"clientGraphRevision",
 	"componentClasses",
 	"componentInstances",
 ]);
@@ -375,26 +373,6 @@ export const validateManifest = (
 			path: pointer(path, "protocol"),
 			category: typeof value.protocol === "string" ? "enum" : "type",
 			message: "The manifest protocol must be citry-events/1.",
-		};
-	}
-	if (
-		value.clientGraphRevision !== null &&
-		typeof value.clientGraphRevision !== "string"
-	) {
-		return {
-			path: pointer(path, "clientGraphRevision"),
-			category: "type",
-			message: "The graph revision must be a string or null.",
-		};
-	}
-	if (
-		typeof value.clientGraphRevision === "string" &&
-		!REVISION.test(value.clientGraphRevision)
-	) {
-		return {
-			path: pointer(path, "clientGraphRevision"),
-			category: "pattern",
-			message: "The graph revision must be lowercase SHA-256.",
 		};
 	}
 	if (!Array.isArray(value.componentClasses)) {

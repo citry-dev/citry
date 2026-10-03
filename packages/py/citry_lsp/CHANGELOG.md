@@ -2,6 +2,105 @@
 
 All notable changes to `citry-lsp` are documented here.
 
+## Unreleased
+
+### Added
+
+- The editor reports TypeScript's errors in component JavaScript and Vue
+  template expressions, such as a method assigned a boolean, an `$emit`
+  payload that fails its validator, a wrong argument count, or an unknown
+  member of `this.$el`. They show as `citry.typescript.*` errors with the
+  source `Citry (ts)`, and a mistake Citry already reports keeps only
+  Citry's finding. VS Code uses its own TypeScript; other editors use the
+  project's `tsc`. Set the `typeCheck` initialization option to `false` to
+  turn it off.
+- The editor checks a bound attribute on an HTML element, such as
+  `:draggable` or `:style`, against Vue's types for that attribute, so
+  `:style="1"` is a TypeScript error. This can report existing bindings
+  such as `:aria-expanded="String(open)"`; bind the boolean instead.
+- The editor checks each `c-*` value on a component tag against the
+  child's `Kwargs` annotation, so `<c-TaskCard c-task="1">` is an error
+  when `task` is a `Task`. A static attribute is checked as the string
+  it passes, so `<c-TaskCard size="xl">` is an error when `size` only
+  takes `"sm"`, `"md"`, or `"lg"`. It also checks that `c-class` and
+  `c-style` on an HTML element get a string, a dict, a list or tuple of
+  those, or `None`.
+- The editor warns about a static HTML attribute value that the attribute
+  does not accept, such as `draggable="treu"` or `<input type="datetime">`,
+  and suggests the closest valid keyword. A Vue binding to one string,
+  such as `:dir="'rlt'"`, is checked the same way, and TypeScript does
+  not report the same value again, so such a value is now a warning
+  rather than a TypeScript error.
+- The editor asks ty for the type of a `js_data()` value Citry has no
+  rule for, such as `self.labels()` or a list comprehension, so when
+  `labels()` returns `list[str]`, completion, hover, and TypeScript checks
+  type `this.labels` as `string[]` instead of `any`.
+
+### Changed
+
+- A value Citry cannot type, such as an injection or a server event's
+  result, is `any` in completion and hover.
+- A `js_data()` constant types its key by the value's general type, such
+  as `boolean` for `False`, while a Kwargs field annotated with a
+  `Literal`, or an `Enum` member's `.value`, keeps its values, such as
+  `"sm" | "md"`.
+- A `js_data()` value that reads attributes of a Kwargs field, such as
+  `kwargs.task.lane`, types its key from the annotations of the classes
+  it passes through, so `lane: str` makes `this.laneKey` a `string`
+  instead of `any`.
+- `$event` on an HTML element is the DOM event of that name, such as
+  `KeyboardEvent` for `@keydown`, and a name the DOM does not define is a
+  `CustomEvent`.
+- A selector query such as `querySelector('#name')` returns `any`.
+
+- citry-lsp 0.2.0 understands Vue templates and component JavaScript.
+  It requires Citry 0.6.0 or newer, with no upper bound, so upgrade
+  `citry` and `citry-lsp` together. Keep citry-lsp 0.1.x for a project
+  that stays on Citry 0.5.x.
+- On a subclassed component, completion, hover, and template checks
+  follow Citry 0.6.0's rule for nested data classes such as `TemplateData`
+  and `JsData`: a plain `class TemplateData:` on the subclass replaces the
+  parent's class and drops its fields, while
+  `class TemplateData(Parent.TemplateData):` keeps them.
+- Hovers and type checks cover every field of the `onServerRender`
+  context, including `state`, `sendEvent`, `loading`, `error`, `i18n`,
+  `els`, and `id`, and `$component({ init })` is checked like
+  `onServerRender`.
+
+### Fixed
+
+- In VS Code, `this` inside `$component({ ... })` now completes and hovers
+  every member of the component: props, injections, `data()`, `setup()`,
+  computed values, methods, `js_data()` keys, and Citry's helpers such as
+  `$sendEvent`. Vue expressions in the template get the same types, and Go
+  to Definition from either place opens the member's declaration, or the
+  Python field for a `js_data()` key.
+- `$el` is typed from the component template's top-level node, such as
+  `HTMLButtonElement` for a `<button>` root, instead of `any` in component
+  JavaScript and `Element` in templates.
+- `$emit` follows the component's `emits` option like Vue's
+  `defineComponent()`: completion offers the declared names, hover shows
+  each event's values, and a listener on a child component tag types
+  `$event` from the child's `emits`. The editor also marks an event name
+  that `emits` does not declare.
+- Hovering `$state` explains that it is Citry's Events State, typed from
+  the component's `State` class, not Vue's `data()` or a Pinia store.
+- Completion, hover, go-to-definition, and unknown-variable diagnostics now
+  work for keys returned by a `template_data`, `js_data`, or `css_data`
+  written as a `@staticmethod` or `@classmethod`, not only for instance
+  methods.
+- In an app without i18n settings, the editor no longer reports "Unknown
+  i18n format profile" for a `self.i18n.format.number(..., format=...)`
+  call guarded by `self.i18n.configured`, as `citry check` does.
+- A template loop variable now has its own type in hover and type checks
+  when `template_data()` has a local of the same name. Before, `c-for="row
+  in rows"` next to a local `row: list[Row]` typed the loop variable as
+  the list.
+- Hover and type checks keep each key's own type in the dict
+  `template_data()` returns, also when the method ends with `return data`
+  or when only some returns include the key. Before, such a key could show
+  the union of every value in the dict.
+
 ## [0.1.7] - 2026-09-11
 
 ### Added

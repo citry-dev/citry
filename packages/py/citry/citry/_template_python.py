@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import ast
+import builtins
 import copy
+import itertools
 import re
+import symtable
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Literal
 
+from citry._source_lines import source_lines
 from citry_core.template_parser import HtmlAttrKind, TemplateElement, parse_template
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+# A type display may use these names without importing them.
+_BUILTIN_NAMES = frozenset(dir(builtins))
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +53,9 @@ class TemplatePythonQuery:
         host_kind: Template construct that owns the expression.
         controls: Enclosing template controls in lexical order.
         free_names: Parser-proven free root names used by the expression.
+        attribute_target: For a ``c-*`` attribute value, the tag as written
+            and the attribute name without its ``c-`` prefix, such as
+            ``("c-TaskCard", "task")``; otherwise ``None``.
 
     """
 
@@ -54,6 +65,7 @@ class TemplatePythonQuery:
     host_kind: Literal["interpolation", "attribute", "loop"]
     controls: tuple[TemplatePythonControl, ...] = ()
     free_names: tuple[str, ...] = ()
+    attribute_target: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +117,33 @@ class TemplatePythonRoot:
 
 
 @dataclass(frozen=True, slots=True)
+class TemplatePythonValueType:
+    """
+    The type an attribute value must have, so the analyzer checks the value against it.
+
+    A ``c-task="..."`` value on ``<c-TaskCard>`` must match the child's
+    ``Kwargs.task`` annotation. The generated Python assigns the authored
+    value to a variable annotated with this type, so ty reports a mismatch
+    on the value itself.
+
+    Attributes:
+        annotation: A Python annotation written the way Citry formats schema
+            types, such as ``app.store.Task | None`` or ``Task``.
+        module: The module whose names an unqualified annotation uses, such
+            as the module that declares the child's ``Kwargs``.
+        class_modules: The module of each dotted class path in
+            ``annotation``, such as ``("app.store.Board.Row", "app.store")``
+            for a class nested in another class. A dotted path without an
+            entry is read as a module followed by one class name.
+
+    """
+
+    annotation: str
+    module: str | None = None
+    class_modules: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class ShadowPythonCopy:
     """
     One generated copy of the queried authored expression.
@@ -151,12 +190,17 @@ class ShadowPythonDocument:
         source: Complete generated Python source.
         copies: Exact authored template expression copies.
         source_copies: Unchanged ranges copied from the Python source input.
+        query_function: Start and end string offsets of the generated
+            ``__citry_analyze_template`` function, from the start of its
+            ``def`` line to the end of its body, so a caller can cut it out
+            without parsing the source again; ``None`` when unknown.
 
     """
 
     source: str
     copies: tuple[ShadowPythonCopy, ...]
     source_copies: tuple[ShadowPythonSourceCopy, ...] = ()
+    query_function: tuple[int, int] | None = None
 
 
 def template_python_query_at(
@@ -191,6 +235,81 @@ def template_python_queries(
     return tuple(queries)
 
 
+def template_static_input_queries(
+    template: Any,
+    *,
+    parse_nested: Callable[[str], Any] = parse_template,
+) -> tuple[TemplatePythonQuery, ...]:
+    """
+    Return a query for each quoted static attribute on a ``c-*`` component tag.
+
+    ``<c-TaskCard lane="todo">`` passes the string ``"todo"`` as the
+    ``lane`` input, so the quoted text, quotes included, is a Python string
+    literal with the value the child receives, and it can be checked
+    against the child's input type like a ``c-lane`` value. Citry passes the
+    text as written, without decoding character references, so the literal
+    matches it exactly. A value with a backslash, which Python would read
+    as an escape, or with a line break, which a quoted literal cannot hold,
+    is left out. An unquoted value is left out too, and so is an empty or
+    missing one, which passes ``True`` rather than a string.
+    """
+    queries: list[TemplatePythonQuery] = []
+    _collect_static_input_queries(template, queries, base_index=0, parse_nested=parse_nested)
+    return tuple(sorted(queries, key=lambda query: query.start_index))
+
+
+def _collect_static_input_queries(
+    template: Any,
+    queries: list[TemplatePythonQuery],
+    *,
+    base_index: int,
+    parse_nested: Callable[[str], Any],
+) -> None:
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node: Any = element._0
+        tag_name = node.start_tag.name.content
+        for attr in node.start_tag.attrs:
+            name = attr.key.content
+            value = attr.value
+            if attr.kind == HtmlAttrKind.Template and attr.inner_value is not None:
+                nested = _nested_template(attr.inner_value.content, parse_nested)
+                if nested is not None:
+                    nested_template, nested_start = nested
+                    _collect_static_input_queries(
+                        nested_template,
+                        queries,
+                        base_index=base_index + attr.inner_value.start_index + nested_start,
+                        parse_nested=parse_nested,
+                    )
+                continue
+            if (
+                attr.kind != HtmlAttrKind.Static
+                or not tag_name.lower().startswith("c-")
+                or value is None
+                or attr.quote_char not in {'"', "'"}
+                or attr.inner_value is None
+                or not attr.inner_value.content
+                or "\\" in value.content
+                or "\n" in value.content
+                or "\r" in value.content
+            ):
+                continue
+            queries.append(
+                TemplatePythonQuery(
+                    value.content,
+                    base_index + value.start_index,
+                    base_index + value.end_index,
+                    "attribute",
+                    attribute_target=(tag_name, name),
+                )
+            )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_static_input_queries(body, queries, base_index=base_index, parse_nested=parse_nested)
+
+
 def build_inferred_template_shadow(
     module_source: str,
     class_qualname: str,
@@ -200,11 +319,17 @@ def build_inferred_template_shadow(
     source_module: str | None = None,
     source_is_package: bool = False,
     kwargs_type: tuple[str, str] | None = None,
+    value_type: TemplatePythonValueType | None = None,
 ) -> ShadowPythonDocument | None:
-    """Copy one proven ``template_data`` method and evaluate the query at each return."""
-    try:
-        tree = ast.parse(module_source)
-    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+    """
+    Copy one proven ``template_data`` method and evaluate the query at each return.
+
+    With ``value_type``, such as a component input's type, the generated
+    code also assigns the query's value to a variable annotated with that
+    type, so ty checks the value against it.
+    """
+    tree = _parsed_module(module_source)
+    if tree is None:
         return None
     class_node = _class_for_qualname(tree, class_qualname)
     if class_node is None or class_node.decorator_list:
@@ -214,38 +339,61 @@ def build_inferred_template_shadow(
         for statement in class_node.body
         if isinstance(statement, ast.FunctionDef) and statement.name == "template_data"
     ]
-    if len(methods) != 1 or methods[0].decorator_list:
+    if len(methods) != 1:
         return None
+    # citry.analysis imports this module at load time and the data-method
+    # analyzer imports citry.analysis, so importing it here breaks the cycle.
+    from citry._template_data_source import data_method_call_parameters  # noqa: PLC0415
+
+    # Only an instance, static, or class method has a known call shape. The
+    # copy keeps that decorator, so the kwargs annotation must go on the same
+    # parameter the runtime fills with kwargs.
+    call_parameters = data_method_call_parameters(tree, class_node, methods[0])
+    if call_parameters is None:
+        return None
+    # The call parameters are the tail of the positional list, after any receiver.
+    positional_count = len(methods[0].args.posonlyargs) + len(methods[0].args.args)
+    kwargs_index = positional_count - len(call_parameters) if call_parameters else None
 
     placeholder = _query_placeholder(
         module_source,
         roots,
         query,
-        generated_inputs=(source_module or "", *(kwargs_type or ())),
+        generated_inputs=(source_module or "", *(kwargs_type or ()), *_value_type_inputs(value_type)),
     )
-    duplicate = copy.deepcopy(methods[0])
-    if _return_affected_by_finally(duplicate):
-        # A finally return can replace an earlier value after that earlier
-        # return was evaluated. Querying both sites would create a false type
-        # result, so this uncommon control-flow shape deliberately degrades.
+    value_check = _value_check(value_type, module_source, roots, query, source_module=source_module)
+    # The generated code binds template names inside this copied method, so a
+    # method local with the same name, such as `resolved: list[Row]` next to a
+    # template loop `c-for="resolved in items"`, would lend its declared type
+    # to the template name. Renaming those locals gives each template name its
+    # own type, while the copied method computes the same value.
+    conflicts = _renamable_method_locals(module_source, class_qualname) & _template_bound_names(roots, query)
+    prepared = _prepared_template_data_method(
+        module_source,
+        class_qualname,
+        conflicts,
+        source_module,
+        source_is_package=source_is_package,
+    )
+    if prepared is None:
         return None
-    _prune_unreachable_statements(duplicate)
+    # The prepared method is shared by every query, so each query edits its own copy.
+    duplicate = copy.deepcopy(prepared)
     duplicate.name = "__citry_analyze_template"
-    duplicate.decorator_list = []
     duplicate.returns = None
     import_source = ""
     if kwargs_type is not None:
         module, qualname = kwargs_type
         positional = (*duplicate.args.posonlyargs, *duplicate.args.args)
-        if not _qualified_identifier(module) or not _qualified_identifier(qualname) or len(positional) < 2:
+        if not _qualified_identifier(module) or not _qualified_identifier(qualname) or kwargs_index is None:
             return None
         if module == source_module:
             class_prefix = f"{class_qualname}."
             scoped_qualname = qualname.removeprefix(class_prefix)
-            positional[1].annotation = ast.parse(scoped_qualname, mode="eval").body
+            positional[kwargs_index].annotation = ast.parse(scoped_qualname, mode="eval").body
         else:
             alias = "__citry_schema_module"
-            positional[1].annotation = ast.parse(f"{alias}.{qualname}", mode="eval").body
+            positional[kwargs_index].annotation = ast.parse(f"{alias}.{qualname}", mode="eval").body
             import_source = f"import {module} as {alias}\n"
     type_imports, type_references = _root_type_imports(roots, source_module=source_module)
     transformer = _ReturnQueryTransformer(
@@ -255,23 +403,14 @@ def build_inferred_template_shadow(
         type_references,
         placeholder,
         direct_attribute_owner=kwargs_type,
+        value_check=value_check,
     )
     duplicate.body = transformer.transform_body(duplicate.body)
     if transformer.return_count == 0:
         return None
-    rewritten_module = _rewrite_module_relative_imports(
-        module_source,
-        tree,
-        source_module,
-        source_is_package=source_is_package,
-    )
-    if rewritten_module is None or not _rewrite_relative_imports(
-        duplicate,
-        source_module,
-        source_is_package=source_is_package,
-    ):
+    rewritten_module = _rewritten_module(module_source, source_module, source_is_package=source_is_package)
+    if rewritten_module is None:
         return None
-    ast.fix_missing_locations(duplicate)
     method_source = ast.unparse(duplicate)
 
     shadow_module_source, source_copies = rewritten_module
@@ -282,15 +421,27 @@ def build_inferred_template_shadow(
     indent = _line_indent(module_source, methods[0].lineno)
     if not indent:
         return None
-    indented_method = "\n".join(f"{indent}{line}" if line else "" for line in method_source.splitlines())
+    method_lines = method_source.splitlines()
+    indented_method = "\n".join(f"{indent}{line}" if line else "" for line in method_lines)
     indented_import = f"{indent}{import_source}" if import_source else ""
     inserted = f"\n{indented_import}{indented_method}\n"
     shadow = f"{shadow_module_source[:insertion]}{inserted}{shadow_module_source[insertion:]}"
+    # The function starts at its `def` line, after any decorator lines that
+    # ast.unparse writes one per line, and ends where the copied method ends.
+    method_start = insertion + 1 + len(indented_import)
+    decorator_count = len(duplicate.decorator_list)
+    query_function = None
+    if len(method_lines) > decorator_count and method_lines[decorator_count].startswith(
+        "def __citry_analyze_template("
+    ):
+        def_start = method_start + sum(len(indent) + len(line) + 1 for line in method_lines[:decorator_count])
+        query_function = (def_start, method_start + len(indented_method))
     return _replace_query_placeholders(
         shadow,
         query,
         placeholder=placeholder,
         source_copies=_source_copies_after_insertion(source_copies, insertion, len(inserted)),
+        query_function=query_function,
     )
 
 
@@ -302,20 +453,18 @@ def build_schema_template_shadow(
     *,
     source_module: str | None = None,
     source_is_package: bool = False,
+    value_type: TemplatePythonValueType | None = None,
 ) -> ShadowPythonDocument | None:
-    """Evaluate a query against fields on one exact authored schema class."""
+    """
+    Evaluate a query against fields on one exact authored schema class.
+
+    With ``value_type``, such as a component input's type, the generated
+    code also assigns the query's value to a variable annotated with that
+    type, so ty checks the value against it.
+    """
     if not _qualified_identifier(schema_qualname):
         return None
-    try:
-        module_tree = ast.parse(module_source)
-    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
-        return None
-    rewritten_module = _rewrite_module_relative_imports(
-        module_source,
-        module_tree,
-        source_module,
-        source_is_package=source_is_package,
-    )
+    rewritten_module = _rewritten_module(module_source, source_module, source_is_package=source_is_package)
     if rewritten_module is None:
         return None
     shadow_module_source, source_copies = rewritten_module
@@ -323,8 +472,9 @@ def build_schema_template_shadow(
         module_source,
         roots,
         query,
-        generated_inputs=(source_module or "", schema_qualname),
+        generated_inputs=(source_module or "", schema_qualname, *_value_type_inputs(value_type)),
     )
+    value_check = _value_check(value_type, module_source, roots, query, source_module=source_module)
     type_imports, type_references = _root_type_imports(roots, source_module=source_module)
     lines = [
         *type_imports,
@@ -339,15 +489,97 @@ def build_schema_template_shadow(
         )
     )
     lines.extend(_unknown_binding_lines(roots, query, indent="    "))
-    lines.extend(_query_lines(query, indent="    ", placeholder=placeholder))
+    lines.extend(_query_lines(query, indent="    ", placeholder=placeholder, value_check=value_check))
     generated = "\n".join(lines)
     shadow = f"{shadow_module_source}\n\n{generated}\n"
+    # The generated function follows its import lines and ends the source.
+    generated_start = len(shadow_module_source) + 2
+    function_start = generated_start + sum(len(line) + 1 for line in type_imports)
     return _replace_query_placeholders(
         shadow,
         query,
         placeholder=placeholder,
         source_copies=source_copies,
+        query_function=(function_start, generated_start + len(generated)),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ShadowRevealDocument:
+    """
+    A copy of a module that asks ty for the type of chosen expressions.
+
+    Each chosen expression is wrapped in ``reveal_type(...)``, which returns
+    its argument unchanged, so ty reports the expression's type as a
+    ``revealed-type`` finding that starts at the expression.
+
+    Attributes:
+        source: Complete generated Python source.
+        reveals: Start and end string offsets of each wrapped expression in
+            ``source``, in the order the expressions were requested.
+
+    """
+
+    source: str
+    reveals: tuple[tuple[int, int], ...]
+
+
+def build_reveal_shadow(
+    module_source: str,
+    spans: tuple[tuple[int, int], ...],
+    *,
+    source_module: str | None = None,
+    source_is_package: bool = False,
+) -> ShadowRevealDocument | None:
+    """
+    Copy one module and wrap each expression span in ``reveal_type()``.
+
+    ``spans`` are start and end string offsets in ``module_source``, each
+    covering one whole expression; they must not overlap. Relative imports
+    are made absolute, as in the template shadows, because ty reads the copy
+    as a sibling file. Returns ``None`` when the module cannot be copied,
+    mentions ``reveal_type`` anywhere, even in a comment, or a span is not a
+    whole expression of unchanged source.
+    """
+    if not spans or re.search(r"\breveal_type\b", module_source):
+        # A module's own `reveal_type` would replace the analyzer's built-in one.
+        return None
+    ordered = sorted(spans)
+    if any(start >= end for start, end in ordered) or any(
+        earlier[1] > later[0] for earlier, later in itertools.pairwise(ordered)
+    ):
+        return None
+    rewritten = _rewritten_module(module_source, source_module, source_is_package=source_is_package)
+    if rewritten is None:
+        return None
+    shadow, copies = rewritten
+    mapped: list[tuple[int, int]] = []
+    for start, end in spans:
+        shadow_start = _shadow_offset_for_source(copies, start)
+        shadow_end = _shadow_offset_for_source(copies, end)
+        # Both ends must come from one unchanged range, so the text between
+        # them is exactly the authored expression.
+        if shadow_start is None or shadow_end is None or shadow_end - shadow_start != end - start:
+            return None
+        if shadow[shadow_start:shadow_end] != module_source[start:end]:
+            return None
+        mapped.append((shadow_start, shadow_end))
+    opening, closing = "reveal_type((", "))"
+    # Splice from the last span backwards so earlier offsets stay valid, then
+    # shift each span by the text inserted before it.
+    for shadow_start, shadow_end in sorted(mapped, reverse=True):
+        shadow = f"{shadow[:shadow_start]}{opening}{shadow[shadow_start:shadow_end]}{closing}{shadow[shadow_end:]}"
+    reveals = []
+    for shadow_start, shadow_end in mapped:
+        inserted_before = sum(len(opening) + len(closing) for other_start, _ in mapped if other_start < shadow_start)
+        start = shadow_start + inserted_before + len(opening)
+        reveals.append((start, start + shadow_end - shadow_start))
+    try:
+        ast.parse(shadow)
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        # A span that was not a whole expression breaks the copy.
+        return None
+    return ShadowRevealDocument(shadow, tuple(reveals))
 
 
 class _ReturnQueryTransformer(ast.NodeTransformer):
@@ -362,13 +594,16 @@ class _ReturnQueryTransformer(ast.NodeTransformer):
         placeholder: str,
         *,
         direct_attribute_owner: tuple[str, str] | None,
+        value_check: tuple[list[str], str] | None = None,
     ) -> None:
         self.roots = roots
+        self.value_check = value_check
         self.query = query
         self.type_imports = type_imports
         self.type_references = type_references
         self.placeholder = placeholder
         self.direct_attribute_owner = direct_attribute_owner
+        self.bound_names = _template_bound_names(roots, query)
         self.return_count = 0
 
     def transform_body(self, statements: list[ast.stmt]) -> list[ast.stmt]:
@@ -398,23 +633,44 @@ class _ReturnQueryTransformer(ast.NodeTransformer):
             targets=[ast.Name(id="__citry_data", ctx=ast.Store())],
             value=node.value,
         )
+        # ty remembers the type of each literal key read from the variable a
+        # dict was assigned to, but not from a second name that variable is
+        # copied into. Reading roots from the returned variable itself keeps
+        # `data["size"]` as precise as the value the method stored there. A
+        # variable that the generated code itself assigns, such as a root of
+        # the same name that could not be renamed, is read through the copy.
+        data_name = (
+            node.value.id
+            if isinstance(node.value, ast.Name) and node.value.id not in self.bound_names
+            else "__citry_data"
+        )
         generated = ast.parse(
             "\n".join(
                 [
                     *self.type_imports,
                     *_root_binding_lines(
                         self.roots,
-                        data_name="__citry_data",
+                        data_name=data_name,
                         indent="",
                         type_references=self.type_references,
                         direct_attribute_owner=self.direct_attribute_owner,
+                        present_keys=_literal_dict_keys(node.value),
                     ),
                     *_unknown_binding_lines(self.roots, self.query, indent=""),
-                    *_query_lines(self.query, indent="", placeholder=self.placeholder),
+                    *_query_lines(
+                        self.query,
+                        indent="",
+                        placeholder=self.placeholder,
+                        value_check=self.value_check,
+                    ),
                 ]
             )
         ).body
-        replacement_return = ast.Return(value=ast.Name(id="__citry_data", ctx=ast.Load()))
+        returned_name = ast.copy_location(ast.Name(id="__citry_data", ctx=ast.Load()), node)
+        replacement_return = ast.copy_location(ast.Return(value=returned_name), node)
+        # ast.unparse reads statement positions, so the new statements borrow
+        # the position of the return they replace.
+        ast.copy_location(assignment, node)
         return [assignment, *generated, replacement_return]
 
 
@@ -499,6 +755,214 @@ def _prune_unreachable_statements(node: ast.AST) -> None:
             _prune_unreachable_statements(value)
 
 
+@lru_cache(maxsize=64)
+def _prepared_template_data_method(
+    module_source: str,
+    class_qualname: str,
+    conflicts: frozenset[str],
+    source_module: str | None,
+    *,
+    source_is_package: bool,
+) -> ast.FunctionDef | None:
+    """
+    Copy one ``template_data`` method and apply every change that does not depend on the query.
+
+    Every expression of a template builds its shadow from the same method, so
+    the unreachable-code pruning, the local renames, and the relative-import
+    rewrite are done once per module text and set of renamed names. The
+    returned tree is shared: callers copy it before changing it.
+    """
+    tree = _parsed_module(module_source)
+    class_node = _class_for_qualname(tree, class_qualname) if tree is not None else None
+    if class_node is None:
+        return None
+    methods = [
+        statement
+        for statement in class_node.body
+        if isinstance(statement, ast.FunctionDef) and statement.name == "template_data"
+    ]
+    if len(methods) != 1:
+        return None
+    duplicate = copy.deepcopy(methods[0])
+    if _return_affected_by_finally(duplicate):
+        # A finally return can replace an earlier value after that earlier
+        # return was evaluated. Querying both sites would create a false type
+        # result, so this uncommon control-flow shape deliberately degrades.
+        return None
+    _prune_unreachable_statements(duplicate)
+    _rename_conflicting_locals(
+        duplicate,
+        local_names=conflicts,
+        template_names=conflicts,
+        occupied=module_source,
+    )
+    # The generated statements added later hold no relative imports, so the
+    # method's own imports can be made absolute before they are added.
+    if not _rewrite_relative_imports(duplicate, source_module, source_is_package=source_is_package):
+        return None
+    return duplicate
+
+
+@lru_cache(maxsize=32)
+def _renamable_method_locals(module_source: str, class_qualname: str) -> frozenset[str]:
+    """
+    Return the names local to one class's ``template_data`` method that can be renamed safely.
+
+    Python's own symbol table answers this, parameters included. A name
+    the method declares ``global`` or only reads is not local. A local is
+    left out when a function, class, or lambda nested in the method binds
+    the same name itself or reads a global of that name, because renaming
+    every occurrence would then change what that nested code means, such as
+    a nested function called by keyword or a nested class's attribute. On
+    Python 3.12 and later the table also lists a comprehension's loop
+    variable as a method local, and the same rule covers it.
+    """
+    try:
+        table = symtable.symtable(module_source, "<citry-template-data>", "exec")
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return frozenset()
+    for part in class_qualname.split("."):
+        found = _named_child_table(table, part, "class")
+        if found is None:
+            return frozenset()
+        table = found
+    method = _named_child_table(table, "template_data", "function")
+    if not isinstance(method, symtable.Function):
+        return frozenset()
+    kept: set[str] = set()
+    pending = list(method.get_children())
+    while pending:
+        nested = pending.pop()
+        pending.extend(nested.get_children())
+        kept.update(
+            symbol.get_name()
+            for symbol in nested.get_symbols()
+            if symbol.is_local() or symbol.is_parameter() or symbol.is_global() or symbol.is_nonlocal()
+        )
+    return frozenset(method.get_locals()) - kept
+
+
+# What `SymbolTable.get_type()` calls the scope holding a generic's type
+# parameters: Python 3.12 says "type parameter", 3.13 and later "type parameters".
+_TYPE_PARAMETER_SCOPES = frozenset({"type parameter", "type parameters"})
+
+
+def _named_child_table(table: symtable.SymbolTable, name: str, kind: str) -> symtable.SymbolTable | None:
+    """Return the one child scope of this kind and name, looking through a generic's type-parameter scope."""
+    matches: list[symtable.SymbolTable] = []
+    for child in table.get_children():
+        if child.get_name() != name:
+            continue
+        if child.get_type() == kind:
+            matches.append(child)
+        elif child.get_type() in _TYPE_PARAMETER_SCOPES:
+            # `class Board[T]:` (Python 3.12+) wraps the class in a scope
+            # that holds the type parameters.
+            matches.extend(inner for inner in child.get_children() if inner.get_type() == kind)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _template_bound_names(roots: tuple[TemplatePythonRoot, ...], query: TemplatePythonQuery) -> frozenset[str]:
+    """Return every name the generated template code binds or reads."""
+    names = {root.name for root in roots}
+    names.update(query.free_names)
+    for control in query.controls:
+        names.update(control.names)
+        names.update(control.free_names)
+    return frozenset(names)
+
+
+def _rename_conflicting_locals(
+    method: ast.FunctionDef,
+    *,
+    local_names: frozenset[str],
+    template_names: frozenset[str],
+    occupied: str,
+) -> None:
+    """
+    Rename the method locals that a template name would otherwise reuse.
+
+    The method is a private copy, and ``local_names`` holds only locals that
+    no nested scope binds or reads as a global, so every occurrence of such
+    a name in the method body, nested functions included, means the
+    method's local and can be renamed together. The renamed copy computes
+    the same values. The method's decorators, defaults, and annotations run
+    in the class body, so they keep their names.
+    """
+    conflicts = local_names & template_names
+    if not conflicts:
+        return
+    redirected = {
+        name
+        for statement in method.body
+        for node in ast.walk(statement)
+        if isinstance(node, (ast.Global, ast.Nonlocal))
+        for name in node.names
+        if name in conflicts
+    }
+    # `import a.b` binds `a` to the top package, and an alias would bind the
+    # submodule, so a name bound that way cannot be renamed either.
+    redirected.update(
+        alias.name.split(".", 1)[0]
+        for statement in method.body
+        for node in ast.walk(statement)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+        if alias.asname is None and "." in alias.name
+    )
+    renames: dict[str, str] = {}
+    for name in sorted(conflicts - redirected):
+        candidate = f"__citry_local_{name}"
+        suffix = 0
+        # A generated name that already appears in the module could refer to
+        # something real, so it gets a number until it is unused.
+        while candidate in occupied or candidate in renames.values():
+            suffix += 1
+            candidate = f"__citry_local_{name}_{suffix}"
+        renames[name] = candidate
+    if not renames:
+        return
+
+    arguments = method.args
+    starred = tuple(item for item in (arguments.vararg, arguments.kwarg) if item is not None)
+    for parameter in (*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs, *starred):
+        parameter.arg = renames.get(parameter.arg, parameter.arg)
+    for statement in method.body:
+        for node in ast.walk(statement):
+            if isinstance(node, ast.Name) and node.id in renames:
+                node.id = renames[node.id]
+            elif isinstance(node, ast.arg) and node.arg in renames:
+                node.arg = renames[node.arg]
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                node.name = renames.get(node.name, node.name)
+            elif isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) and node.name in renames:
+                node.name = renames[node.name]
+            elif isinstance(node, ast.MatchMapping) and node.rest in renames:
+                node.rest = renames[node.rest]
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    bound = alias.asname or alias.name
+                    if bound in renames:
+                        alias.asname = renames[bound]
+
+
+def _literal_dict_keys(value: ast.expr) -> frozenset[str]:
+    """
+    Return the string keys that a returned dict literal always sets itself.
+
+    A `**other` spread may replace the keys written before it, so only the
+    keys after the last spread count.
+    """
+    if not isinstance(value, ast.Dict):
+        return frozenset()
+    last_spread = max((index for index, key in enumerate(value.keys) if key is None), default=-1)
+    return frozenset(
+        key.value
+        for key in value.keys[last_spread + 1 :]
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    )
+
+
 _QUERY_PLACEHOLDER_BASE = "__citry_template_expression_query__"
 
 
@@ -509,6 +973,7 @@ def _root_binding_lines(
     indent: str,
     type_references: dict[tuple[str, str], str] | None = None,
     direct_attribute_owner: tuple[str, str] | None = None,
+    present_keys: frozenset[str] = frozenset(),
 ) -> list[str]:
     lines: list[str] = []
     for root in roots:
@@ -536,7 +1001,9 @@ def _root_binding_lines(
             value = f"{data_name}.{root.name}"
         elif root.access == "mixed":
             value = f'{data_name}["{root.name}"] if isinstance({data_name}, dict) else {data_name}.{root.name}'
-        elif root.presence == "conditional":
+        elif root.presence == "conditional" and root.name not in present_keys:
+            # `dict.get()` answers with the union of every value in the dict,
+            # so it is used only when this return may lack the key.
             value = f'{data_name}.get("{root.name}")'
         else:
             value = f'{data_name}["{root.name}"]'
@@ -662,7 +1129,13 @@ def _unknown_binding_lines(
     ]
 
 
-def _query_lines(query: TemplatePythonQuery, *, indent: str, placeholder: str) -> list[str]:
+def _query_lines(
+    query: TemplatePythonQuery,
+    *,
+    indent: str,
+    placeholder: str,
+    value_check: tuple[list[str], str] | None = None,
+) -> list[str]:
     lines: list[str] = []
     current = indent
     for control in query.controls:
@@ -670,7 +1143,7 @@ def _query_lines(query: TemplatePythonQuery, *, indent: str, placeholder: str) -
             # Put generated punctuation after a newline so an authored Python
             # comment cannot consume the closing parenthesis and colon.
             lines.append(f"{current}if (")
-            lines.extend(f"{current}    {line}" for line in control.source.splitlines())
+            lines.extend(f"{current}    {line}" for line in _bare_lines(control.source))
             lines.append(f"{current}):")
             current += "    "
         elif control.kind == "for":
@@ -678,21 +1151,147 @@ def _query_lines(query: TemplatePythonQuery, *, indent: str, placeholder: str) -
                 return []
             target = control.names[0] if len(control.names) == 1 else f"({', '.join(control.names)})"
             yielded = control.names[0] if len(control.names) == 1 else f"({', '.join(control.names)})"
-            source_lines = control.source.splitlines()
-            if not source_lines:
+            clause_lines = _bare_lines(control.source)
+            if not clause_lines:
                 return []
             lines.append(f"{current}for {target} in [")
             lines.append(f"{current}    {yielded}")
-            lines.append(f"{current}    for {source_lines[0]}")
-            lines.extend(f"{current}    {line}" for line in source_lines[1:])
+            lines.append(f"{current}    for {clause_lines[0]}")
+            lines.extend(f"{current}    {line}" for line in clause_lines[1:])
             lines.append(f"{current}]:")
             current += "    "
         else:
             for name in control.names:
                 lines.append(f"{current}from typing import Any as __citry_Any")
                 lines.append(f"{current}{name}: __citry_Any = None")
-    lines.append(f"{current}{placeholder}")
+    if value_check is None:
+        lines.append(f"{current}{placeholder}")
+        return lines
+    # Assigning the value to an annotated name makes ty report a mismatch
+    # over the parenthesized value, which maps back to the authored text.
+    imports, annotation = value_check
+    lines.extend(f"{current}{line}" for line in imports)
+    lines.append(f"{current}{_VALUE_CHECK_PREFIX}_value: {annotation} = {placeholder}")
     return lines
+
+
+def _bare_lines(source: str) -> list[str]:
+    """Split authored Python into lines as Python does, without their line breaks."""
+    return [line.rstrip("\r\n") for line in source_lines(source)]
+
+
+# Generated names for a value check. They must not contain the query
+# placeholder, which is replaced by text everywhere it appears.
+_VALUE_CHECK_PREFIX = "__citry_checked"
+
+
+def _value_check(
+    value_type: TemplatePythonValueType | None,
+    module_source: str,
+    roots: tuple[TemplatePythonRoot, ...],
+    query: TemplatePythonQuery,
+    *,
+    source_module: str | None,
+) -> tuple[list[str], str] | None:
+    """Return the imports and annotation for a value check, or ``None`` to check nothing."""
+    if value_type is None:
+        return None
+    occupied = (
+        module_source,
+        query.source,
+        *(control.source for control in query.controls),
+        *(root.name for root in roots),
+        value_type.annotation,
+        value_type.module or "",
+    )
+    # A user name containing this prefix could clash with the generated
+    # names, so skip the check. A user name that hides a name the annotation
+    # uses, such as a local `list`, only makes the check miss a mistake.
+    if any(_VALUE_CHECK_PREFIX in value for value in occupied):
+        return None
+    return _value_check_source(value_type, alias_prefix=f"{_VALUE_CHECK_PREFIX}_type", source_module=source_module)
+
+
+# Names Citry's schema type display takes from `typing` or `collections.abc`.
+_TYPING_DISPLAY_NAMES = frozenset({"Any", "Callable", "Literal", "Mapping", "Optional", "Sequence", "Union"})
+
+
+def _value_check_source(
+    value_type: TemplatePythonValueType,
+    *,
+    alias_prefix: str,
+    source_module: str | None,
+) -> tuple[list[str], str] | None:
+    """
+    Rewrite a type display into an annotation that resolves inside generated code.
+
+    A dotted name such as ``app.store.Task`` imports its module under a private
+    alias, and a bare name such as ``Task`` is read from ``value_type.module``,
+    where the annotation was written. Names such as ``Literal`` and
+    ``Sequence`` come from ``typing``, and builtins stay as they are. A name from
+    ``source_module`` stays bare: the generated code is a copy of that module,
+    and importing the real module would name a different class.
+    """
+    display = _canonical_type_display(value_type.annotation)
+    if display is None:
+        return None
+    expression = ast.parse(display, mode="eval")
+    aliases: dict[str, str] = {}
+    unresolved = False
+    class_modules = dict(value_type.class_modules)
+
+    def alias(module: str) -> str:
+        return aliases.setdefault(module, f"{alias_prefix}_{len(aliases)}")
+
+    def attribute_chain(base: ast.expr, names: list[str]) -> ast.expr:
+        for name in names:
+            base = ast.Attribute(base, name, ast.Load())
+        return base
+
+    class Qualifier(ast.NodeTransformer):
+        def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+            parts: list[str] = [node.attr]
+            owner: ast.expr = node.value
+            while isinstance(owner, ast.Attribute):
+                parts.append(owner.attr)
+                owner = owner.value
+            if not isinstance(owner, ast.Name):
+                return self.generic_visit(node)
+            parts.append(owner.id)
+            parts.reverse()
+            # A class nested in another class, such as `app.store.Board.Row`,
+            # needs its module from the app; otherwise the last name is the class.
+            module = class_modules.get(".".join(parts), ".".join(parts[:-1]))
+            class_path = ".".join(parts)[len(module) + 1 :].split(".")
+            if module == source_module:
+                return attribute_chain(ast.Name(class_path[0], ast.Load()), class_path[1:])
+            return attribute_chain(ast.Name(alias(module), ast.Load()), class_path)
+
+        def visit_Name(self, node: ast.Name) -> ast.AST:
+            nonlocal unresolved
+            if node.id in _BUILTIN_NAMES:
+                return node
+            if node.id in _TYPING_DISPLAY_NAMES:
+                return ast.Attribute(ast.Name(alias("typing"), ast.Load()), node.id, ast.Load())
+            if value_type.module is None or not _qualified_identifier(value_type.module):
+                unresolved = True
+                return node
+            if value_type.module == source_module:
+                return node
+            return ast.Attribute(ast.Name(alias(value_type.module), ast.Load()), node.id, ast.Load())
+
+    rewritten = Qualifier().visit(expression)
+    if unresolved or not all(_qualified_identifier(module) for module in aliases):
+        return None
+    imports = [f"import {module} as {name}" for module, name in aliases.items()]
+    return imports, ast.unparse(rewritten)
+
+
+def _value_type_inputs(value_type: TemplatePythonValueType | None) -> tuple[str, ...]:
+    """Return the value type's text, so the generated names avoid it too."""
+    if value_type is None:
+        return ()
+    return (value_type.annotation, value_type.module or "", *(module for _path, module in value_type.class_modules))
 
 
 def _query_placeholder(
@@ -727,6 +1326,7 @@ def _replace_query_placeholders(
     *,
     placeholder: str,
     source_copies: tuple[ShadowPythonSourceCopy, ...],
+    query_function: tuple[int, int] | None = None,
 ) -> ShadowPythonDocument | None:
     if placeholder not in source:
         return None
@@ -763,7 +1363,17 @@ def _replace_query_placeholders(
         )
         for item in source_copies
     )
-    return ShadowPythonDocument("".join(retained), tuple(copies), adjusted_source_copies)
+    # Every placeholder sits inside the generated function, so its start stays
+    # put and its end moves by the length each replacement adds.
+    adjusted_function = (
+        (
+            _offset_after_replacements(query_function[0], matches, len(replacement), len(placeholder)),
+            _offset_after_replacements(query_function[1], matches, len(replacement), len(placeholder)),
+        )
+        if query_function is not None
+        else None
+    )
+    return ShadowPythonDocument("".join(retained), tuple(copies), adjusted_source_copies, adjusted_function)
 
 
 def _offset_after_replacements(
@@ -791,6 +1401,32 @@ def _class_for_qualname(module: ast.Module, qualname: str) -> ast.ClassDef | Non
         matched = candidates[0]
         body = matched.body
     return matched
+
+
+# Every expression in a template builds its own shadow from the same owner
+# module, so the parsed tree and its import rewrite are computed once per
+# module text and reused. A few entries cover the files one check visits in turn.
+@lru_cache(maxsize=8)
+def _parsed_module(source: str) -> ast.Module | None:
+    """Parse one module; callers must copy any part they change, because the tree is shared."""
+    try:
+        return ast.parse(source)
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return None
+
+
+@lru_cache(maxsize=8)
+def _rewritten_module(
+    source: str,
+    source_module: str | None,
+    *,
+    source_is_package: bool,
+) -> tuple[str, tuple[ShadowPythonSourceCopy, ...]] | None:
+    """Return the module with relative imports made absolute, computed once per module text."""
+    tree = _parsed_module(source)
+    if tree is None:
+        return None
+    return _rewrite_module_relative_imports(source, tree, source_module, source_is_package=source_is_package)
 
 
 def _rewrite_module_relative_imports(
@@ -974,7 +1610,7 @@ def _absolute_relative_import(
 
 def _ast_source_offset(source: str, lineno: int, byte_column: int) -> int | None:
     """Convert CPython's UTF-8 AST column to a Python string offset."""
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     if lineno < 1 or lineno > len(lines) or byte_column < 0:
         return None
     line = lines[lineno - 1]
@@ -996,13 +1632,13 @@ def _line_after(source: str, lineno: int | None) -> int:
     if lineno is None:
         return len(source)
     starts = [0]
-    starts.extend(match.end() for match in re.finditer("\n", source))
+    starts.extend(match.end() for match in re.finditer(r"\r\n|\r|\n", source))
     return starts[lineno] if lineno < len(starts) else len(source)
 
 
 def _line_indent(source: str, lineno: int) -> str:
     """Return the exact whitespace prefix of one one-based source line."""
-    lines = source.splitlines()
+    lines = source_lines(source)
     if lineno < 1 or lineno > len(lines):
         return ""
     match = re.match(r"[ \t\f]*", lines[lineno - 1])
@@ -1156,6 +1792,16 @@ def _query_in_node(
             host_kind = "loop"
         elif not _is_condition_attribute(node, name):
             attr_controls = body_controls
+        # A `c-*` value that sets an attribute or a component input can be
+        # checked against that target's type; control attributes cannot.
+        target = (
+            (node.start_tag.name.content, name.removeprefix("c-"))
+            if attr.kind == HtmlAttrKind.Expression
+            and host_kind == "attribute"
+            and name.startswith("c-")
+            and _attribute_sees_loop(name)
+            else None
+        )
         return TemplatePythonQuery(
             inner.content,
             start,
@@ -1163,6 +1809,7 @@ def _query_in_node(
             host_kind,
             attr_controls,
             _used_names(attr),
+            target,
         )
 
     body = getattr(node, "body", None)
@@ -1265,11 +1912,14 @@ __all__ = [
     "ShadowPythonCopy",
     "ShadowPythonDocument",
     "ShadowPythonSourceCopy",
+    "ShadowRevealDocument",
     "TemplatePythonControl",
     "TemplatePythonQuery",
     "TemplatePythonRoot",
     "build_inferred_template_shadow",
+    "build_reveal_shadow",
     "build_schema_template_shadow",
     "template_python_queries",
     "template_python_query_at",
+    "template_static_input_queries",
 ]

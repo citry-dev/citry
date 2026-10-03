@@ -328,7 +328,7 @@ def test_title_accepts_the_exact_phrasing_and_decorative_svg_contract():
         ('<span :href="target">Help</span>', "dynamically bind"),
         ('<span v-bind:aria-label="name">Help</span>', "dynamically bind"),
         ('<span v-html="markup">Help</span>', "Vue directive"),
-        ('<span V-IF="shown">Help</span>', "Vue directive"),
+        ('<span v-if="shown">Help</span>', "Vue directive"),
         ('<span v-bind="extra">Help</span>', "Vue directive"),
         # The browser picks a dynamic argument's attribute, so it cannot be
         # checked against the rejected list and is refused outright.

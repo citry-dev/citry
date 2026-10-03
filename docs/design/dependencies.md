@@ -1,5 +1,12 @@
 # Design: JS/CSS dependency rendering, fragments, and host integration
 
+**Vue cutover:** [`vue.md`](vue.md) defines the current runtime packaging,
+component Options, document serialization and revision integration. The
+collection and security contracts below remain relevant; browser-manager and
+Alpine-specific implementation sections describe the earlier runtime.
+Migration qualification and retained findings are recorded in
+[`vue.md`](vue.md).
+
 **Status (updated 2026-08-13): built and under integration hardening.** Phases
 1-5 (section 16), the `packages/js/citry-client` TypeScript/minification build,
 and the user-facing dependency documentation are implemented. The core
@@ -247,7 +254,6 @@ Same scheme as DJC (`dependencies.py:436`), with the citry prefix:
 | `citry:<class_id>:css` | mutable compatibility entry for the current class's `Component.css` |
 | `citry:<class_id>:js:component:<content_hash>` | immutable `Script` for one class JS version (post-hook, `$component` transformed) |
 | `citry:<class_id>:css:component:<content_hash>` | immutable `Style` for one class CSS version |
-| `citry:<class_id>:js:<vars_hash>` | generated script registering one distinct `js_data()` result |
 | `citry:<class_id>:css:<vars_hash>` | generated stylesheet defining one distinct `css_data()` result |
 
 During a live render, empty and whitespace-only `Component.js` or
@@ -344,14 +350,11 @@ The mechanism ports from DJC conceptually unchanged:
   text is checked for declaration and style-tag breakout plus balanced blocks,
   strings, and comments. This is a structural containment check, not a full
   CSS grammar validator.
-- **JS variables** become a cached script that calls
-  `Citry.manager.registerComponentData("<class_id>", "<hash>", json_source)`.
-  Each client-active instance produces an explicit component call
-  (`class_id`, `component_id`, `js_vars_hash`, `init | seed`) in the
-  serialize-time manifest. `init` seeds the instance's Alpine scope and then
-  runs `$component`; `seed` performs only the first operation. The content
-  stays deduplicated by hash, while the manager parses a fresh graph per call
-  so sibling instances never share nested mutable values.
+- **JS variables** travel inside the page's Vue payload: each component
+  occurrence carries its own `js_data()` result as a JSON object, and the
+  browser runtime hands it to that instance. They are not written to the
+  cache or served as a separate file, so `DependencyRecord.js_vars_hash`
+  stays `None`.
 - **`$component` sugar**: a regex rewrite applied once when the class's JS is
   first cached: `$component(` becomes
   `Citry.manager.registerComponent("<class_id>", `.
@@ -429,12 +432,14 @@ render.serialize(
 )
 ```
 
-- **`document`** (default): emit all tags inline, plus the client runtime and
-  a mark-as-loaded manifest so later fragments dedupe against the page.
-- **`simple`**: tags only, no client runtime, no manifest. For static pages
-  and emails.
-- **`fragment`**: no tags inlined; emit the pre-loader plus a JSON manifest
-  of URLs for the client manager to fetch (section 8).
+- **`document`** (default): emit all tags inline, plus the Vue runtime when
+  the page is interactive. The runtime loads each component script once per
+  page, so a later interactive fragment that uses the same component does not
+  fetch or run it again.
+- **`simple`**: tags only, no client runtime. For static pages and emails.
+- **`fragment`**: no tags inlined. A static fragment carries ordinary tags
+  that reference cached URLs; an interactive one carries a runtime loader and
+  one JSON descriptor naming the assets the Vue runtime loads before mounting.
 - **`ignore`**: content unchanged.
 - **`deps_position`**: `smart` uses placeholders/default locations (7.3);
   `prepend`/`append` put the tags before/after the whole output.
@@ -537,190 +542,125 @@ contract can firm up before it is promoted for third-party extensions.
 
 ---
 
-## 8. Fragments and the client-side dependency manager
+## 8. Fragment and document delivery
 
-### 8.1 What a fragment is
+### 8.1 Static output
 
-A fragment is a render serialized with `deps_strategy="fragment"`: HTML meant
-to be inserted into an already-loaded page (HTMX swap, Unpoly, Turbo,
-`fetch` + `innerHTML`, jQuery `.load()`). Its dependencies cannot go into
-`<head>`, so the output carries, after the HTML:
+A render with no native Vue requirements emits dependencies as ordinary HTML
+tags. Under `document`, inline component CSS and declared dependency tags use
+the normal placeholder/default positions. Under `fragment`, stylesheet tags
+come after the fragment HTML, followed by `early_scripts` hook entries and
+then dependency scripts. Static fragments carry no runtime or JSON dependency
+manifest. Repeated URL tags are allowed; the browser cache handles repeated
+fetches, and the integrating fragment library owns the inserted tags' lifetime.
 
-1. In the default and CSP warning modes, a **pre-loader** script: if
-   `globalThis.Citry` is missing, inject a `<script src>` for the standard
-   runtime, then remove itself. So those fragments work even on pages that
-   were not rendered with the `document` strategy. Strict CSP fragments omit
-   this executable bootstrap and require a matching CSP manager in the base
-   document; without one, their inert manifest remains inactive.
-2. An **exec manifest**: `<script type="application/json" data-citry>`
-   containing (base64-armored, as in DJC, so content cannot break out of the
-   script tag): the script/style tag descriptors to fetch, and the component
-   calls to run. Because it is JSON, never executable JS, it is inert no
-   matter how the fragment is inserted; the manager's MutationObserver picks
-   it up even from `innerHTML` insertions, where ordinary scripts would not
-   execute.
+Equal stylesheets (same URL, or same inline content) are emitted once, so
+their declarations must agree on every attribute the browser applies, such as
+`media`; a disagreement raises a `ValueError` naming the sheet. A static
+`Component.css` sheet names its class in `data-citry-css-class` (and, under a
+mounted integration, its fragment URL in `data-citry-css-url`). When two
+classes declare byte-identical `css`, the page inlines one sheet and each of
+these markers lists every owner, space-separated in first-seen order, so a
+`[data-citry-css-class~="Name_abc123"]` selector finds the sheet for either
+class. Byte-identical `js` from two classes is likewise emitted once.
 
-A component fragment may also carry inert ownership, Events, i18n, or other
-framework manifests beside the exec manifest. Events parses this complete
-package once. The ownership/morph planner first produces an unpublished set of
-accepted incoming render IDs. Core dependency preparation preflights CSS-only
-instance records, loads all accepted stylesheets and sequential scripts, and
-stages the graph calls while the candidate fragment remains detached.
-Registered framework-manifest handlers also run asynchronous `prepare` hooks
-against that owner filter. Only after every preparation succeeds does Events
-insert the fragment, commit the handlers, and release component activation.
-Rollback runs in reverse order. If an accepted `fetch` CSS or JavaScript asset
-fails to load, Citry does not insert the candidate fragment or replace its
-ownership graph, and it removes styles introduced solely by that transaction.
-Those prepared dependencies do not begin network requests after the fragment
-is inserted. Arbitrary `beforeManifest` descriptors retain their existing
-post-insertion commit semantics.
+Trusted pre-rendered `Markup` dependency entries are accepted on this static
+path and rendered through the configured security materializer. When a nonce or
+integrity policy needs structured metadata, its existing `Script` and `Style`
+validation still applies. `on_dependencies` receives the exact
+`selected_render`, and only dependency records reachable from that selection
+are exposed.
 
-A page rendered with `document` strategy emits a mark-as-loaded manifest, so
-a later fragment referencing the same component fetches nothing. Each manifest
-also records `alpineRuntime` as `"standard"` or `"csp"`. The manager rejects a
-different variant before adopting any fragment dependencies.
+### 8.2 Native Vue output
 
-### 8.2 The client runtime
+A render with native Vue behavior uses the prepared Vue protocol. A document
+emits the Vue runtime before component Options and then starts the prepared app.
+The runtime and any plugin registration scripts are classic scripts that run
+where the parser meets them. The app itself is started by two tags that always
+sit next to each other, in this order:
 
-Citry ships its own browser runtime with the same responsibilities as DJC's
-manager, renamed (`globalThis.Citry`, `data-citry`, `citry.min.js`):
+```html
+<script type="application/json" data-citry-vue-document="APP_ID">{...}</script>
+<script type="module">__citryRuntime.startDocument("APP_ID");</script>
+```
 
-- `registerComponent(classId, definition)` (the `$component` target),
-  `registerComponentData(classId, hash, data)`, `callComponent(classId,
-  componentId, varsHash, revision, mode)`; calls queue until their script and
-  data arrive, then seed the graph-owned scope and optionally run against the
-  elements matching `[data-cid-<componentId>]`.
-  A class accepts exactly one component registration. A second registration
-  throws an error naming the class and explaining that only one `$component`
-  registration is allowed. The definition is either the bare callback or a
-  config object with `init` and optional `props`. One registration represents
-  one component definition, not a subscriber list. That is why the authoring
-  name is `$component`, while `$onEvent` remains the listener API; `init`
-  likewise names the component lifecycle phase instead of a generic handler.
-  A graph-linked call is validated against its exact revision, render ID, and
-  class before it enters the queue. Its callback payload also carries `graph`,
-  a frozen route to the render record, logical client instance, and stable
-  browser anchor.
-- Two hooks for other extensions on the callback path (contracts pinned in
-  `events.md` 12.5): `decorateContext(fn)` registers a decorator that adds
-  members to the `$component` payload object in place just before the
-  callback runs (and returns an unregister function), and the callback may
-  return a cleanup function that runs before the callback fires again for
-  the same instance id.
-- `loadJs`/`loadCss` from JSON tag descriptors; `markScriptLoaded`/
-  `isScriptLoaded` keyed by URL. URL stylesheets share one in-flight promise,
-  settle on the browser's load or error event, and can retry after failure.
-  Graph-linked component callbacks wait for their CSS and sequential
-  JavaScript dependencies, so a callback never treats an inserted but still
-  loading stylesheet as ready.
-- One permanent MutationObserver handles graph and dependency manifests and
-  fans batches out to extension providers. The same core owns
-  `Citry.alpine`, whose permanent selector, init, magic, morph, and startup
-  hooks dispatch through replaceable providers.
-- `registerFrameworkManifest(name, handler)` registers an inert-manifest
-  lifecycle with exact `match`, asynchronous `prepare`, synchronous `commit`,
-  and reverse-order `rollback` hooks. Events uses the core private
-  prepare/commit bridge for parsed fragments; ordinary streaming/document
-  insertion still goes through the permanent observer. The i18n extension is
-  the first consumer and uses the accepted-owner set to filter requirements
-  during partial morph adoption.
-- Planned, not yet in the runtime: a console warning for a stuck call (one
-  whose component script or data never arrives). Today such a call just
-  stays queued, silently.
+The first tag is a JSON data block that holds the whole app configuration
+(the prepared manifest, component tags, host selector, and flags). The browser
+never runs it. The second is a one-line module script that asks the already
+loaded runtime to start the app with that id. `startDocument` finds the data
+block whose `data-citry-vue-document` value equals the id, requires exactly
+one such block, reads it with `JSON.parse`, checks that the manifest's
+`appId` matches, and calls `startPrepared` with the result. A failed start is
+reported as an uncaught error on the page. Each app on a page has its own id
+(random unless the application sets `id_generator`), so several apps on one
+page each read only their own block.
 
-The dependency manager ships inside the `citry` Python package as readable
-package-data JavaScript. The pinned Alpine, morph, and Events source lives in
-`packages/js/citry-client/`; its committed classic-IIFE build also ships as
-Python package data. It is served by citry's own URL routes (9.2), so no
-staticfiles-like setup is needed.
-Improvement over DJC, flagged: in `document` mode, if no web integration is
-mounted (no URL to `src` from), the runtime is **inlined** into the page
-instead, so the zero-integration experience still works end to end;
-fragments are the only feature that hard-requires mounting (8.3).
+The configuration is data rather than a JavaScript object literal because the
+browser reads JSON much faster than it compiles the same text as a script. On
+the benchmark board page with 1,400 rows the configuration is about 1.28 MB,
+and compiling and running it as a script took about 20 ms.
 
-### 8.3 Operational requirements for fragments
+The module script runs only after the browser has parsed the whole document
+and before `DOMContentLoaded`. If the start ran while the browser was still
+reading the page, before it drew anything, it would hold back the first paint
+of the server HTML. Your own `defer` or module scripts placed earlier in the
+page run before the app is registered, so they wait for `citry:ready` rather
+than calling into the app directly. Module scripts keep document order with
+each other and with `defer` scripts. Wherever `deps_position` places the two
+tags, the app starts after parsing.
 
-Two, both diagnosed with explicit errors rather than silent breakage:
+The server writes the data block's JSON with every `<` escaped as `\u003c`
+(`citry.util.html.script_json`, also used for the fragment descriptor and the
+i18n data block). In JSON a `<` can only occur inside a string, so page data
+such as `</script>`, `<!--` or `<script` cannot end the block early or hide
+its end tag, and `JSON.parse` still reads the original text. U+2028 and
+U+2029 are written as escapes too. A non-finite number is rejected when the
+page is serialized.
 
-- **A mounted web integration** (section 9), because the manifest references
-  script URLs. `serialize(deps_strategy="fragment")` raises with a pointed
-  message when the instance has no mounted prefix.
-- **A shared cache** (section 10) when running multiple processes: variables
-  scripts are written by the rendering worker and may be served by another.
-  Class-level scripts self-heal via lazy repopulation (4.3); variables
-  scripts cannot. Documented as the production guidance: fragments + JS/CSS
-  variables + multi-worker means configure a shared cache backend.
+Both tags carry the request's CSP nonce like Citry's other scripts. The
+browser does not apply CSP to a data block, so the nonce on it is not needed
+for the page to load; the runtime uses it as a check instead. When the
+runtime's own script tag had a nonce, `startDocument` refuses a data block
+whose nonce differs, so markup injected into the page without the nonce
+cannot supply a configuration. In script-integrity mode only the start
+script's hash is listed in `csp_script_hashes`; the data block is not
+executable, so it needs no CSP hash (the per-script records in
+`serialized.security.scripts` still describe it). The start script's text
+holds only the app id, so its hash is cheap to compute and never contains
+page data.
 
-### 8.4 The component-instance lifecycle: teardown on removal and CSS cleanup
+The trust model is that the runtime trusts a data block from the same
+document when its id matches and, under a nonce policy, its nonce matches.
+The id is random for each response unless the application sets
+`id_generator`, in which case it is predictable. Under a hash-only policy with
+a predictable id, the rule that exactly one block may match does not protect
+the page: injected markup placed before the real block can hide it (for
+example with an unclosed comment or attribute value) and supply its own
+block. An attacker who can inject markup would need to guess a random id,
+so pages at risk of markup injection should use a nonce policy or keep the
+default random ids. The configuration's contents are still checked by
+`startPrepared` before anything mounts.
 
-The manager already runs an instance's `$component` cleanup (8.2) when a
-new call for the same instance id arrives, which covers a component that
-re-renders under the same id. Three additions complete the lifecycle for
-the cases that path never reaches. All three stay keyed by the component id
-and the class id the manifests already carry; they need no new client
-concept.
+A fragment emits a small runtime loader followed by one inert
+`data-citry-vue-fragment` JSON descriptor. The fragment manager validates,
+loads, stages, and commits the descriptor; it owns app-local stylesheet and
+plugin lifetime. No legacy `data-citry` exec manifest, `markLoaded` list, Alpine
+component calls, or dependency ownership graph is emitted.
 
-- **Teardown on removal.** An instance's cleanup also runs when its last
-  `[data-cid-<id>]` element leaves the DOM. The manager keeps the set of
-  instance ids whose callbacks have fired and, on DOM mutation and after
-  each render, sweeps that set against the live DOM; an id with no live
-  element left has its stored cleanups run and then discarded. The sweep
-  catches both a real node removal and an in-place attribute swap (the same
-  node losing its old `data-cid-<id>`), so a re-render that changes an
-  instance's id retires the old id exactly once. This closes the case where
-  a component's id never recurs: without the sweep its cleanup would stay
-  queued and its resources (a chart, a map, an editor) would leak.
-- **`Component.css` cleanup on the last instance of a class.** A
-  class-level `Component.css` sheet is tagged
-  `data-citry-css-class="<class>"` at emission (7, and the serializer note
-  below). A document's inline sheet also stores its equivalent fragment URL in
-  `data-citry-css-url`. When the manager removes the sheet, it uses that
-  attribute to clear the URL that the document manifest marked as loaded. The
-  manager removes that sheet when the last live instance of the class leaves
-  the DOM, so a class that is gone from the page stops carrying its stylesheet
-  and a later fragment can fetch it again. The per-render CSS-variables sheets
-  (`data-ccss-<hash>`, 5.2) are left in place for now; reclaiming them is out of
-  scope here.
+The Vue fragment descriptor requires a mounted integration because its owned
+assets use Citry routes. Static CSS-only and script-only fragments can emit
+ordinary external URLs without installing the Citry runtime. Component JavaScript
+that requires a browser app is rejected if no prepared Vue plan exists.
 
-  **This cleanup must be deferred to a later task, not run the instant an
-  instance retires.** A component that re-renders in place first retires its
-  old instance id and only then registers the fresh one, so at the moment of
-  retirement a solo instance of a class can momentarily look like the
-  class's last, even though a same-class render is about to land. Running
-  the check inline would drop the class's sheet on every such re-render.
-  Deferring the check to a later task and re-counting the live instances then
-  lets the arriving same-class render cancel it; a genuine last-instance
-  departure still collects the sheet. While a replacement manifest loads its
-  assets, the manager removes stale same-class sheets but keeps each incoming
-  link through the stylesheet request, later scripts, and extension setup. It
-  registers the manifest's instances before releasing those links and checking
-  again. When same-class manifests overlap, each keeps the others' links until
-  they finish. A successful manifest can then remove the prior render's sheet
-  without deleting a still-loading sibling's sheet. If any stylesheet, script,
-  or extension setup fails, the manager removes only sheets introduced solely
-  by that manifest. It keeps a sheet shared with another pending manifest or a
-  live instance. Once no instance or pending manifest remains, the manager
-  removes every class sheet and clears each URL from its loaded set, so a later
-  instance can fetch it again.
-- **Re-entrant flush safety.** When the manager flushes queued calls it
-  snapshots and clears the pending list before iterating it, so a callback
-  or context decorator that synchronously triggers another flush cannot
-  re-run a call that is still in flight. This keeps a nested flush from
-  firing a cleanup twice or recursing without bound.
-
-Three matching additions belong to the serializer that emits the manifests
-(7), not to this runtime: tagging each `Component.css` sheet with
-`data-citry-css-class="<class>"` so the cleanup can find it; recording the
-equivalent fragment URL on a document's inline sheet as
-`data-citry-css-url="<url>"`; and emitting a small instance-to-class presence
-record for instances that carry CSS but no `$component` JS, so the manager can
-still count a class's live instances when nothing else registers them. The
-record's shape, pinned by the WP4 amendment that consumes it: a top-level
-`cssInstances` key holding a list of `[classId, componentId]` pairs, each
-element base64-armored like the `calls` entries.
-
----
+An `on_dependencies` hook puts scripts that must run before the other
+dependency scripts in `ctx.early_scripts`. On an interactive render these
+entries become the first scripts of the prepared Vue
+payload, in the order the extension added them, so the browser loads them
+before `ctx.scripts` and the other assets and only after the descriptor has
+passed validation. On the static path they are written before ordinary
+dependency scripts. They are direct trusted tags, so extension
+authors must use structured `Script` or `Style` values when security policy
+requires nonce or integrity reconciliation.
 
 ## 9. URLs and web-server integration
 
@@ -736,7 +676,7 @@ extension's routes, and `Citry.urls` exposes the combined table:
 <prefix>/cache/<class_id>.<js|css>                # compatibility/current class script
 <prefix>/cache/<class_id>.<content_hash>.<js|css> # immutable class version
 <prefix>/cache/<class_id>.<vars_hash>.<js|css>    # variables script
-<prefix>/citry.min.js                             # the client runtime
+<prefix>/citry.js                                 # generated client runtime delivery
 <prefix>/ext/<extension_name>/...                 # extension-provided routes
 ```
 
@@ -834,6 +774,80 @@ The built-in Events extension fills this slot with named per-component routes
 and fragment-render actions over `Extension.urls`, as specified in
 [`events.md`](events.md).
 
+### 9.6 Letting any page read Citry's own JS and CSS
+
+Citry puts `integrity` on every definition, script, and stylesheet it serves
+itself, and `security_script_integrity="citry"` adds it to the runtime
+tag and component scripts. The browser checks a digest only on a response the
+page may read. A page inside an iframe sandboxed without `allow-same-origin`
+has an opaque origin, so every request it makes counts as cross-origin, and
+without CORS the browser blocks the file and the page never mounts.
+
+So Citry does two things together:
+
+- **Every tag, preload hint, or runtime-created element that fetches a
+  Citry-owned file with `integrity` also sets `crossorigin="anonymous"`.** An
+  author's own `crossorigin` value on the asset stays as written. A preload
+  hint carries the same value as the tag it prepares; with a different value
+  the browser ignores the hint and downloads the file again.
+- **The public asset routes answer with `Access-Control-Allow-Origin: *`:**
+  `citry.js`, `cache/...`, `asset/...`, `ext/events/runtime.js`,
+  `ext/events/definitions/...`, `ext/events/assets/...`, and
+  `ext/i18n/runtime.js`. Routes that answer with a Citry-owned file (the
+  `_OwnedResource` helper, which holds one URL and its exact bytes) get the
+  header automatically; the Events definition and style routes add the same
+  `PUBLIC_ASSET_CORS_HEADERS` themselves, so a new asset route must use one
+  of the two.
+
+The wildcard is safe on those routes because they answer `GET` without reading
+cookies, sessions, or any other request data, so the response does not depend
+on who asks: a page can read only what an anonymous request for the same URL
+returns. Browsers never let a page read a credentialed response that carries
+the wildcard, so if a host puts the mount behind a login, another origin
+cannot read those files with the user's cookies, and an anonymous request gets
+the login response rather than the file. The value does not depend on the
+request's `Origin`, so no `Vary` header is needed.
+
+A file built from one render's `css_data()` (the
+`cache/<class_id>.<vars_hash>.css` files and Events stylesheets) holds that
+render's values. Its URL is a hash of the content, and anyone who has the URL
+could already download it, so those methods must not return secrets.
+
+The header does widen who can read these files: a public web page running in
+a visitor's browser can now read a Citry file from a server on the visitor's
+internal network, if it knows or guesses the URL. Class-level files hold
+component source that any visitor of the app receives anyway. A deployment
+that treats its component source as confidential on an internal network
+should strip the header at its proxy for the `cache/` and `asset/` routes and
+accept that sandboxed embedding then fails.
+
+The request routes (`ext/events/call`, `ext/events/e/...`,
+`ext/i18n/messages`, and the preview routes) do not send the header. The
+Events CSRF baseline relies on the browser refusing a cross-origin read and
+blocking the preflight for `X-Citry-Events` (see [`events.md`](events.md) 7.4).
+
+Error modes:
+
+- **A proxy or CDN strips the header.** Same-origin pages keep working, since
+  CORS checks pass for a page's own origin. A page in an opaque-origin sandbox,
+  or a page on another origin, fails: the browser reports a Subresource
+  Integrity error and the Vue app does not mount.
+- **Citry's mount sits on another origin that sends no header.** Same as
+  above: integrity needs CORS from that host.
+- **A third-party URL with `integrity`.** Citry does not add `crossorigin` or
+  change it; the author sets it, and that host must send CORS headers.
+- **An author sets `crossorigin="use-credentials"` on an owned asset.** Citry
+  keeps it, and the browser rejects the wildcard for a cross-origin
+  credentialed request, so that asset loads only on same-origin pages.
+  Removing the attribute (`crossorigin=False`) sends a request without CORS,
+  so the integrity check fails in an opaque-origin sandbox in the same way.
+- **A browser cached a response before the header existed.** Definition and
+  stylesheet URLs are cached for a year and change only with their content.
+  A sandboxed frame that loaded one without the header may reuse that cached
+  response and fail its CORS check until the entry expires. Only frames that
+  already failed to mount are affected, since each cross-site frame keeps its
+  own cache.
+
 ---
 
 ## 10. Cache integration
@@ -928,7 +942,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 |---|---|---|
 | `Script`/`Style`/`Dependency`, kinds, dedupe, to/from JSON | Ported | plus first-class use as `Dependencies` entries (3) |
 | `_parse_dependency_from_string` / `TagAttrParser` | Dropped | entries are objects; DJC's own TODO_V1 (3) |
-| `cache_component_js/css`, `cache_component_js_vars/css_vars`, key scheme | Ported | `citry:` prefix (4.2) |
+| `cache_component_js/css`, `cache_component_css_vars`, key scheme | Ported | `citry:` prefix (4.2); JS variables travel in the Vue payload instead of a cached script (5.2) |
 | Eager class-creation caching (djc `extensions/dependencies.py`) | Replaced | lazy endpoint repopulation (4.3), flagged divergence |
 | `evict_component_scripts` | Ported | folded into the existing `on_files_reset` handler (4.3) |
 | `get_js_data` / `get_css_data` / `JsData` / `CssData` | Ported (reshaped) | `js_data(kwargs, slots)` / `css_data(kwargs, slots)` (5.1) |
@@ -942,8 +956,8 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 | `_insert_js_css_to_default_locations` | Ported | the fallback half of hybrid placement (7.3) |
 | `OnDependenciesContext` / `extensions.on_dependencies` | Ported (reshaped) | extension-owned `emit` hook, not core (7.2) |
 | `Component.on_dependencies` | Ported | (7.2) |
-| Exec script JSON manifest + base64 armor | Ported | `data-citry` attribute (8.1) |
-| Client manager (`django_components.min.js`) | Rewritten | `packages/js/citry-client`, `globalThis.Citry` (8.2) |
+| Exec script JSON manifest + base64 armor | Removed | static dependencies are direct tags; interactive fragments use the Vue descriptor (8) |
+| Client manager (`django_components.min.js`) | Replaced | the native Vue fragment manager handles interactive apps (8.2) |
 | Manager served via Django static | Replaced | served by citry routes; inlined when nothing is mounted (8.2) |
 | `cached_script_view` + `urlpatterns` | Ported (split) | neutral endpoint logic + host adapters (9.1, 9.2) |
 | `URLRoute` / `URLRouteHandler` | Ported | `citry/util/routing.py`; `Extension.urls` lands (9.1) |
@@ -967,8 +981,10 @@ logic, the client runtime contract) lives in the `dependencies` extension.
   - `emission.py`: record resolution, categorization, dedupe, manifests,
     placement
   - `routes.py`: the extension's `URLRoute`s + endpoint logic
-  - `client/`: the vendored built `citry.min.js` (package data)
-- `packages/js/citry-client/`: the runtime's TypeScript source + build.
+  - `client/`: readable `citry.js` plus generated `citry.min.js` delivery
+    companion (package data)
+- `packages/js/citry-client/`: Events and i18n TypeScript plus browser-runtime
+  generation and exact canaries.
 - Core files per the table in section 11.
 - Tests: `tests/test_deps.py` (extend), `tests/test_deps_emission.py`,
   `tests/test_deps_fragments.py`, `tests/test_contrib_fastapi.py`,
@@ -1011,10 +1027,9 @@ logic, the client runtime contract) lives in the `dependencies` extension.
   `on_serialize` as an id-to-exact-text map (7.3).
 - ~~How `on_component_data` exposes the render's `CitryContext`~~ decided:
   the hook context carries a `context` field (6).
-- ~~Whether the `document` manifest should always be emitted~~ decided: the
-  manifest and the runtime are emitted when a rendered component used
-  `$component`, or when a mounted page carries component assets a later
-  fragment must dedup against (so `markLoaded` can list their cache URLs).
+- ~~Whether the `document` manifest should always be emitted~~ decided: there
+  is no legacy dependency manifest. Static output uses direct tags; a native
+  Vue plan emits its runtime and prepared bootstrap.
 - ~~Naming~~ settled at implementation: `data-ccss-<hash>` for the CSS vars
   marker, `on_serialize` for the hook.
 - ~~Whether `serve` mode fingerprints URLs~~ decided yes: the asset URL *is*
@@ -1044,22 +1059,11 @@ logic, the client runtime contract) lives in the `dependencies` extension.
    hook receives an id-to-exact-text map; resolved local-file `Dependencies`
    entries are `Path` objects (so emission can tell a file from a URL
    string) and are inlined, per the 9.4 default.
-3. **Client runtime + variables - built.** Vars scripts and hashing;
-   `$component`; `data-ccss-` markers via the root-marker hook; the
-   document manifest (mark-as-loaded + component calls); runtime inlining.
-   Decisions made in code: the root-marker hook is the internal
-   `CitryContext._add_root_markers` / `_get_root_markers`, storing under the
-   namespaced `extra["citry"]["root_markers"]`, read by serialization next
-   to the `data-cid` marker; the manifest (and the
-   runtime with it) is emitted when a rendered component used `$component`, or
-   when a mounted page carries component assets a later fragment must dedup
-   against; `document` vs `simple` now genuinely differ: `simple` is
-   the no-JS-runtime mode, so JS variables and component calls are
-   document-only while CSS variables (pure CSS) work under both; the runtime
-   core manager ships as readable plain JS package data
-   (`citry/extensions/dependencies/client/citry.js`); the pinned Alpine,
-   Events, CSP, and i18n runtimes are built and checked from
-   `packages/js/citry-client` TypeScript sources.
+3. **Client runtime + variables - superseded by native Vue.** `data-ccss-`
+   markers remain pure CSS metadata. `$component`, `js_data`, and interactive
+   lifecycle compile into the prepared Vue app; no Alpine call manifest is
+   emitted. `simple` remains the no-runtime strategy; document and fragment
+   install Vue only when typed browser requirements select a prepared app.
 4. **URLs + fragments - built.** `URLRoute` port + `Extension.urls` +
    `Citry.urls`; endpoint logic with lazy repopulation; ASGI/WSGI apps +
    FastAPI adapter (used by the tests) + mount contract; `fragment` strategy

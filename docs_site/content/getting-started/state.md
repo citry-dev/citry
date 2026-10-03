@@ -1,40 +1,32 @@
 ---
-title: Events state
-description: Add signed Citry State so Python can load the next set of choices on each call.
+title: Keep values between calls
+description: Carry signed State between Python calls and read it from Vue.
 ---
 
-# Events state
+# Keep values between calls
 
-The last handler ran the same database query on every click. This time Python
-will remember server-side state across calls, so we can count how many times we called the endpoint.
+An event handler often needs to remember something from the last call: which
+page of results it showed, which filter is on, how many items it loaded. The
+handler does not keep anything between calls on its own. In this step, a
+counter survives from one call to the next, so Python can load a different
+batch of choices on each click.
 
-Continue from [Call Python from a
-click](/getting-started/call-python/). Keep `citry_setup.py` and `app.py`
-unchanged.
+Citry keeps such values in the component's **State**. Citry sends State to
+the browser with the rendered component, and the browser sends it back with
+the next call.
 
-## Add server-side state
+## Replace the components
 
-Replace `components.py` with this version:
-
-The `New in this step` comments point to four changes:
-
-- `load_choices_from_database` returns one of the two choice batches
-- a starting counter `Kwargs.batches_loaded`
-- the [`State`][citry.Component.State] declaration and stateful handler
-- the count shown in the browser
+Replace `components.py` with:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step10.py" language="citry" />
 
-Open `http://127.0.0.1:8000/` and click “Load choices” twice. The first call
-loads “Ocean” and “Forest.” The second loads “History” and “Science,” while
-“Sets loaded” moves from one to two. Reload the whole page and the sequence
-starts over.
+Click “Load choices” twice. The first call loads “Ocean” and “Forest”; the
+second loads “History” and “Science.” “Sets loaded” goes from one to two.
+Reloading the page starts over.
 
 ## Declare State
 
-The server needs one value from the previous call: how many choice sets have
-already been loaded. Use [`State`][citry.Component.State] to store that info:
-
 ```python
 class Kwargs:
     batches_loaded: int = 0
@@ -43,191 +35,73 @@ class State:
     batches_loaded: int = 0
 ```
 
-[`Kwargs`][citry.Component.Kwargs] and [`State`][citry.Component.State] answer two
-different questions:
+[`Kwargs`][citry.Component.Kwargs] are the inputs for one render.
+[`State`][citry.Component.State] holds the values that event handlers
+receive on each call. On the first render, Citry fills each State field from
+the input with the same name. A field with no matching input uses its own
+default.
 
-- `Kwargs` - Component input when rendered as `Comp(...)` or `<c-Comp />`
-- `State` - Data private to event handlers preserved across calls.
-
-`Kwargs.batches_loaded` gives the first render its counter. The same-named
-`State.batches_loaded` gives the first Python call its counter and says that
-the value must come back on later calls.
-
-How Citry builds the initial State:
-
-1. Pass kwargs to state with matching names, so `Kwargs.batches_loaded -> State.batches_loaded`.
-2. Uses State defaults for any gaps.
-3. Remaining unfilled fields raise error.
-
-With `<c-ChoicePicker />`, both declarations use their own `0` default. If a caller
-passes `batches_loaded=3`, that value starts both the render and its State.
-
-The following would fail, because `other_field` has no default
-and is not on `Kwargs`:
+When every input should be kept, make `State` inherit from `Kwargs` instead:
 
 ```python
-class Kwargs:
-    batches_loaded: int = 0
-
-class State:
-    batches_loaded: int = 0
-    other_field: str
-```
-
-Defining [`state_data()`](/events/state/#choose-what-survives-in-state)
-replaces this automatic step. It receives the resolved kwargs and slots, then
-returns the initial State as a `State` instance or a dictionary. Use it when
-State needs a renamed or transformed value, or a small value derived from a
-richer input. `ChoicePicker` does not need it because its names already match.
-
-This would be a valid way of manually constructing `State`:
-
-```python
-class Kwargs:
-    resume_id: int
-
-class State:
-    batches_loaded: int
-
-def state_data(self, kwargs: Kwargs, slots):
-    batches_loaded = resume_batches_from_db(kwargs.resume_id)
-    return {"batches_loaded": batches_loaded or 0}
-```
-
-Coming back to `<c-ChoicePicker />`, every kwarg is also State. When the two shapes are the
-same, you can inherit the fields and their defaults instead of repeating them:
-
-```python
-class Kwargs:
-    batches_loaded: int = 0
-
 class State(Kwargs):
     pass
 ```
 
-The following lessons use this shorthand. Keep the declarations separate when
-some render inputs should not travel through the browser.
+Keep the two classes separate when some inputs should not go to the browser.
+When names differ or a value must be computed, fill State with
+`state_data()`, as [Event state](/events/state/) shows.
 
-The choices themselves do not need to be in State. Python can load them again,
-and Alpine already holds the selected choice for the browser interaction.
-
-## State decides server behavior
-
-The example now has two possible database results:
-
-```python
-CHOICE_BATCHES = (
-    ("Ocean", "Forest"),
-    ("History", "Science"),
-)
-
-def load_choices_from_database(batch: int) -> list[str]:
-    choices = CHOICE_BATCHES[batch % len(CHOICE_BATCHES)]
-    return list(choices)
-```
-
-Batch zero returns “Ocean” and “Forest.” Batch one returns “History” and
-“Science.” The `% len(CHOICE_BATCHES)` part wraps back to the first set after
-the last one.
-
-The handler reads the current counter, loads that batch, and then advances the
-counter for next time:
+## Read and change State
 
 ```python
 class Events:
     def load_choices(self, state):
-        choices = load_choices_from_database(
-            state.batches_loaded
-        )
+        choices = load_choices_from_database(state.batches_loaded)
         state.batches_loaded += 1
         return actions.Dispatch(
-            "choice-picker:loaded",
-            {
-                "choices": choices,
-                "batches_loaded": state.batches_loaded,
-            },
+            "ChoicePicker:loaded",
+            {"choices": choices},
         )
 ```
 
-On the first click, the handler:
+The handler receives State through its `state` parameter. The first call
+gets zero, loads batch zero, and sets the value to one. Citry sends the
+changed State back with the response, so the next call gets one.
 
-- receives `state.batches_loaded=0`
-- loads batch zero
-- sets `state.batches_loaded=1`
+## Show State on the page
 
-Citry then sends the updated State back with the response.
-
-On the second click, the handler:
-
-- receives `state.batches_loaded=1`
-- loads batch one
-- sets `state.batches_loaded=2`
-
-The dispatched event also includes the new count because the page displays
-it. State carries the value to the next Python call; the event payload makes
-the value available to Alpine right now.
-
-## Update the browser values
-
-The picker starts its Alpine data from the value Python rendered:
+The template reads State through `$state`:
 
 ```citry-html
-<section
-  c-x-data="{
-    'choices': [],
-    'choice': '',
-    'batchesLoaded': batches_loaded,
-  }"
->
-  ...
-</section>
+<output v-text="$state.batches_loaded">{{ batches_loaded }}</output>
 ```
 
-The `c-` prefix makes `x-data` a
-[dynamic attribute](/syntax/dynamic-attributes/). Citry evaluates the Python
-expression and writes an ordinary Alpine `x-data` attribute. A picker created
-with another starting count will therefore show that count in both places.
+Python renders the starting value inside the tag. After each call that
+changes State, `$state.batches_loaded` updates, and Vue shows the new value.
 
-When `choice-picker:loaded` arrives, its listener updates all three browser
-values:
+The list of choices stays in ordinary Vue data, because Python does not need
+the browser's current choice on its next call.
 
-```citry-html
-@choice-picker:loaded="
-  choices = $event.detail.choices;
-  choice = choices[0];
-  batchesLoaded = $event.detail.batches_loaded;
-"
-```
+!!! note "Changing State from the browser"
 
-The new list and selected choice stay in Alpine. The counter is named
-`batches_loaded` in Python and `batchesLoaded` in Alpine, following each
-language's usual style:
+    Browser code can also assign a whole field, as in
+    `$state.batches_loaded = 0`. The page shows the new value at once, but
+    the assignment does not send a request: Citry sends the value with the
+    component's next event call (calls sent as GET requests are the
+    exception). You cannot assign a nested value, or a field that `State`
+    does not let the browser change. See
+    [`$state`](/reference/browser-apis/#state) for the full rules.
 
-```text
-batchesLoaded = $event.detail.batches_loaded;
-^^^^^^^^^^^^^                 ^^^^^^^^^^^^^^^
-  Alpine var                  data from Python
-```
+## Keep secrets out of State
 
-The `batches_loaded` counter travels in State because Python needs it to
-choose the next batch. Reloading the page creates a new picker at its starting
-value of zero.
+State is signed, not secret. Citry signs it with `CITRY_SECRET` so it can
+tell when someone has changed it, but anyone who opens the page can read the
+values. Signing also does not identify the user or grant permission.
 
-## State secrets
-
-Signed State lets the server detect whether its browser-carried value was
-changed. It does not hide the value, sign a person in, or decide what that
-person may do.
-
-!!! warning
-
-     **DO NOT** put passwords, API keys, or other secrets in State. Check permissions
-     inside each event handler just as you would in an ordinary web route. In
-     production, keep `CITRY_SECRET` stable and give every worker the same value so
-     they can read one another's signed State.
+Never put passwords or API keys in State, and check access inside each event
+handler. In production, every worker needs the same `CITRY_SECRET`.
 
 ## Next steps
 
-State is useful for values a component carries from one call to the next.
-Next, [handle and validate forms](/getting-started/forms/) whose values come
-from named browser controls.
+Next, [handle and validate forms](/getting-started/forms/).

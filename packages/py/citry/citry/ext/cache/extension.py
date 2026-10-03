@@ -482,7 +482,7 @@ class CacheExtension(Extension):
                 )
 
     def _publish_component(self, plan: _CacheMissPlan, render: CitryRender) -> bool:
-        """Publish one settled, clean subtree when its revision is still current."""
+        """Publish one settled typed subtree while its revision remains current."""
         from .artifact import _encode_artifact  # noqa: PLC0415
         from .errors import (  # noqa: PLC0415
             CacheArtifactError,
@@ -490,31 +490,28 @@ class CacheExtension(Extension):
             _CacheRevisionChanged,
             _CacheUncacheableError,
         )
-        from .replay import _export_component_artifact, _export_fragment_artifact  # noqa: PLC0415
+        from .replay import (  # noqa: PLC0415
+            _export_component_artifact,
+            _export_fragment_artifact,
+            _UnsupportedTypedCachePart,
+        )
 
         component = render.context.component
         if component is None:
-            raise RuntimeError("A render-cache publication has no live boundary component.")
+            raise RuntimeError("render-cache publication has no live boundary component")
         if render.context._error_tainted:
             self._diagnose_plan("store-skipped", plan, component, reason="error-tainted")
-            return False
-        if self._revision_snapshot() != plan.revision:
-            self._diagnose_plan("store-skipped", plan, component, reason="revision-changed")
             return False
         try:
             artifact = (
                 _export_fragment_artifact(render) if plan.kind == "fragment" else _export_component_artifact(render)
             )
-            value = _encode_artifact(artifact)
+            value = _encode_artifact(artifact, max_entry_bytes=plan.max_entry_bytes)
         except _CacheArtifactOversizedError as error:
-            self._diagnose_plan(
-                "oversized-entry",
-                plan,
-                component,
-                artifact_bytes=error.size,
-                limit_bytes=error.limit,
-                reason="entry-limit",
-            )
+            self._diagnose_plan("oversized-entry", plan, component, artifact_bytes=error.size, limit_bytes=error.limit)
+            return False
+        except _UnsupportedTypedCachePart as error:
+            self._diagnose_plan("store-skipped", plan, component, reason=str(error))
             return False
         except _CacheUncacheableError as error:
             self._diagnose_plan(
@@ -528,20 +525,8 @@ class CacheExtension(Extension):
         except CacheArtifactError:
             self._diagnose_plan("store-skipped", plan, component, reason="artifact-rejected")
             return False
-        artifact_bytes = len(value.encode("utf-8"))
-        if plan.max_entry_bytes is not None and artifact_bytes > plan.max_entry_bytes:
-            self._diagnose_plan(
-                "oversized-entry",
-                plan,
-                component,
-                artifact_bytes=artifact_bytes,
-                frame_count=len(artifact.frames),
-                limit_bytes=plan.max_entry_bytes,
-                reason="entry-limit",
-            )
-            return False
+        stored = False
         try:
-            stored = False
             with self._stable_revision(plan.revision):
                 self.citry.cache.set(plan.key, value, ttl=plan.ttl)
                 stored = True
@@ -557,7 +542,7 @@ class CacheExtension(Extension):
             "store",
             plan,
             component,
-            artifact_bytes=artifact_bytes,
+            artifact_bytes=len(value.encode("utf-8")),
             frame_count=len(artifact.frames),
         )
         return True

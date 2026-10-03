@@ -79,11 +79,13 @@ def wsgi_app(citry_instance: Citry) -> WSGIApp:
     """
     Build the WSGI application serving ``citry_instance.urls``.
 
-    The returned app routes each request to the matched citry handler,
-    translates the environ into a ``RouteRequest`` (``_build_request``),
-    calls the handler, and translates the returned ``RouteResponse`` back
-    into the WSGI shape (``respond``). Async handlers are rejected with a
-    pointed error up front: WSGI is synchronous.
+    The returned app routes each request to the matching citry handler.
+    It builds a [`RouteRequest`][citry.RouteRequest] from the WSGI environ,
+    calls the handler, and turns the returned
+    [`RouteResponse`][citry.RouteResponse] into a WSGI response. Because
+    WSGI is synchronous, a request that reaches an ``async def`` handler
+    raises ``TypeError`` before the handler runs, and the message points to
+    the ASGI adapter.
     """
 
     def app(environ: dict[str, Any], start_response: StartResponse) -> Iterable[bytes]:

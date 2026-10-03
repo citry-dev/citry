@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import ast
 import json
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+import math
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Literal, cast
+
+from citry._source_lines import source_lines
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -36,6 +39,15 @@ class JsonWireType:
     @property
     def javascript(self) -> str:
         """Render a JSDoc-compatible type without exposing Python spellings."""
+        return self.render()
+
+    def render(self, *, unknown: str = "unknown") -> str:
+        """
+        Render a JSDoc-compatible type, spelling each unproven part as `unknown`.
+
+        A type checker must not report errors about a value Citry could not
+        type, so the editor's projections pass `unknown="any"`.
+        """
         if self.kind == "null":
             return "null"
         if self.kind in {"boolean", "number", "string"}:
@@ -43,20 +55,20 @@ class JsonWireType:
                 return json.dumps(self.literal, ensure_ascii=False)
             return self.kind
         if self.kind == "array":
-            item = merge_json_wire_types(self.items).javascript if self.items else "unknown"
+            item = merge_json_wire_types(self.items).render(unknown=unknown) if self.items else unknown
             return f"Array<{item}>"
         if self.kind == "object":
             members = [
-                f"{_js_property(field.name)}{'?' if not field.required else ''}: {field.value.javascript}"
+                f"{_js_property(field.name)}{'?' if not field.required else ''}: {field.value.render(unknown=unknown)}"
                 for field in self.fields
             ]
             if self.additional is not None:
-                members.append(f"[key: string]: {self.additional.javascript}")
-            return "{" + ", ".join(members) + "}" if members else "Record<string, unknown>"
+                members.append(f"[key: string]: {self.additional.render(unknown=unknown)}")
+            return "{" + ", ".join(members) + "}" if members else f"Record<string, {unknown}>"
         if self.kind == "union":
-            rendered = tuple(dict.fromkeys(item.javascript for item in self.items))
-            return " | ".join(rendered) if rendered else "unknown"
-        return "unknown"
+            rendered = tuple(dict.fromkeys(item.render(unknown=unknown) for item in self.items))
+            return " | ".join(rendered) if rendered else unknown
+        return unknown
 
     @property
     def display(self) -> str:
@@ -65,6 +77,98 @@ class JsonWireType:
 
 
 UNKNOWN_JSON_TYPE = JsonWireType("unknown")
+
+# A JSON scalar an Enum member value may be, so `.value` can type as its literals.
+_ENUM_VALUE_TYPES = (bool, int, float, str)
+
+# How a class's instances behave once they reach a data method:
+# "object" instances are read by attribute and rejected by the JSON wire;
+# "named-tuple" instances are read by attribute and sent as arrays;
+# "typed-dict" values are plain dicts, so they are sent as objects but have
+# no attributes to read; "enum" members carry only `.value` and `.name`.
+WireClassKind = Literal["object", "named-tuple", "typed-dict", "enum"]
+_WIRE_CLASS_KINDS = frozenset({"object", "named-tuple", "typed-dict", "enum"})
+
+
+@dataclass(frozen=True, slots=True)
+class WireClass:
+    """
+    The attribute annotations of one Python class that a data method reads through.
+
+    A ``js_data()`` value such as ``kwargs.task.lane`` reads ``lane`` from the
+    class of ``kwargs.task``. Each annotation is written the way Citry formats
+    a schema field's type, so a class annotation is its import path and can
+    itself be looked up in the same class table.
+
+    Attributes:
+        attributes: Each public attribute's annotation, or ``None`` when it
+            could not be resolved to a type.
+        kind: How the class's instances are read and sent; see ``WireClassKind``.
+        required: The keys a TypedDict always has, else ``None``.
+        enum_values: Every member's value when the class is an ``Enum`` whose
+            values are all JSON scalars, else ``None``.
+        enum_names: Every member's name when the class is an ``Enum``, else ``None``.
+
+    """
+
+    attributes: Mapping[str, str | None]
+    kind: WireClassKind = "object"
+    required: tuple[str, ...] | None = None
+    enum_values: tuple[bool | int | float | str | None, ...] | None = None
+    enum_names: tuple[str, ...] | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-ready copy for the language server's worker payload."""
+        return {
+            "attributes": dict(self.attributes),
+            "kind": self.kind,
+            "required": None if self.required is None else list(self.required),
+            "enum_values": None if self.enum_values is None else list(self.enum_values),
+            "enum_names": None if self.enum_names is None else list(self.enum_names),
+        }
+
+    @classmethod
+    def from_dict(cls, value: object) -> WireClass:
+        """Validate and restore one copied class record."""
+        if type(value) is not dict or set(value) != {"attributes", "kind", "required", "enum_values", "enum_names"}:
+            msg = "wire class data must contain the exact supported fields"
+            raise ValueError(msg)
+        attributes = value["attributes"]
+        if type(attributes) is not dict or any(
+            type(name) is not str or (annotation is not None and type(annotation) is not str)
+            for name, annotation in attributes.items()
+        ):
+            msg = "wire class attributes must map names to annotations"
+            raise ValueError(msg)
+        kind = value["kind"]
+        if type(kind) is not str or kind not in _WIRE_CLASS_KINDS:
+            msg = "wire class kind is not supported"
+            raise ValueError(msg)
+        required = value["required"]
+        if required is not None and (type(required) is not list or any(type(item) is not str for item in required)):
+            msg = "wire class required keys must be strings"
+            raise ValueError(msg)
+        enum_values = value["enum_values"]
+        if enum_values is not None and (
+            type(enum_values) is not list
+            or any(item is not None and type(item) not in _ENUM_VALUE_TYPES for item in enum_values)
+            or any(type(item) is float and not math.isfinite(item) for item in enum_values)
+        ):
+            msg = "wire class enum values must be JSON scalars"
+            raise ValueError(msg)
+        enum_names = value["enum_names"]
+        if enum_names is not None and (
+            type(enum_names) is not list or any(type(item) is not str for item in enum_names)
+        ):
+            msg = "wire class enum names must be strings"
+            raise ValueError(msg)
+        return cls(
+            attributes=dict(attributes),
+            kind=cast("WireClassKind", kind),
+            required=None if required is None else tuple(required),
+            enum_values=None if enum_values is None else tuple(enum_values),
+            enum_names=None if enum_names is None else tuple(enum_names),
+        )
 
 
 def json_wire_type_from_annotation(source: str) -> JsonWireType:
@@ -80,13 +184,45 @@ def json_wire_type_from_expression(
     source: str,
     *,
     member_types: Mapping[str, Mapping[str, JsonWireType]] | None = None,
+    member_annotations: Mapping[str, Mapping[str, str | None]] | None = None,
+    classes: Mapping[str, WireClass] | None = None,
+    inferred: Mapping[tuple[int, int], JsonWireType] | None = None,
+    unproven: list[tuple[int, int]] | None = None,
+    widen_literals: bool = False,
 ) -> JsonWireType:
-    """Infer JSON shape from a Python value expression and proven members."""
+    """
+    Infer JSON shape from a Python value expression and proven members.
+
+    ``member_types`` types ``name.attr`` directly, such as ``kwargs.title``.
+    ``member_annotations`` gives the same members' annotations, and
+    ``classes`` describes the classes those annotations name, so a longer
+    chain such as ``kwargs.task.lane`` follows each class's attribute
+    annotations. A chain through a class the table does not describe, or
+    through an optional value, stays unknown.
+
+    These rules leave a part such as a method call unknown. A caller that
+    asked a type checker about such parts passes the answers in
+    ``inferred``, keyed by each part's start and end offset in ``source``,
+    and ``unproven`` collects the offsets of the parts that are still
+    unknown, so the caller knows what to ask about. With
+    ``widen_literals``, a constant such as ``False`` types as ``boolean``
+    rather than ``false``, while a ``Literal`` annotation keeps its values.
+    """
     try:
         expression = ast.parse(source, mode="eval").body
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return UNKNOWN_JSON_TYPE
-    return _expression_type(expression, member_types or {})
+    context = _ExpressionContext(
+        member_types or {},
+        member_annotations or {},
+        classes or {},
+        inferred=inferred or {},
+        unproven=unproven,
+        widen_literals=widen_literals,
+        line_starts=_line_starts(source),
+        lines=tuple(source_lines(source)),
+    )
+    return _expression_type(expression, context)
 
 
 def merge_json_wire_types(values: tuple[JsonWireType, ...] | list[JsonWireType]) -> JsonWireType:
@@ -133,13 +269,12 @@ def _annotation_type(node: ast.expr) -> JsonWireType:
     if isinstance(node, ast.Subscript):
         name = _qualified_name(node.value)
         arguments = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+        # `Annotated` metadata and TypedDict key markers wrap the value type,
+        # however the annotation spells their module.
         if name in {
-            "Annotated",
-            "typing.Annotated",
-            "Required",
-            "NotRequired",
-            "typing.Required",
-            "typing.NotRequired",
+            f"{prefix}{wrapper}"
+            for prefix in ("", "typing.", "typing_extensions.")
+            for wrapper in ("Annotated", "Required", "NotRequired", "ReadOnly")
         }:
             return _annotation_type(arguments[0]) if arguments else UNKNOWN_JSON_TYPE
         if name in {"Optional", "typing.Optional"}:
@@ -221,28 +356,181 @@ def _annotation_type(node: ast.expr) -> JsonWireType:
     return _unsupported("the annotation does not describe a supported strict JSON value")
 
 
+@dataclass(frozen=True, slots=True)
+class _ExpressionContext:
+    """The member and class facts one expression is typed against."""
+
+    member_types: Mapping[str, Mapping[str, JsonWireType]]
+    member_annotations: Mapping[str, Mapping[str, str | None]]
+    classes: Mapping[str, WireClass]
+    # Each context gets its own empty mapping. A dataclass default must be
+    # hashable on Python 3.11+, and a mapping proxy is not on 3.11.
+    inferred: Mapping[tuple[int, int], JsonWireType] = field(default_factory=dict)
+    unproven: list[tuple[int, int]] | None = None
+    widen_literals: bool = False
+    line_starts: tuple[int, ...] = ()
+    lines: tuple[str, ...] = ()
+
+    def span(self, node: ast.expr) -> tuple[int, int] | None:
+        """Return the node's start and end offsets in the expression source."""
+        start = self._offset(node.lineno, node.col_offset)
+        end = self._offset(node.end_lineno, node.end_col_offset)
+        return (start, end) if start is not None and end is not None else None
+
+    def _offset(self, lineno: int | None, byte_column: int | None) -> int | None:
+        # The parser counts columns in UTF-8 bytes; callers count characters.
+        if lineno is None or byte_column is None or not 1 <= lineno <= len(self.lines):
+            return None
+        prefix = self.lines[lineno - 1].encode()[:byte_column]
+        try:
+            return self.line_starts[lineno - 1] + len(prefix.decode())
+        except UnicodeDecodeError:
+            return None
+
+
+def _line_starts(source: str) -> tuple[int, ...]:
+    starts = [0]
+    for line in source_lines(source):
+        starts.append(starts[-1] + len(line))
+    return tuple(starts)
+
+
+def _attribute_chain(node: ast.Attribute) -> tuple[str, ...] | None:
+    """Return ``("kwargs", "task", "lane")`` for ``kwargs.task.lane``, or ``None`` for any other base."""
+    names: list[str] = []
+    current: ast.expr = node
+    while isinstance(current, ast.Attribute):
+        names.append(current.attr)
+        current = current.value
+    if not isinstance(current, ast.Name):
+        return None
+    names.append(current.id)
+    return tuple(reversed(names))
+
+
+def _attribute_chain_type(chain: tuple[str, ...], context: _ExpressionContext) -> JsonWireType:
+    """Follow ``root.member.attr...`` through the class table to the last attribute's type."""
+    root, member, *attributes = chain
+    annotation = context.member_annotations.get(root, {}).get(member)
+    if not attributes:
+        # A NamedTuple or TypedDict member is sent as an array or object.
+        owner = context.classes.get(annotation) if annotation is not None else None
+        if annotation is not None and owner is not None and owner.kind in {"named-tuple", "typed-dict"}:
+            return _class_value_type(annotation, context)
+        declared = context.member_types.get(root, {}).get(member, UNKNOWN_JSON_TYPE)
+        # The schema writes a type alias such as `Size = Literal["sm", "md"]`
+        # by its name, which the JSON rules cannot read, while the resolved annotation
+        # spells out its values. The resolved one is used only when it is a
+        # JSON type, so a class keeps the schema's shorter name in messages.
+        if annotation is not None and declared.unsupported:
+            resolved = json_wire_type_from_annotation(annotation)
+            if resolved.kind != "unknown" and not resolved.unsupported:
+                return resolved
+        return declared
+    for attribute in attributes[:-1]:
+        # Only a plain class annotation is followed; `Owner | None` could be
+        # None at run time, so reading through it proves nothing.
+        owner = _readable_class(annotation, context)
+        annotation = owner.attributes.get(attribute) if owner is not None else None
+    last = attributes[-1]
+    owner = context.classes.get(annotation) if annotation is not None else None
+    if owner is not None and owner.kind == "enum":
+        # An Enum member's `.value` and `.name` are the only JSON values it carries.
+        if last == "value" and owner.enum_values is not None:
+            return merge_json_wire_types(tuple(_literal_value_type(value) for value in owner.enum_values))
+        if last == "name" and owner.enum_names is not None:
+            return merge_json_wire_types(tuple(JsonWireType("string", literal=name) for name in owner.enum_names))
+        return UNKNOWN_JSON_TYPE
+    owner = _readable_class(annotation, context)
+    field_annotation = owner.attributes.get(last) if owner is not None else None
+    if field_annotation is None:
+        return UNKNOWN_JSON_TYPE
+    return _class_value_type(field_annotation, context)
+
+
+def _readable_class(annotation: str | None, context: _ExpressionContext) -> WireClass | None:
+    """Return the class whose attributes a value of this annotation has, or ``None``."""
+    owner = context.classes.get(annotation) if annotation is not None else None
+    # A TypedDict value is a plain dict, and an Enum member has no fields.
+    return owner if owner is not None and owner.kind in {"object", "named-tuple"} else None
+
+
+def _class_value_type(annotation: str, context: _ExpressionContext) -> JsonWireType:
+    """Type a whole value of ``annotation``, as the JSON wire sends it."""
+    owner = context.classes.get(annotation)
+    if owner is not None and owner.kind in {"named-tuple", "typed-dict"}:
+        # Each field is typed from its own annotation; an unresolved one stays unknown.
+        values = {
+            name: (json_wire_type_from_annotation(field) if field is not None else UNKNOWN_JSON_TYPE)
+            for name, field in owner.attributes.items()
+        }
+        if owner.kind == "named-tuple":
+            # The wire sends a NamedTuple as an array of its fields.
+            item = merge_json_wire_types(tuple(values.values())) if values else UNKNOWN_JSON_TYPE
+            return JsonWireType("array", (item,), unsupported=item.unsupported)
+        required = set(owner.required or ())
+        fields = tuple(JsonWireField(name, value, name in required) for name, value in values.items())
+        issues = tuple(dict.fromkeys(issue for value in values.values() for issue in value.unsupported))
+        return JsonWireType("object", fields=fields, unsupported=issues)
+    return json_wire_type_from_annotation(annotation)
+
+
+def _literal_value_type(value: str | float | None) -> JsonWireType:
+    if value is None:
+        return JsonWireType("null")
+    if type(value) is bool:
+        return JsonWireType("boolean", literal=value)
+    if type(value) is str:
+        return JsonWireType("string", literal=value)
+    return JsonWireType("number", literal=value)
+
+
 def _expression_type(
     node: ast.expr,
-    member_types: Mapping[str, Mapping[str, JsonWireType]],
+    context: _ExpressionContext,
 ) -> JsonWireType:
-    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-        return member_types.get(node.value.id, {}).get(node.attr, UNKNOWN_JSON_TYPE)
+    value = _rule_expression_type(node, context)
+    # Only a part the rules leave unknown without a reason may be filled from
+    # a type checker's answer; a part with a reason is known not to fit.
+    # A `*items` element is not an expression on its own, so it cannot be asked about.
+    if value.kind != "unknown" or value.unsupported or isinstance(node, ast.Starred):
+        return value
+    span = context.span(node)
+    if span is None:
+        return value
+    answer = context.inferred.get(span)
+    if answer is not None:
+        return answer
+    if context.unproven is not None:
+        context.unproven.append(span)
+    return value
+
+
+def _rule_expression_type(
+    node: ast.expr,
+    context: _ExpressionContext,
+) -> JsonWireType:
+    if isinstance(node, ast.Attribute):
+        chain = _attribute_chain(node)
+        return _attribute_chain_type(chain, context) if chain is not None else UNKNOWN_JSON_TYPE
     if isinstance(node, ast.Constant):
         if node.value is None:
             return JsonWireType("null")
+        # A widened constant keeps only its kind, as TypeScript types a `let`.
+        literal = None if context.widen_literals else node.value
         if type(node.value) is bool:
-            return JsonWireType("boolean", literal=node.value)
+            return JsonWireType("boolean", literal=literal)
         if type(node.value) in {int, float}:
-            return JsonWireType("number", literal=node.value)
+            return JsonWireType("number", literal=literal)
         if type(node.value) is str:
-            return JsonWireType("string", literal=node.value)
+            return JsonWireType("string", literal=literal)
         if type(node.value) in {bytes, complex}:
             return _unsupported(f"{type(node.value).__name__} literals are not JSON-serializable")
         return UNKNOWN_JSON_TYPE
     if isinstance(node, ast.JoinedStr):
         return JsonWireType("string")
     if isinstance(node, ast.List | ast.Tuple):
-        item = merge_json_wire_types(tuple(_expression_type(element, member_types) for element in node.elts))
+        item = merge_json_wire_types(tuple(_expression_type(element, context) for element in node.elts))
         return JsonWireType("array", (item,), unsupported=item.unsupported)
     if isinstance(node, ast.Set):
         return _unsupported("set literals are not JSON-serializable")
@@ -252,29 +540,25 @@ def _expression_type(
         for key, value_node in zip(node.keys, node.values, strict=True):
             if not isinstance(key, ast.Constant) or type(key.value) is not str:
                 return _unsupported("JSON objects require string keys")
-            value = _expression_type(value_node, member_types)
+            value = _expression_type(value_node, context)
             issues.extend(value.unsupported)
             fields.append(JsonWireField(key.value, value))
         return JsonWireType("object", fields=tuple(fields), unsupported=tuple(dict.fromkeys(issues)))
     if isinstance(node, ast.Set | ast.SetComp):
         return _unsupported("sets are not JSON-serializable")
     if isinstance(node, ast.IfExp):
-        return merge_json_wire_types(
-            (_expression_type(node.body, member_types), _expression_type(node.orelse, member_types))
-        )
+        return merge_json_wire_types((_expression_type(node.body, context), _expression_type(node.orelse, context)))
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return JsonWireType("boolean")
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
         return (
-            JsonWireType("number")
-            if _expression_type(node.operand, member_types).kind == "number"
-            else UNKNOWN_JSON_TYPE
+            JsonWireType("number") if _expression_type(node.operand, context).kind == "number" else UNKNOWN_JSON_TYPE
         )
     if isinstance(node, ast.Compare):
         return JsonWireType("boolean")
     if isinstance(node, ast.BinOp):
-        left = _expression_type(node.left, member_types)
-        right = _expression_type(node.right, member_types)
+        left = _expression_type(node.left, context)
+        right = _expression_type(node.right, context)
         if isinstance(node.op, ast.Add) and left.kind == right.kind == "string":
             return JsonWireType("string")
         if left.kind == right.kind == "number":
@@ -285,7 +569,7 @@ def _expression_type(
 
 
 def _literal_type(node: ast.expr) -> JsonWireType:
-    value = _expression_type(node, {})
+    value = _expression_type(node, _ExpressionContext({}, {}, {}))
     return value if value.kind != "unknown" else _unsupported("Literal contains a non-JSON value")
 
 
@@ -315,6 +599,8 @@ __all__ = [
     "JsonWireField",
     "JsonWireKind",
     "JsonWireType",
+    "WireClass",
+    "WireClassKind",
     "json_wire_type_from_annotation",
     "json_wire_type_from_expression",
     "merge_json_wire_types",

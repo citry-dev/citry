@@ -3,8 +3,9 @@
 // The channel has exactly two members: `#c-key="expr"` (expression-valued,
 // server-evaluated) and the bare `#c-ignore` marker. They parse into
 // `HtmlAttr` with `HtmlAttrKind::Meta`; every other `#c-*` name, a valueless
-// `#c-key`, a valued `#c-ignore`, and either member on a reserved structural
-// tag are parse errors. See docs/design/component_ranges_plan.md.
+// `#c-key`, a valued `#c-ignore`, either member on a reserved structural
+// tag, and a child component, slot, or Vue binding inside a `#c-ignore`
+// element are parse errors. See docs/design/component_ranges_plan.md.
 
 mod common;
 
@@ -109,11 +110,10 @@ mod tests {
     }
 
     #[test]
-    fn test_meta_ignore_allowed_on_component_and_element_tags() {
+    fn test_meta_ignore_allowed_on_component_tags() {
         for input in [
             "<c-Card #c-ignore />",
             r#"<c-component is="Card" #c-ignore />"#,
-            r#"<c-element c-is="tag" #c-ignore />"#,
         ] {
             let node = parse_first_node(input).unwrap();
             let ignore = node
@@ -123,6 +123,36 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing #c-ignore in {input:?}"));
             assert_eq!(ignore.kind, HtmlAttrKind::Meta);
             assert!(ignore.inner_value.is_none());
+        }
+    }
+
+    #[test]
+    fn test_meta_ignore_rejected_on_element_tag_in_both_forms() {
+        // The static form compiles to a plain tag, so the parser is the only
+        // place that still sees it was written as `<c-element>`.
+        for (input, example) in [
+            (r#"<c-element c-is="tag" #c-ignore />"#, "<div #c-ignore>"),
+            (
+                r#"<c-element is="section" #c-ignore>x</c-element>"#,
+                "<section #c-ignore>",
+            ),
+            (
+                r#"<c-Element is="div" #c-key="k" #c-ignore>x</c-Element>"#,
+                "<div #c-ignore>",
+            ),
+        ] {
+            assert_parse_error(input, "'#c-ignore' is not supported on '<");
+            assert_parse_error(
+                input,
+                &format!("Write the element as a plain HTML tag, such as {example}"),
+            );
+        }
+        // `#c-key` keeps working on both forms.
+        for input in [
+            r#"<c-element c-is="tag" #c-key="k" />"#,
+            r#"<c-element is="div" #c-key="k">x</c-element>"#,
+        ] {
+            parse_first_node(input).unwrap();
         }
     }
 
@@ -211,7 +241,7 @@ mod tests {
     fn test_valued_ignore_is_error() {
         assert_parse_error(
             r#"<div #c-ignore="yes">x</div>"#,
-            "'#c-ignore' takes no value. Write the bare marker ('#c-ignore') to opt the element subtree or component range out of morphing.",
+            "'#c-ignore' takes no value. Write the bare marker ('#c-ignore') on an HTML element to keep its contents as the server first rendered them.",
         );
     }
 
@@ -219,7 +249,7 @@ mod tests {
     fn test_valued_ignore_on_component_is_error() {
         assert_parse_error(
             r#"<c-Card #c-ignore="yes" />"#,
-            "'#c-ignore' takes no value. Write the bare marker ('#c-ignore') to opt the element subtree or component range out of morphing.",
+            "'#c-ignore' takes no value. Write the bare marker ('#c-ignore') on an HTML element to keep its contents as the server first rendered them.",
         );
     }
 
@@ -248,7 +278,7 @@ mod tests {
     fn test_ignore_on_reserved_tag_is_error() {
         assert_parse_error(
             r#"<c-if cond="x" #c-ignore>y</c-if>"#,
-            "'#c-ignore' is not supported on '<c-if>' (line 1, column 16). It belongs on a plain HTML element (the ignored subtree) or on a component tag (the ignored component range).",
+            "'#c-ignore' is not supported on '<c-if>' (line 1, column 16). Put it on a plain HTML element, whose contents the browser then keeps as the server first rendered them.",
         );
     }
 
@@ -312,7 +342,7 @@ mod tests {
     fn test_key_on_slot_tag_is_error() {
         assert_parse_error(
             r#"<c-slot name="s" #c-key="k" />"#,
-            "'#c-key' is not supported on '<c-slot>' (line 1, column 18). It belongs on a plain HTML element (the morph pairing key) or on a component tag (the key of the child instance).",
+            "'#c-key' is not supported on '<c-slot>' (line 1, column 18). It belongs on a plain HTML element or a component tag, where it is the key Vue uses to match that element or child instance across renders.",
         );
     }
 
@@ -349,5 +379,133 @@ mod tests {
             "<div>\n  <c-if cond=\"x\" #c-key=\"k\">y</c-if>\n</div>",
             "'#c-key' is not supported on '<c-if>' (line 2, column 18).",
         );
+    }
+
+    // =============================================================================
+    // CONTENTS OF A #c-ignore ELEMENT
+    // =============================================================================
+
+    #[test]
+    fn test_ignored_element_accepts_server_rendered_contents() {
+        // Plain HTML, expressions, control flow, `<c-raw>`, a nested
+        // `#c-key`, and a `c-for` shorthand all render once on the server.
+        let input = concat!(
+            r#"<div #c-ignore><canvas class="c"></canvas>{{ label }}"#,
+            r#"<c-if cond="ok"><b>yes</b></c-if><c-else>no</c-else>"#,
+            r#"<ul><li c-for="x in xs" #c-key="x">{{ x }}</li></ul>"#,
+            r#"<c-raw><i>{{ raw }}</i></c-raw></div>"#,
+        );
+        parse_template(input, None, None).unwrap();
+    }
+
+    #[test]
+    fn test_ignored_element_rejects_component_child() {
+        assert_parse_error(
+            "<div #c-ignore>\n  <c-Card />\n</div>",
+            "'#c-ignore' on <div> (line 1, column 6) keeps the element's contents exactly as the server first rendered them, so they cannot hold <c-Card> (line 2, column 4): it needs Vue to render it. Inside a '#c-ignore' element, write plain HTML, '{{ }}' expressions, '<c-if>', '<c-for>', and '<c-raw>'. Move <c-Card> outside the <div> element.",
+        );
+    }
+
+    #[test]
+    fn test_ignored_element_rejects_citry_tags_that_need_vue() {
+        for (input, tag_name) in [
+            (r#"<div #c-ignore><c-slot name="s" /></div>"#, "c-slot"),
+            (
+                r#"<div #c-ignore><c-component is="Card" /></div>"#,
+                "c-component",
+            ),
+            (
+                r#"<div #c-ignore><c-element c-is="tag" /></div>"#,
+                "c-element",
+            ),
+            (
+                r#"<div #c-ignore><c-mark name="m">x</c-mark></div>"#,
+                "c-mark",
+            ),
+            (
+                r#"<div #c-ignore><p><c-if cond="x"><c-Card /></c-if></p></div>"#,
+                "c-Card",
+            ),
+        ] {
+            assert_parse_error(input, &format!("so they cannot hold <{tag_name}>"));
+        }
+    }
+
+    #[test]
+    fn test_ignored_element_rejects_vue_bindings_in_its_contents() {
+        for (input, name) in [
+            (
+                r#"<div #c-ignore><button @click="go()">x</button></div>"#,
+                "@click",
+            ),
+            (r#"<div #c-ignore><b :title="t">x</b></div>"#, ":title"),
+            (r#"<div #c-ignore><p v-if="ok">x</p></div>"#, "v-if"),
+            (
+                r#"<div #c-ignore><p><b v-text="t"></b></p></div>"#,
+                "v-text",
+            ),
+            (
+                r#"<div #c-ignore><button @c-click="save">x</button></div>"#,
+                "@c-click",
+            ),
+            (r#"<div #c-ignore><input :c-name /></div>"#, ":c-name"),
+        ] {
+            assert_parse_error(input, &format!("so the browser never runs '{name}'"));
+        }
+    }
+
+    #[test]
+    fn test_ignored_element_rejects_a_ref_with_the_way_to_reach_the_child() {
+        assert_parse_error(
+            r#"<div #c-ignore><canvas ref="chart"></canvas></div>"#,
+            "'#c-ignore' on <div> (line 1, column 6) keeps the element's contents exactly as the server first rendered them, so the browser never runs 'ref' on <canvas> (line 1, column 24). Inside a '#c-ignore' element, write plain HTML, '{{ }}' expressions, '<c-if>', '<c-for>', and '<c-raw>'. Put the 'ref' on the <div> element itself and find the child from there, for example with this.$refs.<name>.querySelector(...).",
+        );
+    }
+
+    #[test]
+    fn test_ignored_element_keeps_its_own_vue_bindings() {
+        // The element itself stays Vue-managed, so its own bindings are fine.
+        parse_template(
+            r#"<div #c-ignore ref="map" :class="cls" @click="go()"><p>x</p></div>"#,
+            None,
+            None,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_ignore_placements_without_element_contents_are_errors() {
+        assert_parse_error(
+            "<br #c-ignore>",
+            "'#c-ignore' is not supported on <br> (line 1, column 5). <br> has no contents to keep. Remove '#c-ignore'.",
+        );
+        assert_parse_error(
+            "<textarea #c-ignore>x</textarea>",
+            "<textarea> holds text, not elements, so there is nothing to keep.",
+        );
+        for input in [
+            "<svg #c-ignore><g></g></svg>",
+            "<svg><g #c-ignore><circle></circle></g></svg>",
+            "<math><mi #c-ignore>x</mi></math>",
+        ] {
+            assert_parse_error(
+                input,
+                "Put '#c-ignore' on an HTML element that wraps the <svg> or <math> element.",
+            );
+        }
+        for tag in ["table", "thead", "tbody", "tfoot", "tr", "colgroup"] {
+            assert_parse_error(
+                &format!("<{tag} #c-ignore></{tag}>"),
+                "Put '#c-ignore' on a <div> that wraps the <table>, or on a <td> or <th> inside it.",
+            );
+        }
+        parse_template(
+            "<div #c-ignore><table><tbody><tr><td #c-ignore>1</td></tr></tbody></table></div>",
+            None,
+            None,
+        )
+        .unwrap();
+        // Wrapping the SVG element in an HTML element works.
+        parse_template("<div #c-ignore><svg><g></g></svg></div>", None, None).unwrap();
     }
 }

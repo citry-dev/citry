@@ -593,6 +593,35 @@ def test_worker_process_and_json_failures_degrade(tmp_path, monkeypatch):
     assert "status 2" in messages[3]
 
 
+def test_project_worker_uses_utf8_for_the_json_transport(tmp_path, monkeypatch):
+    observed: dict[str, object] = {}
+
+    def run(*_args, **kwargs):
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(
+            [],
+            2,
+            stdout='{"ok": false, "error": "名"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr("citry_lsp.project.subprocess.run", run)
+
+    state = load_project(tmp_path, "app:engine")
+
+    assert observed["encoding"] == "utf-8"
+    assert observed["errors"] == "replace"
+    assert "名" in (state.status.message or "")
+
+
+def test_worker_missing_output_streams_degrade_as_a_structured_failure(tmp_path):
+    state = project_module._project_from_worker_output(tmp_path, "app:engine", 1, None, None)
+
+    assert state.status.mode == "syntax-only"
+    assert state.status.registry_ready is False
+    assert "without a response" in (state.status.message or "")
+
+
 def test_worker_protocol_and_version_mismatches_degrade(tmp_path, monkeypatch):
     engine = Citry(autodiscover=False)
     base = {
@@ -672,6 +701,7 @@ def test_private_source_analysis_requires_exact_catalog_coverage(tmp_path, monke
             "name": "count",
             "type_display": "int",
             "description": None,
+            "client_writable": True,
             "module": "app",
             "qualname": "Card.State",
             "file": "relative.py",
@@ -740,7 +770,7 @@ def test_source_analysis_declines_non_function_template_data_without_invoking_it
 
 @pytest.mark.parametrize(
     "version",
-    [".".join(map(str, MINIMUM_CITRY_VERSION)), "0.6.0", "1.0.0", "9.0.0"],
+    [".".join(map(str, MINIMUM_CITRY_VERSION)), "0.6.1", "1.0.0", "9.0.0"],
 )
 def test_compatible_future_citry_versions_keep_registry_results(tmp_path, monkeypatch, version):
     monkeypatch.chdir(tmp_path)
@@ -759,7 +789,7 @@ def test_compatible_future_citry_versions_keep_registry_results(tmp_path, monkey
     assert "schema 999 is unsupported" in state.status.message
 
 
-@pytest.mark.parametrize("version", ["0.4.5", "0.5.0", "development"])
+@pytest.mark.parametrize("version", ["0.4.5", "0.5.1", "development"])
 def test_older_patch_versions_decline_registry_results(tmp_path, monkeypatch, version):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "minimum_version_app.py").write_text(

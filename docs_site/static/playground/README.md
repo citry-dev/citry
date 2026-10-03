@@ -20,10 +20,12 @@ source modules elsewhere in the repository.
    instance so event handlers remain callable.
 4. `preview_bridge.js` loads a fresh `preview.html` iframe and sends it the
    HTML through a private `MessagePort`.
-5. `preview.html` installs the HTML, reactivates supported scripts, then
-   publishes Citry manifests after Citry's classic scripts are ready. It waits
-   for authored non-async external scripts, while async scripts and modules may
-   finish later.
+5. `preview.html` asks the Worker for every Vue component definition and
+   stylesheet the HTML names, and swaps each path for a Blob URL, because
+   those files exist only inside the Worker. It then installs the HTML,
+   reactivates supported scripts, and publishes Citry manifests once
+   Citry's classic scripts are ready. It waits for authored non-async external
+   scripts, while async scripts and modules may finish later.
 6. A Citry event travels from `preview.html` through `preview_bridge.js` and
    `worker_session.js` to `worker.js`. The Worker calls `executor.py`, and the
    response returns along the same path.
@@ -48,6 +50,7 @@ beside the error.
 | `worker.js` | Owns Pyodide, installs the runtime, runs Python, and dispatches Python event handlers. | This file. |
 | `executor.py` | Executes one module, normalizes its final value, reports Python diagnostics, adapts Events requests, and projects an exact-version component catalog. | This file. |
 | `analysis_adapter.py` | Converts parser diagnostics, structural and registered-component results, and catalog-backed findings into validated browser records. | This file. |
+| `runtime_label.js` | Formats the visible published/workspace runtime provenance label. | [`../../_internal/frontend/src/runtime_label.js`](../../_internal/frontend/src/runtime_label.js). |
 | `portable_ide.py` | Generated parser and component-name rules shared with the desktop LSP. | [`../../../packages/py/citry/citry/_portable_ide.py`](../../../packages/py/citry/citry/_portable_ide.py). |
 | `preview.html` | Provides the sandboxed result document, ordered script activation, diagnostics, and the Events transport. | This file. |
 | `playground.css` | Styles the full-page editor and result workspace. | This file. |
@@ -101,8 +104,9 @@ changes require another frontend build and page refresh.
 The live server builds a temporary wheel from the workspace `citry-ui` source
 and replaces the published Citry UI entry in its generated copy of
 `runtime.json`. It serves that local wheel without changing this committed
-directory or installing two UI copies. Static builds, CI, and deployed docs use
-only the exact published versions in the committed `runtime.json`. The pinned
+directory or installing two UI copies. Deployed docs, CI, and static builds
+without `CITRY_PLAYGROUND_CORE_WHEEL` use only the exact published versions in
+the committed `runtime.json`. The pinned
 Citry wheel owns the Events client in both cases.
 
 The workspace `citry-ui` usually requires a Citry that is newer than the pinned
@@ -110,15 +114,115 @@ release, for the whole stretch between releases. The server then prints which
 pair it rejected and serves this committed runtime unchanged, so every page
 still renders and Citry UI examples show their code without a live preview.
 Pinning a Citry release that the workspace `citry-ui` accepts brings the local
-wheel back.
+wheel back, or set `CITRY_PLAYGROUND_CORE_WHEEL` (see below) to run this
+checkout's Citry.
+
+## Run the playground with this checkout's Citry
+
+Between releases, the workspace Citry often changes what the browser receives,
+while the committed `runtime.json` still installs the last published Citry.
+The browser tests then check the published code, not your change. The
+workspace Citry also needs the workspace Citry Core, which contains compiled
+Rust code, so the browser needs a Citry Core wheel compiled for Pyodide.
+
+Build that wheel with the release build script. The script needs the Pyodide
+cross-build environment (the Emscripten compiler and the Python headers that
+Pyodide publishes). It also needs a copy of the source without compiled
+extensions or Python caches, because it rejects a source tree that contains
+them. Run these commands from the repository root:
+
+```bash
+cache=~/Library/Caches/citry  # any directory outside the repository
+rustup toolchain install 1.96.0 --target wasm32-unknown-emscripten
+export PYODIDE_XBUILDENV_PATH=$cache/pyodide-xbuildenv
+uvx --python 3.14.2 --from pyodide-cli==0.5.0 \
+  --with pyodide-build==0.37.0 \
+  pyodide xbuildenv install 314.0.3 --path $PYODIDE_XBUILDENV_PATH
+uvx --python 3.14.2 --from pyodide-cli==0.5.0 \
+  --with pyodide-build==0.37.0 \
+  pyodide xbuildenv install-emscripten --path $PYODIDE_XBUILDENV_PATH
+
+rm -rf $cache/core-src && mkdir -p $cache/core-src/packages/py
+rsync -a --exclude .git --exclude target --exclude __pycache__ \
+  --exclude '*.so' --exclude '*.pyc' \
+  Cargo.toml Cargo.lock crates third_party $cache/core-src/
+rsync -a --exclude __pycache__ --exclude '*.so' --exclude '*.pyc' \
+  packages/py/citry_core $cache/core-src/packages/py/
+rm -rf $cache/core-wheel
+uv run --no-sync python scripts/build_citry_core_pyodide_wheel.py \
+  --source $cache/core-src/packages/py/citry_core \
+  --out-dir $cache/core-wheel \
+  --xbuildenv-path $cache/pyodide-xbuildenv \
+  --cargo-target-dir $cache/cargo-pyemscripten \
+  --source-date-epoch "$(date +%s)"
+```
+
+The versions in these commands come from
+[`packages/py/citry_core/pyodide-build.json`](../../../packages/py/citry_core/pyodide-build.json).
+The first run downloads about 2 GB of tools and takes a few minutes. A cold
+Rust build took about three minutes on an Apple Silicon laptop. Later builds
+reuse the Cargo target directory. Rebuild the wheel whenever the Rust crates
+change.
+
+Point `CITRY_PLAYGROUND_CORE_WHEEL` at the result:
+
+```bash
+export CITRY_PLAYGROUND_CORE_WHEEL=$(ls $cache/core-wheel/citry_core-*.whl)
+```
+
+With the variable set, the local docs server and the browser tests build
+wheels from `packages/py/citry` and `packages/py/citry_ui` (a few seconds),
+and the playground installs them with your Citry Core wheel in place of the
+published ones.
+The generated `runtime.json` says `source: "workspace"` in place of the
+committed `source: "published"`, and the playground shows that label next to
+the versions it runs. Build the Core wheel from this checkout with the script
+above; a matching file name, version, and ABI show that a wheel fits, not that
+it was built from your source, so do not use a downloaded wheel here.
+The committed directory never changes. If the variable names a missing file, a
+wheel built for another platform, or a Citry Core version that the workspace
+Citry rejects, the server and the tests stop with the reason rather than fall
+back to the published Citry.
+
+## Which browser tests run against the pinned release
+
+Without `CITRY_PLAYGROUND_CORE_WHEEL`, the playground and `<c-live-code>`
+browser tests run against the release that `runtime.json` pins, because that
+is what the deployed docs serve. The docs check workflow
+([`repo--docs-check.yml`](https://github.com/citry-dev/citry/blob/main/.github/workflows/repo--docs-check.yml))
+runs them this way too: it does not set the variable, so CI checks the
+playground the deployed docs serve and skips the tests below with their
+reason. Running them against this checkout's Citry is a local step: build the
+Core wheel above and set the variable.
+
+Some tests click through code from this checkout: the docs snippets, the
+Citry UI snippets, or the workspace Citry UI wheel. Between releases that code
+can use Citry features the pinned release lacks, so these tests carry the
+`workspace_citry` marker. Without `CITRY_PLAYGROUND_CORE_WHEEL`, pytest skips
+them and prints the reason, which names the variable. With it set, they run
+against this checkout's Citry. Every other playground and live-code test runs
+unconditionally.
+
+Mark a new browser test `workspace_citry` when it checks what this checkout's
+example code or Citry UI does in the browser. Leave it unmarked when it checks
+the runtime itself (loading, Stop and Reset, diagnostics, the iframe protocol)
+or code that the pinned release already supports.
+
+The release docs workflow sets `CITRY_PLAYGROUND_PINS_MATCH_CHECKOUT=1` when it
+tests the pins it has just updated. Right after publication, `main` normally
+still holds the released source, so the marked tests describe the pinned
+wheels and run. Set it yourself only when your checkout matches the pinned
+release; otherwise the marked tests fail on features that release lacks.
 
 ## Update the pinned Python runtime
 
 Treat `runtime.json` as one compatible tuple. When any runtime package changes:
 
 1. Pin the full Pyodide and Python versions.
-2. Pin PyPI packages by version, filename, and SHA-256. Pin CDN packages by
-   their direct URL.
+2. Pin PyPI packages by version, filename, and lowercase SHA-256. Pin CDN
+   packages by their direct URL; published direct URLs must use the pinned
+   Pyodide CDN `/pyodide/v<version>/full/` tree, while workspace manifests may
+   use their generated `./local/` wheel paths.
 3. Confirm compiled wheels match the Pyodide Python and PyEmscripten ABI.
 4. Keep `citry.version`, `citry.core_version`, and `citry.ui_version` equal to
    their package entries.
@@ -129,8 +233,8 @@ The Worker verifies installed Python, Citry, Citry Core, and Citry UI versions
 before it accepts a run. For a PyPI package, it resolves the registry-assigned
 storage URL at startup and rejects any artifact whose filename or SHA-256 does
 not match `runtime.json`. This means the release candidate can contain the
-complete runtime entry before publication. A local runtime retains
-`citry.ui_version` while replacing the public UI wheel with the workspace build.
+complete runtime entry before publication. A local runtime rewrites the
+`citry` version fields to match the workspace wheels it serves.
 
 ## Keep the protocols synchronized
 
@@ -183,6 +287,10 @@ uv run --no-sync pytest \
   docs_site/tests/e2e/test_preview_bridge_e2e.py \
   docs_site/tests/e2e/test_playground_e2e.py
 ```
+
+When your change touches what the browser receives from Citry, set
+`CITRY_PLAYGROUND_CORE_WHEEL` for this run so the skipped `workspace_citry`
+tests run too.
 
 Finish with the repository gate:
 

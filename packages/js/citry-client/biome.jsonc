@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
   // Formatter settings mirror how this package was already written (2-space
   // indent, double quotes, semicolons, trailing commas); lineWidth 120 tracks
   // the repo-wide taste (ruff runs Python at 119).
@@ -11,9 +11,8 @@
   "assist": {
     "actions": {
       "source": {
-        // Import order in src is deliberate: alpinejs evaluates before
-        // @alpinejs/morph in the bundle, and the comment above the imports
-        // explains the pairing. Alphabetizing would swap them.
+        // Browser entrypoint import order is deliberate where dependencies
+        // have evaluation-order requirements.
         "organizeImports": "off"
       }
     }

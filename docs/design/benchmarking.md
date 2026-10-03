@@ -5,7 +5,7 @@ The retained publication measurement covers five configurations, including
 ordinary Citry and a configuration using the public `Component.simple` opt-in.
 The public chart shows four series: Django, django-components, Jinja2 and one
 optimized `Citry*` series. Its asterisk points to the
-[performance guide](../../docs_site/content/advanced/performance.md), which
+[performance guide](../../docs_site/content/performance/pure.md), which
 explains the simple and pure optimizations. The configurations emit different
 output and provide different component behavior. See the current results in
 [`benchmarks/README.md`](../../benchmarks/README.md) and the retained
@@ -295,10 +295,13 @@ section, and a test-infra import inside it would pollute the measurement.
   so the small `citry-const` cell is skipped.
 - Print one table per size: engine rows (including `citry-const`),
   test-type columns, with ratios against the Django baseline.
-- Refuse to run (or warn loudly) when `citry_core` is a debug build, the
-  same trap `benchmark_const.py` documents. How to detect the build profile
-  cheaply is an open question (section 9); worst case the README warning is
-  the guard.
+- Refuse to run when `citry_core` is a debug build, the same trap
+  `benchmark_const.py` documents. The extension reports its Cargo profile in
+  `citry_core._rust.BUILD_PROFILE` as `"release"` or `"debug"`, from Rust's
+  `debug_assertions` flag, which Cargo's `dev` profile turns on and `release`
+  turns off. `compare.py`, `client.py` and `i18n.py` (through
+  `benchmarks/native_build.py`) and the web runner's `prepare` step exit on
+  `"debug"` unless `CITRY_BENCH_ALLOW_DEBUG_NATIVE=1` is set.
 - Not collected by pytest; run as
   `.venv/bin/python benchmarks/compare.py [--size sm|lg] [--quick]`.
 
@@ -605,10 +608,6 @@ Phases 1-2 gave the first citry-vs-DJC-vs-Django numbers. Phase 3's gates
 
 ## 9. Open questions
 
-- **Detecting a debug `citry_core` build** from the runner, so `compare.py`
-  can refuse to produce garbage numbers instead of relying on a README
-  warning. (Possible angle: a build-profile flag exposed from the Rust crate;
-  needs its own small design if pursued.)
 - **Where published numbers live** once a docs site exists (DJC publishes the
   asv dashboard with its docs). Until then, the benchmarks README holds a
   dated results table.

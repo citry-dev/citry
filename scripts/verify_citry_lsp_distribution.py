@@ -39,7 +39,7 @@ SOURCE_ROOT: Final = PACKAGE_ROOT / "citry_lsp"
 MAX_WHEEL_BYTES: Final = 512 * 1024
 MAX_SDIST_BYTES: Final = 1024 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
-    "citry>=0.5.1",
+    "citry>=0.6.0",
     "packaging>=25.0",
     "pygls==2.1.1",
     "python-dotenv<2,>=1.2.3",

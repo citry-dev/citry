@@ -20,8 +20,8 @@ Related contracts:
 - [`component_initialization.md`](component_initialization.md) owns Citry's
   startup lifecycle.
 - [`events.md`](events.md) owns Events, State, actions, and transport.
-- [`alpinejs.md`](alpinejs.md) owns Alpine expressions, client data, component
-  boundaries, and browser lifecycle.
+- [`vue.md`](vue.md) owns Vue as Citry's browser renderer: template
+  bindings, client data, and browser lifecycle.
 - [`security_csrf.md`](security_csrf.md) owns CSRF responsibility across Citry
   and its hosts.
 - [`benchmarking.md`](benchmarking.md) owns benchmark fixture isolation and
@@ -247,10 +247,10 @@ in one sitting.
 The deterministic data module defines a frozen Python `Project` record and a
 small project catalog. The page displays project cards and lets a user:
 
-1. reveal or hide a short help panel immediately in Alpine, without a server
+1. reveal or hide a short help panel immediately in Vue, without a server
    call;
 2. type a project query whose debounced Citry Event reloads matching records
-   and morphs the explorer; and
+   and replaces the explorer; and
 3. observe explicit loading and error feedback while the event settles.
 
 The page route loads the initial rich `Project` values and passes them into
@@ -259,19 +259,21 @@ event, the handler treats State as client input, reloads the deterministic
 records, and builds a fresh component tree from explicit inputs.
 
 This shape deliberately avoids a fake database mutation. It proves the full
-Events request, signed State, host route, dependency runtime, and morph path
+Events request, signed State, host route, dependency runtime, and replacement path
 without implying that a process-local list is a persistence design.
 
 ### 5.2 Required component shape
 
 The shared story should need three or four authored components:
 
-- `ProjectPage`: a complete HTML document containing `<c-css>` and `<c-js>`;
-- `PageShell`: layout composition with at least one named slot and the default
-  slot;
+- `ProjectPage`: the page component that the host renders; it fills
+  `PageShell` with the page introduction and the explorer;
+- `PageShell`: the complete HTML document containing `<c-css />` and
+  `<c-js />`, with a named `header` slot and the default slot;
 - `ProjectExplorer`: typed inputs, explicit State, `template_data()`,
-  `js_data()`, Alpine expressions, and Events; and
-- `ProjectCard`: a typed child component rendered from a server-side loop.
+  `js_data()`, Vue template bindings, and Events; and
+- `ProjectCard`: a typed child component rendered from a server-side
+  `<c-for>` loop.
 
 Names can vary if a host has a compelling convention, but reducing the story
 to one monolithic class fails the starter contract.
@@ -313,11 +315,11 @@ their READMEs:
 | Parent to child | typed component kwargs | Required. |
 | Parent-authored markup to a child/layout | slots and fills | Required. |
 | Python render to browser scope | `js_data()` | Required. |
-| Immediate browser-only state | Alpine expressions such as `@click`, `x-show`, and `x-text` | Required. |
+| Immediate browser-only state | Vue template bindings such as `@click`, `v-show`, `v-text`, and `:aria-expanded` | Required. |
 | Browser to the next server call | `State` plus a `:c-*` or `@c-*` binding | Required in web starters. |
 | Server result to live DOM | an Event handler returning a fresh component tree | Required in web starters. |
 | Ambient server context | provide/inject | Reserved for demos or a focused example. |
-| Reactive parent-to-child browser input | `$c-props` | Reserved for demos or a focused example. |
+| Reactive parent-to-child browser input | Vue `:prop` bindings on a child component | Reserved for demos or a focused example. |
 | Cross-target browser result | Events actions such as `Dispatch` or targeted `Render` | Reserved for demos or a focused example. |
 
 The last three are intentionally not forced into a beginner starter. The
@@ -328,18 +330,30 @@ advanced mechanisms.
 
 The Project Explorer must include:
 
-- a `js_data()` seed with a browser-style key such as `tipsOpen`;
-- an ordinary Alpine `@click` that changes that local value;
-- `x-show` and `x-text` or an equivalent visible expression;
-- `:c-query.debounce.300ms="refresh"` or the settled equivalent for the
-  live server query;
-- `$loading("refresh")` in a visible and accessible pending state;
-- `$error("refresh")` in an `aria-live` error region; and
-- an Events morph that preserves the focused query input and updates the
-  result count and cards.
+- a `js_data()` seed with a browser-style key, `tipsOpen`, set to `False`;
+- an ordinary Vue `@click="tipsOpen = !tipsOpen"` on the help button that
+  changes that value in the browser only;
+- `v-show="tipsOpen"` on the help panel, a `v-text` button label that
+  follows the same value, and `:aria-expanded="tipsOpen"` on the button;
+- `v-cloak` on content that starts hidden, with a `[v-cloak]` rule in
+  `PageShell` that keeps it hidden until Vue starts;
+- `:c-query.debounce.300ms="refresh"` on the search input, which sends the
+  query as State to the `refresh` Event after the user pauses typing;
+- `$loading('refresh')` showing "Searching…" inside the `aria-live` result
+  summary;
+- `$error('refresh')` filling a `role="alert"` error paragraph;
+- an empty state when no project matches the query; and
+- an Event response that replaces the explorer, updating the result count and
+  cards while the query input keeps its value and focus.
 
-Citry owns Alpine startup. A starter must not add a second Alpine script tag.
-It must not fetch its styling or JavaScript from a CDN.
+The help button, help panel, and button label are browser-only Vue. Only the
+search input calls Python, through the Citry Event binding. Citry compiles
+these bindings into Vue render code on the server, so the served page does
+not contain the raw `:c-query` attribute.
+
+Citry starts Vue. `PageShell`'s `<c-js />` emits Citry's browser runtime,
+which includes Vue, so a starter must not add its own Vue script tag. It must
+not fetch its styling or JavaScript from a CDN.
 
 ### 5.5 Required server behavior
 
@@ -386,12 +400,21 @@ It still demonstrates:
 - `template_data()`;
 - parent/child composition and slots;
 - `js_data()`;
-- local Alpine `@click`, `x-show`, and `x-text`; and
-- component CSS and the required browser runtime embedded into the document.
+- the same browser-only Vue help panel: `@click`, `v-show`, `v-text`, and
+  `:aria-expanded` driven by `tipsOpen`; and
+- component CSS, the Citry browser runtime with Vue, and the prepared Vue
+  data embedded into the document.
+
+`python -m app.render` writes `_build/index.html`. It restarts the app's ID
+numbering before each render so unchanged inputs produce identical output.
+The project tests check that the document embeds the compiled Vue handler and
+its prepared data, has no `src` or `href` pointing at an `http` URL and no
+`/citry/` path, escapes project data inside the embedded JSON, and renders the
+same text twice.
 
 The generated file must open locally without a server and make no network
-requests. Its browser test loads the produced `file://` document and exercises
-the Alpine interaction. If Citry's settled document runtime cannot satisfy
+requests. Its browser test loads the produced `file://` document and opens the
+help panel. If Citry's settled document runtime cannot satisfy
 that contract, implementation must surface the failure and revisit this
 starter rather than quietly introducing an HTTP server.
 
@@ -518,12 +541,12 @@ The adaptation must:
 - keep only controls backed by real application behavior;
 - serve every CSS, JavaScript, and icon asset locally and implement every
   route the page uses;
-- register and implement every Alpine or JavaScript behavior the page uses;
+- register and implement every Vue or JavaScript behavior the page uses;
 - use deterministic time and fixture data;
 - implement or clearly disable every visible form, link, and action;
 - let people drag cards with a pointing device and provide a labeled column
   menu for keyboard and touchscreen use;
-- exercise Events, forms, State, actions, Alpine expressions, slots,
+- exercise Events, forms, State, actions, Vue expressions, slots,
   provide/inject, dependencies, and dynamic components only where they
   support a real interaction; and
 - pass the browser checks in section 8.5 before public docs link to the demo.
@@ -662,10 +685,10 @@ secret values), captured stdout/stderr, and the last connection failure.
 All web starters must pass the same Chromium journey against their actual
 spawned server:
 
-1. load `/` and wait for Citry/Alpine readiness;
+1. load `/` and wait until Citry has started the page's Vue app;
 2. assert there are no unexpected console errors or failed same-origin
    resources;
-3. open the help panel and assert the visible Alpine change;
+3. open the help panel and assert that its text becomes visible;
 4. prove that local interaction sent no Events request;
 5. focus and edit the project query;
 6. observe one debounced Events request under `/citry`;
@@ -674,7 +697,7 @@ spawned server:
 8. reload the document and prove deterministic initial state.
 
 The standalone browser journey renders the output, opens the resulting
-`file://` URL, performs the Alpine interaction, and asserts zero network
+`file://` URL, opens the help panel, and asserts zero network
 requests and console errors.
 
 The browser profile is fixed in repository tests. A starter cannot weaken the
@@ -905,7 +928,7 @@ This design should be revisited if evidence shows that:
 - real-server/browser qualification is too slow for pull requests, in which
   case measured sharding or tiering is required without dropping release
   coverage;
-- local `file://` document activation cannot support the standalone Alpine
+- local `file://` document activation cannot support the standalone Vue
   promise;
 - a project's host dependency no longer supports Citry's full Python range;
 - CI archives cannot be made reproducible from tagged source;

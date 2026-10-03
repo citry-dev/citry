@@ -142,6 +142,9 @@ under `/v/<version>/`; links to site pages remain at the root. Shared
 root-owned. During assembly, mounted snapshot pages are rewritten to load that
 root Pagefind bundle, so changing its configured directory does not strand
 historical versions on an old asset URL.
+Mounted snapshots load every `/static/` file, images included, from the
+current `static/`, so keep a file that an older snapshot still uses, such as
+`static/img/benchmark.png`, even after the current pages stop using it.
 Content assets inherit the unanimous scope of their first route segment. Keep a
 content-asset directory within one scope; put site-global assets under
 `static/`. An unknown or mixed asset namespace defaults to `versioned` so the
@@ -160,6 +163,31 @@ companion, and LLM output. It deliberately omits the documentation sidebar,
 breadcrumbs, page table of contents, and previous/next navigation. Keep all
 meaningful copy in `content/index.md`; JavaScript may enhance it but must not be
 required to read it or follow its primary actions.
+
+### How code blocks show blank lines
+
+Keep example sources formatted as ruff formats them, with two blank lines
+between top-level definitions. When the site renders a code block, it shows
+each run of two or more blank lines as one blank line, so examples take less
+vertical space. This applies to Markdown fences, `--8<--` includes,
+`<c-include-file>`, live examples, Citry UI previews, example cards, and the
+landing page. The source files are not changed, and executed examples run from
+them.
+
+- Only Python, `citry`, `citry-html`, HTML, JavaScript, TypeScript, CSS, and
+  JSON blocks change. Other languages, such as `text`, `console`, `diff`,
+  Markdown, YAML, Fluent, and shell, keep every blank line.
+- Blank lines inside a string literal stay (Python, JavaScript, and HTML
+  attribute values), because they are part of the string's value. In a Citry component this covers the `template`,
+  `js`, `css`, and `messages` strings.
+- Count `hl_lines` and landing walkthrough line ranges in source-file lines.
+  The site moves them to the matching displayed lines.
+- A fence with `linenums` keeps every blank line, so its numbers match the
+  file.
+- The copy button copies the displayed code, and **Try live** starts from it.
+  Markdown companions and LLM exports keep the source as written.
+
+The rule lives in `_internal/code_display.py`.
 
 ### Add an inline live example
 
@@ -205,11 +233,14 @@ the browser runtime:
 
 This keeps the canonical source beside the component and uses the same
 highlighting and text projection without offering a broken activation control.
-The live authoring server builds the workspace `citry` and `citry-ui` wheels
-and automatically enables these component snippets in the browser. Keep
-`static` in committed content until `citry-ui` is part of the published
-playground runtime. Static builds and `build-check` intentionally use that
-published package set.
+The browser runs these snippets on the published release that
+`docs_site/static/playground/runtime.json` pins. The live authoring server
+swaps in a `citry-ui` wheel built from this checkout when that wheel accepts
+the pinned Citry. When you set `CITRY_PLAYGROUND_CORE_WHEEL` to a Pyodide build
+of this checkout's `citry-core`, the server also builds `citry` from this
+checkout, so the snippets run this checkout's code end to end. Keep `static`
+for a snippet that needs a package or feature the pinned release lacks. Static
+builds and `build-check` always use the pinned release.
 
 The path may name any Python file in the repository, including after resolving
 symlinks. The module must be UTF-8 with LF line endings and no larger than 64
@@ -409,7 +440,7 @@ Older committed snapshots keep their historical header unchanged.
 
 The docs require Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), the
 repository's pinned nightly Rust toolchain, and the recursive Git submodules.
-CI currently uses Python 3.13.
+CI currently uses Python 3.14.
 
 ```bash
 git submodule update --init --recursive
@@ -431,12 +462,26 @@ uv run --no-sync python -m docs_site serve
 Open <http://127.0.0.1:8000/>. The server reads content and navigation on each
 request, renders through Citry, and serves component assets and examples.
 Refresh the browser after changing Markdown. Uvicorn reloads when Python or
-YAML docs configuration changes. Each server start or reload builds a universal
-wheel from the workspace `citry-ui` package and combines it with the browser
-playground's pinned Citry release. This local-only runtime lets interactive
-snippets import `citry_ui` before that package is published, when its Citry
-requirement accepts the pinned release. `serve-built`, static builds, CI, and
-deployed docs use the committed pinned runtime unchanged.
+YAML docs configuration changes.
+
+The browser playground installs the published Citry release that
+`docs_site/static/playground/runtime.json` pins. On each start or reload, the
+server picks what to swap in from this checkout:
+
+- By default it builds a `citry-ui` wheel from this checkout and uses it with
+  the pinned Citry. When that wheel does not accept the pinned Citry, which is
+  common between releases, the server prints the reason and serves the pinned
+  release unchanged.
+- When `CITRY_PLAYGROUND_CORE_WHEEL` names a Pyodide build of this checkout's
+  `citry-core`, the server also builds `citry` from this checkout, so the
+  playground runs this checkout's code end to end. A wrong or incompatible
+  wheel stops the server with the reason, so you never test the published
+  code by mistake.
+
+The playground README explains
+[how to build that wheel](static/playground/README.md#run-the-playground-with-this-checkouts-citry).
+`serve-built`, static builds, and deployed docs always use the pinned release.
+The release workflow moves the pins to each newly published release.
 
 Example recipes live at `/examples/<slug>/`. Their bare runnable pages live at
 `/examples/<slug>/demo/`, so opening a recipe and opening its iframe directly
@@ -556,6 +601,12 @@ uv run --no-sync pytest docs_site/tests/e2e --browser chromium
 The second sync selects the `e2e` group from its owning `citry` workspace
 package. `--inexact` keeps the root project's docs dependencies installed.
 
+Without `CITRY_PLAYGROUND_CORE_WHEEL`, the playground and live-code browser
+tests run against the pinned release, and pytest skips the tests that need this
+checkout's Citry and prints the reason. With the variable set, they run this
+checkout's Citry. The playground README lists
+[which browser tests run against the pinned release](static/playground/README.md#which-browser-tests-run-against-the-pinned-release).
+
 The complete repository gate is:
 
 ```bash
@@ -661,7 +712,10 @@ the catalog route, and publishes the YAML beside the rendered guide so authored
 the grouped UI overview; there is no synchronized copy under
 `docs_site/content`.
 Add a published redirect to `redirects.yml`; redirect chains and unsafe paths
-are rejected.
+are rejected. With JavaScript, the redirect page carries the query string and
+`#fragment` over, so `/old/#section` lands on `/new/#section`. Without
+JavaScript, the query string and fragment are dropped and the visitor lands
+at the top of the new page.
 
 The builder reads these variables when the Python process starts:
 

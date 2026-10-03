@@ -24,7 +24,9 @@ result is cached per component class and per set of ``Const`` values, so
 repeat renders skip that work. See docs/design/component_constness.md and
 citry/constness.py.
 
-Rendering is deferred and stack-driven (no recursion limit on nesting depth),
+Rendering is deferred and stack-driven, so nesting depth is not tied to
+Python's recursion limit; ``CitrySettings.max_component_depth`` bounds it
+instead, so a component that renders itself forever fails fast. Rendering also
 collects each component's JS/CSS dependencies, and drives the ``on_render``
 hook; see docs/design/component_rendering_defer.md and component_on_render.md. Django's
 context snapshotting is deliberately not ported: a component receives only
@@ -33,34 +35,49 @@ its own props and slots, never an inherited context.
 
 from __future__ import annotations
 
+import abc
+from contextlib import nullcontext
 from contextvars import ContextVar
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from difflib import get_close_matches
-from typing import TYPE_CHECKING, Any, NamedTuple, cast
+from inspect import getattr_static
+from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast
 
+from citry._class_introspection import _component_declaration_generation, _static_class_dict, _static_class_mro
 from citry._pure import (
     PureBodyPlan,
     PureInteriorBody,
     PureLiveBodyItem,
+    PurePreparedPart,
     pure_body_cache_scope,
     pure_body_lookup,
     store_pure_body,
 )
-from citry.assets import load_template
+from citry._vue.capture import (
+    PreparedTextValue,
+    PreparedTrustedHtmlValue,
+    coalesce_prepared_static_nodes,
+    prepared_render_active,
+    typed_render_scope,
+    vue_render_active,
+)
+from citry._vue.direct import direct_render_scope
+from citry.assets import _TEMPLATE_CACHE, load_template
 from citry.citry_context import CitryContext
-from citry.citry_element import CitryElement
+from citry.citry_element import CitryElement, _PreparedCallMetadata
 from citry.citry_render import (
     _VALUE_CONTEXT,
     CitryRender,
     DeferredComponent,
     RenderFrame,
-    _PhysicalRegion,
+    SimpleVueRecord,
+    _after_render_hooks_scope,
     _render_slot_value,
-    unwrap_physical_region,
 )
 from citry.citry_template import CitryTemplate, DeclaredSlot
 from citry.client_directives import CLIENT_PROPS_ATTR, validate_client_props_target
 from citry.component_like import ComponentLike, _component_like_render_scope, _resolve_component_like
+from citry.components.mark import reject_repeated_mark_names
 from citry.constness import (
     _const_mapping,
     _ConstMapping,
@@ -73,9 +90,6 @@ from citry.constness import (
     extract_const_vars,
     precompute_const_parts,
 )
-from citry.ext.cache.errors import CacheArtifactError, _CacheRevisionChanged
-from citry.ext.cache.extension import CacheExtension, _CacheHit, _CacheMissPlan
-from citry.ext.cache.replay import _replay_component_artifact, _replay_fragment_artifact
 from citry.nodes import (
     ComponentNode,
     ElementAttrsNode,
@@ -91,26 +105,29 @@ from citry.nodes import (
     SlotNode,
     StaticHtmlAttr,
     TemplateHtmlAttr,
-    TemplateNode,
 )
-from citry.ownership import current_ownership_graph, ownership_render_scope, resume_ownership_graph
 from citry.slots import Slot
 from citry.util.exception import (
     set_component_error_message,
     set_template_origin_error_message,
     set_template_position_error_message,
 )
+from citry.util.html import Markup, escape
+from citry.util.id import gen_render_id, validate_render_id
 from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
 from citry.util.misc import get_fields, is_generator, to_dict
 from citry_core.template_parser import ForeignSpan, ParseOptions, compile_template, parse_template
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, Sequence
+    from contextlib import AbstractContextManager
 
+    from citry._vue.direct import DirectExecutionFrame
+    from citry._vue.leaf_program import LeafCallChildren, LeafProgramNode, PreparedLeafProgram
+    from citry.assets import HasHtml
     from citry.citry_render import OnRenderGenerator, RenderPart, RenderReplacement
     from citry.component import Component
     from citry.nodes import BodyItem, Node
-    from citry.ownership import OwnershipGraph, PhysicalRegionId
     from citry_core.template_parser import TagRules
 
 
@@ -121,6 +138,650 @@ if TYPE_CHECKING:
 # threaded through each node and slot; a concurrent render on another thread or
 # task keeps its own value. None means no per-render override was given.
 _render_globals: ContextVar[dict[str, Any] | None] = ContextVar("citry_render_globals", default=None)
+
+
+@dataclass(frozen=True, slots=True)
+class _SimpleVueAdmission:
+    """
+    The per-class answer to "can a ``simple='vue'`` call skip the Component instance".
+
+    Every call of the same class would otherwise repeat the same checks: the
+    scan of the class and its bases, the nested declarations, the dependency lists, the extension
+    hooks, and the template plan. ``_simple_vue_admission`` computes this record
+    once and reuses it while every input it read is unchanged; see
+    ``_simple_vue_admission_key`` for that list.
+    """
+
+    # The engine and class state this record was computed from.
+    key: tuple[object, ...]
+    # The loaded template the plan was built from; compared by identity.
+    template: CitryTemplate | None
+    # A reason the class itself is incompatible with simple='vue', or None.
+    rejection: str | None
+    # The engine (not the class) needs the ordinary render path for this class.
+    renders_ordinarily: bool
+    # The static data callbacks to call, or None where the class keeps the
+    # base default (kwargs as template data, no js_data or css_data).
+    template_data_callback: Callable[[Any, dict[str, Any]], Any] | None
+    js_data_callback: Callable[[Any, dict[str, Any]], Any] | None
+    css_data_callback: Callable[[Any, dict[str, Any]], Any] | None
+    # The admitted evaluator for the class template; None when not admitted.
+    leaf_node: LeafProgramNode | None
+    # Whether the class declares any secondary Dependencies at all.
+    has_dependencies: bool
+    # Each plain (non-component) base between the class and Component, with
+    # its namespace values at computation time. Writes to these classes do
+    # not move the component declaration count, so each call compares them.
+    plain_bases: tuple[tuple[type, tuple[tuple[str, object], ...]], ...] = ()
+
+
+# The class attribute that holds a class's admission record. Keeping the
+# record on the class (instead of a module-level table) lets the class and the
+# callbacks the record holds be collected together. It is written with
+# type.__setattr__, so storing it does not count as a declaration change.
+_SIMPLE_VUE_ADMISSION_ATTR = "_citry_simple_vue_admission"
+
+
+def _reject_simple_vue(component_class: type[Any], reason: str) -> NoReturn:
+    """Raise the named error for a class or call that cannot use ``simple='vue'``."""
+    raise TypeError(f"Component {component_class.__name__} simple='vue' is unsupported: {reason}.")
+
+
+def _simple_vue_admission_key(component_class: type[Component]) -> tuple[object, ...]:
+    """
+    Snapshot everything outside the template that an admission record depends on.
+
+    A record is reused only while this tuple compares equal, so each entry
+    names one way the answer can change:
+
+    - the component declaration count moves when any component class assigns
+      or deletes an authored attribute after definition;
+    - the extension manager and its extension tuple identify the installed
+      extensions and, through them, the hook dispatch cache;
+    - the Cache extension revision moves on ``reset_template()``,
+      ``reset_files()``, ``Citry.clear()`` and alias removal;
+    - the i18n registry generation moves when a component registers or
+      unregisters, when message sources load or reload, and on clear;
+    - ``abc.get_cache_token()`` moves when any class is registered as
+      ``ComponentLike`` (or with any other ABC), which changes value dispatch.
+
+    The loaded template is compared separately, by identity.
+    """
+    extensions = component_class.citry.extensions
+    by_name = extensions._extensions_by_name
+    i18n = by_name.get("i18n")
+    return (
+        _component_declaration_generation(),
+        extensions,
+        extensions._extensions,
+        cast("Any", by_name["cache"])._revision,
+        None if i18n is None else cast("Any", i18n)._registry_generation,
+        abc.get_cache_token(),
+    )
+
+
+def _simple_vue_admission(component_class: type[Component]) -> _SimpleVueAdmission:
+    """Return the current admission record for a ``simple='vue'`` class, rebuilding it when stale."""
+    key = _simple_vue_admission_key(component_class)
+    namespace = vars(component_class)
+    admission = cast("_SimpleVueAdmission | None", namespace.get(_SIMPLE_VUE_ADMISSION_ATTR))
+    # A reset or reload replaces the class's loaded template object, so the
+    # identity check catches template changes the key tuple does not cover.
+    if (
+        admission is not None
+        and admission.key == key
+        and admission.template is namespace.get(_TEMPLATE_CACHE)
+        and _plain_bases_unchanged(admission.plain_bases)
+    ):
+        return admission
+    admission = _compute_simple_vue_admission(component_class, key)
+    type.__setattr__(component_class, _SIMPLE_VUE_ADMISSION_ATTR, admission)
+    return admission
+
+
+def _plain_base_snapshot(base: type) -> tuple[tuple[str, object], ...]:
+    """Record a plain base's namespace so a later write to it can be detected."""
+    return tuple(_static_class_dict(base).items())
+
+
+def _plain_bases_unchanged(plain_bases: tuple[tuple[type, tuple[tuple[str, object], ...]], ...]) -> bool:
+    """Whether every recorded plain base still has the same names bound to the same objects."""
+    # Most components have no plain bases, so this loop usually does nothing.
+    for base, snapshot in plain_bases:
+        current = _static_class_dict(base)
+        if len(current) != len(snapshot):
+            return False
+        for name, value in snapshot:
+            if current.get(name, _MISSING_MEMBER) is not value:
+                return False
+    return True
+
+
+# Distinguishes a deleted member from one bound to None.
+_MISSING_MEMBER = object()
+
+
+def _compute_simple_vue_admission(
+    component_class: type[Component],
+    key: tuple[object, ...],
+) -> _SimpleVueAdmission:
+    """
+    Run every class-level ``simple='vue'`` check once.
+
+    Checks run in two groups. The first group looks only at what the class
+    declares (members, nested declarations, messages, dependencies, data
+    callbacks, template); a failure there is recorded as a rejection so each
+    call raises the same named error. The second group looks at engine state
+    the class does not control (extension hooks and i18n settings); a failure
+    there makes the calls render as ordinary components instead.
+    """
+    from types import FunctionType  # noqa: PLC0415
+
+    from citry._nested_declarations import _get_nested_class_declarations  # noqa: PLC0415
+    from citry._vue.leaf_program import compile_leaf_program  # noqa: PLC0415
+    from citry.assets import _find_pair_declaration  # noqa: PLC0415
+    from citry.component import Component as ComponentBase  # noqa: PLC0415
+    from citry.ext.dependencies.extension import DependenciesExtension  # noqa: PLC0415
+    from citry.ext.events.extension import EventsExtension  # noqa: PLC0415
+    from citry.ext.i18n.extension import I18nExtension  # noqa: PLC0415
+
+    # Component subclasses report their own writes through the declaration
+    # count; plain bases do not, so the namespaces of the plain bases the scan
+    # below reads (those before Component in the MRO) are recorded instead.
+    mro = _static_class_mro(component_class)
+    scanned_bases = mro[: mro.index(ComponentBase)] if ComponentBase in mro else mro
+    plain_bases = tuple(
+        (base, _plain_base_snapshot(base)) for base in scanned_bases if not isinstance(base, type(ComponentBase))
+    )
+
+    def rejected(reason: str, template: CitryTemplate | None = None) -> _SimpleVueAdmission:
+        return _SimpleVueAdmission(
+            key=key,
+            template=template,
+            rejection=reason,
+            renders_ordinarily=False,
+            template_data_callback=None,
+            js_data_callback=None,
+            css_data_callback=None,
+            leaf_node=None,
+            has_dependencies=False,
+            plain_bases=plain_bases,
+        )
+
+    class_metadata = {
+        _SIMPLE_VUE_ADMISSION_ATTR,
+        "__module__",
+        "__doc__",
+        "__qualname__",
+        "__dict__",
+        "__weakref__",
+        "__annotations__",
+        "__classcell__",
+        "__slots__",
+        "__firstlineno__",
+        "__static_attributes__",
+        "__type_params__",
+    }
+    static_data_callbacks = {"template_data", "js_data", "css_data"}
+    unsupported_instance_members = {
+        "on_render",
+        "on_component_input",
+        "on_component_rendered",
+        "on_dependencies",
+        "provide",
+        "unprovide",
+        "inject",
+    }
+    # Every authored member between the class and Component must be data,
+    # a nested class, or a plain static function; anything that needs an
+    # instance cannot run without one.
+    for base in _static_class_mro(component_class):
+        if base is ComponentBase:
+            break
+        for member, value in _static_class_dict(base).items():
+            if member in class_metadata:
+                continue
+            if member in unsupported_instance_members or member.startswith("on_"):
+                return rejected(f"instance member {member} is not supported")
+            if member in static_data_callbacks:
+                continue
+            if type(value) is staticmethod:
+                if type(value.__func__) is FunctionType:
+                    continue
+                return rejected(f"static member {member} must wrap a Python function")
+            if isinstance(value, type):
+                continue
+            if type(value) in (FunctionType, classmethod, property):
+                return rejected(f"instance member {member} is not supported")
+            if any("__get__" in _static_class_dict(value_type) for value_type in _static_class_mro(type(value))):
+                return rejected(f"descriptor {member} is not supported")
+
+    for declaration_name in ("Events", "Cache", "I18n", "State"):
+        if _get_nested_class_declarations(component_class, declaration_name):
+            return rejected(f"{declaration_name} configuration is not supported")
+    if _get_nested_class_declarations(component_class, "Slots"):
+        slots_fields = get_fields(component_class.Slots) if component_class.Slots is not None else []
+        if slots_fields is None or slots_fields:
+            return rejected("nonempty Slots configuration is not supported")
+    # Messages on this class (or a base) would need the per-instance i18n
+    # collector. Messages on some other registered class are engine state and
+    # are handled with the extension hooks below.
+    _messages_owner, inline_messages, messages_file = _find_pair_declaration(
+        component_class, "messages", "messages_file"
+    )
+    if inline_messages is not None or messages_file is not None:
+        return rejected("component messages are not supported")
+    dependencies = component_class.get_dependencies()
+    # A media type with no entries declares no stylesheet, so check the
+    # entries rather than the mapping itself.
+    if any(dependencies.css.values()):
+        return rejected("secondary CSS dependencies are unsupported for simple='vue'")
+    if dependencies.js:
+        return rejected("secondary JavaScript dependencies are unsupported for simple='vue'")
+
+    template_data_member: object | None = None
+    js_data_member: object | None = None
+    css_data_member: object | None = None
+    for base in _static_class_mro(component_class):
+        base_namespace = _static_class_dict(base)
+        if template_data_member is None and "template_data" in base_namespace:
+            template_data_member = base_namespace["template_data"]
+        if js_data_member is None and "js_data" in base_namespace:
+            js_data_member = base_namespace["js_data"]
+        if css_data_member is None and "css_data" in base_namespace:
+            css_data_member = base_namespace["css_data"]
+        if template_data_member is not None and js_data_member is not None and css_data_member is not None:
+            break
+    if template_data_member is not ComponentBase.template_data and type(template_data_member) is not staticmethod:
+        return rejected("template_data must use the base default or be declared as a static method")
+    for callback_name, callback_member, base_callback in (
+        ("js_data", js_data_member, ComponentBase.js_data),
+        ("css_data", css_data_member, ComponentBase.css_data),
+    ):
+        if callback_member is not base_callback and type(callback_member) is not staticmethod:
+            return rejected(f"{callback_name} must use the base default or be declared as a static method")
+
+    compiled = _get_compiled_template(component_class, prepared=True)
+    if compiled is None or compiled.prepared_generate is None:
+        return rejected("a prepared template is required", compiled)
+    extensions = component_class.citry.extensions
+    # The plan depends on how extensions transform the compiled template, so
+    # its cache key names each extension's template hooks.
+    extension_key = tuple(
+        (
+            id(extension),
+            getattr(type(extension), "on_template_foreign_compiled", None),
+            getattr(type(extension), "on_template_compiled", None),
+            getattr(type(extension), "on_attrs_resolved", None),
+        )
+        for extension in extensions._extensions
+    )
+    plan_key = (
+        "simple-vue-leaf-calls",
+        compiled.template_id,
+        compiled.origin,
+        compiled.kind,
+        extension_key,
+    )
+    # The plan is stored on the loaded template, so a rebuilt admission for an
+    # unchanged template and extension set reuses it and on_template_compiled
+    # runs once per plan.
+    with compiled.compile_lock:
+        cached_plan = compiled.prepared_standalone_bodies.get(plan_key)
+        if cached_plan is None:
+            generated = compiled.prepared_generate()
+            foreign_resolved = extensions.on_template_foreign_compiled(
+                component_class,
+                generated,
+                provider_metadata=compiled.foreign_provider_metadata,
+                template_id=compiled.template_id,
+                origin=compiled.origin,
+                template_kind=compiled.kind,
+            )
+            transformed = extensions.on_template_compiled(
+                component_class,
+                foreign_resolved,
+                template_id=compiled.template_id,
+                origin=compiled.origin,
+                template_kind=compiled.kind,
+            )
+            typed = coalesce_prepared_static_nodes(transformed)
+            compiled_leaf = compile_leaf_program(typed, allow_static_only=True, allow_calls=True)
+            cached_plan = (
+                [compiled_leaf]
+                if compiled_leaf is not None and compiled_leaf.static_instance_free_template_supported()
+                else []
+            )
+            compiled.prepared_standalone_bodies[plan_key] = cached_plan
+            compiled.prepared_standalone_bodies.move_to_end(plan_key)
+            while len(compiled.prepared_standalone_bodies) > 64:
+                compiled.prepared_standalone_bodies.popitem(last=False)
+        else:
+            compiled.prepared_standalone_bodies.move_to_end(plan_key)
+    if len(cached_plan) != 1:
+        # `#c-ignore` keeps its contents through the component's own Vue
+        # instance, which a simple component does not have. Name it, because
+        # the generic reason below does not mention it.
+        if "#c-ignore" in compiled.source:
+            return rejected(
+                "`#c-ignore` needs a component instance to keep its contents; "
+                'remove `simple = "vue"` from this component, or remove `#c-ignore`',
+                compiled,
+            )
+        return rejected(
+            "the template uses slots, a child call that passes content, c-bind or Vue bindings, "
+            "or an expression the instance-free renderer cannot evaluate",
+            compiled,
+        )
+    leaf_node = cast("LeafProgramNode", cached_plan[0])
+
+    # Engine state from here on. Only the built-in extensions are known to
+    # leave an instance-free render unchanged; the i18n extension qualifies
+    # only while no catalog can apply to this render.
+    def known_lifecycle_hook(extension: object, hook_name: str) -> bool:
+        extension_type = type(extension)
+        implementation = getattr(extension_type, hook_name, None)
+        if extension_type is DependenciesExtension:
+            return implementation is getattr(DependenciesExtension, hook_name, None)
+        if extension_type is EventsExtension:
+            return implementation is getattr(EventsExtension, hook_name, None)
+        if extension_type is I18nExtension:
+            i18n = cast("I18nExtension", extension)
+            return (
+                implementation is getattr(I18nExtension, hook_name, None)
+                and not i18n.configured
+                and not i18n._has_registered_message_source()
+            )
+        return False
+
+    renders_ordinarily = any(
+        not known_lifecycle_hook(extension, hook_name)
+        for hook_name in (
+            "on_component_input",
+            "on_component_data",
+            "on_component_rendered",
+            "on_render_context_merge",
+        )
+        for extension in extensions._extensions_with_hook(hook_name)
+    ) or not leaf_node.static_instance_free_hooks_supported(extensions)
+
+    return _SimpleVueAdmission(
+        key=key,
+        template=compiled,
+        rejection=None,
+        renders_ordinarily=renders_ordinarily,
+        template_data_callback=_static_data_callback(template_data_member),
+        js_data_callback=_static_data_callback(js_data_member),
+        css_data_callback=_static_data_callback(css_data_member),
+        leaf_node=leaf_node,
+        has_dependencies=bool(dependencies),
+        plain_bases=plain_bases,
+    )
+
+
+def _static_data_callback(member: object) -> Callable[[Any, dict[str, Any]], Any] | None:
+    """Unwrap an admitted staticmethod; the base default method maps to None."""
+    if type(member) is staticmethod:
+        return cast("Callable[[Any, dict[str, Any]], Any]", member.__func__)
+    return None
+
+
+def _simple_vue_renders_ordinarily(component_class: type[Component]) -> bool:
+    """Whether engine state sends this admitted ``simple='vue'`` class through ordinary rendering."""
+    admission = _simple_vue_admission(component_class)
+    return admission.rejection is None and admission.renders_ordinarily
+
+
+def _render_simple_vue_leaf(
+    element: CitryElement,
+    parent_context: CitryContext,
+) -> SimpleVueRecord | None:
+    """
+    Render one admitted ``simple='vue'`` occurrence without a Python Component.
+
+    Returns None for a class that is not ``simple='vue'``, and also when
+    engine state (an extension hook, configured i18n, or messages on another
+    registered component) requires the ordinary path. That decision is made
+    before the render ID or any data callback, so the ordinary render that
+    follows runs each callback exactly once.
+    """
+    component_class = element.comp_cls
+    if component_class.simple != "vue":
+        return None
+
+    from citry.ext.dependencies.emission import EXTRA_KEY  # noqa: PLC0415
+    from citry.ext.dependencies.extension import _DependencyCacheCapture  # noqa: PLC0415
+    from citry.ext.dependencies.scripts import has_component_asset  # noqa: PLC0415
+    from citry.ext.dependencies.types import DependencyRecord  # noqa: PLC0415
+
+    try:
+        # The call shape belongs to this invocation, so it is checked every time.
+        if (
+            type(element) is not CitryElement
+            or component_class.transparent
+            or component_class.pure
+            or component_class._citry_dynamic_selector
+            or element.slots
+            or element.component_tag_client_bindings
+            or element.element_morph_metadata is not None
+        ):
+            _reject_simple_vue(
+                component_class,
+                "calls must be registered, nontransparent leaf components without slots, component-tag bindings, "
+                "or instance effects",
+            )
+        # Registration can change between calls without touching any key the
+        # admission record watches, so identity is checked every time.
+        if component_class.citry.get_component_by_class_id(component_class.class_id) is not component_class:
+            _reject_simple_vue(component_class, "the component must remain registered in its owning Citry instance")
+
+        admission = _simple_vue_admission(component_class)
+        if admission.rejection is not None:
+            _reject_simple_vue(component_class, admission.rejection)
+
+        metadata = element.prepared_call_metadata
+        if metadata is None:
+            # Only a direct root call carries no call metadata.
+            if parent_context.component is not None:
+                _reject_simple_vue(component_class, "a template-authored, slot-free component call is required")
+        elif type(metadata) is not _PreparedCallMetadata or metadata.slot_free_body is not True:
+            _reject_simple_vue(component_class, "a template-authored, slot-free component call is required")
+        elif parent_context.component is None and not metadata.simple_vue_callers:
+            # With no component around it, a template call can only come
+            # from a simple='vue' template, which names its callers.
+            _reject_simple_vue(component_class, "a direct root call cannot carry child-call metadata")
+
+        # Engine state needs the ordinary path. Nothing observable has run
+        # yet, so the caller renders this call as a regular component.
+        if admission.renders_ordinarily:
+            return None
+        leaf_node = cast("LeafProgramNode", admission.leaf_node)
+
+        # Match Component.__init__: allocate and validate the render ID before
+        # the typed schema can reject this occurrence.
+        render_id = (
+            component_class.citry.id_generator() if component_class.citry.id_generator is not None else gen_render_id()
+        )
+        render_id = validate_render_id(render_id)
+        kwargs, _kwargs_const = _construct_data_schema(
+            element.kwargs,
+            component_class.Kwargs,
+            provenance_only=True,
+        )
+        # Callbacks run in the ordinary order: template_data, js_data, css_data.
+        template_data_callback = admission.template_data_callback
+        template_data = kwargs if template_data_callback is None else template_data_callback(kwargs, {})
+        template_data = _normalize_data(template_data, component_class.TemplateData)
+        js_data_callback = admission.js_data_callback
+        js_data = _normalize_data(
+            None if js_data_callback is None else js_data_callback(kwargs, {}),
+            component_class.JsData,
+        )
+        # This path skips on_component_data, so the callback's own keys are
+        # the final ones the browser will receive.
+        _check_js_data_keys(component_class, js_data)
+        css_data_callback = admission.css_data_callback
+        css_data = _normalize_data(
+            None if css_data_callback is None else css_data_callback(kwargs, {}),
+            component_class.CssData,
+        )
+        instance_globals = component_class.citry.template_globals
+        render_globals = _render_globals.get()
+        if instance_globals or render_globals:
+            template_data = _merge_const_mappings(
+                _const_mapping(instance_globals),
+                _const_mapping(render_globals or {}),
+                template_data,
+            )
+        variables = dict(template_data)
+        calls: dict[tuple[int, str], tuple[Any, dict[str, object], str | None]] | None = (
+            {} if leaf_node.fragment.calls else None
+        )
+        leaf = leaf_node.render_static_instance_free(
+            variables,
+            component_name=component_class.__name__,
+            calls=calls,
+        )
+        if calls is not None:
+            _defer_simple_vue_calls(
+                component_class,
+                leaf,
+                calls,
+                parent_context,
+                metadata,
+                admission,
+            )
+
+        css_capture = None
+        if css_data:
+            from citry.ext.dependencies.scripts import _cache_component_css_vars_capture  # noqa: PLC0415
+
+            css_capture = _cache_component_css_vars_capture(component_class, css_data)
+        css_vars_hash = None if css_capture is None else css_capture.variables_hash
+        has_js_asset = has_component_asset("js", component_class)
+        has_css_asset = has_component_asset("css", component_class)
+        # The parent owns the dependency set, so this record goes in at the
+        # position where an ordinary child render would have merged it.
+        if has_js_asset or has_css_asset or admission.has_dependencies:
+            records = parent_context.extra.setdefault(EXTRA_KEY, {})
+            if type(records) is not dict:
+                _reject_simple_vue(component_class, "dependency records changed type during instance-free rendering")
+            records[
+                DependencyRecord(
+                    class_id=component_class.class_id,
+                    component_id=render_id,
+                    css_vars_hash=css_vars_hash,
+                    component_class=component_class,
+                )
+            ] = _DependencyCacheCapture(css=css_capture)
+
+        return SimpleVueRecord(
+            component_class=component_class,
+            class_id=component_class.class_id,
+            render_id=render_id,
+            call_metadata=metadata,
+            js_data=dict(js_data),
+            leaf=leaf,
+            prepared_data=leaf.prepared_data,
+            css_vars_hash=css_vars_hash,
+            root_markers=() if css_vars_hash is None else (f"data-ccss-{css_vars_hash}",),
+        )
+    except Exception as error:
+        call_metadata = element.prepared_call_metadata
+        callers = call_metadata.simple_vue_callers if type(call_metadata) is _PreparedCallMetadata else ()
+        set_component_error_message(
+            error, [*_component_path(parent_context.component), *callers, component_class.__name__]
+        )
+        raise
+
+
+def _defer_simple_vue_calls(
+    component_class: type[Component],
+    leaf: PreparedLeafProgram,
+    calls: dict[tuple[int, str], tuple[Any, dict[str, object], str | None]],
+    parent_context: CitryContext,
+    metadata: _PreparedCallMetadata | None,
+    admission: _SimpleVueAdmission,
+) -> None:
+    """
+    Turn the calls a ``simple='vue'`` template made into deferred children.
+
+    Each child gets the same element, call metadata and provided values that
+    ``ComponentNode.render`` would give it inside an ordinary parent. The
+    render loop then renders it as usual, so the child's own mode decides
+    how it renders. A ``simple='vue'`` parent has no Python instance, so the
+    child's ``parent`` is the nearest ordinary component above it (None at
+    the root); ``simple_vue_callers`` keeps the skipped names for error
+    messages.
+    """
+    from citry._vue.direct import active_execution  # noqa: PLC0415
+
+    children = cast("LeafCallChildren", leaf.call_children)
+    registered = component_class.citry._registry._name_to_cls
+    for call in leaf.fragment.calls:
+        # Recorded even when the loop is empty; a name that resolves to no
+        # registered class, or to a class that cannot be called here, gets
+        # no loop, like ForNode.render.
+        run_class = registered.get(call.node.name) if call.node.key is not None else None
+        if run_class is not None and run_class.simple is not True and not run_class.transparent:
+            children.run_types[call.key] = run_class.class_id
+    callers = (*(() if metadata is None else metadata.simple_vue_callers), component_class.__name__)
+    origin = admission.template.origin if admission.template is not None else None
+    parent_component = parent_context.component
+    direct_parent_execution = active_execution()
+    for site, (call, kwargs, key) in calls.items():
+        node = call.node
+        child_class = component_class.citry.get(node.name)
+        # These children do not render as a component of their own: they
+        # write their HTML into their caller's template, which a simple='vue'
+        # template compiled once cannot take in.
+        if child_class.simple is True or child_class.transparent or child_class._citry_dynamic_selector:
+            kind = "simple=True" if child_class.simple is True else "transparent or dynamic"
+            _reject_simple_vue(
+                component_class,
+                f"its template calls {child_class.__name__}, a {kind} component that renders into its "
+                "caller's template; wrap that call in an ordinary component or use an ordinary parent",
+            )
+        element = CitryElement(
+            child_class,
+            kwargs,
+            {},
+            prepared_call_metadata=_PreparedCallMetadata(
+                node.source,
+                node.position,
+                key,
+                origin,
+                slot_free_body=True,
+                simple_vue_callers=callers,
+            ),
+        )
+        children.index[site] = len(children.parts)
+        children.parts.append(
+            DeferredComponent(
+                element,
+                cast("Component", parent_component),
+                parent_context.provides,
+                direct_parent_execution=direct_parent_execution,
+            )
+        )
+
+
+def _simple_vue_child_tasks(
+    record: SimpleVueRecord,
+    parent_context: CitryContext,
+    depth: int,
+) -> list[_RenderTask]:
+    """Queue the children a ``simple='vue'`` occurrence called, in template order, at ``depth``."""
+    children = record.leaf.call_children
+    if children is None:
+        return []
+    # The children's dependencies go where the record's own dependency
+    # record went: the context of the nearest enclosing render.
+    return [
+        _RenderTask(part, _DeferredComponentPosition(children.parts, index, parent_context), depth)
+        for index, part in enumerate(children.parts)
+        if isinstance(part, DeferredComponent)
+    ]
 
 
 def render_impl(
@@ -147,8 +808,46 @@ def render_impl(
     """
     value_token = _VALUE_CONTEXT.set(None)
     try:
-        owns_ownership_graph = current_ownership_graph() is None
-        if element.comp_cls.simple and parent is None:
+        if element.comp_cls.simple == "vue" and parent is None:
+            owner = element.comp_cls.citry
+            root_context = CitryContext(
+                component=None,
+                provides=provides,
+                sandboxed=owner.settings.sandbox_expressions,
+            )
+            render_token = _render_globals.set(render_globals) if render_globals is not None else None
+            try:
+                with _component_like_render_scope(owner):
+                    record = _render_simple_vue_leaf(element, root_context)
+            finally:
+                if render_token is not None:
+                    _render_globals.reset(render_token)
+            # None means engine state needs the ordinary path; nothing ran
+            # yet, so the ordinary root render below is the only render.
+            if record is not None:
+                root_render = CitryRender(
+                    parts=[record],
+                    context=root_context,
+                    owner_citry=owner,
+                    render_target="prepared",
+                )
+                if record.leaf.call_children is None:
+                    return root_render
+                # The children render through the ordinary render loop, in
+                # the same scopes an ordinary root render sets up.
+                with (
+                    nullcontext() if prepared_render_active() else typed_render_scope(direct=True, vue=False),
+                    direct_render_scope(),
+                    _component_like_render_scope(owner),
+                    pure_body_cache_scope(),
+                ):
+                    render_token = _render_globals.set(render_globals) if render_globals is not None else None
+                    try:
+                        return _settle_render(root_render, finalize_root=False)
+                    finally:
+                        if render_token is not None:
+                            _render_globals.reset(render_token)
+        if element.comp_cls.simple is True and parent is None:
             # A standalone template supplies an explicit owner for a root simple
             # call. Embedded calls already carry their actual insertion context.
             return element.comp_cls.citry.render_template(
@@ -158,22 +857,27 @@ def render_impl(
                 template_globals=render_globals,
                 origin=f"<simple root {element.comp_cls.__name__}>",
             )
+        target_scope: AbstractContextManager[None]
+        if prepared_render_active():
+            target_scope = nullcontext()
+        else:
+            # Rendering always captures one typed representation. Whether it is
+            # consumed as static HTML or compiled for Vue is decided later by
+            # serialization, without changing Python expression semantics.
+            target_scope = typed_render_scope(direct=True, vue=False)
         with (
-            ownership_render_scope() as ownership,
+            target_scope,
+            direct_render_scope(),
             _component_like_render_scope(element.comp_cls.citry),
             pure_body_cache_scope(),
         ):
+            if render_globals is None:
+                return _render_tree(element, parent, provides)
+            token = _render_globals.set(render_globals)
             try:
-                if render_globals is None:
-                    return _render_tree(element, parent, provides)
-                token = _render_globals.set(render_globals)
-                try:
-                    return _render_tree(element, parent, provides)
-                finally:
-                    _render_globals.reset(token)
+                return _render_tree(element, parent, provides)
             finally:
-                if owns_ownership_graph:
-                    ownership.release_transient_region_results()
+                _render_globals.reset(token)
     finally:
         _VALUE_CONTEXT.reset(value_token)
 
@@ -191,7 +895,10 @@ def _render_tree(
     ``DeferredComponent``. This function then renders those children one at a
     time, working through a list instead of calling itself, so a deeply nested
     page never hits Python's recursion limit (see
-    docs/design/component_rendering_defer.md).
+    docs/design/component_rendering_defer.md). The list has no natural end
+    when a component renders itself forever, so each task carries its nesting
+    depth and the loop raises ``RecursionError`` past
+    ``CitrySettings.max_component_depth``.
 
     A component's after-render hooks run once everything inside that component
     has been rendered (so children run before their parents): first its own
@@ -224,12 +931,9 @@ def _render_tree(
 
     """
     root = _render_one_traced(element, parent, provides)
-    return _settle_render(
-        root.render,
-        root.generator,
-        root_cache_plan=root.cache_plan,
-        root_cache_hit=root.cache_hit,
-    )
+    if root.cache_hit:
+        return root.render
+    return _settle_render(root.render, root.generator)
 
 
 def _settle_render(
@@ -237,8 +941,6 @@ def _settle_render(
     root_generator: OnRenderGenerator | None = None,
     *,
     finalize_root: bool = True,
-    root_cache_plan: _CacheMissPlan | None = None,
-    root_cache_hit: _CacheHit | None = None,
 ) -> CitryRender:
     """
     Resolve deferred components inside an existing render tree.
@@ -261,6 +963,17 @@ def _settle_render(
     # everything inside it finish before we run the parent's _FinalizeTask. (This
     # is the approach django-components uses, but on objects instead of HTML
     # strings.)
+    #
+    # Each task also carries its component's nesting depth (the root is 1), so
+    # data that contains itself, which would nest forever, stops at
+    # max_component_depth. The depth is relative to this loop: a nested
+    # _settle_render (slot text, an element in an expression, the target of a
+    # <c-component>) runs inside a Python call, so Python's own recursion
+    # limit already bounds that nesting. A cache hit places a stored subtree
+    # without counting its levels; it was rendered once already, so it cannot
+    # nest forever. Without a root component here, the components directly
+    # inside root_render start at depth 1.
+    child_depth = 2 if finalize_root else 1
     stack: list[_RenderTask | _FinalizeTask | _ContextMergeTask] = []
     if finalize_root:
         stack.append(
@@ -268,11 +981,9 @@ def _settle_render(
                 root_render,
                 None,
                 root_generator,
-                cache_plan=root_cache_plan,
-                cache_hit=root_cache_hit,
             )
         )
-    stack.extend(reversed(_scan_deferred(root_render)))
+    stack.extend(reversed(_scan_deferred(root_render, child_depth)))
 
     root_result = root_render
 
@@ -284,7 +995,10 @@ def _settle_render(
         if position is None:
             root_result = final
         else:
-            _replace_in_parts(position.parts, position.idx, old, final)
+            from citry._vue.direct import wrap_python_composition_result  # noqa: PLC0415
+
+            placed = wrap_python_composition_result(final)
+            _replace_in_parts(position.parts, position.idx, old, placed)
             _merge_dependencies(position.parent_context, final.context)
 
     def requeue(
@@ -292,8 +1006,8 @@ def _settle_render(
         content: RenderReplacement,
         generator: OnRenderGenerator | None,
         *,
-        hook_checkpoint: int,
-        hook_through_order: int,
+        hook_checkpoint: int,  # noqa: ARG001
+        hook_through_order: int,  # noqa: ARG001
     ) -> None:
         # The component's on_render generator replaced its output. Render the
         # new content in its place (children deferred as usual) and finalize
@@ -304,48 +1018,26 @@ def _settle_render(
         if component is None:
             msg = "an on_render generator settled on a render that has no component."
             raise RuntimeError(msg)
-        ownership = old.context.ownership
-        ownership_checkpoint = ownership.checkpoint() if ownership is not None else None
         new_render = CitryRender(
             parts=_replacement_parts(content, old.context, component),
             context=old.context,
             is_component_root=old.is_component_root,
             is_transparent_root=old.frame.is_transparent_root,
         )
-        if ownership is not None:
-            selected_render_ids, selected_object_ids = _render_selection(new_render)
-            # This container was just created, so no captured region can own
-            # it. Only objects carried into its parts can preserve old output.
-            selected_object_ids.discard(id(new_render))
-            selected_region_ids = ownership.selected_region_ids(render_object_ids=selected_object_ids)
-            # Equal capture orders mean the hook created no ownership records to retire.
-            if hook_checkpoint != hook_through_order:
-                ownership.retire_unselected_after(
-                    hook_checkpoint,
-                    through_order=hook_through_order,
-                    preserved_render_ids=selected_render_ids,
-                    preserved_region_ids=selected_region_ids,
-                )
-        if ownership is not None and ownership_checkpoint is not None and id(old) not in selected_object_ids:
-            ownership.retire_component_output(
-                component.id,
-                through_order=ownership_checkpoint,
-                descendant_render_ids=_render_ids(old, exclude_render_id=component.id),
-                preserved_render_ids=selected_render_ids - {component.id},
-                preserved_region_ids=selected_region_ids,
-            )
         if task.position is not None:
             _replace_in_parts(task.position.parts, task.position.idx, old, new_render)
+        # The replacement is still this component's output, so it keeps the
+        # component's depth and its children sit one level below it.
         stack.append(
             _FinalizeTask(
                 new_render,
                 task.position,
                 generator,
-                cache_plan=task.cache_plan,
-                physical_parent_region_id=task.physical_parent_region_id,
+                direct_parent_execution=task.direct_parent_execution,
+                depth=task.depth,
             )
         )
-        stack.extend(reversed(_scan_deferred(new_render)))
+        stack.extend(reversed(_scan_deferred(new_render, task.depth + 1)))
 
     def settle(task: _FinalizeTask, error: Exception | None) -> CitryRender | None:
         # Settle a component whose subtree has finished rendering (or, when
@@ -358,26 +1050,11 @@ def _settle_render(
         # incoming or raised here, was not handled, so the caller bubbles it.
         render: CitryRender | None = task.render if error is None else None
         generator = task.generator
-        ownership = task.render.context.ownership
         if error is not None:
             task.render.context._error_tainted = True
-        if task.cache_hit is not None:
-            if error is not None:
-                raise error
-            component = task.render.context.component
-            if component is None:
-                raise RuntimeError("A component cache hit has no live boundary component.")
-            if ownership is not None:
-                ownership.settle_component(component.id)
-            cache_extension = component.citry.extensions.get_extension("cache")
-            if not isinstance(cache_extension, CacheExtension):
-                raise TypeError("The built-in Cache extension has an invalid runtime type.")
-            cache_extension._notify_component_hit(task.cache_hit, component)
-            return task.render
-        generator_checkpoint = ownership.checkpoint() if ownership is not None else None
         while generator is not None:
             try:
-                yielded = generator.send((render, error))
+                yielded = _send_on_render_generator(generator, (render, error), task.render.context)
             except StopIteration as stop:
                 if stop.value is not None:
                     # `return <content>`: the final output; the generator is
@@ -386,26 +1063,11 @@ def _settle_render(
                         task,
                         stop.value,
                         None,
-                        hook_checkpoint=generator_checkpoint or 0,
-                        hook_through_order=ownership.checkpoint() if ownership is not None else 0,
+                        hook_checkpoint=0,
+                        hook_through_order=0,
                     )
                     return None
                 # Plain `return`: keep the current result (and error).
-                if ownership is not None and generator_checkpoint is not None:
-                    generator_through_order = ownership.checkpoint()
-                    if generator_checkpoint < generator_through_order:
-                        preserved_render_ids = _render_ids(render) if render is not None else set()
-                        selected_objects = _render_objects(render) if render is not None else None
-                        ownership.retire_unselected_after(
-                            generator_checkpoint,
-                            through_order=generator_through_order,
-                            preserved_render_ids=preserved_render_ids,
-                            preserved_region_ids=(
-                                _selected_region_ids(ownership, selected_objects)
-                                if selected_objects is not None
-                                else set()
-                            ),
-                        )
                 break
             except Exception as gen_error:  # noqa: BLE001
                 # The generator raised: that becomes the component's error.
@@ -413,12 +1075,6 @@ def _settle_render(
                 # error it was sent keeps the original frames.
                 if gen_error is not error:
                     set_component_error_message(gen_error, _component_path(task.render.context.component))
-                if ownership is not None and generator_checkpoint is not None:
-                    ownership.retire_unselected_after(
-                        generator_checkpoint,
-                        through_order=ownership.checkpoint(),
-                        preserved_render_ids=set(),
-                    )
                 task.render.context._error_tainted = True
                 render, error = None, gen_error
                 break
@@ -431,8 +1087,8 @@ def _settle_render(
                     task,
                     yielded,
                     generator,
-                    hook_checkpoint=generator_checkpoint or 0,
-                    hook_through_order=ownership.checkpoint() if ownership is not None else 0,
+                    hook_checkpoint=0,
+                    hook_through_order=0,
                 )
             except TypeError as bad_yield:
                 # The yielded value was not renderable; deliver the failure
@@ -443,6 +1099,12 @@ def _settle_render(
                 continue
             return None
         finalized = _finalize(task.render, error)
+        owner = finalized.context.component
+        if owner is not None and owner._citry_mark_name_repeated:
+            # Two <c-mark> tags with one name rendered for this component. Every
+            # fill and branch it wrote has settled by now, so check the output it
+            # kept: an on_render hook or error boundary may have dropped one.
+            reject_repeated_mark_names(owner, finalized)
         if finalized.frame.is_component_root and finalized.context.component is not None:
             root_markers = tuple(dict.fromkeys(finalized.context._get_root_markers()))
             # Most roots have no extra markers. Keep their immutable frame;
@@ -455,27 +1117,27 @@ def _settle_render(
                 or frame.root_markers
             ):
                 finalized.frame = replace(finalized.frame, root_markers=root_markers)
-        if task.cache_plan is not None:
-            component = finalized.context.component
-            if component is None:
-                raise RuntimeError("A component cache miss has no live boundary component.")
-            cache_extension = component.citry.extensions.get_extension("cache")
+        cache_plan = finalized.context.extra.pop("citry_cache_miss_plan", None)
+        if cache_plan is not None:
+            from citry.ext.cache.extension import CacheExtension  # noqa: PLC0415
+
+            # Only the cache extension can publish the plan it staged on the miss,
+            # so a foreign extension under the "cache" name must fail here rather
+            # than silently drop the finished render.
+            publishing_component = finalized.context.component
+            if publishing_component is None:
+                raise TypeError("a staged cache miss must finalize on a live component")
+            cache_extension = publishing_component.citry.extensions.get_extension("cache")
             if not isinstance(cache_extension, CacheExtension):
-                raise TypeError("The built-in Cache extension has an invalid runtime type.")
-            cache_extension._publish_component(task.cache_plan, finalized)
+                raise TypeError("the 'cache' extension slot must hold a CacheExtension")
+            cache_extension._publish_component(cache_plan, finalized)
         return finalized
 
     def settle_in_invocation_region(task: _FinalizeTask, error: Exception | None) -> CitryRender | None:
-        """Finalize under the physical region that contains this invocation."""
-        component = task.render.context.component
-        ownership = task.render.context.ownership
-        invocation_id = component._ownership_invocation_id if component is not None else None
-        if ownership is None:
-            return settle(task, error)
-        if task.physical_parent_region_id is not None:
-            with ownership.active_region(task.physical_parent_region_id):
-                return settle(task, error)
-        with ownership.active_invocation_region(invocation_id):
+        """Finalize under the direct placement captured for deferred work."""
+        from citry._vue.direct import direct_execution_scope  # noqa: PLC0415
+
+        with direct_execution_scope(task.direct_parent_execution):
             return settle(task, error)
 
     def bubble(error: Exception) -> None:
@@ -490,14 +1152,18 @@ def _settle_render(
         # may swallow the error by producing replacement output, which ends
         # the unwind. Otherwise the error continues to the next ancestor, and
         # out of render_impl at the root.
+        #
+        # The nesting-depth error skips this: an error boundary inside the
+        # recursion would swallow it and let the next sibling recurse again,
+        # so data that contains itself twice would still render exponentially
+        # many components. Ending the whole render is the only bounded answer.
+        if getattr(error, "_citry_nesting_limit", False):
+            raise error
         while stack:
             task = stack.pop()
             if isinstance(task, _ContextMergeTask):
                 continue
             if not isinstance(task, _FinalizeTask):
-                ownership = task.deferred.element.ownership_graph or task.position.parent_context.ownership
-                if ownership is not None:
-                    ownership.retire_invocation(task.deferred.element.ownership_invocation_id)
                 continue
             try:
                 final = settle_in_invocation_region(task, error)
@@ -522,29 +1188,47 @@ def _settle_render(
         # Case: Render nested component
         if isinstance(task, _RenderTask):
             try:
-                ownership = task.deferred.element.ownership_graph or task.position.parent_context.ownership
-                if ownership is None:
-                    child = _render_one_traced(
+                # Checked before any work for the child, so a runaway recursion
+                # stops after max_component_depth renders instead of growing
+                # memory until the process dies. bubble() raises it straight
+                # out of the render; no ancestor hook can swallow it.
+                if task.depth > task.deferred.element.comp_cls.citry.settings.max_component_depth:
+                    raise _nesting_depth_error(task)
+                from citry._vue.direct import direct_execution_scope  # noqa: PLC0415
+
+                with direct_execution_scope(task.deferred.direct_parent_execution):
+                    simple_record = _render_simple_vue_leaf(
                         task.deferred.element,
-                        task.deferred.parent,
-                        task.deferred.provides,
+                        task.position.parent_context,
                     )
-                elif task.deferred.physical_parent_region_id is not None:
-                    with ownership.active_region(task.deferred.physical_parent_region_id):
-                        child = _render_one_traced(
+                    child = (
+                        None
+                        if simple_record is not None
+                        else _render_one_traced(
                             task.deferred.element,
                             task.deferred.parent,
                             task.deferred.provides,
                         )
-                else:
-                    with ownership.active_invocation_region(task.deferred.element.ownership_invocation_id):
-                        child = _render_one_traced(
-                            task.deferred.element,
-                            task.deferred.parent,
-                            task.deferred.provides,
-                        )
+                    )
             except Exception as error:  # noqa: BLE001
                 bubble(error)
+                continue
+            if simple_record is not None:
+                _replace_in_parts(task.position.parts, task.position.idx, task.deferred, simple_record)
+                # Render the children it called next, before its later
+                # siblings, as an ordinary parent's children would be.
+                if simple_record.leaf.call_children is not None:
+                    stack.extend(
+                        reversed(_simple_vue_child_tasks(simple_record, task.position.parent_context, task.depth + 1))
+                    )
+                continue
+            if child is None:
+                raise AssertionError("ordinary deferred rendering did not produce a result")
+            if child.cache_hit:
+                # A stored subtree is finished; its depth is not counted
+                # (see the comment at the top of this function).
+                _replace_in_parts(task.position.parts, task.position.idx, task.deferred, child.render)
+                _merge_dependencies(task.position.parent_context, child.render.context)
                 continue
             _replace_in_parts(task.position.parts, task.position.idx, task.deferred, child.render)
             stack.append(
@@ -552,12 +1236,11 @@ def _settle_render(
                     child.render,
                     task.position,
                     child.generator,
-                    cache_plan=child.cache_plan,
-                    cache_hit=child.cache_hit,
-                    physical_parent_region_id=task.deferred.physical_parent_region_id,
+                    direct_parent_execution=task.deferred.direct_parent_execution,
+                    depth=task.depth,
                 )
             )
-            stack.extend(reversed(_scan_deferred(child.render)))
+            stack.extend(reversed(_scan_deferred(child.render, task.depth + 1)))
         # Case: Finalize nested component
         else:
             try:
@@ -584,6 +1267,9 @@ class _RenderTask(NamedTuple):
 
     deferred: DeferredComponent
     position: _DeferredComponentPosition
+    # How many components deep the child sits (the root component is 1);
+    # checked against CitrySettings.max_component_depth before it renders.
+    depth: int
 
 
 class _FinalizeTask(NamedTuple):
@@ -594,9 +1280,10 @@ class _FinalizeTask(NamedTuple):
     # The component's live on_render generator when the hook yielded; resumed
     # with the settled result when this task runs (None for most components).
     generator: OnRenderGenerator | None = None
-    cache_plan: _CacheMissPlan | None = None
-    cache_hit: _CacheHit | None = None
-    physical_parent_region_id: PhysicalRegionId | None = None
+    direct_parent_execution: DirectExecutionFrame | None = None
+    # The component's nesting depth, so when its on_render replaces the
+    # output, the new children queue one level below it.
+    depth: int = 1
 
 
 class _ContextMergeTask(NamedTuple):
@@ -611,16 +1298,16 @@ class _InitialRender(NamedTuple):
 
     render: CitryRender
     generator: OnRenderGenerator | None
-    cache_plan: _CacheMissPlan | None
-    cache_hit: _CacheHit | None
+    cache_hit: bool = False
 
 
 def _scan_deferred_parts(
     parts: list[RenderPart],
     parent_context: CitryContext,
     tasks: list[_RenderTask | _ContextMergeTask],
+    depth: int,
 ) -> bool:
-    """Append child work in source order, merging contexts after their children."""
+    """Append child work in source order at ``depth``, merging contexts after their children."""
     initial_count = len(tasks)
     stack: list[tuple[Iterator[tuple[int, RenderPart]], list[RenderPart], CitryContext, int]] = [
         (iter(enumerate(parts)), parts, parent_context, initial_count)
@@ -639,17 +1326,26 @@ def _scan_deferred_parts(
         if type(part) is str:
             continue
         if isinstance(part, DeferredComponent):
-            tasks.append(_RenderTask(part, _DeferredComponentPosition(current_parts, i, context)))
+            tasks.append(_RenderTask(part, _DeferredComponentPosition(current_parts, i, context), depth))
+        elif type(part) is SimpleVueRecord:
+            # A root simple='vue' render holds its called children in its
+            # leaf; they share the enclosing context. The record is already
+            # rendered at this level, so its children are one level below.
+            if part.leaf.call_children is not None:
+                tasks.extend(_simple_vue_child_tasks(part, context, depth + 1))
         else:
-            unwrapped = unwrap_physical_region(part)
+            unwrapped = part
             if isinstance(unwrapped, CitryRender):
                 stack.append((iter(enumerate(unwrapped.parts)), unwrapped.parts, unwrapped.context, len(tasks)))
     return len(tasks) > initial_count
 
 
-def _scan_deferred(render: CitryRender) -> list[_RenderTask | _ContextMergeTask]:
+def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _ContextMergeTask]:
     """
     Find the child components inside ``render`` that still need rendering.
+
+    ``depth`` is the nesting depth the found children render at, one more
+    than the depth of the component that owns ``render``.
 
     Returns one ``_RenderTask`` per ``DeferredComponent``, descending into
     every nested ``CitryRender``. Most nested renders share this component's
@@ -666,7 +1362,7 @@ def _scan_deferred(render: CitryRender) -> list[_RenderTask | _ContextMergeTask]
     dependencies belong (see docs/design/component_slots.md section 8).
     """
     tasks: list[_RenderTask | _ContextMergeTask] = []
-    _scan_deferred_parts(render.parts, render.context, tasks)
+    _scan_deferred_parts(render.parts, render.context, tasks, depth)
     return tasks
 
 
@@ -685,7 +1381,7 @@ def _contains_deferred(render: CitryRender) -> bool:
                 continue
             if isinstance(part, DeferredComponent):
                 return True
-            unwrapped = unwrap_physical_region(part)
+            unwrapped = part
             if isinstance(unwrapped, CitryRender):
                 pending.append(unwrapped)
     return False
@@ -708,15 +1404,10 @@ def _render_ids(render: CitryRender, *, exclude_render_id: str | None = None) ->
         for part in current.parts:
             if type(part) is str:
                 continue
-            nested_part = unwrap_physical_region(part)
+            nested_part = part
             if isinstance(nested_part, CitryRender):
                 pending.append(nested_part)
     return render_ids
-
-
-def _selected_region_ids(ownership: OwnershipGraph, selected: set[int]) -> set[PhysicalRegionId]:
-    """Resolve selected render objects to their physical regions."""
-    return ownership.selected_region_ids(render_object_ids=selected)
 
 
 def _render_selection(render: CitryRender) -> tuple[set[str], set[int]]:
@@ -728,15 +1419,13 @@ def _render_selection(render: CitryRender) -> tuple[set[str], set[int]]:
         current = pending.pop()
         # Text identity cannot select an occurrence: equal or interned text
         # can appear in unrelated slots. Keep only structural identities.
-        if not isinstance(current, (CitryRender, _PhysicalRegion)):
+        if not isinstance(current, CitryRender):
             continue
         object_id = id(current)
         if object_id in object_ids:
             continue
         object_ids.add(object_id)
-        if isinstance(current, _PhysicalRegion):
-            pending.append(current.part)
-        elif isinstance(current, CitryRender):
+        if isinstance(current, CitryRender):
             render_id = current.frame.render_id
             if render_id is not None:
                 render_ids.add(render_id)
@@ -748,7 +1437,7 @@ def _render_ids_from_parts(parts: list[RenderPart]) -> set[str]:
     """Collect component render IDs reachable from a selected parts list."""
     render_ids: set[str] = set()
     for part in parts:
-        nested_part = unwrap_physical_region(part)
+        nested_part = part
         if isinstance(nested_part, CitryRender):
             render_ids.update(_render_ids(nested_part))
     return render_ids
@@ -764,9 +1453,7 @@ def _render_objects(render: RenderPart) -> set[int]:
         if object_id in object_ids:
             continue
         object_ids.add(object_id)
-        if isinstance(current, _PhysicalRegion):
-            pending.append(current.part)
-        elif isinstance(current, CitryRender):
+        if isinstance(current, CitryRender):
             pending.extend(current.parts)
     return object_ids
 
@@ -775,7 +1462,7 @@ def _render_objects_from_parts(parts: list[RenderPart]) -> set[int]:
     """Collect transient part identities reachable from selected parts."""
     object_ids: set[int] = set()
     for part in parts:
-        if isinstance(part, (CitryRender, _PhysicalRegion)):
+        if isinstance(part, CitryRender):
             object_ids.update(_render_objects(part))
         else:
             object_ids.add(id(part))
@@ -797,7 +1484,7 @@ def _contains_render(container: CitryRender, target: CitryRender) -> bool:
         for part in current.parts:
             if type(part) is str:
                 continue
-            nested_part = unwrap_physical_region(part)
+            nested_part = part
             if isinstance(nested_part, CitryRender):
                 pending.append(nested_part)
     return False
@@ -837,9 +1524,44 @@ def _component_path(component: Component | None) -> list[str]:
     names: list[str] = []
     while component is not None:
         names.append(type(component).__name__)
+        # simple='vue' components between this one and its parent have no
+        # instance to walk through, so their names come from the call.
+        metadata = getattr(component, "_prepared_call_metadata", None)
+        if type(metadata) is _PreparedCallMetadata:
+            names.extend(reversed(metadata.simple_vue_callers))
         component = component.parent
     names.reverse()
     return names
+
+
+def _nesting_depth_error(task: _RenderTask) -> RecursionError:
+    """
+    Build the error for a child that would sit deeper than ``max_component_depth``.
+
+    Only called once, on failure, so walking the whole parent chain here costs
+    nothing on ordinary renders. The chain is shortened to its two outermost
+    and three innermost names: the innermost ones show which components
+    repeat, and the full chain can be thousands of names long.
+    """
+    element = task.deferred.element
+    limit = element.comp_cls.citry.settings.max_component_depth
+    metadata = element.prepared_call_metadata
+    callers = metadata.simple_vue_callers if type(metadata) is _PreparedCallMetadata else ()
+    names = [*_component_path(task.deferred.parent), *callers, element.comp_cls.__name__]
+    if len(names) > 6:
+        names = [*names[:2], "...", *names[-3:]]
+    chain = " > ".join(names)
+    msg = (
+        f"Component {element.comp_cls.__name__} is nested more than {limit} components deep "
+        f"({chain}). This usually means a component keeps rendering itself, for example a tree "
+        "node whose data lists the node among its own children. Make sure the recursion ends, "
+        "or pass a larger max_component_depth to Citry() if the page really nests this deep."
+    )
+    error = RecursionError(msg)
+    # Users see a plain RecursionError; the flag lets bubble() tell this one
+    # apart so no error boundary can swallow it.
+    error._citry_nesting_limit = True  # type: ignore[attr-defined]
+    return error
 
 
 def _render_one_traced(
@@ -855,13 +1577,7 @@ def _render_one_traced(
     from this ``parent`` argument), and is available even when the failure
     happens before the instance exists (e.g. kwargs validation).
     """
-    graph = element.ownership_graph
-    # Ordinary descendants already share the active graph. Only delayed work
-    # from another graph needs a temporary scope and its cleanup machinery.
-    if graph is None or graph is current_ownership_graph():
-        return _render_one_with_error_path(element, parent, provides)
-    with resume_ownership_graph(graph):
-        return _render_one_with_error_path(element, parent, provides)
+    return _render_one_with_error_path(element, parent, provides)
 
 
 def _render_one_with_error_path(
@@ -873,10 +1589,9 @@ def _render_one_with_error_path(
     try:
         return _render_one(element, parent, provides)
     except Exception as err:
-        ownership = element.ownership_graph or current_ownership_graph()
-        if ownership is not None:
-            ownership.fail_invocation(element.ownership_invocation_id)
-        set_component_error_message(err, [*_component_path(parent), element.comp_cls.__name__])
+        metadata = element.prepared_call_metadata
+        callers = metadata.simple_vue_callers if type(metadata) is _PreparedCallMetadata else ()
+        set_component_error_message(err, [*_component_path(parent), *callers, element.comp_cls.__name__])
         raise
 
 
@@ -889,9 +1604,9 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
     bubbling up (docs/design/component_on_render.md section 5). The extension hook
     receives the rendered output, or ``None`` together with the error when
     rendering failed. An extension may replace the output with a new
-    ``CitryRender`` or ``str`` (which also swallows the error), or raise to
-    replace the error. An error that is not swallowed is raised here, to
-    continue bubbling.
+    ``CitryRender``, a plain ``str`` (shown as text), or ``Markup`` (inserted
+    as HTML), which also swallows the error, or raise to replace the error.
+    An error that is not swallowed is raised here, to continue bubbling.
     """
     from citry._simple_runtime import SimpleRender  # noqa: PLC0415
 
@@ -904,87 +1619,59 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
         if error is not None:
             raise error
         return render
-    ownership = render.context.ownership
-    ownership_checkpoint = ownership.checkpoint() if ownership is not None else None
     if error is not None:
         render.context._error_tainted = True
     try:
-        new_render, out_error, had_error = component.citry.extensions.on_component_rendered(
-            component,
-            None if error is not None else render,
-            error,
-        )
-    except Exception:
-        if ownership is not None:
-            if ownership_checkpoint is not None:
-                ownership.retire_unselected_after(
-                    ownership_checkpoint,
-                    through_order=ownership.checkpoint(),
-                    preserved_render_ids=set(),
-                )
-            ownership.settle_component(component.id, failed=True)
+        # An extension may also serialize the result and return the HTML, so
+        # its hook gets the same marker rule as the component's on_render.
+        with _after_render_hooks_scope(component.id):
+            new_render, out_error, had_error = component.citry.extensions.on_component_rendered(
+                component,
+                None if error is not None else render,
+                error,
+                context=render.context,
+            )
+    except Exception:  # noqa: TRY203
         raise
     if had_error:
         render.context._error_tainted = True
-    ownership_through_order = ownership.checkpoint() if ownership is not None else None
-    if (
-        ownership is not None
-        and ownership_checkpoint is not None
-        and ownership_through_order is not None
-        and ownership_checkpoint < ownership_through_order
-    ):
-        # A no-op hook creates no ownership records, so there is nothing to
-        # retire and no reason to rescan every physical region captured so far.
-        selected_render_ids = (
-            _render_ids(new_render, exclude_render_id=None) if isinstance(new_render, CitryRender) else set()
-        )
-        selected_objects = _render_objects(new_render) if isinstance(new_render, CitryRender) else None
-        ownership.retire_unselected_after(
-            ownership_checkpoint,
-            through_order=ownership_through_order,
-            preserved_render_ids=selected_render_ids,
-            preserved_region_ids=(
-                _selected_region_ids(ownership, selected_objects) if selected_objects is not None else set()
-            ),
-        )
     if out_error is not None:
         # A fresh error (raised by an extension just now) gets this
         # component's path; a bubbling error passing through unchanged
         # already carries the frames from where it happened.
         if out_error is not error:
             set_component_error_message(out_error, _component_path(component))
-        if ownership is not None:
-            ownership.settle_component(component.id, failed=True)
         raise out_error
-    if ownership is not None:
-        ownership.settle_component(component.id)
-    replacement_selected = isinstance(new_render, str) or (new_render is not None and new_render is not render)
-    if replacement_selected and ownership is not None and ownership_checkpoint is not None:
-        replacement_contains_old = isinstance(new_render, CitryRender) and _contains_render(new_render, render)
-        if not replacement_contains_old:
-            selected_objects = _render_objects(new_render) if isinstance(new_render, CitryRender) else None
-            preserved_render_ids = (
-                _render_ids(new_render, exclude_render_id=component.id)
-                if isinstance(new_render, CitryRender)
-                else set()
+    if new_render is None:
+        return render
+    if not isinstance(new_render, CitryRender):
+        # A returned plain str is text and Markup is HTML, the same rule as
+        # on_render, so user input in the hook's string cannot add a script.
+        replacement = _text_or_html_part(new_render, _ON_COMPONENT_RENDERED_TEXT_SOURCE)
+        if replacement is None:
+            msg = (
+                f"on_component_rendered for {type(component).__name__} returned a value of type "
+                f"{type(new_render).__name__}, which Citry cannot put on the page. Return Markup for "
+                "HTML, a str for text, a CitryRender, or None to keep the output."
             )
-            ownership.retire_component_output(
-                component.id,
-                through_order=ownership_checkpoint,
-                descendant_render_ids=_render_ids(render, exclude_render_id=component.id),
-                preserved_render_ids=preserved_render_ids,
-                preserved_region_ids=(
-                    _selected_region_ids(ownership, selected_objects) if selected_objects is not None else set()
-                ),
-            )
-    if isinstance(new_render, str):
+            err = TypeError(msg)
+            set_component_error_message(err, _component_path(component))
+            raise err
         return CitryRender(
-            parts=[new_render],
+            parts=[replacement],
             context=render.context,
             is_component_root=render.is_component_root,
             is_transparent_root=render.frame.is_transparent_root,
         )
     if isinstance(new_render, CitryRender) and new_render is not render:
+        from citry.citry_render import RenderDecoration  # noqa: PLC0415
+
+        if isinstance(new_render, RenderDecoration) and (
+            new_render.context is render.context or new_render.context.component is None
+        ):
+            if new_render.context is not render.context:
+                _merge_dependencies(render.context, new_render.context)
+            return new_render._with_frame(render.context, render.frame)
         if new_render.context is render.context:
             return CitryRender(
                 parts=new_render.parts,
@@ -993,64 +1680,26 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
                 is_transparent_root=render.frame.is_transparent_root,
             )
         _merge_dependencies(render.context, new_render.context)
+        from citry._vue.direct import wrap_python_composition_result  # noqa: PLC0415
+
         return CitryRender(
-            parts=[new_render],
+            parts=[wrap_python_composition_result(new_render)],
             context=render.context,
             is_component_root=render.is_component_root,
             is_transparent_root=render.frame.is_transparent_root,
         )
-    if new_render is not None:
-        return new_render
     return render
 
 
 def _validate_client_props_target(element: CitryElement) -> None:
     """Validate the final dynamic target and retain the authored call-site diagnostic."""
-    if element.forward_ownership_invocation:
-        return
     binding_keys = tuple(binding.key for binding in element.component_tag_client_bindings)
     if CLIENT_PROPS_ATTR not in binding_keys:
         return
 
-    invocation = None
-    location = None
-    ownership = element.ownership_graph or current_ownership_graph()
-    if ownership is not None and element.ownership_invocation_id is not None:
-        invocation = next(
-            (
-                record
-                for record in ownership.snapshot().component_invocations
-                if record.id == element.ownership_invocation_id
-            ),
-            None,
-        )
-        if invocation is not None:
-            location = ownership.source_location(invocation.source_location_id)
-
     comp_cls = element.comp_cls
-    tag_name = (
-        f"c-{invocation.authored_tag}"
-        if invocation is not None
-        else f"c-{getattr(comp_cls, 'name', None) or comp_cls.__name__}"
-    )
-    try:
-        validate_client_props_target(comp_cls, binding_keys, tag_name=tag_name)
-    except RuntimeError as err:
-        if location is not None and invocation is not None:
-            try:
-                source_class = comp_cls.citry.get_component_by_class_id(invocation.source_class_id)
-            except KeyError:
-                component_name = None
-            else:
-                component_name = source_class.__name__
-            set_template_position_error_message(
-                err,
-                location.source,
-                location.span,
-                component_name,
-                location.origin,
-            )
-        raise
+    tag_name = f"c-{getattr(comp_cls, 'name', None) or comp_cls.__name__}"
+    validate_client_props_target(comp_cls, binding_keys, tag_name=tag_name)
 
 
 def _render_one(
@@ -1083,7 +1732,16 @@ def _render_one(
 
     """
     comp_cls = element.comp_cls
-    if comp_cls.simple:
+    from citry._vue.capture import prepared_render_active  # noqa: PLC0415
+
+    # A simple='vue' class reaches this path only when engine state (not the
+    # class) needs ordinary rendering; any other arrival skipped the checks.
+    if comp_cls.simple == "vue" and not _simple_vue_renders_ordinarily(comp_cls):
+        raise TypeError(
+            "simple='vue' calls must pass through the instance-free leaf renderer; "
+            "this invocation reached the ordinary component-instance path"
+        )
+    if comp_cls.simple is True:
         from citry._simple_runtime import SimpleElement, prepare_simple_element, render_simple  # noqa: PLC0415
 
         if not isinstance(element, SimpleElement):
@@ -1092,11 +1750,10 @@ def _render_one(
                 CitryContext(
                     component=parent,
                     provides=provides,
-                    ownership=element.ownership_graph or current_ownership_graph(),
                     sandboxed=comp_cls.citry.settings.sandbox_expressions,
                 ),
             )
-        return _InitialRender(render_simple(element), None, None, None)
+        return _InitialRender(render_simple(element), None)
     _validate_client_props_target(element)
     citry_instance = comp_cls.citry
     extensions = citry_instance.extensions
@@ -1116,21 +1773,28 @@ def _render_one(
     )
     if type(element) is not CitryElement:
         from citry.components.dynamic import _DynamicSelectorElement  # noqa: PLC0415
+        from citry.components.mark import _SyntheticMarkElement  # noqa: PLC0415
 
         if isinstance(element, _DynamicSelectorElement):
             component._selector_call_shape = (element.contains_fills, element.has_range_directives)
+        elif type(element) is _SyntheticMarkElement:
+            component._citry_mark_replacement = True
+    if element.component_tag_client_bindings and comp_cls.transparent and not comp_cls._citry_dynamic_selector:
+        # A transparent component renders no Vue component of its own, so a
+        # prop, listener, or `v-show` on its tag would have nothing to reach.
+        # `<c-component>` is the exception: it forwards them to its target.
+        names = ", ".join(repr(binding.key) for binding in element.component_tag_client_bindings)
+        msg = (
+            f"{names} cannot be used on the tag of the transparent component {comp_cls.__name__!r}: "
+            "it renders its content in place and has no Vue component to receive props, listeners, or 'v-show'. "
+            "Put the binding on an element inside it."
+        )
+        raise TypeError(msg)
     component._component_tag_client_bindings = element.component_tag_client_bindings
     # Private dynamic-element directives must be visible to input hooks, but
     # never enter the user kwargs those hooks can replace.
     component._element_morph_metadata = element.element_morph_metadata
-    component._ownership_invocation_id = element.ownership_invocation_id
-    ownership = element.ownership_graph or current_ownership_graph()
-    if ownership is None:
-        msg = "Component rendering requires an active ownership graph."
-        raise RuntimeError(msg)
-    ownership.bind_instance(component, element)
-    component._ownership_graph = ownership
-
+    component._prepared_call_metadata = element.prepared_call_metadata
     # 2. Attach the per-component extension configs (eg `component.view`,
     #    AKA `component.<ext.name>`), then run on_component_input.
     #    Typed construction is deliberately deferred until every input hook
@@ -1150,15 +1814,8 @@ def _render_one(
             component_path=_component_path(component),
             slot_fills=component.raw_slots,
         )
-    if not element.forward_ownership_invocation:
-        # Input hooks may replace raw slot supplies. Bind ownership after the
-        # hook so the graph records the slots the component will actually use.
-        ownership.bind_supplied_slots(component)
 
-    # 3. Build the current-call boundary before component data executes. A
-    #    cache replay keeps this component, its input-hook mutations, ownership
-    #    anchors, provides, and invocation-owned range key while replacing only
-    #    archived output.
+    # 3. Build the current-call component context before component data executes.
     active_provides = component._provides_inherited
     if component._provides_own:
         active_provides = {**active_provides, **component._provides_own}
@@ -1166,43 +1823,55 @@ def _render_one(
         component=component,
         provides=active_provides,
         sandboxed=citry_instance.settings.sandbox_expressions,
-        ownership=ownership,
     )
 
-    cache_extension = extensions.get_extension("cache")
-    if not isinstance(cache_extension, CacheExtension):
-        raise TypeError("The built-in Cache extension has an invalid runtime type.")
-    cache_plan: _CacheMissPlan | None = None
-    while True:
-        try:
-            cache_decision = cache_extension._lookup_component(component, context)
-        except _CacheRevisionChanged:
-            continue
-        if not isinstance(cache_decision, _CacheHit):
-            cache_plan = cache_decision
-            break
-        try:
-            replay = (
-                _replay_fragment_artifact if cache_decision.miss.kind == "fragment" else _replay_component_artifact
-            )
-            replayed = replay(
-                cache_decision.artifact,
-                boundary=component,
-                context=context,
-                revision=cache_decision.miss.revision,
-            )
-        except CacheArtifactError as error:
-            if cache_extension._revision_snapshot() != cache_decision.miss.revision:
+    from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
+
+    if direct_prepared_render_active():
+        from citry.ext.cache.errors import CacheArtifactError, _CacheRevisionChanged  # noqa: PLC0415
+        from citry.ext.cache.extension import CacheExtension, _CacheHit, _CacheMissPlan  # noqa: PLC0415
+        from citry.ext.cache.replay import _replay_component_artifact, _replay_fragment_artifact  # noqa: PLC0415
+
+        # The registry is keyed by name and hands back the base Extension, while the
+        # replay decisions below are the cache extension's own. Narrow once here so a
+        # different extension registered under "cache" fails on this line rather than
+        # part-way through a replay.
+        cache_extension = citry_instance.extensions.get_extension("cache")
+        if not isinstance(cache_extension, CacheExtension):
+            raise TypeError("the 'cache' extension slot must hold a CacheExtension")
+        while True:
+            try:
+                decision = cache_extension._lookup_component(component, context)
+            except _CacheRevisionChanged:
                 continue
-            cache_extension._record_replay_rejection(cache_decision, component, error)
-            cache_plan = cache_decision.miss
+            if isinstance(decision, _CacheHit):
+                try:
+                    replayed = (
+                        _replay_fragment_artifact(
+                            decision.artifact,
+                            boundary=component,
+                            context=context,
+                            revision=decision.miss.revision,
+                        )
+                        if decision.miss.kind == "fragment"
+                        else _replay_component_artifact(
+                            decision.artifact,
+                            boundary=component,
+                            context=context,
+                            revision=decision.miss.revision,
+                        )
+                    )
+                except CacheArtifactError as error:
+                    if cache_extension._revision_snapshot() != decision.miss.revision:
+                        continue
+                    cache_extension._record_replay_rejection(decision, component, error)
+                    decision = decision.miss
+                else:
+                    cache_extension._notify_component_hit(decision, component)
+                    return _InitialRender(render=replayed, generator=None, cache_hit=True)
             break
-        return _InitialRender(
-            render=replayed,
-            generator=None,
-            cache_plan=None,
-            cache_hit=cache_decision,
-        )
+        if isinstance(decision, _CacheMissPlan):
+            context.extra["citry_cache_miss_plan"] = decision
 
     # 4. Call the data methods on a miss or bypass.
     #    template_data() feeds the template variables; js_data() / css_data()
@@ -1215,21 +1884,24 @@ def _render_one(
     #    produces its result fresh each render, and the default returns the
     #    component's own kwargs, which __init__ already copied per render
     #    (raw_kwargs), so the result is never shared across renders.
-    # Component imports this render module lazily, so the cycle is settled here.
-    from citry.component import Component as ComponentBase  # noqa: PLC0415
+    from citry._vue.direct import direct_receiver_scope  # noqa: PLC0415
 
-    template_data_callback = component.template_data
-    default_template_data = (
-        getattr(template_data_callback, "__func__", None) is ComponentBase.template_data
-        and getattr(template_data_callback, "__self__", None) is component
-    )
-    tpl_data = _normalize_data(
-        template_data_callback(component.kwargs, component.slots),
-        comp_cls.TemplateData,
-        preserve=component._kwargs_const if default_template_data else None,
-    )
-    js_data = _normalize_data(component.js_data(component.kwargs, component.slots), comp_cls.JsData)
-    css_data = _normalize_data(component.css_data(component.kwargs, component.slots), comp_cls.CssData)
+    with direct_receiver_scope(context):
+        # Component imports this render module lazily, so the cycle is settled here.
+        from citry.component import Component as ComponentBase  # noqa: PLC0415
+
+        template_data_callback = component.template_data
+        default_template_data = (
+            getattr(template_data_callback, "__func__", None) is ComponentBase.template_data
+            and getattr(template_data_callback, "__self__", None) is component
+        )
+        tpl_data = _normalize_data(
+            template_data_callback(component.kwargs, component.slots),
+            comp_cls.TemplateData,
+            preserve=component._kwargs_const if default_template_data else None,
+        )
+        js_data = _normalize_data(component.js_data(component.kwargs, component.slots), comp_cls.JsData)
+        css_data = _normalize_data(component.css_data(component.kwargs, component.slots), comp_cls.CssData)
 
     # 3.5 Overlay template globals: variables exposed to every component's
     #     template without being returned from each template_data(). Two layers,
@@ -1253,8 +1925,13 @@ def _render_one(
     # 4.5 on_component_data: extensions may add/modify the data, and stash
     #     tree-wide state into ``context.extra`` (e.g. the dependencies
     #     extension's render records).
-    extensions.on_component_data(component, context, tpl_data, js_data, css_data)
-    _restore_const_identities(tpl_data, component._const_candidates)
+    with direct_receiver_scope(context):
+        extensions.on_component_data(component, context, tpl_data, js_data, css_data)
+        _restore_const_identities(tpl_data, component._const_candidates)
+    # Checked after the extensions ran, because an extension may add keys, and
+    # before the template renders, so the error comes before any browser output.
+    _check_js_data_keys(comp_cls, js_data)
+    context.js_data = js_data
 
     # 5. ``provides`` are the entries this component inherited plus any
     #    provide or block changes it registered during template_data; a new
@@ -1274,11 +1951,11 @@ def _render_one(
     #     the component's finalize task and is resumed with the settled
     #     result once the whole subtree has rendered (``settle`` in
     #     ``render_impl``).
-    hook_checkpoint = ownership.checkpoint()
     generator: OnRenderGenerator | None = None
     parts: list[RenderPart] | None = None
     try:
-        hook_result = component.on_render()
+        with direct_receiver_scope(context):
+            hook_result = component.on_render()
         if is_generator(hook_result):
             # Prime the generator (runs the before-phase, up to the first
             # yield). A bare first yield means "render the template as usual";
@@ -1287,25 +1964,10 @@ def _render_one(
             parts, generator = _send_into_generator(generator, None, context, component, default_on_none=True)
         elif hook_result is not None:
             parts = _replacement_parts(hook_result, context, component)
-    except Exception:
-        ownership.retire_unselected_after(
-            hook_checkpoint,
-            through_order=ownership.checkpoint(),
-            preserved_render_ids=set(),
-        )
+    except Exception:  # noqa: TRY203
         raise
-    hook_through_order = ownership.checkpoint()
 
     if parts is not None:
-        if hook_checkpoint < hook_through_order:
-            selected_render_ids = _render_ids_from_parts(parts)
-            selected_objects = _render_objects_from_parts(parts)
-            ownership.retire_unselected_after(
-                hook_checkpoint,
-                through_order=hook_through_order,
-                preserved_render_ids=selected_render_ids,
-                preserved_region_ids=_selected_region_ids(ownership, selected_objects),
-            )
         return _InitialRender(
             render=CitryRender(
                 parts=parts,
@@ -1314,8 +1976,6 @@ def _render_one(
                 is_transparent_root=comp_cls.transparent,
             ),
             generator=generator,
-            cache_plan=cache_plan,
-            cache_hit=None,
         )
 
     # 6. Build the body (the list of static strings and node objects the
@@ -1346,17 +2006,30 @@ def _render_one(
     #    already in scope, including one the template otherwise never reads.
     #    A node injected by an extension may use a value outside the compiled
     #    set; that value stays un-optimized and re-evaluates each render.
-    template_output_checkpoint = ownership.checkpoint()
     try:
         template_override = getattr(element, "_template_override", None)
-        compiled = _get_compiled_template(comp_cls, template_override=template_override)
+        from citry._vue.capture import prepared_render_active  # noqa: PLC0415
+
+        prepared = prepared_render_active()
+        compiled = _get_compiled_template(
+            comp_cls,
+            template_override=template_override,
+            prepared=prepared,
+        )
         context.template_record = compiled
-        generate = compiled.generate if compiled is not None else None
+        generate = (
+            compiled.prepared_generate
+            if prepared and compiled is not None
+            else compiled.generate
+            if compiled
+            else None
+        )
         if compiled is None or generate is None:
             body: list[BodyItem] = []
         else:
-            const_vars, signature = extract_const_vars(tpl_data, used_vars=compiled.used_vars)
             visible_names = frozenset(tpl_data)
+
+            const_vars, signature = extract_const_vars(tpl_data, used_vars=compiled.used_vars)
 
             def build() -> list[BodyItem]:
                 foreign_resolved = extensions.on_template_foreign_compiled(
@@ -1367,14 +2040,57 @@ def _render_one(
                     origin=compiled.origin,
                     template_kind=compiled.kind,
                 )
+                transformed = extensions.on_template_compiled(
+                    comp_cls,
+                    foreign_resolved,
+                    template_id=compiled.template_id,
+                    origin=compiled.origin,
+                    template_kind=compiled.kind,
+                )
+                if prepared:
+                    from citry._vue.capture import (  # noqa: PLC0415
+                        PREPARED_CONST_PRECOMPUTE_ADAPTER,
+                        coalesce_prepared_static_nodes,
+                    )
+                    from citry._vue.leaf_program import (  # noqa: PLC0415
+                        compile_leaf_program,
+                    )
+
+                    specialized = precompute_const_parts(
+                        transformed,
+                        const_vars,
+                        precompute_attrs=not extensions.has_hook("on_attrs_resolved"),
+                        sandboxed=citry_instance.settings.sandbox_expressions,
+                        visible_names=visible_names,
+                        adapter=PREPARED_CONST_PRECOMPUTE_ADAPTER,
+                    )
+                    typed = coalesce_prepared_static_nodes(specialized)
+                    i18n = getattr(component, "i18n", None)
+                    allow_i18n_passthrough = i18n is not None and i18n._extension._compiled_catalog is None
+                    attrs_hooks = extensions._extensions_with_hook("on_attrs_resolved")
+                    from citry.ext.events.extension import EventsExtension  # noqa: PLC0415
+
+                    supported_attrs_hooks = all(
+                        type(extension) is EventsExtension
+                        and getattr(extension.on_attrs_resolved, "__func__", None) is EventsExtension.on_attrs_resolved
+                        for extension in attrs_hooks
+                    )
+                    program = (
+                        compile_leaf_program(
+                            typed,
+                            allow_i18n_passthrough=allow_i18n_passthrough,
+                        )
+                        if template_override is None
+                        and comp_cls.simple is False
+                        and not comp_cls.pure
+                        and not comp_cls.transparent
+                        and not is_tracing()
+                        and supported_attrs_hooks
+                        else None
+                    )
+                    return [program] if program is not None else typed
                 return precompute_const_parts(
-                    extensions.on_template_compiled(
-                        comp_cls,
-                        foreign_resolved,
-                        template_id=compiled.template_id,
-                        origin=compiled.origin,
-                        template_kind=compiled.kind,
-                    ),
+                    transformed,
                     const_vars,
                     # Precomputing an attribute region bakes its dict before extensions
                     # see it, so keep the regions live when anyone subscribes.
@@ -1383,11 +2099,33 @@ def _render_one(
                     visible_names=visible_names,
                 )
 
-            if template_override is not None:
+            if prepared:
+                if template_override is None:
+                    body = citry_instance._const_body_cache.get_or_build(
+                        comp_cls,
+                        signature,
+                        build,
+                        visible_names=visible_names,
+                        format_key=("vue-prepared", is_tracing()),
+                    )
+                else:
+                    # The ABC token keeps a later ComponentLike registration
+                    # from reusing text a constant value was written as.
+                    prepared_key = (signature, visible_names, is_tracing(), abc.get_cache_token())
+                    with compiled.compile_lock:
+                        cached_body = compiled.prepared_standalone_bodies.get(prepared_key)
+                        if cached_body is None:
+                            cached_body = build()
+                            compiled.prepared_standalone_bodies[prepared_key] = cached_body
+                            while len(compiled.prepared_standalone_bodies) > 64:
+                                compiled.prepared_standalone_bodies.popitem(last=False)
+                        compiled.prepared_standalone_bodies.move_to_end(prepared_key)
+                        body = cached_body
+            elif template_override is not None:
                 # One transparent class serves every standalone source. Its
                 # body cache must therefore include the immutable template
                 # record rather than using the class-keyed shared cache.
-                standalone_key = (signature, visible_names)
+                standalone_key = (signature, visible_names, abc.get_cache_token())
                 with compiled.compile_lock:
                     cached_body = compiled.standalone_bodies.get(standalone_key)
                     if cached_body is None:
@@ -1432,7 +2170,6 @@ def _render_one(
             parts = _render_body(body, context)
     except Exception as render_error:
         context._error_tainted = True
-        failed_output_through_order = ownership.checkpoint()
         if generator is None:
             raise
         # The component's own template failed; deliver the error to its live
@@ -1441,7 +2178,6 @@ def _render_one(
         # own slot content, which renders right here in its body walk. The
         # generator may produce replacement output; if it does not (plain
         # return), the error continues out as usual.
-        recovery_checkpoint = ownership.checkpoint()
         parts, generator = _send_into_generator(
             generator,
             (None, render_error),
@@ -1449,32 +2185,9 @@ def _render_one(
             component,
             default_on_none=False,
         )
-        recovery_through_order = ownership.checkpoint()
         if parts is None:
             raise
-        selected_objects = _render_objects_from_parts(parts)
-        ownership.retire_unselected_after(
-            recovery_checkpoint,
-            through_order=recovery_through_order,
-            preserved_render_ids=_render_ids_from_parts(parts),
-            preserved_region_ids=_selected_region_ids(ownership, selected_objects),
-        )
-        ownership.retire_range(
-            template_output_checkpoint,
-            through_order=failed_output_through_order,
-        )
 
-    if hook_checkpoint < hook_through_order:
-        # Most components use the default hook. Keep that render path linear
-        # in component count by doing selection work only for captured effects.
-        selected_render_ids = _render_ids_from_parts(parts)
-        selected_objects = _render_objects_from_parts(parts)
-        ownership.retire_unselected_after(
-            hook_checkpoint,
-            through_order=hook_through_order,
-            preserved_render_ids=selected_render_ids,
-            preserved_region_ids=_selected_region_ids(ownership, selected_objects),
-        )
     return _InitialRender(
         render=CitryRender(
             parts=parts,
@@ -1483,8 +2196,6 @@ def _render_one(
             is_transparent_root=comp_cls.transparent,
         ),
         generator=generator,
-        cache_plan=cache_plan,
-        cache_hit=None,
     )
 
 
@@ -1497,12 +2208,25 @@ def _i18n_body_capture_is_empty(component: Component) -> bool:
     return bindings is None or not (bindings.records or bindings.markers or bindings._pending_text)
 
 
-def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInteriorBody | None:
+def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInteriorBody | PurePreparedPart | None:
     """Detach one ownership-free output part for a render-local pure plan."""
     if isinstance(part, str):
         return part
-    # Exact type matters: PhysicalRegionRender is a CitryRender subclass whose
-    # wrapper identity and graph record must be recreated by the slot runtime.
+    from citry._vue.capture import (  # noqa: PLC0415
+        PreparedElementClose,
+        PreparedSourceText,
+        PreparedStaticRun,
+        PreparedTextValue,
+    )
+
+    if type(part) in {PreparedSourceText, PreparedStaticRun, PreparedElementClose}:
+        return PurePreparedPart(part)
+    if (
+        type(part) is PreparedTextValue
+        and part.browser_binding is None
+        and type(part.value) in {type(None), bool, int, float, str}
+    ):
+        return PurePreparedPart(part)
     if (
         type(part) is not CitryRender
         or part.context is not context
@@ -1510,7 +2234,7 @@ def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInt
         or part.frame.is_transparent_root
     ):
         return None
-    plan: list[str | PureInteriorBody] = []
+    plan: list[str | PureInteriorBody | PurePreparedPart] = []
     for nested_part in part.parts:
         captured = _capture_pure_part(nested_part, context)
         if captured is None:
@@ -1525,12 +2249,8 @@ def _render_and_capture_pure_body(
     component: Component,
 ) -> tuple[list[RenderPart], PureBodyPlan, int]:
     """Render once while compiling safe values around live transaction holes."""
-    ownership = context.ownership
-    if ownership is None:
-        msg = "Pure component rendering requires an active ownership graph."
-        raise RuntimeError(msg)
     parts: list[RenderPart] = []
-    plan: list[str | PureInteriorBody | PureLiveBodyItem] = []
+    plan: list[str | PureInteriorBody | PureLiveBodyItem | PurePreparedPart] = []
     cached_node_count = 0
     tracing = is_tracing()
     for item in body:
@@ -1538,11 +2258,10 @@ def _render_and_capture_pure_body(
             parts.append(item)
             plan.append(item)
             continue
-        checkpoint = ownership.checkpoint()
         i18n_empty_before = _i18n_body_capture_is_empty(component)
         part = _render_pure_live_item(item, context, tracing=tracing)
         parts.append(part)
-        if ownership.checkpoint() == checkpoint and i18n_empty_before and _i18n_body_capture_is_empty(component):
+        if i18n_empty_before and _i18n_body_capture_is_empty(component):
             captured = _capture_pure_part(part, context)
             if captured is not None:
                 plan.append(captured)
@@ -1564,7 +2283,7 @@ def _render_pure_live_item(item: Node, context: CitryContext, *, tracing: bool) 
         raise
     finally:
         _VALUE_CONTEXT.reset(value_token)
-    unwrapped = unwrap_physical_region(part)
+    unwrapped = part
     if isinstance(unwrapped, CitryRender) and unwrapped.context is not context and not _contains_deferred(unwrapped):
         _merge_dependencies(context, unwrapped.context)
     return part
@@ -1576,6 +2295,8 @@ def _replay_pure_body(plan: PureBodyPlan, context: CitryContext) -> list[RenderP
     for item in plan:
         if isinstance(item, str):
             parts.append(item)
+        elif isinstance(item, PurePreparedPart):
+            parts.append(item.part)
         elif isinstance(item, PureInteriorBody):
             parts.append(CitryRender(parts=_replay_pure_body(item.parts, context), context=context))
         else:
@@ -1612,7 +2333,7 @@ def _send_into_generator(
     """
     while True:
         try:
-            yielded = generator.send(send_arg)
+            yielded = _send_on_render_generator(generator, send_arg, context)
         except StopIteration as stop:
             if stop.value is None:
                 # Plain return: no replacement, generator done.
@@ -1630,25 +2351,107 @@ def _send_into_generator(
             send_arg = (None, bad_yield)
 
 
+def _send_on_render_generator(
+    generator: OnRenderGenerator,
+    send_arg: Any,
+    context: CitryContext,
+) -> Any:
+    """Execute one generator phase with its component as the active Slot receiver."""
+    from citry._vue.direct import direct_receiver_scope  # noqa: PLC0415
+
+    # The generator may serialize its own result and return the HTML; see
+    # _AFTER_RENDER_HOOKS_RENDER_ID for why that serialization skips this
+    # component's root markers.
+    render_id = context.component.id if context.component is not None else None
+    with direct_receiver_scope(context), _after_render_hooks_scope(render_id):
+        return generator.send(send_arg)
+
+
+# The source labels on the text part a prepared (Vue) render gets when a
+# hook returns a plain str. That text has no template position, so the part
+# points into its label instead, the way Python slot text does.
+_ON_RENDER_TEXT_SOURCE = "on-render-text"
+_ON_COMPONENT_RENDERED_TEXT_SOURCE = "on-component-rendered-text"
+_ON_SLOT_RENDERED_TEXT_SOURCE = "on-slot-rendered-text"
+
+
+def _text_or_html_part(value: object, text_source: str) -> RenderPart | None:
+    """
+    Turn page content a hook returned into a render part: a plain ``str`` is text, ``__html__`` is HTML.
+
+    ``on_render``, ``on_component_rendered``, and ``on_slot_rendered`` all
+    hand content back to the page, and all follow the rule of a ``{{ ... }}``
+    value, on static and interactive pages alike. ``text_source`` labels the
+    text part used when Citry renders for Vue, so a diagnostic can name the
+    hook.
+    Returns ``None`` for any other value, which the caller handles itself.
+    """
+    if type(value) is str and value == "":
+        # "" is the public way to render nothing. Every serializer, the Vue
+        # one included, treats this exact empty string as zero output.
+        return ""
+    if getattr_static(value, "__html__", None) is not None:
+        # Trusted HTML, as in a {{ ... }} expression. The Vue target used by
+        # server events accepts HTML only as a typed part, the same one a
+        # {{ ... }} Markup value becomes there.
+        if vue_render_active():
+            return PreparedTrustedHtmlValue(str(cast("HasHtml", value).__html__()))
+        # Markup is already a render part; escape() turns another __html__
+        # object into Markup without escaping it.
+        return value if isinstance(value, Markup) else escape(value)
+    if isinstance(value, str):
+        # Plain text. A typed render needs a text part, which the serializer
+        # escapes and the browser renders as the same text node, so a
+        # returned "<script>" stays visible text. Renders outside a typed
+        # render scope escape it here instead.
+        if prepared_render_active():
+            return PreparedTextValue(text_source, (0, len(text_source)), str(value))
+        return escape(value)
+    return None
+
+
+def _hook_content_render(value: object, context: CitryContext, text_source: str) -> object:
+    """
+    Wrap text or HTML that an extension render hook returned in a ``CitryRender``.
+
+    Extensions run one after another, and each receives what the one before
+    it returned. Wrapping the content right away means the next extension
+    sees a render, never a plain ``str``, so ``str(ctx.render)`` is always
+    HTML with that text already escaped. Any other value is returned as it
+    is, for the caller to accept or reject.
+    """
+    if value is None or isinstance(value, CitryRender):
+        return value
+    part = _text_or_html_part(value, text_source)
+    if part is None:
+        return value
+    return CitryRender(parts=[part], context=context)
+
+
 def _replacement_parts(value: RenderReplacement, context: CitryContext, component: Component) -> list[RenderPart]:
     """
     Convert an ``on_render`` replacement value into the component's parts list.
 
     The accepted values mirror what a ``{{ ... }}`` expression accepts
-    (``_render_value`` in citry_render.py), with two differences: a ``str``
-    is the component's own output, so it is used as-is rather than
-    autoescaped, and an unsupported type is an error rather than being
-    escaped to text (docs/design/component_on_render.md section 3.1).
+    (``_render_value`` in citry_render.py): a plain ``str`` is text and is
+    escaped, while ``Markup`` (or any object with ``__html__``) is trusted
+    HTML and is inserted as-is. The one difference is that an unsupported
+    type is an error rather than being escaped to text
+    (docs/design/component_on_render.md section 3.1).
     """
     # A Const marker is unwrapped first (a replacement built from a literal
     # template attribute arrives Const-wrapped); the value becomes output
     # here, so the marker has no further role, and the proxy must not leak
     # into the parts.
     value = const_value(value)
+    # Text and HTML are checked before the component protocol, in the order
+    # a {{ ... }} expression uses, so an object that has both __html__ and
+    # __citry_element__ renders the same here as in the template.
+    part = _text_or_html_part(value, _ON_RENDER_TEXT_SOURCE)
+    if part is not None:
+        return [part]
     if isinstance(value, ComponentLike):
         value = _resolve_component_like(value, component.citry)
-    if isinstance(value, str):
-        return [value]
     if isinstance(value, Slot):
         # Invoked with no data, like {{ my_slot }}. Slot content renders with
         # the scope of the component that wrote it, so its collected data is
@@ -1656,7 +2459,7 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
         part = _render_slot_value(value, None, None, context)
         if type(part) is str:
             return [part]
-        unwrapped = unwrap_physical_region(part)
+        unwrapped = part
         if (
             isinstance(unwrapped, CitryRender)
             and unwrapped.context is not context
@@ -1668,8 +2471,7 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
         # Deferred like a <c-child> tag in the template: the render_impl loop
         # renders it, so a replacement chain can never exhaust the Python
         # call stack.
-        ownership = context.ownership
-        if value.comp_cls.simple:
+        if value.comp_cls.simple is True:
             from citry._simple_runtime import simple_deferred  # noqa: PLC0415
 
             return [simple_deferred(value, context)]
@@ -1678,7 +2480,6 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
                 value,
                 parent=component,
                 provides=context.provides,
-                physical_parent_region_id=(ownership.current_region_id() if ownership is not None else None),
             )
         ]
     if isinstance(value, CitryRender):
@@ -1686,7 +2487,9 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
         # copied into this render.
         if value.context is not context:
             _merge_dependencies(context, value.context)
-        return [value]
+        from citry._vue.direct import wrap_python_composition_result  # noqa: PLC0415
+
+        return [wrap_python_composition_result(value)]
     msg = (
         f"{type(component).__name__}.on_render() returned {type(value).__name__!r}; "
         "expected a str, a composed element, a CitryRender, a Slot, or None."
@@ -1698,6 +2501,7 @@ def _get_compiled_template(
     comp_cls: type[Component],
     *,
     template_override: CitryTemplate | None = None,
+    prepared: bool = False,
 ) -> CitryTemplate | None:
     """
     Return the component's template with its compiled form filled in.
@@ -1705,8 +2509,8 @@ def _get_compiled_template(
     The template is loaded via ``assets.load_template``, which resolves
     ``template`` / ``template_file``, reads the file when needed, fires
     ``on_template_loaded``, and caches the ``CitryTemplate`` on the class (see
-    docs/design/asset_loading.md). On the first render this function compiles
-    the source and fills the struct's ``generate`` / ``used_vars`` in place,
+    docs/design/asset_loading.md). On the first render in each mode this function
+    compiles the source and fills the selected generator and ``used_vars`` in place,
     so the loaded and compiled halves share one cache and one invalidation
     (``Component.reset_template()``). Each call to ``generate`` produces a
     fresh node list. Returns ``None`` when the component has no template.
@@ -1718,9 +2522,11 @@ def _get_compiled_template(
     template = template_override if template_override is not None else load_template(comp_cls)
     if template is None:
         return None
-    if template.generate is None:
+    current_generate = template.prepared_generate if prepared else template.generate
+    if current_generate is None:
         with template.compile_lock:
-            if template.generate is not None:
+            current_generate = template.prepared_generate if prepared else template.generate
+            if current_generate is not None:
                 return template
             try:
                 if not template.foreign_prepared:
@@ -1735,9 +2541,30 @@ def _get_compiled_template(
                     template.foreign_spans = spans
                     template.foreign_provider_metadata = metadata
                     template.foreign_prepared = True
-                generate = _compile_template(template, comp_cls.citry._tag_rules())
+                compile_prepared = prepared
+                if prepared and template.foreign_spans:
+                    from citry._vue.capture import vue_render_active  # noqa: PLC0415
+
+                    if vue_render_active():
+                        raise TypeError("prepared Vue rendering does not yet support foreign template spans")
+                    # Static serialization still preserves the established
+                    # foreign-provider hook contract. Its selected output is
+                    # ordinary trusted HTML and never enters the Vue compiler.
+                    compile_prepared = False
+                generate = _compile_template(
+                    template,
+                    comp_cls.citry._tag_rules(),
+                    prepared=compile_prepared,
+                )
                 _check_declared_slots(comp_cls, template)
-                template.generate = generate
+                if prepared:
+                    template.prepared_generate = generate
+                    # Typed nodes are now the normal compiled representation;
+                    # keep the established public compiled-template accessor
+                    # pointed at that same immutable generator.
+                    template.generate = generate
+                else:
+                    template.generate = generate
             except Exception as err:
                 set_template_origin_error_message(err, template.origin)
                 raise
@@ -1778,13 +2605,16 @@ def _check_declared_slots(comp_cls: type[Component], template: CitryTemplate) ->
 def _compile_template(
     template: CitryTemplate,
     user_rules: dict[str, TagRules] | None = None,
+    *,
+    prepared: bool = False,
 ) -> Callable[[], list[BodyItem]]:
     """
     Parse, compile, and exec a template's source.
 
     Uses the citry_core pipeline: parse -> compile -> exec. The
     ``generate_template`` function from the exec'd namespace is returned;
-    calling it returns a fresh list of static strings and runtime node objects.
+    calling it returns a fresh list of runtime node objects. HTML mode also
+    emits static strings; prepared mode emits typed source, value, and element nodes.
     The component-template caller publishes it only after its class-level slot
     validation succeeds. The parsed AST's root ``used_variables`` (which are
     transitive) become ``template.used_vars``.
@@ -1814,7 +2644,19 @@ def _compile_template(
     template.declared_slots = tuple(
         DeclaredSlot(slot.token.content, slot.token.line_col[0], slot.token.line_col[1]) for slot in ast.slots
     )
-    code = compile_template(ast)
+    if prepared:
+        from citry._vue.capture import (  # noqa: PLC0415
+            PreparedElementCloseNode,
+            PreparedElementOpenNode,
+            PreparedExprNode,
+            PreparedSourceTextNode,
+            PreparedVerbatimHtmlNode,
+        )
+        from citry_core.template_parser.compile import _compile_prepared_template  # noqa: PLC0415
+
+        code = _compile_prepared_template(ast)
+    else:
+        code = compile_template(ast)
 
     # Build the namespace for exec. "source" is the original template string,
     # passed to nodes for error reporting and diagnostics. This namespace
@@ -1826,7 +2668,6 @@ def _compile_template(
         "source": template.root_source or template.source,
         "ExprNode": ExprNode,
         "ForeignNode": ForeignNode,
-        "TemplateNode": TemplateNode,
         "ComponentNode": ComponentNode,
         "ElementAttrsNode": ElementAttrsNode,
         "ElementKeyNode": ElementKeyNode,
@@ -1840,6 +2681,14 @@ def _compile_template(
         "TemplateHtmlAttr": TemplateHtmlAttr,
         "ForeignHtmlAttr": ForeignHtmlAttr,
     }
+    if prepared:
+        ns.update(
+            PreparedSourceTextNode=PreparedSourceTextNode,
+            PreparedVerbatimHtmlNode=PreparedVerbatimHtmlNode,
+            PreparedExprNode=PreparedExprNode,
+            PreparedElementOpenNode=PreparedElementOpenNode,
+            PreparedElementCloseNode=PreparedElementCloseNode,
+        )
     exec(code, ns)  # noqa: S102
     generate: Callable[[], list[BodyItem]] = ns["generate_template"]
     return generate
@@ -1884,7 +2733,12 @@ def _compile_nested_template(
         root_source=root_source,
         **template_kwargs,
     )
-    generate = _compile_template(template, user_rules)
+    from citry._vue.capture import prepared_render_active, vue_render_active  # noqa: PLC0415
+
+    prepared = prepared_render_active()
+    if prepared and core_spans and vue_render_active():
+        raise TypeError("prepared Vue rendering does not yet support foreign template spans")
+    generate = _compile_template(template, user_rules, prepared=prepared and not core_spans)
     if component_class is None:
         return generate
     if provider_metadata is None:
@@ -1912,7 +2766,8 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     """
     Render a body (a list of static strings and nodes) into a list of parts.
 
-    Static strings pass through unchanged. Each node is rendered with
+    Static strings pass through unchanged in HTML mode and are rejected in
+    prepared mode. Each node is rendered with
     ``context`` and adds a part: a ``str``, a nested ``CitryRender``, or a
     ``DeferredComponent`` (a ``<c-child>`` tag, rendered later by ``render_impl``).
 
@@ -1928,10 +2783,15 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     """
     value_token = _VALUE_CONTEXT.set(context)
     try:
+        from citry._vue.capture import vue_render_active  # noqa: PLC0415
+
+        direct_prepared = vue_render_active()
         parts: list[RenderPart] = []
         tracing = is_tracing()  # hoisted: one level check per body walk, not per node
         for item in body:
             if isinstance(item, str):
+                if direct_prepared:
+                    raise TypeError("prepared Vue rendering received unsupported raw compiled output")
                 parts.append(item)
                 continue
             if tracing:
@@ -1942,9 +2802,13 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
                 _attach_template_position(err, item, context)
                 raise
             if type(part) is str:
+                if direct_prepared:
+                    raise TypeError(
+                        f"prepared Vue rendering received unsupported raw output from {type(item).__name__}"
+                    )
                 parts.append(part)
                 continue
-            unwrapped = unwrap_physical_region(part)
+            unwrapped = part
             if (
                 isinstance(unwrapped, CitryRender)
                 and unwrapped.context is not context
@@ -1994,6 +2858,69 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
         if template is not None:
             origin = template.origin
     set_template_position_error_message(err, source, position, component_name, origin)
+
+
+# Every js_data() key becomes a member of the component's Vue instance in the
+# browser. Vue and Citry already own every instance name that starts with "$"
+# or "_", and Citry adds the "citryId" prop to every component, so the browser
+# runtime refuses those keys when the component mounts. Python knows these
+# names without seeing the component's JavaScript, so it rejects them at render
+# time, before any HTML leaves the server. A key that matches a name the
+# component's JavaScript defines (a prop, data(), setup(), method, computed
+# value, or injection) can only be detected in the browser, which reports it
+# when the component mounts.
+_RESERVED_JS_DATA_PREFIXES = ("$", "_")
+_RESERVED_JS_DATA_NAMES = frozenset({"citryId"})
+
+# Names that already passed the check above. A component returns the same few
+# keys on every render, so a set lookup replaces the prefix test after the
+# first render. The cap keeps components that build keys from data (for
+# example one key per row ID) from growing the set without limit; past it,
+# new names are still checked, just not remembered.
+_ACCEPTED_JS_DATA_KEYS: set[str] = set()
+_ACCEPTED_JS_DATA_KEYS_LIMIT = 4096
+
+
+def _check_js_data_keys(component_class: type[Any], js_data: Mapping[str, object]) -> None:
+    """Reject a ``js_data()`` key that the browser runtime would refuse at mount."""
+    accepted = _ACCEPTED_JS_DATA_KEYS
+    for key in js_data:
+        if key in accepted:
+            continue
+        # Only a non-string key is skipped here, because the prepared-data
+        # conversion rejects it with its own error. A str subclass is still
+        # checked, since it reaches the browser as an ordinary string.
+        if not isinstance(key, str):
+            continue
+        if key.startswith(_RESERVED_JS_DATA_PREFIXES) or key in _RESERVED_JS_DATA_NAMES:
+            raise ValueError(_reserved_js_data_key_message(component_class, key))
+        if len(accepted) < _ACCEPTED_JS_DATA_KEYS_LIMIT:
+            accepted.add(key)
+
+
+def _reserved_js_data_key_message(component_class: type[Any], key: str) -> str:
+    """Explain why one ``js_data()`` key is refused and suggest a usable name."""
+    if key in _RESERVED_JS_DATA_NAMES:
+        reason = f"Citry uses {key!r} as a prop on every component's Vue instance"
+    else:
+        reason = (
+            f"Vue and Citry reserve names that start with {key[0]!r} on the component's Vue instance, "
+            "so the browser would refuse this key when the component mounts"
+        )
+    # Strip the reserved prefix so the suggestion is usually the name the
+    # author meant; fall back to a generic hint when nothing usable remains.
+    stripped = key.lstrip("".join(_RESERVED_JS_DATA_PREFIXES))
+    # A name that starts with a digit could not be read from a template
+    # expression, so it is not worth suggesting.
+    if stripped and stripped != key and not stripped[0].isdigit() and stripped not in _RESERVED_JS_DATA_NAMES:
+        suggestion = f", for example to {stripped!r}"
+    else:
+        suggestion = " to a name that starts with a letter"
+    return (
+        f"The JavaScript data for component {component_class.__name__} (from js_data() or an extension's "
+        f"on_component_data) contains the key {key!r}, but {reason}. "
+        f"Rename the key{suggestion}."
+    )
 
 
 def _normalize_data(

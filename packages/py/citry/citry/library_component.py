@@ -26,6 +26,7 @@ from citry.util.misc import get_import_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from typing import Literal
 
     from citry.citry_render import OnRenderGenerator, RenderReplacement
     from citry.component import Component
@@ -42,7 +43,7 @@ if TYPE_CHECKING:
         definition_id: ClassVar[str]
         citry: ClassVar[Citry]
         transparent: ClassVar[bool]
-        simple: ClassVar[bool]
+        simple: ClassVar[bool | Literal["vue"]]
         pure: ClassVar[bool]
         name: ClassVar[str | None]
         template: ClassVar[str | None]
@@ -115,6 +116,12 @@ _DEFINITION_ROOT_FLAG = "_citry_library_component_root"
 _COMPONENT_ROOT_FLAG = "_citry_component_root"
 _SEALED_FLAG = "_citry_library_component_sealed"
 _MATERIALIZATION_TOKEN = object()
+
+
+def _is_valid_simple_declaration(value: object) -> bool:
+    """Accept the boolean modes and the opt-in instance-free Vue mode."""
+    return type(value) is bool or (type(value) is str and value == "vue")
+
 
 LibraryComponentIdentity = tuple[str, str]
 """The portable module and qualified-name identity of one definition."""
@@ -205,8 +212,8 @@ class LibraryComponentMeta(type):
                 ),
                 False,
             )
-            if type(simple) is not bool:
-                msg = f"Library component {name}.simple must be an exact bool; got {simple!r}."
+            if not _is_valid_simple_declaration(simple):
+                msg = f"Library component {name}.simple must be False, True, or 'vue'; got {simple!r}."
                 raise ValueError(msg)
             # Like a concrete Component, each definition makes its own promise;
             # purity never arrives implicitly from a base class.
@@ -217,11 +224,15 @@ class LibraryComponentMeta(type):
     def __setattr__(cls, name: str, value: Any) -> None:
         """Keep published definition behavior stable across installed classes."""
         is_definition = cls.__dict__.get(_DEFINITION_FLAG, False)
-        if is_definition and name in {"pure", "simple"} and type(value) is not bool:
-            msg = f"Library component {cls.__name__}.{name} must be an exact bool; got {value!r}."
+        if is_definition and name == "pure" and type(value) is not bool:
+            msg = f"Library component {cls.__name__}.pure must be an exact bool; got {value!r}."
+            raise ValueError(msg)
+        if is_definition and name == "simple" and not _is_valid_simple_declaration(value):
+            msg = f"Library component {cls.__name__}.simple must be False, True, or 'vue'; got {value!r}."
             raise ValueError(msg)
         if is_definition and name == "simple" and "simple" in cls.__dict__:
-            if value is cls.__dict__["simple"]:
+            prior_value = cls.__dict__["simple"]
+            if type(value) is type(prior_value) and value == prior_value:
                 return
             raise AttributeError(f"Cannot change {cls.__name__}'s simple-component declaration.")
         is_sealed_definition = is_definition and cls.__dict__.get(_SEALED_FLAG, False)
@@ -284,7 +295,7 @@ class LibraryComponent(_LibraryComponentAuthoringBase, metaclass=LibraryComponen
 
     _citry_library_component_root: ClassVar[bool] = True
     pure: ClassVar[bool] = False
-    simple: ClassVar[bool] = False
+    simple: ClassVar[bool | Literal["vue"]] = False
     """Render without an independent instance; see [`Component.simple`][citry.Component.simple]."""
     name: ClassVar[str | None] = None
     """Optional explicit registry name, with the same behavior as ``Component.name``."""

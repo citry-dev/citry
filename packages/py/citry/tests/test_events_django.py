@@ -186,7 +186,14 @@ class TestDjangoParity:
         [item] = response.json()["results"]
         assert item["ok"] is True
         assert item["sendSequence"] == 3
-        assert ">Hello</p>" in item["actions"][0]["html"]
+        html = item["actions"][0]["html"]
+        fragment_start = '<script type="application/json" data-citry-vue-fragment>'
+        serialized_fragment = html.split(fragment_start, 1)[1].split("</script>", 1)[0]
+        fragment = json.loads(serialized_fragment)
+        [occurrence] = fragment["vue"]["prepared"]["manifest"]["occurrences"]
+        assert occurrence["typeKey"] == greeter.class_id
+        assert occurrence["eventContext"]["publicState"] == {"text": "Hello"}
+        assert "Hello" in occurrence["preparedData"].values()
 
     def test_error_status_mirrors_and_get_is_no_store(self, mounted):
         c = _citry()

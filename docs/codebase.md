@@ -26,7 +26,7 @@ citry/
 │   ├── citry_core_py/   # Main Rust crate exposed to Python
 │   ├── citry_html_transform/
 │   ├── citry_i18n/     # Language-neutral Fluent catalog runtime
-│   ├── citry_ownership/ # Internal render relationship calculation
+│   ├── citry_vue_compiler/ # Native browser-template compilation
 │   ├── citry_template_formatter/
 │   ├── python_safe_eval/
 │   └── citry_template_parser/
@@ -67,9 +67,9 @@ As such, the Rust crates are ideal for:
 - **UV**: Fast Python package installer (recommended)
 - **Node.js and [pnpm](https://pnpm.io/)**: needed for the gate's Node-based
   phases: the pinned `pyright`, the `citry-client` TypeScript package, the docs
-  playground bundle, and the VS Code language extension. A current LTS Node is
-  fine; run `pnpm install` once after cloning. pnpm is the repo's Node package
-  manager: the committed lockfile is `pnpm-lock.yaml`, CI installs from it with
+  playground bundle, the VS Code language extension, and the Citry UI asset
+  check. A current LTS Node is fine; run `pnpm install` once after cloning.
+  pnpm is the repo's Node package manager: the committed lockfile is `pnpm-lock.yaml`, CI installs from it with
   `pnpm install --frozen-lockfile`, and one root install covers every member in
   `pnpm-workspace.yaml`, including `docs_site/_internal/frontend`, `packages/editors/*`,
   and `packages/js/*`. npm is not a substitute here because it does not read
@@ -186,7 +186,19 @@ pip install uv
    uv run maturin develop
    ```
 
+   In a separate worktree, explicitly select that worktree's virtual environment
+   before invoking maturin. It honors `VIRTUAL_ENV` even when the maturin
+   executable comes from a different environment. An inherited value can install
+   the editable package into another checkout's environment. Check the selected
+   interpreter and imported `citry_core._rust` path after rebuilding.
+
    Note: both `maturin develop` and the `uv sync` build produce a **debug** (unoptimized) extension. That is fine for tests, but it makes the Rust-backed paths ~10x or more slower, so pass `--release` (for example `uv run maturin develop --release`) before running any benchmark.
+   The extension reports how it was compiled in `citry_core._rust.BUILD_PROFILE` (`"release"` or `"debug"`), and the benchmark runners exit on a debug build with the rebuild command. To measure a debug build on purpose, set `CITRY_BENCH_ALLOW_DEBUG_NATIVE=1`. Check which build is installed:
+
+   ```bash
+   uv run --no-sync python -c \
+     'from citry_core import _rust; print(_rust.BUILD_PROFILE)'
+   ```
 
    When switching between a version-specific extension and an ABI3 build, both
    generated binaries can remain in the package directory. Python prefers the
@@ -208,7 +220,7 @@ pip install uv
    uv run pytest
 
    # Or run Rust tests first (scoped to our crates, see "Running tests" below)
-   cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_ownership -p citry_template_formatter -p citry_template_parser -p python_safe_eval
+   cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval
    ```
 
 ## Common Development Tasks
@@ -232,6 +244,26 @@ The schema, review policy, disclosure rules, publication lifecycle, and future
 weekly discovery process are defined in
 [`docs_community_packages.md`](design/docs_community_packages.md).
 
+### Refreshing the HTML attribute value table
+
+The `citry.template.invalid-attribute-value` rule checks static attribute
+values against
+[`citry/_html_attribute_values.py`](../packages/py/citry/citry/_html_attribute_values.py).
+That module is generated from the HTML Standard's attribute index, and its
+docstring records the standard's update date. To pick up keywords the
+standard has added or removed, run:
+
+```sh
+python scripts/generate_html_attribute_values.py
+```
+
+The script downloads https://html.spec.whatwg.org/multipage/indices.html; pass
+`--source FILE` to read a saved copy instead. It keeps only rows whose values
+are a closed list of keywords, and adds a few closed sets that the index
+describes in words, such as `<input type>`. Review the diff before committing:
+a new keyword becomes valid, and a removed one starts being reported. No CI
+job refreshes the table, because that would need network access.
+
 ### Running tests
 
 Rust tests are scoped to the crates under `crates/`, one `-p` flag per crate.
@@ -246,10 +278,10 @@ would also run ruff's own test suite. CI scopes the run the same way
 uv run pytest
 
 # Rust tests (our crates only)
-cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_ownership -p citry_template_formatter -p citry_template_parser -p python_safe_eval
+cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval
 
 # Both (Rust first, then Python)
-cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_ownership -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
+cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
 ```
 
 #### Browser end-to-end tests
@@ -273,6 +305,7 @@ uv run --no-sync pytest \
   packages/py/citry/tests/e2e \
   packages/py/citry_ui/citry_ui/components \
   packages/py/citry_ui/citry_ui/quality/tests/e2e \
+  packages/py/citry_ui/tests/e2e \
   -m e2e \
   --browser chromium \
   -n 4 \
@@ -291,6 +324,34 @@ the ordinary Python matrix, and the docs-site E2E suite stay serial. In
 particular, distributing the docs-site suite would repeat its session-scoped
 site build once per worker. On a machine with fewer than four CPUs or limited
 memory, lower `-n`; four is the CI default, not a correctness requirement.
+
+The docs-site playground and live-code browser tests run against the release
+pinned in `docs_site/static/playground/runtime.json`, and skip the tests that
+need this checkout's Citry unless `CITRY_PLAYGROUND_CORE_WHEEL` is set. See
+[Which browser tests run against the pinned release](../docs_site/static/playground/README.md#which-browser-tests-run-against-the-pinned-release).
+
+#### Vue render parity check
+
+The parity check records every Vue page the non-browser suite prepares,
+renders each one with the Rust renderer and with Vue's own
+`renderToString` in Node, and compares the HTML. `scripts/check.py` runs it
+in both profiles, so CI runs it too: its `pytest` phase loads the recording
+plugin, and the `vue render parity` phase that follows compares the pages
+that run recorded. The comparison itself takes a few seconds.
+
+When you change the server's hydration renderer
+(`crates/citry_vue_compiler/src/server_render.rs`) or the compiled render
+code it reads, run it on its own. It needs `pnpm install` and a native
+build, and takes about as long as one non-browser test run. It also records
+pages from the qualification tests and the benchmark board's server tests,
+which the gate's `pytest` phase does not run:
+
+```bash
+.venv/bin/python scripts/vue_render_parity/check.py
+```
+
+What it compares and the rules it applies are in
+[`docs/design/vue_ssr_selected_tree_plan.md`](design/vue_ssr_selected_tree_plan.md#checking-the-servers-html-against-vue).
 
 ### Formatting and linting code
 
@@ -422,6 +483,10 @@ the non-browser pytest suite with `-n 4 --dist loadfile --durations 30`. The
 main pytest phase selects `not e2e and not qualification`; the full profile
 enables pytest-cov there, enforces the repository threshold, and then runs the
 `qualification and not e2e` stress slice separately without coverage.
+The main pytest phase also records every Vue page the tests prepare into a
+temporary directory for that gate run, and the `vue render parity` phase
+compares those pages with Vue's server renderer (see "Vue render parity
+check" above).
 Coverage measures shipped runtime modules. It omits tests, repository-only
 qualification helpers, subprocess adapters whose execution belongs to child
 processes, and Citry UI's public demo `snippets/`, which are excluded from the
@@ -430,7 +495,11 @@ ratchet immediately below the current measured runtime coverage; raise it as
 focused tests recover headroom.
 The `pyright` phase runs the pinned pyright from `node_modules` alongside mypy.
 The package-local Node phases run `pnpm run check` for `citry-client`, the docs
-playground, and the VS Code language extension. One root `pnpm install` covers
+playground, and the VS Code language extension. The `citry-ui assets` phase
+fails when a committed, minified Citry UI file (a `runtime.min.js` or
+production CSS) does not match the readable source it is built from. The
+`vue render parity` phase
+runs Node with the Vue that `citry-client` pins. One root `pnpm install` covers
 all of them, the same way `uv sync` installs the Python tools.
 
 #### Custom validators
@@ -458,24 +527,24 @@ The runner prints `PASS`/`FAIL` per validator and exits non-zero if any returns 
 #### CI integration
 
 The gate runs in CI via the [`repo--check.yml`](../.github/workflows/repo--check.yml)
-workflow, which builds the workspace and explicitly runs
-`python scripts/check.py --profile full` on every change (no path filters).
+workflow, which builds the workspace, installs the Node workspace, and
+explicitly runs `python scripts/check.py --profile full` on every change (no
+path filters). That run includes the Vue render parity phase.
 The per-language matrix workflows ([`rust--tests.yml`](../.github/workflows/rust--tests.yml),
 [`py--tests.yml`](../.github/workflows/py--tests.yml)) add cross-version,
 cross-OS, and dedicated browser breadth on top of that single-environment gate.
 
 ### Protocol packages and shipped copies
 
-Citry has two private server/browser wire contracts:
+Citry's language-neutral Events contract lives in
+[`packages/protocol/events/v1/`](../packages/protocol/events/v1/) and owns
+Events calls, results, actions, and browser manifests. The current Vue prepared
+definition/occurrence protocol lives in `citry._vue.protocol` and its browser
+coordinator; [the Vue design](design/vue.md) tracks the cutover and qualification.
 
-- [`packages/protocol/events/v1/`](../packages/protocol/events/v1/) owns
-  Events calls, results, actions, and browser manifests.
-- [`packages/protocol/client_graph/v1/`](../packages/protocol/client_graph/v1/)
-  owns the rendered component graph and its ownership comments.
-
-Each directory contains the prose spec, JSON Schemas, worked examples, a
-standard-library-only Python package, and a TypeScript package. The protocol
-directories are the editable sources. Citry ships byte-identical Python copies
+The Events directory contains the prose spec, JSON Schemas, worked examples, a
+standard-library-only Python package, and a TypeScript package. It is the
+editable source. Citry ships byte-identical Python copies
 under `citry._protocol`; refresh or check them with:
 
 ```bash
@@ -483,14 +552,17 @@ uv run python scripts/sync_protocol_python.py
 uv run python scripts/sync_protocol_python.py --check
 ```
 
-The Events TypeScript package builds into `citry-events.js`. The client-graph
-TypeScript package builds one marked generated block inside `citry.js`.
-Package-local `pnpm run check` commands type-check the sources, replay shared
-cases, and reject stale generated files:
+The Events TypeScript package supplies protocol types and validation used by
+the Vue Events bridge in `packages/js/citry-client`. The client build
+combines the production Vue runtime, the fragment manager, the prepared
+coordinator, and the Events bridge into `citry/_vue/runtime.js`; i18n has a separate generated bundle. The
+coordinator is the hand-written `citry/_vue/client.js`; the build removes its
+comments and indentation, so rebuild after editing it. Package-local
+`pnpm run check` commands type-check the sources, replay shared cases, and
+reject stale generated files:
 
 ```bash
 pnpm --dir packages/protocol/events/v1/js run check
-pnpm --dir packages/protocol/client_graph/v1/js run check
 pnpm --dir packages/js/citry-client run check
 ```
 
@@ -500,12 +572,11 @@ concrete structural rule at one schema location. The companion
 `tests/constraint-ownership.json` groups every such rule under named Python
 and JavaScript validator functions and supporting test files. Counts and
 content fingerprints make a schema edit fail until its validator assignment
-is reviewed. Run both protocol audits with:
+is reviewed. Run the Events protocol audit with:
 
 ```bash
 uv run python -m packages.protocol._tooling.check \
-  packages/protocol/events/v1 \
-  packages/protocol/client_graph/v1
+  packages/protocol/events/v1
 ```
 
 The report deliberately keeps complete ownership assignment separate from the
@@ -1024,6 +1095,11 @@ published version; the new description appears with that package's next
 release. Do not create an otherwise-empty patch release merely to refresh the
 description unless maintainers explicitly choose to do so.
 
+A released description keeps loading its images from `main`. The READMEs of
+`citry` 0.4.0 to 0.5.1 load `docs/assets/benchmark.png` this way. Published
+descriptions never change, so keep such an image on `main` even after the
+current README stops using it.
+
 #### Recording Marketplace demo GIFs
 
 The first VS Code release used this practical macOS workflow. It favors crisp,
@@ -1078,7 +1154,7 @@ only be uploaded through the web interface; there is no API for either.
 The top-level `Cargo.toml` defines a workspace that includes:
 
 - Core crates (`citry_core_py`, `citry_html_transform`, `citry_i18n`,
-  `citry_ownership`,
+  `citry_vue_compiler`,
   `citry_template_formatter`, `python_safe_eval`, `citry_template_parser`)
 - Shared dependencies and toolchain configuration
 - Unified linting, formatting, and testing
@@ -1165,7 +1241,7 @@ dev = ["maturin>=1.10.2", "ruff>=0.10.0", "mypy>=1.0.0"]
 
 The workspace has exactly one dependency lockfile: the root [`uv.lock`](../uv.lock).
 Run `uv lock` from the repository root and commit that file for every workspace
-dependency or package-version change. Package-local `uv.lock` files belong to
+dependency or package-version change. Workspace-member package-local `uv.lock` files belong to
 the pre-workspace layout and are not development, CI, or release inputs; the
 remaining Citry Core copy is tracked for removal in
 [#87](https://github.com/citry-dev/citry/issues/87).
@@ -1297,8 +1373,8 @@ There is one release entry point. Individual package workflows are internal
 workers and must not be run by hand.
 
 ```text
-prepare release changes in the review working tree
-  -> copy the reviewed changes to a promotion branch and merge its PR
+prepare release changes on a branch from current main
+  -> open a pull request against main and merge it
   -> Prepare release candidate runs automatically
        -> determine which manifest versions do not have final tags
        -> qualify all selected packages concurrently
@@ -1331,9 +1407,10 @@ Prepare a release as follows:
 3. Sweep version references deliberately. Update live metadata and pins, but
    do not rewrite historical changelogs, dated research, fixtures, or unrelated
    versions merely because the number matches.
-4. Verify and copy the intended changes to a promotion branch, then merge its
-   pull request into `main` using the clean-worktree procedure below. A qualifying candidate is created automatically when the
-   release surfaces change. To retry candidate preparation or make an explicit
+4. Open a pull request with the release changes and merge it into `main`, as
+   described in [How changes reach `main`](#how-changes-reach-main). A
+   qualifying candidate is created automatically when the release surfaces
+   change. To retry candidate preparation or make an explicit
    selection, run **Prepare release candidate** with `auto` or a comma-separated
    list such as `citry-core,citry,citry-lsp,vscode-citry`.
 5. Inspect the candidate run and its selected package graph. Require the
@@ -1365,6 +1442,40 @@ Prepare a release as follows:
    separate job uses the dedicated release App to commit only generated
    documentation and runtime pins directly to `main`. That push starts the
    normal site deployment. No follow-up PR or browser-runtime tag is needed.
+9. Confirm that the playground pins moved to the published release, then run
+   the playground and live-code browser tests against them. When Citry is
+   selected, **Release docs** updates `docs_site/static/playground/runtime.json`
+   from the published wheels, runs
+   `pytest docs_site/tests/e2e/test_playground_e2e.py -k published_runtime`
+   against the new pins, and only then commits them to `main`. That push
+   changes `docs_site/`, so **Docs check** runs the whole docs browser suite
+   against the new pins, with the tests that need this checkout's Citry
+   skipped. Nothing runs `test_live_code_e2e.py` with those tests included,
+   so run it and the rest of the playground suite yourself from the updated
+   `main`:
+
+   ```sh
+   CITRY_PLAYGROUND_PINS_MATCH_CHECKOUT=1 uv run --no-sync pytest \
+     docs_site/tests/e2e/test_playground_e2e.py \
+     docs_site/tests/e2e/test_live_code_e2e.py \
+     docs_site/tests/e2e/test_preview_bridge_e2e.py
+   ```
+
+   When Citry is not selected, nothing updates the pins. They take the Citry
+   Core and citry-ui versions named in the next Citry release's source. The
+   skip rule for these tests is described in
+   [Which browser tests run against the pinned release](../docs_site/static/playground/README.md#which-browser-tests-run-against-the-pinned-release).
+10. When Citry is selected, open every link in the root `README.md` that
+    points at the new tag (for example
+    `https://github.com/citry-dev/citry/tree/citry%400.6.0/examples/starters/fastapi`)
+    and confirm each one resolves. These links 404 until the tag exists, so
+    no earlier check can prove them.
+11. When an example raised its Citry or citry-lsp floor to a version that
+    this release published, run `uv lock` in that example, run
+    `python -m examples._internal.release_gate` from the repository root, and
+    commit the refreshed locks together in one post-release change. A lock
+    can name only a published release, so this is the one example update
+    that cannot happen before publication.
 
 The controller derives ordering from selected-package constraints. Citry waits
 for a selected Citry Core because it pins Core exactly. citry-lsp and citry-ui
@@ -1401,7 +1512,9 @@ locks a compatible public Citry range. The exact-commit examples CI workflow
 runs alongside candidate preparation and overlays the selected wheel in a clean
 copy, proving the unreleased change without rewriting every example lock.
 Update an example's minimum and lock only when that example actually adopts a
-new public contract.
+new public contract. When the new contract arrives in the release being
+prepared, raise the minimum in the release change and refresh the lock after
+publication (step 11 above).
 
 ### Discord release notifications
 
@@ -1430,9 +1543,11 @@ change public package bytes. Retry a missed post by manually running **Notify
 Discord on Release** with the existing GitHub Release tag; do not rerun the
 package publisher merely to resend Discord.
 
-**`citry` pins one exact `citry-core` version** (`citry-core==1.7.0`, not a
-range). The runtime node classes in `citry.nodes` read the source that
-citry-core's compiler emits, so a citry-core release that changes that output
+**`citry` pins one exact `citry-core` version**, not a range. The pin lives in
+the `dependencies` list of
+[`packages/py/citry/pyproject.toml`](../packages/py/citry/pyproject.toml).
+The runtime node classes in `citry.nodes` read the source that citry-core's
+compiler emits, so a citry-core release that changes that output
 would otherwise reach an already-published `citry` that cannot read it. Raise
 the pin in the same change that bumps citry-core's version. That makes the two
 releases a pair, and the controller publishes and verifies `citry-core` before
@@ -1531,127 +1646,18 @@ grows; [issue 112](https://github.com/citry-dev/citry/issues/112) tracks that ch
 The current sole-maintainer process requires no second approver. Administrator
 control over repository settings remains an explicit trust boundary.
 
-### The `review` branch holds work that has not been read yet
+### How changes reach `main`
 
-Releases go out from `main`, but not everything committed has been read line by
-line. The `review` branch is where that unread work waits, so the editor's
-source-control panel doubles as the worklist:
+Every change lands on `main` through an ordinary branch and a pull request.
+Create a branch from current `origin/main`, commit the work there, push it,
+and open a pull request against `main`. The required checks must pass against
+an up-to-date base before the pull request merges, as described in
+[Main branch and release permissions](#main-branch-and-release-permissions).
+Releases start from `main` after the pull request merges.
 
-- **`main` is the reviewed baseline.** Local `main` tracks `origin/main`, so it
-  never reports as diverged and never prompts to sync.
-- **`review` carries everything not yet read**, branched at the commit `main`
-  held when the ledger was last reset. The `reviewed-baseline` tag names that
-  commit as a recovery point.
-- **Reading a file through means committing it on `review`.** The commit is the
-  audit record of what has been read.
-- **Do not pull generated commits into `review`.** The release workflow
-  commits generated snapshots to `main`. Verify their release source and build
-  checks, then let local `main` fetch those commits without copying those
-  generated files into the unread-work ledger.
-
-**`review` never merges into `main`, in either direction.** The gate works by
-having `HEAD` point at an old tree, so the two branches diverging is what makes
-it function, not damage to repair. The editor's "N behind, M ahead" indicator is
-cosmetic and stays lit; `review` has no upstream configured, so the editor is
-just comparing against `origin/main`. Merging `main` into `review` would refuse
-to run anyway, because it would have to overwrite hundreds of locally-modified
-files, and `git merge -s ours` is worse: it records "deliberately discard main's
-changes", so a later merge the other way would revert content on `main` to
-`review`'s older copies.
-
-A release therefore never comes from `review`. Assemble it on a promotion
-branch based on current `main`:
-
-```bash
-git fetch origin main --tags
-git worktree add -b release/package-update ../citry-release origin/main
-# Apply the explicit promotion manifest, inspect, test, and commit here.
-git -C ../citry-release push -u origin release/package-update
-gh pr create --base main --head release/package-update
-# Merge after the required checks pass, then remove the clean worktree.
-git worktree remove ../citry-release
-```
-
-If a clean `main` worktree already exists, reuse it only after verifying that
-it has no staged, modified, deleted, or untracked files and fast-forwarding it
-to `origin/main`. Create and switch to a promotion branch before applying any
-changes there. Do not force-remove a dirty worktree.
-
-Use this promotion sequence:
-
-1. In the original worktree, require the current branch to be `review`; record
-   the `review`, local `main`, `origin/main`, and `reviewed-baseline` SHAs plus
-   the current status. Read-only inspection is allowed, but do not stage,
-   commit, merge, rebase, reset, or move any ref from this worktree.
-2. Fetch `origin/main` and tags, record the fetched SHA, then create a clean
-   promotion branch and worktree from that commit. Keep local `main` tracking
-   the remote through fast-forward updates; reconcile any unexpected divergence
-   before proceeding.
-3. Write an explicit promotion manifest before copying anything. It has three
-   inputs:
-
-   - tracked modifications and deletions relative to `review`'s `HEAD`;
-   - non-ignored untracked files selected for promotion; and
-   - explicit preserve/delete decisions for paths that exist only on newer
-     `main`.
-
-   In automation, obtain the first two inputs with the NUL-delimited forms of
-   `git diff --name-status --no-renames -z HEAD` and
-   `git ls-files --others --exclude-standard -z`. Never copy ignored files,
-   caches, environments, generated `site/` output, or whole directories merely
-   because one child is in the manifest.
-4. Treat absence from `review` as ambiguous, not as a deletion instruction. A
-   path may have been added directly to `main` after `review`'s old baseline,
-   including generated version snapshots and release records. Preserve every
-   such main-only path unless the manifest explicitly names its exact deletion.
-   Conversely, when a maintainer deliberately removes a main-only path, apply
-   that exact deletion in the promotion worktree even though `review` cannot show
-   it as `D` in `git status`.
-5. Copy only the manifest's named existing files and apply only its named
-   deletions. Confirm the source worktree did not change during the copy. In the
-   promotion worktree, inspect `git status`, `git diff --check`, the name/status and
-   stat summaries, and the complete diff. Stop on an unexpected path or byte
-   difference.
-6. Run the agreed integration gate, stage only the manifest, inspect the staged
-   diff again, and commit on the promotion branch. If a necessary fix is made in the
-   release worktree, mirror it into the original working tree before finishing.
-7. Push the promotion branch and open a pull request targeting `main`. Fetch
-   current `main` and incorporate any intervening changes on the promotion
-   branch; resolve conflicts and rerun affected checks before merging. The
-   required Check must pass against an up-to-date base. Never push directly or
-   force-push to `main`.
-8. Merge the PR and fast-forward local `main` to the resulting remote commit.
-   Verify the remote SHA and required CI/deployment result. Remove the
-   throwaway worktree only after it is clean. Recheck that the original
-   worktree is still on the recorded `review` SHA with its index, working files,
-   and untracked files intact.
-
-Two additional rules came out of doing this five times:
-
-- **Copy named files, never whole trees.** A wholesale copy drags in whatever
-  other work is in progress on disk, and `main` may not be able to run it. Diff
-  each file into place and read the diff.
-- **Land any fix you make during the release in the working tree too**, not
-  only in the worktree. Otherwise the disk copy stays stale and committing the
-  tree later silently reverts the fix. The change then shows up in the panel as
-  an ordinary unread entry, which is accurate.
-
-Prepare candidates on `main`, then publish through **Release qualified
-packages** using the successful candidate run ID. Package workflows are
-internal workers; final tags are created after publication.
-
-The promotion worktree preserves the arrangement automatically. Keep the
-original `review` worktree's branch pointer, index, and files unchanged before,
-during, and after the promotion; `review` continues to point at its recorded
-pre-promotion baseline, so every unread modification and untracked file remains
-visible in the editor. Do not reset `review` to the new `main`: that makes the
-same bytes appear reviewed and hides newly tracked files from the worklist. If
-recovery is ever required, restore `review` to its recorded pre-promotion SHA
-(normally the `reviewed-baseline` recovery point) with a mixed reset so the disk
-contents remain intact.
-
-A tag cannot rebuild this arrangement: it only names a commit, while the panel
-is populated from the original worktree relative to `review`'s `HEAD`.
+For audits of older work, the `origin/review` branch and the
+`reviewed-baseline` tag keep the historical diff of changes that were
+committed before they were read line by line.
 
 ### Chronological Ordering
 

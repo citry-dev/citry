@@ -10,6 +10,8 @@ import jsonschema
 import pytest
 
 from citry import Citry, Component
+from citry._vue.capture import render_prepared_direct
+from citry._vue.events import default_events_producer
 from citry.ext.events import EventError, actions, event
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.tokens import mint_state_token
@@ -20,7 +22,6 @@ _ROOT = Path(__file__).resolve().parents[4]
 _PROTOCOL = _ROOT / "packages" / "protocol" / "events" / "v1"
 _TESTS = _PROTOCOL / "tests"
 _PATH_PART_RE = re.compile(r"\.([A-Za-z0-9_]+)|\[([0-9]+)\]")
-_EVENTS_TAG_RE = re.compile(r'<script type="application/json" data-citry-events>(.*?)</script>', re.DOTALL)
 _DYNAMIC = "<dynamic>"
 
 INDEX = json.loads((_TESTS / "index.json").read_text(encoding="utf8"))
@@ -111,15 +112,17 @@ def _conformance_surface() -> tuple[Citry, type[Component]]:
     return engine, Counter
 
 
-def _render_live_instance(comp_cls: type[Component]) -> tuple[str, str, str, dict[str, Any]]:
-    """Read the named instance values actually emitted by a fresh render."""
-    match = _EVENTS_TAG_RE.search(str(comp_cls()))
-    assert match is not None, "The conformance component emitted no Events manifest"
-    manifest = json.loads(match.group(1))
-    assert manifest["protocol"] == "citry-events/1"
-    [instance] = manifest["componentInstances"]
+def _render_live_instance(citry: Citry, comp_cls: type[Component]) -> tuple[str, str, str, dict[str, Any]]:
+    """Read credentials from the root occurrence in a fresh prepared Vue revision."""
+    manifest = default_events_producer(citry).prepare_from_render(
+        render_prepared_direct(comp_cls()), citry=citry, app_id="conformance", revision=0
+    )
+    root_id = manifest["rootId"]
+    [root] = [item for item in manifest["occurrences"] if item["id"] == root_id]
+    instance = root.get("eventContext")
+    assert instance is not None, "The conformance component emitted no prepared Events context"
     return (
-        instance["renderId"],
+        instance["serverRenderId"],
         instance["componentClassId"],
         instance["stateToken"],
         instance["publicState"],
@@ -221,7 +224,7 @@ def _mask_dynamic_results(entry: dict[str, Any], expected: dict[str, Any], actua
 def test_python_dispatcher_replays_protocol_fixture(entry: dict[str, Any]) -> None:
     """One fresh serializer-to-dispatcher round trip must reproduce each golden result."""
     citry, counter = _conformance_surface()
-    instance_id, class_id, token, values = _render_live_instance(counter)
+    instance_id, class_id, token, values = _render_live_instance(citry, counter)
     assert class_id == counter.class_id
     assert values == {"count": 0, "name": "Counter"}
 

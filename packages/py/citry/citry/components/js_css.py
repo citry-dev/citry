@@ -57,7 +57,13 @@ def make_js_component(citry_instance: Citry) -> type[Component]:
     """Create (and thereby register) the ``<c-js>`` component for one Citry instance."""
 
     class Js(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
-        """Marks where the collected ``<script>`` dependency tags are placed."""
+        """
+        Mark where Citry puts the ``<script>`` tags for the page's components.
+
+        Without it, the scripts go at the end of ``<body>``. Passing an
+        attribute or a body raises ``ValueError``. When a page has several,
+        the first one gets the scripts and the others render nothing.
+        """
 
         citry = citry_instance
         transparent = True
@@ -72,7 +78,13 @@ def make_css_component(citry_instance: Citry) -> type[Component]:
     """Create (and thereby register) the ``<c-css>`` component for one Citry instance."""
 
     class Css(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
-        """Marks where the collected stylesheet dependency tags are placed."""
+        """
+        Mark where Citry puts the stylesheet tags for the page's components.
+
+        Without it, the stylesheets go at the end of ``<head>``. Passing an
+        attribute or a body raises ``ValueError``. When a page has several,
+        the first one gets the stylesheets and the others render nothing.
+        """
 
         citry = citry_instance
         transparent = True

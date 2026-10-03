@@ -77,6 +77,8 @@ def preview_app(citry: Citry, routes: tuple[URLRoute, ...]) -> ASGIApp:
         if matched is None:
             await _respond(send, RouteResponse("Not Found", status=404), head=head)
             return
+        # Preview serves read-only pages, so only GET and HEAD pass; a route
+        # that does not list GET still answers 405 to it.
         if method not in ("GET", "HEAD") or (method not in matched.route.methods and not head):
             await _respond(
                 send, RouteResponse("Method Not Allowed", status=405, headers=(("Allow", "GET, HEAD"),)), head=head

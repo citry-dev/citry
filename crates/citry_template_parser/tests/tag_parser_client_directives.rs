@@ -1,223 +1,604 @@
-// Parser contract for Citry's `$c-props` component-boundary directive.
-//
-// A0 reserves two exact authored spellings. `$c-props` carries an inert
-// browser expression, while `c-$c-props` carries a Python expression whose
-// result is the complete browser expression. Both are valid only on Citry
-// component tags. A `$c-props` mapping key supplied by `c-bind` is enforced
-// later because mapping keys do not exist at parse time.
+//! Parser migration contract for native Vue component-call bindings.
 
 mod common;
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::rc::Rc;
-
-    use citry_template_parser::ast::HtmlAttrKind;
     use citry_template_parser::parser::parse_template;
-    use citry_template_parser::parser_context::TagRules;
 
     use super::common::{assert_parse_error, parse_first_node};
 
     #[test]
-    fn test_direct_form_is_static_with_exact_source_spans() {
-        let node = parse_first_node(r#"<c-child $c-props="{ count: localCount }" />"#).unwrap();
-        let attr = &node.attrs()[0];
-
-        assert_eq!(attr.kind, HtmlAttrKind::Static);
-        assert_eq!(attr.token.content, r#"$c-props="{ count: localCount }""#);
-        assert_eq!((attr.token.start_index, attr.token.end_index), (9, 41));
-        assert_eq!(attr.token.line_col, (1, 10));
-        assert_eq!(attr.key.content, "$c-props");
-        assert_eq!((attr.key.start_index, attr.key.end_index), (9, 17));
-        assert_eq!(
-            attr.inner_value.as_ref().unwrap().content,
-            "{ count: localCount }"
-        );
-        assert_eq!(
-            (
-                attr.inner_value.as_ref().unwrap().start_index,
-                attr.inner_value.as_ref().unwrap().end_index,
-            ),
-            (19, 40)
-        );
-        assert!(attr.used_variables.is_empty());
+    fn native_vue_bindings_preserve_authored_order_and_spans() {
+        let node = parse_first_node(
+            r#"<c-child :disabled="blocked" @change="changed($event)" ref="root" />"#,
+        )
+        .unwrap();
+        let keys = node
+            .attrs()
+            .iter()
+            .map(|attr| attr.key.content.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(keys, [":disabled", "@change", "ref"]);
+        assert!(node
+            .attrs()
+            .windows(2)
+            .all(|pair| pair[0].token.end_index < pair[1].token.start_index));
     }
 
     #[test]
-    fn test_server_dynamic_form_is_python_expression_with_exact_source_spans() {
-        let node = parse_first_node(r#"<c-child c-$c-props="props_source" />"#).unwrap();
-        let attr = &node.attrs()[0];
-
-        assert_eq!(attr.kind, HtmlAttrKind::Expression);
-        assert_eq!(attr.token.content, r#"c-$c-props="props_source""#);
-        assert_eq!((attr.token.start_index, attr.token.end_index), (9, 34));
-        assert_eq!(attr.token.line_col, (1, 10));
-        assert_eq!(attr.key.content, "c-$c-props");
-        assert_eq!((attr.key.start_index, attr.key.end_index), (9, 19));
-        assert_eq!(attr.inner_value.as_ref().unwrap().content, "props_source");
-        assert_eq!(attr.used_variables.len(), 1);
-        assert_eq!(attr.used_variables[0].content, "props_source");
-        assert_eq!(
-            (
-                attr.used_variables[0].start_index,
-                attr.used_variables[0].end_index,
-            ),
-            (21, 33)
-        );
-    }
-
-    #[test]
-    fn test_direct_dynamic_and_spread_forms_resolve_in_source_order() {
-        for input in [
-            r#"<c-child $c-props="first" c-$c-props="second" />"#,
-            r#"<c-child c-$c-props="second" $c-props="first" />"#,
-            r#"<c-child $c-props="first" c-bind="spread" />"#,
-            r#"<c-child c-$c-props="second" c-bind="spread" />"#,
-        ] {
-            assert!(parse_template(input, None, None).is_ok());
-        }
-    }
-
-    #[test]
-    fn test_component_and_dynamic_component_accept_both_forms() {
-        for input in [
-            r#"<c-child $c-props="{ count: 1 }" />"#,
-            r#"<c-child c-$c-props="expr" />"#,
-            r#"<c-component is="child" $c-props="{ count: 1 }" />"#,
-            r#"<c-component c-is="target" c-$c-props="expr" />"#,
+    fn retired_aliases_are_rejected_everywhere() {
+        for source in [
+            r#"<c-child $c-props="value" />"#,
+            r#"<div c-$c-props="value"></div>"#,
         ] {
             assert!(
-                parse_template(input, None, None).is_ok(),
-                "input should parse: {input:?}"
+                format!("{}", parse_template(source, None, None).unwrap_err())
+                    .contains("was removed")
             );
         }
     }
 
     #[test]
-    fn test_client_props_bypasses_component_kwarg_allowlist() {
-        let mut rules = HashMap::new();
-        rules.insert(
-            "c-child".to_string(),
-            TagRules {
-                allowed_attrs: Some(vec![vec!["title".to_string()]]),
-                required_attrs: vec![],
-                allowed_slots: None,
-                required_slots: vec![],
-                slot_data_fields: Default::default(),
-            },
-        );
-        let rules = Rc::new(rules);
-
-        assert!(parse_template(
-            r#"<c-child title="ok" $c-props="{ count: 1 }" c-bind="spread" />"#,
-            None,
-            Some(&rules),
+    fn component_tags_keep_bind_on_and_plain_show() {
+        let node = parse_first_node(
+            r#"<c-child v-show="open" v-bind="props" v-bind:x="a" v-on:y="b()" />"#,
         )
-        .is_ok());
+        .unwrap();
+        let keys = node
+            .attrs()
+            .iter()
+            .map(|attr| attr.key.content.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(keys, ["v-show", "v-bind", "v-bind:x", "v-on:y"]);
+        // The dynamic element renders plain HTML, so its directives are not
+        // component-tag directives.
+        parse_template(r#"<c-element is="div" v-if="open" />"#, None, None).unwrap();
+        // `#c-*` stays Citry metadata rather than a slot shorthand.
+        parse_template(r#"<c-child #c-key="row" />"#, None, None).unwrap();
     }
 
     #[test]
-    fn test_client_props_does_not_satisfy_required_python_kwarg() {
-        let mut rules = HashMap::new();
-        rules.insert(
-            "c-child".to_string(),
-            TagRules {
-                allowed_attrs: None,
-                required_attrs: vec![vec!["title".to_string()]],
-                allowed_slots: None,
-                required_slots: vec![],
-                slot_data_fields: Default::default(),
-            },
+    fn component_tags_carry_conditions_models_and_custom_directives() {
+        let node = parse_first_node(
+            r#"<c-child v-if="a" v-else-if="b" v-else v-model="q" v-model:title.trim="t" v-focus v-tooltip:top.delay="tip" />"#,
+        )
+        .unwrap();
+        let keys = node
+            .attrs()
+            .iter()
+            .map(|attr| attr.key.content.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            keys,
+            [
+                "v-if",
+                "v-else-if",
+                "v-else",
+                "v-model",
+                "v-model:title.trim",
+                "v-focus",
+                "v-tooltip:top.delay",
+            ]
         );
-        let rules = Rc::new(rules);
-
-        let err = parse_template(r#"<c-child $c-props="{ count: 1 }" />"#, None, Some(&rules))
-            .unwrap_err();
-        assert!(format!("{err}").contains("must have a 'title' attribute"));
+        // A lone or empty `v-else` and a dynamic component call parse the same way.
+        parse_template(r#"<c-child v-else="" />"#, None, None).unwrap();
+        parse_template(r#"<c-child v-else />"#, None, None).unwrap();
+        parse_template(r#"<c-component is="child" v-if="open" />"#, None, None).unwrap();
     }
 
     #[test]
-    fn test_direct_form_rejects_missing_empty_and_whitespace_values() {
+    fn component_tags_reject_other_vue_directives_with_a_fix() {
+        let cases = [
+            (r#"<c-child v-for="row in rows" />"#, "'v-for'", "<c-for>"),
+            (r#"<c-child v-html="markup" />"#, "'v-html'", "<c-fill>"),
+            (r#"<c-child v-text="label" />"#, "'v-text'", "<c-fill>"),
+            (r#"<c-child v-slot="data" />"#, "'v-slot'", "<c-fill name="),
+            (
+                r##"<c-child #header="data" />"##,
+                "'#header'",
+                "<c-fill name=",
+            ),
+            (
+                r#"<c-child v-show.lazy="open" />"#,
+                "'v-show.lazy'",
+                "without an argument",
+            ),
+            (
+                r#"<c-child v-if.once="open" />"#,
+                "'v-if.once'",
+                "without an argument or modifiers",
+            ),
+            (
+                r#"<c-child v-else:x />"#,
+                "'v-else:x'",
+                "without an argument or modifiers",
+            ),
+            (r#"<c-child v-once />"#, "'v-once'", "Remove the directive"),
+            (
+                r#"<c-child v-citry-control="x" />"#,
+                "'v-citry-control'",
+                "Citry reserves",
+            ),
+            (r#"<c-child v-If="open" />"#, "'v-If'", "lowercase"),
+            (
+                r#"<c-child v-On:click="go()" />"#,
+                "'v-On:click'",
+                "lowercase",
+            ),
+            // Vue reads an uppercase `V-` as a plain attribute, so these
+            // would reach the child as Python kwargs without a trace.
+            (
+                r#"<c-child V-SHOW="open" />"#,
+                "'V-SHOW'",
+                "'v-' prefix is lowercase",
+            ),
+            (
+                r#"<c-child V-focus />"#,
+                "'V-focus'",
+                "'v-' prefix is lowercase",
+            ),
+            (
+                r#"<c-child c-V-IF="open" />"#,
+                "'c-V-IF'",
+                "'v-' prefix is lowercase",
+            ),
+            (r#"<c-child ^title="x" />"#, "'^title'", "':name="),
+            (r#"<c-child c-^title="x" />"#, "'c-^title'", "':name="),
+            (
+                r#"<c-component is="child" V-SHOW="open" />"#,
+                "'V-SHOW'",
+                "'v-' prefix is lowercase",
+            ),
+            (r#"<c-child v-model:="q" />"#, "'v-model:'", "Name the prop"),
+            (r#"<c-child v-on:="go()" />"#, "'v-on:'", "'@event="),
+            (
+                r#"<c-child v-bind.prop="value" />"#,
+                "'v-bind.prop'",
+                "':name=",
+            ),
+            (r#"<c-child .value="text" />"#, "'.value'", "':name="),
+            (
+                r#"<c-child c-v-for="row in rows" />"#,
+                "'c-v-for'",
+                "<c-for>",
+            ),
+        ];
+        for (source, name, hint) in cases {
+            let message = format!("{}", parse_template(source, None, None).unwrap_err());
+            assert!(
+                message.contains(&format!(
+                    "Vue directive {name} is not supported on the component tag"
+                )),
+                "{source}: {message}"
+            );
+            assert!(message.contains(hint), "{source}: {message}");
+        }
+    }
+
+    #[test]
+    fn component_tag_directives_need_an_expression() {
+        for (source, name) in [
+            (r#"<c-child v-show />"#, "'v-show'"),
+            (r#"<c-child v-show=" " />"#, "'v-show'"),
+            (r#"<c-child v-if />"#, "'v-if'"),
+            (r#"<c-child v-else-if="" />"#, "'v-else-if'"),
+            (r#"<c-child v-model />"#, "'v-model'"),
+            (r#"<c-child v-model:title />"#, "'v-model:title'"),
+        ] {
+            let message = format!("{}", parse_template(source, None, None).unwrap_err());
+            assert!(
+                message.contains(&format!(
+                    "{name} on the component tag '<c-child>' needs a Vue expression"
+                )),
+                "{source}: {message}"
+            );
+        }
+        let message = format!(
+            "{}",
+            parse_template(r#"<c-child v-else="x" />"#, None, None).unwrap_err()
+        );
+        assert!(
+            message.contains("'v-else' on the component tag '<c-child>' takes no value"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn slot_tags_reject_every_vue_directive_with_a_fix() {
+        // A `<c-slot>` attribute is Python slot data, so no Vue form has a
+        // meaning there, including the `:`/`@` shorthands a component keeps.
+        let cases = [
+            (r#"<c-slot v-if="open" />"#, "'v-if'", "<c-if>"),
+            (r#"<c-slot name="body" v-else />"#, "'v-else'", "<c-if>"),
+            (r#"<c-slot v-for="row in rows" />"#, "'v-for'", "<c-for>"),
+            (
+                r#"<c-slot v-show="open" />"#,
+                "'v-show'",
+                "carries 'v-show'",
+            ),
+            (r#"<c-slot :item="row" />"#, "':item'", "Vue slot props"),
+            (r#"<c-slot v-bind="props" />"#, "'v-bind'", "Vue slot props"),
+            (r#"<c-slot @click="go()" />"#, "'@click'", "inside the fill"),
+            (r#"<c-slot .value="text" />"#, "'.value'", "Vue slot props"),
+            (r##"<c-slot #header />"##, "'#header'", "Name the slot with"),
+            (r#"<c-slot v-focus />"#, "'v-focus'", "fallback content"),
+            (r#"<c-slot c-v-if="open" />"#, "'c-v-if'", "<c-if>"),
+            // HTML names are case-insensitive and `^title` sets an attribute
+            // in Vue, so neither may become slot data.
+            (r#"<c-slot V-IF="open" />"#, "'V-IF'", "<c-if>"),
+            (r#"<c-slot ^title="x" />"#, "'^title'", "Vue slot props"),
+            (r#"<c-slot c-V-FOR="rows" />"#, "'c-V-FOR'", "<c-for>"),
+        ];
+        for (source, name, hint) in cases {
+            let message = format!("{}", parse_template(source, None, None).unwrap_err());
+            assert!(
+                message.contains(&format!(
+                    "Vue directive {name} is not supported on '<c-slot>'"
+                )),
+                "{source}: {message}"
+            );
+            assert!(message.contains(hint), "{source}: {message}");
+        }
+        // Plain and `c-` attributes stay slot data.
+        parse_template(
+            r#"<c-slot name="row" item="x" c-count="n" required />"#,
+            None,
+            None,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_vue_binding_and_a_python_value_for_one_attribute_are_rejected() {
+        assert_parse_error(
+            r#"<p c-title="label" :title="hint">x</p>"#,
+            "':title' on <p> (line 1, column 20) sets the same attribute as 'c-title'. Set the attribute in one place: keep 'c-title' when Python decides the value, or keep ':title' and send the value to the browser with js_data().",
+        );
+        for (input, expected) in [
+            (
+                r#"<p v-bind:TITLE="hint" c-title="label">x</p>"#,
+                "'v-bind:TITLE' on <p>",
+            ),
+            (
+                r#"<c-element c-is="'p'" c-id="a" :id="b" />"#,
+                "':id' on <c-element>",
+            ),
+            (
+                r#"<li v-for="item in items" #c-key="k" :key="item.id">x</li>"#,
+                "Keep '#c-key' to key the element from Python, or remove it and keep ':key'.",
+            ),
+            (
+                r#"<p c-class="a" :class.prop="b">x</p>"#,
+                "Remove the modifier and write ':class', which Vue joins with 'c-class'.",
+            ),
+            // Vue's short forms of `.prop` and `.attr` bindings.
+            (r#"<p c-title="a" .title="b">x</p>"#, "'.title' on <p>"),
+            (r#"<p c-title="a" ^title="b">x</p>"#, "'^title' on <p>"),
+            (r#"<p c-class="a" .class="b">x</p>"#, "Remove the modifier"),
+            // Vue treats `Class` as a key of its own, which it does not merge.
+            (
+                r#"<p c-class="a" v-bind:Class="b">x</p>"#,
+                "'v-bind:Class' on <p>",
+            ),
+        ] {
+            assert_parse_error(input, expected);
+        }
+        // An object `v-bind` or a dynamic name may set any attribute.
+        for (input, expected) in [
+            (
+                r#"<p v-bind="attrs" c-title="t">x</p>"#,
+                "'v-bind' on <p> (line 1, column 4) may set any attribute, so it cannot be combined with 'c-title', which Python sets.",
+            ),
+            (r#"<p c-bind="d" :[name]="v">x</p>"#, "':[name]' on <p>"),
+            (r#"<p v-bind.prop="o" c-title="t">x</p>"#, "'v-bind.prop' on <p>"),
+            (r#"<p #c-key="k" v-bind:[name]="v">x</p>"#, "'#c-key'"),
+            (
+                r#"<c-element c-is="'p'" v-bind="attrs" c-id="i" />"#,
+                "cannot be combined with 'c-id'",
+            ),
+        ] {
+            assert_parse_error(input, expected);
+        }
+        // Vue joins a bound class or style with the Python one, a component
+        // tag's `c-*` attributes are Python inputs rather than attributes,
+        // and a structural `c-if` or `c-is` sets no attribute.
         for input in [
-            "<c-child $c-props />",
-            r#"<c-child $c-props="" />"#,
-            r#"<c-child $c-props="   " />"#,
+            r#"<p c-class="a" :class="b" c-style="c" v-bind:style="d">x</p>"#,
+            r#"<c-Card c-title="a" :title="b" />"#,
+            r#"<p title="a" :title="b">x</p>"#,
+            r#"<p v-bind="attrs" class="a" c-if="ok">x</p>"#,
+            // Control flow sets no attribute of its own name.
+            r#"<label c-for="f in fields" :for="f">x</label>"#,
+            r#"<p c-if="ok" :if="x">x</p>"#,
+            r#"<c-element c-is="'p'" v-bind="attrs" />"#,
+            r#"<c-Card v-bind="props" c-title="a" />"#,
+        ] {
+            parse_template(input, None, None).unwrap();
+        }
+    }
+
+    #[test]
+    fn alpine_only_listener_modifiers_are_rejected_with_the_vue_form() {
+        assert_parse_error(
+            r#"<div @click.outside="open = false;">x</div>"#,
+            "'@click.outside' (line 1, column 6) uses '.outside', which is not a Vue event modifier. Vue would read '.outside' as a key name, so the listener would not do what '.outside' asks. Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted().",
+        );
+        for (input, modifier, hint) in [
+            (
+                r#"<div @click.away="x = 1;"></div>"#,
+                "away",
+                "this.$el contains event.target",
+            ),
+            (
+                r#"<div @resize.window="x = 1;"></div>"#,
+                "window",
+                "window.addEventListener",
+            ),
+            (
+                r#"<div v-on:keyup.document="x = 1;"></div>"#,
+                "document",
+                "document.addEventListener",
+            ),
+            (
+                r#"<input @input.debounce.500ms="x = 1;" />"#,
+                "debounce",
+                "'@c-input.debounce'",
+            ),
+            (
+                r#"<input @input.throttle="x = 1;" />"#,
+                "throttle",
+                "setTimeout",
+            ),
+            (
+                r#"<div @custom-event.camel="x = 1;"></div>"#,
+                "camel",
+                "exact event name",
+            ),
+            (
+                r#"<div @custom-event.dot="x = 1;"></div>"#,
+                "dot",
+                "exact event name",
+            ),
+            (r#"<input @keydown.cmd.enter="x = 1;" />"#, "cmd", "'.meta'"),
+            (
+                r#"<input @keydown.period="x = 1;" />"#,
+                "period",
+                "$event.key === '.'",
+            ),
+            (
+                r#"<div @[name].outside="x = 1;"></div>"#,
+                "outside",
+                "this.$el",
+            ),
+            (
+                r#"<c-Card @close.window="x = 1;" />"#,
+                "window",
+                "window.addEventListener",
+            ),
+            (
+                r#"<div @click.OUTSIDE="x = 1;"></div>"#,
+                "OUTSIDE",
+                "this.$el contains",
+            ),
         ] {
             assert_parse_error(
                 input,
-                "'$c-props' must have a non-empty client expression value",
+                &format!("uses '.{modifier}', which is not a Vue event modifier"),
+            );
+            assert_parse_error(input, hint);
+        }
+    }
+
+    #[test]
+    fn vue_listener_modifiers_and_citry_event_modifiers_still_parse() {
+        for input in [
+            r#"<form @submit.prevent.stop="go();"></form>"#,
+            r#"<div @click.self.once.capture.passive="go();"></div>"#,
+            r#"<input @keyup.enter.exact="go();" @keydown.ctrl.shift.alt.meta.a="go();" />"#,
+            r#"<input @keydown.caps-lock.page-down.esc.space.tab.delete="go();" />"#,
+            r#"<div @click.left.right.middle="go();"></div>"#,
+            r#"<input @c-input.debounce.300ms="search" @c-scroll.throttle.1s="more" />"#,
+            r#"<div @[name.window]="go();"></div>"#,
+        ] {
+            parse_template(input, None, None).unwrap();
+        }
+    }
+
+    #[test]
+    fn key_names_on_a_non_keyboard_event_are_rejected() {
+        assert_parse_error(
+            r#"<button @click.enter="go();"></button>"#,
+            "'@click.enter' (line 1, column 9) uses '.enter' on the 'click' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so Vue would ignore '.enter' and run the listener on every 'click' event. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. Remove '.enter', or listen to 'keydown' or 'keyup' to react to a key.",
+        );
+        for (input, modifier, event) in [
+            (r#"<button @click.foo="go();"></button>"#, "foo", "click"),
+            (
+                r#"<button v-on:click.prevent.esc="go();"></button>"#,
+                "esc",
+                "click",
+            ),
+            (r#"<input @input.trim="go();" />"#, "trim", "input"),
+            (
+                r#"<form @submit.Prevent="go();"></form>"#,
+                "Prevent",
+                "submit",
+            ),
+            (r#"<c-child @select.enter="go();" />"#, "enter", "select"),
+            // Citry's Vue compiler listens for `KeyDown` as written, which
+            // the browser never sends, so it is not a keyboard event.
+            (r#"<input @KeyDown.enter="go();" />"#, "enter", "KeyDown"),
+        ] {
+            assert_parse_error(
+                input,
+                &format!("uses '.{modifier}' on the '{event}' event."),
             );
         }
     }
 
     #[test]
-    fn test_both_forms_reject_plain_element_and_c_element_placements() {
+    fn model_and_native_modifiers_on_a_listener_name_their_own_fix() {
+        assert_parse_error(
+            r#"<input @input.trim="go();" />"#,
+            "'.trim' is a 'v-model' modifier. Put it on 'v-model', or remove it from the listener.",
+        );
+        assert_parse_error(
+            r#"<c-child @click.native="go();" />"#,
+            "Vue 3 has no '.native' modifier",
+        );
+    }
+
+    #[test]
+    fn key_names_on_keyboard_and_dynamic_events_still_parse() {
         for input in [
-            r#"<div $c-props="{ count: 1 }"></div>"#,
-            r#"<div c-$c-props="expr"></div>"#,
-            r#"<x-card $c-props="{ count: 1 }"></x-card>"#,
-            r#"<c-element is="div" $c-props="{ count: 1 }" />"#,
-            r#"<c-Element is="div" $c-props="{ count: 1 }" />"#,
-            r#"<c-element c-is="tag" c-$c-props="expr" />"#,
+            r#"<input @keydown.enter="go();" @keyup.page-down="go();" @keypress.a="go();" />"#,
+            r#"<div @[name].enter="go();"></div>"#,
+            r#"<button @click.ctrl.shift.alt.meta.exact.left.right.middle="go();"></button>"#,
+            r#"<div @scroll.passive.capture.once.self.stop.prevent="go();"></div>"#,
+            r#"<button @c-click.enter="save"></button>"#,
+        ] {
+            parse_template(input, None, None).unwrap();
+        }
+    }
+
+    #[test]
+    fn element_directives_in_the_wrong_case_are_rejected() {
+        assert_parse_error(
+            r#"<div V-IF="open">x</div>"#,
+            "'V-IF' on <div> (line 1, column 6) is not a Vue directive, because Vue reads a directive only when its 'v-' prefix is lowercase. Vue would write it as a plain attribute. Write 'v-if'.",
+        );
+        assert_parse_error(r#"<div V-focus:x.y="a">x</div>"#, "Write 'v-focus:x.y'.");
+        assert_parse_error(
+            r#"<div v-If="open">x</div>"#,
+            "'v-If' on <div> (line 1, column 6) uses a Vue directive name in the wrong case. Vue's own directives are lowercase, and Vue would look up 'v-If' as a custom directive named 'If'. Write 'v-if'.",
+        );
+        assert_parse_error(r#"<input v-MODEL.trim="q" />"#, "Write 'v-model.trim'.");
+    }
+
+    #[test]
+    fn element_directives_with_reserved_names_are_rejected() {
+        for input in [
+            r#"<div v-citry-control="a">x</div>"#,
+            r#"<div v-c-tr="a">x</div>"#,
+            r#"<c-element c-is="tag" v-Citry-x="a">x</c-element>"#,
         ] {
             assert_parse_error(
                 input,
-                "is a client props directive and belongs on a Citry component tag",
+                "uses a name Citry reserves: 'v-c-*' and 'v-citry-*' belong to Citry's own browser runtime. Give the directive another name.",
             );
         }
     }
 
     #[test]
-    fn test_both_forms_reject_reserved_citry_tags() {
-        for input in [
-            r#"<c-if cond="ok" $c-props="{ count: 1 }"></c-if>"#,
-            r#"<c-slot c-$c-props="expr" />"#,
-            r#"<c-child><c-fill name="x" $c-props="{ count: 1 }"></c-fill></c-child>"#,
-            r#"<c-raw $c-props="{ count: 1 }">x</c-raw>"#,
+    fn element_directives_without_an_expression_are_rejected() {
+        assert_parse_error(
+            r#"<div v-show>x</div>"#,
+            "'v-show' on <div> (line 1, column 6) needs a Vue expression, for example 'v-show=\"open\"'.",
+        );
+        for (input, example) in [
+            (r#"<div v-show="  ">x</div>"#, r#"v-show="open""#),
+            (r#"<div v-if>x</div>"#, r#"v-if="open""#),
+            (
+                r#"<div v-if="a">x</div><div v-else-if>y</div>"#,
+                r#"v-else-if="open""#,
+            ),
+            (r#"<li v-for>x</li>"#, r#"v-for="item in items""#),
+            (r#"<input v-model.lazy />"#, r#"v-model.lazy="query""#),
+            (r#"<div v-html></div>"#, r#"v-html="html""#),
+            (r#"<p v-text=""></p>"#, r#"v-text="label""#),
         ] {
             assert_parse_error(
                 input,
-                "is a client props directive and belongs on a Citry component tag",
+                &format!("needs a Vue expression, for example '{example}'."),
             );
         }
-
         assert_parse_error(
-            r#"<c-IF cond="ok" $c-props="{ count: 1 }"></c-IF>"#,
-            "Reserved Citry structural tags are lowercase. Write '<c-if>'",
+            r#"<div v-show.lazy="open">x</div>"#,
+            "'v-show.lazy' on <div> (line 1, column 6) takes no argument or modifiers.",
         );
     }
 
     #[test]
-    fn test_case_variants_are_pointed_errors() {
+    fn element_model_argument_and_v_is_are_rejected() {
+        assert_parse_error(
+            r#"<input v-model:title="q" />"#,
+            "'v-model:title' on <input> (line 1, column 8) names an argument, which only a component tag's 'v-model' takes.",
+        );
+        assert_parse_error(
+            r#"<div v-is="'x'"></div>"#,
+            "'v-is' on <div> (line 1, column 6) is not supported: Vue 3 reads 'v-is' only in its compatibility build.",
+        );
+    }
+
+    #[test]
+    fn element_directives_spelled_as_vue_reads_them_still_parse() {
         for input in [
-            r#"<c-child $C-PROPS="{ count: 1 }" />"#,
-            r#"<c-child c-$C-PROPS="expr" />"#,
+            r#"<div v-show="open" v-Tooltip="tip" v-my-dir:Arg.Mod="x">x</div>"#,
+            r#"<template v-if="a"><p>x</p></template><p v-else>y</p>"#,
+            r#"<li v-for="item in items" :key="item">x</li>"#,
+            r#"<p v-html="html" v-text="text"></p>"#,
+            r#"<div data-V-flag="x">x</div>"#,
         ] {
-            assert_parse_error(input, "Citry client directive names are lowercase");
+            parse_template(input, None, None).unwrap();
         }
     }
 
     #[test]
-    fn test_only_exact_directive_names_are_reserved() {
-        for input in [
-            r#"<div $c-props-extra="ordinary" x-show="open"></div>"#,
-            r#"<div c-$c-props-extra="expr" x-show="open"></div>"#,
-        ] {
-            assert!(parse_template(input, None, None).is_ok());
-        }
-
+    fn once_and_memo_on_an_element_name_the_directive() {
         assert_parse_error(
-            r#"<div $c-props-extra="ordinary" c-$c-props-extra="expr"></div>"#,
-            "provide the same logical attribute '$c-props-extra'",
+            r#"<p v-once>hi</p>"#,
+            "'v-once' on <p> (line 1, column 4): Citry does not support 'v-once' or 'v-memo' in component templates, on elements or component tags. Remove the directive. To keep an element's contents as the server first rendered them, put '#c-ignore' on the element.",
+        );
+        assert_parse_error(
+            r#"<li v-memo="[a]">x</li>"#,
+            "'v-memo' on <li> (line 1, column 5)",
         );
     }
 
     #[test]
-    fn test_exact_duplicate_direct_form_is_rejected() {
+    fn vue_builtin_components_are_rejected_in_both_spellings() {
         assert_parse_error(
-            r#"<c-child $c-props="first" $c-props="second" />"#,
-            "Duplicate attribute '$c-props' found.",
+            r#"<div><Transition><p>x</p></Transition></div>"#,
+            "'<Transition>' (line 1, column 7) is Vue's built-in 'Transition' component, which Citry templates do not support. To animate an element, give it a CSS transition or animation and change its class with ':class'.",
         );
+        for (input, component) in [
+            ("<transition><p>x</p></transition>", "Transition"),
+            ("<TransitionGroup></TransitionGroup>", "TransitionGroup"),
+            ("<transition-group></transition-group>", "TransitionGroup"),
+            ("<KeepAlive></KeepAlive>", "KeepAlive"),
+            ("<keep-alive></keep-alive>", "KeepAlive"),
+            (r##"<Teleport to="#x"></Teleport>"##, "Teleport"),
+            ("<teleport />", "Teleport"),
+            ("<Suspense></Suspense>", "Suspense"),
+            ("<suspense></suspense>", "Suspense"),
+        ] {
+            assert_parse_error(
+                input,
+                &format!("is Vue's built-in '{component}' component, which Citry templates do not support."),
+            );
+        }
+        assert_parse_error(
+            "<KeepAlive></KeepAlive>",
+            "leave it rendered and hide it with 'v-show'",
+        );
+        assert_parse_error(
+            "<Teleport></Teleport>",
+            "use the HTML '<dialog>' element or the 'popover' attribute",
+        );
+        assert_parse_error(
+            "<Suspense></Suspense>",
+            "keep a loading flag in the component's data",
+        );
+    }
+
+    #[test]
+    fn names_that_only_resemble_vue_builtin_components_still_parse() {
+        for input in [
+            "<transition-panel></transition-panel>",
+            "<c-Transition />",
+            "<my-teleport></my-teleport>",
+        ] {
+            parse_template(input, None, None).unwrap();
+        }
     }
 }

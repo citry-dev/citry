@@ -15,7 +15,8 @@ from citry import Citry, Component, Const, Extension, InMemoryCache, Slot
 from citry.ext.cache import CacheKeyError, OnComponentCacheHitContext, component_cache_key
 from citry.ext.cache.artifact import _decode_artifact
 from citry.ext.debug import Debug
-from citry.ownership import OwnershipState, QueueState
+from citry.ext.dependencies.extension import EXTRA_KEY as DEPENDENCIES_EXTRA_KEY
+from citry.ext.dependencies.scripts import gen_cache_key
 
 
 class _RecordingCache(InMemoryCache):
@@ -183,46 +184,6 @@ class TestComponentCacheLookup:
         assert calls == ["Ada"]
         key = component_cache_key(Card, vary={"name": "Ada"})
         assert _decode_artifact(app.cache.get(key))
-
-    def test_cache_hit_keeps_current_boundary_invocation_metadata(self):
-        app = Citry()
-        renders = 0
-
-        class Cached(Component):
-            citry = app
-
-            class Cache:
-                enabled = True
-
-            template = """
-            <p>cached</p>
-            """
-
-            def template_data(self, kwargs, slots):
-                nonlocal renders
-                renders += 1
-                return {}
-
-        class Page(Component):
-            citry = app
-            template = """
-            <c-cached #c-key="call_key" />
-            """
-
-            def template_data(self, kwargs, slots):
-                return {"call_key": kwargs.get("call_key")}
-
-        Page(call_key="first").render()
-        replayed = Page(call_key="second").render()
-        invocation = next(
-            record
-            for record in replayed.context.ownership.snapshot().component_invocations
-            if record.target_class_id == Cached.class_id and record.state == OwnershipState.ACTIVE
-        )
-
-        assert renders == 1
-        assert invocation.morph_key == "second"
-        assert invocation.morph_mode is None
 
     def test_disabled_component_never_touches_backend(self):
         backend = _RecordingCache()
@@ -617,7 +578,7 @@ class TestComponentCacheSlots:
         assert "FALLBACK" in str(Card())
         assert calls == 1
 
-    def test_custom_vary_allows_slot_hit_without_rendering_new_fill(self):
+    def test_custom_vary_does_not_make_a_supplied_python_slot_cacheable(self):
         app = Citry()
 
         class Card(Component):
@@ -641,13 +602,56 @@ class TestComponentCacheSlots:
 
         assert "FIRST" in str(Card(placement="same", slots={"body": "FIRST"}))
 
-        def explode(_ctx):
-            raise AssertionError("a cache hit rendered its replacement Slot")
+        slot_calls = 0
 
-        assert "FIRST" in str(Card(placement="same", slots={"body": explode}))
+        def replacement(_ctx):
+            nonlocal slot_calls
+            slot_calls += 1
+            return "SECOND"
+
+        assert "SECOND" in str(Card(placement="same", slots={"body": replacement}))
+        assert slot_calls == 1
 
 
 class TestComponentCacheLifecycle:
+    def test_cache_hit_repairs_an_evicted_dependency_variable_stylesheet(self):
+        app = Citry()
+        data_calls = 0
+
+        class Card(Component):
+            citry = app
+
+            class Cache:
+                enabled = True
+
+            def css_data(self, kwargs, slots):
+                nonlocal data_calls
+                data_calls += 1
+                return {"accent": "red"}
+
+            template = """
+            <div>cached</div>
+            """
+            css = """
+            div { color: var(--accent); }
+            """
+
+        first = Card().render()
+        first_html = first.serialize()
+        first_record = next(iter(first.context.extra[DEPENDENCIES_EXTRA_KEY]))
+        assert first_record.css_vars_hash is not None
+        variables_key = gen_cache_key(Card.class_id, "css", first_record.css_vars_hash)
+        expected = app.cache.get(variables_key)
+        assert expected is not None
+        app.cache.delete(variables_key)
+
+        second = Card().render()
+
+        assert data_calls == 1
+        assert app.cache.get(variables_key) == expected
+        assert first_record.css_vars_hash in first_html
+        assert first_record.css_vars_hash in second.serialize()
+
     def test_hit_hook_runs_after_replay_and_render_hooks_are_skipped(self):
         calls: list[str] = []
         hits: list[OnComponentCacheHitContext] = []
@@ -670,18 +674,6 @@ class TestComponentCacheLifecycle:
                     calls.append("rendered-hook")
 
             def on_component_cache_hit(self, ctx):
-                instance = next(
-                    record
-                    for record in ctx.component._ownership_graph.snapshot().logical_instances
-                    if record.render_id == ctx.component.id
-                )
-                assert instance.state == OwnershipState.ACTIVE
-                queue = next(
-                    record
-                    for record in ctx.component._ownership_graph.snapshot().render_queue
-                    if record.invocation_id == instance.invocation_id
-                )
-                assert queue.state == QueueState.SETTLED
                 hits.append(ctx)
                 calls.append("hit")
 

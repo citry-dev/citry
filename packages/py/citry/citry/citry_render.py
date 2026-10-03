@@ -32,10 +32,11 @@ A ``CitryRender`` holds:
   context is kept (the collected data lives in its ``extra``); this can be
   narrowed to specific fields once we know what serialize needs.
 
-Serialization joins the parts, stamps the ``data-cid-<id>`` markers, and
-places the collected dependencies into the page per the ``deps_strategy`` /
-``deps_position`` arguments (docs/design/dependencies.md section 7),
-including the ``fragment`` strategy for HTML partials.
+Serialization joins the parts, adds static or prepared-runtime ownership
+metadata as needed, and places collected dependencies into the page per the
+``deps_strategy`` / ``deps_position`` arguments
+(docs/design/dependencies.md section 7), including the ``fragment`` strategy
+for HTML partials.
 
 Example:
     Render and serialize a component::
@@ -53,10 +54,12 @@ Example:
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias
-from weakref import ReferenceType, ref
+from html import unescape
+from inspect import getattr_static
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
 
 from citry.citry_element import _DEFAULT_CITRY_ELEMENT, CitryElement
 from citry.component_like import _DEFAULT_COMPONENT_LIKE, ComponentLike, _resolve_component_like
@@ -65,15 +68,55 @@ from citry.slots import Slot
 from citry.util.html import escape
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterator
 
+    from citry._vue.capture import (
+        PreparedDynamicElementClose,
+        PreparedDynamicElementOpen,
+        PreparedElementClose,
+        PreparedElementOpen,
+        PreparedSourceText,
+        PreparedStaticRun,
+        PreparedTextValue,
+        PreparedTrustedHtmlValue,
+        PreparedVerbatimHtml,
+    )
+    from citry._vue.direct import DirectExecutionFrame
+    from citry._vue.leaf_program import PreparedLeafProgram
     from citry.citry import Citry
     from citry.citry_context import CitryContext
+    from citry.citry_element import _PreparedCallMetadata
+    from citry.client_directives import ComponentTagClientBindingKind
     from citry.component import Component
-    from citry.ownership import OwnershipGraph, PhysicalRegionId
     from citry.settings import SecurityCspMode, SecurityJavascriptMode, SecurityScriptIntegrityMode
 
 _VALUE_CONTEXT: ContextVar[CitryContext | None] = ContextVar("citry_value_context", default=None)
+
+# A component's after-render hooks (its `on_render` generator and the
+# extensions' `on_component_rendered`) may serialize the component's own live
+# result and return that HTML as its new output. The returned HTML becomes the
+# component's root output again, and the final serialization marks its root
+# tags then. So while those hooks run, serializing that same render must leave
+# the component's own root markers off, or the page would carry each marker
+# twice on one tag (and on tags that are not roots of the returned HTML, when
+# the hook wraps the result). This holds the render id of the component whose hooks run.
+_AFTER_RENDER_HOOKS_RENDER_ID: ContextVar[str | None] = ContextVar(
+    "citry_after_render_hooks_render_id",
+    default=None,
+)
+
+
+@contextmanager
+def _after_render_hooks_scope(render_id: str | None) -> Iterator[None]:
+    """Mark `render_id` as the component whose after-render hooks are running."""
+    # The token restores the outer value, so a hook that renders another
+    # component (with hooks of its own) gets its scope back afterwards.
+    token = _AFTER_RENDER_HOOKS_RENDER_ID.set(render_id)
+    try:
+        yield
+    finally:
+        _AFTER_RENDER_HOOKS_RENDER_ID.reset(token)
+
 
 # One piece of rendered output. It is one of:
 #   - str: final text.
@@ -82,10 +125,15 @@ _VALUE_CONTEXT: ContextVar[CitryContext | None] = ContextVar("citry_value_contex
 #     before any serialize()).
 #   - Placeholder: a spot whose final text an extension supplies at serialize
 #     time (the <c-js>/<c-css> built-ins render these).
+#   - Typed prepared records: source, text, elements, and leaf programs kept
+#     structured for native Vue assembly.
 # A CitryRender's `parts`, and what a node's render() returns, are made of these.
-RenderPart: TypeAlias = (
-    "str | CitryRender | PhysicalRegionPart | PhysicalRegionRender | DeferredComponent | Placeholder"
+PreparedRenderPart: TypeAlias = (
+    "PreparedSourceText | PreparedVerbatimHtml | PreparedTextValue | PreparedTrustedHtmlValue | "
+    "PreparedElementOpen | PreparedElementClose | PreparedDynamicElementOpen | PreparedDynamicElementClose | "
+    "PreparedStaticRun | PreparedLeafProgram"
 )
+RenderPart: TypeAlias = "str | CitryRender | DeferredComponent | Placeholder | PreparedRenderPart | SimpleVueRecord"
 
 # How collected JS/CSS dependencies are handled when serializing (see
 # CitryRender.serialize and docs/design/dependencies.md section 7.1).
@@ -135,10 +183,14 @@ class SerializedRender:
 
 
 # What ``Component.on_render`` may return to replace the component's whole
-# output (docs/design/component_on_render.md section 3): final text (a ``str``, used
-# as-is, not autoescaped), a composed element (rendered in the component's
-# place), an already-rendered subtree, a ``Slot`` (invoked with no data), or a
-# ``ComponentLike`` value (resolved against the Citry instance rendering it).
+# output (docs/design/component_on_render.md section 3): text (a plain ``str``,
+# escaped like a ``{{ ... }}`` value), trusted HTML (``Markup``, which is a
+# ``str`` subclass, inserted as-is), a composed element (rendered in the
+# component's place), an already-rendered subtree, a ``Slot`` (invoked with no
+# data), or a ``ComponentLike`` value (resolved against the Citry instance
+# rendering it). Any other object with ``__html__`` is accepted as trusted HTML
+# too, the same as in ``{{ ... }}``, though the type alias has no way to
+# express it.
 # ``None`` is not part of the alias: returning ``None`` means "no
 # replacement, render the template as usual".
 RenderReplacement: TypeAlias = "str | CitryElement | CitryRender | Slot | ComponentLike"
@@ -155,6 +207,57 @@ OnRenderGenerator: TypeAlias = (
 
 
 @dataclass(frozen=True, slots=True)
+class PreparedOccurrenceMetadata:
+    """Immutable prepared-call facts retained after the live component is gone."""
+
+    call: _PreparedCallMetadata | None
+    raw_slots_present: bool
+    component_tag_client_bindings: tuple[PreparedComponentBinding, ...]
+
+
+# Final because the Vue assembler matches it by exact type.
+@final
+@dataclass(frozen=True, slots=True)
+class SimpleVueRecord:
+    """
+    Carry one ``simple="vue"`` occurrence's identity and data without a Python component.
+
+    The render loop puts this record where an ordinary child ``CitryRender``
+    would go. Serialization reads the row's recorded template values
+    (``leaf``) from it and gives the occurrence its own Vue instance, as it
+    would for an ordinary component.
+    """
+
+    component_class: type[Component]
+    class_id: str
+    render_id: str
+    call_metadata: _PreparedCallMetadata | None
+    js_data: dict[str, object]
+    leaf: PreparedLeafProgram
+    prepared_data: dict[str, object]
+    css_vars_hash: str | None = None
+    root_markers: tuple[str, ...] = ()
+    # True when a Python expression, public Slot call or render hook placed
+    # this occurrence. Such a call has no parser record, so the Vue assembler
+    # reads this flag, set only by `wrap_python_composition_result()`, to tell it
+    # apart from an authored tag whose call record went missing.
+    python_composition: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedComponentBinding:
+    """Authenticated component-call binding detached from its parser node."""
+
+    kind: ComponentTagClientBindingKind
+    key: str
+    value: str
+    source: str
+    span: tuple[int, int]
+    authenticated: bool
+    provenance: Literal["authored", "runtime-spread"] = "authored"
+
+
+@dataclass(frozen=True, slots=True)
 class RenderFrame:
     """Immutable identity needed to traverse and serialize one render frame."""
 
@@ -165,6 +268,7 @@ class RenderFrame:
     root_markers: tuple[str, ...]
     is_transparent_root: bool = False
     """True for a transparent component's whole output, excluding caller-owned interiors."""
+    prepared_occurrence: PreparedOccurrenceMetadata | None = None
 
     @classmethod
     def from_context(
@@ -180,8 +284,48 @@ class RenderFrame:
                 is_component_root=is_component_root,
                 is_transparent_root=is_transparent_root,
                 root_markers=tuple(context._get_root_markers()) if is_component_root else (),
+                prepared_occurrence=None,
             )
         component_class = type(component)
+        from citry.client_directives import (  # noqa: PLC0415
+            ComponentTagClientBinding,
+            ComponentTagClientBindingKind,
+            RuntimeComponentEventBinding,
+            is_authenticated_component_tag_client_binding,
+            is_authenticated_runtime_component_event_binding,
+        )
+
+        prepared_bindings: list[PreparedComponentBinding] = []
+        for binding in component._component_tag_client_bindings:
+            if type(binding) is RuntimeComponentEventBinding:
+                if type(binding.key) is not str or type(binding.value) is not str or type(binding.source) is not str:
+                    raise TypeError("runtime component event key, handler, and source must be exact strings")
+                prepared_bindings.append(
+                    PreparedComponentBinding(
+                        ComponentTagClientBindingKind.CITRY_HANDLER,
+                        binding.key,
+                        binding.value,
+                        binding.source,
+                        binding.span,
+                        is_authenticated_runtime_component_event_binding(binding),
+                        "runtime-spread",
+                    )
+                )
+                continue
+            if type(binding) is not ComponentTagClientBinding:
+                raise TypeError("component-call binding metadata changed after resolution")
+            if type(binding.source) is not str:
+                raise TypeError("component-call binding source must be template text")
+            prepared_bindings.append(
+                PreparedComponentBinding(
+                    binding.kind,
+                    binding.key,
+                    binding.value,
+                    binding.source,
+                    binding.span,
+                    is_authenticated_component_tag_client_binding(binding),
+                )
+            )
         return cls(
             render_id=component.id,
             class_id=component._citry_class_id,
@@ -189,6 +333,11 @@ class RenderFrame:
             is_component_root=is_component_root,
             is_transparent_root=is_transparent_root,
             root_markers=tuple(context._get_root_markers()) if is_component_root else (),
+            prepared_occurrence=PreparedOccurrenceMetadata(
+                call=component._prepared_call_metadata,
+                raw_slots_present=bool(component.raw_slots),
+                component_tag_client_bindings=tuple(prepared_bindings),
+            ),
         )
 
 
@@ -211,7 +360,7 @@ class CitryRender:
 
     """
 
-    __slots__ = ("__weakref__", "context", "frame", "parts")
+    __slots__ = ("__weakref__", "context", "frame", "owner_citry", "parts", "render_target")
 
     def __init__(
         self,
@@ -221,12 +370,23 @@ class CitryRender:
         is_component_root: bool = False,
         frame: RenderFrame | None = None,
         is_transparent_root: bool = False,
+        render_target: Literal["html", "prepared"] | None = None,
+        owner_citry: Citry | None = None,
     ) -> None:
         self.parts = parts
         self.context = context
+        context_citry = context.component.citry if context.component is not None else None
+        if owner_citry is not None and context_citry is not None and owner_citry is not context_citry:
+            raise ValueError("CitryRender owner must match its component context.")
+        self.owner_citry = owner_citry if owner_citry is not None else context_citry
         self.frame = frame or RenderFrame.from_context(
             context, is_component_root=is_component_root, is_transparent_root=is_transparent_root
         )
+        if render_target is None:
+            from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
+
+            render_target = "prepared" if direct_prepared_render_active() else "html"
+        self.render_target = render_target
 
     @property
     def is_component_root(self) -> bool:
@@ -242,31 +402,47 @@ class CitryRender:
         security_csp: SecurityCspMode | None = None,
         security_javascript: SecurityJavascriptMode | None = None,
         security_script_integrity: SecurityScriptIntegrityMode | None = None,
+        ssr: bool | None = None,
     ) -> str:
         """
         Turn this render into a final HTML string.
 
-        Each component's root element(s) get a ``data-cid-<id>`` marker so the
-        rendered HTML records which component produced which part of the page,
-        and the JS/CSS collected from the rendered components is placed into the
-        output per the chosen strategy and position.
+        In static output, each component's root element gets a
+        ``data-cid-<id>`` attribute. When a rendered component needs Vue in
+        the browser, Citry keeps the surrounding page markup, puts the
+        rendered content (the page body, for a full document) in one element
+        where Vue mounts, and adds the data and scripts Vue needs to mount
+        it. Citry places the collected JS/CSS according to
+        ``deps_strategy`` and ``deps_position``.
+
+        With ``security_csp="warn"``, Citry reports content that would break
+        under a Content Security Policy but leaves the output unchanged. With
+        ``"strict"``, it uses the CSP-safe browser runtime and raises on
+        incompatible content. With ``security_javascript="warn"``, it reports
+        which components need JavaScript; ``"omit"`` drops Citry's scripts but
+        keeps the HTML and CSS; ``"forbid"`` raises when a rendered component
+        needs browser behavior.
 
         Args:
             deps_strategy: How to handle the collected JS/CSS.
 
-                - ``"document"`` (default): emit the tags, plus the
-                client-side dependency manager and the page manifest when
-                a component needs per-instance browser behavior, including
-                ``js_data()`` scope seeding and ``$component`` callbacks.
+                - ``"document"`` (default): emit the tags, plus Citry's
+                  Vue browser runtime and the data it needs to mount the
+                  page when a component needs per-instance browser
+                  behavior, such as ``js_data()`` values on its Vue
+                  instance or ``$component`` callbacks.
                 - ``"simple"``: the tags only, no JavaScript runtime. For
                   static pages and emails; per-instance JS does not run
                   (CSS variables still work, they are pure CSS).
                 - ``"fragment"``: HTML meant to be inserted into an
                   already-loaded page (an HTMX swap, ``fetch`` +
-                  ``innerHTML``, ...): nothing is inlined; the output ends
-                  with a JSON manifest of URLs the client-side manager
-                  fetches, each once per page however many fragments need
-                  it. Requires a mounted web integration.
+                  ``innerHTML``, ...). A fragment without browser behavior
+                  carries its tags directly. An interactive fragment
+                  carries a script that loads Citry's browser runtime if
+                  the page does not have it yet, plus JSON that tells the
+                  runtime which assets to load before it mounts the
+                  fragment. A fragment that carries JS, CSS, or browser
+                  behavior requires a mounted web integration.
                 - ``"ignore"``: no tags inserted.
             deps_position: Where the tags go (``document``/``simple`` only).
 
@@ -284,17 +460,22 @@ class CitryRender:
                 JavaScript delivery policy.
             security_script_integrity: Override this render's engine-level
                 script integrity policy.
+            ssr: Override the engine's initial Vue HTML hydration setting.
+                ``None`` uses the [`ssr`][citry.CitrySettings.ssr] setting.
 
-        Raises ``RuntimeError`` if any child component was left unrendered (a
-        ``DeferredComponent`` still in the parts), which can only happen if this
-        render did not come from ``render()``.
-
-        CSP warning mode reports incompatibilities without changing the
-        standard-runtime output. Strict mode selects the CSP runtime and
-        rejects incompatible reached-tree or final HTML. JavaScript warning
-        mode inventories client requirements, omit removes Citry-managed
-        executable output while retaining HTML and CSS, and forbid rejects a
-        rendered subtree that requires client behavior.
+        Raises:
+            RuntimeError: If a child component was left unrendered, which can
+                only happen when this render did not come from ``render()``;
+                if the same render is placed more than once in the output;
+                or if ``deps_strategy="fragment"`` needs a mounted web
+                integration and none is mounted.
+            ValueError: If an argument is invalid; if
+                ``security_csp="strict"`` rejects the output or the output
+                needs ``csp_nonce`` and none was given; or if
+                ``security_javascript="forbid"`` finds a component that
+                needs browser behavior; or if a component uses ``Events``
+                and no web integration is mounted.
+            TypeError: If ``ssr`` is not a bool or ``None``.
 
         """
         return self.serialize_result(
@@ -304,6 +485,7 @@ class CitryRender:
             security_csp=security_csp,
             security_javascript=security_javascript,
             security_script_integrity=security_script_integrity,
+            ssr=ssr,
         ).html
 
     def serialize_result(
@@ -315,12 +497,14 @@ class CitryRender:
         security_csp: SecurityCspMode | None = None,
         security_javascript: SecurityJavascriptMode | None = None,
         security_script_integrity: SecurityScriptIntegrityMode | None = None,
+        ssr: bool | None = None,
     ) -> SerializedRender:
         """
         Return final HTML together with security metadata for those exact bytes.
 
-        Arguments and validation match :meth:`serialize`; this richer method
-        exposes the host-facing metadata while :meth:`serialize` returns only
+        Arguments and validation match
+        [`serialize()`][citry.CitryRender.serialize]; this method also returns
+        the security metadata a host needs, while ``serialize()`` returns only
         ``result.html``.
         """
         # Imported here, not at module load, to avoid an import cycle:
@@ -335,6 +519,7 @@ class CitryRender:
             security_csp=security_csp,
             security_javascript=security_javascript,
             security_script_integrity=security_script_integrity,
+            ssr=ssr,
         )
 
     def __str__(self) -> str:
@@ -347,69 +532,56 @@ class CitryRender:
         return f"CitryRender(parts={len(self.parts)})"
 
 
-class _PhysicalRegion:
-    """Internal common identity for both transparent physical wrappers."""
+class RenderDecoration(CitryRender):
+    """Atomic transparent visual wrapper around one structured render body."""
 
-    __slots__ = ()
+    __slots__ = ("closing", "omit_around_document", "opening")
 
-    if TYPE_CHECKING:
-        region_id: PhysicalRegionId
-        part: RenderPart
+    def __init__(
+        self,
+        parts: list[RenderPart],
+        context: CitryContext,
+        *,
+        opening: tuple[object, ...],
+        closing: tuple[object, ...],
+        omit_around_document: bool = False,
+        frame: RenderFrame | None = None,
+    ) -> None:
+        from citry._vue.capture import PreparedElementClose, PreparedElementOpen, PreparedTextValue  # noqa: PLC0415
 
-        @property
-        def graph(self) -> OwnershipGraph: ...
+        if type(opening) is not tuple or type(closing) is not tuple:
+            raise TypeError("render decoration edges must be immutable tuples")
+        allowed = (PreparedElementOpen, PreparedElementClose, PreparedTextValue)
+        if not opening or not closing or any(type(part) not in allowed for part in (*opening, *closing)):
+            raise TypeError("render decoration edges must be nonempty fixed typed structure")
+        for part in (*opening, *closing):
+            if type(part) is PreparedElementOpen and (
+                part.event_bindings
+                or part.poll_bindings
+                or part.control_bindings
+                or part.browser_bindings
+                or part.runtime_event_bindings
+                or part.runtime_poll_bindings
+                or part.runtime_events_candidate
+                or any(attr.name.startswith(("v-", "@", ":", "#")) for attr in part.attrs)
+            ):
+                raise TypeError("render decoration element structure must be inert")
+        if type(omit_around_document) is not bool:
+            raise TypeError("render decoration document policy must be a boolean")
+        super().__init__(parts=parts, context=context, frame=frame)
+        self.opening = opening
+        self.closing = closing
+        self.omit_around_document = omit_around_document
 
-
-class PhysicalRegionPart(_PhysicalRegion):
-    """One exact physical occurrence of a logical slot or fill result."""
-
-    __slots__ = ("__weakref__", "_graph_ref", "part", "region_id")
-
-    def __init__(self, graph: OwnershipGraph, region_id: PhysicalRegionId, part: RenderPart) -> None:
-        self._graph_ref: ReferenceType[OwnershipGraph] = ref(graph)
-        self.region_id = region_id
-        self.part = part
-
-    @property
-    def graph(self) -> OwnershipGraph:
-        """Return the live graph without making the graph/result pair cyclic."""
-        graph = self._graph_ref()
-        if graph is None:
-            raise RuntimeError("A physical region outlived its ownership graph.")
-        return graph
-
-    def __repr__(self) -> str:
-        return f"PhysicalRegionPart(region_id={int(self.region_id)}, part={self.part!r})"
-
-
-def unwrap_physical_region(part: RenderPart) -> RenderPart:
-    """Remove one or more transparent physical-occurrence wrappers."""
-    while isinstance(part, _PhysicalRegion):
-        part = part.part
-    return part
-
-
-class PhysicalRegionRender(CitryRender, _PhysicalRegion):
-    """A region wrapper that remains a transparent ``CitryRender`` to hooks."""
-
-    __slots__ = ("_graph_ref", "part", "region_id")
-
-    def __init__(self, graph: OwnershipGraph, region_id: PhysicalRegionId, part: CitryRender) -> None:
-        super().__init__(parts=part.parts, context=part.context, frame=part.frame)
-        self._graph_ref: ReferenceType[OwnershipGraph] = ref(graph)
-        self.region_id = region_id
-        self.part = part
-
-    @property
-    def graph(self) -> OwnershipGraph:
-        """Return the live graph without making the graph/result pair cyclic."""
-        graph = self._graph_ref()
-        if graph is None:
-            raise RuntimeError("A physical region outlived its ownership graph.")
-        return graph
-
-    def __repr__(self) -> str:
-        return f"PhysicalRegionRender(region_id={int(self.region_id)}, part={self.part!r})"
+    def _with_frame(self, context: CitryContext, frame: RenderFrame) -> RenderDecoration:
+        return RenderDecoration(
+            self.parts,
+            context,
+            opening=self.opening,
+            closing=self.closing,
+            omit_around_document=self.omit_around_document,
+            frame=frame,
+        )
 
 
 class Placeholder:
@@ -471,7 +643,7 @@ class DeferredComponent:
 
     """
 
-    __slots__ = ("element", "parent", "physical_parent_region_id", "provides")
+    __slots__ = ("direct_parent_execution", "element", "parent", "provides")
 
     def __init__(
         self,
@@ -479,12 +651,12 @@ class DeferredComponent:
         parent: Component,
         provides: dict[str, Any] | None = None,
         *,
-        physical_parent_region_id: PhysicalRegionId | None = None,
+        direct_parent_execution: DirectExecutionFrame | None = None,
     ) -> None:
         self.element = element
         self.parent = parent
         self.provides = provides if provides is not None else {}
-        self.physical_parent_region_id = physical_parent_region_id
+        self.direct_parent_execution = direct_parent_execution
 
     def __repr__(self) -> str:
         return f"DeferredComponent({self.element!r})"
@@ -492,14 +664,31 @@ class DeferredComponent:
 
 # The imported identities come from their defining modules; the local classes
 # are captured here before callers can replace any dispatch aliases.
-_DEFAULT_VALUE_TYPES = (_DEFAULT_COMPONENT_LIKE, _DEFAULT_CITRY_ELEMENT, CitryRender, PhysicalRegionPart)
+_DEFAULT_VALUE_TYPES = (_DEFAULT_COMPONENT_LIKE, _DEFAULT_CITRY_ELEMENT, CitryRender)
+
+
+def _default_value_dispatch_for(kind: type[object]) -> bool:
+    """Whether an exact built-in type still has the renderer's default protocol meaning."""
+    return (
+        ComponentLike is _DEFAULT_VALUE_TYPES[0]
+        and CitryElement is _DEFAULT_VALUE_TYPES[1]
+        and CitryRender is _DEFAULT_VALUE_TYPES[2]
+        and not issubclass(kind, ComponentLike)
+    )
 
 
 def _render_slot_value(slot: Slot, data: Any, fallback: Slot | None, context: CitryContext) -> RenderPart:
     """Keep the insertion context while a Python slot produces a component value."""
     token = _VALUE_CONTEXT.set(context)
     try:
-        return slot(data, fallback=fallback, provides=context.provides)
+        rendered = slot(data, fallback=fallback, provides=context.provides)
+        from citry._vue.capture import PreparedTextValue, vue_render_active  # noqa: PLC0415
+        from citry.slots import _EscapedSlotText  # noqa: PLC0415
+
+        if vue_render_active() and isinstance(rendered, _EscapedSlotText) and "<" not in rendered:
+            source = "python-slot-text"
+            return PreparedTextValue(source, (0, len(source)), unescape(str(rendered)))
+        return rendered
     finally:
         _VALUE_CONTEXT.reset(token)
 
@@ -525,6 +714,10 @@ def _render_value(
       here: the call already produced a render part, handled by the rules
       below.) The slot's fallback handle is a Slot too, so ``{{ fallback }}``
       renders through this same branch.
+    - An object with ``__html__`` (such as ``Markup``) is trusted HTML and
+      passes through unescaped. This is checked before ``ComponentLike``, as
+      a template ``{{ ... }}`` checks it, so an object with both renders its
+      HTML.
     - A ``ComponentLike`` is asked for a ``CitryElement`` using the Citry
       instance rendering this tree. The result must belong to that exact
       instance. This lets packages expose import-time composition values while
@@ -534,8 +727,7 @@ def _render_value(
       surrounding tree.
     - A ``CitryRender`` (an already-rendered subtree) is inlined as-is; it is
       trusted HTML, and the surrounding ``_render_body`` merges its dependencies.
-    - Anything else is autoescaped. ``escape`` respects the ``__html__``
-      protocol, so ``Markup`` (trusted HTML) passes through unescaped.
+    - Anything else is autoescaped.
 
     ``provides`` are the provide/inject entries active where the value was
     found; an element rendered here inherits them, so a component embedded
@@ -559,24 +751,27 @@ def _render_value(
     # Exact strings and ordinary slotted renders have no instance-level
     # protocol members. Keep registration and class changes visible on each call.
     kind = type(value)
+    if kind is str and _default_value_dispatch_for(kind):
+        return escape(value)
     if (
-        ComponentLike is _DEFAULT_VALUE_TYPES[0]
-        and CitryElement is _DEFAULT_VALUE_TYPES[1]
-        and CitryRender is _DEFAULT_VALUE_TYPES[2]
-        and PhysicalRegionPart is _DEFAULT_VALUE_TYPES[3]
+        kind is _DEFAULT_VALUE_TYPES[2]
+        and _default_value_dispatch_for(kind)
+        and kind.__bases__ == (object,)
+        and "__citry_element__" not in kind.__dict__
+        and "__getattribute__" not in kind.__dict__
+        and "__getattr__" not in kind.__dict__
+        and "__class__" not in kind.__dict__
     ):
-        if kind is str and not issubclass(str, ComponentLike):
-            return escape(value)
-        if (
-            kind is _DEFAULT_VALUE_TYPES[2]
-            and kind.__bases__ == (object,)
-            and "__citry_element__" not in kind.__dict__
-            and "__getattribute__" not in kind.__dict__
-            and "__getattr__" not in kind.__dict__
-            and "__class__" not in kind.__dict__
-            and not issubclass(kind, ComponentLike)
-        ):
-            return value
+        return value
+    # Exact numbers are plain text unless registered for a protocol; skip
+    # the lookups below for them.
+    if (kind is int or kind is float or kind is bool) and _default_value_dispatch_for(kind):
+        return escape(value)
+    # Trusted HTML wins over the component protocol, in the order the
+    # template's {{ ... }} uses, so an object with both __html__ and
+    # __citry_element__ renders the same in a slot as in the template.
+    if getattr_static(value, "__html__", None) is not None:
+        return escape(value)
     if isinstance(value, ComponentLike):
         value = _resolve_component_like(value, citry)
     if isinstance(value, CitryElement):
@@ -584,12 +779,77 @@ def _render_value(
         # module, so a top-level import back into it would be circular.
         from citry.component_render import render_impl  # noqa: PLC0415
 
-        if value.comp_cls.simple and context is not None:
+        if value.comp_cls.simple is True and context is not None:
             from citry._simple_runtime import render_simple_value  # noqa: PLC0415
 
             return render_simple_value(value, context, provides)
 
         value = render_impl(value, provides=provides)
-    if isinstance(value, (CitryRender, PhysicalRegionPart)):
+        # A component supplied by a Python expression renders in its own tree,
+        # rather than through the surrounding tree's DeferredComponent commit
+        # path. Mark that finalized root with the same composition carrier so
+        # prepared assembly can distinguish it from an unauthenticated
+        # authored child missing parser call metadata.
+        from citry._vue.direct import wrap_python_composition_result  # noqa: PLC0415
+
+        value = wrap_python_composition_result(value)
+    if isinstance(value, CitryRender):
+        return value
+    # Prepared slot text can pass through another expression while a simple
+    # component flattens its callback result.  Keep that checked render part
+    # intact; treating the dataclass as an ordinary Python value serializes
+    # its repr instead of the captured text.
+    from citry._vue.capture import PreparedTextValue  # noqa: PLC0415
+
+    if isinstance(value, PreparedTextValue):
         return value
     return escape(value)
+
+
+def simple_vue_called_components(record: SimpleVueRecord) -> Iterator[CitryRender | SimpleVueRecord]:
+    """
+    Yield the components a ``simple='vue'`` occurrence called, and the ones those records called.
+
+    A record keeps its called children inside its leaf rather than in a
+    render's ``parts``, so every walk over a render tree reaches them
+    through this function. Called records are yielded and then searched in
+    turn; an ordinary child render is yielded but not entered, since the
+    caller already walks renders. Any other part (a child that has not been
+    rendered yet) is yielded as well, so a checker can reject it.
+    """
+    pending: list[SimpleVueRecord] = [record]
+    while pending:
+        children = pending.pop().leaf.call_children
+        if children is None:
+            continue
+        for part in children.parts:
+            if type(part) is SimpleVueRecord:
+                pending.append(part)
+            yield cast("CitryRender | SimpleVueRecord", part)
+
+
+def selected_render_ids(render: CitryRender) -> frozenset[str]:
+    """Return component render IDs reachable through the final selected tree."""
+    selected: set[str] = set()
+    pending = [render]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if current.frame.is_component_root and current.frame.render_id is not None:
+            selected.add(current.frame.render_id)
+        for part in current.parts:
+            if isinstance(part, SimpleVueRecord):
+                selected.add(part.render_id)
+                if part.leaf.call_children is None:
+                    continue
+                for called in simple_vue_called_components(part):
+                    if isinstance(called, SimpleVueRecord):
+                        selected.add(called.render_id)
+                    elif isinstance(called, CitryRender):
+                        pending.append(called)
+            elif isinstance(part, CitryRender):
+                pending.append(part)
+    return frozenset(selected)

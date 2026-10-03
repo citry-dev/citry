@@ -25,6 +25,7 @@ class TestCitryInstance:
             "error-fallback",
             "js",
             "css",
+            "mark",
             "i18n",
             "trans",
         }
@@ -84,31 +85,102 @@ class TestCitryInstance:
         with pytest.raises(ValueError, match=name):
             CitrySettings(**{name: value})
 
+    def test_ssr_element_threshold_defaults_and_stores_valid_counts(self):
+        # The default keeps every page's content in its served HTML.
+        assert Citry().settings.ssr_element_threshold == 0
+        assert CitrySettings().ssr_element_threshold == 0
+        for value in (0, 1, 150_000):
+            assert Citry(ssr_element_threshold=value).settings.ssr_element_threshold == value
+            assert CitrySettings(ssr_element_threshold=value).ssr_element_threshold == value
+
+    @pytest.mark.parametrize(
+        ("value", "error"),
+        [
+            # A bool is an int subclass but not a count; a float or string
+            # would silently round or compare wrongly later.
+            (True, TypeError),
+            (20_000.0, TypeError),
+            ("20000", TypeError),
+            (None, TypeError),
+            (-1, ValueError),
+        ],
+    )
+    def test_invalid_ssr_element_threshold_is_rejected(self, value, error):
+        with pytest.raises(error, match="ssr_element_threshold"):
+            Citry(ssr_element_threshold=value)
+        with pytest.raises(error, match="ssr_element_threshold"):
+            CitrySettings(ssr_element_threshold=value)
+
+    def test_max_component_depth_defaults_and_stores_valid_limits(self):
+        # The default leaves room for any real page while stopping runaway
+        # recursion quickly.
+        assert Citry().settings.max_component_depth == 2000
+        assert CitrySettings().max_component_depth == 2000
+        for value in (1, 50_000):
+            assert Citry(max_component_depth=value).settings.max_component_depth == value
+            assert CitrySettings(max_component_depth=value).max_component_depth == value
+
+    @pytest.mark.parametrize(
+        ("value", "error"),
+        [
+            # A bool is an int subclass but not a limit; a float, a string,
+            # or None would compare wrongly or fail later inside a render.
+            (True, TypeError),
+            (100.0, TypeError),
+            ("100", TypeError),
+            (None, TypeError),
+            # A limit below 1 means nothing: the root component alone is 1 deep.
+            (0, ValueError),
+            (-1, ValueError),
+        ],
+    )
+    def test_invalid_max_component_depth_is_rejected(self, value, error):
+        with pytest.raises(error, match="max_component_depth"):
+            Citry(max_component_depth=value)
+        with pytest.raises(error, match="max_component_depth"):
+            CitrySettings(max_component_depth=value)
+
     def test_lint_settings_are_typed_copied_and_stored(self):
         variables = {"request": Annotated[str, "Current request."]}
-        alpine_variables = {"$featureFlags": Annotated[dict[str, bool], "Feature flags."]}
+        vue_variables = {"$featureFlags": Annotated[dict[str, bool], "Feature flags."]}
         component_js_globals = {"analytics": Annotated[object, "Application analytics client."]}
         lint = LintSettings(
             rule_unknown_template_variable="warning",
             template_variables=variables,
-            rule_unknown_alpine_variable="warning",
-            alpine_variables=alpine_variables,
+            rule_unknown_vue_variable="warning",
+            vue_variables=vue_variables,
             rule_unknown_component_js_variable="warning",
             component_js_globals=component_js_globals,
+            rule_unknown_component_js_member="ignore",
+            rule_vue_python_variable="error",
+            rule_alpine_attribute="ignore",
+            rule_alpine_cloak="warning",
+            rule_invalid_attribute_value="error",
+            rule_i18n_cross_language_fallback="error",
         )
         app = Citry(lint=lint)
         variables["later"] = str
-        alpine_variables["later"] = str
+        vue_variables["later"] = str
         component_js_globals["later"] = str
 
         assert app.settings.lint is lint
         assert lint.template_variables == {
             "request": Annotated[str, "Current request."],
         }
-        assert lint.alpine_variables == {
+        assert lint.vue_variables == {
             "$featureFlags": Annotated[dict[str, bool], "Feature flags."],
         }
         assert lint.rule_unknown_component_js_variable == "warning"
+        assert lint.rule_unknown_component_js_member == "ignore"
+        assert LintSettings().rule_unknown_component_js_member == "error"
+        assert lint.rule_vue_python_variable == "error"
+        assert LintSettings().rule_vue_python_variable == "warning"
+        assert (lint.rule_alpine_attribute, lint.rule_alpine_cloak) == ("ignore", "warning")
+        assert (LintSettings().rule_alpine_attribute, LintSettings().rule_alpine_cloak) == ("warning", "error")
+        assert lint.rule_invalid_attribute_value == "error"
+        assert LintSettings().rule_invalid_attribute_value == "warning"
+        assert lint.rule_i18n_cross_language_fallback == "error"
+        assert LintSettings().rule_i18n_cross_language_fallback == "warning"
         assert lint.component_js_globals == {
             "analytics": Annotated[object, "Application analytics client."],
         }
@@ -119,10 +191,22 @@ class TestCitryInstance:
             LintSettings(rule_unknown_template_variable=severity)
         with pytest.raises(ValueError, match="rule_i18n_missing_param_type"):
             LintSettings(rule_i18n_missing_param_type=severity)
-        with pytest.raises(ValueError, match="rule_unknown_alpine_variable"):
-            LintSettings(rule_unknown_alpine_variable=severity)
+        with pytest.raises(ValueError, match="rule_unknown_vue_variable"):
+            LintSettings(rule_unknown_vue_variable=severity)
         with pytest.raises(ValueError, match="rule_unknown_component_js_variable"):
             LintSettings(rule_unknown_component_js_variable=severity)
+        with pytest.raises(ValueError, match="rule_unknown_component_js_member"):
+            LintSettings(rule_unknown_component_js_member=severity)
+        with pytest.raises(ValueError, match="rule_vue_python_variable"):
+            LintSettings(rule_vue_python_variable=severity)
+        with pytest.raises(ValueError, match="rule_alpine_attribute"):
+            LintSettings(rule_alpine_attribute=severity)
+        with pytest.raises(ValueError, match="rule_alpine_cloak"):
+            LintSettings(rule_alpine_cloak=severity)
+        with pytest.raises(ValueError, match="rule_invalid_attribute_value"):
+            LintSettings(rule_invalid_attribute_value=severity)
+        with pytest.raises(ValueError, match="rule_i18n_cross_language_fallback"):
+            LintSettings(rule_i18n_cross_language_fallback=severity)
 
     @pytest.mark.parametrize("name", ["", "two words", "class", "K"])  # noqa: RUF001
     def test_lint_settings_reject_names_without_exact_python_identity(self, name):
@@ -131,10 +215,28 @@ class TestCitryInstance:
 
     @pytest.mark.parametrize("name", ["", "two words", "class", "item.name", "1value"])
     def test_lint_settings_reject_invalid_alpine_variable_names(self, name):
-        with pytest.raises(ValueError, match="invalid Alpine variable name"):
-            LintSettings(alpine_variables={name: str})
+        with pytest.raises(ValueError, match="invalid Vue variable name"):
+            LintSettings(vue_variables={name: str})
         with pytest.raises(ValueError, match="invalid JavaScript identifier"):
             LintSettings(component_js_globals={name: str})
+
+    @pytest.mark.parametrize(
+        ("old_name", "value", "replacement"),
+        [
+            ("rule_unknown_alpine_variable", "warning", "rule_unknown_vue_variable"),
+            ("alpine_variables", {"$analytics": object}, "vue_variables"),
+        ],
+    )
+    def test_lint_settings_name_the_vue_replacement_for_alpine_settings(self, old_name, value, replacement):
+        # The generated dataclass error suggests a close name only on newer
+        # Python versions; this message must name the replacement everywhere.
+        with pytest.raises(TypeError) as excinfo:
+            LintSettings(**{old_name: value})
+
+        assert str(excinfo.value) == (
+            f"LintSettings got unexpected keyword argument(s): {old_name}. "
+            f"Vue lint settings replace the Alpine ones; rename {old_name!r} to {replacement!r}."
+        )
 
     def test_settings_reject_a_non_lint_settings_value(self):
         with pytest.raises(TypeError, match="must be a LintSettings"):
@@ -157,6 +259,7 @@ class TestCitryInstance:
             "error-fallback",
             "js",
             "css",
+            "mark",
             "i18n",
             "trans",
         }

@@ -5,7 +5,12 @@
     {
       "prefix": "citry.python.",
       "provider": "ty",
-      "summary": "Python semantic diagnostics retained from the pinned ty analyzer. The suffix and message remain provider-owned."
+      "summary": "Python type errors in template expressions and c-* values, such as a value of the wrong type for a component input. They come from ty, the Python type checker Citry runs. The part after citry.python. is ty's rule name, and the message is ty's."
+    },
+    {
+      "prefix": "citry.typescript.",
+      "provider": "TypeScript",
+      "summary": "TypeScript errors in component JavaScript and Vue expressions, such as a wrong argument type, an unknown member, or a wrong number of arguments. The part after citry.typescript. is TypeScript's error number, such as ts2322, and the message is TypeScript's. When one of Citry's own diagnostics already reports the same mistake, Citry shows only its own."
     }
   ],
   "diagnostics": [
@@ -13,12 +18,22 @@
       "code": "citry.parse.syntax",
       "constant": "PARSE_SYNTAX",
       "title": "Invalid template syntax",
-      "summary": "The Citry parser could not parse the template at the reported source range.",
-      "when": "Citry encounters malformed template markup, an incomplete expression, or another template grammar error.",
+      "summary": "The template has a syntax mistake, such as an unclosed element or an unfinished expression. Citry cannot read the template, so it does not render.",
+      "when": "The parser finds malformed markup, an incomplete expression, or another syntax error. Only the first syntax error in a template is reported.",
+      "fix": "Correct the template at the reported position. The message says what the parser expected there.",
       "defaultSeverity": "error",
-      "surfaces": ["parser", "formatter", "check", "lsp"],
-      "parameters": { "detail": "Parser-provided explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "parser",
+        "formatter",
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "Parser-provided explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "examples": [
         {
           "title": "Unclosed element",
@@ -32,36 +47,60 @@
       "code": "citry.parse.value",
       "constant": "PARSE_VALUE",
       "title": "Invalid template value",
-      "summary": "The parser received a template value that cannot be represented by Citry's template model.",
-      "when": "A parser API receives a value that it cannot convert into Citry template source or a supported template value.",
+      "summary": "Citry was given a value it cannot parse as a template. This is usually not a mistake in your template text.",
+      "when": "A parser API receives a value it cannot turn into template source, for example when an extension that adds its own template syntax reports positions that do not fit the template.",
+      "fix": "If an extension adds its own template syntax, update it or report the message to its authors. Otherwise, report the message as a Citry bug.",
       "defaultSeverity": "error",
-      "surfaces": ["parser", "formatter", "check", "lsp"],
-      "parameters": { "detail": "Parser-provided explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "parser",
+        "formatter",
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "Parser-provided explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.parse.value"
     },
     {
       "code": "citry.parse.configuration",
       "constant": "PARSE_CONFIGURATION",
-      "title": "Template parser configuration failed",
-      "summary": "Project-specific parser configuration could not be constructed or applied.",
-      "when": "Citry cannot build the parser rules required by the selected application or component registry.",
+      "title": "Template parser setup failed",
+      "summary": "Citry could not set up the template parser for your application, so it cannot check this template.",
+      "when": "The tag rules that your application or its extensions add to the parser cannot be built or applied.",
+      "fix": "Read the message for the rule that failed, and fix the application or extension that defines it.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
-      "parameters": { "detail": "Configuration failure detail." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "Configuration failure detail."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.parse.configuration"
     },
     {
       "code": "citry.template.unknown-variable",
       "constant": "TEMPLATE_UNKNOWN_VARIABLE",
       "title": "Unknown template variable",
-      "summary": "A parser-proven root variable is not declared by every component that consumes the template.",
-      "when": "A name used in an interpolation or Python-valued template attribute is absent from the proven template data, configured globals, and lint-only variables.",
+      "summary": "A template reads a variable that nothing provides, often because of a typo. Rendering then fails with a KeyError.",
+      "when": "A name in {{ ... }} or in a c-* attribute is not in the component's template data, a c-for or c-fill binding around it, template_globals, or the declared template_variables. In a template that several components share, every one of them must provide the name.",
+      "fix": "Correct the name, or add it to the data that template_data() returns. If another integration provides it, declare it in template_variables, or change rule_unknown_template_variable.",
       "defaultSeverity": "error",
       "configurableSeverity": true,
-      "surfaces": ["check", "lsp"],
-      "parameters": { "name": "Authored variable name." },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "Authored variable name."
+      },
       "messages": {
         "closed": "Template variable '{name}' is not available in this template.",
         "allow-extra": "Template variable '{name}' is not declared. It may be supplied dynamically.",
@@ -85,12 +124,20 @@
       "code": "citry.template.unknown-component",
       "constant": "TEMPLATE_UNKNOWN_COMPONENT",
       "title": "Unknown component",
-      "summary": "A component tag is not registered in the selected Citry registry.",
-      "when": "A template uses a component tag whose name is absent from the selected application or library registry.",
+      "summary": "A component tag names a component that your application does not register, often because of a typo. The template fails to render.",
+      "when": "A <c-*> tag names no component in the selected application or library, counting built-in names and aliases.",
+      "fix": "Correct the tag name, or register the component with the application that Citry loaded.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
-      "parameters": { "tag": "Authored component tag, including the c- prefix." },
-      "messages": { "default": "Component <{tag}> is not registered." },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "tag": "Authored component tag, including the c- prefix."
+      },
+      "messages": {
+        "default": "Component <{tag}> is not registered."
+      },
       "examples": [
         {
           "title": "Unregistered component tag",
@@ -101,13 +148,135 @@
       "documentationPath": "/ide/diagnostics/#citry.template.unknown-component"
     },
     {
+      "code": "citry.template.marker-name-invalid",
+      "constant": "TEMPLATE_MARKER_NAME_INVALID",
+      "title": "Invalid <c-mark> tag",
+      "summary": "A <c-mark> tag, which marks part of a component that an event handler can replace, has no usable name, an extra attribute, or content it does not accept.",
+      "when": "A <c-mark> tag has no name attribute, a dynamic or invalid name, any other attribute, or a named fill.",
+      "fix": "Give the marker one literal name that starts with a letter and contains only letters, digits, _ or -. Remove other attributes and named fills.",
+      "defaultSeverity": "error",
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {},
+      "messages": {
+        "dynamic": "Marker name must be a static literal.",
+        "invalid": "Marker name must match [A-Za-z][A-Za-z0-9_-]*.",
+        "missing": "Marker requires a literal name attribute.",
+        "extra": "Marker accepts only its name attribute.",
+        "named_fill": "Marker accepts only its default slot."
+      },
+      "documentationPath": "/ide/diagnostics/#citry.template.marker-name-invalid"
+    },
+    {
+      "code": "citry.template.alpine-attribute",
+      "constant": "TEMPLATE_ALPINE_ATTRIBUTE",
+      "title": "Alpine attribute on an HTML element",
+      "summary": "An HTML element still has an Alpine x-* attribute, such as x-data or x-on:click. Citry uses Vue, so nothing reads it and it does nothing.",
+      "when": "An Alpine directive name, such as x-data, x-on:click, or x-intersect, sits on an HTML element or <c-element>, including inside nested templates. Other x-* names, such as x-webkit-airplay, are ordinary HTML. Component tags are not checked, because an x-* attribute there is a Python keyword argument. x-cloak is reported as citry.template.alpine-cloak.",
+      "fix": "Move the state into js_data() or $component, and write the listener in its Vue form, such as @click. If another library on the page reads x-* attributes, set rule_alpine_attribute to \"ignore\".",
+      "defaultSeverity": "warning",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "Attribute name as written in the template."
+      },
+      "messages": {
+        "default": "'{name}' is an Alpine attribute. Citry uses Vue, so nothing reads it. Replace it with its Vue form, or set rule_alpine_attribute to 'ignore' if a library on the page reads '{name}'."
+      },
+      "examples": [
+        {
+          "title": "Alpine state on an element",
+          "language": "citry-html",
+          "source": "<div x-data=\"{ open: false }\">\n  <button x-on:click=\"open = !open\">Menu</button>\n</div>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.alpine-attribute"
+    },
+    {
+      "code": "citry.template.alpine-cloak",
+      "constant": "TEMPLATE_ALPINE_CLOAK",
+      "title": "x-cloak hides an element for good",
+      "summary": "An HTML element still has x-cloak. Nothing removes it, so a [x-cloak] CSS rule hides the element for good.",
+      "when": "x-cloak, in any letter case, sits on an HTML element or <c-element>, including inside nested templates. Component tags are not checked.",
+      "fix": "Delete x-cloak and its [x-cloak] CSS rule. The HTML from the server already shows the content.",
+      "defaultSeverity": "error",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {},
+      "messages": {
+        "default": "Nothing in Citry removes 'x-cloak', so a '[x-cloak]' CSS rule keeps this element hidden. Delete 'x-cloak' and its '[x-cloak]' rule; the server-rendered HTML already shows the content."
+      },
+      "examples": [
+        {
+          "title": "Leftover x-cloak",
+          "language": "citry-html",
+          "source": "<div x-cloak>{{ message }}</div>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.alpine-cloak"
+    },
+    {
+      "code": "citry.template.invalid-attribute-value",
+      "constant": "TEMPLATE_INVALID_ATTRIBUTE_VALUE",
+      "title": "HTML attribute value the browser does not accept",
+      "summary": "An HTML attribute that accepts only certain keywords, such as draggable or type, has another value. The browser ignores it or falls back to a default, with no error.",
+      "when": "The value is not one of the keywords the HTML Standard lists for that attribute on that element. Letter case does not matter, except for list markers in type on <ol> and <li>. A Vue binding whose value is one JavaScript string, such as :dir=\"'rtl'\", is checked too. Other bound values, component tags, <c-element>, custom elements, elements inside <svg> or <math>, and attributes that take a list of words, such as rel, are not checked.",
+      "fix": "Use one of the valid values the message lists. If a script on the page reads its own values from the attribute, set rule_invalid_attribute_value to \"ignore\" for that component.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "attribute": "Attribute name as written in the template.",
+        "element": "Element name as written in the template.",
+        "value": "Attribute value as written in the template.",
+        "allowed": "The valid values, quoted and separated by commas.",
+        "suggestion": "The valid value closest to the written one."
+      },
+      "messages": {
+        "default": "'{value}' is not a valid value for '{attribute}' on <{element}>. Valid values: {allowed}.",
+        "suggestion": "'{value}' is not a valid value for '{attribute}' on <{element}>. Did you mean '{suggestion}'? Valid values: {allowed}.",
+        "empty": "'{attribute}' on <{element}> needs a value. Valid values: {allowed}.",
+        "target": "'{value}' is not a valid value for '{attribute}' on <{element}>. A name that starts with '_' must be one of: {allowed}.",
+        "frame-name": "'{value}' is not a valid value for '{attribute}' on <{element}>. A frame name cannot start with '_'.",
+        "pragma": "'{value}' is not a pragma browsers act on in '{attribute}' on <{element}>. If it is an HTTP header, send it in the HTTP response instead. Valid values: {allowed}."
+      },
+      "examples": [
+        {
+          "title": "A misspelled keyword",
+          "language": "citry-html",
+          "source": "<div draggable=\"treu\">Drag me</div>"
+        },
+        {
+          "title": "An input type the browser does not know",
+          "language": "citry-html",
+          "source": "<input type=\"datetime\" name=\"start\">"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.invalid-attribute-value"
+    },
+    {
       "code": "citry.js-data.unsupported-type",
       "constant": "JS_DATA_UNSUPPORTED_TYPE",
       "title": "JsData field is not a JSON type",
-      "summary": "A declared or inferred JsData value cannot be represented safely by Citry's JSON wire format.",
-      "when": "A JsData field has a type that strict JSON serialization cannot carry, such as bytes, a set, a callable, or a date/time object without an explicit conversion.",
+      "summary": "A JsData field has a type that cannot be sent to the browser as JSON, such as a set or a date. Editor help treats the value as any.",
+      "when": "A declared or inferred JsData field has a type that strict JSON cannot carry, such as bytes, a set, a callable, a date or time, or a whole class instance.",
+      "fix": "Convert the value to JSON-friendly data in js_data(), such as a list, a string, or a dict of plain values, and change the JsData annotation to match.",
       "defaultSeverity": "warning",
-      "surfaces": ["check", "lsp"],
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
       "parameters": {
         "name": "JsData field name.",
         "detail": "Why the value is not a clean JSON type."
@@ -125,37 +294,104 @@
       "documentationPath": "/ide/diagnostics/#citry.js-data.unsupported-type"
     },
     {
-      "code": "citry.alpine.unknown-variable",
-      "constant": "ALPINE_UNKNOWN_VARIABLE",
-      "title": "Unknown Alpine variable",
-      "summary": "A free identifier in an Alpine expression is absent from the component's proven browser scope.",
-      "when": "An Alpine expression references a root that is not supplied by JsData, x-data, an enclosing x-for, a proven $component scope write, an Alpine or Citry magic, a browser global, or configured lint-only Alpine variables.",
+      "code": "citry.js-data.public-name-collision",
+      "constant": "JS_DATA_PUBLIC_NAME_COLLISION",
+      "title": "JsData field conflicts with a public instance name",
+      "summary": "A JsData field has the same name as something already on the component instance in the browser, such as a prop, a method, or a name Vue reserves.",
+      "when": "A JsData field that Citry can see in the source uses a reserved browser name or the name of a Vue Options entry, such as a prop, method, or computed value.",
+      "fix": "Rename the JsData field, or rename the Vue Options entry it collides with.",
+      "defaultSeverity": "error",
+      "surfaces": [
+        "lsp"
+      ],
+      "parameters": {
+        "name": "JsData field name."
+      },
+      "messages": {
+        "default": "JsData field '{name}' conflicts with a reserved or component-defined public instance name.",
+        "conditional": "JsData field '{name}' conflicts with a reserved or component-defined public instance name when supplied."
+      },
+      "documentationPath": "/ide/diagnostics/#citry.js-data.public-name-collision"
+    },
+    {
+      "code": "citry.vue.unknown-variable",
+      "constant": "VUE_UNKNOWN_VARIABLE",
+      "title": "Unknown Vue variable",
+      "summary": "A Vue expression reads a name the component does not send to the browser, often because of a typo. Vue shows nothing, or the expression fails in the browser.",
+      "when": "A name in a Vue expression is not a JsData or js_data() key, a v-for or slot alias around it, a Vue or Citry helper, a browser global, or a declared vue_variables entry.",
+      "fix": "Correct the name, or send the value from js_data(). If it is a Python variable, pass it with a c- attribute instead. Declare names that come from outside Citry in vue_variables, or change rule_unknown_vue_variable.",
       "defaultSeverity": "error",
       "configurableSeverity": true,
-      "surfaces": ["check", "lsp"],
-      "parameters": { "name": "Authored Alpine variable name." },
-      "messages": { "default": "Alpine variable '{name}' is not available in this component." },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "Authored Vue variable name."
+      },
+      "messages": {
+        "default": "Vue variable '{name}' is not available in this component.",
+        "python": "Vue variable '{name}' is not available in this component. '{name}' is a Python variable here, which the browser never sees; pass its value with a c- attribute or loop with Vue's v-for."
+      },
       "examples": [
         {
-          "title": "Unknown name in an Alpine expression",
+          "title": "Unknown name in a Vue expression",
           "language": "citry-html",
           "source": "<button :disabled=\"submitting1\">Save</button>"
         }
       ],
-      "documentationPath": "/ide/diagnostics/#citry.alpine.unknown-variable"
+      "documentationPath": "/ide/diagnostics/#citry.vue.unknown-variable"
+    },
+    {
+      "code": "citry.vue.python-variable",
+      "constant": "VUE_PYTHON_VARIABLE",
+      "title": "Python variable read by a Vue expression",
+      "summary": "A Vue expression reads a Python c-for or c-fill variable. The browser never sees that variable, so the value is missing, or Vue shows a different browser value with the same name.",
+      "when": "A Vue expression inside a c-for loop or c-fill binding reads the Python variable, and no Vue v-for or slot alias of that name is around it. When Citry knows every name the component sends to the browser and the name is not among them, it reports citry.vue.unknown-variable instead, unless that rule is set to ignore.",
+      "fix": "Pass the Python value with a c- attribute, such as c-title=\"item\" instead of :title=\"item\", or loop with Vue's v-for. If a browser value has the same name, rename one of them.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "Python variable name read by the Vue expression.",
+        "attribute": "HTML attribute name that a c- attribute can set from Python."
+      },
+      "messages": {
+        "default": "Vue reads '{name}' from browser state, but '{name}' is a Python variable here. Pass its value with a c- attribute or loop with Vue's v-for instead.",
+        "attribute": "Vue reads '{name}' from browser state, but '{name}' is a Python variable here. Use c-{attribute}=\"{name}\" to pass the Python value.",
+        "browser": "Vue reads the component's browser value '{name}' here, not the Python loop or slot variable '{name}'. Pass the Python value with a c- attribute, or rename one of them.",
+        "browser-attribute": "Vue reads the component's browser value '{name}' here, not the Python loop or slot variable '{name}'. Use c-{attribute}=\"{name}\" for the Python value, or rename one of them."
+      },
+      "examples": [
+        {
+          "title": "Python loop variable in a Vue binding",
+          "language": "citry-html",
+          "source": "<li c-for=\"item in items\" :title=\"item\"></li>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.vue.python-variable"
     },
     {
       "code": "citry.csp.incompatible-browser-code",
       "constant": "CSP_INCOMPATIBLE_BROWSER_CODE",
       "title": "Browser code is incompatible with strict CSP",
-      "summary": "An Alpine or Citry browser expression uses a host or source form unsupported by the pinned Alpine CSP evaluator.",
-      "when": "The selected Citry application configures CSP warning or strict mode and a source-classifiable browser expression is incompatible with Alpine CSP 3.17.1.",
+      "summary": "Browser code in a template or asset is not allowed by the Content Security Policy mode your application sets.",
+      "when": "The application sets security_csp to \"warn\" or \"strict\", and a browser expression or asset does something that policy forbids.",
+      "fix": "Move the logic into a method in the component's JavaScript and call that method from the template.",
       "defaultSeverity": "error",
       "configurableSeverity": true,
-      "surfaces": ["check", "lsp"],
-      "parameters": { "detail": "The unsupported directive, host, token, or operation." },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "The unsupported directive, host, token, or operation."
+      },
       "messages": {
-        "default": "Alpine CSP 3.17.1 cannot evaluate {detail} here. Move complex logic to Component.js and call a scope method from the template."
+        "default": "The configured browser security policy cannot accept {detail} here. Move complex logic to Component.js and call a component method from the template."
       },
       "examples": [
         {
@@ -170,51 +406,76 @@
       "code": "citry.component-js.unknown-variable",
       "constant": "COMPONENT_JS_UNKNOWN_VARIABLE",
       "title": "Unknown component JavaScript variable",
-      "summary": "A free identifier inside a $component initializer is absent from its lexical scope and configured globals.",
-      "when": "A $component initializer references a name that was not declared locally, destructured from the callback context, supplied by the JavaScript or browser environment, or configured as a lint-only component JavaScript global.",
+      "summary": "Code inside $component reads a name that is not declared there, often a callback value you forgot to destructure. It fails in the browser.",
+      "when": "A name inside a $component initializer is not declared in that code, destructured from the callback's argument, a JavaScript or browser global, or a declared component_js_globals entry.",
+      "fix": "Declare or destructure the name, or read the value from the component instance. If a project script defines it as a global, declare it in component_js_globals, or change rule_unknown_component_js_variable.",
       "defaultSeverity": "error",
       "configurableSeverity": true,
-      "surfaces": ["check", "lsp"],
-      "parameters": { "name": "Authored JavaScript variable name." },
-      "messages": { "default": "Component JavaScript variable '{name}' is not defined." },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "Authored JavaScript variable name."
+      },
+      "messages": {
+        "default": "Component JavaScript variable '{name}' is not defined."
+      },
       "examples": [
         {
-          "title": "Missing callback destructuring",
+          "title": "Undeclared name in a callback",
           "language": "javascript",
-          "source": "$component(({ data }) => {\n  scope.ready = data.ready;\n});"
+          "source": "$component(({ component }) => {\n  component.ready = settings.ready;\n});"
         }
       ],
       "documentationPath": "/ide/diagnostics/#citry.component-js.unknown-variable"
     },
     {
-      "code": "citry.component-js.unknown-data-member",
-      "constant": "COMPONENT_JS_UNKNOWN_DATA_MEMBER",
-      "title": "Unknown component JavaScript data member",
-      "summary": "A callback accesses a data field that is absent from the component's known JavaScript data schema.",
-      "when": "A static member access on the $component callback's data binding names a field absent from a closed JsData schema or a complete inferred js_data() return shape. Dynamic keys and unknown or open schemas are not checked.",
+      "code": "citry.component-js.unknown-member",
+      "constant": "COMPONENT_JS_UNKNOWN_MEMBER",
+      "title": "Unknown component instance member",
+      "summary": "Component JavaScript reads this.<name> or component.<name>, and the component has no member with that name, often because of a typo. The value is undefined in the browser.",
+      "when": "The name is not a js_data() key, prop, data() key, setup binding, method, computed value, or injection. Citry checks only when it can see every js_data() key and every Vue Options section in the source. It skips names that start with $ or _, bracket reads such as component[key], and code that uses mixins, extends, Object.assign, a class, or computed member names.",
+      "fix": "Correct the name, or define it on the component. A plugin that adds a property to every component should give it a $ prefix, such as $api.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
-      "parameters": { "name": "Authored JavaScript data field name." },
-      "messages": { "default": "JavaScript data field '{name}' is not available in this component." },
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "Authored member name."
+      },
+      "messages": {
+        "default": "Component instance member '{name}' is not defined by this component."
+      },
       "examples": [
         {
-          "title": "Unknown field in callback data",
+          "title": "Misspelled js_data() key in a callback",
           "language": "javascript",
-          "source": "$component(({ data }) => {\n  console.log(data.missing_field);\n});"
+          "source": "$component(({ component }) => {\n  console.log(component.missing_field);\n});"
         }
       ],
-      "documentationPath": "/ide/diagnostics/#citry.component-js.unknown-data-member"
+      "documentationPath": "/ide/diagnostics/#citry.component-js.unknown-member"
     },
     {
       "code": "citry.browser.invalid-state-binding-target",
       "constant": "BROWSER_INVALID_STATE_BINDING_TARGET",
       "title": "Invalid State binding target",
-      "summary": "A State binding is attached to an element or input type that cannot support it.",
-      "when": "A statically known target cannot hold a bound value or support the requested binding direction or update event.",
+      "summary": "A :c-* State binding is on an element that has no value to bind, such as a <div>, or an input type that cannot hold one, such as a file input.",
+      "when": "The element or input type cannot hold a bound value, or does not support the binding's direction or update event.",
+      "fix": "Bind a form control that holds a value, such as <input>, <select>, or <textarea>. On a custom element, name its update event with .on:<event>. To react to an event on another element, use an @c-* binding instead.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
-      "parameters": { "detail": "Explanation of the unsupported binding target." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "Explanation of the unsupported binding target."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "examples": [
         {
           "title": "Binding on a non-control element",
@@ -228,12 +489,20 @@
       "code": "citry.browser.unknown-state-field",
       "constant": "BROWSER_UNKNOWN_STATE_FIELD",
       "title": "Unknown State binding field",
-      "summary": "A State binding names a field that the owning component does not expose publicly.",
-      "when": "A :c-* binding names a field absent from a known public State schema. Bindings with unknown component ownership or an unknown State schema are not checked.",
+      "summary": "A :c-* State binding names a field the component's State does not have, often because of a typo.",
+      "when": "A :c-* binding names a field that is not a public field of the component's State class. Bindings whose component or State class Citry cannot determine are not checked.",
+      "fix": "Correct the field name, or add the field to the component's State class.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
-      "parameters": { "name": "Authored State field name, without prefix or modifiers." },
-      "messages": { "default": "State field '{name}' is not a public field of this component." },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "Authored State field name, without prefix or modifiers."
+      },
+      "messages": {
+        "default": "State field '{name}' is not a public field of this component."
+      },
       "examples": [
         {
           "title": "Unknown field in a State binding",
@@ -247,12 +516,20 @@
       "code": "citry.browser.unknown-server-event",
       "constant": "BROWSER_UNKNOWN_SERVER_EVENT",
       "title": "Unknown server event",
-      "summary": "A literal browser event reference names no effective handler on the component that owns it.",
-      "when": "An Alpine expression or component JavaScript calls sendEvent, $sendEvent, $loading, or $error with an unknown non-empty string literal, or a declarative @c-* binding names an unknown handler.",
+      "summary": "Browser code names a server event that the component has no handler for, often because of a typo.",
+      "when": "A template or component JavaScript calls sendEvent, $sendEvent, $loading, or $error with a string that names no handler, or an @c-* binding names no handler.",
+      "fix": "Correct the name, or add a public method with that name to the component's Events class.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
-      "parameters": { "name": "Authored server-event wire name." },
-      "messages": { "default": "Server event '{name}' is not declared by this component." },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "Authored server-event wire name."
+      },
+      "messages": {
+        "default": "Server event '{name}' is not declared by this component."
+      },
       "examples": [
         {
           "title": "Unknown literal event",
@@ -267,55 +544,95 @@
         {
           "title": "Unknown loading handler",
           "language": "citry-html",
-          "source": "<span x-show=\"$loading('missing')\">Saving</span>"
+          "source": "<span v-show=\"$loading('missing')\">Saving</span>"
         }
       ],
       "documentationPath": "/ide/diagnostics/#citry.browser.unknown-server-event"
     },
     {
-      "code": "citry.browser.unknown-component-prop",
-      "constant": "BROWSER_UNKNOWN_COMPONENT_PROP",
-      "title": "Unknown client prop",
-      "summary": "A static $c-props object contains a key that the child component does not declare.",
-      "when": "A statically resolved component receives a direct $c-props object key absent from its static $component({props}) declaration.",
+      "code": "citry.browser.undeclared-emit",
+      "constant": "BROWSER_UNDECLARED_EMIT",
+      "title": "Undeclared emitted event",
+      "summary": "Browser code emits a Vue event that the component's emits option does not list, often because of a typo. Parents listening for the declared name never hear it.",
+      "when": "this.$emit, component.$emit, or $emit in the component's template uses a name that emits does not list and no on<Event> prop declares. Citry checks only when emits is an array of strings or an object with plain keys. A component without emits may emit any name, as in Vue.",
+      "fix": "Correct the event name, or add it to emits.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
       "parameters": {
-        "name": "Authored client-prop key.",
-        "tag": "Authored child component tag."
+        "name": "Authored event name."
       },
       "messages": {
-        "default": "Client prop '{name}' is not declared by <{tag}>."
+        "default": "Event '{name}' is not declared in this component's emits option."
       },
       "examples": [
         {
-          "title": "Unknown client prop",
+          "title": "Misspelled event in a method",
+          "language": "javascript",
+          "source": "$component({\n  emits: ['drop-task'],\n  methods: {\n    drop() { this.$emit('drop-tsak'); },\n  },\n});"
+        },
+        {
+          "title": "Undeclared event in the template",
           "language": "citry-html",
-          "source": "<c-card $c-props=\"{ missing: value }\" />"
+          "source": "<button @click=\"$emit('close')\">Close</button>"
         }
       ],
-      "documentationPath": "/ide/diagnostics/#citry.browser.unknown-component-prop"
+      "documentationPath": "/ide/diagnostics/#citry.browser.undeclared-emit"
+    },
+    {
+      "code": "citry.browser.undeclared-component-event",
+      "constant": "BROWSER_UNDECLARED_COMPONENT_EVENT",
+      "title": "Listener for an event the child component does not declare",
+      "summary": "A template listens on a child component for an event the child does not declare, often because of a typo. The listener usually never runs.",
+      "when": "An @name or v-on:name listener on a component tag names an event that the child's emits does not list and no on<Event> prop accepts. Vue then passes the listener to the child's root element, where it runs only for a DOM event of that name. Only names with a hyphen, a colon, or an uppercase letter are reported, because a plain lowercase name such as click is usually a DOM event. Citry checks only when the child's emits is an array of strings or an object with plain keys.",
+      "fix": "Correct the event name, or add it to the child's emits.",
+      "defaultSeverity": "warning",
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "component": "Component tag, lowercased, including the c- prefix.",
+        "name": "Authored event name."
+      },
+      "messages": {
+        "default": "Component '{component}' does not declare event '{name}' in its emits option."
+      },
+      "examples": [
+        {
+          "title": "Misspelled child event",
+          "language": "citry-html",
+          "source": "<c-Lane @drop-tsak=\"moveTask($event)\"></c-Lane>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.browser.undeclared-component-event"
     },
     {
       "code": "citry.browser.missing-component-prop",
       "constant": "BROWSER_MISSING_COMPONENT_PROP",
-      "title": "Missing required client prop",
-      "summary": "A static $c-props object omits a required prop declared by the child component.",
-      "when": "A statically resolved component receives a direct $c-props object without a required static $component({props}) key and no dynamic spread can supply it.",
+      "title": "Missing required Vue prop",
+      "summary": "A component tag leaves out a Vue prop that the child component marks as required.",
+      "when": "A registered <c-*> tag has no Vue binding for a prop the child declares with required: true, and no spread binding could supply it.",
+      "fix": "Pass the prop on the tag, such as :count=\"total\".",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
       "parameters": {
-        "name": "Required client-prop name.",
-        "tag": "Authored child component tag."
+        "name": "Required child Vue prop name.",
+        "tag": "Resolved native component tag."
       },
       "messages": {
-        "default": "Required client prop '{name}' is missing for <{tag}>."
+        "default": "Required Vue prop '{name}' is missing for <{tag}>."
       },
       "examples": [
         {
           "title": "Missing required prop",
           "language": "citry-html",
-          "source": "<c-card $c-props=\"{}\" />"
+          "source": "<c-card />"
         }
       ],
       "documentationPath": "/ide/diagnostics/#citry.browser.missing-component-prop"
@@ -323,24 +640,28 @@
     {
       "code": "citry.browser.incompatible-component-prop",
       "constant": "BROWSER_INCOMPATIBLE_COMPONENT_PROP",
-      "title": "Incompatible client prop",
-      "summary": "A static $c-props value has a proven type outside the child component's prop declaration.",
-      "when": "Citry can prove both the authored value type and the static $component({props}) type, and the value cannot satisfy that prop.",
+      "title": "Incompatible Vue prop",
+      "summary": "A Vue prop on a component tag gets a value of a type the child component does not accept.",
+      "when": "A :prop or v-bind:prop value on a component tag has a type Citry knows, from a literal, JsData, or a loop binding, and the child's declared Vue prop type does not accept it.",
+      "fix": "Pass a value of the type the child declares, or change the child's prop type.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
       "parameters": {
-        "name": "Authored client-prop key.",
-        "expected": "Child component's declared JavaScript type.",
+        "name": "Authored native Vue prop name.",
+        "expected": "Child component's accepted Vue prop type.",
         "actual": "Proven authored value type."
       },
       "messages": {
-        "default": "Client prop '{name}' expects {expected}, but this value is {actual}."
+        "default": "Vue prop '{name}' expects {expected}, but this binding is {actual}."
       },
       "examples": [
         {
           "title": "Wrong literal type",
           "language": "citry-html",
-          "source": "<c-card $c-props=\"{ count: 'many' }\" />"
+          "source": "<c-card :count=\"'many'\" />"
         }
       ],
       "documentationPath": "/ide/diagnostics/#citry.browser.incompatible-component-prop"
@@ -349,34 +670,51 @@
       "code": "citry.check.template-declaration",
       "constant": "CHECK_TEMPLATE_DECLARATION",
       "title": "Template declaration unavailable",
-      "summary": "The checker could not safely inspect or identify a component's template declaration.",
-      "when": "The selected component's template or template_file declaration raises during inspection or cannot be identified safely.",
+      "summary": "citry check could not read a component's template or template_file, for example because computing it raised an error.",
+      "when": "Reading the component's template or template_file declaration raises an error, or Citry cannot tell which declaration applies.",
+      "fix": "Read the error in the message and fix the declaration or the code it runs.",
       "defaultSeverity": "error",
-      "surfaces": ["check"],
-      "parameters": { "detail": "Inspection failure detail." },
-      "messages": { "default": "Citry could not inspect this component's template declaration: {detail}" },
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "detail": "Inspection failure detail."
+      },
+      "messages": {
+        "default": "Citry could not inspect this component's template declaration: {detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.check.template-declaration"
     },
     {
       "code": "citry.check.template-language-unsupported",
       "constant": "CHECK_TEMPLATE_LANGUAGE_UNSUPPORTED",
       "title": "Unsupported template language",
-      "summary": "The checker only analyzes native Citry templates and skipped a declaration with another language.",
-      "when": "A component sets template_lang to a non-None value; citry check currently analyzes only native Citry templates.",
+      "summary": "The component sets template_lang to another template language. citry check reads only Citry templates, so it skipped this one.",
+      "when": "A component's template_lang is not None.",
+      "fix": "Nothing to fix if the other language is intended. Check that template with that language's own tools.",
       "defaultSeverity": "error",
-      "surfaces": ["check"],
-      "parameters": { "type": "Runtime type of the non-None template_lang value." },
-      "messages": { "default": "Citry cannot check template_lang with a {type} value. This template was skipped." },
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "type": "Runtime type of the non-None template_lang value."
+      },
+      "messages": {
+        "default": "Citry cannot check template_lang with a {type} value. This template was skipped."
+      },
       "documentationPath": "/ide/diagnostics/#citry.check.template-language-unsupported"
     },
     {
       "code": "citry.check.template-value-invalid",
       "constant": "CHECK_TEMPLATE_VALUE_INVALID",
       "title": "Invalid template declaration value",
-      "summary": "A template or template_file declaration has a value type the checker cannot use.",
+      "summary": "A component's template or template_file has a value of the wrong type, so citry check skipped it.",
       "when": "Component.template is not a string, or Component.template_file is neither a string nor a pathlib.Path.",
+      "fix": "Set template to a string, or template_file to a string or Path.",
       "defaultSeverity": "error",
-      "surfaces": ["check"],
+      "surfaces": [
+        "check"
+      ],
       "parameters": {},
       "messages": {
         "inline": "Component.template must be a string. This template was skipped.",
@@ -395,15 +733,20 @@
       "code": "citry.check.template-file-not-found",
       "constant": "CHECK_TEMPLATE_FILE_NOT_FOUND",
       "title": "Template file not found",
-      "summary": "No template file exists at any location resolved from template_file.",
-      "when": "Component.template_file points to a path that does not exist in the component directory or any configured template directory.",
+      "summary": "The file named in template_file does not exist in any place Citry looks.",
+      "when": "template_file points to a path that is not in the component's directory or any configured template directory.",
+      "fix": "Correct the path, or move the file to one of the searched locations the message lists.",
       "defaultSeverity": "error",
-      "surfaces": ["check"],
+      "surfaces": [
+        "check"
+      ],
       "parameters": {
         "path": "Authored template_file value.",
         "locations": "Locations searched by Citry."
       },
-      "messages": { "default": "Template file '{path}' was not found. Searched: {locations}." },
+      "messages": {
+        "default": "Template file '{path}' was not found. Searched: {locations}."
+      },
       "examples": [
         {
           "title": "Missing template file",
@@ -417,120 +760,237 @@
       "code": "citry.check.template-file-unreadable",
       "constant": "CHECK_TEMPLATE_FILE_UNREADABLE",
       "title": "Template file could not be read",
-      "summary": "The resolved template file could not be opened or decoded as UTF-8.",
-      "when": "Citry resolves Component.template_file but cannot open the file or decode it as UTF-8.",
+      "summary": "The template file exists, but Citry could not open it or read it as UTF-8 text.",
+      "when": "Citry finds the template_file but cannot open it, or it is not valid UTF-8.",
+      "fix": "Check the file's permissions, and save it as UTF-8.",
       "defaultSeverity": "error",
-      "surfaces": ["check"],
-      "parameters": { "detail": "File-system or decoding failure detail." },
-      "messages": { "default": "Citry could not read this template file: {detail}" },
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "detail": "File-system or decoding failure detail."
+      },
+      "messages": {
+        "default": "Citry could not read this template file: {detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.check.template-file-unreadable"
     },
     {
       "code": "citry.check.template-namespace-unavailable",
       "constant": "CHECK_TEMPLATE_NAMESPACE_UNAVAILABLE",
       "title": "Template variables unavailable",
-      "summary": "The checker could not determine the variables supplied to a component template.",
-      "when": "citry check cannot inspect the component's declared or inferred template data namespace.",
+      "summary": "citry check could not work out which variables a component's template receives, so it cannot check them.",
+      "when": "Reading the component's declared or inferred template data raises an error.",
+      "fix": "Read the error in the message and fix the template data declaration or the code it runs.",
       "defaultSeverity": "error",
-      "surfaces": ["check"],
-      "parameters": { "detail": "Namespace inspection failure detail." },
-      "messages": { "default": "Citry could not inspect this template's variables: {detail}" },
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "detail": "Namespace inspection failure detail."
+      },
+      "messages": {
+        "default": "Citry could not inspect this template's variables: {detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.check.template-namespace-unavailable"
     },
     {
       "code": "citry.check.python-source-unreadable",
       "constant": "CHECK_PYTHON_SOURCE_UNREADABLE",
       "title": "Python source could not be analyzed",
-      "summary": "Static checking could not read, decode, or parse a Python source file.",
-      "when": "Static discovery reaches a Python file that cannot be read, decoded, or parsed.",
+      "summary": "A Python file could not be read or parsed, so its components were not checked.",
+      "when": "citry check --static reaches a Python file it cannot read, decode, or parse.",
+      "fix": "Fix the Python syntax error or encoding problem in the file the message names.",
       "defaultSeverity": "error",
-      "surfaces": ["check"],
-      "parameters": { "detail": "Python source failure detail." },
-      "messages": { "default": "Citry could not analyze this Python source: {detail}" },
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "detail": "Python source failure detail."
+      },
+      "messages": {
+        "default": "Citry could not analyze this Python source: {detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.check.python-source-unreadable"
     },
     {
       "code": "citry.i18n.catalog-invalid",
       "constant": "I18N_CATALOG_INVALID",
       "title": "Invalid Fluent catalog source",
-      "summary": "A Fluent source unit failed Citry's production parser or i18n contract checks.",
-      "when": "A messages block or catalog file contains invalid Fluent syntax, an unsupported parameter type, or another source-level i18n error.",
+      "summary": "A messages block or Fluent catalog file has invalid Fluent syntax or another translation source mistake.",
+      "when": "A messages block or catalog file has invalid Fluent syntax, an unsupported @param type, or another source error.",
+      "fix": "Correct the Fluent source at the reported position. The message says what is wrong.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
-      "parameters": { "detail": "Compiler-provided catalog error." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "Compiler-provided catalog error."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.i18n.catalog-invalid"
     },
     {
       "code": "citry.i18n.unknown-message",
       "constant": "I18N_UNKNOWN_MESSAGE",
       "title": "Unknown i18n message",
-      "summary": "A literal translation key is absent from the checked project catalog.",
-      "when": "A direct tr() call, <c-trans> tag, $c-tr binding, or bounded browser bind() call names a message value or attribute that no component or configured catalog package defines.",
+      "summary": "Code asks for a translation message that no catalog defines, often because of a typo in the message ID.",
+      "when": "A tr() call, <c-trans> tag, $c-tr binding, or browser bind() call with a literal ID names a message or attribute that no component or configured catalog package defines.",
+      "fix": "Correct the message ID, or add the message to the component's messages or a catalog.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
-      "parameters": { "detail": "Unknown-message explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "Unknown-message explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.i18n.unknown-message"
     },
     {
       "code": "citry.i18n.argument-invalid",
       "constant": "I18N_ARGUMENT_INVALID",
       "title": "Invalid i18n argument",
-      "summary": "A translation binding, formatter, parser, or rich-message call does not match its checked contract.",
-      "when": "A literal i18n call or $c-tr binding is malformed, has missing, unknown, or mistyped message inputs, uses an unknown named profile, or supplies the wrong <c-trans> values or fills.",
+      "summary": "A translation call passes the wrong inputs: a missing, extra, or mistyped argument, an unknown format profile, or wrong <c-trans> values or fills.",
+      "when": "A literal i18n call or $c-tr binding is malformed, its message inputs do not match the message's @param declarations, it names an unknown formatter or parser profile, or a <c-trans> tag supplies the wrong values or fills.",
+      "fix": "Match the arguments to the message's @param declarations, which hover shows, or correct the profile name.",
       "defaultSeverity": "error",
-      "surfaces": ["check", "lsp"],
-      "parameters": { "detail": "Argument-contract explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "Argument-contract explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.i18n.argument-invalid"
+    },
+    {
+      "code": "citry.i18n.missing-param-type",
+      "constant": "I18N_MISSING_PARAM_TYPE",
+      "title": "Message variable without a type",
+      "summary": "A message uses a variable that has no # @param comment, so Citry cannot check the type of the value that callers pass in.",
+      "when": "A source-language message uses a variable such as { $name } in its value or an attribute, has no # @param comment declaring its type, and rule_i18n_missing_param_type is \"warning\". A variable used in a selector or a formatting function without a type fails catalog compilation and is reported as citry.i18n.catalog-invalid.",
+      "fix": "Add a comment such as # @param {str} $name above the message, naming the type the variable really takes. Set rule_i18n_missing_param_type to \"error\" to make a missing type fail catalog compilation, or to \"ignore\" to hide this warning.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "detail": "Message and variable that lack a type."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
+      "documentationPath": "/ide/diagnostics/#citry.i18n.missing-param-type"
     },
     {
       "code": "citry.i18n.cross-language-fallback",
       "constant": "I18N_CROSS_LANGUAGE_FALLBACK",
-      "title": "Cross-language i18n fallback",
-      "summary": "A plain translated string falls back to a different language without a place to carry that language metadata.",
-      "when": "A text-only translation can select a source or fallback locale whose canonical language tag differs from the requested locale.",
-      "defaultSeverity": "error",
-      "surfaces": ["check"],
-      "parameters": { "detail": "Fallback coverage explanation." },
-      "messages": { "default": "{detail}" },
+      "title": "Text from a fallback language",
+      "summary": "A translation is missing for some locales, so this text appears in another language there. The page still renders, but the text sits inside an element marked with the requested language, so a screen reader may read it with the wrong pronunciation.",
+      "when": "A tr() call or self.i18n.tr() call with a literal message ID, or a message listed in Component.I18n.client_messages, has no translation in some selectable locale and resolves to another locale through the configured fallbacks or the message's source locale.",
+      "fix": "Add the missing translations; the i18n coverage command lists them. To show fallback text with its own language, call self.i18n.resolve() and put its locale and direction on an element, as the i18n guide's Language direction and accessibility page shows. Set rule_i18n_cross_language_fallback to \"error\" to require complete translations, or to \"ignore\" to hide this warning.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "detail": "Fallback coverage explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.i18n.cross-language-fallback"
+    },
+    {
+      "code": "citry.i18n.rich-message-fallback",
+      "constant": "I18N_RICH_MESSAGE_FALLBACK",
+      "title": "Rich message without a translation",
+      "summary": "A <c-trans> message has no translation in some locale. Rendering it in that locale raises I18nRuntimeUnavailableError, because <c-trans> adds no element that could mark text from a fallback language.",
+      "when": "A <c-trans> tag names a message or attribute that has no translation in some selectable locale, so it would resolve to another locale through the configured fallbacks or the message's source locale.",
+      "fix": "Add a translation for each locale the finding lists. Plain text messages may fall back; only <c-trans> needs every translation.",
+      "defaultSeverity": "error",
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "detail": "Fallback coverage explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
+      "documentationPath": "/ide/diagnostics/#citry.i18n.rich-message-fallback"
     },
     {
       "code": "citry.i18n.client-message-invalid",
       "constant": "I18N_CLIENT_MESSAGE_INVALID",
-      "title": "Invalid client i18n message",
-      "summary": "A message declared for browser use is missing or lacks complete locale coverage.",
-      "when": "Component.I18n.client_messages names an unknown output or an output that would fall back across languages in a client-enabled subtree.",
+      "title": "Unknown client i18n message",
+      "summary": "Component.I18n.client_messages names a message that does not exist, so the browser cannot load it.",
+      "when": "Component.I18n.client_messages names a message ID that no component or configured catalog package defines.",
+      "fix": "Correct the name in client_messages, or add the message.",
       "defaultSeverity": "error",
-      "surfaces": ["check"],
-      "parameters": { "detail": "Client-message contract explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "detail": "Client-message contract explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.i18n.client-message-invalid"
     },
     {
       "code": "citry.format.syntax",
       "constant": "FORMAT_SYNTAX",
       "title": "Invalid template syntax",
-      "summary": "Formatting stopped because the template does not parse.",
+      "summary": "The template has a syntax error, so the formatter left it unchanged.",
       "when": "A format command receives a template with a Citry syntax error.",
+      "fix": "Fix the syntax error, then format again.",
       "defaultSeverity": "error",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Formatter-provided explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Formatter-provided explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.syntax"
     },
     {
       "code": "citry.format.suppression",
       "constant": "FORMAT_SUPPRESSION",
       "title": "Invalid formatter directive",
-      "summary": "A fmt directive is unmatched or appears in a context where its requested scope is invalid.",
-      "when": "A fmt:on, fmt:off, or fmt:skip directive has no valid matching scope at its authored position.",
+      "summary": "A fmt: on, fmt: off, or fmt: skip comment has no matching partner or sits where it cannot apply.",
+      "when": "A formatter directive has no valid scope at the place it is written, such as a fmt: on without an earlier fmt: off.",
+      "fix": "Pair each fmt: off with a fmt: on in the same scope, or remove the stray directive.",
       "defaultSeverity": "error",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Formatter-provided explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Formatter-provided explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "examples": [
         {
           "title": "Unmatched formatter enable directive",
@@ -544,72 +1004,126 @@
       "code": "citry.format.invariant",
       "constant": "FORMAT_INVARIANT",
       "title": "Formatter safety check failed",
-      "summary": "The formatter refused to write output after an internal span, structure, or idempotence check failed.",
-      "when": "Formatting output fails one of Citry's safety checks, so Citry refuses to apply the edit.",
+      "summary": "The formatter's own safety check failed, so it refused to change the file. Your template is not at fault.",
+      "when": "The formatted result fails one of Citry's safety checks, for example formatting it a second time would change it again.",
+      "fix": "The file is unchanged. Report the template and message as a Citry bug.",
       "defaultSeverity": "error",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Formatter-provided explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Formatter-provided explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.invariant"
     },
     {
       "code": "citry.format.unsupported",
       "constant": "FORMAT_UNSUPPORTED",
       "title": "Formatting shape unsupported",
-      "summary": "The formatter conservatively declined a valid template shape it cannot yet rewrite safely.",
-      "when": "The template is valid, but its source shape is outside the formatter's currently supported rewrite rules.",
+      "summary": "The template is valid, but the formatter cannot rewrite this shape safely, so it left it unchanged.",
+      "when": "The template's structure is outside what the formatter can rewrite.",
+      "fix": "Nothing to fix. Format that part by hand, or wrap it in fmt: off and fmt: on.",
       "defaultSeverity": "error",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Formatter-provided explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Formatter-provided explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.unsupported"
     },
     {
       "code": "citry.format.provider-invalid",
       "constant": "FORMAT_PROVIDER_INVALID",
       "title": "Embedded formatter returned invalid output",
-      "summary": "A JavaScript or CSS formatter response failed Citry's source-bound validation.",
-      "when": "A delegated JavaScript or CSS formatter returns an edit that does not match the requested embedded region.",
+      "summary": "The JavaScript or CSS formatter returned a change that does not fit the code it was asked to format, so Citry discarded it.",
+      "when": "An external JavaScript or CSS formatter returns an edit outside the region Citry sent it.",
+      "fix": "The file is unchanged. Try another formatter for that language, or report the message.",
       "defaultSeverity": "error",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Provider validation failure detail." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Provider validation failure detail."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.provider-invalid"
     },
     {
       "code": "citry.format.embedded-suppressed",
       "constant": "FORMAT_EMBEDDED_SUPPRESSED",
       "title": "Embedded formatting suppressed",
-      "summary": "A fmt directive deliberately prevented formatting of a JavaScript or CSS region.",
-      "when": "A fmt:off or fmt:skip directive covers an embedded JavaScript or CSS region.",
+      "summary": "A fmt: off or fmt: skip comment kept a JavaScript or CSS region unformatted, as requested.",
+      "when": "A fmt: off or fmt: skip directive covers an embedded JavaScript or CSS region.",
+      "fix": "Nothing to fix. Remove the directive if you want the region formatted.",
       "defaultSeverity": "information",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Suppression explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Suppression explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.embedded-suppressed"
     },
     {
       "code": "citry.format.embedded-language-unsupported",
       "constant": "FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED",
       "title": "Embedded language unsupported",
-      "summary": "Citry recognized an embedded region but cannot delegate its declared language.",
-      "when": "An embedded script or style region declares a language for which Citry has no formatter provider.",
+      "summary": "A <script> or <style> region declares a language Citry has no formatter for, so it was left unchanged.",
+      "when": "An embedded script or style region declares a language that no Citry formatter handles.",
+      "fix": "Nothing to fix. Format that region with its own tools.",
       "defaultSeverity": "warning",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Unsupported language explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Unsupported language explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.embedded-language-unsupported"
     },
     {
       "code": "citry.format.embedded-interpolation-unsupported",
       "constant": "FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED",
       "title": "Embedded interpolation unsupported",
-      "summary": "A JavaScript or CSS region contains Citry interpolation that cannot be safely delegated yet.",
-      "when": "An embedded JavaScript or CSS region contains Citry interpolation, which cannot yet be mapped safely through an external formatter.",
+      "summary": "A JavaScript or CSS region contains Citry interpolation, such as {{ title }}, so it was left unchanged.",
+      "when": "An embedded JavaScript or CSS region contains Citry interpolation, which an external formatter cannot handle safely.",
+      "fix": "Pass the value through js_data() or css_data() instead of interpolating it, or leave the region unformatted.",
       "defaultSeverity": "warning",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Interpolation explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Interpolation explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "examples": [
         {
           "title": "Citry interpolation inside JavaScript",
@@ -623,60 +1137,102 @@
       "code": "citry.format.provider-unavailable",
       "constant": "FORMAT_PROVIDER_UNAVAILABLE",
       "title": "Embedded formatter unavailable",
-      "summary": "No JavaScript or CSS formatter returned a usable result for a delegated region.",
-      "when": "Citry asks the editor to format embedded JavaScript or CSS, but no installed provider returns an edit.",
+      "summary": "No JavaScript or CSS formatter answered, so that region was left unchanged.",
+      "when": "Citry asks the editor to format embedded JavaScript or CSS, and no installed formatter returns an edit.",
+      "fix": "In VS Code, check that Prettier for VS Code is installed and enabled for the language, or disable it so Citry uses its own copy of Prettier.",
       "defaultSeverity": "warning",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Provider availability detail." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Provider availability detail."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.provider-unavailable"
     },
     {
       "code": "citry.format.host-syntax",
       "constant": "FORMAT_HOST_SYNTAX",
       "title": "Invalid Python host syntax",
-      "summary": "A Python file containing component assets could not be parsed before formatting.",
-      "when": "A format command targets a Python file whose current source has invalid Python syntax.",
+      "summary": "The Python file has a syntax error, so Citry could not find the component strings to format.",
+      "when": "A format command targets a Python file that is not valid Python.",
+      "fix": "Fix the Python syntax error, then format again.",
       "defaultSeverity": "error",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Python syntax explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Python syntax explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.host-syntax"
     },
     {
       "code": "citry.format.ineligible",
       "constant": "FORMAT_INELIGIBLE",
       "title": "Document is not eligible for formatting",
-      "summary": "The selected document, position, or asset is outside Citry's proven formatting scope.",
-      "when": "Citry cannot prove that the selected document or cursor position belongs to a supported Citry template, script, or style region.",
+      "summary": "The file or cursor position is not inside a Citry template, script, or style, so there is nothing to format.",
+      "when": "Citry cannot tell that the document or cursor position belongs to a template, js, or css string, or a standalone Citry template.",
+      "fix": "Place the cursor inside a template, js, or css string, or open the template file itself.",
       "defaultSeverity": "error",
-      "surfaces": ["formatter", "lsp", "vscode"],
-      "parameters": { "detail": "Eligibility explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "formatter",
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Eligibility explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.ineligible"
     },
     {
       "code": "citry.format.stale-document",
       "constant": "FORMAT_STALE_DOCUMENT",
       "title": "Document changed during formatting",
-      "summary": "Formatting was discarded because its source-bound plan no longer matches the current document.",
-      "when": "The document changes after Citry prepares a format plan but before the editor can apply it.",
+      "summary": "The document changed while Citry was formatting it, so the result was discarded.",
+      "when": "The document changes after Citry prepares the edit and before the editor applies it.",
+      "fix": "Run the format command again.",
       "defaultSeverity": "error",
-      "surfaces": ["lsp", "vscode"],
-      "parameters": { "detail": "Stale-document explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "lsp",
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Stale-document explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.stale-document"
     },
     {
       "code": "citry.format.cancelled",
       "constant": "FORMAT_CANCELLED",
       "title": "Formatting cancelled",
-      "summary": "The editor cancelled a formatting operation before Citry could apply it.",
-      "when": "The editor or user cancels a format request before Citry applies its edits.",
+      "summary": "Formatting was cancelled before Citry applied it.",
+      "when": "The editor or you cancel a format request before Citry applies its edits.",
+      "fix": "Nothing to fix. Run the format command again if needed.",
       "defaultSeverity": "information",
-      "surfaces": ["vscode"],
-      "parameters": { "detail": "Cancellation explanation." },
-      "messages": { "default": "{detail}" },
+      "surfaces": [
+        "vscode"
+      ],
+      "parameters": {
+        "detail": "Cancellation explanation."
+      },
+      "messages": {
+        "default": "{detail}"
+      },
       "documentationPath": "/ide/diagnostics/#citry.format.cancelled"
     }
   ]

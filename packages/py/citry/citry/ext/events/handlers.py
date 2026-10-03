@@ -50,6 +50,18 @@ CONFIG_NAMES = (
 )
 
 _HTTP_METHOD_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+
+# The methods the per-event route (``ext/events/e/{class_id}/{event}``)
+# admits at the host adapter. Handlers can register after the routes are
+# mounted (Django snapshots its URL set once), so the route cannot list only
+# the methods current handlers declare; it admits this fixed set, and the
+# resolved handler answers 405 with its own ``Allow`` list. A handler may
+# declare only methods from this set, because on its own URL a request with
+# any other method stops at the adapter, so the declared method could never
+# be served there. It lives here rather than in
+# ``routes.py`` because ``routes.py`` imports the dispatcher, which imports
+# this module.
+EVENT_ROUTE_METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
 _MAX_TIMING_MILLISECONDS = 2**53 - 1
 
 # Where ``@event`` stores its values, as an attribute on the handler function.
@@ -130,6 +142,28 @@ def validate_methods_value(source: str, value: Any) -> tuple[str, ...]:
         msg = f"{source} contains an invalid HTTP method name: {invalid!r}."
         raise ValueError(msg)
     return tuple(m.upper() for m in value)
+
+
+def validate_route_methods(source: str, methods: tuple[str, ...]) -> None:
+    """
+    Check that every declared method can reach the handler through the per-event route.
+
+    ``methods`` is the uppercase tuple ``validate_methods_value`` returned.
+    On the handler's own URL, a method outside ``EVENT_ROUTE_METHODS`` is
+    answered 405 by the host adapter before Events sees the request, so a
+    declared method outside that set could never be served there. (The
+    batched call route ignores declared methods.) Rejecting it here makes
+    that mistake fail when the class is defined instead of on the first
+    request.
+    """
+    unreachable = next((method for method in methods if method not in EVENT_ROUTE_METHODS), None)
+    if unreachable is not None:
+        allowed = ", ".join(EVENT_ROUTE_METHODS)
+        msg = (
+            f"{source} declares HTTP method {unreachable!r}, which the per-event route does not accept,"
+            f" so the handler's own URL could never serve it. Use one of: {allowed}."
+        )
+        raise ValueError(msg)
 
 
 def validate_timing_value(source: str, value: Any) -> int | None:
@@ -267,6 +301,8 @@ def event(
         name: Wire name override: rename the Python method without touching
             templates.
         methods: The allowed HTTP methods for this handler, e.g. ``("GET",)``.
+            Each must be one of GET, HEAD, POST, PUT, PATCH, DELETE, or
+            OPTIONS, the methods the per-event route accepts.
         guard: Per-handler authorization callable; replaces (does not stack
             on) the component's ``_guard``.
         csrf: Per-handler CSRF policy: ``"auto"``, ``False``, or a callable.
@@ -306,7 +342,10 @@ def event(
 
     Raises:
         ValueError: When a value has the wrong shape (e.g. a ``methods``
-            string instead of a tuple), at decoration time.
+            string instead of a tuple), or when ``methods`` names a method
+            the per-event route does not accept (anything other than GET,
+            HEAD, POST, PUT, PATCH, DELETE, and OPTIONS), at decoration
+            time.
 
     """
     if name is not None and (not isinstance(name, str) or not name):
@@ -324,6 +363,11 @@ def event(
     )
 
     def wrap(handler: _F) -> _F:
+        # The shape was checked above, when ``@event(...)`` was called; the
+        # route check waits for the handler so its error can name it.
+        if options.methods is not None:
+            handler_name = getattr(handler, "__qualname__", repr(handler))
+            validate_route_methods(f"@event(methods=...) on handler {handler_name!r}", options.methods)
         setattr(handler, EVENT_OPTIONS_ATTR, options)
         return handler
 

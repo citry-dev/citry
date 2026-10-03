@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
+import pytest
 
-from citry._alpine_csp import ALPINE_CSP_COMPATIBILITY_VERSION, classify_alpine_csp
-from citry._browser_expressions import BrowserExpression
+from citry._browser_expressions import BrowserExpression, browser_component_prop_sites
 from citry.analysis import (
-    AlpineLintConsumer,
+    VUE_AMBIENT_NAMES,
+    AlpineAttributeLintConsumer,
+    AttributeValueLintConsumer,
     ComponentJsLintConsumer,
+    VueLintConsumer,
     analyze_browser_component_source,
     analyze_browser_expression,
     analyze_js_data_source,
+    browser_bindings,
     browser_client_prop_accepts,
-    browser_component_prop_uses,
     browser_component_props,
-    browser_component_scope_writes,
     browser_declarative_events,
     browser_expressions,
     browser_i18n_bind_calls,
@@ -30,9 +30,16 @@ from citry.analysis import (
     browser_member_literal_calls,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
+    lint_alpine_attributes,
+    lint_attribute_values,
     lint_csp_compatibility,
-    lint_unknown_alpine_variables,
+    lint_undeclared_component_js_emits,
+    lint_undeclared_component_listeners,
+    lint_undeclared_template_emits,
+    lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
+    lint_unknown_vue_variables,
+    lint_vue_python_variables,
     python_event_handler_range,
 )
 from citry_core.template_parser import parse_template
@@ -85,34 +92,33 @@ def test_js_data_source_keeps_only_browser_identifier_roots():
 
     assert shape is not None
     assert [root.name for root in shape.roots] == ["optional", "title"]
-    assert shape.parameters == ("self", "kwargs", "slots")
+    # The receiver is left out, so the kwargs parameter always comes first.
+    assert shape.parameters == ("kwargs", "slots")
 
 
 def test_browser_hosts_preserve_loop_bindings_and_literal_event_ranges():
     source = (
-        '<main x-data="{}"><button @click="sendEvent(\'save\')" :class="tone"></button>'
-        '<span x-for="item in items" x-text="item.name + title" '
-        'x-model.lazy="query" x-intersect.once="load()"></span></main>'
+        '<main><button @click="sendEvent(\'save\')" :class="tone"></button>'
+        '<span v-for="item in items" v-text="item.name + title" '
+        'v-model.lazy="query"></span></main>'
     )
     template = parse_template(source)
 
     expressions = browser_expressions(template)
 
     assert [(item.attribute, item.mode) for item in expressions] == [
-        ("x-data", "expression"),
         ("@click", "statement"),
         (":class", "expression"),
-        ("x-for", "loop"),
-        ("x-text", "expression"),
-        ("x-model.lazy", "expression"),
-        ("x-intersect.once", "statement"),
+        ("v-for", "loop"),
+        ("v-text", "expression"),
+        ("v-model.lazy", "expression"),
     ]
-    click = expressions[1]
+    click = expressions[0]
     calls = browser_literal_calls(click, frozenset({"sendEvent", "$sendEvent"}))
     assert [(call.function, call.value) for call in calls] == [("sendEvent", "save")]
-    text = expressions[4]
+    text = expressions[3]
     assert [(binding.name, binding.kind, binding.position) for binding in text.binding_details] == [
-        ("item", "x-for", 0)
+        ("item", "v-for", 0)
     ]
     binding = text.binding_details[0]
     assert source.encode()[binding.start_index : binding.end_index].decode() == "item"
@@ -123,47 +129,235 @@ def test_browser_hosts_preserve_loop_bindings_and_literal_event_ranges():
     ]
 
 
-def test_browser_hosts_keep_citry_state_bindings_out_of_alpine_analysis():
-    source = '<input :c-query.debounce.300ms="refresh" /><input :C-query="ordinaryAlpineBinding" />'
+def test_browser_hosts_collect_bare_object_event_expression_on_component_boundary():
+    source = '<c-Child v-on="listeners" />'
+    expression = browser_expressions(parse_template(source))[0]
+
+    assert (expression.attribute, expression.mode, expression.host, expression.evaluator) == (
+        "v-on",
+        "expression",
+        "vue",
+        "raw",
+    )
+    assert [(item.name, item.root) for item in browser_identifiers(expression)] == [("listeners", True)]
+
+
+def test_browser_hosts_keep_citry_state_bindings_out_of_vue_analysis():
+    source = '<input :c-query.debounce.300ms="refresh" /><input :C-query="ordinaryVueBinding" />'
 
     expressions = browser_expressions(parse_template(source))
 
     # Citry prefixes are case-sensitive. The exact lowercase channel belongs
-    # to Events, while the case variant remains ordinary Alpine shorthand.
+    # to Events, while the case variant remains ordinary Vue shorthand.
     assert [(item.attribute, item.source, item.host) for item in expressions] == [
-        (":C-query", "ordinaryAlpineBinding", "alpine")
+        (":C-query", "ordinaryVueBinding", "vue")
     ]
+
+
+def test_native_slot_pattern_binds_only_its_body_and_reports_initializer_references():
+    source = (
+        '<NativeChild :value="item" #[slotName]="{ item: local = fallback, nested: [first, ...rest] }">'
+        '<span :title="local + first + rest.length" />'
+        '</NativeChild><p :title="item" />'
+    )
+    template = parse_template(source)
+    expressions = browser_expressions(template)
+    by_attribute = [(item.attribute, item) for item in expressions]
+
+    value = next(item for attribute, item in by_attribute if attribute == ":value")
+    dynamic_name = next(
+        item for attribute, item in by_attribute if attribute == "#[slotName]" and item.mode == "expression"
+    )
+    pattern = next(
+        item for attribute, item in by_attribute if attribute == "#[slotName]" and item.mode == "binding-pattern"
+    )
+    body = next(item for attribute, item in by_attribute if attribute == ":title" and "local" in item.source)
+    sibling = next(item for attribute, item in by_attribute if attribute == ":title" and item.source == "item")
+
+    assert [(item.name, item.root) for item in browser_identifiers(value)] == [("item", True)]
+    assert [(item.name, item.root) for item in browser_identifiers(dynamic_name)] == [("slotName", True)]
+    assert [item.name for item in analyze_browser_expression(pattern).references] == ["fallback"]
+    assert [(item.name, item.root) for item in browser_identifiers(body)] == [
+        ("local", False),
+        ("first", False),
+        ("rest", False),
+        ("length", False),
+    ]
+    assert [(item.name, item.root) for item in browser_identifiers(sibling)] == [("item", True)]
+    assert [(item.name, item.kind) for item in browser_bindings(template)] == [
+        ("local", "v-slot"),
+        ("first", "v-slot"),
+        ("rest", "v-slot"),
+    ]
+
+
+def test_v_for_and_v_slot_scopes_keep_same_element_props_outside_slot_bindings():
+    source = (
+        '<NativeChild v-for="row in rows" :value="item + row" #default="{ item = fallback(row) }">'
+        '<span :title="item + row" />'
+        '</NativeChild><p :title="item + row" />'
+    )
+    expressions = browser_expressions(parse_template(source))
+    same_element = next(item for item in expressions if item.attribute == ":value")
+    pattern = next(item for item in expressions if item.mode == "binding-pattern")
+    body = next(item for item in expressions if item.attribute == ":title" and item.source == "item + row")
+    sibling = [item for item in expressions if item.attribute == ":title" and item.source == "item + row"][1]
+
+    assert [(item.name, item.root) for item in browser_identifiers(same_element)] == [
+        ("item", True),
+        ("row", False),
+    ]
+    pattern_analysis = analyze_browser_expression(pattern)
+    assert [item.name for item in pattern_analysis.references] == ["fallback", "row"]
+    assert "row" in pattern.bindings
+    assert [(item.name, item.root) for item in browser_identifiers(body)] == [
+        ("item", False),
+        ("row", False),
+    ]
+    assert [(item.name, item.root) for item in browser_identifiers(sibling)] == [
+        ("item", True),
+        ("row", True),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("directive", "bindings"),
+    [('#default="x, y"', ("x", "y")), ('#default="...args"', ("args",))],
+)
+def test_native_slot_parameter_lists_are_scoped_only_to_descendants(directive, bindings):
+    source = (
+        f'<NativeChild :title="x + y + args" {directive}>'
+        '<span :title="x + y + args" />'
+        '</NativeChild><p :title="x + y + args" />'
+    )
+    expressions = browser_expressions(parse_template(source))
+    same_element, body, sibling = [item for item in expressions if item.attribute == ":title"]
+
+    assert all(item.root for item in browser_identifiers(same_element))
+    assert {item.name for item in browser_identifiers(body) if not item.root} == set(bindings)
+    assert all(item.root for item in browser_identifiers(sibling))
+
+
+@pytest.mark.parametrize("conditional", ["v-if", "v-else-if"])
+def test_same_element_vue_condition_precedes_v_for_and_slot_bindings(conditional):
+    source = (
+        f'<NativeChild v-for="row in rows" {conditional}="row.visible" '
+        '#default="{ item = fallback(row) }">'
+        '<span :title="item + row" />'
+        "</NativeChild>"
+    )
+    expressions = browser_expressions(parse_template(source))
+    condition = next(item for item in expressions if item.attribute == conditional)
+    pattern = next(item for item in expressions if item.mode == "binding-pattern")
+    body = next(item for item in expressions if item.attribute == ":title")
+
+    assert [(item.name, item.root) for item in browser_identifiers(condition)] == [
+        ("row", True),
+        ("visible", False),
+    ]
+    assert "row" in pattern.bindings
+    assert [(item.name, item.root) for item in browser_identifiers(body)] == [
+        ("item", False),
+        ("row", False),
+    ]
+
+
+def test_only_whole_dynamic_slot_arguments_create_name_expressions():
+    source = (
+        '<template #foo[bar]="{ item }"><span :title="item" /></template>'
+        '<template v-slot:foo[other]="{ item }"><span :title="item" /></template>'
+        '<template #[slots[名]].tail="{ item }"><span :title="item" /></template>'
+        '<template #[slots[\'[\']].tail="{ item }"><span :title="item" /></template>'
+        '<template #[slots[`[`]].tail="{ item }"><span :title="item" /></template>'
+        '<template #[slots[a][foo.bar]].tail="{ item }"><span :title="item" /></template>'
+    )
+    expressions = browser_expressions(parse_template(source))
+    slot_name_expressions = [
+        item for item in expressions if item.mode == "expression" and item.attribute.startswith(("#", "v-slot:"))
+    ]
+
+    assert [(item.attribute, item.source) for item in slot_name_expressions] == [
+        ("#[slots[名]].tail", "slots[名]].tail"),
+        ("#[slots['[']].tail", "slots['[']].tail"),
+        ("#[slots[`[`]].tail", "slots[`[`]].tail"),
+        ("#[slots[a][foo.bar]].tail", "slots[a][foo.bar]].tail"),
+    ]
+    dynamic = slot_name_expressions[0]
+    assert source.encode()[dynamic.start_index : dynamic.end_index].decode() == dynamic.source
+    analysis = analyze_browser_expression(dynamic)
+    assert analysis.valid
+    assert [(item.name, item.start_index, item.end_index) for item in analysis.references] == [
+        (
+            "slots",
+            dynamic.start_index,
+            dynamic.start_index + len("slots"),
+        ),
+        (
+            "名",
+            dynamic.start_index + len("slots["),
+            dynamic.start_index + len("slots[名".encode()),
+        ),
+    ]
+
+
+def test_default_v_slot_modifier_form_still_introduces_bindings():
+    template = parse_template('<template v-slot.foo="{ item }"><span :title="item" /></template>')
+    body = next(item for item in browser_expressions(template) if item.attribute == ":title")
+
+    assert [(item.name, item.root) for item in browser_identifiers(body)] == [("item", False)]
+
+
+def test_invalid_slot_pattern_is_one_invalid_host_without_spurious_bindings():
+    template = parse_template('<template #default="{ item:"><span :title="item" /></template>')
+    patterns = [item for item in browser_expressions(template) if item.mode == "binding-pattern"]
+
+    assert len(patterns) == 1
+    assert not analyze_browser_expression(patterns[0]).valid
+    assert browser_bindings(template) == ()
+    assert "item" not in patterns[0].bindings
+
+
+@pytest.mark.parametrize("attribute", ["v-slot", "#default", 'v-slot=""', '#default=""'])
+def test_empty_native_slot_directive_has_no_pattern_or_binding(attribute):
+    template = parse_template(f'<template {attribute}><span :title="outer" /></template>')
+
+    assert all(item.mode != "binding-pattern" for item in browser_expressions(template))
+    assert browser_bindings(template) == ()
+
+
+def test_citry_slot_channels_do_not_create_native_vue_bindings():
+    template = parse_template('<c-Card><c-fill name="body" data="item"><span #c-key="item" /></c-fill></c-Card>')
+
+    assert browser_bindings(template) == ()
 
 
 def test_browser_hosts_capture_csp_element_attribute_and_evaluator_context():
     source = (
-        '<main X-DATA="{ open: true }"><span X-TEXT="open"></span></main>'
-        '<c-card @click="save()" @c-save="save({ id: item.id })" $c-props="{ id: item.id }" />'
+        '<main><span v-text="open"></span></main>'
+        '<c-card @click="save()" @c-save="save({ id: item.id })" />'
         '<button @C-CLICK="save(() => 1)"></button>'
     )
 
     expressions = browser_expressions(parse_template(source))
 
     assert [(item.canonical_attribute, item.element, item.host, item.evaluator) for item in expressions] == [
-        ("x-data", "main", "alpine", "normal"),
-        ("x-text", "span", "alpine", "normal"),
-        ("@click", "c-card", "alpine", "raw"),
+        ("v-text", "span", "vue", "normal"),
+        ("@click", "c-card", "vue", "raw"),
         ("@c-save", "c-card", "citry-event-args", "raw"),
-        ("$c-props", "c-card", "citry-props", "raw"),
-        ("@c-click", "button", "alpine", "normal"),
+        ("@c-click", "button", "vue", "normal"),
     ]
-    assert "open" in expressions[1].bindings
+    assert expressions[1].bindings == ()
     encoded = source.encode()
     assert [
         encoded[item.attribute_start_index : item.attribute_end_index].decode()  # type: ignore[index]
         for item in expressions
-    ] == ["X-DATA", "X-TEXT", "@click", "@c-save", "$c-props", "@C-CLICK"]
+    ] == ["v-text", "@click", "@c-save", "@C-CLICK"]
 
 
-def test_case_variant_dynamic_element_uses_the_rendered_html_evaluator_context():
+def test_case_variant_dynamic_element_uses_vue_precompiled_evaluator_context():
     source = (
         '<c-Element is="SCRIPT" @click="value = 1"></c-Element>'
-        '<c-Element is="IFRAME" x-text="value"></c-Element>'
+        '<c-Element is="IFRAME" v-text="value"></c-Element>'
         '<c-Card @click="value = 1" />'
     )
     expressions = browser_expressions(parse_template(source))
@@ -175,110 +369,21 @@ def test_case_variant_dynamic_element_uses_the_rendered_html_evaluator_context()
     ]
     findings = lint_csp_compatibility(
         expressions,
-        (AlpineLintConsumer(frozenset({"value"}), "ignore"),),
+        (VueLintConsumer(frozenset({"value"}), "ignore"),),
         "strict",
     )
-    assert len(findings) == 2
-    assert [source.encode()[item.start_index : item.end_index].decode() for item in findings] == [
-        "@click",
-        "x-text",
-    ]
+    assert findings == ()
 
 
-def test_alpine_csp_classifier_matches_the_pinned_expression_corpus():
-    fixture = json.loads(
-        (Path(__file__).parents[3] / "js/citry-client/test/fixtures/alpine-csp-3.17.1.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    assert fixture["alpineVersion"] == ALPINE_CSP_COMPATIBILITY_VERSION
-
-    for case in fixture["cases"]:
-        expression = BrowserExpression(
-            case["source"],
-            0,
-            len(case["source"].encode()),
-            "expression",
-            "x-text",
-            transform=case.get("transform", "identity"),
-        )
-        actual = classify_alpine_csp(expression).outcome
-        expected = case.get("staticOutcome", "compatible" if case["outcome"] == "accepted" else "incompatible")
-        assert actual == expected, case["id"]
-
-
-def test_alpine_csp_checker_handles_directives_casing_derived_code_and_mode():
-    source = (
-        '<div X-HTML></div><SCRIPT x-text="value"></SCRIPT>'
-        '<input x-modelable="count + 1">'
-        '<template x-for="item in rows?.items"></template>'
-    )
-    expressions = browser_expressions(parse_template(source))
-    consumer = AlpineLintConsumer(frozenset({"count", "rows", "value"}), "ignore")
+def test_vue_precompiled_expressions_do_not_use_the_legacy_csp_evaluator():
+    expressions = browser_expressions(parse_template('<div v-html="markup"></div><button @click="save()"></button>'))
+    consumer = VueLintConsumer(frozenset({"markup", "save"}), "ignore")
 
     assert lint_csp_compatibility(expressions, (consumer,), "off") == ()
-    warnings = lint_csp_compatibility(expressions, (consumer,), "warn")
-    errors = lint_csp_compatibility(expressions, (consumer,), "strict")
-
-    assert len(warnings) == 4
-    assert {finding.severity for finding in warnings} == {"warning"}
-    assert {finding.severity for finding in errors} == {"error"}
-    assert all(finding.code == "citry.csp.incompatible-browser-code" for finding in errors)
-    assert [source.encode()[finding.start_index : finding.end_index].decode() for finding in errors] == [
-        "X-HTML",
-        "x-text",
-        "count + 1",
-        "?.",
-    ]
-
-
-def test_alpine_csp_checker_requires_explicit_scope_for_javascript_globals():
-    expression = browser_expressions(parse_template('<span x-text="Math.max(1, 2)"></span>'))[0]
-
-    missing = lint_csp_compatibility(
-        (expression,),
-        (AlpineLintConsumer(frozenset(), "ignore"),),
-        "strict",
-    )
-    supplied = lint_csp_compatibility(
-        (expression,),
-        (AlpineLintConsumer(frozenset({"Math"}), "ignore"),),
-        "strict",
-    )
-
-    assert len(missing) == 1
-    assert "unprovided JavaScript global 'Math'" in missing[0].message
-    assert supplied == ()
-    undefined = browser_expressions(parse_template('<span x-text="undefined"></span>'))[0]
-    assert lint_csp_compatibility((undefined,), (AlpineLintConsumer(frozenset(), "ignore"),), "strict") == ()
-
-
-def test_alpine_csp_checker_reports_unterminated_strings_without_raising():
-    expression = BrowserExpression("'unterminated", 7, 20, "expression", "x-text")
-
-    classification = classify_alpine_csp(expression)
-    findings = lint_csp_compatibility(
-        (expression,),
-        (AlpineLintConsumer(frozenset(), "ignore"),),
-        "strict",
-    )
-
-    assert classification.outcome == "incompatible"
-    assert classification.detail == "an unterminated string"
-    assert (classification.start_index, classification.end_index) == (7, 20)
-    assert len(findings) == 1
-
-
-def test_alpine_csp_directive_empty_rules_use_javascript_whitespace_semantics():
-    source = '<div x-data="\u001c"></div><button @click="\u001c"></button><div x-init="\ufeff"></div>'
-    expressions = browser_expressions(parse_template(source))
-    findings = lint_csp_compatibility(expressions, (), "strict")
-
-    assert len(findings) == 2
-    assert [source.encode()[item.start_index : item.end_index].decode() for item in findings] == [
-        "\u001c",
-        "\u001c",
-    ]
+    assert lint_csp_compatibility(expressions, (consumer,), "warn") == ()
+    assert lint_csp_compatibility(expressions, (consumer,), "strict") == ()
+    with pytest.raises(ValueError, match="Unknown CSP compatibility mode"):
+        lint_csp_compatibility(expressions, (consumer,), "invalid")  # type: ignore[arg-type]
 
 
 def test_declarative_event_handlers_preserve_wire_names_arguments_and_nested_ranges():
@@ -305,7 +410,7 @@ def test_declarative_event_handlers_preserve_wire_names_arguments_and_nested_ran
 
 def test_oxc_browser_analysis_distinguishes_free_roots_from_javascript_locals():
     template = parse_template(
-        '<div x-text="items.map((item) => ({ label: item.name, value: suffix }))" '
+        '<div v-text="items.map((item) => ({ label: item.name, value: suffix }))" '
         '@click="const next = count + 1; submit(next)"></div>'
     )
     text, click = browser_expressions(template)
@@ -327,7 +432,7 @@ def test_oxc_browser_analysis_distinguishes_free_roots_from_javascript_locals():
 
 
 def test_member_literal_calls_keep_direct_i18n_calls_and_exact_utf8_ranges():
-    source_text = "<span x-text=\"$i18n.tr('čau') + other.tr('skip') + $i18n['tr']('skip')\"></span>"
+    source_text = "<span v-text=\"$i18n.tr('čau') + other.tr('skip') + $i18n['tr']('skip')\"></span>"
     template = parse_template(source_text)
     expression = browser_expressions(template)[0]
 
@@ -344,7 +449,7 @@ def test_member_literal_calls_keep_direct_i18n_calls_and_exact_utf8_ranges():
 
 def test_i18n_profile_calls_keep_nested_method_and_literal_option_ranges():
     source_text = (
-        "<span x-text=\"$i18n.format.number(total, {format: 'measurement'}) "
+        "<span v-text=\"$i18n.format.number(total, {format: 'measurement'}) "
         "+ $i18n.parse.percent(value, { format: 'editing' }) + other.format.number(1, {format: 'skip'})"
         '"></span>'
     )
@@ -364,9 +469,9 @@ def test_i18n_magic_binding_follows_client_provider_and_server_barrier():
     for client_input in ('c-client="True"', "client"):
         source = f"""
         <c-i18n {client_input} tag="main">
-          <span x-text="$i18n.tr('outer')"></span>
+          <span v-text="$i18n.tr('outer')"></span>
           <c-i18n tag="section">
-            <span x-text="$i18n.tr('blocked')"></span>
+            <span v-text="$i18n.tr('blocked')"></span>
           </c-i18n>
         </c-i18n>
         """
@@ -401,9 +506,23 @@ def test_i18n_bind_calls_extract_only_bounded_literal_object_roots():
     assert encoded[calls[0].output_start_index - 7 : calls[0].output_end_index - 7].decode() == "aria-label"
 
 
+def test_i18n_bind_calls_accept_only_authenticated_member_owner_spans() -> None:
+    source = "component.$i18n.bind({message:'allowed'}); other.$i18n.bind({message:'forged'});"
+    expression = BrowserExpression(source, 0, len(source.encode()), "statement", "component-js")
+    owner_start = source.index("$i18n")
+
+    calls = browser_i18n_bind_calls(
+        expression,
+        frozenset({"$i18n"}),
+        authenticated_owner_spans=frozenset({(owner_start, owner_start + len("$i18n"))}),
+    )
+
+    assert [(call.message, call.owner_start_index) for call in calls] == [("allowed", owner_start)]
+
+
 def test_browser_i18n_message_calls_keep_parameter_and_attribute_spans():
     source = "$i18n.tr('account-title', { name: accountName, count }, { attr: 'aria-label' })"
-    expression = BrowserExpression(source, 11, len(source.encode("utf-8")) + 11, "expression", "x-text")
+    expression = BrowserExpression(source, 11, len(source.encode("utf-8")) + 11, "expression", "v-text")
 
     calls = browser_i18n_message_calls(expression)
 
@@ -460,7 +579,7 @@ def test_browser_i18n_binding_value_is_an_alpine_expression_host() -> None:
 
 
 def test_oxc_loop_analysis_checks_only_the_outer_iterable_expression():
-    template = parse_template('<template x-for="(color, index) in colors.filter(Boolean)"></template>')
+    template = parse_template('<template v-for="(color, index) in colors.filter(Boolean)"></template>')
     expression = browser_expressions(template)[0]
 
     analysis = analyze_browser_expression(expression)
@@ -478,20 +597,20 @@ def test_oxc_browser_analysis_declines_invalid_source_without_partial_roots():
     assert analysis.references == ()
 
 
-def test_unknown_alpine_lint_is_strict_configurable_and_scope_aware():
+def test_unknown_vue_lint_is_strict_configurable_and_v_for_scope_aware():
     template = parse_template(
-        '<main x-data="{ local: 1 }" :class="known + missing">'
-        '<template x-for="color in colors"><span x-text="color + local + missing"></span></template>'
-        "<button @click=\"$dispatch('open'); console.log(known)\"></button>"
+        '<main :class="known + missing">'
+        '<div v-for="color in colors"><span v-text="color + missing"></span></div>'
+        "<button @click=\"$sendEvent('open'); console.log(known)\"></button>"
         "</main>"
     )
     expressions = browser_expressions(template)
     consumers = (
-        AlpineLintConsumer(frozenset({"known", "colors"}), "error"),
-        AlpineLintConsumer(frozenset({"known", "colors", "missing"}), "warning"),
+        VueLintConsumer(frozenset({"known", "colors"}), "error"),
+        VueLintConsumer(frozenset({"known", "colors", "missing"}), "warning"),
     )
 
-    findings = lint_unknown_alpine_variables(expressions, consumers)
+    findings = lint_unknown_vue_variables(expressions, consumers)
 
     assert [(item.name, item.severity) for item in findings] == [
         ("missing", "error"),
@@ -499,43 +618,358 @@ def test_unknown_alpine_lint_is_strict_configurable_and_scope_aware():
     ]
 
 
-def test_unknown_alpine_lint_honors_ignore_and_declines_invalid_hosts():
-    template = parse_template('<button :disabled="missing" @click="broken("></button>')
+def test_unknown_vue_lint_knows_vue_instance_names():
+    # A Vue template reads these from the component instance, as `$el` and `$refs`.
+    template = parse_template(
+        "<button @click=\"$emit('saved'); $forceUpdate()\" "
+        ':title="[$attrs, $slots, $props, $parent, $options].length"></button>'
+    )
 
-    findings = lint_unknown_alpine_variables(
+    findings = lint_unknown_vue_variables(
         browser_expressions(template),
-        (AlpineLintConsumer(frozenset(), "ignore"),),
+        (VueLintConsumer(frozenset(), "error", "closed"),),
     )
 
     assert findings == ()
 
 
+def test_unknown_vue_lint_honors_ignore_and_declines_invalid_hosts():
+    template = parse_template('<button :disabled="missing" @click="broken("></button>')
+
+    findings = lint_unknown_vue_variables(
+        browser_expressions(template),
+        (VueLintConsumer(frozenset(), "ignore"),),
+    )
+
+    assert findings == ()
+
+
+def test_unknown_vue_lint_uses_native_names_and_respects_unknown_namespace() -> None:
+    template = parse_template('<button @click="save(opaque)"></button>')
+    expressions = browser_expressions(template)
+
+    assert (
+        lint_unknown_vue_variables(
+            expressions,
+            (VueLintConsumer(frozenset({"save"}), "error", "unknown"),),
+        )
+        == ()
+    )
+    findings = lint_unknown_vue_variables(
+        expressions,
+        (VueLintConsumer(frozenset({"save"}), "error", "closed"),),
+    )
+    assert [item.name for item in findings] == ["opaque"]
+
+
+def _python_variable_findings(
+    source: str,
+    known: frozenset[str] = frozenset(),
+    rule: str = "warning",
+    namespace_policy: str = "unknown",
+    unknown_rule: str = "error",
+) -> list[tuple[str, str, str]]:
+    # The default open namespace keeps the unknown-variable rule out of the way.
+    findings = lint_vue_python_variables(
+        browser_expressions(parse_template(source)),
+        (VueLintConsumer(known, unknown_rule, namespace_policy, rule),),  # type: ignore[arg-type]
+    )
+    return [(item.name, item.severity, item.message) for item in findings]
+
+
+def test_vue_python_variable_lint_reports_c_for_names_with_the_c_attribute_form():
+    findings = _python_variable_findings(
+        '<ul><li c-for="item in items" :title="item" v-text="label"></li></ul>',
+        frozenset({"label"}),
+    )
+
+    assert findings == [
+        (
+            "item",
+            "warning",
+            "Vue reads 'item' from browser state, but 'item' is a Python variable here. "
+            'Use c-title="item" to pass the Python value.',
+        )
+    ]
+
+
+def test_vue_python_variable_lint_covers_directives_events_and_c_fill_bindings():
+    findings = _python_variable_findings(
+        '<c-for each="row in rows">'
+        '<p v-show="row.visible" @click="pick(row)" v-bind:data-id="row" :title.prop="row" :key="row"></p>'
+        '<c-card c-for="cell in row" :title="cell"></c-card>'
+        "</c-for>"
+        '<c-card><c-fill name="body" data="{ entry }">'
+        '<b v-text="entry" :title="entry + suffix"></b>'
+        "</c-fill></c-card>",
+        frozenset({"pick", "suffix"}),
+    )
+
+    general = "Pass its value with a c- attribute or loop with Vue's v-for instead."
+    # Only a plain attribute bound to exactly the name gets the `c-` form: a
+    # modifier, `:key`, a component prop, or a larger expression does not.
+    assert [(name, message.split(" here. ")[1]) for name, _severity, message in findings] == [
+        ("row", general),
+        ("row", general),
+        ("row", 'Use c-data-id="row" to pass the Python value.'),
+        ("row", general),
+        ("row", general),
+        ("cell", general),
+        ("entry", general),
+        ("entry", general),
+    ]
+
+
+def test_vue_python_variable_lint_names_both_meanings_when_the_browser_also_knows_the_name():
+    # A js_data key or other browser name makes Vue show the component's value
+    # instead of the loop value, with no error, so the warning names both.
+    assert _python_variable_findings(
+        '<li c-for="item in items" :title="item" v-text="item"></li>',
+        frozenset({"item"}),
+        namespace_policy="closed",
+    ) == [
+        (
+            "item",
+            "warning",
+            "Vue reads the component's browser value 'item' here, not the Python loop or slot variable "
+            "'item'. Use c-title=\"item\" for the Python value, or rename one of them.",
+        ),
+        (
+            "item",
+            "warning",
+            "Vue reads the component's browser value 'item' here, not the Python loop or slot variable "
+            "'item'. Pass the Python value with a c- attribute, or rename one of them.",
+        ),
+    ]
+    # An open namespace that lists the name gets the same message.
+    assert [
+        message
+        for _name, _severity, message in _python_variable_findings(
+            '<li c-for="item in items" :title="item"></li>', frozenset({"item"})
+        )
+    ] == [
+        "Vue reads the component's browser value 'item' here, not the Python loop or slot variable "
+        "'item'. Use c-title=\"item\" for the Python value, or rename one of them."
+    ]
+
+
+def test_vue_python_variable_lint_with_several_components_sharing_a_template():
+    expressions = browser_expressions(parse_template('<li c-for="item in items" :title="item"></li>'))
+
+    # One component defines `item` and another provably lacks it: the
+    # unknown-variable error owns the read, so this rule adds nothing.
+    assert (
+        lint_vue_python_variables(
+            expressions,
+            (
+                VueLintConsumer(frozenset({"item"}), "error", "closed", "warning"),
+                VueLintConsumer(frozenset(), "error", "closed", "warning"),
+            ),
+        )
+        == ()
+    )
+    # Only a component that reports the read picks the message, so an ignoring
+    # component that defines `item` does not make the warning claim Vue has it.
+    findings = lint_vue_python_variables(
+        expressions,
+        (
+            VueLintConsumer(frozenset({"item"}), "error", "closed", "ignore"),
+            VueLintConsumer(frozenset(), "error", "unknown", "warning"),
+        ),
+    )
+    assert [item.message for item in findings] == [
+        "Vue reads 'item' from browser state, but 'item' is a Python variable here. "
+        'Use c-title="item" to pass the Python value.'
+    ]
+
+
+def test_vue_python_variable_lint_skips_vue_aliases_and_reads_outside_the_python_scope():
+    # A Vue v-for alias shadows the Python name inside the browser loop.
+    assert (
+        _python_variable_findings(
+            '<c-for each="item in items"><ul><li v-for="item in list" :title="item"></li></ul></c-for>',
+            frozenset({"list"}),
+        )
+        == []
+    )
+    # Outside the loop the name is not a Python binding at all.
+    assert _python_variable_findings('<c-for each="item in items"></c-for><b :title="item"></b>') == []
+
+
+def test_vue_python_variable_lint_tracks_nested_python_loops_and_normalized_names():
+    findings = _python_variable_findings(
+        '<c-for each="group in groups">'
+        '<ul :data-group="group"><li c-for="item in group.items" :title="item + group"></li></ul>'
+        "</c-for>"
+        # Python stores the NFKC form `fi`; JavaScript keeps the ligature.
+        '<b c-for="\ufb01 in items" :title="\ufb01"></b>',
+    )
+
+    assert [name for name, _severity, _message in findings] == ["group", "item", "group", "\ufb01"]
+
+
+def test_vue_python_variable_lint_severity_and_namespace_policy():
+    source = '<li c-for="item in items" :title="item"></li>'
+
+    assert _python_variable_findings(source, rule="ignore") == []
+    assert [severity for _name, severity, _message in _python_variable_findings(source, rule="error")] == ["error"]
+    # An open namespace cannot prove the browser lacks the name, but the Python
+    # binding still makes the Vue read suspicious, so the warning remains.
+    assert len(_python_variable_findings(source, frozenset({"item"}))) == 1
+    assert lint_vue_python_variables(browser_expressions(parse_template(source)), ()) == (), (
+        "syntax-only analysis without a proven owner reports nothing"
+    )
+
+
+def test_python_names_missing_from_a_closed_namespace_get_one_unknown_variable_error():
+    expressions = browser_expressions(parse_template('<li c-for="item in items" :title="item + label"></li>'))
+    consumers = (VueLintConsumer(frozenset({"label"}), "error", "closed", "warning"),)
+
+    unknown = lint_unknown_vue_variables(expressions, consumers)
+
+    # The provably broken read stays an error and names the Python variable;
+    # the Python-variable rule adds no second finding for the same span.
+    assert [(item.code, item.severity, item.message) for item in unknown] == [
+        (
+            "citry.vue.unknown-variable",
+            "error",
+            "Vue variable 'item' is not available in this component. 'item' is a Python variable "
+            "here, which the browser never sees; pass its value with a c- attribute or loop with Vue's v-for.",
+        )
+    ]
+    assert lint_vue_python_variables(expressions, consumers) == ()
+    # With the unknown-variable rule ignored, the warning takes over.
+    assert [
+        item.code
+        for item in lint_vue_python_variables(
+            expressions, (VueLintConsumer(frozenset({"label"}), "ignore", "closed", "warning"),)
+        )
+    ] == ["citry.vue.python-variable"]
+
+
+def test_vue_lint_consumer_rejects_an_unknown_python_variable_severity():
+    with pytest.raises(ValueError, match="Python-variable rule severity"):
+        VueLintConsumer(frozenset(), "error", "closed", "warn")  # type: ignore[arg-type]
+
+
 def test_component_source_analysis_keeps_initializer_bindings_and_free_names_separate():
     source = """
 const outside = missingOutside;
-$component(({ scope: alpineScope, data }) => {
+$component({ onServerRender({ component: current, revision, onEvent: listen, data }) {
   const local = data.ready;
-  alpineScope.ready = local;
-  console.log(missingInside);
-});
+  current.ready = local;
+  listen("cart:changed", detail => console.log(revision, detail, missingInside));
+} });
 """
 
     analysis = analyze_browser_component_source(source)
 
     assert analysis.valid
     assert [(item.name, item.local_name) for item in analysis.bindings] == [
-        ("scope", "alpineScope"),
-        ("data", "data"),
+        ("component", "current"),
+        ("revision", "revision"),
+        ("onEvent", "listen"),
     ]
     assert [item.name for item in analysis.references] == ["console", "missingInside"]
-    assert [item.name for item in analysis.scope_writes] == ["ready"]
+
+
+def test_init_callback_gets_the_full_onserverrender_context():
+    # `init` is the 0.5.1 name of `onServerRender`. Its context fields are
+    # bindings, and its `component` is a proven instance, so a read of an
+    # undeclared member is reported just as it is in `onServerRender`.
+    source = """$component({ init({ component, id, els, state, sendEvent, loading, error, i18n }) {
+  sendEvent("save", { id, count: els.length, state, busy: loading(), failed: error(), i18n });
+  component.missing;
+} });"""
+
+    analysis = analyze_browser_component_source(source)
+
+    assert [(item.name, item.local_name) for item in analysis.bindings] == [
+        ("component", "component"),
+        ("id", "id"),
+        ("els", "els"),
+        ("state", "state"),
+        ("sendEvent", "sendEvent"),
+        ("loading", "loading"),
+        ("error", "error"),
+        ("i18n", "i18n"),
+    ]
+    assert [(item.receiver, item.name) for item in analysis.member_references] == [("component", "missing")]
+    assert [item.name for item in lint_unknown_component_js_members(source, frozenset())] == ["missing"]
+    consumers = (ComponentJsLintConsumer(frozenset(), "error"),)
+    assert lint_unknown_component_js_variables(source, consumers) == ()
+
+
+def test_component_source_analysis_reports_vue_options_and_authenticated_helper_spans():
+    source = """
+$component /* trivia */ ({
+  props: ["display-name"],
+  methods: { save() {}, ...extra },
+  data() { return { ready: true } },
+  setup: () => ({ selected: seed }),
+  computed: { label() { return this.$i18n.locale } },
+});
+"""
+
+    analysis = analyze_browser_component_source(source)
+
+    assert analysis.valid
+    assert len(analysis.component_calls) == 1
+    call = analysis.component_calls[0]
+    encoded = source.encode()
+    assert encoded[call.callee_start_index : call.callee_end_index] == b"$component"
+    assert encoded[call.open_paren_end_index - 1 : call.open_paren_end_index] == b"("
+    assert [(item.origin, item.exposed_name) for item in analysis.public_names] == [
+        ("props", "displayName"),
+        ("methods", "save"),
+        ("data", "ready"),
+        ("setup", "selected"),
+        ("computed", "label"),
+    ]
+    assert next(item for item in analysis.sections if item.name == "methods").state == "unknown"
+    assert [(item.receiver, item.name) for item in analysis.member_references] == [("this", "$i18n")]
+
+
+def test_component_source_analysis_preserves_native_unknown_states_and_vue_camelization():
+    analysis = analyze_browser_component_source("$component({ props: { 'foo--bar': { type: String, ...details } } })")
+
+    prop = next(item for item in analysis.public_names if item.origin == "props")
+    assert prop.exposed_name == "foo-Bar"
+    assert (prop.required, prop.has_default, prop.type_source) == (None, None, None)
+    computed = analyze_browser_component_source(
+        "$component({ props: { first: String }, methods: { save() {} }, [key]: value })"
+    )
+    assert computed.public_names == ()
+    assert all(section.state == "unknown" for section in computed.sections)
+
+
+def test_component_member_literal_calls_require_native_receiver_authentication():
+    source = "$component({ methods: { label() { return this.$i18n.resolve('message') } } })"
+    analysis = analyze_browser_component_source(source)
+    owner_spans = frozenset(
+        (item.start_index, item.end_index) for item in analysis.member_references if item.name == "$i18n"
+    )
+    expression = BrowserExpression(source, 0, len(source.encode()), "statement", "component-js")
+
+    assert [
+        call.value
+        for call in browser_member_literal_calls(
+            expression,
+            frozenset({"$i18n"}),
+            frozenset({"resolve"}),
+            authenticated_owner_spans=owner_spans,
+        )
+    ] == ["message"]
+    assert not browser_member_literal_calls(expression, frozenset({"$i18n"}), frozenset({"resolve"}))
 
 
 def test_unknown_component_js_lint_is_strict_configurable_and_initializer_only():
     source = """
 const outside = missingOutside;
-$component(({ data }) => {
-  console.log(data.ready, configured, missingInside);
+$component({
+  onServerRender({ component }) {
+    console.log(component.ready, configured, missingInside);
+  }
 });
 """
 
@@ -551,7 +985,7 @@ $component(({ data }) => {
 
 
 def test_unknown_component_js_lint_flags_a_missing_context_destructure():
-    source = "$component(({ data }) => { scope.ready = data.ready; });"
+    source = "$component({ onServerRender({ component }) { scope.ready = component.ready; } });"
 
     findings = lint_unknown_component_js_variables(
         source,
@@ -561,6 +995,24 @@ def test_unknown_component_js_lint_flags_a_missing_context_destructure():
     assert [(item.name, item.code, item.severity) for item in findings] == [
         ("scope", "citry.component-js.unknown-variable", "error")
     ]
+
+
+def test_component_js_lint_knows_citry_and_dom_globals_but_vue_templates_do_not():
+    source = """$component({ onServerRender({ component }) {
+  const input = component.$el.querySelector("input");
+  if (!(input instanceof HTMLInputElement)) return;
+  const observer = new MutationObserver(() => getComputedStyle(input));
+  Citry.vue.nextTick(() => observer.disconnect());
+  if (input.getRootNode() instanceof Document) new EventTarget();
+  new MessageEvent("x", { data: btoa("y") });
+  missingHelper(input);
+} });"""
+
+    findings = lint_unknown_component_js_variables(source, (ComponentJsLintConsumer(frozenset(), "error"),))
+
+    assert [item.name for item in findings] == ["missingHelper"]
+    assert "Citry" not in VUE_AMBIENT_NAMES
+    assert "HTMLInputElement" not in VUE_AMBIENT_NAMES
 
 
 def test_simple_data_and_scope_members_are_identified_without_chained_guesses():
@@ -579,7 +1031,8 @@ def test_simple_data_and_scope_members_are_identified_without_chained_guesses():
 def test_component_props_and_event_method_provenance_use_conservative_source_shapes():
     js = (
         "$component({ props: { title: { type: String, required: true }, "
-        "count: { type: [Number, String], default: null } }, init({ props }) { props.title } })"
+        "count: { type: [Number, String], default: null } }, "
+        "onServerRender({ component }) { component.$props.title } })"
     )
     props = browser_component_props(js)
     source = (
@@ -599,36 +1052,7 @@ def test_component_props_and_event_method_provenance_use_conservative_source_sha
 
 
 def test_dynamic_component_props_remain_unknown_instead_of_looking_empty():
-    assert browser_component_props("$component({ props: makeProps(), init() {} })") is None
-
-
-def test_component_prop_uses_keep_direct_keys_beside_dynamic_spreads():
-    source = "<c-child $c-props=\"{ title: label, count: 2, ...extra, '😀': enabled, [computed]: other }\" />"
-    uses = browser_component_prop_uses(parse_template(source))
-
-    assert len(uses) == 1
-    use = uses[0]
-    assert use.tag_name == "c-child"
-    assert use.has_dynamic_keys
-    assert [(field.name, field.value_source) for field in use.properties] == [
-        ("title", "label"),
-        ("count", "2"),
-        ("😀", "enabled"),
-    ]
-    encoded = source.encode()
-    assert [encoded[field.start_index : field.end_index].decode() for field in use.properties] == [
-        "title",
-        "count",
-        "'😀'",
-    ]
-
-
-def test_component_prop_uses_resolve_only_static_dynamic_component_targets():
-    static = parse_template('<c-component is="child" $c-props="{ title }" />')
-    dynamic = parse_template('<c-component c-is="target" $c-props="{ title }" />')
-
-    assert [use.tag_name for use in browser_component_prop_uses(static)] == ["c-child"]
-    assert browser_component_prop_uses(dynamic) == ()
+    assert browser_component_props("$component({ props: makeProps(), onServerRender() {} })") is None
 
 
 def test_component_prop_types_compare_only_proven_broad_json_shapes():
@@ -638,24 +1062,322 @@ def test_component_prop_types_compare_only_proven_broad_json_shapes():
     assert browser_literal_wire_type("calculate() ").kind == "unknown"
 
 
-def test_component_scope_writes_preserve_utf8_ranges_and_exact_value_source():
+def test_native_component_prop_sites_preserve_nested_utf8_ranges_and_dynamic_uncertainty():
     source = (
-        "const prefix = '😀';\n"
-        "$component(({ scope }) => {\n"
-        "  scope.title = data.title;\n"
-        "  Object.assign(scope, { count: 2 });\n"
-        "  setTimeout(() => { scope.late = true; });\n"
-        "});\n"
+        'é<template><c-card v-bind="{ title: name }" :display-name.camel="name" '
+        ':ignored.prop="value" :ignored-attr.attr="value" :unknown.future="value" />'
+        "</template>"
     )
 
-    writes = browser_component_scope_writes(source)
-    encoded = source.encode()
+    sites = browser_component_prop_sites(parse_template(source))
 
-    assert [(write.name, write.value_source) for write in writes] == [
-        ("title", "data.title"),
-        ("count", "2"),
+    assert len(sites) == 1
+    site = sites[0]
+    encoded = source.encode("utf-8")
+    assert encoded[site.tag_start_index : site.tag_end_index].decode() == "c-card"
+    assert [(item.name, item.source, item.dynamic) for item in site.contributions] == [
+        ("title", "name", False),
+        ("display-name", "name", False),
+        (None, "value", True),
     ]
-    assert [encoded[write.start_index : write.end_index].decode() for write in writes] == [
-        "title",
-        "count",
+    dynamic = site.contributions[-1]
+    assert encoded[dynamic.name_start_index : dynamic.name_end_index].decode() == ":unknown.future"
+    assert encoded[dynamic.value_start_index : dynamic.value_end_index].decode() == "value"
+
+
+def _alpine(source: str, consumers: tuple[AlpineAttributeLintConsumer, ...] = ()) -> list[tuple[str, str, str]]:
+    """Return (code, severity, spanned source text) for each Alpine finding."""
+    encoded = source.encode("utf-8")
+    return [
+        (finding.code, finding.severity, encoded[finding.start_index : finding.end_index].decode("utf-8"))
+        for finding in lint_alpine_attributes(parse_template(source), consumers)
     ]
+
+
+def test_alpine_lint_reports_x_attributes_on_html_elements():
+    # The span covers the attribute name, and a nested element is walked too.
+    assert _alpine('<div x-data="{ a: 1 }"><b x-on:click="a++">{{ label }}</b></div>') == [
+        ("citry.template.alpine-attribute", "warning", "x-data"),
+        ("citry.template.alpine-attribute", "warning", "x-on:click"),
+    ]
+    (finding,) = lint_alpine_attributes(parse_template("<p x-text='a'></p>"), ())
+    assert finding.name == "x-text"
+    assert "'x-text' is an Alpine attribute" in finding.message
+    assert "rule_alpine_attribute" in finding.message
+
+
+def test_alpine_lint_reports_x_cloak_once_as_an_error_in_any_letter_case():
+    assert _alpine("<div X-Cloak x-SHOW='a'></div>") == [
+        ("citry.template.alpine-cloak", "error", "X-Cloak"),
+        ("citry.template.alpine-attribute", "warning", "x-SHOW"),
+    ]
+    (finding,) = lint_alpine_attributes(parse_template("<div x-cloak></div>"), ())
+    assert "[x-cloak]" in finding.message
+
+
+def test_alpine_lint_reports_only_alpine_directive_names():
+    # Vendor and library `x-*` names are ordinary HTML, not Alpine leftovers.
+    source = (
+        '<video x-webkit-airplay="allow" x-ms-format-detection="none"></video>'
+        '<div x-bind:class="c" x-on.click="go" x-intersect.once="load" x-databag="1"></div>'
+    )
+    assert [name for _code, _severity, name in _alpine(source)] == [
+        "x-bind:class",
+        "x-on.click",
+        "x-intersect.once",
+    ]
+
+
+def test_alpine_lint_skips_component_tags_but_checks_c_element():
+    # On a component tag `x-foo` is a Python kwarg; `<c-element>` renders HTML.
+    source = '<c-card x-foo="1" /><c-element is="div" x-cloak></c-element>'
+    assert _alpine(source) == [("citry.template.alpine-cloak", "error", "x-cloak")]
+
+
+def test_alpine_lint_maps_nested_template_offsets_into_the_outer_source():
+    source = "<c-card c-header=\"<><i x-show='a'></i></>\" /><p>ok</p>"
+    assert _alpine(source) == [("citry.template.alpine-attribute", "warning", "x-show")]
+
+
+def test_alpine_lint_severity_across_consumers():
+    source = "<div x-data='{}' x-cloak></div>"
+    ignore = AlpineAttributeLintConsumer("ignore", "ignore")
+    assert _alpine(source, (ignore,)) == []
+    # One consumer that still reports is enough, and "error" wins over "warning".
+    assert _alpine(source, (ignore, AlpineAttributeLintConsumer("error", "warning"))) == [
+        ("citry.template.alpine-attribute", "error", "x-data"),
+        ("citry.template.alpine-cloak", "warning", "x-cloak"),
+    ]
+
+
+def test_alpine_lint_consumer_rejects_an_unknown_severity():
+    with pytest.raises(ValueError, match="rule_alpine_cloak"):
+        AlpineAttributeLintConsumer(rule_alpine_cloak="fatal")  # type: ignore[arg-type]
+
+
+def _attribute_values(
+    source: str,
+    consumers: tuple[AttributeValueLintConsumer, ...] = (),
+) -> list[tuple[str, str, str]]:
+    """Return (attribute, severity, spanned source text) for each attribute-value finding."""
+    encoded = source.encode("utf-8")
+    return [
+        (finding.attribute, finding.severity, encoded[finding.start_index : finding.end_index].decode("utf-8"))
+        for finding in lint_attribute_values(parse_template(source), consumers)
+    ]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Keywords ignore ASCII case, and an attribute that allows the empty
+        # string may have no value at all.
+        '<div draggable="TRUE" dir="Auto" hidden contenteditable translate="" spellcheck></div>',
+        '<div hidden="until-found" popover inputmode="numeric" enterkeyhint="go" writingsuggestions="false"></div>',
+        '<input type="Email" formmethod="dialog"><button type="reset" popovertargetaction="hide">b</button>',
+        '<form method="POST" enctype="multipart/form-data" autocomplete="off"></form>',
+        '<img loading="lazy" decoding="async" fetchpriority="high" crossorigin referrerpolicy="no-referrer">',
+        '<video preload crossorigin="use-credentials"></video><track kind="captions">',
+        '<textarea wrap="hard"></textarea><table><tr><th scope="colgroup"></th></tr></table>',
+        '<ol type="I"><li type="DISC">x</li></ol><ul type="Square"></ul><bdo dir="rtl">x</bdo>',
+        # The browser decodes character references before it reads the keyword.
+        '<div draggable="&#116;rue" dir="&#x61;uto"></div>',
+        # A window name is any name that does not start with "_".
+        '<a target="preview">a</a><a target="_BLANK">b</a><form target="_self"></form><iframe name="frame"></iframe>',
+        # Open or token-list attributes are left alone.
+        '<iframe sandbox="allow-scripts nonsense"></iframe><link rel="whatever"><input autocomplete="nickname">',
+        '<input step="any"><script type="text/x-template"></script><button command="--custom">c</button>',
+    ],
+)
+def test_attribute_value_lint_accepts_valid_and_open_values(source):
+    assert _attribute_values(source) == []
+
+
+def test_attribute_value_lint_reports_values_outside_the_keywords():
+    # The span covers the value inside its quotes.
+    source = '<div draggable="treu"><input type="datetime"><img loading="lazzy"></div>'
+    assert _attribute_values(source) == [
+        ("draggable", "warning", "treu"),
+        ("type", "warning", "datetime"),
+        ("loading", "warning", "lazzy"),
+    ]
+    (finding,) = lint_attribute_values(parse_template('<div draggable="treu"></div>'), ())
+    assert finding.code == "citry.template.invalid-attribute-value"
+    assert (finding.element, finding.attribute, finding.value) == ("div", "draggable", "treu")
+    assert finding.message == (
+        "'treu' is not a valid value for 'draggable' on <div>. Did you mean 'true'? Valid values: 'true', 'false'."
+    )
+
+
+def test_attribute_value_lint_messages_without_a_close_match_and_for_a_missing_value():
+    source = '<form autocomplete="nope"></form><div draggable></div><img crossorigin="maybe">'
+    findings = lint_attribute_values(parse_template(source), ())
+    assert [finding.message for finding in findings] == [
+        "'nope' is not a valid value for 'autocomplete' on <form>. Valid values: 'on', 'off'.",
+        "'draggable' on <div> needs a value. Valid values: 'true', 'false'.",
+        "'maybe' is not a valid value for 'crossorigin' on <img>. "
+        "Valid values: 'anonymous', 'use-credentials', or no value.",
+    ]
+    # A value-less attribute has no value span, so the finding marks its name.
+    assert _attribute_values("<div draggable></div>") == [("draggable", "warning", "draggable")]
+
+
+def test_attribute_value_lint_compares_list_markers_with_letter_case():
+    assert _attribute_values('<ol type="A"><li type="i">x</li><li type="Circle">y</li></ol>') == []
+    # "a" and "A" are different markers, so "B" does not match "b" by case.
+    assert _attribute_values('<ol type="b"><li type="X">x</li></ol><ul type="1"></ul>') == [
+        ("type", "warning", "b"),
+        ("type", "warning", "X"),
+        ("type", "warning", "1"),
+    ]
+
+
+def test_attribute_value_lint_uses_element_specific_keywords_before_global_ones():
+    # `dir` on `<bdo>` has no "auto", and `type` depends on the element.
+    assert _attribute_values('<bdo dir="auto">x</bdo><div dir="auto"></div>') == [("dir", "warning", "auto")]
+    assert _attribute_values('<button type="text">b</button><menu type="x"></menu>') == [("type", "warning", "text")]
+
+
+def test_attribute_value_lint_reports_underscore_window_names():
+    findings = lint_attribute_values(parse_template('<a target="_new">a</a><button formtarget="_x">b</button>'), ())
+    assert [(finding.attribute, finding.value) for finding in findings] == [("target", "_new"), ("formtarget", "_x")]
+    assert findings[0].message == (
+        "'_new' is not a valid value for 'target' on <a>. "
+        "A name that starts with '_' must be one of: _blank, _self, _parent, _top."
+    )
+
+
+def test_attribute_value_lint_reports_frame_names_that_start_with_an_underscore():
+    source = '<iframe name="preview"></iframe><iframe name="_blank"></iframe><object name="_x"></object>'
+    findings = lint_attribute_values(parse_template(source), ())
+    assert [(finding.element, finding.value) for finding in findings] == [("iframe", "_blank"), ("object", "_x")]
+    assert findings[0].message == (
+        "'_blank' is not a valid value for 'name' on <iframe>. A frame name cannot start with '_'."
+    )
+
+
+def test_attribute_value_lint_shows_the_written_value_of_a_character_reference():
+    (finding,) = lint_attribute_values(parse_template('<div draggable="&#116;ru"></div>'), ())
+    assert finding.value == "&#116;ru"
+    assert "Did you mean 'true'?" in finding.message
+
+
+def test_attribute_value_lint_skips_elements_it_cannot_type():
+    # Component tags, `<c-element>`, custom elements, PascalCase Vue components,
+    # SVG and MathML subtrees, and bound values other than one string are not
+    # plain HTML values.
+    source = (
+        '<c-card dir="sideways" /><c-element is="div" dir="sideways"></c-element>'
+        '<my-widget dir="sideways"></my-widget><Button type="sideways" />'
+        '<svg><a target="_sideways"></a></svg><math dir="sideways"></math>'
+        '<div c-dir="\'sideways\'" v-bind:hidden="x"></div>'
+        "<div :dir=\"'a' + 'b'\" :translate.prop=\"'x'\"></div>"
+        '<div :dir="\'a\\\\nb\'"></div><div :dir="`${x}`" :[name]="\'x\'"></div>'
+    )
+    assert _attribute_values(source) == []
+
+
+def test_attribute_value_lint_checks_a_binding_to_one_string():
+    # `:dir="'rlt'"` sets the same text as `dir="rlt"`, in either quote style.
+    source = (
+        '<div :dir="\'rlt\'" v-bind:translate="`yess`"></div>'
+        "<form :method=\"'post'\"></form><form :method='\"foo\"'></form>"
+    )
+
+    findings = lint_attribute_values(parse_template(source), ())
+
+    assert [(finding.attribute, finding.value) for finding in findings] == [
+        ("dir", "rlt"),
+        ("translate", "yess"),
+        ("method", "foo"),
+    ]
+    # The finding marks the whole string, where TypeScript would mark a
+    # value Vue's types reject.
+    assert source.encode()[findings[0].start_index : findings[0].end_index] == b"'rlt'"
+    assert "Did you mean 'rtl'?" in findings[0].message
+
+
+def test_attribute_value_lint_says_a_header_pragma_belongs_in_a_response_header():
+    source = (
+        '<meta http-equiv="Cache-Control" content="no-cache">'
+        '<meta http-equiv="refesh" content="5">'
+        '<meta http-equiv="content-security-policy-report-only" content="x">'
+    )
+
+    findings = lint_attribute_values(parse_template(source), ())
+
+    # A near typo still gets the closest pragma; another HTTP header gets
+    # the advice to send it as a header.
+    assert [finding.value for finding in findings] == [
+        "Cache-Control",
+        "refesh",
+        "content-security-policy-report-only",
+    ]
+    assert findings[0].message.startswith(
+        "'Cache-Control' is not a pragma browsers act on in 'http-equiv' on <meta>. "
+        "If it is an HTTP header, send it in the HTTP response instead."
+    )
+    assert "Did you mean 'refresh'?" in findings[1].message
+    assert "send it in the HTTP response instead." in findings[2].message
+
+
+def test_attribute_value_lint_maps_nested_template_offsets_into_the_outer_source():
+    source = "<c-card c-header=\"<><i dir='up'></i></>\" /><p>ok</p>"
+    assert _attribute_values(source) == [("dir", "warning", "up")]
+
+
+def test_attribute_value_lint_severity_across_consumers():
+    source = '<div draggable="nope"></div>'
+    ignore = AttributeValueLintConsumer("ignore")
+    assert _attribute_values(source, (ignore,)) == []
+    # One consumer that still reports is enough, and "error" wins over "warning".
+    assert _attribute_values(source, (ignore, AttributeValueLintConsumer("error"))) == [
+        ("draggable", "error", "nope"),
+    ]
+
+
+def test_attribute_value_lint_consumer_rejects_an_unknown_severity():
+    with pytest.raises(ValueError, match="rule_invalid_attribute_value"):
+        AttributeValueLintConsumer(rule_invalid_attribute_value="fatal")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("listener", "declared", "reported"),
+    [
+        # Vue matches a listener to `emits` in camelCase or kebab-case.
+        ("@drop-task", "['dropTask']", False),
+        ("@dropTask", "['drop-task']", False),
+        ("v-on:drop-task.once", "{ 'drop-task': null }", False),
+        ("@update:model-value", "['update:modelValue']", False),
+        ("@drop-tsak", "['drop-task']", True),
+        ("@update:title", "['update:modelValue']", True),
+        # A callback prop and Vue's `Once` suffix also match.
+        ("@drop-task", "['x'], props: { onDropTask: Function }", False),
+        ("@dropTaskOnce", "['drop-task']", False),
+        # Vue's vnode lifecycle hooks are not component events.
+        ("@vue:mounted", "['drop-task']", False),
+        # A plain lowercase name may be a native DOM event on the child's root.
+        ("@select", "['drop-task']", False),
+        # A child without readable `emits` accepts any listener.
+        ("@drop-tsak", "names", False),
+    ],
+)
+def test_component_listener_names_follow_vue_matching(listener, declared, reported):
+    template = parse_template(f'<c-lane {listener}="go"></c-lane>')
+    source = f"$component({{ emits: {declared} }});"
+    findings = lint_undeclared_component_listeners(browser_expressions(template), lambda _tag: source)
+    assert bool(findings) is reported
+
+
+def test_emit_checks_accept_on_props_and_shared_templates_need_every_owner():
+    source = "$component({ emits: ['open'], props: { onPing: Function } });"
+    template = parse_template("<p @click=\"$emit('open'); $emit('ping'); $emit('gone')\"></p>")
+    expressions = browser_expressions(template)
+    assert [finding.name for finding in lint_undeclared_template_emits(expressions, [source])] == ["gone"]
+    # An owner without `emits` accepts every name, so nothing is provable.
+    assert lint_undeclared_template_emits(expressions, [source, "$component({})"]) == ()
+    assert lint_undeclared_template_emits(expressions, []) == ()
+    # A computed event name is never checked.
+    assert (
+        lint_undeclared_component_js_emits("$component({ emits: [], methods: { m() { this.$emit(name); } } });") == ()
+    )

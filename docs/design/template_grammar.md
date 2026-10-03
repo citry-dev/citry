@@ -155,6 +155,12 @@ nested template) is decided afterwards in Rust. One consequence worth knowing:
 an unquoted value cannot contain a space, so an expression that needs one (for
 example `- .123e-5`) must be quoted: `key="- .123e-5"`.
 
+A quoted value ends at the first matching quote, and the grammar has no escape
+character, so `\"` also ends a double-quoted value. A value that contains one
+quote character must use the other quote around it. This matters most for a
+nested template, whose inner attributes have to use the quote the outer value
+does not: `c-footer="<><a c-href='url'>x</a></>"`.
+
 ### Why nesting is built in Rust, not in the grammar
 
 Pest rules cannot refer back to text they already matched, so the grammar
@@ -442,6 +448,24 @@ spellings are visible when the template is written, and one would always make
 the other dead configuration. The accumulating `class` / `c-class` and `style`
 / `c-style` pairs are the exception on HTML elements because both contributions
 are preserved and merged.
+
+The same rule covers a Vue binding and a Python value for one attribute on an
+HTML element or `<c-element>`: `c-title` together with `:title` (or
+`v-bind:title`), and `#c-key` together with `:key`, fail at parse time. Python
+computes the `c-*` value while rendering and Vue then applies its binding on
+top, so one would silently replace the other. `:class` and `:style` without
+modifiers are the exception: Vue joins a bound class with every other class on
+the element and combines a bound style with every other style, exactly as it
+does for a static `class` or `style`. A modifier such as `.prop` makes Vue set
+the DOM property instead, so `c-class` with `:class.prop` is rejected. A
+component tag is exempt, because there `c-title` is a Python input and
+`:title` a Vue prop. Vue's short forms `.title` and `^title` count as modified
+bindings. Control flow (`c-for`, `c-if`, ...) and a `<c-element>`'s `c-is` set
+no attribute of their own name, so `c-for` beside `:for` is accepted. An object
+`v-bind` or a dynamic `:[name]` beside any Python attribute (including
+`c-bind` and `#c-key`) is rejected at parse time, because it may set any
+attribute. A `c-bind` key is only known while rendering, where the same
+conflict stops rendering with an error.
 
 `c-bind` is repeatable and may coexist with an explicit provider. A spread may
 or may not contain the logical key at render time, so its contributions resolve

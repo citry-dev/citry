@@ -43,6 +43,9 @@ def _assert_component_extension_types(component: Component) -> None:
     assert_type(component.dependencies, DependenciesConfig)
     assert_type(component.events, EventsBase[Any])
     assert_type(component.i18n, I18n)
+    # The URL builder is declared on the base, so user code calling it from
+    # template_data type-checks without an ignore comment.
+    assert_type(component.events.url("search", query={"q": "milk"}, fragment="top"), str)
 
 
 class TodoState:

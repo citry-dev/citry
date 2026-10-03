@@ -24,6 +24,18 @@ from scripts.verify_citry_lsp_distribution import (  # noqa: E402
 )
 
 RELEASE_VERSION = distribution_verifier.package_version()
+VUE_TYPE_PACKAGES = {
+    "vue": "3.5.42",
+    "@vue/shared": "3.5.42",
+    "@vue/compiler-core": "3.5.42",
+    "@vue/compiler-dom": "3.5.42",
+    "@vue/reactivity": "3.5.42",
+    "@vue/runtime-core": "3.5.42",
+    "@vue/runtime-dom": "3.5.42",
+    "@babel/types": "7.29.8",
+    "@babel/parser": "7.29.8",
+    "csstype": "3.2.3",
+}
 
 
 def _write_wheel(path: Path, *, extra: str | None = None) -> None:
@@ -64,6 +76,27 @@ def test_release_inventory_is_one_universal_wheel_and_one_sdist() -> None:
         f"citry_lsp-{RELEASE_VERSION}-py3-none-any.whl",
         f"citry_lsp-{RELEASE_VERSION}.tar.gz",
     }
+
+
+def test_official_vue_type_tree_has_exact_inventory_and_licenses() -> None:
+    root = distribution_verifier.SOURCE_ROOT / "types"
+    inventory = json.loads((root / "inventory.json").read_text(encoding="utf8"))
+    assert inventory["vue"] == "3.5.42"
+    packages = inventory["packages"]
+    assert len(packages) == len(VUE_TYPE_PACKAGES)
+    assert {item["name"]: item["version"] for item in packages} == VUE_TYPE_PACKAGES
+    for item in packages:
+        package_root = root / "node_modules" / item["name"]
+        declared_files = item["files"]
+        actual_files = sorted(
+            path.relative_to(package_root).as_posix() for path in package_root.rglob("*") if path.is_file()
+        )
+        assert actual_files == sorted(declared_files), item["name"]
+        assert any(Path(member).name.lower().startswith("license") for member in declared_files)
+        content_digest = hashlib.sha256(
+            b"".join((package_root / member).read_bytes() for member in declared_files)
+        ).hexdigest()
+        assert content_digest == item["sha256"], item["name"]
 
 
 def test_sdist_rebuild_resolves_input_before_switching_workdir(

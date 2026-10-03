@@ -138,6 +138,6 @@ Before adding private data or write operations:
 - use a shared Citry cache when several workers render component updates; and
 - run the application through your normal process manager and proxy.
 
-Read the [bare ASGI and WSGI guide](https://citry.dev/web-frameworks/#bare-asgi-and-wsgi),
+Read the [bare ASGI and WSGI guide](https://citry.dev/advanced/web-frameworks/#bare-asgi-and-wsgi),
 [Events guide](https://citry.dev/events/), and
 [security guide](https://citry.dev/security/) before extending the starter.

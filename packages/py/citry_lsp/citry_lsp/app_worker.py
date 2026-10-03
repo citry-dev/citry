@@ -19,8 +19,9 @@ from citry import Citry, ComponentLibrary
 from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
 from citry._component_introspection import _loaded_python_file
 from citry._linting import _component_lint_variable_owners
-from citry._nested_declarations import _active_nested_class_declarations
+from citry._nested_declarations import _nearest_data_shape_declaration
 from citry._schema_introspection import _inspect_schema_class
+from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
     python_application_lint_variable_range,
     python_class_asset_resolution_signature,
@@ -181,6 +182,7 @@ def _source_analysis(
                     if selected_class
                     else {"handlers": None, "state": None, "state_resolution": {"resolution_chain": None}}
                 ),
+                "kwargs_classes": _kwargs_classes(selected_class, with_classes=bool(js_data_chain)),
                 "template_lint": {
                     "variables": _component_lint_sources(
                         selected_class,
@@ -192,6 +194,22 @@ def _source_analysis(
             }
         )
     return {"version": _SOURCE_ANALYSIS_VERSION, "components": components}
+
+
+def _kwargs_classes(component_class: type | None, *, with_classes: bool) -> dict[str, object]:
+    """
+    Copy the resolved Kwargs field annotations, and the classes `js_data()` can read through.
+
+    A parent template's `c-*` values are checked against the resolved
+    annotations of every component. Only a component with `js_data()` reads
+    attributes through the classes, so the others copy no class table.
+    """
+    if component_class is None:
+        return KwargsWireClasses().to_dict()
+    resolved = kwargs_wire_classes(component_class)
+    if not with_classes:
+        resolved = KwargsWireClasses(members=resolved.members, class_modules=resolved.class_modules)
+    return resolved.to_dict()
 
 
 def _schema_resolution_chain(
@@ -208,10 +226,16 @@ def _schema_resolution_chain(
     ]
     # Field origins alone miss a base that only supplies schema policy, and an
     # empty schema still needs its component bases checked for later additions.
-    for declaration in _active_nested_class_declarations(component_class, schema_name):
-        if not isinstance(declaration.value, type):
-            return None
-        candidates.extend(candidate for candidate in _static_class_mro(declaration.value) if candidate is not object)
+    # Only the nearest declaration applies, like a Python attribute lookup, so
+    # its own bases (``class State(Parent.State)``) are the classes that add
+    # fields; a farther declaration is hidden and cannot change the schema.
+    try:
+        nearest = _nearest_data_shape_declaration(component_class, schema_name)
+    except ValueError:
+        # The runtime rejects this definition, so there is no schema to trust.
+        return None
+    if nearest is not None and isinstance(nearest.value, type):
+        candidates.extend(candidate for candidate in _static_class_mro(nearest.value) if candidate is not object)
     records: dict[tuple[str, str], dict[str, str]] = {}
     for candidate in candidates:
         module = _safe_class_text(candidate, "__module__")
@@ -277,6 +301,7 @@ def _event_sources(component_class: type) -> dict[str, object]:
         else:
             state = []
             public = set(info.state_meta.public)
+            writable = set(info.state_meta.model)
             for field in inspected:
                 if field.name not in public:
                     continue
@@ -288,6 +313,7 @@ def _event_sources(component_class: type) -> dict[str, object]:
                         "name": field.name,
                         "type_display": field.type_display,
                         "description": field.description,
+                        "client_writable": field.name in writable,
                         "module": field.source_module,
                         "qualname": field.source_qualname,
                         "file": field.source_file.resolve().as_posix(),
@@ -413,6 +439,11 @@ def _data_resolution_chain(
             chain.append(record)
         if method_name in namespace:
             method = namespace[method_name]
+            # A staticmethod or classmethod stores the authored function on
+            # __func__. Compare that function with the source, and let the
+            # source analyzer decide whether the decorator is one it understands.
+            if type(method) is staticmethod or type(method) is classmethod:
+                method = method.__func__
             if (
                 type(method) is not FunctionType
                 or method.__module__ != module

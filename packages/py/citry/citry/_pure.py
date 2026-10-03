@@ -13,6 +13,7 @@ from citry.constness import const_value
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from citry.citry_render import RenderPart
     from citry.nodes import BodyItem, Node
 
 
@@ -30,7 +31,14 @@ class PureLiveBodyItem:
     item: Node
 
 
-PureBodyPart: TypeAlias = "str | PureInteriorBody | PureLiveBodyItem"
+@dataclass(frozen=True, slots=True)
+class PurePreparedPart:
+    """One immutable typed prepared part safe to replay verbatim."""
+
+    part: RenderPart
+
+
+PureBodyPart: TypeAlias = "str | PureInteriorBody | PureLiveBodyItem | PurePreparedPart"
 PureBodyPlan: TypeAlias = tuple[PureBodyPart, ...]
 _PureBodyKey = tuple[type[Any], int, object]
 _PureBodyCache = dict[_PureBodyKey, PureBodyPlan]

@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 _HTTP_METHOD = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Z-]+$")
-_REVISION = re.compile(r"^[0-9a-f]{64}$")
 _DESCRIPTOR_FIELDS = ("componentClassId", "eventHandlers", "writableStateFields")
 _HANDLER_FIELDS = (
     "httpMethod",
@@ -32,7 +31,7 @@ _HANDLER_FIELDS = (
     "allowBatching",
 )
 _INSTANCE_FIELDS = ("renderId", "componentClassId", "stateToken", "publicState")
-_MANIFEST_FIELDS = ("protocol", "clientGraphRevision", "componentClasses", "componentInstances")
+_MANIFEST_FIELDS = ("protocol", "componentClasses", "componentInstances")
 
 
 def validate_handler_descriptor(value: Any, path: str = "") -> ValidationIssue | None:
@@ -264,15 +263,6 @@ def _validate_manifest_shape(value: Any, path: str) -> ValidationIssue | None:
     if value["protocol"] != PROTOCOL:
         category = "type" if not isinstance(value["protocol"], str) else "enum"
         return ValidationIssue(pointer(path, "protocol"), category, "The manifest protocol must be citry-events/1.")
-    revision = value["clientGraphRevision"]
-    if revision is not None and not isinstance(revision, str):
-        return ValidationIssue(
-            pointer(path, "clientGraphRevision"), "type", "The graph revision must be a string or null."
-        )
-    if isinstance(revision, str) and _REVISION.fullmatch(revision) is None:
-        return ValidationIssue(
-            pointer(path, "clientGraphRevision"), "pattern", "The graph revision must be lowercase SHA-256."
-        )
     classes = value["componentClasses"]
     if not isinstance(classes, list):
         return ValidationIssue(pointer(path, "componentClasses"), "type", "Component classes must be an array.")
@@ -324,14 +314,12 @@ def _validate_manifest_shape(value: Any, path: str) -> ValidationIssue | None:
 
 
 def build_manifest(
-    client_graph_revision: str | None,
     component_classes: Sequence[Mapping[str, Any]],
     component_instances: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Build a fresh, fully validated Events browser manifest."""
     manifest = {
         "protocol": PROTOCOL,
-        "clientGraphRevision": client_graph_revision,
         "componentClasses": [copy_json(dict(item)) for item in component_classes],
         "componentInstances": [copy_json(dict(item)) for item in component_instances],
     }

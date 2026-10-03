@@ -35,6 +35,7 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from importlib import import_module
+from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast
 from weakref import ReferenceType, WeakSet, ref
 
@@ -59,6 +60,11 @@ if TYPE_CHECKING:
 
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
+    from citry.browser_render import (
+        BrowserPluginDescriptor,
+        BrowserRenderContribution,
+        OnBrowserRenderPrepareContext,
+    )
     from citry.citry import Citry
     from citry.citry_context import CitryContext
     from citry.citry_render import CitryRender, RenderPart
@@ -66,7 +72,6 @@ if TYPE_CHECKING:
     from citry.component import Component
     from citry.host_templates import CompiledBody
     from citry.nodes import BodyItem, SlotNode
-    from citry.ownership_manifest import OwnershipManifestArtifact
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
     from citry.slots import Slot
     from citry.util.routing import URLRoute
@@ -225,8 +230,9 @@ class OnComponentDataContext:
     template_data: dict[str, Any]
     """The template variables from ``Component.template_data()`` (mutable)."""
     js_data: dict[str, Any]
-    """The JS variables from ``Component.js_data()`` (mutable). Consumed by
-    the built-in ``dependencies`` extension."""
+    """The JS variables from ``Component.js_data()`` (mutable). Citry sends
+    them to the browser as fields on the component's Vue instance, and checks
+    the keys after this hook runs."""
     css_data: dict[str, Any]
     """The CSS variables from ``Component.css_data()`` (mutable). Consumed by
     the built-in ``dependencies`` extension."""
@@ -303,6 +309,8 @@ class OnRenderCacheStageContext:
     payload: dict[str, object]
     instance_ids: tuple[str, ...]
     instance_class_ids: tuple[str, ...]
+    parent_ids: tuple[str, ...]
+    provided_render_ids: Mapping[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -531,6 +539,8 @@ class OnSerializeContext:
     context: CitryContext
     """The root render's ``CitryContext`` (its ``extra`` carries everything
     that bubbled up during the render)."""
+    selected_render: CitryRender
+    """The final hook-selected render tree being serialized."""
     html: str
     """The joined HTML (threaded: return a new string to replace it)."""
     placeholders: dict[str, str]
@@ -553,14 +563,14 @@ class ExtensionCommand:
     """
     Base class for an extension's CLI command.
 
-    Subclass this, set ``name`` (and usually ``help``), declare any ``arguments``,
-    and define ``handle`` to do the work. A command that only groups
-    ``subcommands`` leaves ``handle`` unset, and the runner prints its help
-    instead of running anything. The declarations are turned into an ``argparse``
-    parser and dispatched by :mod:`citry.command`; an extension lists its command
-    classes in ``Extension.commands`` and a user reaches one as
-    ``citry ext run <extension> <command>``. (Extension HTTP routes are a
-    separate surface, ``Extension.urls``.)
+    Subclass this, set ``name`` (and usually ``help``), declare any
+    ``arguments``, and define ``handle`` to do the work. A command that only
+    groups ``subcommands`` leaves ``handle`` unset, and the runner prints its
+    help instead of running anything. Citry turns the declarations into an
+    ``argparse`` parser and runs the matching command; an extension lists its
+    command classes in ``Extension.commands`` and a user reaches one as
+    ``citry ext run <extension> <command>``. An extension declares HTTP
+    routes separately, in ``Extension.urls``.
     """
 
     name: ClassVar[str]
@@ -570,7 +580,7 @@ class ExtensionCommand:
     """One-line description of the command, shown in ``--help`` output."""
 
     arguments: ClassVar[Sequence[CommandArg | CommandArgGroup]] = ()
-    """Positional arguments and options, declared with :class:`~citry.command.CommandArg`."""
+    """Positional arguments and options, declared with [`CommandArg`][citry.CommandArg]."""
 
     subcommands: ClassVar[Sequence[type[ExtensionCommand]]] = ()
     """Nested commands. A command with subcommands usually has no ``handle`` of its own."""
@@ -584,9 +594,10 @@ class ExtensionCommand:
     command overrides this with ``def handle(self, **kwargs)``."""
 
     citry: Citry | None = None
-    """The engine the command runs against, bound by the runner before ``handle``
-    is called (mirrors :attr:`Extension.citry`). A command's ``handle`` reads it
-    to reach the component registry and the installed extensions."""
+    """The engine the command runs against, bound by the runner before
+    ``handle`` is called (like [`Extension.citry`][citry.Extension.citry]).
+    A command's ``handle`` reads it to reach the component registry and the
+    installed extensions."""
 
 
 ################################################
@@ -603,9 +614,9 @@ class ExtensionConfig:
     as a subclass of this base (binding ``component_class``), then instantiates it
     per render and attaches it as ``component.view``.
 
-    The component back-reference is a weakref, and the component may be ``None``
-    for extensions that run outside a component lifecycle (for example a future
-    Storybook extension).
+    The config holds only a weak reference to its component, and the
+    component may be ``None`` when an extension creates the config outside a
+    component render.
     """
 
     component_class: ClassVar[type[Component]]
@@ -621,8 +632,10 @@ class ExtensionConfig:
         """
         The owning Component instance.
 
-        Raises ``RuntimeError`` if this config runs outside a component lifecycle
-        (no component), or if the component has been garbage-collected.
+        Raises:
+            RuntimeError: If this config was created without a component, or
+                the component has been garbage-collected.
+
         """
         if self._component_ref is None:
             msg = f"{type(self).__name__} runs outside a component lifecycle (no component)"
@@ -653,17 +666,19 @@ class Extension:
     name: ClassVar[str]
     """Name of the extension. Lowercase, a valid Python identifier. Determines
     the attribute the per-component config is reachable under
-    (``component.<name>``) and, via :attr:`class_name`, the nested class name."""
+    (``component.<name>``) and, through
+    [`class_name`][citry.Extension.class_name], the nested class name."""
 
     class_name: ClassVar[str]
     """PascalCase name of the per-component nested config class, derived from
-    :attr:`name` at subclass creation (``my_extension`` -> ``MyExtension``)."""
+    [`name`][citry.Extension.name] at subclass creation (``my_extension`` ->
+    ``MyExtension``)."""
 
     Config: ClassVar[type[ExtensionConfig]] = ExtensionConfig
     """Base class the per-component nested config inherits from."""
 
     commands: ClassVar[list[type[ExtensionCommand]]] = []
-    """CLI commands this extension provides (see :class:`ExtensionCommand`)."""
+    """CLI commands this extension provides (see [`ExtensionCommand`][citry.ExtensionCommand])."""
 
     introspection_version: ClassVar[int | None] = None
     """Positive schema version when this extension publishes component metadata."""
@@ -688,7 +703,7 @@ class Extension:
     @property
     def urls(self) -> list[URLRoute]:
         """
-        HTTP routes this extension provides (see ``citry/util/routing.py``).
+        HTTP routes this extension provides, as [`URLRoute`][citry.URLRoute] values.
 
         Mounted by the web-integration adapters as part of ``Citry.urls``: a
         user extension's routes live under ``ext/<extension name>/``;
@@ -761,13 +776,18 @@ class Extension:
             ```python
             from citry import Extension
 
-            class CacheExtension(Extension):
-                name = "cache"
+            class TimeoutExtension(Extension):
+                name = "timeout"
 
-                def validate_config_fields(self, fields, *, component=None):
+                def validate_config_fields(
+                    self, fields, *, component=None
+                ):
                     for name in fields:
-                        if name != "ttl":
-                            msg = f"unknown config field {name!r}; the only field is 'ttl'"
+                        if name != "seconds":
+                            msg = (
+                                f"unknown field {name!r}; "
+                                "the only field is 'seconds'"
+                            )
                             raise ValueError(msg)
             ```
 
@@ -783,11 +803,11 @@ class Extension:
 
         Citry calls this direct query method only when a caller explicitly
         requests the extension by name. Override it together with a positive
-        :attr:`introspection_version`. Return an exact built-in ``dict`` made
-        only from strict JSON values, or ``None`` when this component has no
-        entry. The method must be observational, deterministic, reentrant, and
-        thread-safe; it must not render, load assets, mutate registration, or
-        depend on request state.
+        [`introspection_version`][citry.Extension.introspection_version].
+        Return an exact built-in ``dict`` made only from strict JSON values,
+        or ``None`` when this component has no entry. The method must be
+        observational, deterministic, reentrant, and thread-safe; it must not
+        render, load assets, mutate registration, or depend on request state.
 
         Args:
             ctx: The owning engine, temporary live component class, and its
@@ -859,17 +879,43 @@ class Extension:
 
     def on_component_rendered(self, ctx: OnComponentRenderedContext) -> CitryRender | str | None:
         """
-        Called after a component (and its children) rendered. Return a new
-        ``CitryRender`` / ``str`` to replace the output, raise to replace the
-        error, or return ``None`` to keep the original.
+        Called after a component (and its children) rendered. Return new
+        content to replace the output, raise to replace the error, or return
+        ``None`` to keep the original.
+
+        The content follows the rule of a ``{{ ... }}`` value, on static and
+        interactive pages alike: a ``CitryRender`` replaces the output, a
+        plain ``str`` is shown as text (Citry escapes it), and
+        [`Markup`][citry.Markup] is inserted as HTML. Never pass user input
+        to the ``Markup()`` constructor.
+
+        HTML you serialize inside the hook, such as ``str(ctx.render)``, is a
+        plain ``str``, so wrap it in ``Markup`` before you return it. It does
+        not carry the component's own ``data-cid-*`` attribute; Citry adds it
+        to the HTML you return.
+
+        Raises:
+            TypeError: Citry raises it when the hook returns any other
+                value that is not ``None``.
+
         """
 
     def on_slot_rendered(self, ctx: OnSlotRenderedContext) -> RenderPart | None:
         """
         Called after a ``<c-slot>`` site rendered (a fill, or the fallback).
 
-        Return a new render part (``str`` or ``CitryRender``) to replace the
-        output, or ``None`` to keep the original. Raising propagates.
+        Return new content to replace the output, or ``None`` to keep the
+        original. Raising propagates. As with ``on_component_rendered``, a
+        ``CitryRender`` replaces the output, a plain ``str`` is shown as text
+        (Citry escapes it), and [`Markup`][citry.Markup] is inserted as HTML,
+        on static and interactive pages alike.
+
+        Raises:
+            TypeError: Citry raises it when the hook returns a value of any
+                other type, such as a bare ``Placeholder`` or component.
+                Return ``None`` or the unchanged ``ctx.result`` to keep the
+                output.
+
         """
 
     def on_attrs_resolved(self, ctx: OnAttrsResolvedContext) -> dict[str, Any] | None:
@@ -939,6 +985,17 @@ class Extension:
         ``<c-js>``/``<c-css>`` positions.
         """
 
+    def browser_plugin(self) -> BrowserPluginDescriptor | None:
+        """Describe the fixed Vue plugin installed before an interactive app mounts."""
+        return None
+
+    def prepare_browser_render(
+        self,
+        ctx: OnBrowserRenderPrepareContext,  # noqa: ARG002
+    ) -> BrowserRenderContribution | None:
+        """Project this extension's selected render records into prepared browser data."""
+        return None
+
     def _on_serialize_internal(
         self,
         ctx: OnSerializeContext,
@@ -946,7 +1003,6 @@ class Extension:
         _security_csp: SecurityCspMode,
         _javascript_policy: _JavascriptPolicy | None,
         _security_javascript: SecurityJavascriptMode,
-        _ownership_artifact: OwnershipManifestArtifact | None,
     ) -> str | None:
         """Internal dispatch carrying call-local structured-script authority."""
         return self.on_serialize(ctx)
@@ -1096,15 +1152,16 @@ class ExtensionManager:
     """
     Fans each lifecycle hook out across a ``Citry`` instance's extensions.
 
-    Owned by :class:`~citry.citry.Citry` and built once in its ``__init__``.
-    Unlike DJC's module-level singleton, there is no deferred-event machinery: a
-    component class is bound to its ``Citry`` (and thus these extensions) at
-    definition time, so the extensions are always present when a hook fires.
+    Each [`Citry`][citry.Citry] instance builds one manager when it is
+    created. A component class is bound to its ``Citry`` instance (and so to
+    these extensions) when the class is defined, so the extensions are
+    always present when a hook fires.
 
-    Dispatch is *smart*: for each hook name, only the extensions that actually
-    override that hook are called (an extension that does not implement a hook
-    costs nothing). The same name-keyed dispatch underlies :meth:`emit`, which
-    extensions use for their own custom hooks (e.g. ``on_dependencies``).
+    For each hook name, the manager calls only the extensions that override
+    that hook, so an extension that does not implement a hook costs nothing.
+    [`emit()`][citry.ExtensionManager.emit] uses the same lookup by name,
+    which lets extensions fire their own custom hooks (e.g.
+    ``on_dependencies``).
     """
 
     def __init__(
@@ -1359,6 +1416,8 @@ class ExtensionManager:
         *,
         instance_ids: tuple[str, ...],
         instance_class_ids: tuple[str, ...],
+        parent_ids: tuple[str, ...],
+        provided_render_ids: Mapping[str, str],
     ) -> tuple[StagedRenderCacheContribution, ...]:
         """Validate every payload and stage immutable contributions without mutation."""
         from citry.ext.cache.artifact import ArtifactExtension, _thaw_json  # noqa: PLC0415
@@ -1384,6 +1443,8 @@ class ExtensionManager:
                     payload=cast("dict[str, object]", thawed),
                     instance_ids=instance_ids,
                     instance_class_ids=instance_class_ids,
+                    parent_ids=parent_ids,
+                    provided_render_ids=provided_render_ids,
                 )
             )
             if type(contribution) is not StagedRenderCacheContribution:
@@ -1579,10 +1640,10 @@ class ExtensionManager:
           (via ``dataclasses.replace``) and is passed to the next extension; the
           final field value is returned.
 
-        An extension defines ``name`` by overriding it (see
-        ``_extensions_with_hook``). ``name`` need not be a hook declared on
-        :class:`Extension`, so an extension can fire its own custom hook for
-        others to implement.
+        An extension takes part by defining a method called ``name``.
+        ``name`` need not be a hook declared on
+        [`Extension`][citry.Extension], so an extension can fire its own
+        custom hook for others to implement.
 
         Examples:
             Most named hooks delegate here. ``on_component_data`` notifies every
@@ -1593,7 +1654,12 @@ class ExtensionManager:
             ``on_template_loaded`` threads ``ctx.content`` through the extensions
             (``"map"``) and returns the final string::
 
-                manager.emit("on_template_loaded", ctx, result="map", field="content")
+                manager.emit(
+                    "on_template_loaded",
+                    ctx,
+                    result="map",
+                    field="content",
+                )
 
             A custom hook can let an extension short-circuit (``"first"`` returns
             the first non-``None`` value)::
@@ -1840,6 +1906,7 @@ class ExtensionManager:
     def on_serialize(
         self,
         context: CitryContext,
+        selected_render: CitryRender,
         html: str,
         placeholders: dict[str, str],
         deps_strategy: str,
@@ -1849,11 +1916,11 @@ class ExtensionManager:
         _security_csp: SecurityCspMode = "off",
         _javascript_policy: _JavascriptPolicy | None = None,
         _security_javascript: SecurityJavascriptMode = "allow",
-        _ownership_artifact: OwnershipManifestArtifact | None = None,
     ) -> str:
         ctx = OnSerializeContext(
             citry=self.citry,
             context=context,
+            selected_render=selected_render,
             html=html,
             placeholders=placeholders,
             deps_strategy=deps_strategy,
@@ -1866,7 +1933,6 @@ class ExtensionManager:
                 _security_csp,
                 _javascript_policy,
                 _security_javascript,
-                _ownership_artifact,
             )
             if out is not None:
                 ctx = replace(ctx, html=out)
@@ -1877,10 +1943,16 @@ class ExtensionManager:
         component: Component,
         render: CitryRender | str | None,
         error: Exception | None,
+        *,
+        context: CitryContext | None = None,
     ) -> tuple[CitryRender | str | None, Exception | None, bool]:
         """
         Thread the rendered output through the extensions; a return replaces the
         render, a raise replaces the error.
+
+        With ``context`` (the component's render context), a returned ``str``
+        or ``Markup`` becomes a render in that context before the next
+        extension sees it, so a plain ``str`` stays text along the chain.
         """
         had_error = error is not None
         extensions = self._extensions_with_hook("on_component_rendered")
@@ -1901,6 +1973,15 @@ class ExtensionManager:
                 ctx = replace(ctx, render=None, error=err)
             else:
                 if out is not None:
+                    if context is not None:
+                        # Imported lazily: component_render imports this module.
+                        from citry.component_render import (  # noqa: PLC0415
+                            _ON_COMPONENT_RENDERED_TEXT_SOURCE,
+                            _hook_content_render,
+                        )
+
+                        wrapped = _hook_content_render(out, context, _ON_COMPONENT_RENDERED_TEXT_SOURCE)
+                        out = cast("CitryRender | str", wrapped)
                     ctx = replace(ctx, render=out, error=None)
         return ctx.render, ctx.error, had_error
 
@@ -1912,30 +1993,58 @@ class ExtensionManager:
         slot_node: SlotNode,
         slot_is_required: bool,
         result: RenderPart,
+        *,
+        context: CitryContext | None = None,
     ) -> RenderPart:
         """
         Thread a slot's rendered output through the extensions; a return
         replaces the result, a raise propagates.
+
+        With ``context`` (the context of the ``<c-slot>`` site), a returned
+        ``str`` or ``Markup`` becomes a render in that context before the
+        next extension sees it, so a plain ``str`` stays text along the chain.
         """
         # Skip building the context when nothing subscribes: this fires for
         # every slot of every component, so the dataclass would otherwise be
         # built and thrown away on a hot path.
-        if not self.has_hook("on_slot_rendered"):
+        extensions = self._extensions_with_hook("on_slot_rendered")
+        if not extensions:
             return result
-        return self.emit(
-            "on_slot_rendered",
-            OnSlotRenderedContext(
-                citry=self.citry,
-                component=component,
-                slot=slot,
-                slot_name=slot_name,
-                slot_node=slot_node,
-                slot_is_required=slot_is_required,
-                result=result,
-            ),
-            result="map",
-            field="result",
+        ctx = OnSlotRenderedContext(
+            citry=self.citry,
+            component=component,
+            slot=slot,
+            slot_name=slot_name,
+            slot_node=slot_node,
+            slot_is_required=slot_is_required,
+            result=result,
         )
+        for extension in extensions:
+            out = extension.on_slot_rendered(ctx)
+            if out is None:
+                continue
+            # The slot's own output, passed back unchanged, is already a
+            # render part, even when it is an escaped str.
+            if out is not ctx.result:
+                # Imported lazily: component_render imports this module.
+                from citry.citry_render import CitryRender  # noqa: PLC0415
+                from citry.component_render import _ON_SLOT_RENDERED_TEXT_SOURCE, _hook_content_render  # noqa: PLC0415
+
+                if context is not None:
+                    out = cast("RenderPart", _hook_content_render(out, context, _ON_SLOT_RENDERED_TEXT_SOURCE))
+                # Anything else would only fail later, deep in the slot or Vue
+                # serializer, with a message that names neither the hook nor
+                # the slot, so reject it here where both are known.
+                if not isinstance(out, (CitryRender, str)) and getattr_static(out, "__html__", None) is None:
+                    msg = (
+                        f"on_slot_rendered of extension {extension.name!r} returned a value of type "
+                        f"{type(out).__name__} for slot {slot_name!r} of {type(component).__name__}, which Citry "
+                        "cannot put on the page. Return Markup for HTML, a str for text, a CitryRender, or None "
+                        "to keep the output."
+                    )
+                    raise TypeError(msg)
+            ctx = replace(ctx, result=out)
+        return ctx.result
 
     def has_hook(self, name: str) -> bool:
         """Whether any installed extension implements the hook ``name``."""
@@ -2260,9 +2369,9 @@ class ExtensionManager:
         reset, so each drops its own per-class state (the ``dependencies``
         built-in drops its merged result here).
 
-        Deliberately not declared on the :class:`Extension` base: this is the
-        first consumer of the duck-typed custom-hook dispatch (an extension
-        subscribes by defining a method named ``on_files_reset``).
+        This hook is not declared on the [`Extension`][citry.Extension]
+        base. An extension receives it by defining a method named
+        ``on_files_reset``.
         """
         self.emit(
             "on_files_reset",

@@ -2,12 +2,13 @@
 
 # ruff: noqa: ANN
 
+import warnings
 from dataclasses import dataclass, field, fields
 from typing import Annotated, NamedTuple
 
 import pytest
 
-from citry import Citry, CitryElement, Component, Slot
+from citry import Citry, CitryElement, Component, Const, NestedSchemaReplacedWarning, Slot
 
 
 class TestComponentFields:
@@ -38,42 +39,59 @@ class TestComponentFields:
             class Lint:
                 rule_unknown_template_variable = "warning"
                 template_variables = {"base_value": int}
-                rule_unknown_alpine_variable = "warning"
-                alpine_variables = {"$baseMagic": int}
+                rule_unknown_vue_variable = "warning"
+                vue_variables = {"$baseMagic": int}
                 rule_unknown_component_js_variable = "warning"
                 component_js_globals = {"baseClient": int}
+                rule_unknown_component_js_member = "warning"
+                rule_vue_python_variable = "error"
+                rule_alpine_attribute = "ignore"
 
         class Child(Base):
+            class Lint:
+                rule_alpine_cloak = "warning"
+                rule_invalid_attribute_value = "ignore"
+                rule_i18n_cross_language_fallback = "error"
+
+        class Grandchild(Child):
             class Lint:
                 template_variables = {
                     "child_value": Annotated[str, "Child-only value."],
                 }
-                alpine_variables = {
+                vue_variables = {
                     "childValue": Annotated[str, "Child-only browser value."],
                 }
                 component_js_globals = {
                     "childClient": Annotated[str, "Child-only component JS value."],
                 }
 
-        class Reset(Child):
+        class Reset(Grandchild):
             Lint = None
 
         analysis = c.template_analysis()
-        child_lint = analysis.component_lint[Child.definition_id]
+        # Each nested Lint overrides only the rules it names.
+        middle_lint = analysis.component_lint[Child.definition_id]
+        assert (middle_lint.rule_alpine_attribute, middle_lint.rule_alpine_cloak) == ("ignore", "warning")
+        assert middle_lint.rule_invalid_attribute_value == "ignore"
+        assert middle_lint.rule_i18n_cross_language_fallback == "error"
+        child_lint = analysis.component_lint[Grandchild.definition_id]
         reset_lint = analysis.component_lint[Reset.definition_id]
 
         assert child_lint.rule_unknown_template_variable == "warning"
         assert {item.name for item in child_lint.template_variables} == {"base_value", "child_value"}
         child_value = next(item for item in child_lint.template_variables if item.name == "child_value")
         assert (child_value.type_display, child_value.description) == ("str", "Child-only value.")
-        assert child_lint.rule_unknown_alpine_variable == "warning"
-        assert {item.name for item in child_lint.alpine_variables} == {"$baseMagic", "childValue"}
-        child_browser_value = next(item for item in child_lint.alpine_variables if item.name == "childValue")
+        assert child_lint.rule_unknown_vue_variable == "warning"
+        assert {item.name for item in child_lint.vue_variables} == {"$baseMagic", "childValue"}
+        child_browser_value = next(item for item in child_lint.vue_variables if item.name == "childValue")
         assert (child_browser_value.type_display, child_browser_value.description) == (
             "str",
             "Child-only browser value.",
         )
         assert child_lint.rule_unknown_component_js_variable == "warning"
+        assert child_lint.rule_unknown_component_js_member == "warning"
+        assert child_lint.rule_vue_python_variable == "error"
+        assert (child_lint.rule_alpine_attribute, child_lint.rule_alpine_cloak) == ("ignore", "warning")
         assert {item.name for item in child_lint.component_js_globals} == {"baseClient", "childClient"}
         child_client_value = next(item for item in child_lint.component_js_globals if item.name == "childClient")
         assert (child_client_value.type_display, child_client_value.description) == (
@@ -82,10 +100,33 @@ class TestComponentFields:
         )
         assert reset_lint.rule_unknown_template_variable == "error"
         assert reset_lint.template_variables == ()
-        assert reset_lint.rule_unknown_alpine_variable == "error"
-        assert reset_lint.alpine_variables == ()
+        assert reset_lint.rule_unknown_vue_variable == "error"
+        assert reset_lint.vue_variables == ()
         assert reset_lint.rule_unknown_component_js_variable == "error"
+        assert reset_lint.rule_unknown_component_js_member == "error"
+        assert reset_lint.rule_vue_python_variable == "warning"
+        assert (reset_lint.rule_alpine_attribute, reset_lint.rule_alpine_cloak) == ("warning", "error")
+        assert reset_lint.rule_invalid_attribute_value == "warning"
+        assert reset_lint.rule_i18n_cross_language_fallback == "warning"
         assert reset_lint.component_js_globals == ()
+
+    def test_lint_declaration_names_the_vue_replacement_for_alpine_settings(self):
+        c = Citry(autodiscover=False)
+
+        with pytest.raises(ValueError, match="unknown setting") as excinfo:
+
+            class Upgraded(Component):
+                citry = c
+
+                class Lint:
+                    rule_unknown_alpine_variable = "warning"
+                    alpine_variables = {"$analytics": object}
+
+        assert str(excinfo.value) == (
+            "Component Upgraded.Lint has unknown setting(s): alpine_variables, rule_unknown_alpine_variable. "
+            "Vue lint settings replace the Alpine ones; rename 'alpine_variables' to 'vue_variables', "
+            "'rule_unknown_alpine_variable' to 'rule_unknown_vue_variable'."
+        )
 
     def test_lint_declaration_rejects_unknown_fields_and_invalid_values(self):
         c = Citry(autodiscover=False)
@@ -106,13 +147,53 @@ class TestComponentFields:
                 class Lint:
                     rule_unknown_template_variable = "warn"
 
-        with pytest.raises(ValueError, match="rule_unknown_alpine_variable"):
+        with pytest.raises(ValueError, match="rule_unknown_vue_variable"):
+
+            class InvalidVueRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_unknown_vue_variable = "warn"
+
+        with pytest.raises(ValueError, match="rule_unknown_component_js_member"):
+
+            class InvalidMemberRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_unknown_component_js_member = "warn"
+
+        with pytest.raises(ValueError, match="rule_i18n_cross_language_fallback"):
+
+            class InvalidFallbackRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_i18n_cross_language_fallback = "warn"
+
+        with pytest.raises(ValueError, match="rule_vue_python_variable"):
+
+            class InvalidPythonVariableRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_vue_python_variable = "warn"
+
+        with pytest.raises(ValueError, match="rule_alpine_attribute"):
 
             class InvalidAlpineRule(Component):
                 citry = c
 
                 class Lint:
-                    rule_unknown_alpine_variable = "warn"
+                    rule_alpine_attribute = "warn"
+
+        with pytest.raises(ValueError, match="rule_alpine_cloak"):
+
+            class InvalidCloakRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_alpine_cloak = "warn"
 
     def test_kwargs_auto_dataclass(self):
         c = Citry()
@@ -556,6 +637,53 @@ class TestKwargsRenderValidation:
         with pytest.raises(TypeError, match="got an unexpected keyword argument 'bogus'"):
             MyComp(title="x", bogus=1).render()
 
+    def test_one_near_unexpected_kwarg_suggests_declared_field(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            class Kwargs:
+                title: str
+
+        with pytest.raises(TypeError, match=r"unexpected keyword argument 'titel'.*Did you mean 'title'\?"):
+            Card(titel="x").render()
+
+    def test_distant_or_multiple_unexpected_kwargs_are_not_guessed(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            class Kwargs:
+                title: str = ""
+
+        with pytest.raises(TypeError) as distant:
+            Card(bogus="x").render()
+        assert "Did you mean" not in str(distant.value)
+        with pytest.raises(TypeError) as multiple:
+            Card(titel="x", bogus="y").render()
+        assert "Did you mean" not in str(multiple.value)
+
+    def test_constructor_body_type_error_is_not_enriched(self):
+        c = Citry()
+
+        @dataclass(init=False)
+        class Inputs:
+            title: str
+
+            def __init__(self, **kwargs):
+                del kwargs
+                raise TypeError("got an unexpected keyword argument 'titel'")
+
+        class Card(Component):
+            citry = c
+            Kwargs = Inputs
+
+        with pytest.raises(TypeError, match="unexpected keyword argument 'titel'") as caught:
+            Card(titel="x").render()
+        assert "Did you mean" not in str(caught.value)
+
 
 class TestKwargsDefaults:
     """
@@ -683,9 +811,9 @@ class TestKwargsDefaults:
 
 
 class TestSubclassTypedInputs:
-    """Nested input schemas follow their component class's C3 MRO."""
+    """Nested data shapes use the nearest declaration in component C3 order."""
 
-    def test_redeclared_kwargs_revalidates_with_the_subclass(self):
+    def test_plain_child_kwargs_replaces_the_parent_schema(self):
         c = Citry()
         seen = {}
 
@@ -696,26 +824,165 @@ class TestSubclassTypedInputs:
             class Kwargs:
                 color: str
 
-        class ButtonExtra(Button):
-            class Kwargs:
-                size: int
+        with pytest.warns(NestedSchemaReplacedWarning):
 
-            def template_data(self, kwargs, slots):
-                seen["is_extra"] = isinstance(kwargs, ButtonExtra.Kwargs)
-                seen["is_parent"] = isinstance(kwargs, Button.Kwargs)
-                return {}
+            class ButtonExtra(Button):
+                class Kwargs:
+                    size: int
 
-        ButtonExtra(color="red", size=3).render()
-        # A child declaration adds to the inherited schema without having to
-        # spell ``class Kwargs(Button.Kwargs)`` itself.
-        assert seen["is_extra"] is True
-        assert seen["is_parent"] is False
-        # The parent keeps its own schema: the subclass-only field is rejected.
+                def template_data(self, kwargs, slots):
+                    seen["is_extra"] = isinstance(kwargs, ButtonExtra.Kwargs)
+                    seen["is_parent"] = isinstance(kwargs, Button.Kwargs)
+                    return {}
+
+        ButtonExtra(size=3).render()
+        assert seen == {"is_extra": True, "is_parent": False}
+        # A plain nested class replaces the parent's, like any nested Python
+        # class, so the parent's field is no longer accepted.
+        with pytest.raises(TypeError, match="got an unexpected keyword argument 'color'"):
+            ButtonExtra(color="red", size=3).render()
         with pytest.raises(TypeError, match="got an unexpected keyword argument 'size'"):
             Button(color="red", size=3).render()
-        # The subclass enforces its own new required field.
-        with pytest.raises(TypeError, match="missing 1 required positional argument: 'size'"):
-            ButtonExtra(color="red").render()
+
+    def test_child_kwargs_naming_the_parent_extends_it(self):
+        c = Citry()
+
+        class Button(Component):
+            citry = c
+            template = "<p>hi</p>"
+
+            class Kwargs:
+                color: str
+                variant: str = "solid"
+
+        class ButtonExtra(Button):
+            class Kwargs(Button.Kwargs):
+                size: int = 1
+
+        assert [field.name for field in fields(ButtonExtra.Kwargs)] == ["color", "variant", "size"]
+        assert issubclass(ButtonExtra.Kwargs, Button.Kwargs)
+        # The parent's defaults survive the extension.
+        assert ButtonExtra.Kwargs(color="red") == ButtonExtra.Kwargs(color="red", variant="solid", size=1)
+        assert ButtonExtra(color="red").render().serialize() == '<p data-cid-c1="">hi</p>'
+        with pytest.raises(TypeError, match="missing 1 required positional argument: 'color'"):
+            ButtonExtra().render()
+
+    def test_extension_reaches_grandparent_fields_and_defaults(self):
+        c = Citry()
+
+        class Base(Component):
+            citry = c
+
+            class Kwargs:
+                a: int = 1
+
+        class Middle(Base):
+            class Kwargs(Base.Kwargs):
+                b: int = 2
+
+        class Leaf(Middle):
+            class Kwargs(Middle.Kwargs):
+                c: int = 3
+
+        assert Leaf.Kwargs() == Leaf.Kwargs(a=1, b=2, c=3)
+
+    def test_extension_keeps_field_factories_and_redeclared_defaults(self):
+        c = Citry()
+
+        class Parent(Component):
+            citry = c
+
+            class Kwargs:
+                tags: list[str] = field(default_factory=list)
+                size: int = 1
+
+        class Child(Parent):
+            class Kwargs(Parent.Kwargs):
+                size: int
+                label: str = "x"
+
+        first = Child.Kwargs()
+        second = Child.Kwargs()
+        # A redeclared annotation without a value keeps the inherited
+        # default, as dataclass inheritance does.
+        assert first.size == 1
+        assert first.tags == []
+        assert first.tags is not second.tags
+
+    def test_extension_keeps_and_overrides_const_defaults(self):
+        c = Citry()
+
+        class Parent(Component):
+            citry = c
+
+            class Kwargs:
+                cols: int = Const(3)
+                rows: int = Const(1)
+
+        class Child(Parent):
+            class Kwargs(Parent.Kwargs):
+                rows: int = 2
+                label: str = Const("x")
+
+        # Inherited Const markers stay; a redeclared plain default drops one.
+        assert Child.Kwargs._citry_const_schema_defaults == {"cols": 3, "label": "x"}
+        assert Child.Kwargs() == Child.Kwargs(cols=3, rows=2, label="x")
+
+    def test_required_field_after_inherited_default_becomes_keyword_only(self):
+        c = Citry()
+
+        class Parent(Component):
+            citry = c
+            template = "<p>{{ label }}</p>"
+
+            class Kwargs:
+                size: int = 1
+
+        class Child(Parent):
+            class Kwargs(Parent.Kwargs):
+                label: str
+
+        assert [(item.name, item.kw_only) for item in fields(Child.Kwargs)] == [("size", False), ("label", True)]
+        assert Child(label="ok").render().serialize() == '<p data-cid-c1="">ok</p>'
+        with pytest.raises(TypeError, match="missing 1 required keyword-only argument: 'label'"):
+            Child().render()
+
+    def test_plain_child_of_frozen_dataclass_stays_frozen(self):
+        c = Citry()
+
+        @dataclass(frozen=True)
+        class FrozenKwargs:
+            size: int = 1
+
+        class Parent(Component):
+            citry = c
+            Kwargs = FrozenKwargs
+
+        class Child(Parent):
+            class Kwargs(Parent.Kwargs):
+                label: str = "x"
+
+        assert Child.Kwargs.__dataclass_params__.frozen is True
+        assert Child.Kwargs() == Child.Kwargs(size=1, label="x")
+
+    def test_mixed_frozen_dataclass_bases_raise_a_clear_error(self):
+        c = Citry()
+
+        @dataclass(frozen=True)
+        class FrozenFields:
+            frozen_value: str = "frozen"
+
+        @dataclass
+        class MutableFields:
+            mutable_value: str = "mutable"
+
+        with pytest.raises(ValueError, match=r"Kwargs cannot mix frozen and non-frozen dataclass bases"):
+
+            class Card(Component):
+                citry = c
+
+                class Kwargs(FrozenFields, MutableFields):
+                    pass
 
     def test_redeclared_kwargs_inherits_methods_and_supports_super(self):
         c = Citry()
@@ -730,7 +997,7 @@ class TestSubclassTypedInputs:
                     return self.title
 
         class Child(Parent):
-            class Kwargs:
+            class Kwargs(Parent.Kwargs):
                 suffix: str = "!"
 
                 def label(self):
@@ -739,176 +1006,216 @@ class TestSubclassTypedInputs:
         kwargs = Child.Kwargs(title="Hello")
         assert kwargs.label() == "Hello!"
 
-    def test_kwargs_merge_multiple_component_bases_in_c3_order(self):
+    def test_module_level_field_classes_combine_two_sources(self):
         c = Citry()
 
-        class Common(Component):
+        class SizeFields:
+            size: int = 1
+
+        class ColorFields:
+            color: str = "red"
+
+        class Card(Component):
             citry = c
 
-            class Kwargs:
-                shared: str = "common"
+            class Kwargs(SizeFields, ColorFields):
+                label: str = "x"
 
-        class Left(Common):
+        assert [field.name for field in fields(Card.Kwargs)] == ["color", "size", "label"]
+        assert Card.Kwargs() == Card.Kwargs(color="red", size=1, label="x")
+
+    def test_plain_base_with_its_own_constructor_is_kept(self):
+        c = Citry()
+
+        class Validating:
+            def __init__(self, **values):
+                self.values = values
+
+        class Card(Component):
+            citry = c
+
+            class Kwargs(Validating):
+                label: str
+
+        assert "__dataclass_fields__" not in Card.Kwargs.__dict__
+        assert Card.Kwargs(label="x").values == {"label": "x"}
+
+    def test_two_bases_with_different_kwargs_raise(self):
+        c = Citry()
+
+        class Left(Component):
+            citry = c
+
             class Kwargs:
                 left: str = "left"
-                shared: str = "left-shared"
 
-        class Right(Common):
+        class Right(Component):
+            citry = c
+
             class Kwargs:
                 right: str = "right"
-                shared: str = "right-shared"
-
-        class Combined(Left, Right):
-            class Kwargs:
-                own: str = "combined"
-
-        assert [field.name for field in fields(Combined.Kwargs)] == ["shared", "right", "left", "own"]
-        assert Combined.Kwargs().shared == "left-shared"
-
-    def test_unslotted_dataclass_schemas_merge_across_c3_branches(self):
-        c = Citry()
-
-        @dataclass
-        class LeftSchema:
-            left: str = "left"
-
-        @dataclass
-        class RightSchema:
-            right: str = "right"
-
-        class Left(Component):
-            citry = c
-            Kwargs = LeftSchema
-
-        class Right(Component):
-            citry = c
-            Kwargs = RightSchema
-
-        class Combined(Left, Right):
-            pass
-
-        assert [field.name for field in fields(Combined.Kwargs)] == ["right", "left"]
-        assert Combined.Kwargs() == Combined.Kwargs(right="right", left="left")
-
-    def test_frozen_unslotted_dataclass_schemas_preserve_frozen_composition(self):
-        c = Citry()
-
-        @dataclass(frozen=True)
-        class LeftSchema:
-            left: str = "left"
-
-        @dataclass(frozen=True)
-        class RightSchema:
-            right: str = "right"
-
-        class Left(Component):
-            citry = c
-            Kwargs = LeftSchema
-
-        class Right(Component):
-            citry = c
-            Kwargs = RightSchema
-
-        class Combined(Left, Right):
-            pass
-
-        assert [field.name for field in fields(Combined.Kwargs)] == ["right", "left"]
-        assert Combined.Kwargs() == Combined.Kwargs(right="right", left="left")
-
-    def test_mixed_frozen_dataclass_modes_reject_multiple_c3_branches(self):
-        c = Citry()
-
-        @dataclass(frozen=True)
-        class FrozenSchema:
-            frozen: str = "frozen"
-
-        @dataclass
-        class MutableSchema:
-            mutable: str = "mutable"
-
-        class Frozen(Component):
-            citry = c
-            Kwargs = FrozenSchema
-
-        class Mutable(Component):
-            citry = c
-            Kwargs = MutableSchema
-
-        with pytest.raises(ValueError, match=r"frozen and non-frozen dataclass Kwargs declarations"):
-
-            class Combined(Frozen, Mutable):
-                pass
-
-    def test_slotted_dataclass_schemas_reject_multiple_c3_branches(self):
-        c = Citry()
-
-        @dataclass(slots=True)
-        class LeftSchema:
-            left: str = "left"
-
-        @dataclass(slots=True)
-        class RightSchema:
-            right: str = "right"
-
-        class Left(Component):
-            citry = c
-            Kwargs = LeftSchema
-
-        class Right(Component):
-            citry = c
-            Kwargs = RightSchema
 
         with pytest.raises(
             ValueError,
-            match=r"slotted dataclass Kwargs declarations.*incompatible instance layouts",
+            match=(
+                r"Component Combined: its bases declare Kwargs differently \(Left.Kwargs and"
+                r" Right.Kwargs\), and Citry does not combine them. Declare Kwargs on Combined: write"
+                r" `Kwargs = Left.Kwargs`"
+            ),
         ):
 
             class Combined(Left, Right):
                 pass
 
-    def test_namedtuple_schemas_reject_multiple_c3_branches(self):
+    def test_two_bases_resolved_by_an_own_declaration(self):
         c = Citry()
-
-        class LeftSchema(NamedTuple):
-            left: str
-
-        class RightSchema(NamedTuple):
-            right: str
 
         class Left(Component):
             citry = c
-            Kwargs = LeftSchema
+
+            class Kwargs:
+                left: str = "left"
 
         class Right(Component):
             citry = c
-            Kwargs = RightSchema
 
-        with pytest.raises(ValueError, match=r"NamedTuple Kwargs declarations.*silently dropping fields"):
+            class Kwargs:
+                right: str = "right"
+
+        class Combined(Left, Right):
+            Kwargs = Left.Kwargs
+
+        assert Combined.Kwargs is Left.Kwargs
+
+    def test_one_base_class_and_one_base_none_raise(self):
+        c = Citry()
+
+        class Left(Component):
+            citry = c
+
+            class Kwargs:
+                left: str = "left"
+
+        class Right(Component):
+            citry = c
+            Kwargs = None
+
+        with pytest.raises(ValueError, match=r"\(Left.Kwargs and Kwargs = None on Right\)"):
 
             class Combined(Left, Right):
                 pass
 
-    def test_mixed_schema_adapters_reject_multiple_c3_branches(self):
+    def test_bases_sharing_one_class_do_not_conflict(self):
         c = Citry()
 
-        class PlainSchema:
-            plain: str
-
-        class TupleSchema(NamedTuple):
-            tuple_value: str
-
-        class Plain(Component):
+        class Left(Component):
             citry = c
-            Kwargs = PlainSchema
 
-        class Tuple(Component):
+            class Kwargs:
+                left: str = "left"
+
+        class Right(Component):
             citry = c
-            Kwargs = TupleSchema
+            Kwargs = Left.Kwargs
 
-        with pytest.raises(ValueError, match=r"incompatible schema adapters \(namedtuple, plain\)"):
+        class Combined(Left, Right):
+            pass
 
-            class Combined(Plain, Tuple):
-                pass
+        assert Combined.Kwargs is Left.Kwargs
+
+    def test_bases_binding_one_module_level_class_do_not_conflict(self):
+        c = Citry()
+
+        class SharedFields:
+            a: int = 1
+
+        class Left(Component):
+            citry = c
+            Kwargs = SharedFields
+
+        class Right(Component):
+            citry = c
+            Kwargs = SharedFields
+
+        class Combined(Left, Right):
+            pass
+
+        assert Combined.Kwargs is Left.Kwargs
+
+    def test_non_class_on_a_competing_base_raises_the_class_error(self):
+        c = Citry()
+
+        class Cleared(Component):
+            citry = c
+            Kwargs = None
+
+        class Mixin:
+            Kwargs = "oops"
+
+        with pytest.raises(ValueError, match=r"Mixin.Kwargs must be a class, or None for no Kwargs; got 'oops'"):
+
+            class Combined(Cleared, Mixin, Component):
+                citry = c
+
+    def test_choosing_one_base_class_does_not_warn(self):
+        c = Citry()
+
+        class Left(Component):
+            citry = c
+
+            class Kwargs:
+                a: int = 1
+
+        class Right(Component):
+            citry = c
+
+            class Kwargs:
+                b: int = 2
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NestedSchemaReplacedWarning)
+
+            class Combined(Left, Right):
+                Kwargs = Right.Kwargs
+
+        assert Combined.Kwargs is Right.Kwargs
+
+    def test_own_constructor_on_the_declared_class_is_still_converted(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = "<p>{{ size }}</p>"
+
+            class Kwargs:
+                size: int = 3
+
+                def describe(self):
+                    return f"size {self.size}"
+
+        assert "__dataclass_fields__" in Card.Kwargs.__dict__
+        assert Card().render().serialize() == '<p data-cid-c1="">3</p>'
+
+    def test_diamond_uses_the_nearer_declaration_without_error(self):
+        c = Citry()
+
+        class Base(Component):
+            citry = c
+
+            class Kwargs:
+                a: int = 1
+
+        class Extended(Base):
+            class Kwargs(Base.Kwargs):
+                b: int = 2
+
+        class Sibling(Base):
+            pass
+
+        class Combined(Sibling, Extended):
+            pass
+
+        assert Combined.Kwargs is Extended.Kwargs
 
     def test_kwargs_none_resets_inherited_schema(self):
         c = Citry()
@@ -919,11 +1226,41 @@ class TestSubclassTypedInputs:
             class Kwargs:
                 title: str
 
-        class Child(Parent):
-            Kwargs = None
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NestedSchemaReplacedWarning)
+
+            class Child(Parent):
+                Kwargs = None
 
         assert Child.Kwargs is None
         assert Child(anything="goes").render().serialize() == ""
+
+    def test_non_class_declaration_raises_at_definition(self):
+        c = Citry()
+
+        with pytest.raises(
+            ValueError, match=r"Component Card: Card.Kwargs must be a class, or None for no Kwargs; got 5"
+        ):
+
+            class Card(Component):
+                citry = c
+                Kwargs = 5
+
+    def test_namedtuple_subclass_adding_fields_raises(self):
+        c = Citry()
+
+        class ParentKwargs(NamedTuple):
+            title: str
+
+        class Parent(Component):
+            citry = c
+            Kwargs = ParentKwargs
+
+        with pytest.raises(ValueError, match=r"a NamedTuple subclass cannot add fields"):
+
+            class Child(Parent):
+                class Kwargs(Parent.Kwargs):
+                    extra: int = 0
 
     @pytest.mark.parametrize("schema_name", ["Kwargs", "Slots", "TemplateData", "JsData", "CssData"])
     def test_every_core_schema_role_uses_the_same_inheritance_rule(self, schema_name):
@@ -936,10 +1273,18 @@ class TestSubclassTypedInputs:
             own: str = "child"
 
         parent = type(f"{schema_name}Parent", (Component,), {"citry": c, schema_name: ParentSchema})
-        child = type(f"{schema_name}Child", (parent,), {schema_name: ChildSchema})
+        with pytest.warns(NestedSchemaReplacedWarning, match=f"{schema_name} replaces"):
+            replaced = type(f"{schema_name}Replaced", (parent,), {schema_name: ChildSchema})
+        extending = type(
+            f"{schema_name}Extending",
+            (parent,),
+            {schema_name: type(schema_name, (getattr(parent, schema_name),), {"__annotations__": {"own": str}})},
+        )
+        inherited = type(f"{schema_name}Inherited", (parent,), {})
 
-        schema = getattr(child, schema_name)
-        assert [field.name for field in fields(schema)] == ["inherited", "own"]
+        assert [field.name for field in fields(getattr(replaced, schema_name))] == ["own"]
+        assert [field.name for field in fields(getattr(extending, schema_name))] == ["inherited", "own"]
+        assert getattr(inherited, schema_name) is getattr(parent, schema_name)
 
     @pytest.mark.parametrize("schema_name", ["Kwargs", "Slots", "TemplateData", "JsData", "CssData"])
     def test_core_schema_declaration_reopens_above_a_reset(self, schema_name):
@@ -959,7 +1304,7 @@ class TestSubclassTypedInputs:
         assert [field.name for field in fields(schema)] == ["reopened"]
 
     @pytest.mark.parametrize("schema_name", ["Kwargs", "Slots", "TemplateData", "JsData", "CssData"])
-    def test_core_schema_declaration_precedes_a_later_c3_branch_reset(self, schema_name):
+    def test_core_schema_class_and_a_separate_branch_reset_conflict(self, schema_name):
         c = Citry()
 
         class LeftSchema:
@@ -967,10 +1312,9 @@ class TestSubclassTypedInputs:
 
         left = type(f"{schema_name}Left", (Component,), {"citry": c, schema_name: LeftSchema})
         right = type(f"{schema_name}Right", (Component,), {"citry": c, schema_name: None})
-        combined = type(f"{schema_name}Combined", (left, right), {})
 
-        schema = getattr(combined, schema_name)
-        assert [field.name for field in fields(schema)] == ["left"]
+        with pytest.raises(ValueError, match=f"its bases declare {schema_name} differently"):
+            type(f"{schema_name}Combined", (left, right), {})
 
     def test_plain_definition_base_schemas_are_normalized_for_the_component(self):
         c = Citry()
@@ -988,8 +1332,14 @@ class TestSubclassTypedInputs:
             <p>{{ label }}</p>
             """
 
+        class BoundChild(Bound):
+            pass
+
         assert [field.name for field in fields(Bound.Kwargs)] == ["label"]
         assert [field.name for field in fields(Bound.Slots)] == ["default"]
+        # A subclass reuses the class the first component generated from the
+        # plain definition base instead of generating another one.
+        assert BoundChild.Kwargs is Bound.Kwargs
         assert Bound(label="ready", slots={"default": "body"}).render().serialize().strip() == (
             '<p data-cid-c1="">ready</p>'
         )
@@ -1014,6 +1364,127 @@ class TestSubclassTypedInputs:
         # The error names the parent's class, showing it is the inherited
         # Kwargs doing the validating.
         assert "Button.Kwargs" in str(exc.value)
+
+
+class TestNestedSchemaReplacedWarning:
+    """The migration warning names dropped fields once, at class definition."""
+
+    def test_warning_names_every_dropped_field_and_the_fix(self):
+        c = Citry()
+
+        class Message(Component):
+            citry = c
+
+            class Kwargs:
+                text: str
+                author: str = ""
+
+        with pytest.warns(NestedSchemaReplacedWarning) as record:
+
+            class SignedMessage(Message):
+                class Kwargs:
+                    signature: str
+
+        assert [str(item.message) for item in record] == [
+            "Component SignedMessage: Kwargs replaces Message.Kwargs and leaves out fields 'text' and 'author'."
+            " To keep them, write `class Kwargs(Message.Kwargs):`."
+        ]
+        # The warning points at the class statement in user code.
+        assert record[0].filename == __file__
+
+    def test_single_dropped_field_message(self):
+        c = Citry()
+
+        class Message(Component):
+            citry = c
+
+            class Kwargs:
+                text: str
+
+        with pytest.warns(NestedSchemaReplacedWarning) as record:
+
+            class SignedMessage(Message):
+                class Kwargs:
+                    signature: str
+
+        assert str(record[0].message) == (
+            "Component SignedMessage: Kwargs replaces Message.Kwargs and leaves out field 'text'."
+            " To keep it, write `class Kwargs(Message.Kwargs):`."
+        )
+
+    def test_no_warning_for_extension_none_or_kept_fields(self):
+        c = Citry()
+
+        class Message(Component):
+            citry = c
+
+            class Kwargs:
+                text: str
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NestedSchemaReplacedWarning)
+
+            class Extended(Message):
+                class Kwargs(Message.Kwargs):
+                    signature: str = ""
+
+            class Cleared(Message):
+                Kwargs = None
+
+            class Retyped(Message):
+                class Kwargs:
+                    text: str | None = None
+
+            class Inherited(Message):
+                pass
+
+            class Aliased(Message):
+                Kwargs = Message.Kwargs
+
+        assert Inherited.Kwargs is Message.Kwargs
+
+    def test_warning_is_a_filterable_user_warning(self):
+        c = Citry()
+        assert issubclass(NestedSchemaReplacedWarning, UserWarning)
+
+        class Message(Component):
+            citry = c
+
+            class Kwargs:
+                text: str
+
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            warnings.filterwarnings("ignore", category=NestedSchemaReplacedWarning)
+
+            class SignedMessage(Message):
+                class Kwargs:
+                    signature: str
+
+        assert record == []
+
+    def test_subclass_of_the_replacing_class_does_not_warn_again(self):
+        c = Citry()
+
+        class Message(Component):
+            citry = c
+
+            class Kwargs:
+                text: str
+
+        with pytest.warns(NestedSchemaReplacedWarning):
+
+            class SignedMessage(Message):
+                class Kwargs:
+                    signature: str
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NestedSchemaReplacedWarning)
+
+            class FancySignedMessage(SignedMessage):
+                pass
+
+        assert FancySignedMessage.Kwargs is SignedMessage.Kwargs
 
 
 class TestTemplateDataNormalization:

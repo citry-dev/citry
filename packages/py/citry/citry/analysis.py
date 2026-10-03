@@ -10,22 +10,28 @@ from array import array
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
-from difflib import SequenceMatcher
+from difflib import SequenceMatcher, get_close_matches
 from enum import Enum
 from itertools import pairwise
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal
 
-from citry._alpine_csp import classify_alpine_csp
 from citry._browser_expressions import (
     SERVER_EVENT_CALL_NAMES,
     BrowserBinding,
     BrowserCompletion,
     BrowserComponentBinding,
-    BrowserComponentMember,
-    BrowserComponentPropsUse,
+    BrowserComponentCall,
+    BrowserComponentContextName,
+    BrowserComponentMemberReference,
+    BrowserComponentPropContribution,
+    BrowserComponentPropFinding,
+    BrowserComponentPropSite,
+    BrowserComponentPublicName,
+    BrowserComponentSection,
     BrowserComponentSourceAnalysis,
     BrowserDeclarativeEvent,
+    BrowserEmitName,
     BrowserExpression,
     BrowserExpressionMode,
     BrowserFreeReference,
@@ -38,24 +44,26 @@ from citry._browser_expressions import (
     BrowserMemberLiteralCall,
     BrowserObjectProperty,
     BrowserProp,
-    BrowserScopeWrite,
     BrowserSourceAnalysis,
     BrowserStateBinding,
     BrowserStateBindingTargetError,
+    MarkLiteralFinding,
+    _ascii_lower,
+    _nested_template,
     analyze_browser_component_source,
     analyze_browser_expression,
     browser_bindings,
     browser_client_prop_accepts,
     browser_completion_at,
-    browser_component_members,
-    browser_component_prop_uses,
+    browser_component_prop_findings,
+    browser_component_prop_sites,
     browser_component_props,
-    browser_component_scope_writes,
     browser_declarative_events,
     browser_expression_at,
     browser_expressions,
     browser_i18n_bind_calls,
     browser_i18n_binding_directives,
+    browser_i18n_calls_checkable,
     browser_i18n_message_calls,
     browser_i18n_profile_calls,
     browser_identifier_at,
@@ -64,17 +72,20 @@ from citry._browser_expressions import (
     browser_literal_wire_type,
     browser_member_at,
     browser_member_literal_calls,
+    browser_proven_member_literal_calls,
     browser_state_binding_target_errors,
     browser_state_bindings,
+    component_js_i18n_owners,
+    mark_literal_findings,
 )
 from citry._browser_expressions import (
     python_event_handler_coordinates as _python_event_handler_coordinates,
 )
 from citry._diagnostic_catalog import (
-    ALPINE_UNKNOWN_VARIABLE,
-    COMPONENT_JS_UNKNOWN_DATA_MEMBER,
+    BROWSER_UNDECLARED_COMPONENT_EVENT,
+    BROWSER_UNDECLARED_EMIT,
+    COMPONENT_JS_UNKNOWN_MEMBER,
     COMPONENT_JS_UNKNOWN_VARIABLE,
-    CSP_INCOMPATIBLE_BROWSER_CODE,
     FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
     FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
     FORMAT_HOST_SYNTAX,
@@ -82,11 +93,34 @@ from citry._diagnostic_catalog import (
     FORMAT_INVARIANT,
     FORMAT_PROVIDER_INVALID,
     FORMAT_PROVIDER_UNAVAILABLE,
+    TEMPLATE_ALPINE_ATTRIBUTE,
+    TEMPLATE_ALPINE_CLOAK,
+    TEMPLATE_INVALID_ATTRIBUTE_VALUE,
     TEMPLATE_UNKNOWN_VARIABLE,
+    VUE_PYTHON_VARIABLE,
+    VUE_UNKNOWN_VARIABLE,
 )
 from citry._diagnostics import render_diagnostic
+from citry._html_attribute_values import (
+    CASE_SENSITIVE_KEYWORDS as _CASE_SENSITIVE_KEYWORDS,
+)
+from citry._html_attribute_values import (
+    ENUMERATED_VALUES as _ENUMERATED_ATTRIBUTE_VALUES,
+)
+from citry._html_attribute_values import (
+    FRAME_NAME_ELEMENTS as _FRAME_NAME_ELEMENTS,
+)
+from citry._html_attribute_values import (
+    HTML_ELEMENTS as _HTML_ELEMENTS,
+)
+from citry._html_attribute_values import (
+    NAVIGABLE_TARGET_ATTRIBUTES as _NAVIGABLE_TARGET_ATTRIBUTES,
+)
+from citry._html_attribute_values import (
+    NAVIGABLE_TARGET_KEYWORDS as _NAVIGABLE_TARGET_KEYWORDS,
+)
 from citry._inline_assets import normalize_inline_asset
-from citry._json_wire import JsonWireField, JsonWireKind, JsonWireType, merge_json_wire_types
+from citry._json_wire import JsonWireField, JsonWireKind, JsonWireType, WireClass, merge_json_wire_types
 from citry._json_wire import json_wire_type_from_annotation as _json_wire_type_from_annotation
 from citry._json_wire import json_wire_type_from_expression as _json_wire_type_from_expression
 from citry._linting import TemplateLintInfo
@@ -98,16 +132,22 @@ from citry._portable_ide import (
     template_tag_uses,
     unknown_component_uses,
 )
+from citry._source_lines import source_lines
 from citry._template_python import ShadowPythonCopy as _ShadowPythonCopy
 from citry._template_python import ShadowPythonDocument as _ShadowPythonDocument
 from citry._template_python import ShadowPythonSourceCopy as _ShadowPythonSourceCopy
+from citry._template_python import ShadowRevealDocument as _ShadowRevealDocument
 from citry._template_python import TemplatePythonControl as _TemplatePythonControl
 from citry._template_python import TemplatePythonQuery as _TemplatePythonQuery
 from citry._template_python import TemplatePythonRoot as _TemplatePythonRoot
+from citry._template_python import TemplatePythonValueType as _TemplatePythonValueType
 from citry._template_python import build_inferred_template_shadow as _build_inferred_template_shadow
+from citry._template_python import build_reveal_shadow as _build_reveal_shadow
 from citry._template_python import build_schema_template_shadow as _build_schema_template_shadow
 from citry._template_python import template_python_queries as _template_python_queries
 from citry._template_python import template_python_query_at as _template_python_query_at
+from citry._template_python import template_static_input_queries as _template_static_input_queries
+from citry.util.html import decode_attribute_entities
 from citry_core.template_formatter import (
     EmbeddedFormatPlan as _CoreEmbeddedFormatPlan,
 )
@@ -127,7 +167,7 @@ from citry_core.template_formatter import format_template as _format_template
 from citry_core.template_formatter import (
     prepare_embedded_format as _prepare_embedded_format,
 )
-from citry_core.template_parser import TagRules
+from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttr, HtmlAttrKind, TagRules, TemplateElement
 from citry_core.template_parser import parse_template as _parse_template
 
 if TYPE_CHECKING:
@@ -146,9 +186,11 @@ UNKNOWN_TEMPLATE_VARIABLE_CODE = TEMPLATE_UNKNOWN_VARIABLE
 TemplatePythonControl = _TemplatePythonControl
 TemplatePythonQuery = _TemplatePythonQuery
 TemplatePythonRoot = _TemplatePythonRoot
+TemplatePythonValueType = _TemplatePythonValueType
 ShadowPythonCopy = _ShadowPythonCopy
 ShadowPythonDocument = _ShadowPythonDocument
 ShadowPythonSourceCopy = _ShadowPythonSourceCopy
+ShadowRevealDocument = _ShadowRevealDocument
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,29 +265,41 @@ class TemplateLintFinding:
 
 
 @dataclass(frozen=True, slots=True)
-class AlpineLintConsumer:
+class VueLintConsumer:
     """Describe one proven browser namespace used by a physical template."""
 
     known_names: frozenset[str]
-    rule_unknown_alpine_variable: Literal["ignore", "warning", "error"]
+    rule_unknown_vue_variable: Literal["ignore", "warning", "error"]
+    namespace_policy: Literal["closed", "unknown"] = "closed"
+    rule_vue_python_variable: Literal["ignore", "warning", "error"] = "warning"
 
     def __post_init__(self) -> None:
         if type(self.known_names) is not frozenset or any(
             type(name) is not str or not name for name in self.known_names
         ):
-            msg = "AlpineLintConsumer.known_names must be a frozenset of non-empty strings"
+            msg = "VueLintConsumer.known_names must be a frozenset of non-empty strings"
             raise TypeError(msg)
-        if type(self.rule_unknown_alpine_variable) is not str or self.rule_unknown_alpine_variable not in {
+        if type(self.rule_unknown_vue_variable) is not str or self.rule_unknown_vue_variable not in {
             "ignore",
             "warning",
             "error",
         }:
-            msg = f"Unknown Alpine-variable rule severity: {self.rule_unknown_alpine_variable!r}"
+            msg = f"Unknown Vue-variable rule severity: {self.rule_unknown_vue_variable!r}"
+            raise ValueError(msg)
+        if self.namespace_policy not in {"closed", "unknown"}:
+            msg = f"Unknown Vue namespace policy: {self.namespace_policy!r}"
+            raise ValueError(msg)
+        if type(self.rule_vue_python_variable) is not str or self.rule_vue_python_variable not in {
+            "ignore",
+            "warning",
+            "error",
+        }:
+            msg = f"Unknown Vue Python-variable rule severity: {self.rule_vue_python_variable!r}"
             raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
-class AlpineLintFinding:
+class VueLintFinding:
     """Report one OXC-proven free root missing from a browser namespace."""
 
     name: str
@@ -257,8 +311,82 @@ class AlpineLintFinding:
 
 
 @dataclass(frozen=True, slots=True)
+class AlpineAttributeLintConsumer:
+    """
+    Carry one consuming component's severities for leftover Alpine attributes.
+
+    Attributes:
+        rule_alpine_attribute: Configured severity for an ``x-*`` attribute
+            other than ``x-cloak``.
+        rule_alpine_cloak: Configured severity for ``x-cloak``.
+
+    """
+
+    rule_alpine_attribute: Literal["ignore", "warning", "error"] = "warning"
+    rule_alpine_cloak: Literal["ignore", "warning", "error"] = "error"
+
+    def __post_init__(self) -> None:
+        for rule_name in ("rule_alpine_attribute", "rule_alpine_cloak"):
+            severity = getattr(self, rule_name)
+            if type(severity) is not str or severity not in {"ignore", "warning", "error"}:
+                msg = f"Unknown {rule_name} severity: {severity!r}"
+                raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class AlpineAttributeFinding:
+    """Report one Alpine ``x-*`` attribute on an HTML element, spanning its name."""
+
+    name: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class AttributeValueLintConsumer:
+    """
+    Carry one consuming component's severity for invalid enumerated attribute values.
+
+    Attributes:
+        rule_invalid_attribute_value: Configured severity for a static value
+            outside an enumerated HTML attribute's keywords.
+
+    """
+
+    rule_invalid_attribute_value: Literal["ignore", "warning", "error"] = "warning"
+
+    def __post_init__(self) -> None:
+        severity = self.rule_invalid_attribute_value
+        if type(severity) is not str or severity not in {"ignore", "warning", "error"}:
+            msg = f"Unknown rule_invalid_attribute_value severity: {severity!r}"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class AttributeValueFinding:
+    """
+    Report one static HTML attribute value outside its enumerated keywords.
+
+    The span covers the value inside its quotes, or the attribute name when
+    the value is empty or missing.
+    """
+
+    element: str
+    attribute: str
+    value: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
 class CspCompatibilityFinding:
-    """Report one browser host incompatible with the selected Alpine CSP build."""
+    """Report one browser host incompatible with the selected Vue CSP build."""
 
     message: str
     code: str
@@ -394,29 +522,95 @@ COMPONENT_JS_AMBIENT_NAMES = frozenset(
 )
 
 
-ALPINE_AMBIENT_NAMES = frozenset(
+# Component JavaScript runs as an ordinary browser script, so Citry's own
+# global and the page's DOM interfaces are in scope there. Vue template
+# expressions cannot reach them, so these stay out of VUE_AMBIENT_NAMES.
+_COMPONENT_JS_BROWSER_GLOBALS = frozenset(
+    {
+        "AbortController",
+        "AbortSignal",
+        "Blob",
+        "CSS",
+        "CSSStyleSheet",
+        "Citry",
+        "DOMException",
+        "DOMParser",
+        "DOMRect",
+        "DataTransfer",
+        "Document",
+        "DocumentFragment",
+        "EventTarget",
+        "File",
+        "FileReader",
+        "FormData",
+        "HTMLCollection",
+        "Headers",
+        "Image",
+        "IntersectionObserver",
+        "MutationObserver",
+        "Node",
+        "NodeList",
+        "Range",
+        "Request",
+        "ResizeObserver",
+        "Response",
+        "Selection",
+        "ShadowRoot",
+        "Text",
+        "TextDecoder",
+        "TextEncoder",
+        "WebSocket",
+        "Window",
+        "Worker",
+        "XMLHttpRequest",
+        "alert",
+        "atob",
+        "btoa",
+        "cancelIdleCallback",
+        "confirm",
+        "crypto",
+        "customElements",
+        "getComputedStyle",
+        "getSelection",
+        "innerHeight",
+        "innerWidth",
+        "matchMedia",
+        "prompt",
+        "requestIdleCallback",
+        "scrollX",
+        "scrollY",
+        "self",
+    }
+)
+# Every element interface, such as HTMLInputElement or SVGPathElement, and
+# every event class, such as KeyboardEvent or MessageEvent.
+_DOM_INTERFACE = re.compile(r"(?:HTML|SVG)[A-Za-z]*Element|[A-Z][A-Za-z]*Event")
+
+
+VUE_AMBIENT_NAMES = frozenset(
     {
         *COMPONENT_JS_AMBIENT_NAMES,
-        # Alpine's documented magic properties.
+        # Vue template public-instance properties.
+        "$attrs",
         "$data",
-        "$dispatch",
         "$el",
+        "$emit",
         "$event",
-        "$id",
+        "$forceUpdate",
         "$nextTick",
+        "$options",
+        "$parent",
+        "$props",
         "$refs",
         "$root",
-        "$store",
+        "$slots",
         "$watch",
-        # Citry's Alpine magic/context surface.
+        # Citry's Vue magic/context surface.
         "$error",
-        "$inject",
         "$loading",
         "$onEvent",
-        "$provide",
         "$sendEvent",
         "$state",
-        "$unprovide",
         "sendEvent",
         "onEvent",
     }
@@ -506,34 +700,41 @@ def lint_unknown_template_variables(
     return tuple(findings)
 
 
-def lint_unknown_alpine_variables(
+def lint_unknown_vue_variables(
     expressions: Sequence[BrowserExpression],
-    consumers: Sequence[AlpineLintConsumer],
-) -> tuple[AlpineLintFinding, ...]:
-    """Diagnose OXC-proven Alpine roots missing from any physical owner."""
+    consumers: Sequence[VueLintConsumer],
+) -> tuple[VueLintFinding, ...]:
+    """Diagnose OXC-proven Vue roots missing from any physical owner."""
     if not consumers:
         return ()
-    findings: list[AlpineLintFinding] = []
+    findings: list[VueLintFinding] = []
     for expression in expressions:
         analysis = analyze_browser_expression(expression)
         if not analysis.valid:
             continue
-        lexical = frozenset((*ALPINE_AMBIENT_NAMES, *expression.bindings))
+        lexical = frozenset((*VUE_AMBIENT_NAMES, *expression.bindings))
         for reference in analysis.references:
             if reference.name in lexical:
                 continue
-            missing = [consumer for consumer in consumers if reference.name not in consumer.known_names]
-            active = [consumer for consumer in missing if consumer.rule_unknown_alpine_variable != "ignore"]
+            missing = [
+                consumer
+                for consumer in consumers
+                if consumer.namespace_policy == "closed" and reference.name not in consumer.known_names
+            ]
+            active = [consumer for consumer in missing if consumer.rule_unknown_vue_variable != "ignore"]
             if not active:
                 continue
             severity: Literal["warning", "error"] = (
-                "error" if any(consumer.rule_unknown_alpine_variable == "error" for consumer in active) else "warning"
+                "error" if any(consumer.rule_unknown_vue_variable == "error" for consumer in active) else "warning"
             )
+            # A Python loop or slot variable of the same name is the likely
+            # cause, so say so in the one finding this span gets.
+            variant = "python" if _is_python_bound(reference.name, expression) else "default"
             findings.append(
-                AlpineLintFinding(
+                VueLintFinding(
                     name=reference.name,
-                    message=render_diagnostic(ALPINE_UNKNOWN_VARIABLE, name=reference.name),
-                    code=ALPINE_UNKNOWN_VARIABLE,
+                    message=render_diagnostic(VUE_UNKNOWN_VARIABLE, variant=variant, name=reference.name),
+                    code=VUE_UNKNOWN_VARIABLE,
                     severity=severity,
                     start_index=reference.start_index,
                     end_index=reference.end_index,
@@ -542,80 +743,543 @@ def lint_unknown_alpine_variables(
     return tuple(findings)
 
 
-def lint_csp_compatibility(
+def lint_vue_python_variables(
     expressions: Sequence[BrowserExpression],
-    consumers: Sequence[AlpineLintConsumer],
-    mode: Literal["off", "warn", "strict"] | None,
-) -> tuple[CspCompatibilityFinding, ...]:
-    """Diagnose source-proven incompatibilities with Alpine CSP 3.17.1."""
-    if mode in {None, "off"}:
+    consumers: Sequence[VueLintConsumer],
+) -> tuple[VueLintFinding, ...]:
+    """
+    Warn when a Vue expression reads a name that a Python loop or slot binds there.
+
+    Inside `<li c-for="item in items" :title="item">`, Python renders one `li`
+    per item, but Vue evaluates `item` later in the browser against the
+    component's Vue state, so the binding never sees the loop value.
+
+    When a closed browser namespace proves the name missing, the
+    unknown-variable rule already reports the read as an error that names the
+    Python variable, so this rule stays quiet to give each read one finding.
+    It covers the remaining cases: an open namespace that cannot prove the
+    name missing, an unknown-variable rule set to ``"ignore"``, and a
+    component whose browser data also defines the name. In the last case Vue
+    shows the component's value without any error, so the message names both
+    meanings of the name.
+
+    Args:
+        expressions: Browser expressions with their enclosing Python bindings.
+        consumers: Every proven component that consumes this physical template.
+
+    Returns:
+        Findings in expression and source order. No consumer means no finding,
+        matching the unknown-variable rule, because syntax-only analysis cannot
+        prove which browser names exist.
+
+    """
+    if not consumers:
         return ()
-    if mode not in {"warn", "strict"}:
-        msg = f"Unknown CSP compatibility mode: {mode!r}"
-        raise ValueError(msg)
-    severity: Literal["warning", "error"] = "warning" if mode == "warn" else "error"
-    findings: list[CspCompatibilityFinding] = []
-    seen: set[tuple[int, int, str]] = set()
+    findings: list[VueLintFinding] = []
     for expression in expressions:
-        classification = classify_alpine_csp(expression)
-        if classification.outcome == "incompatible":
-            detail = classification.detail or "this browser expression"
-            _append_csp_finding(
-                findings,
-                seen,
-                detail,
-                severity,
-                classification.start_index,
-                classification.end_index,
-            )
-            continue
-        if not consumers:
+        # Most expressions sit outside any Python loop, so skip parsing them.
+        if not expression.python_bindings:
             continue
         analysis = analyze_browser_expression(expression)
         if not analysis.valid:
             continue
-        lexical = frozenset(expression.bindings)
+        # A Vue `v-for` or slot alias, or a Vue helper, owns the name in the
+        # browser, so the expression reads the value the author bound there.
+        lexical = frozenset((*VUE_AMBIENT_NAMES, *expression.bindings))
         for reference in analysis.references:
-            if (
-                reference.name == "undefined"
-                or reference.name in lexical
-                or reference.name not in COMPONENT_JS_AMBIENT_NAMES
+            if reference.name in lexical or not _is_python_bound(reference.name, expression):
+                continue
+            # The unknown-variable rule reports this read already.
+            if any(
+                consumer.namespace_policy == "closed"
+                and reference.name not in consumer.known_names
+                and consumer.rule_unknown_vue_variable != "ignore"
+                for consumer in consumers
             ):
                 continue
-            if any(reference.name not in consumer.known_names for consumer in consumers):
-                _append_csp_finding(
-                    findings,
-                    seen,
-                    f"the unprovided JavaScript global {reference.name!r}",
-                    severity,
-                    reference.start_index,
-                    reference.end_index,
+            active = [consumer for consumer in consumers if consumer.rule_vue_python_variable != "ignore"]
+            if not active:
+                continue
+            severity: Literal["warning", "error"] = (
+                "error" if any(consumer.rule_vue_python_variable == "error" for consumer in active) else "warning"
+            )
+            # When the component's browser data also defines the name, Vue shows
+            # that value instead of the loop value and nothing fails, so the
+            # message names both meanings rather than calling the name missing.
+            # Only a component that reports the read decides which message it gets.
+            browser_known = any(reference.name in consumer.known_names for consumer in active)
+            attribute = _python_attribute_for(expression, reference.name)
+            if attribute is not None:
+                variant = "browser-attribute" if browser_known else "attribute"
+                message = render_diagnostic(
+                    VUE_PYTHON_VARIABLE, variant=variant, name=reference.name, attribute=attribute
                 )
-                break
+            else:
+                message = render_diagnostic(
+                    VUE_PYTHON_VARIABLE, variant="browser" if browser_known else "default", name=reference.name
+                )
+            findings.append(
+                VueLintFinding(
+                    name=reference.name,
+                    message=message,
+                    code=VUE_PYTHON_VARIABLE,
+                    severity=severity,
+                    start_index=reference.start_index,
+                    end_index=reference.end_index,
+                )
+            )
     return tuple(findings)
 
 
-def _append_csp_finding(
-    findings: list[CspCompatibilityFinding],
-    seen: set[tuple[int, int, str]],
-    detail: str,
-    severity: Literal["warning", "error"],
-    start_index: int,
-    end_index: int,
-) -> None:
-    key = (start_index, end_index, CSP_INCOMPATIBLE_BROWSER_CODE)
-    if key in seen:
-        return
-    seen.add(key)
-    findings.append(
-        CspCompatibilityFinding(
-            message=render_diagnostic(CSP_INCOMPATIBLE_BROWSER_CODE, detail=detail),
-            code=CSP_INCOMPATIBLE_BROWSER_CODE,
-            severity=severity,
-            start_index=start_index,
-            end_index=end_index,
+def _is_python_bound(name: str, expression: BrowserExpression) -> bool:
+    """Return whether an enclosing `c-for` or `c-fill` binds this JavaScript name in Python."""
+    # The parser stores Python names NFKC-normalized, as Python itself does,
+    # so `ﬁ` in JavaScript must match the Python loop variable `fi`.
+    return _identifier_identity(name) in {_identifier_identity(item) for item in expression.python_bindings}
+
+
+# `:name` or `v-bind:name` with no modifiers. A modifier such as `.prop` or
+# `.camel` changes what the binding sets, so `c-name` would not be equivalent.
+_VUE_BOUND_ATTRIBUTE = re.compile(r"(?::|v-bind:)([A-Za-z_][A-Za-z0-9_:-]*)")
+# Vue treats these bindings as instructions, not HTML attributes.
+_VUE_SPECIAL_BINDINGS = frozenset({"key", "ref", "is"})
+
+
+def _python_attribute_for(expression: BrowserExpression, name: str) -> str | None:
+    """Return the attribute that `c-<attribute>="<name>"` can set from Python instead."""
+    # Only a plain element attribute bound to exactly the Python name has an
+    # equivalent `c-` attribute. Anything else gets the general suggestion:
+    # `:title="item + label"` also reads Vue state, and a component tag's
+    # `:title` is a Vue prop, where `c-title` would become a Python kwarg.
+    if expression.host != "vue" or expression.evaluator == "raw" or expression.source.strip() != name:
+        return None
+    match = _VUE_BOUND_ATTRIBUTE.fullmatch(expression.attribute)
+    if match is None:
+        return None
+    attribute = match.group(1)
+    # `:c-name` binds Citry State, so prefixing it again would name nothing.
+    if attribute.startswith("c-") or attribute in _VUE_SPECIAL_BINDINGS:
+        return None
+    return attribute
+
+
+def lint_alpine_attributes(
+    template: Template,
+    consumers: Sequence[AlpineAttributeLintConsumer],
+    *,
+    parse_nested: Callable[[str], Template] = _parse_template,
+) -> tuple[AlpineAttributeFinding, ...]:
+    """
+    Report Alpine ``x-*`` attributes left on HTML elements.
+
+    Citry uses Vue, so it renders an attribute such as ``x-data`` unchanged
+    and nothing in the browser reads it. ``x-cloak`` is worse: nothing removes
+    it, so a ``[x-cloak]`` CSS rule hides the element for good. ``x-cloak``
+    gets only the cloak finding, never both. Names compare without regard to
+    ASCII letter case, as HTML attribute names do.
+
+    Only plain HTML elements and ``<c-element>`` are checked, including
+    elements inside nested templates. On a component tag an ``x-*`` attribute
+    is an ordinary Python keyword argument.
+
+    A finding is reported unless every consumer ignores its rule, and it is an
+    error when any reporting consumer says ``"error"``. Unlike the
+    unknown-variable rules, this check needs no component namespace, so it
+    still runs when no consumer is proven. An empty ``consumers`` uses the
+    built-in defaults: ``"warning"`` for ``x-*`` attributes and ``"error"``
+    for ``x-cloak``. ``citry check --static`` and an editor without project
+    analysis rely on this; a caller that knows the application's
+    [`LintSettings`][citry.LintSettings] passes them as one consumer.
+
+    Args:
+        template: Parsed Citry template AST.
+        consumers: Every proven component that consumes this physical template.
+        parse_nested: Parser for template-valued attributes, so nested
+            templates use the same parse options as the outer one.
+
+    Returns:
+        Findings in source order, each spanning the attribute name.
+
+    """
+    # With no proven owner the defaults still apply, because whether an
+    # attribute is an Alpine leftover does not depend on the component.
+    effective = tuple(consumers) or (AlpineAttributeLintConsumer(),)
+    found: list[tuple[str, int, int]] = []
+    _collect_alpine_attributes(template, found, parse_nested=parse_nested, base_index=0)
+    findings: list[AlpineAttributeFinding] = []
+    for name, start_index, end_index in sorted(found, key=lambda item: (item[1], item[2])):
+        is_cloak = _ascii_lower(name) == "x-cloak"
+        severities = [
+            consumer.rule_alpine_cloak if is_cloak else consumer.rule_alpine_attribute for consumer in effective
+        ]
+        active = [severity for severity in severities if severity != "ignore"]
+        if not active:
+            continue
+        code = TEMPLATE_ALPINE_CLOAK if is_cloak else TEMPLATE_ALPINE_ATTRIBUTE
+        findings.append(
+            AlpineAttributeFinding(
+                name=name,
+                message=render_diagnostic(code) if is_cloak else render_diagnostic(code, name=name),
+                code=code,
+                severity="error" if "error" in active else "warning",
+                start_index=start_index,
+                end_index=end_index,
+            )
         )
+    return tuple(findings)
+
+
+# Alpine's own directives and those of its official plugins. Other `x-*`
+# names, such as the vendor attribute `x-webkit-airplay`, are ordinary HTML
+# that browsers or other libraries read, so they are not reported.
+_ALPINE_DIRECTIVES = frozenset(
+    {
+        "data", "init", "show", "bind", "on", "text", "html", "model", "modelable", "for",
+        "transition", "effect", "ignore", "ref", "cloak", "teleport", "if", "id",
+        "intersect", "trap", "collapse", "anchor", "mask", "sort", "resize", "persist",
+    }
+)  # fmt: skip
+
+
+def _is_alpine_attribute(name: str) -> bool:
+    """Return whether an attribute name is an Alpine directive, with any argument or modifiers."""
+    lowered = _ascii_lower(name)
+    if not lowered.startswith("x-"):
+        return False
+    directive = re.split(r"[:.]", lowered[2:], maxsplit=1)[0]
+    return directive in _ALPINE_DIRECTIVES
+
+
+def _collect_alpine_attributes(
+    template: Template,
+    found: list[tuple[str, int, int]],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    """Collect each ``x-*`` attribute name on an HTML element with its byte span."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        tag = _ascii_lower(node.start_tag.name.content)
+        # A component tag passes `x-*` to Python as a keyword argument, and
+        # the other built-in tags do not render their own attributes. Only
+        # `<c-element>` writes its attributes onto a real HTML element.
+        renders_attributes = not tag.startswith("c-") or tag == "c-element"
+        for attr in node.start_tag.attrs:
+            if renders_attributes and _is_alpine_attribute(attr.key.content):
+                found.append((attr.key.content, base_index + attr.key.start_index, base_index + attr.key.end_index))
+            # A template-valued attribute holds more HTML, whose offsets are
+            # relative to the nested source, so shift them into this template.
+            inner = attr.inner_value
+            if attr.kind == HtmlAttrKind.Template and inner is not None:
+                nested = _nested_template(inner.content, parse_nested)
+                if nested is not None:
+                    parsed, nested_start = nested
+                    _collect_alpine_attributes(
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_alpine_attributes(body, found, parse_nested=parse_nested, base_index=base_index)
+
+
+def lint_attribute_values(
+    template: Template,
+    consumers: Sequence[AttributeValueLintConsumer],
+    *,
+    parse_nested: Callable[[str], Template] = _parse_template,
+) -> tuple[AttributeValueFinding, ...]:
+    """
+    Report static HTML attribute values that an enumerated attribute does not accept.
+
+    Some HTML attributes take only fixed keywords, such as ``draggable``
+    (``"true"`` or ``"false"``) or ``type`` on ``<input>``. A browser ignores
+    any other value or falls back to a default, so ``draggable="treu"``
+    silently does nothing. The keywords come from the HTML Standard; see
+    ``scripts/generate_html_attribute_values.py``.
+
+    Keywords compare without regard to ASCII letter case, except the list
+    markers ``1``, ``a``, ``A``, ``i``, and ``I`` of ``type`` on ``<ol>`` and
+    ``<li>``. Character references are decoded first, as the browser does,
+    and an attribute with no value counts as the empty string. For
+    ``target`` and ``formtarget``, only a value starting with ``_`` is
+    checked, because any other value is a valid window name; the ``name`` of
+    an ``<iframe>`` or ``<object>`` may not start with ``_`` at all.
+
+    Only static attributes on lowercase HTML element names are checked,
+    including elements inside nested templates, and Vue bindings whose
+    value is one JavaScript string, such as ``:dir="'rlt'"``, which set the
+    same text. Component tags, ``<c-element>``, custom elements, PascalCase
+    Vue components, elements inside ``<svg>`` or ``<math>``, other bound
+    values, bindings with a modifier such as ``.prop``, and attributes whose
+    value contains syntax an extension handles are skipped.
+
+    An ``http-equiv`` value that is not a standard pragma, such as
+    ``Cache-Control``, is reported with a message that browsers ignore it
+    and that it belongs in an HTTP response header.
+
+    A finding is reported unless every consumer ignores the rule, and it is an
+    error when any reporting consumer says ``"error"``. The check needs no
+    component namespace, so an empty ``consumers`` uses the default
+    ``"warning"``, as ``citry check --static`` and an editor without project
+    analysis do.
+
+    Args:
+        template: Parsed Citry template AST.
+        consumers: Every proven component that consumes this physical template.
+        parse_nested: Parser for template-valued attributes, so nested
+            templates use the same parse options as the outer one.
+
+    Returns:
+        Findings in source order.
+
+    """
+    effective = tuple(consumers) or (AttributeValueLintConsumer(),)
+    active = [consumer.rule_invalid_attribute_value for consumer in effective]
+    active = [severity for severity in active if severity != "ignore"]
+    if not active:
+        return ()
+    severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
+    found: list[AttributeValueFinding] = []
+    _collect_attribute_values(template, found, severity, parse_nested=parse_nested, base_index=0)
+    return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
+
+
+def _collect_attribute_values(
+    template: Template,
+    found: list[AttributeValueFinding],
+    severity: Literal["warning", "error"],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    """Check each static attribute of each HTML element in one template and its nested templates."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        tag = node.start_tag.name.content
+        # SVG and MathML elements have their own attributes with other values,
+        # so their whole subtree is left unchecked.
+        if _ascii_lower(tag) in {"svg", "math"}:
+            continue
+        # Vue resolves only lowercase names as native tags; `<Button>` may be
+        # a component, and a custom element or `c-*` tag has its own attributes.
+        checked = tag in _HTML_ELEMENTS
+        for attr in node.start_tag.attrs:
+            if checked:
+                finding = _attribute_value_finding(tag, attr, severity, base_index)
+                if finding is not None:
+                    found.append(finding)
+            # A template-valued attribute holds more HTML, whose offsets are
+            # relative to the nested source, so shift them into this template.
+            inner = attr.inner_value
+            if attr.kind == HtmlAttrKind.Template and inner is not None:
+                nested = _nested_template(inner.content, parse_nested)
+                if nested is not None:
+                    parsed, nested_start = nested
+                    _collect_attribute_values(
+                        parsed,
+                        found,
+                        severity,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_attribute_values(body, found, severity, parse_nested=parse_nested, base_index=base_index)
+
+
+def _attribute_value_finding(
+    element: str,
+    attr: HtmlAttr,
+    severity: Literal["warning", "error"],
+    base_index: int,
+) -> AttributeValueFinding | None:
+    """Return a finding for one static attribute whose value its element does not accept."""
+    # Template-valued attributes are typed by other checks, and an
+    # extension-owned part means the written text is not the rendered value.
+    if attr.kind != HtmlAttrKind.Static or attr.foreign_parts:
+        return None
+    name = attr.key.content
+    inner = attr.inner_value
+    value = inner.content if inner is not None else ""
+    # The browser decodes character references such as `&#116;` before it
+    # reads the keyword, with the attribute-value rules, so compare the text
+    # it decodes.
+    decoded = decode_attribute_entities(value)
+    bound = _bound_string_attribute(name, decoded)
+    if bound is not None:
+        # `:dir="'rlt'"` sets the same text as `dir="rlt"`. The finding marks
+        # the whole quoted string, where TypeScript reports a value Vue's
+        # types reject, so the editor keeps only this finding.
+        name, decoded = bound
+        value = decoded
+        if not decoded:
+            return None
+    elif name.startswith((":", "v-bind:", "@", "v-", "#")):
+        # Other bindings, listeners, and directives hold an expression.
+        return None
+    attribute = _ascii_lower(name)
+    # The value span sits inside the quotes; an empty or missing value marks the name.
+    span = (inner.start_index, inner.end_index) if inner is not None and inner.content else None
+    start, end = span if span is not None else (attr.key.start_index, attr.key.end_index)
+    if attribute == "name" and element in _FRAME_NAME_ELEMENTS:
+        # A frame name may be anything that does not start with "_".
+        if not decoded.startswith("_"):
+            return None
+        message = render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            variant="frame-name",
+            value=value,
+            attribute=name,
+            element=element,
+        )
+    elif element in _NAVIGABLE_TARGET_ATTRIBUTES.get(attribute, ()):
+        # Any window name is valid, unless it starts with "_" and is not a keyword.
+        if not decoded.startswith("_") or _ascii_lower(decoded) in _NAVIGABLE_TARGET_KEYWORDS:
+            return None
+        message = render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            variant="target",
+            value=value,
+            attribute=name,
+            element=element,
+            allowed=", ".join(_NAVIGABLE_TARGET_KEYWORDS),
+        )
+    else:
+        by_element = _ENUMERATED_ATTRIBUTE_VALUES.get(attribute)
+        if by_element is None:
+            return None
+        allowed = by_element.get(element, by_element.get("*"))
+        if allowed is None:
+            return None
+        exact = _CASE_SENSITIVE_KEYWORDS.get((element, attribute), ())
+        if decoded in exact or _ascii_lower(decoded) in {
+            _ascii_lower(keyword) for keyword in allowed if keyword not in exact
+        }:
+            return None
+        message = _attribute_value_message(name, element, value, decoded, allowed)
+    return AttributeValueFinding(
+        element=element,
+        attribute=name,
+        value=value,
+        message=message,
+        code=TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+        severity=severity,
+        start_index=base_index + start,
+        end_index=base_index + end,
     )
+
+
+def _bound_string_attribute(name: str, value: str) -> tuple[str, str] | None:
+    """
+    Return the attribute name and text of a Vue binding whose value is one JavaScript string.
+
+    ``:dir="'rtl'"`` and ``v-bind:dir="`rtl`"`` set ``dir`` to ``rtl``.
+    Returns ``None`` for a binding with a modifier, a dynamic name, an escape
+    sequence, or a template literal with a placeholder, because its text is
+    not simply the quoted characters.
+    """
+    for prefix in (":", "v-bind:"):
+        if name.startswith(prefix):
+            attribute = name.removeprefix(prefix)
+            break
+    else:
+        return None
+    if not attribute or "." in attribute or attribute.startswith("["):
+        return None
+    literal = value.strip()
+    if len(literal) < 2 or literal[0] not in "'\"`" or literal[-1] != literal[0]:
+        return None
+    text = literal[1:-1]
+    if literal[0] in text or "\\" in text or "\n" in text or (literal[0] == "`" and "${" in text):
+        return None
+    return attribute, text
+
+
+# A typo of a standard pragma is this close to it; a different HTTP header,
+# such as `Content-Security-Policy-Report-Only`, is not.
+_PRAGMA_SUGGESTION_CUTOFF = 0.8
+
+
+def _attribute_value_message(
+    name: str,
+    element: str,
+    value: str,
+    decoded: str,
+    allowed: tuple[str, ...],
+) -> str:
+    """Render the message for a value outside ``allowed``, naming the closest keyword when one is near."""
+    listed = ", ".join(f"'{keyword}'" for keyword in allowed if keyword) + (", or no value" if "" in allowed else "")
+    if not decoded:
+        return render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            variant="empty",
+            attribute=name,
+            element=element,
+            allowed=listed,
+        )
+    # A pragma value is often an HTTP header, such as `Cache-Control`, which
+    # browsers ignore in a <meta>; only a near typo gets a suggestion.
+    pragma = _ascii_lower(name) == "http-equiv" and element == "meta"
+    # Suggest the nearest keyword so a typo such as "treu" names its fix.
+    keywords = [keyword for keyword in allowed if keyword]
+    nearest = get_close_matches(
+        _ascii_lower(decoded),
+        [_ascii_lower(keyword) for keyword in keywords],
+        n=1,
+        cutoff=_PRAGMA_SUGGESTION_CUTOFF if pragma else 0.6,
+    )
+    if not nearest and pragma:
+        return render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            variant="pragma",
+            value=value,
+            attribute=name,
+            element=element,
+            allowed=listed,
+        )
+    if not nearest:
+        return render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            value=value,
+            attribute=name,
+            element=element,
+            allowed=listed,
+        )
+    suggestion = next(keyword for keyword in keywords if _ascii_lower(keyword) == nearest[0])
+    return render_diagnostic(
+        TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+        variant="suggestion",
+        value=value,
+        attribute=name,
+        element=element,
+        suggestion=suggestion,
+        allowed=listed,
+    )
+
+
+def lint_csp_compatibility(
+    expressions: Sequence[BrowserExpression],
+    consumers: Sequence[VueLintConsumer],
+    mode: Literal["off", "warn", "strict"] | None,
+) -> tuple[CspCompatibilityFinding, ...]:
+    """
+    Validate the mode for Vue expressions compiled into script assets.
+
+    Asset and dangerous-HTML checks run at serialization boundaries.
+    """
+    del expressions, consumers
+    if mode in {None, "off", "warn", "strict"}:
+        return ()
+    msg = f"Unknown CSP compatibility mode: {mode!r}"
+    raise ValueError(msg)
 
 
 def lint_unknown_component_js_variables(
@@ -630,7 +1294,11 @@ def lint_unknown_component_js_variables(
         return ()
     findings: list[ComponentJsLintFinding] = []
     for reference in analysis.references:
-        if reference.name in COMPONENT_JS_AMBIENT_NAMES:
+        if (
+            reference.name in COMPONENT_JS_AMBIENT_NAMES
+            or reference.name in _COMPONENT_JS_BROWSER_GLOBALS
+            or _DOM_INTERFACE.fullmatch(reference.name)
+        ):
             continue
         missing = [consumer for consumer in consumers if reference.name not in consumer.known_names]
         active = [consumer for consumer in missing if consumer.rule_unknown_component_js_variable != "ignore"]
@@ -675,36 +1343,397 @@ _JSON_OBJECT_MEMBERS = frozenset(
 def lint_unknown_component_js_members(
     source: str,
     known_data_names: frozenset[str] | None,
+    *,
+    severity: Literal["ignore", "warning", "error"] = "error",
 ) -> tuple[ComponentJsLintFinding, ...]:
     """
-    Check static callback data members against a proven closed namespace.
+    Report `this.<name>` and `component.<name>` reads the component instance lacks.
+
+    The JavaScript analyzer proves which reads target the live Vue instance:
+    `this.<name>` in Vue Options methods, computed values, `data()`, lifecycle
+    hooks, `provide()`, and `watch` handlers, and `component.<name>` in an
+    `onServerRender` or `init` callback. Each name must then be a
+    `js_data()` key or a name the Vue Options declare (props, `data()`, `setup`,
+    methods, computed values, injections).
 
     Args:
         source: Authored component JavaScript.
-        known_data_names: Fields available to every owner, or None when the
-            namespace is open or cannot be established.
+        known_data_names: `js_data()` keys available to every owning component,
+            or None when that namespace is open or cannot be established.
+        severity: The `rule_unknown_component_js_member` severity that applies
+            to this source. `"ignore"` reports nothing.
 
     Returns:
-        Errors on unknown field names. Dynamic keys, shadowed bindings, and
-        reassigned callback parameters are excluded by the JavaScript analyzer.
+        Findings at the given severity for unknown member names, in source
+        order. Nothing is reported when the source is invalid, when any Vue
+        Options section cannot be read statically, or when the source may add
+        members at run time.
+
+    Raises:
+        ValueError: If `severity` is not `"ignore"`, `"warning"`, or `"error"`.
 
     """
-    if known_data_names is None:
+    if severity not in {"ignore", "warning", "error"}:
+        msg = f"Unknown component-JavaScript-member rule severity: {severity!r}"
+        raise ValueError(msg)
+    # An ignored rule skips the source analysis, not only the findings.
+    if known_data_names is None or severity == "ignore":
         return ()
-    return tuple(
-        ComponentJsLintFinding(
+    reported: Literal["warning", "error"] = "warning" if severity == "warning" else "error"
+    analysis = analyze_browser_component_source(source)
+    # An Options section built at run time (a spread, a computed data() result)
+    # can declare any name, so no missing name can be proven.
+    if not analysis.valid or any(section.state == "unknown" for section in analysis.sections):
+        return ()
+    assigned = _assigned_instance_member_names(source, analysis)
+    if assigned is None:
+        return ()
+    known = (
+        known_data_names
+        | {item.exposed_name for item in analysis.public_names}
+        | assigned
+        | _RUNTIME_INSTANCE_MEMBERS
+        | _JSON_OBJECT_MEMBERS
+    )
+    findings: dict[tuple[int, int], ComponentJsLintFinding] = {}
+    for member in analysis.member_references:
+        # Vue's own instance API and every extension's instance helper start
+        # with $ or _, and plugins can add them, so they are never "unknown".
+        if member.name.startswith(("$", "_")) or member.name in known:
+            continue
+        findings[(member.start_index, member.end_index)] = ComponentJsLintFinding(
             name=member.name,
-            message=render_diagnostic(COMPONENT_JS_UNKNOWN_DATA_MEMBER, name=member.name),
-            code=COMPONENT_JS_UNKNOWN_DATA_MEMBER,
-            severity="error",
+            message=render_diagnostic(COMPONENT_JS_UNKNOWN_MEMBER, name=member.name),
+            code=COMPONENT_JS_UNKNOWN_MEMBER,
+            severity=reported,
             start_index=member.start_index,
             end_index=member.end_index,
         )
-        for member in browser_component_members(source)
-        # The browser decodes data with JSON.parse, so ordinary Object.prototype
-        # members remain available even when no JSON field declares them.
-        if member.context_name == "data" and member.name not in known_data_names | _JSON_OBJECT_MEMBERS
+    return tuple(findings[span] for span in sorted(findings))
+
+
+# Citry adds this prop to every component itself, so authored Options never
+# declare it.
+_RUNTIME_INSTANCE_MEMBERS = frozenset({"citryId"})
+
+
+def lint_undeclared_component_js_emits(source: str) -> tuple[ComponentJsLintFinding, ...]:
+    """
+    Report `this.$emit('name')` and `component.$emit('name')` calls for undeclared events.
+
+    Vue checks emitted names against the component's `emits` option, and
+    accepts a name that matches a declared `on<Event>` prop too. Only calls
+    whose receiver the analyzer proves is the live instance, with a string
+    literal event name, are checked.
+
+    Args:
+        source: Authored component JavaScript.
+
+    Returns:
+        Error findings spanning each undeclared event name, in source order.
+        Nothing is reported when the component declares no `emits` (Vue then
+        accepts every name) or builds `emits` in a way the analyzer cannot read.
+
+    """
+    analysis = analyze_browser_component_source(source)
+    if analysis.declared_events is None:
+        return ()
+    spans = frozenset(
+        (member.start_index, member.end_index) for member in analysis.member_references if member.name == "$emit"
     )
+    return tuple(
+        ComponentJsLintFinding(
+            name=call.value,
+            message=render_diagnostic(BROWSER_UNDECLARED_EMIT, name=call.value),
+            code=BROWSER_UNDECLARED_EMIT,
+            severity="error",
+            start_index=call.start_index,
+            end_index=call.end_index,
+        )
+        for call in browser_proven_member_literal_calls(source, spans)
+        if not _emit_is_declared(call.value, analysis)
+    )
+
+
+def lint_undeclared_template_emits(
+    expressions: Sequence[BrowserExpression],
+    component_sources: Sequence[str],
+) -> tuple[VueLintFinding, ...]:
+    """
+    Report `$emit('name')` calls in Vue expressions for events the component does not declare.
+
+    Args:
+        expressions: The Vue expressions of one template.
+        component_sources: The JavaScript of every component that renders the
+            template. An expression runs in each of them, so a name must be
+            declared by all of them.
+
+    Returns:
+        Error findings spanning each undeclared event name. Nothing is reported
+        when any component declares no `emits`, or builds it in a way the
+        analyzer cannot read, since that component accepts every name.
+
+    """
+    analyses = [analyze_browser_component_source(source) for source in component_sources]
+    if not analyses or any(analysis.declared_events is None for analysis in analyses):
+        return ()
+    findings: list[VueLintFinding] = []
+    for expression in expressions:
+        # A `v-for` or slot binding named `$emit` is not Vue's `$emit`.
+        if expression.host != "vue" or "$emit" in expression.bindings:
+            continue
+        findings.extend(
+            VueLintFinding(
+                name=call.value,
+                message=render_diagnostic(BROWSER_UNDECLARED_EMIT, name=call.value),
+                code=BROWSER_UNDECLARED_EMIT,
+                severity="error",
+                start_index=call.start_index,
+                end_index=call.end_index,
+            )
+            for call in browser_literal_calls(expression, frozenset({"$emit"}))
+            if not all(_emit_is_declared(call.value, analysis) for analysis in analyses)
+        )
+    return tuple(findings)
+
+
+def lint_undeclared_component_listeners(
+    expressions: Sequence[BrowserExpression],
+    child_source: Callable[[str], str | None],
+) -> tuple[VueLintFinding, ...]:
+    """
+    Report listeners on child component tags for events the child does not declare.
+
+    Vue turns `@drop-task` on a component into an `onDropTask` listener and
+    matches it against the child's `emits` in camelCase or kebab-case, or
+    against an `on<Event>` prop. A listener the child does not declare is
+    passed to the child's root element as a DOM listener instead, where it
+    fires only if that element dispatches a DOM event with this name, so a
+    misspelled event name goes unnoticed. Only a name with a hyphen, a colon,
+    or an uppercase letter is reported: a plain lowercase name such as
+    `click` is usually a native DOM event.
+
+    Args:
+        expressions: The Vue expressions of one template.
+        child_source: Return the JavaScript of the component a `c-*` tag
+            renders, or None when the tag resolves to no component with
+            readable JavaScript.
+
+    Returns:
+        Warning findings spanning each listener's attribute name.
+
+    """
+    sources: dict[str, BrowserComponentSourceAnalysis | None] = {}
+    findings: list[VueLintFinding] = []
+    for expression in expressions:
+        element = expression.element
+        event = component_listener_event(expression)
+        if element is None or event is None or expression.attribute_start_index is None:
+            continue
+        if element not in sources:
+            source = child_source(element)
+            sources[element] = None if source is None else analyze_browser_component_source(source)
+        analysis = sources[element]
+        if analysis is None or analysis.declared_events is None:
+            continue
+        if event == event.lower() and "-" not in event and ":" not in event:
+            continue
+        if _listener_is_declared(event, analysis):
+            continue
+        findings.append(
+            VueLintFinding(
+                name=event,
+                message=render_diagnostic(BROWSER_UNDECLARED_COMPONENT_EVENT, name=event, component=element),
+                code=BROWSER_UNDECLARED_COMPONENT_EVENT,
+                severity="warning",
+                start_index=expression.attribute_start_index,
+                end_index=expression.attribute_end_index or expression.attribute_start_index,
+            )
+        )
+    return tuple(findings)
+
+
+def component_listener_event(expression: BrowserExpression) -> str | None:
+    """
+    Return the event name of a `@name` or `v-on:name` listener on a component tag.
+
+    Citry server events (`@c-*`), dynamic names (`@[name]`), native tags, and
+    Citry's structural tags have no child `emits` to check.
+    """
+    element = expression.element
+    if (
+        expression.mode != "statement"
+        or element is None
+        or not element.startswith("c-")
+        or element == "c-element"
+        or element in RESERVED_TAG_NAMES
+    ):
+        return None
+    attribute = expression.attribute
+    if attribute.startswith("@"):
+        raw = attribute[1:]
+    elif attribute.lower().startswith("v-on:"):
+        raw = attribute[len("v-on:") :]
+    else:
+        return None
+    # `@vue:mounted` and the other `vue:` names are Vue's own vnode lifecycle
+    # hooks, which a component never emits.
+    if not raw or raw.startswith(("[", "c-", "vue:")):
+        return None
+    # Modifiers such as `.once` or `.stop` do not change which event is heard.
+    return raw.split(".", 1)[0] or None
+
+
+def _vue_camelize(name: str) -> str:
+    """Camelize the way Vue does: `drop-task` becomes `dropTask`."""
+    return re.sub(r"-(\w)", lambda match: match.group(1).upper(), name)
+
+
+def _vue_hyphenate(name: str) -> str:
+    """Hyphenate the way Vue does: `dropTask` becomes `drop-task`."""
+    return re.sub(r"\B([A-Z])", r"-\1", name).lower()
+
+
+def _emit_is_declared(name: str, analysis: BrowserComponentSourceAnalysis) -> bool:
+    """
+    Whether Vue accepts `$emit(name)` without a missing-declaration warning.
+
+    Vue looks the name up exactly in `emits`, or accepts an `on<Event>` prop
+    for its camelized form.
+    """
+    declared = analysis.declared_events
+    if declared is None or name in {event.name for event in declared}:
+        return True
+    camel = _vue_camelize(name)
+    handler = f"on{camel[:1].upper()}{camel[1:]}"
+    return any(item.origin == "props" and item.exposed_name == handler for item in analysis.public_names)
+
+
+def vue_listener_event_names(event: str) -> tuple[str, str, str]:
+    """
+    Return the `emits` names Vue accepts for one listener on a component tag.
+
+    Vue compiles `@drop-task` to an `onDropTask` prop and its `isEmitListener`
+    then looks for `dropTask`, `drop-task`, and `DropTask` in `emits`.
+    """
+    camel = _vue_camelize(event)
+    key = camel[:1].upper() + camel[1:]
+    return (key[:1].lower() + key[1:], _vue_hyphenate(key), key)
+
+
+def _listener_is_declared(event: str, analysis: BrowserComponentSourceAnalysis) -> bool:
+    """
+    Match a parent's listener name to the child's `emits` as Vue's `isEmitListener` does.
+
+    A child may also take the listener as an `on<Event>` prop, which Vue
+    binds to the prop instead of passing it on.
+    """
+    declared = analysis.declared_events
+    if declared is None:
+        return True
+    names: tuple[str, ...] = vue_listener_event_names(event)
+    # Vue strips a trailing `Once` before the lookup, as for `.once`.
+    if names[2].endswith("Once") and len(names[2]) > len("Once"):
+        names = (*names, *vue_listener_event_names(names[2][: -len("Once")]))
+    if set(names) & {item.name for item in declared}:
+        return True
+    handler = f"on{names[2]}"
+    return any(item.origin == "props" and item.exposed_name == handler for item in analysis.public_names)
+
+
+# A property write such as `this.timer = ...` or `vm.count += 1`. Vue lets code
+# add plain properties to an instance this way, so a later read is not a typo.
+_PROPERTY_WRITE = re.compile(
+    r"\.\s*([A-Za-z_$][\w$]*)\s*(?:(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?![=>])|\+\+|--)"
+)
+_PROPERTY_PREFIX_UPDATE = re.compile(r"(?:\+\+|--)\s*[\w$.]*\.\s*([A-Za-z_$][\w$]*)")
+# A member used as a `for` target, as in `for (this.key of keys)`.
+_PROPERTY_FOR_TARGET = re.compile(r"\bfor\s*\([^;)]*?\.\s*([A-Za-z_$][\w$]*)\s+(?:of|in)\b")
+# A member name inside a destructuring pattern.
+_PATTERN_MEMBER = re.compile(r"\.\s*([A-Za-z_$][\w$]*)")
+# Calls that can add arbitrary properties to their first argument.
+_BULK_PROPERTY_WRITE = re.compile(
+    r"\b(?:Object\s*\.\s*(?:assign|defineProperty|defineProperties)|Reflect\s*\.\s*(?:set|defineProperty))\s*\(\s*"
+    r"([A-Za-z_$][\w$]*)"
+)
+
+
+def _assigned_instance_member_names(
+    source: str,
+    analysis: BrowserComponentSourceAnalysis,
+) -> frozenset[str] | None:
+    """
+    Collect property names the source writes, or None when writes are unbounded.
+
+    This reads the source text rather than resolving receivers, so it also
+    counts writes to unrelated objects. Over-counting only skips findings, which
+    keeps the rule from reporting a member the component really adds.
+    """
+    # A class body gives `this` a different meaning that the analyzer does not
+    # separate from the component, so nothing about `this` can be proven.
+    if re.search(r"\bclass\b", source):
+        return None
+    names = {match.group(1) for match in _PROPERTY_WRITE.finditer(source)}
+    names.update(match.group(1) for match in _PROPERTY_PREFIX_UPDATE.finditer(source))
+    names.update(match.group(1) for match in _PROPERTY_FOR_TARGET.finditer(source))
+    # `[this.x] = pair` and `({ a: this.y } = obj)` write every member named
+    # inside the pattern. A `const`/`let`/`var` pattern only declares locals.
+    destructuring: list[tuple[int, int]] = []
+    for match in re.finditer(rf"[}}\]]\s*{_ASSIGNMENT_OPERATOR}", source):
+        opening = _matching_opening_bracket(source, match.start())
+        if opening is None:
+            return None
+        if re.search(r"\b(?:const|let|var)\s*$", source[:opening]):
+            continue
+        destructuring.append((opening, match.start()))
+        names.update(member.group(1) for member in _PATTERN_MEMBER.finditer(source, opening, match.start()))
+    component_names = {binding.local_name for binding in analysis.bindings if binding.name == "component"}
+    # A local copy (`const self = this`) is the same instance under another name.
+    aliases = {
+        match.group(1)
+        for match in re.finditer(r"([A-Za-z_$][\w$]*)\s*=\s*(this|[A-Za-z_$][\w$]*)\s*[;,\n)]", source)
+        if match.group(2) == "this" or match.group(2) in component_names
+    }
+    instance = "|".join(re.escape(name) for name in sorted({"this"} | component_names | aliases))
+    # `Object.assign(this, ...)` or `this[key] = value` can add names the text
+    # never spells out.
+    if any(match.group(1) in {"this"} | component_names | aliases for match in _BULK_PROPERTY_WRITE.finditer(source)):
+        return None
+    if re.search(rf"(?<![\w$.])(?:{instance})\s*(?:\?\.)?\s*\[[^\]]*\]\s*{_ASSIGNMENT_OPERATOR}", source):
+        return None
+    # A reassigned callback parameter no longer holds the component, so its
+    # members say nothing about the instance. That includes a destructuring
+    # assignment such as `({ component } = next)`; a `const`/`let`/`var`
+    # declaration pattern creates a new variable instead, so it is skipped.
+    for name in component_names:
+        if re.search(rf"(?<![\w$.]){re.escape(name)}\s*{_ASSIGNMENT_OPERATOR}", source):
+            return None
+        for opening, closing in destructuring:
+            if re.search(rf"(?<![\w$.]){re.escape(name)}(?![\w$])", source[opening:closing]):
+                return None
+    return frozenset(names)
+
+
+def _matching_opening_bracket(source: str, closing: int) -> int | None:
+    """Return the index of the bracket that `source[closing]` closes, if any."""
+    pairs = {"}": "{", "]": "["}
+    stack: list[str] = []
+    for index in range(closing, -1, -1):
+        character = source[index]
+        if character in pairs:
+            stack.append(pairs[character])
+        elif character in "{[":
+            # A mismatched bracket means strings or comments confused the
+            # count, so the caller must not trust the result.
+            if not stack or stack.pop() != character:
+                return None
+            if not stack:
+                return index
+    return None
+
+
+# `=` or a compound assignment such as `+=`, but not `==`, `===`, or `=>`.
+_ASSIGNMENT_OPERATOR = r"(?:(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?![=>]))"
 
 
 def _identifier_identity(name: str) -> str:
@@ -752,6 +1781,28 @@ def template_python_queries(
     return _template_python_queries(template, parse_nested=parse_nested)
 
 
+def template_static_input_queries(
+    template: object,
+    *,
+    parse_nested: Callable[[str], object] = _parse_template,
+) -> tuple[TemplatePythonQuery, ...]:
+    """
+    Return a query for each quoted static attribute on a ``c-*`` component tag.
+
+    The quoted text is a Python string literal with the value the child
+    component receives, so it can be checked against the child's input type.
+
+    Args:
+        template: Parsed Citry template AST.
+        parse_nested: Parser used for nested-template attribute values.
+
+    Returns:
+        Queries ordered by their authored source position.
+
+    """
+    return _template_static_input_queries(template, parse_nested=parse_nested)
+
+
 def build_inferred_template_shadow(
     module_source: str,
     class_qualname: str,
@@ -761,6 +1812,7 @@ def build_inferred_template_shadow(
     source_module: str | None = None,
     source_is_package: bool = False,
     kwargs_type: tuple[str, str] | None = None,
+    value_type: TemplatePythonValueType | None = None,
 ) -> ShadowPythonDocument | None:
     """
     Build analyzer input from one statically accepted ``template_data`` method.
@@ -773,6 +1825,8 @@ def build_inferred_template_shadow(
         source_module: Importable module name used to mirror relative imports.
         source_is_package: Whether that module is implemented by ``__init__.py``.
         kwargs_type: Optional module and qualified name for typed ``Kwargs``.
+        value_type: Optional type the query's value must have, such as the
+            child component input a ``c-*`` value sets.
 
     Returns:
         Generated Python plus exact source mappings, or ``None`` when the
@@ -787,6 +1841,7 @@ def build_inferred_template_shadow(
         source_module=source_module,
         source_is_package=source_is_package,
         kwargs_type=kwargs_type,
+        value_type=value_type,
     )
 
 
@@ -798,6 +1853,7 @@ def build_schema_template_shadow(
     *,
     source_module: str | None = None,
     source_is_package: bool = False,
+    value_type: TemplatePythonValueType | None = None,
 ) -> ShadowPythonDocument | None:
     """
     Build analyzer input from one statically resolved ``TemplateData`` schema.
@@ -809,6 +1865,8 @@ def build_schema_template_shadow(
         query: Authored expression and its lexical template controls.
         source_module: Importable module name used to mirror relative imports.
         source_is_package: Whether that module is implemented by ``__init__.py``.
+        value_type: Optional type the query's value must have, such as the
+            child component input a ``c-*`` value sets.
 
     Returns:
         Generated Python plus exact source mappings, or ``None`` when the
@@ -820,6 +1878,38 @@ def build_schema_template_shadow(
         schema_qualname,
         roots,
         query,
+        source_module=source_module,
+        source_is_package=source_is_package,
+        value_type=value_type,
+    )
+
+
+def build_reveal_shadow(
+    module_source: str,
+    spans: tuple[tuple[int, int], ...],
+    *,
+    source_module: str | None = None,
+    source_is_package: bool = False,
+) -> ShadowRevealDocument | None:
+    """
+    Copy one module so a type checker states the type of chosen expressions.
+
+    Args:
+        module_source: Current Python module source.
+        spans: Start and end string offsets of whole, non-overlapping
+            expressions in ``module_source``.
+        source_module: Importable module name used to mirror relative imports.
+        source_is_package: Whether that module is implemented by ``__init__.py``.
+
+    Returns:
+        The copy with each expression wrapped in ``reveal_type()`` and the
+        offsets of each wrapped expression, or ``None`` when the module
+        cannot be copied that way.
+
+    """
+    return _build_reveal_shadow(
+        module_source,
+        spans,
         source_module=source_module,
         source_is_package=source_is_package,
     )
@@ -935,7 +2025,7 @@ class TemplateAnalysis:
 
     @classmethod
     def from_dict(cls, value: object) -> TemplateAnalysis:
-        """Rebuild a snapshot from :meth:`to_dict` portable data."""
+        """Rebuild a snapshot from the data that ``to_dict()`` returned."""
         if type(value) is not dict:
             msg = "template analysis data must be a dict"
             raise TypeError(msg)
@@ -2443,7 +3533,7 @@ def format_python_component_assets(
     This synchronous convenience function prepares a plan, invokes ``provider``
     once per JavaScript or CSS request, then validates and finishes the plan.
     Call the two-pass prepare and finish functions directly when provider work
-    must be asynchronous. With no provider, M2 template formatting still runs
+    must be asynchronous. With no provider, template formatting still runs
     while JavaScript and CSS requests remain unchanged with notices.
 
     Args:
@@ -3265,7 +4355,7 @@ def _incomplete_template_regions(source: str) -> list[PythonTemplateRegion]:
     imported_names: set[str] = set()
     import_citry = False
     active_class: tuple[str, int] | None = None
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     for line_number, line in enumerate(lines, start=1):
         stripped = line.strip()
         if stripped.startswith("from citry import "):
@@ -3549,12 +4639,34 @@ def json_wire_type_from_expression(
     source: str,
     *,
     member_types: Mapping[str, Mapping[str, JsonWireType]] | None = None,
+    member_annotations: Mapping[str, Mapping[str, str | None]] | None = None,
+    classes: Mapping[str, WireClass] | None = None,
+    inferred: Mapping[tuple[int, int], JsonWireType] | None = None,
+    unproven: list[tuple[int, int]] | None = None,
+    widen_literals: bool = False,
 ) -> JsonWireType:
-    """Infer portable JSON-wire metadata using optional proven members."""
+    """
+    Infer portable JSON-wire metadata using optional proven members.
+
+    ``member_types`` types ``name.attr``. ``member_annotations`` and
+    ``classes`` let a longer chain such as ``kwargs.task.lane`` follow the
+    attribute annotations of the classes it passes through. ``inferred``
+    types a part the rules leave unknown, keyed by its start and end
+    offset in ``source``; ``unproven`` collects the offsets of the parts
+    still unknown. ``widen_literals`` types a constant by its kind only.
+    """
     if type(source) is not str:
         msg = "source must be a str"
         raise TypeError(msg)
-    return _json_wire_type_from_expression(source, member_types=member_types)
+    return _json_wire_type_from_expression(
+        source,
+        member_types=member_types,
+        member_annotations=member_annotations,
+        classes=classes,
+        inferred=inferred,
+        unproven=unproven,
+        widen_literals=widen_literals,
+    )
 
 
 def css_data_references(source: str) -> tuple[CssDataReference, ...]:
@@ -3871,17 +4983,26 @@ def python_class_static_asset_matches(
 
 
 __all__ = [
-    "ALPINE_AMBIENT_NAMES",
     "SERVER_EVENT_CALL_NAMES",
-    "AlpineLintConsumer",
-    "AlpineLintFinding",
+    "VUE_AMBIENT_NAMES",
+    "AlpineAttributeFinding",
+    "AlpineAttributeLintConsumer",
+    "AttributeValueFinding",
+    "AttributeValueLintConsumer",
     "BrowserBinding",
     "BrowserCompletion",
     "BrowserComponentBinding",
-    "BrowserComponentMember",
-    "BrowserComponentPropsUse",
+    "BrowserComponentCall",
+    "BrowserComponentContextName",
+    "BrowserComponentMemberReference",
+    "BrowserComponentPropContribution",
+    "BrowserComponentPropFinding",
+    "BrowserComponentPropSite",
+    "BrowserComponentPublicName",
+    "BrowserComponentSection",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
+    "BrowserEmitName",
     "BrowserExpression",
     "BrowserExpressionMode",
     "BrowserFreeReference",
@@ -3894,7 +5015,6 @@ __all__ = [
     "BrowserMemberLiteralCall",
     "BrowserObjectProperty",
     "BrowserProp",
-    "BrowserScopeWrite",
     "BrowserSourceAnalysis",
     "BrowserStateBinding",
     "BrowserStateBindingTargetError",
@@ -3909,6 +5029,7 @@ __all__ = [
     "JsonWireType",
     "LspPosition",
     "LspRange",
+    "MarkLiteralFinding",
     "PythonComponentAssetDiscovery",
     "PythonComponentAssetFile",
     "PythonComponentAssetFormatResult",
@@ -3926,14 +5047,19 @@ __all__ = [
     "ShadowPythonCopy",
     "ShadowPythonDocument",
     "ShadowPythonSourceCopy",
+    "ShadowRevealDocument",
     "TemplateAnalysis",
     "TemplateLintConsumer",
     "TemplateLintFinding",
     "TemplatePythonControl",
     "TemplatePythonQuery",
     "TemplatePythonRoot",
+    "TemplatePythonValueType",
     "TemplateTagUse",
     "UnknownComponentUse",
+    "VueLintConsumer",
+    "VueLintFinding",
+    "WireClass",
     "analyze_browser_component_source",
     "analyze_browser_expression",
     "analyze_css_data_source",
@@ -3942,15 +5068,15 @@ __all__ = [
     "browser_bindings",
     "browser_client_prop_accepts",
     "browser_completion_at",
-    "browser_component_members",
-    "browser_component_prop_uses",
+    "browser_component_prop_findings",
+    "browser_component_prop_sites",
     "browser_component_props",
-    "browser_component_scope_writes",
     "browser_declarative_events",
     "browser_expression_at",
     "browser_expressions",
     "browser_i18n_bind_calls",
     "browser_i18n_binding_directives",
+    "browser_i18n_calls_checkable",
     "browser_i18n_message_calls",
     "browser_i18n_profile_calls",
     "browser_identifier_at",
@@ -3962,7 +5088,9 @@ __all__ = [
     "browser_state_binding_target_errors",
     "browser_state_bindings",
     "build_inferred_template_shadow",
+    "build_reveal_shadow",
     "build_schema_template_shadow",
+    "component_js_i18n_owners",
     "component_name_match",
     "css_data_completion_at",
     "css_data_reference_at",
@@ -3974,11 +5102,18 @@ __all__ = [
     "format_python_templates",
     "json_wire_type_from_annotation",
     "json_wire_type_from_expression",
+    "lint_alpine_attributes",
+    "lint_attribute_values",
     "lint_csp_compatibility",
-    "lint_unknown_alpine_variables",
+    "lint_undeclared_component_js_emits",
+    "lint_undeclared_component_listeners",
+    "lint_undeclared_template_emits",
     "lint_unknown_component_js_members",
     "lint_unknown_component_js_variables",
     "lint_unknown_template_variables",
+    "lint_unknown_vue_variables",
+    "lint_vue_python_variables",
+    "mark_literal_findings",
     "merge_json_wire_types",
     "prepare_python_component_assets",
     "python_class_asset_resolution_signature",
@@ -3989,6 +5124,7 @@ __all__ = [
     "python_event_handler_range",
     "template_python_queries",
     "template_python_query_at",
+    "template_static_input_queries",
     "template_tag_uses",
     "unknown_component_uses",
 ]

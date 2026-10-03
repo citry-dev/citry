@@ -48,6 +48,11 @@
           "title": { "type": "string", "minLength": 1 },
           "summary": { "type": "string", "minLength": 1 },
           "when": { "type": "string", "minLength": 1 },
+          "fix": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What the reader changes to resolve the diagnostic, shown in the public reference."
+          },
           "defaultSeverity": {
             "enum": ["error", "warning", "information"]
           },

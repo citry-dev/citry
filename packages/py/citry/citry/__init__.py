@@ -14,6 +14,7 @@
 from markupsafe import Markup
 
 from citry._linting import TemplateLintInfo, TemplateVariableInfo
+from citry._nested_declarations import NestedSchemaReplacedWarning
 from citry.analysis import (
     LspPosition,
     LspRange,
@@ -195,7 +196,6 @@ from citry.nodes import (
     SlotNode,
     StaticHtmlAttr,
     TemplateHtmlAttr,
-    TemplateNode,
 )
 from citry.settings import (
     CitrySettings,
@@ -308,6 +308,7 @@ __all__ = [
     "LspRange",
     "Markup",
     "NestedClassDeclaration",
+    "NestedSchemaReplacedWarning",
     "Node",
     "NotRegistered",
     "NumberFormat",
@@ -382,7 +383,6 @@ __all__ = [
     "TemplateLintInfo",
     "TemplateNamespaceContext",
     "TemplateNamespaceContribution",
-    "TemplateNode",
     "TemplateVariableInfo",
     "TimeFormat",
     "TimeInput",

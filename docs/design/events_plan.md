@@ -1270,7 +1270,8 @@ against `_public`/`_model`); code: WP7 (handler and State metadata), the
   modifiers, second poll time segment, `.lazy`+`.on:`, any update-timing
   modifier on a one-way binding, `.lazy` on committed controls, and the
   complete input direction matrix); key filters inspect the concrete event's
-  `key` and do not restrict custom event names; literal types
+  `key`, and a key filter requires `keydown`, `keyup`, or `keypress` as an
+  event binding's event or a two-way binding's update event (5.1); literal types
   validate here, Python-resolved types against final attributes, and
   browser-only dynamic types in WP17.2;
   any `@c-*` or `:c-*` attribute on a `<c-*>` component tag was a

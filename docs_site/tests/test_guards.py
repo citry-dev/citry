@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -21,11 +22,14 @@ from docs_site._internal.guards import (
     blog,
     blog_feed,
     builtin_tags,
+    citry_highlight,
     component_fence,
+    crossref,
     example_contract,
     fence_validator,
     format_report,
     frontmatter,
+    heading_length,
     internal_link,
     json_ld,
     make_context,
@@ -36,6 +40,7 @@ from docs_site._internal.guards import (
     run_guards,
     single_h1,
     snippet_path,
+    stray_markup,
 )
 from docs_site._internal.guards.base import GuardContext, GuardResult, Severity
 from docs_site._internal.guards.site_index import SiteIndex
@@ -186,6 +191,66 @@ def test_nav_guard_requires_sources_for_generated_pages(
     assert source in results[0].message
 
 
+def test_heading_length_guard_reports_long_section_headings_as_info(tmp_path: Path) -> None:
+    # Fenced lines and other heading levels are not section headings, and the
+    # 24-character limit itself is allowed.
+    (tmp_path / "page.md").write_text(
+        "# A page title that is long enough to be reported\n"
+        "\n"
+        "## Exactly twenty-four char\n"
+        "\n"
+        "## Exactly twenty-five chars\n"
+        "\n"
+        "### Configure a signing secret before using State\n"
+        "\n"
+        "```python\n"
+        "## a comment line inside a code block that is long\n"
+        "```\n"
+        "\n"
+        "#### A fourth-level heading that is long enough\n",
+        encoding="utf-8",
+    )
+
+    results = list(heading_length.check(_content_ctx(tmp_path)))
+
+    assert [(r.line, r.severity) for r in results] == [(5, Severity.INFO), (7, Severity.INFO)]
+    assert results[0].source == "page.md"
+    assert "'Exactly twenty-five chars'" in results[0].message
+    # Info findings never fail the build, even under --strict.
+    assert run_guards(_content_ctx(tmp_path), strict=True, guards=[heading_length.check])[1] is True
+
+
+@pytest.mark.parametrize(
+    ("raw", "visible"),
+    [
+        ("Swap in a component { #swap-in-a-different-component }", "Swap in a component"),
+        ("Title ## { #x }", "Title"),
+        ("Call [`render`](/reference/) here", "Call render here"),
+        ("Use [`Component`][citry.Component] here", "Use Component here"),
+        ("Run on the server<br/>or standalone", "Run on the serveror standalone"),
+        ("The **bold** `<c-if>` tag", "The bold <c-if> tag"),
+    ],
+)
+def test_heading_length_guard_counts_only_visible_text(raw: str, visible: str) -> None:
+    assert heading_length.visible_heading_text(raw) == visible
+
+
+def test_heading_length_guard_skips_the_rest_of_an_unclosed_fence(tmp_path: Path) -> None:
+    (tmp_path / "page.md").write_text(
+        "```python\n## a comment line inside a code block that is long\n",
+        encoding="utf-8",
+    )
+
+    assert list(heading_length.check(_content_ctx(tmp_path))) == []
+
+
+def test_scan_fences_records_the_closing_line() -> None:
+    closed, unclosed = fence_validator.scan_fences("```py\nx\n```\n\n~~~\ny\n")
+
+    assert (closed.open_line, closed.close_line) == (1, 3)
+    assert (unclosed.open_line, unclosed.close_line) == (5, None)
+
+
 def test_fence_validator_flags_unclosed_fence(tmp_path: Path) -> None:
     (tmp_path / "bad.md").write_text("# X\n\n```python\nprint(1)\n", encoding="utf-8")
     ctx = GuardContext(
@@ -259,6 +324,35 @@ def test_component_fence_ignores_plain_python_fragments_and_citry_fences(tmp_pat
     (tmp_path / "p.md").write_text(source, encoding="utf-8")
 
     assert list(component_fence.check(_content_ctx(tmp_path))) == []
+
+
+def test_citry_highlight_warns_on_an_error_token_at_its_line(tmp_path: Path) -> None:
+    source = (
+        "# Doc\n\n"
+        "```citry-html\n<c-Card c-body=\"<><a c-href='ok'>x</a></>\" />\n```\n\n"
+        "- item\n\n"
+        '    ```citry-html\n    <c-Card\n      c-body="<><a c-href="bad">x</a></>"\n    />\n    ```\n'
+    )
+    (tmp_path / "page.md").write_text(source, encoding="utf-8")
+
+    results = list(citry_highlight.check(_content_ctx(tmp_path)))
+
+    assert [(r.severity, r.source, r.line) for r in results] == [(Severity.WARNING, "page.md", 11)]
+
+
+def test_citry_highlight_lexes_included_snippets_and_skips_foreign_lexers(tmp_path: Path) -> None:
+    (tmp_path / "bad.html").write_text('<c-A c-x="<><b c-y="z">q</b></>" />\n', encoding="utf-8")
+    source = (
+        '```citry-html\n--8<-- "bad.html"\n```\n\n'
+        '```citry-html\n--8<-- "missing.html"\n```\n\n'
+        "```citry-html\n--8<--\nbad.html:section\n--8<--\n```\n\n"
+        '```html\n<c-A c-x="<><b c-y="z">q</b></>" />\n```\n'
+    )
+    (tmp_path / "page.md").write_text(source, encoding="utf-8")
+
+    results = list(citry_highlight.check(_content_ctx(tmp_path)))
+
+    assert [(r.line, "bad.html" in r.message) for r in results] == [(2, True), (11, True)]
 
 
 def test_frontmatter_flags_unknown_key(tmp_path: Path) -> None:
@@ -382,6 +476,65 @@ def test_authored_reference_guard_reports_a_missing_entry(
     results = list(authored_reference.check(_content_ctx(tmp_path)))
 
     assert any("#state" in result.message for result in results)
+
+
+def test_authored_reference_guard_reports_an_unexpected_anchor(tmp_path: Path) -> None:
+    _write_browser_api_page(tmp_path)
+    page = tmp_path / "reference" / "browser-apis.md"
+    page.write_text(page.read_text(encoding="utf-8") + '\n<h4 id="unlisted">Unlisted</h4>\n', encoding="utf-8")
+
+    results = list(authored_reference.check(_content_ctx(tmp_path)))
+
+    assert any("Unexpected authored Reference anchor: #unlisted" in result.message for result in results)
+
+
+def test_crossref_guard_reports_unknown_keys_in_pages_and_docstrings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "page.md").write_text(
+        "# Page\n\nUse [`Thing`][pkg.Thing].\n\nSee [`Gone`][pkg.Gone].\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(crossref, "symbol_url_index", lambda: {"pkg.Thing": "/r/#thing"})
+    monkeypatch.setattr(
+        crossref,
+        "_docstring_texts",
+        lambda _ctx: iter([("pkg.Thing", "Pairs with [`Other`][pkg.Other].")]),
+    )
+
+    results = [(result.source, result.line, result.message) for result in crossref.check(_content_ctx(tmp_path))]
+
+    assert [(source, line) for source, line, _message in results] == [("page.md", 5), ("pkg.Thing", None)]
+    assert "'pkg.Gone'" in results[0][2]
+    assert "'pkg.Other'" in results[1][2]
+
+
+def test_crossref_scan_skips_code_and_markdown_link_labels() -> None:
+    text = """Known [`Thing`][pkg.Thing] and shortcut [`Thing`][].
+
+A pattern `[a-z][a-z0-9]` and a [guide][guide-link].
+
+```python
+rows[i][j]
+```
+
+Broken [`Gone`][pkg.Gone].
+
+[guide-link]: /guide/
+"""
+
+    assert list(crossref.unresolved_crossrefs(text, {"pkg.Thing": "/r/#thing", "Thing": "/r/#thing"})) == [
+        ("pkg.Gone", 9),
+    ]
+
+
+def test_crossref_docstring_scan_counts_brackets_inside_code() -> None:
+    # The docstring renderer rewrites bracket pairs inside code as well, so
+    # the docstring mode must report them.
+    text = "Index with `rows[i][j]`."
+
+    assert list(crossref.unresolved_crossrefs(text, {}, skip_code=False)) == [("j", 1)]
 
 
 def test_internal_link_flags_broken_and_accepts_valid(tmp_path: Path) -> None:
@@ -801,6 +954,104 @@ def test_rendered_markdown_guard_ignores_markdown_shown_on_purpose(tmp_path: Pat
     )
 
     assert list(rendered_markdown.check(_index_ctx(tmp_path, build))) == []
+
+
+def _prepared_page(fragment_html: str) -> str:
+    """A built page whose content ships inside a prepared Vue app's start script."""
+    transport = {
+        "manifest": {
+            "protocol": "citry-vue-prepared/1",
+            "occurrences": [{"id": "root", "preparedData": {"opaqueHtml": {"content": {"html": fragment_html}}}}],
+        }
+    }
+    return (
+        '<html><body><div id="app"></div>'
+        f'<script type="application/json" data-citry-vue-document="app">{json.dumps(transport)}</script>'
+        "</body></html>"
+    )
+
+
+def test_single_h1_counts_content_served_and_shipped_to_vue_once(tmp_path: Path) -> None:
+    """Raw HTML the server wrote into the body and also ships for Vue is one heading, not two."""
+    build = tmp_path / "site"
+    build.mkdir()
+    fragment = "<h1>Home</h1><p>Copy</p>"
+    page = _prepared_page(fragment).replace('<div id="app"></div>', f'<div id="app"><!--[-->{fragment}<!--]--></div>')
+    (build / "index.html").write_text(page, encoding="utf-8")
+
+    assert list(single_h1.check(_index_ctx(tmp_path, build))) == []
+
+
+def test_rendered_markdown_guard_reads_content_vue_builds_and_points_at_the_source_line(tmp_path: Path) -> None:
+    """A page Vue builds in the browser still ships its HTML; leaks there fail at the Markdown line."""
+    content = tmp_path / "content"
+    (content / "guide").mkdir(parents=True)
+    (content / "guide" / "start.md").write_text(
+        '# Start\n\n<section class="band">\n### Choose Citry when\n</section>\n',
+        encoding="utf-8",
+    )
+    build = tmp_path / "site"
+    (build / "guide" / "start").mkdir(parents=True)
+    (build / "guide" / "start" / "index.html").write_text(
+        _prepared_page('<section class="band">### Choose Citry when</section>'),
+        encoding="utf-8",
+    )
+    ctx = _index_ctx(tmp_path, build)
+    ctx.content_dir = content
+
+    [result] = rendered_markdown.check(ctx)
+
+    assert result.source == str(content / "guide" / "start.md")
+    assert result.line == 4
+    assert "### Choose Citry when" in result.message
+
+
+def test_stray_markup_guard_catches_paragraphs_around_generated_markup(tmp_path: Path) -> None:
+    """The markdown pass wrapping raw HTML in paragraphs shows up as gaps; the build must fail."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        _prepared_page('<div class="panel"><p><div class="code">x</div><p></div><p></p></div>'),
+        encoding="utf-8",
+    )
+    (tmp_path / "index.md").write_text("# Home\n", encoding="utf-8")
+
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+
+    assert result.severity is Severity.ERROR
+    assert result.source == str(tmp_path / "index.md")
+    assert "'<p><div'" in result.message
+    assert "'<p></div>'" in result.message
+    assert "'<p></p>'" in result.message
+
+
+def test_stray_markup_guard_ignores_paragraphs_inside_scripts_and_ordinary_html(tmp_path: Path) -> None:
+    """Script text and well-formed paragraphs are not markdown damage."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><article><p>Text</p><div><p>More</p></div></article>"
+        '<script>const html = "<p></p><p><div>";</script></body></html>',
+        encoding="utf-8",
+    )
+
+    assert list(stray_markup.check(_index_ctx(tmp_path, build))) == []
+
+
+def test_stray_markup_guard_ignores_empty_elements_inside_vue_shells(tmp_path: Path) -> None:
+    """A shell's served HTML comes from component templates, not the markdown pass."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        '<html><body><main><div data-allow-mismatch="children"><div><p></p></div><img src="/x.png"></div>'
+        "<p></p></main></body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "index.md").write_text("# Home\n", encoding="utf-8")
+
+    # Only the empty paragraph outside the shell is reported.
+    [result] = stray_markup.check(_index_ctx(tmp_path, build))
+    assert result.message.count("'<p></p>'") == 1
 
 
 def test_rendered_css_guard_catches_a_custom_property_glued_to_its_value(tmp_path: Path) -> None:

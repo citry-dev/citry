@@ -12,3 +12,6 @@ repository = { workspace = true }
 
 [dependencies]
 quick-xml = { workspace = true }
+html5gum = { workspace = true }
+html5ever = { workspace = true }
+markup5ever_rcdom = "=0.5.0-unofficial"

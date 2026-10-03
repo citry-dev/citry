@@ -12,7 +12,7 @@
 [![Discord](https://img.shields.io/badge/Discord-join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/NaQ8QPyHtD)
 
 Citry is a fully typed frontend framework for Python with server events and
-Alpine.js. One component can own its HTML, browser behavior, CSS, translations,
+Vue. One component can own its HTML, browser behavior, CSS, translations,
 and Python event handlers, so you can build an interactive interface without
 maintaining a separate frontend application. It is inspired by Vue and
 Livewire.
@@ -20,7 +20,7 @@ Livewire.
 Citry works with FastAPI, Django, Flask, Starlette, ASGI, and WSGI
 applications.
 
-**Citry 0.4 is the public beta.** It supports Python 3.10 through 3.14.
+**Citry is in public beta.** It supports Python 3.10 through 3.14.
 
 [Read the docs](https://citry.dev/docs/) ·
 [Try the playground](https://citry.dev/playground/) ·
@@ -127,7 +127,7 @@ Citry gives each part of an interface a clear home:
 | What you need | What Citry provides |
 | --- | --- |
 | Reusable UI | Components, typed inputs, slots, composition, and error boundaries |
-| Browser behavior | Alpine expressions, component JavaScript, CSS, and managed assets |
+| Browser behavior | Vue expressions, component JavaScript, CSS, and managed assets |
 | Python interactions | Server events, forms, persistent State, and targeted HTML updates |
 | Internationalization | Fluent catalogs, locale-aware formatting, and server/browser translations |
 | Production control | Caching, HTML fragments, strict CSP support, CSRF hooks, and debug tooling |
@@ -170,15 +170,15 @@ Citry includes adapters for:
 | Any ASGI application | `citry.contrib.asgi.asgi_app()` |
 | Any WSGI application | `citry.contrib.wsgi.wsgi_app()` |
 
-The [web-framework guide](https://citry.dev/web-frameworks/) shows the right
+The [web-framework guide](https://citry.dev/advanced/web-frameworks/) shows the right
 startup and routing setup for each host.
 
 Want a complete project instead of an integration excerpt? Copy the
-[FastAPI starter](https://github.com/citry-dev/citry/tree/citry%400.4.6/examples/starters/fastapi)
+[FastAPI starter](https://github.com/citry-dev/citry/tree/citry%400.6.0/examples/starters/fastapi)
 or choose from the
-[standalone, Django, Flask, ASGI, and WSGI starter matrix](https://github.com/citry-dev/citry/tree/citry%400.4.6/examples).
+[standalone, Django, Flask, ASGI, and WSGI starter matrix](https://github.com/citry-dev/citry/tree/citry%400.6.0/examples).
 The collection also includes complete Project Board and
-[HTMX integration](https://github.com/citry-dev/citry/tree/citry%400.4.6/examples/demos/htmx)
+[HTMX integration](https://github.com/citry-dev/citry/tree/citry%400.6.0/examples/demos/htmx)
 demos. Each project has its own dependencies, lockfile, and tests. Every web
 starter includes a browser interaction powered by Citry Events. The HTMX demo
 uses HTMX for every request and page update.
@@ -206,7 +206,7 @@ citry --app myproject.app:citry_app check
 ```
 
 See the [VS Code guide](https://citry.dev/ide/vscode/) and
-[CLI reference](https://citry.dev/cli/) for setup and CI usage.
+[CLI reference](https://citry.dev/advanced/cli/) for setup and CI usage.
 
 ## Work with a coding agent
 
@@ -218,26 +218,10 @@ the current starter projects. You do not need to install a Citry skill.
 
 ## Performance
 
-The current benchmark renders a large project page using Citry's documented
-performance optimizations:
-
-![First, second and warmed render times for optimized Citry, Django, django-components and Jinja2. Lower is better.](https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmark.png)
-
-\* Citry uses `simple` and `pure` optimizations. See the
-[performance optimization guide](https://citry.dev/advanced/performance/).
-
-- Citry takes 24.62 ms warmed, about 55% less time than django-components
-  on this workload.
-- Button, Icon and HeroIcon use `simple = True`, giving up independent
-  component identity and hooks while keeping their data callbacks live.
-- Django takes 11.67 ms warmed and Jinja2 7.21 ms. The scenarios emit different
-  output and perform different component and browser-support work.
-
-These are relative results from one machine. Read the
-[published benchmark](https://citry.dev/about/benchmarks/) for the chart and
-interpretation, or the
-[benchmark repository guide](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md)
-to reproduce it.
+The [benchmarks page](https://citry.dev/about/benchmarks/) shows how long
+a page with 1,400 rendered entries takes to become usable in Citry and
+eleven other frameworks, including Django with HTMX and Alpine,
+django-components, Next.js and Nuxt.
 
 ## Get help and contribute
 

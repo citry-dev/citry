@@ -1,15 +1,18 @@
 ---
-title: Add flexible content
+title: Add slots
 description: Give a Citry component a main content area, a named area, and fallback content that appears when nothing is supplied.
 ---
 
-# Add flexible content
+# Add slots
 
-The reading lists on your page accept Python options. Sometimes the person
-using a component should be able to add whole pieces of HTML instead.
+Options like `heading` work well for short values. When the person using a
+component should be able to pass whole pieces of HTML, such as a paragraph
+or a button, use **slots**: places in the template where outside content
+goes.
 
-You will build a panel with one area for its main content and another for an
-optional action. If no action is supplied, the panel shows a useful fallback.
+In this step you build a panel with one slot for its main content and
+another for an optional action. If no action is passed in, the panel shows
+fallback text.
 
 ## Create the panel
 
@@ -29,12 +32,11 @@ python reading_panel.py
 The first panel ends with “No action needed.” The second ends with a “Start
 reading” button.
 
-## Mark slots
+## Place the slots
 
-Inside `ReadingPanel`, each [`<c-slot>`](/reference/builtins/#c-slot) marks a place where another template may
-put content.
-
-Here is how what's on the outside gets inserted on the inside:
+Inside `ReadingPanel`, each [`<c-slot>`](/reference/builtins/#c-slot)
+marks a place where content from outside goes. The arrows show where the
+content from `PanelPage` ends up:
 
 ```citry-html
 <!-- Inside ReadingPanel (inside) -->
@@ -51,7 +53,7 @@ Here is how what's on the outside gets inserted on the inside:
 The `<p>` is plain content inside `<c-ReadingPanel>`. Citry inserts it where
 `<c-slot />` appears. Because that slot has no name, it is the **default slot**.
 
-The footer uses a name to connect its two sides:
+The footer slot has a name, and the outside content uses the same name:
 
 ```citry-html
 <!-- Inside ReadingPanel (inside) -->
@@ -74,11 +76,11 @@ The footer uses a name to connect its two sides:
 </c-ReadingPanel>
 ```
 
-The matching `name="footer"` values tell Citry where the button belongs. The
-button replaces “No action needed.” If there is no `footer` fill, that text
+Each `<c-fill>` passes content to the slot with the same name. The button
+replaces “No action needed.” When nothing fills the `footer` slot, that text
 stays as the fallback.
 
-## Declare accepted slots
+## Declare the slots
 
 [`Slots`][citry.Component.Slots] gives those two places names in Python:
 
@@ -88,12 +90,12 @@ class Slots:
     footer: SlotInput | None = None
 ```
 
-The default slot is required because it has no default value. The footer is
-optional, so the component can use the fallback from its template.
+`default` has no `= ...` value after its type, so it is required. The footer
+defaults to `None`, so it is optional and the template's fallback text shows
+when it is empty.
 
-[`SlotInput`][citry.SlotInput] means the fill may contain rendered HTML, text,
-another component, or a function that produces content. You do not need to
-choose one of those forms when you declare the slot.
+[`SlotInput`][citry.SlotInput] accepts any kind of slot content: HTML, text,
+another component, or a function that produces content.
 
 ## Fill the slots
 
@@ -106,7 +108,8 @@ component tag:
 </c-ReadingPanel>
 ```
 
-When you use a named fill, name every area explicitly, including `default`:
+When you fill a named slot, wrap every piece of content in a `<c-fill>`,
+including the one for `default`:
 
 ```citry-html
 <c-ReadingPanel title="Up next">
@@ -119,15 +122,14 @@ When you use a named fill, name every area explicitly, including `default`:
 </c-ReadingPanel>
 ```
 
-Keeping the fills explicit makes it clear which content belongs in each area.
-Citry reports an error if named fills and loose body content are mixed inside
+Citry reports an error if you mix `<c-fill>` tags and loose content inside
 the same component tag.
 
 ## Next steps
 
-You can now pass Python values through `Kwargs` and pass whole pieces of content
-through slots. The [Slots guide](/concepts/slots/) goes further into required,
-scoped, dynamic, and Python-supplied fills.
+You can now pass Python values through `Kwargs` and whole pieces of content
+through slots. The [Slots guide](/concepts/slots/) covers more, such as
+slots that pass data back to their content and filling slots from Python.
 
 Next, [add behavior that runs immediately in the
 browser](/getting-started/browser-interactivity/).

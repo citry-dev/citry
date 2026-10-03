@@ -4,6 +4,7 @@ use super::classify_modifiers;
 fn common_two_modifier_buckets_stay_inline() {
     let classified = classify_modifiers(
         "keyup",
+        true,
         ["capture", "once", "stop", "prevent", "enter", "escape"],
     );
 
@@ -16,6 +17,7 @@ fn common_two_modifier_buckets_stay_inline() {
 fn authored_modifiers_spill_without_a_length_ceiling() {
     let classified = classify_modifiers(
         "keyup",
+        true,
         [
             "capture", "once", "passive", "stop", "prevent", "self", "enter", "escape", "space",
         ],

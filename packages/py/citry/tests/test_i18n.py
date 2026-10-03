@@ -181,7 +181,7 @@ class TestConfiguration:
             },
         )
         i18n = app.extensions.get_extension("i18n")
-        assert (i18n.render_cache_mode, i18n.render_cache_version) == ("payload", 3)
+        assert (i18n.render_cache_mode, i18n.render_cache_version) == ("payload", 1)
 
         class Greeting(Component):
             citry = app

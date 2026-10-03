@@ -221,6 +221,9 @@ jobs:
         env:
           CITRY_VSCODE_EXTENSION_DIR: ${{ runner.temp }}/citry-vsix/extension
           CITRY_VSCODE_PRETTIER_EXTENSION_DIR: ${{ runner.temp }}/prettier-vscode/extension
+          # Checks typed completion, hover, and go-to-definition in component
+          # JavaScript. A local run of this check took about six seconds.
+          CITRY_VSCODE_SMOKE_BROWSER: "1"
           CITRY_VSCODE_SMOKE_FORMATTING: "1"
           CITRY_VSCODE_SMOKE_PYTHON: ${{ runner.temp }}/citry-vscode-python/bin/python
           CITRY_VSCODE_SMOKE_WORKSPACE: ${{ runner.temp }}/citry-vscode-workspace

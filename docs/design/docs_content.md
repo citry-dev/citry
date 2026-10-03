@@ -15,7 +15,8 @@ material under `docs_site/examples/`, the included source under
 builder. Its Phase 7 notes and content-related decision records are inputs to
 this plan. When the two documents disagree about content work, this document
 is authoritative. Repository-wide writing and component rules remain owned by
-[`CLAUDE.md`](../../CLAUDE.md) and the
+[`CLAUDE.md`](../../CLAUDE.md), the
+[writing guide](../best-practices/writing-docs.md), and the
 [component authoring guide](../best-practices/component-authoring.md).
 
 This is the controlling plan. Completed research records and focused Stage 4
@@ -259,10 +260,11 @@ The tone changes with the reader's situation:
 | Community | Welcoming and procedurally precise | State who the process is for, what to do, and what response to expect. |
 | Blog | Authored, dated, and more personal | Make the context and author clear; link durable instructions back to evergreen pages. |
 
-Apply the repository house style in `CLAUDE.md`: plain words, action-led
-sentences, explained project terms, descriptive headings, no private internals
-or roadmap in user docs, and wrong/right examples when warning about a natural
-mistake.
+Apply the repository house style in `CLAUDE.md` (plain words, action-led
+sentences, explained project terms) and the page-level rules in the
+[writing guide](../best-practices/writing-docs.md): descriptive short
+headings, no private internals or roadmap in user docs, and wrong/right
+examples when warning about a natural mistake.
 
 Use **insert** for template substitution: `{{ value }}` inserts a value where
 the expression appears. Reserve **print** for an actual `print()` call, command

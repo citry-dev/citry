@@ -51,6 +51,19 @@ def test_utf16_positions_round_trip_without_splitting_astral_characters() -> Non
     assert offset_at_position(source, types.Position(1, 1)) is None
 
 
+@pytest.mark.parametrize("separator", ["\x0c", "\u2028", "\x85"])
+def test_positions_count_only_the_line_breaks_lsp_counts(separator: str) -> None:
+    # A form feed or Unicode separator does not end a line for LSP or for
+    # Python's parser, so it must not shift later line numbers.
+    source = f"a{separator}b\r\nc\rvalue\n"
+    offset = source.index("value") + 2
+
+    position = position_at_offset(source, offset)
+
+    assert position == types.Position(2, 2)
+    assert offset_at_position(source, position) == offset
+
+
 @pytest.mark.parametrize(
     "path",
     [

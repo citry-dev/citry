@@ -1,9 +1,22 @@
+import { writeFile } from "node:fs/promises";
+
 import { build } from "esbuild";
 
-import { citryClientBuildOptions, citryCspClientBuildOptions, citryI18nBuildOptions } from "./build-support.mjs";
+import {
+  CITRY_RUNTIME_PATH,
+  buildCitryI18n,
+  buildCitryVueRuntime,
+  citryVueBuildOptions,
+  citryVueEventsBuildOptions,
+  citryVueFragmentsBuildOptions,
+} from "./build-support.mjs";
 
 await Promise.all([
-  build(citryClientBuildOptions()),
-  build(citryCspClientBuildOptions()),
-  build(citryI18nBuildOptions()),
+  build(citryVueBuildOptions()),
+  build(citryVueEventsBuildOptions()),
+  build(citryVueFragmentsBuildOptions()),
+  buildCitryI18n(),
 ]);
+
+// The combined runtime reads the files written above, so it is assembled only after they exist.
+await writeFile(CITRY_RUNTIME_PATH, await buildCitryVueRuntime(), "utf8");

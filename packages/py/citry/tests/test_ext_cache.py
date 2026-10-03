@@ -444,7 +444,7 @@ class TestCacheRevision:
         third = fragment_cache_key(app, "x")
         assert len({first, second, third}) == 3
 
-    def test_only_final_alias_removal_changes_keys(self):
+    def test_each_alias_removal_changes_keys(self):
         app = Citry()
 
         class MyCard(Component):
@@ -452,9 +452,10 @@ class TestCacheRevision:
 
         before = fragment_cache_key(app, "x")
         app.unregister("mycard")
-        assert fragment_cache_key(app, "x") == before
+        after_alias = fragment_cache_key(app, "x")
+        assert after_alias != before
         app.unregister("my-card")
-        assert fragment_cache_key(app, "x") != before
+        assert fragment_cache_key(app, "x") != after_alias
 
     def test_clear_advances_before_a_backend_clear_failure(self):
         class FailingClear(InMemoryCache):

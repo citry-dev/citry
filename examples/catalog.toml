@@ -24,7 +24,7 @@ serve = ["uv", "run", "uvicorn", "app.main:web_app", "--host", "127.0.0.1", "--p
 page_path = "/"
 citry_prefix = "/citry"
 profile = "starter-web-v1"
-docs = ["/getting-started/fastapi/", "/web-frameworks/#fastapi-and-starlette"]
+docs = ["/getting-started/fastapi/", "/advanced/web-frameworks/#fastapi-and-starlette"]
 
 [[projects]]
 id = "starter-django"
@@ -38,7 +38,7 @@ serve = ["uv", "run", "python", "manage.py", "runserver", "127.0.0.1:{port}", "-
 page_path = "/"
 citry_prefix = "/citry"
 profile = "starter-web-v1"
-docs = ["/web-frameworks/#django", "/security/#protect-event-posts-from-csrf"]
+docs = ["/advanced/web-frameworks/#django", "/security/#protect-event-posts-from-csrf"]
 
 [[projects]]
 id = "starter-flask"
@@ -52,7 +52,7 @@ serve = ["uv", "run", "flask", "--app", "app:create_app", "run", "--host", "127.
 page_path = "/"
 citry_prefix = "/citry"
 profile = "starter-web-v1"
-docs = ["/web-frameworks/#flask", "/events/"]
+docs = ["/advanced/web-frameworks/#flask", "/events/"]
 
 [[projects]]
 id = "starter-asgi"
@@ -66,7 +66,7 @@ serve = ["uv", "run", "uvicorn", "app.main:application", "--host", "127.0.0.1", 
 page_path = "/"
 citry_prefix = "/citry"
 profile = "starter-web-v1"
-docs = ["/web-frameworks/#bare-asgi-and-wsgi", "/events/"]
+docs = ["/advanced/web-frameworks/#bare-asgi-and-wsgi", "/events/"]
 
 [[projects]]
 id = "starter-wsgi"
@@ -80,7 +80,7 @@ serve = ["uv", "run", "waitress-serve", "--listen=127.0.0.1:{port}", "app.main:a
 page_path = "/"
 citry_prefix = "/citry"
 profile = "starter-web-v1"
-docs = ["/web-frameworks/#bare-asgi-and-wsgi", "/events/"]
+docs = ["/advanced/web-frameworks/#bare-asgi-and-wsgi", "/events/"]
 
 [[projects]]
 id = "demo-project-board"

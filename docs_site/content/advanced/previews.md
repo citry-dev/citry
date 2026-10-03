@@ -5,31 +5,39 @@ description: Keep named examples beside components, browse their gallery, and ca
 
 # Component previews
 
-The Preview extension lets you define examples beside your components and open
-them in a gallery. Similar idea to [Storybook](https://storybook.js.org/){: target="_blank" rel="noopener"},
+To check how a component looks in each of its states, you would normally
+build a page that renders it with different inputs. Previews let you write
+those examples on the component itself. Citry then shows them all in a
+gallery in your browser, or saves a screenshot of each one, for example to
+review visual changes. The idea is similar to
+[Storybook](https://storybook.js.org/){: target="_blank" rel="noopener"},
 but simpler.
 
-It has two modes:
+The preview extension adds two commands:
 
-- `serve` - Run a web server where you can explore previews of all your components.
-- `render` - Render the previews and save their screenshots with Playwright.
+- `serve` runs a local web server with a gallery of your previews.
+- `render` saves a PNG screenshot of each preview with Playwright.
 
-## Define an example
+## Add examples
 
-Install the dependencies:
+Install the extra dependencies:
 
 ```sh
 pip install 'citry[ext-preview]'
 ```
 
-Add `PreviewExtension` when constructing your Citry app, before defining or
-discovering components. In `myproject/components.py`:
+Add `PreviewExtension` when you create your `Citry` instance, before any
+component is defined or discovered. Then give a component a nested
+`Preview` class whose `variants()` method lists its examples. A variant is
+one named example: a set of inputs plus a label for the gallery.
 
 ```citry
+# myproject/components.py
 from citry import Citry, Component
 from citry.ext.preview import PreviewExtension, variant
 
 app = Citry(extensions=[PreviewExtension])
+
 
 class Button(Component):
     citry = app
@@ -51,43 +59,55 @@ class Button(Component):
                 variant(
                     slug="disabled",
                     label="Saving",
-                    description="The action is temporarily unavailable.",
+                    description="Paused while saving.",
                     params={"label": "Saving...", "disabled": True},
                 ),
             ]
 
     template = """
-        <button c-disabled="disabled">{{ label }}</button>
+      <button c-disabled="disabled">{{ label }}</button>
     """
 ```
 
-The variant's `label` describes the example. The button's visible text lives in
-`params["label"]`. A `slug` is a stable lowercase name using letters, digits, and
-single hyphens; it must be unique within that component.
+Each variant takes:
 
-For an example using only component defaults, declare `class Preview:` with
-`enabled = True`. A component without preview content or variants is omitted.
-Use `enabled = False` to opt out of inherited previews.
+- `slug`, a short name for URLs and file names. It uses lowercase
+  letters, digits, and single hyphens, and must be unique within the
+  component.
+- `label`, the title shown in the gallery. It is not passed to the
+  component; the button text above comes from `params["label"]`.
+- `params`, the inputs to render the component with.
+- `description`, optional text shown with the example.
 
-## Browse previews
+`group` is a label that the gallery shows next to the component's name.
 
-Start a separate preview server:
+To preview a component with its default inputs only, write
+`class Preview:` with `enabled = True` and no variants. A component with
+no `Preview` content gets no preview. Set `enabled = False` to turn off
+previews that a component inherits from its base class.
+
+## Browse the gallery
+
+Start the preview server:
 
 ```sh
 citry --app myproject.components:app ext run preview serve
 ```
 
-Open the printed gallery URL. The server stays running until Ctrl-C and does
-not start Playwright or open a browser. Its default port is 8001; use
-`--port 0` to choose a free port. Python changes require restarting the command;
-preview template file changes take effect when you refresh the page.
+Open the URL it prints. The server runs until you press Ctrl-C. It uses
+port 8001 by default; pass `--port 0` to pick any free port. Refresh the
+page to see changes to preview template files. Restart the command after
+changing Python code.
 
-The gallery shows all selected variants in separate iframes. Each frame uses
-the variant's width and height, keeping component styles and teleport targets
-inside that document. The surrounding page scrolls wide frames rather than
-shrinking them. Frames share the server and may share browser storage.
+The gallery shows each example in its own frame (an iframe), sized to the
+example's viewport (the frame's width and height). Each frame is a separate
+page, so one example's styles and teleported content stay inside its
+frame. An example wider than the window
+scrolls rather than shrinking. All frames share one server, and may share
+browser storage such as cookies.
 
-Component names, variants, and source directories can narrow either command:
+To show only some components, name them, choose variants, or filter by
+directory:
 
 ```sh
 citry --app myproject.components:app ext run preview serve Button
@@ -97,15 +117,17 @@ citry --app myproject.components:app ext run preview serve \
   --dir 'myproject/components/**'
 ```
 
-Names are comma-separated registered names or aliases. Directory filters use
-paths relative to the working directory; `**` includes nested directories.
-Multiple directory filters combine, and named components must also match any
-directory filters. Explicit names without available previews, missing selected
-variants, and filters matching nothing produce errors.
+Separate several names with commas. A name can be a component's
+registered name or an alias. A directory filter is relative to the current
+directory, and `**` includes subdirectories. Repeat `--dir` to include
+several directories. When you give both names and
+directories, a named component must also be inside one of the directories.
+The command fails when a filter matches nothing, a named component has no
+previews, or a named variant does not exist.
 
-## Capture PNGs
+## Save screenshots
 
-Install Chromium once, then run a capture:
+Install Chromium for Playwright once, then run `render`:
 
 ```sh
 playwright install chromium
@@ -113,42 +135,48 @@ citry --app myproject.components:app ext run preview render \
   --outdir ./preview_imgs
 ```
 
-The command starts a temporary preview server and captures each variant in a
-fresh browser context. It writes `<component_id>/<slug>.png` and
-`manifest.json`, which records each result. A failed variant makes the command
-exit unsuccessfully, while completed images and diagnostics remain available.
-Existing outputs require `--overwrite`; unrelated files are retained.
+The command starts its own preview server and opens each variant in a
+fresh browser. It writes one `<component_id>/<slug>.png` per variant, plus
+a `manifest.json` file that lists the result of each one. If any variant
+fails, the command exits with an error, and the images that succeeded stay
+on disk. Pass `--overwrite` to replace existing images; other files in the
+directory are left alone.
 
-To reuse a running `preview serve` session:
+To take screenshots from a `preview serve` that is already running, pass
+its address:
 
 ```sh
 citry --app myproject.components:app ext run preview render \
   --base-url http://127.0.0.1:8001/citry
 ```
 
-The base URL identifies the preview server's mounted Citry root. The command
-checks that its catalog contains the requested variants and leaves that server
-running afterward.
+The command checks that the server has the variants you asked for, and
+leaves it running afterward.
 
-Capture waits for document load, fonts, and images. For asynchronous application
-work, use `--ready-selector '[data-ready="true"]'` with an element your component
-shows only when ready. `--timeout 30` bounds each capture in seconds. Capture
-disables CSS animations, but your fixtures still control clocks, randomness,
-and external data. Ordinary application middleware, static routes, sessions,
-and fixture setup are not created by the preview host.
+Each screenshot waits for the page, its fonts, and its images to load, and
+CSS animations are turned off. If the component loads data on its own
+after that, add `--ready-selector '[data-ready="true"]'` and make the
+component show that element only when it is ready. `--timeout 30` limits
+each screenshot to 30 seconds.
 
-## Compose an example with a template
+The preview server does not run your web app. Middleware, static file
+routes, sessions, and test data setup are not there, so each example must
+supply what it needs. Fixed clocks, random values, and outside data are
+also up to you, if you want the same screenshot on every run.
 
-A preview template owns the entire example, including child components and
-slot content. Its variables are `params` and `preview` metadata:
+## Wrap an example
+
+By default a variant renders the component alone with its `params`. Give
+`Preview` a `template` to build the example yourself, for example to place
+the component in a section or fill its slots:
 
 ```python
 class Preview:
     template = """
-        <section>
-            <h2>{{ preview.variant.label }}</h2>
-            <c-button c-label="params['label']" />
-        </section>
+      <section>
+        <h2>{{ preview.variant.label }}</h2>
+        <c-button c-label="params['label']" />
+      </section>
     """
 
     def variants(self):
@@ -161,72 +189,94 @@ class Preview:
         ]
 ```
 
-Place this nested class inside the component. You can use
-`template_file = "button.preview.citry-html"` instead of inline source. Relative
-paths resolve beside the declaration, including inherited declarations. Define
-only one of `template` and `template_file`; missing or unreadable files fail the
-preview. Templates are fragments; the page layout owns the HTML document.
+The template can read `params` and `preview`, which describes the current
+variant. It renders only the example; the page around it comes from the
+page layout (see below).
 
-`variants(self)` runs without a rendered component instance. It can refer to
-`self.component_class`, but cannot access `self.component`. Return a list or
-tuple of variants, with fresh mutable input values when needed. Keep database
-mutation and fixture setup outside enumeration.
+To keep the template in a file, set
+`template_file = "button.preview.citry-html"` instead. A relative path
+starts from the file that declares the `Preview` class, also when a
+subclass inherits it. Set `template` or `template_file`, not both. A
+missing or unreadable file makes that preview fail.
 
-## Choose viewports and layouts
+## Set size and frame
 
-Import `Viewport` and `Layout` from `citry.ext.preview`. Set a component default
-viewport or pass an override to `variant()`:
+Import `Viewport` and `Layout` from `citry.ext.preview`. A viewport sets the
+width and height an example renders at. Set one for the component, or pass
+`viewport=` to a single `variant()`:
 
 ```python
 class Preview:
     enabled = True
     viewport = Viewport(width=420, height=800)
     variant_layout = Layout(template="""
-        <section>
-            <h2>{{ preview.variant.label }}</h2>
-            <c-slot name="content" />
-        </section>
+      <section>
+        <h2>{{ preview.variant.label }}</h2>
+        <c-slot name="content" />
+      </section>
     """)
 ```
 
-`variant_layout` wraps one example. `page_layout` supplies a complete HTML
-page, receives a `PreviewPage` as `preview`, and places the same `content` slot.
-Each layout accepts exactly one source: `template`, `template_file`, or
-`component=YourLayoutComponent`. A layout component must belong to the same app,
-accept `preview` in its `Kwargs`, and accept a `content` slot.
+A layout is the markup around an example. The example goes into its
+`content` slot. There are two kinds:
 
-A custom page layout may iterate `preview.components`. Each group has
-`component` metadata and `items`; each item has `variant` metadata and lazy
-`content`. Render `{{ item.content }}` to place an item. On a gallery page that
-content is an iframe; on a single-variant page it is the example. The page's
-`selection` is `"variant"`, `"component"`, or `"all"`.
+- `variant_layout` wraps one example.
+- `page_layout` is the full HTML page around the examples. It receives a
+  `PreviewPage` as `preview`.
 
-A component's page layout applies to individual previews and its single-component
-gallery. The all-component gallery uses the engine default. Iframes retain
-the component's own page layout. Custom layouts own any omitted or repeated
-content, as with ordinary slots.
+Give a layout exactly one source: `template`, `template_file`, or
+`component=YourLayoutComponent`. A layout component must use the same
+`Citry` instance, accept `preview` in its `Kwargs`, and accept a `content`
+slot.
 
-Share presentation defaults with the engine:
+## Share defaults
+
+Set defaults for every component on the `Citry` instance:
 
 ```python
 app = Citry(
     extensions=[PreviewExtension],
     extensions_defaults={
-        "preview": {"viewport": Viewport(width=1024, height=768)},
+        "preview": {
+            "viewport": Viewport(width=1024, height=768),
+        },
     },
 )
 ```
 
-Engine defaults accept `group`, `viewport`, `variant_layout`, and `page_layout`.
-Relative layout files configured there resolve from the working directory when
-the extension is attached; use absolute paths when running from different
-locations. Engine defaults do not enable previews on every component.
+The defaults accept `group`, `viewport`, `variant_layout`, and
+`page_layout`. They do not turn on previews for components that have none.
+A relative layout file set here starts from the working directory at the
+time the extension is created, so use an absolute path if you run the
+command from different directories.
 
+## Build a custom gallery
 
-## Preview simple components
+A custom `page_layout` can list the examples itself. `preview.components`
+holds one group per component, with `component` details and `items`. Each
+item has `variant` details and `content`; write `{{ item.content }}` to
+place it. On a gallery page, `content` is a frame; on a page for one
+variant, it is the example itself. `preview.selection` is `"variant"`,
+`"component"`, or `"all"`, depending on which page is shown.
 
-A component with `simple = True` cannot declare its own `Preview` configuration.
-Define an ordinary component with previews enabled and call the simple component
-from its template to exercise it in a preview. Component-based preview layouts
-must also be ordinary components: layouts receive a named `content` slot, while
-simple components accept only default content.
+A component's `page_layout` applies to its own preview pages and its own
+gallery. The gallery of all components uses the default from the `Citry`
+instance, but the frames inside it still use each component's page
+layout. If your layout leaves out `{{ item.content }}` or writes it
+twice, the page shows exactly that.
+
+## Wrap simple components
+
+A component with `simple = True` cannot have its own `Preview` class. To
+preview one, write an ordinary component with previews that uses the
+simple component in its template. A layout component must also be an
+ordinary component, because it receives the example in a named `content`
+slot, and a simple component accepts only default content.
+
+!!! note "When `variants()` runs"
+
+    Citry calls `variants()` each time it lists the examples, without
+    rendering the component. It can read `self.component_class` but not
+    `self.component`. Return a list or tuple, with new mutable values on
+    each call when the component may change them. Do not create database
+    records or other test data in `variants()`.

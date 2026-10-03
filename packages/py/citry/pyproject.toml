@@ -8,9 +8,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "citry"
-version = "0.5.1"
+version = "0.6.0"
 requires-python = ">=3.10, <4.0"
-description = "Fully typed frontend framework for Python with server events and Alpine.js, inspired by Vue and Livewire"
+description = "Fully typed frontend framework for Python with server events and compiled Vue interactivity"
 # Symlink to the repo-root README; setuptools refuses a readme outside the
 # package dir, so the link makes the root README local to this package.
 readme = "README.md"
@@ -40,7 +40,7 @@ dependencies = [
     # Pinned to one exact version, not a range. The runtime node classes in
     # `citry.nodes` read the source citry-core's compiler emits, so the two
     # move together: raise this in the same change that releases citry-core.
-    "citry-core==1.7.1",
+    "citry-core==1.8.0",
     # Deliberately wide. Citry uses only `ObjectProxy` and `__wrapped__`, and
     # wrapt keeps `ObjectProxy` working across its 2.0 rewrite, so both major
     # lines serve. Raising the floor would force wrapt 2 on every installation
@@ -130,8 +130,16 @@ Repository = "https://github.com/citry-dev/citry"
 Changelog = "https://github.com/citry-dev/citry/blob/main/CHANGELOG.md"
 Issues = "https://github.com/citry-dev/citry/issues"
 
+[tool.setuptools]
+# The wheel takes non-Python files only from package-data below. MANIFEST.in
+# adds the readable `_vue/*.js` sources to the sdist, and this keeps them from
+# also reaching the wheel.
+include-package-data = false
+
 [tool.setuptools.package-data]
-# Non-Python files shipped inside the package: the type-checking marker and
-# the client-side dependency manager and Events runtime (inlined into rendered
-# pages, later also served over HTTP by the web integrations).
-citry = ["py.typed", "ext/dependencies/client/*.js", "ext/events/client/*.js", "ext/i18n/client/*.js"]
+# Non-Python files shipped inside the package: the type-checking marker, the
+# bundled browser runtime (`_vue/runtime.js`) that pages load or inline, and
+# the i18n Vue plugin. The other `_vue/*.js` files are the sources that
+# `packages/js/citry-client` bundles into `runtime.js`, so installs never read
+# them; only the sdist carries them (see MANIFEST.in).
+citry = ["py.typed", "_vue/runtime.js", "ext/i18n/client/*.js"]

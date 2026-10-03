@@ -103,7 +103,7 @@ The render-output model (the three-phase `CitryElement` -> `CitryRender` ->
 HTML pipeline, the `CitryContext` render-scoped state, and the JS/CSS dependency
 flow that drives the struct shape) is captured separately in
 [`component_rendering.md`](component_rendering.md). It is built: `.render()` returns a
-`CitryRender`, rendering is deferred (depth-unbounded, stack-driven), and
+`CitryRender`, rendering is deferred (stack-driven, so depth is not tied to Python's recursion limit), and
 `serialize()` stamps the per-component `data-cid-<id>` markers. Placing
 collected JS/CSS dependencies into `<head>`/`<body>` at serialize time is
 built (the five dependency-rendering phases in
@@ -166,7 +166,6 @@ with Vue-like `class`/`style` merging.
 | Node | Renders |
 |---|---|
 | `ExprNode` | Evaluates a Python expression |
-| `TemplateNode` | Evaluates a nested template (recursive) |
 | `StaticHtmlAttr` | Returns `key="value"` or bare `key` |
 | `ExprHtmlAttr` | Evaluates expression, returns `key="result"` |
 | `TemplateHtmlAttr` | Evaluates nested template, returns `key="result"` |
@@ -332,7 +331,7 @@ Status legend:
 | `Kwargs` / `Slots` / `TemplateData` typed classes | ✅ Done | Auto-dataclass (djc used NamedTuple); also feed parse-time validation via `tag_rules.py` |
 | `get_template_data()` | ✅ Done | As `template_data(kwargs, slots)`; no `args`/`context` params |
 | `js` / `js_file`, `css` / `css_file` declarations | ✅ Done | Loading half only (`media.py`); emission is the dependency extension |
-| `JsData` / `CssData` + `get_js_data()` / `get_css_data()` (JS/CSS variables) | ✅ Done | `js_data(kwargs, slots)` / `css_data(kwargs, slots)` + auto-dataclass schemas, delivered to the browser as hashed variables scripts and `data-ccss`-scoped stylesheets ([`dependencies.md`](dependencies.md) section 5) |
+| `JsData` / `CssData` + `get_js_data()` / `get_css_data()` (JS/CSS variables) | ✅ Done | `js_data(kwargs, slots)` / `css_data(kwargs, slots)` + auto-dataclass schemas, `js_data()` delivered to the browser in the page's Vue payload and `css_data()` as `data-ccss`-scoped stylesheets ([`dependencies.md`](dependencies.md) section 5) |
 | `Media` nested class, `media` property | ✅ Done | `CitryMedia` via `get_media()`; user's class not mutated, callables lazy, `bytes` entries dropped |
 | `media_class` | ❌ Drop | Django forms `Media` output class |
 | `on_render_before` / `on_render` (incl. generator form) / `on_render_after` | ✅ Done (diverged) | A single `on_render()` hook; before/after dropped (template_data and the generator's post-yield phase cover them). No `Context`/`Template` args, no lambda yields; the generator receives the completed `CitryRender`. Design in [`component_on_render.md`](component_on_render.md) |
@@ -481,7 +480,7 @@ pipeline (`CitryRender` parts + `CitryContext.extra`).
 | Feature | Status | Notes |
 |---|---|---|
 | `Script` / `Style` / `Dependency` structs (url-or-content, attrs, `to_json`/`from_json`, dedupe by url/content) | ✅ Done | Plus first-class use as `Dependencies` entries ([`dependencies.md`](dependencies.md) section 3); no string re-parsing |
-| Caching of processed component JS/CSS + JS/CSS variables (`cache_component_js`, `cache_component_js_vars`, eviction) | ✅ Done | Class scripts with lazy repopulation; variables scripts hashed and cached per distinct data ([`dependencies.md`](dependencies.md) sections 4-5) |
+| Caching of processed component JS/CSS + JS/CSS variables (`cache_component_js`, `cache_component_js_vars`, eviction) | ✅ Done (diverged) | Class scripts with lazy repopulation; CSS variables stylesheets hashed and cached per distinct data; JS variables travel in the page's Vue payload rather than a cached script ([`dependencies.md`](dependencies.md) sections 4-5) |
 | `render_dependencies()` + six strategies (`document`/`fragment`/`simple`/`prepend`/`append`/`ignore`) | ✅ Done (diverged) | `serialize(deps_strategy=..., deps_position=...)`: four strategies + positions, implementing djc's own TODO; `fragment` raises until the client-runtime phase ([`dependencies.md`](dependencies.md) section 7.1) |
 | `_insert_js_css_to_default_locations` (`<head>`/`<body>` insertion) | ✅ Done | Plus a no-`<head>`/`<body>` fallback (prepend CSS, append JS) instead of djc's silent drop |
 | `{% component_js_dependencies %}` / `{% component_css_dependencies %}` placeholder tags | ✅ Done | The `<c-js>` / `<c-css>` built-ins, rendering a core `Placeholder` part; first occurrence wins, later ones render nothing |
@@ -532,7 +531,7 @@ pipeline (`CitryRender` parts + `CitryContext.extra`).
 
 | Feature | Status | Notes |
 |---|---|---|
-| `TemplateExpression` (nested `{% %}` tags inside tag-attribute strings) | ♻️ Superseded | Template-in-attribute is first-class in V3 (`TemplateHtmlAttr` / `TemplateNode`); expressions are `safe_eval` Python |
+| `TemplateExpression` (nested `{% %}` tags inside tag-attribute strings) | ♻️ Superseded | Template-in-attribute is first-class in V3 (`TemplateHtmlAttr`); expressions are `safe_eval` Python |
 | Single-node passthrough of non-string values | ♻️ Superseded | `ExprHtmlAttr` resolves to raw Python values by design |
 | `StringifiedNode` | ⏭️ Skip (Django) | Django nodelist mechanics |
 
@@ -1069,7 +1068,7 @@ extension and a good dogfood test for citry's hook system.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Eagerly cache component JS/CSS at class creation (so assets survive a server restart mid-session) | ♻️ Superseded | Replaced by lazy repopulation at the script endpoint, keeping citry's no-I/O-at-import rule ([`dependencies.md`](dependencies.md) section 4.3); variables scripts still need a shared cache in multi-worker setups |
+| Eagerly cache component JS/CSS at class creation (so assets survive a server restart mid-session) | ♻️ Superseded | Replaced by lazy repopulation at the script endpoint, keeping citry's no-I/O-at-import rule ([`dependencies.md`](dependencies.md) section 4.3); `css_data()` stylesheets and Vue definition bundles still need a shared cache in multi-worker setups |
 
 </details>
 
@@ -1605,7 +1604,7 @@ ported.
   `template_data()` output is validated by constructing `TemplateData(**data)`,
   which raises on a missing or unexpected field. Skipped when `template_data()`
   already returned a `TemplateData` instance.
-- **Node rendering status.** The value nodes (`ExprNode`, `TemplateNode`), the
+- **Node rendering status.** The value node (`ExprNode`), the
   attribute nodes, `ComponentNode`, and the control-flow nodes (`IfNode`,
   `ForNode`) are implemented (see the entries below); the slot nodes (`SlotNode`,
   `FillNode`) still raise `NotImplementedError` on `render` and are a later
@@ -1729,12 +1728,12 @@ assert str(Hello()) == "<p>Hello!</p>"   # element -> render -> serialize
 
 ### Value nodes and autoescaping (`citry/nodes/__init__.py`, `citry/util/html.py`)
 
-**What:** The body value nodes. `ExprNode` evaluates a `{{ expr }}` with
+**What:** The value node and nested templates. `ExprNode` evaluates a `{{ expr }}` with
 `safe_eval` against the context variables and returns an autoescaped string (or
-inlines an embedded render). `TemplateNode` renders a nested template (a `c-*`
-attribute whose value is itself a template) against the same context. Escaping
-lives in `citry/util/html.py`, a thin layer over `markupsafe` exporting
-`escape` and `Markup`.
+inlines an embedded render). A `c-*` attribute whose value is itself a
+template compiles to `TemplateHtmlAttr`, which renders that nested template
+against the same context. Escaping lives in `citry/util/html.py`, a thin layer
+over `markupsafe` exporting `escape` and `Markup`.
 
 **Why:** Makes dynamic templates actually render, with correct HTML escaping.
 
@@ -2606,7 +2605,7 @@ class Guarded(Component):
     def on_render(self):
         result, error = yield          # result: CitryRender | None
         if error is not None:
-            return "<p>fallback</p>"   # swallow the error
+            return Markup("<p>fallback</p>")  # swallow the error
         return None                    # keep the rendered output
 ```
 

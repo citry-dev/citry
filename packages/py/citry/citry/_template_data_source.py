@@ -41,6 +41,10 @@ class TemplateDataSourceShape:
     completeness: Literal["closed", "open"]
     open_reasons: tuple[str, ...]
     preserves_kwargs_extras: bool = False
+    # The names Citry binds when it calls the method, in order: the kwargs
+    # parameter first, then slots. The receiver (``self`` or ``cls``) is left
+    # out, so ``parameters[0]`` names kwargs whether or not the method is a
+    # staticmethod.
     parameters: tuple[str, ...] = ()
 
 
@@ -60,6 +64,14 @@ class _Mapping:
     def copy(self) -> _Mapping:
         return _Mapping(dict(self.roots), set(self.open_reasons), self.tainted, self.kind)
 
+    def flow_key(self) -> tuple[object, ...]:
+        """Return a hashable value that is equal only for mappings with the same content."""
+        # Each root carries its own definitions, so two mappings that set the
+        # same key from different source lines stay distinct. Frozen sets
+        # ignore the order keys were added in, which is safe because no reader
+        # depends on that order: `_merge_returns` sorts root names itself.
+        return (self.kind, self.tainted, frozenset(self.open_reasons), frozenset(self.roots.items()))
+
 
 @dataclass(slots=True)
 class _State:
@@ -69,6 +81,28 @@ class _State:
 
     def copy(self) -> _State:
         return _State(dict(self.names), {key: value.copy() for key, value in self.heap.items()}, self.next_id)
+
+    def flow_key(self) -> tuple[object, ...]:
+        """Return a hashable value that is equal only for states the rest of the method cannot tell apart."""
+        # Every later read reaches a mapping through a local name, so the key
+        # covers each tracked name and the mapping it points to. Mappings no
+        # name reaches, and the counter that numbers new ones, cannot change
+        # any result and stay out of the key.
+        # Mappings are numbered in the order the sorted names reach them, so
+        # two branches that created their mappings in a different order still
+        # match. Two names that share one mapping get the same number, which
+        # keeps aliasing in the key: a write through one name must show
+        # through the other only when they really share it.
+        positions: dict[int, int] = {}
+        bindings: list[tuple[str, int]] = []
+        mappings: list[tuple[object, ...]] = []
+        for name in sorted(self.names):
+            identity = self.names[name]
+            if identity not in positions:
+                positions[identity] = len(positions)
+                mappings.append(self.heap[identity].flow_key())
+            bindings.append((name, positions[identity]))
+        return tuple(bindings), tuple(mappings)
 
     def store(self, value: _Mapping) -> int:
         identity = self.next_id
@@ -84,7 +118,11 @@ def analyze_template_data_source(
     kwargs_fields: tuple[str, ...] | None,
 ) -> TemplateDataSourceShape | None:
     """
-    Infer roots from one exact, undecorated ``template_data`` method.
+    Infer roots from one exact ``template_data`` method.
+
+    The method may be a plain instance method, a ``@staticmethod``, or a
+    ``@classmethod``. Any other decorator can change the returned value, so
+    Citry does not analyze such a method and returns ``None``.
 
     ``None`` means the module or requested owner cannot be matched safely.
     Unsupported runtime shapes instead return an open result without guesses.
@@ -162,24 +200,25 @@ def _analyze_data_method_source(
     if class_node is None or class_node.decorator_list:
         return None
     bindings = [statement for statement in class_node.body if _statement_binds_name(statement, method_name)]
-    if (
-        len(bindings) != 1
-        or not isinstance(bindings[0], ast.FunctionDef)
-        or bindings[0].name != method_name
-        or bindings[0].decorator_list
-    ):
+    if len(bindings) != 1 or not isinstance(bindings[0], ast.FunctionDef) or bindings[0].name != method_name:
         return None
     method = bindings[0]
-    positional = (*method.args.posonlyargs, *method.args.args)
+    # Citry passes (kwargs, slots) as the arguments, so a staticmethod
+    # receives them first, while an instance or class method receives
+    # self or cls before them.
+    call_parameters = data_method_call_parameters(tree, class_node, method)
+    if call_parameters is None:
+        return None
+    parameters = tuple(argument.arg for argument in call_parameters)
     if _function_contains_yield(method):
         return TemplateDataSourceShape(
             (),
             "open",
             (f"generator {method_name} method",),
             preserves_kwargs_extras=False,
-            parameters=tuple(argument.arg for argument in positional),
+            parameters=parameters,
         )
-    kwargs_name = positional[1].arg if method_name == "template_data" and len(positional) >= 2 else None
+    kwargs_name = parameters[0] if method_name == "template_data" and parameters else None
     initial = _State()
     if kwargs_name is not None:
         initial.names[kwargs_name] = initial.store(_kwargs_mapping(kwargs_fields))
@@ -194,7 +233,47 @@ def _analyze_data_method_source(
         returns.append(_Mapping())
     if not returns:
         returns.append(_Mapping(open_reasons={"method has no reachable normal return"}))
-    return _merge_returns(returns, tuple(argument.arg for argument in positional))
+    return _merge_returns(returns, parameters)
+
+
+def data_method_call_parameters(
+    tree: ast.Module,
+    class_node: ast.ClassDef,
+    method: ast.FunctionDef,
+) -> tuple[ast.arg, ...] | None:
+    """
+    Return the positional parameters Citry fills when it calls a data method.
+
+    Citry passes ``(kwargs, slots)`` as the arguments to ``template_data``,
+    ``js_data``, and ``css_data``. A ``@staticmethod`` receives them as its
+    first parameters, while an instance or class method receives ``self``
+    or ``cls`` before them.
+
+    Returns:
+        The parameters that receive kwargs and slots, or ``None`` when a
+        decorator other than a builtin ``staticmethod`` or ``classmethod``
+        wraps the method, since such a decorator can replace its result.
+
+    """
+    positional = (*method.args.posonlyargs, *method.args.args)
+    if not method.decorator_list:
+        return positional[1:]
+    if len(method.decorator_list) != 1:
+        return None
+    decorator = method.decorator_list[0]
+    if not isinstance(decorator, ast.Name) or decorator.id not in {"staticmethod", "classmethod"}:
+        return None
+    # A module or class that rebinds the name may mean some other decorator,
+    # and then the call shape is unknown. A star import can bind any name,
+    # so it counts as a rebinding too.
+    if any(
+        isinstance(statement, ast.ImportFrom) and any(alias.name == "*" for alias in statement.names)
+        for statement in tree.body
+    ):
+        return None
+    if any(_statement_binds_name(statement, decorator.id) for statement in (*tree.body, *class_node.body)):
+        return None
+    return positional if decorator.id == "staticmethod" else positional[1:]
 
 
 def python_class_defines_direct_method(source: str, class_qualname: str, method_name: str) -> bool | None:
@@ -549,12 +628,36 @@ def _analyze_block(
                 kwargs_fields=kwargs_fields,
             )
             next_states.append(state)
+        # Each `if` can double the states, so a run of checks that never touch
+        # a tracked mapping (validation, local arithmetic) would hit the limit
+        # below and lose a result that is fully known. Merging states the
+        # rest of the method cannot tell apart keeps only real differences.
+        # Only an `if` adds states, and a later `if` still merges states that
+        # became equal on a plain statement, so other statements skip the work.
+        if isinstance(statement, ast.If):
+            next_states = _distinct_states(next_states)
         if len(next_states) > _MAX_FLOW_STATES:
             return [
                 _Mapping(open_reasons={"analysis branch limit exceeded"}, tainted=True),
             ], []
         active = next_states
     return returns, active
+
+
+def _distinct_states(states: list[_State]) -> list[_State]:
+    """Drop states equal to an earlier one, keeping first-seen order."""
+    # A dropped state would only add return values identical to ones the
+    # kept state adds, and `_merge_returns` gives the same answer without
+    # them. Keeping the first-seen order keeps the analysis deterministic.
+    seen: set[tuple[object, ...]] = set()
+    distinct: list[_State] = []
+    for state in states:
+        key = state.flow_key()
+        if key in seen:
+            continue
+        seen.add(key)
+        distinct.append(state)
+    return distinct
 
 
 def _apply_statement(
@@ -1228,6 +1331,7 @@ __all__ = [
     "analyze_css_data_source",
     "analyze_js_data_source",
     "analyze_template_data_source",
+    "data_method_call_parameters",
     "python_class_asset_resolution_signature",
     "python_class_defines_direct_method",
     "python_class_direct_method_first_line",

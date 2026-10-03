@@ -7,13 +7,11 @@ registry, and renders it across a context boundary. Body content (slots/fills)
 is a later phase.
 """
 
-# ruff: noqa: ANN
-
-import re
-
 import pytest
 
 from citry import Citry, Component, NotRegistered
+from citry._vue.capture import render_prepared
+from citry._vue.direct_capture import assemble_typed_render
 from citry.citry_context import CitryContext
 from citry.constness import _ConstMapping
 from citry.nodes import ComponentNode, ExprHtmlAttr, _kwarg_is_const
@@ -33,13 +31,19 @@ class TestComponentNodeMetadata:
 
     def test_tagged_tuple_normalizes_once_and_keeps_the_original(self):
         key = ExprHtmlAttr("<c-card />", (0, 1), "#c-key", "item", ("item",))
-        metadata = ("range", ("key", key), ("morph", "ignore"))
+        metadata = ("element", ("key", key), ("morph", "ignore"))
         node = _component_node(metadata)
 
         assert node.metadata is metadata
-        assert node._metadata_locus == "range"
+        assert node._metadata_locus == "element"
         assert node.key is key
         assert node.morph_mode == "ignore"
+
+    def test_range_ignore_is_rejected_when_the_node_is_built(self):
+        # A component-range `#c-ignore` has no Vue implementation, so the
+        # node refuses it before any render can drop it silently.
+        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-card>"):
+            _component_node(("range", ("morph", "ignore")))
 
     @pytest.mark.parametrize(
         "metadata",
@@ -214,10 +218,11 @@ class TestComponentNodeAttrs:
 
     def test_special_character_attr_names_become_kwargs(self):
         # Kwarg names on a component tag are not limited to Python
-        # identifiers: hyphenated and `#`-prefixed names land in raw_kwargs
-        # under their literal spelling, and the bare `#my-id` becomes True
-        # like any other bare attr. Names that are special elsewhere but not
-        # to citry (HTML's `data-id`, Vue's `v-if`) pass through the same way.
+        # identifiers: hyphenated names land in raw_kwargs under their literal
+        # spelling, and a bare attr becomes True. A name that is special in
+        # HTML but not to citry (`data-id`) passes through the same way. Vue
+        # directives and `#name` slot shorthand are not kwargs; see
+        # test_vue_component_directives.py.
         c = Citry()
         seen = {}
 
@@ -238,14 +243,13 @@ class TestComponentNodeAttrs:
                     <c-card
                         na-me="fzz"
                         data-id="123"
-                        v-if="isVisible"
-                        #my-id
+                        my-flag
                     />
                 </main>
             """
 
         Page().render().serialize()
-        assert seen == {"na-me": "fzz", "data-id": "123", "v-if": "isVisible", "#my-id": True}
+        assert seen == {"na-me": "fzz", "data-id": "123", "my-flag": True}
 
     def test_colon_named_attr_is_a_literal_kwarg(self):
         # A colon in an attr name is not special to citry: the kwarg arrives
@@ -280,8 +284,8 @@ class TestComponentNodeAttrs:
 
     def test_at_prefixed_attrs_are_events_not_kwargs(self):
         # `@`-prefixed attributes on a component tag are client event handler
-        # directives: the events layer captures them for the browser runtime,
-        # so they never become kwargs and never appear in the rendered HTML.
+        # directives: the events layer keeps them on the prepared component
+        # call, so they never become the child's Python kwargs.
         # Migration trap when coming from django-components, where
         # `{% component ... @lol=2 %}` passed `@lol` through to kwargs as a
         # regular key.
@@ -310,14 +314,19 @@ class TestComponentNodeAttrs:
                 </main>
             """
 
-        out = Page().render().serialize()
+        rendered = render_prepared(Page())
+        assembly = assemble_typed_render(
+            rendered,
+            revision=0,
+            tag_for_type=lambda type_key: f"x-{type_key.lower().replace('_', '-')}",
+        )
         assert seen == {"title": "Hi"}
-        # The event bindings are clientBindings in the ownership manifest, where their
-        # keys appear inline), not rendered HTML attributes. Strip the inert
-        # JSON script blocks and confirm they never leak into the markup.
-        markup = re.sub(r'<script type="application/json"[^>]*>.*?</script>', "", out, flags=re.DOTALL)
-        assert "@click" not in markup
-        assert "@lol" not in markup
+        owner = next(item for item in assembly.view.occurrences if item.id == assembly.view.root_id)
+        [call] = assembly.compile_inputs[owner.definition_id].local_calls
+        assert [(binding["kind"], binding["name"], binding["value"]) for binding in call["bindings"]] == [
+            ("event", "@click", "handleClick()"),
+            ("event", "@lol", "doIt()"),
+        ]
 
     def test_c_bind_spreads_mapping_into_kwargs(self):
         c = Citry()

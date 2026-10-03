@@ -1,9 +1,9 @@
-//! Portable JavaScript analysis for Citry-owned Alpine expression hosts.
+//! Portable JavaScript analysis for Citry-owned Vue expression hosts.
 //!
 //! OXC owns JavaScript syntax and lexical scope resolution here. Citry wraps
 //! authored fragments in a generated async function, then maps only exact
 //! unresolved identifier references back to authored UTF-8 byte offsets. The
-//! wrapper makes Alpine statement contexts parseable without pretending that
+//! wrapper makes Vue statement contexts parseable without pretending that
 //! the template language is a complete JavaScript module.
 
 use std::str::FromStr;
@@ -11,13 +11,13 @@ use std::str::FromStr;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, ArrowFunctionBody, AssignmentExpression, AssignmentTarget, CallExpression,
-    ComputedMemberExpression, Expression, FormalParameters, Function, ObjectExpression,
-    ObjectPropertyKind, StaticMemberExpression,
+    Expression, FormalParameters, Function, ObjectExpression, ObjectPropertyKind, Statement,
+    VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_semantic::{Scoping, SemanticBuilder, SymbolId};
-use oxc_span::{GetSpan, SourceType, Span};
+use oxc_span::{GetSpan, SourceType};
 use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 
 /// The grammar expected for one authored browser-expression host.
@@ -64,55 +64,27 @@ pub struct BrowserScopeWrite {
     pub value_end: usize,
 }
 
-/// One name destructured from the `$component` initializer context.
+/// Parser and scope result for one Vue slot-props parameter pattern or list.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BrowserComponentBinding {
-    pub name: String,
-    pub local_name: String,
-    pub start: usize,
-    pub end: usize,
-    pub references: Vec<(usize, usize)>,
-}
-
-/// Source facts proven inside runtime `$component` initializers.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BrowserComponentAnalysis {
+pub struct BrowserBindingPatternAnalysis {
     pub valid: bool,
+    pub bindings: Vec<BrowserReference>,
     pub references: Vec<BrowserReference>,
-    pub bindings: Vec<BrowserComponentBinding>,
-    pub scope_writes: Vec<BrowserScopeWrite>,
 }
 
-/// One static member of a proven, unreassigned component context binding.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct BrowserComponentMember {
-    pub context_name: String,
-    pub member_name: String,
-    pub owner_start: usize,
-    pub owner_end: usize,
-    pub member_start: usize,
-    pub member_end: usize,
-}
-
-/// Static component members with exact authored UTF-8 byte ranges.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BrowserComponentMemberAnalysis {
-    pub valid: bool,
-    pub members: Vec<BrowserComponentMember>,
-}
-
-/// Find direct context members, including references captured by closures.
-///
-/// Invalid JavaScript returns no records. Dynamic keys, escaped bracket keys,
-/// defaulted context bindings, and bindings assigned anywhere are omitted
-/// because their target or exact authored key cannot be established here.
-pub fn analyze_component_members(source: &str) -> BrowserComponentMemberAnalysis {
-    let invalid = || BrowserComponentMemberAnalysis {
+/// Parse one Vue slot-props parameter list through a synchronous arrow function.
+pub fn analyze_browser_binding_pattern(source: &str) -> BrowserBindingPatternAnalysis {
+    let prefix = "(";
+    let suffix = ") => {}";
+    let wrapped = format!("{prefix}{source}{suffix}");
+    let invalid = || BrowserBindingPatternAnalysis {
         valid: false,
-        members: Vec::new(),
+        bindings: Vec::new(),
+        references: Vec::new(),
     };
+
     let allocator = Allocator::default();
-    let parsed = Parser::new(&allocator, source, SourceType::default()).parse();
+    let parsed = Parser::new(&allocator, &wrapped, SourceType::script()).parse();
     if !parsed.diagnostics.is_empty() {
         return invalid();
     }
@@ -123,95 +95,183 @@ pub fn analyze_component_members(source: &str) -> BrowserComponentMemberAnalysis
     if !built.diagnostics.is_empty() {
         return invalid();
     }
-    let scoping = built.semantic.scoping();
-    let mut initializers = ComponentVisitor::new(scoping, true);
-    initializers.visit_program(&parsed.program);
-    // A symbol's writes may run in another closure or branch. Exclude the
-    // entire binding rather than infer execution order from source positions.
-    initializers.bindings.retain(|binding| {
-        binding.direct
-            && matches!(binding.name.as_str(), "data" | "scope" | "state" | "props")
-            && !scoping
-                .get_resolved_references(binding.symbol_id)
-                .any(|reference| reference.is_write())
-    });
-    let mut visitor = ComponentMemberVisitor {
-        source,
-        scoping,
-        bindings: &initializers.bindings,
-        members: Vec::new(),
+    let [Statement::ExpressionStatement(statement)] = parsed.program.body.as_slice() else {
+        return invalid();
     };
-    visitor.visit_program(&parsed.program);
-    visitor
-        .members
-        .sort_by_key(|member| (member.owner_start, member.member_start, member.member_end));
-    visitor.members.dedup();
-    BrowserComponentMemberAnalysis {
-        valid: true,
-        members: visitor.members,
+    let Expression::ArrowFunctionExpression(function) = statement.expression.without_parentheses()
+    else {
+        return invalid();
+    };
+    let function_span = function.span();
+    let params_span = function.params.span();
+    let body_span = function.body.span();
+    let ArrowFunctionBody::FunctionBody(body) = &function.body else {
+        return invalid();
+    };
+    if function.r#async
+        || function_span.start != 0
+        || function_span.end as usize != wrapped.len()
+        || params_span.start != 0
+        || params_span.end as usize != source.len() + 2
+        || body_span.start as usize != wrapped.len() - 2
+        || body_span.end as usize != wrapped.len()
+        || !body.directives.is_empty()
+        || !body.statements.is_empty()
+    {
+        return invalid();
     }
-}
 
-struct ComponentMemberVisitor<'source, 'semantic, 'bindings> {
-    source: &'source str,
-    scoping: &'semantic Scoping,
-    bindings: &'bindings [ComponentBindingCandidate],
-    members: Vec<BrowserComponentMember>,
-}
-
-impl ComponentMemberVisitor<'_, '_, '_> {
-    fn push(&mut self, object: &Expression<'_>, name: &str, span: Span) {
-        let Some(identifier) = object.without_parentheses().get_identifier_reference() else {
-            return;
-        };
-        let symbol = self
-            .scoping
-            .get_reference(identifier.reference_id())
-            .symbol_id();
-        let Some(binding) = self
-            .bindings
-            .iter()
-            .find(|binding| Some(binding.symbol_id) == symbol)
-        else {
-            return;
-        };
-        self.members.push(BrowserComponentMember {
-            context_name: binding.name.clone(),
-            member_name: name.to_string(),
-            owner_start: identifier.span.start as usize,
-            owner_end: identifier.span.end as usize,
-            member_start: span.start as usize,
-            member_end: span.end as usize,
-        });
-    }
-}
-
-impl<'a> Visit<'a> for ComponentMemberVisitor<'_, '_, '_> {
-    fn visit_static_member_expression(&mut self, member: &StaticMemberExpression<'a>) {
-        self.push(
-            &member.object,
-            member.property.name.as_str(),
-            member.property.span,
+    let source_start = prefix.len();
+    let source_end = source_start + source.len();
+    let identifiers = function
+        .params
+        .items
+        .iter()
+        .flat_map(|parameter| parameter.pattern.get_binding_identifiers())
+        .chain(
+            function
+                .params
+                .rest
+                .iter()
+                .flat_map(|rest| rest.rest.argument.get_binding_identifiers()),
         );
-        walk::walk_static_member_expression(self, member);
-    }
+    let mut bindings = identifiers
+        .filter_map(|identifier| {
+            let span = identifier.span();
+            let start = span.start as usize;
+            let end = span.end as usize;
+            (start >= source_start && end <= source_end && start < end).then(|| BrowserReference {
+                name: identifier.name.to_string(),
+                start: start - source_start,
+                end: end - source_start,
+            })
+        })
+        .collect::<Vec<_>>();
+    bindings.sort_by(|left, right| {
+        (left.start, left.end, &left.name).cmp(&(right.start, right.end, &right.name))
+    });
 
-    fn visit_computed_member_expression(&mut self, member: &ComputedMemberExpression<'a>) {
-        // Only unescaped string keys have a one-to-one key range suitable for
-        // editor diagnostics; computed expressions remain the JS provider's job.
-        if let Expression::StringLiteral(literal) = &member.expression {
-            let span = Span::new(literal.span.start + 1, literal.span.end - 1);
-            if self.source.get(span.start as usize..span.end as usize)
-                == Some(literal.value.as_str())
-            {
-                self.push(&member.object, literal.value.as_str(), span);
+    let semantic = built.semantic;
+    let mut references = Vec::new();
+    for (name, reference_ids) in semantic.scoping().root_unresolved_references() {
+        for reference_id in reference_ids {
+            let reference = semantic.scoping().get_reference(*reference_id);
+            let span = semantic.nodes().get_node(reference.node_id()).span();
+            let start = span.start as usize;
+            let end = span.end as usize;
+            if start >= source_start && end <= source_end && start < end {
+                references.push(BrowserReference {
+                    name: name.to_string(),
+                    start: start - source_start,
+                    end: end - source_start,
+                });
             }
         }
-        walk::walk_computed_member_expression(self, member);
+    }
+    references.sort_by(|left, right| {
+        (left.start, left.end, &left.name).cmp(&(right.start, right.end, &right.name))
+    });
+    BrowserBindingPatternAnalysis {
+        valid: true,
+        bindings,
+        references,
     }
 }
 
-/// Parse one Alpine expression/statement and return its exact free roots.
+/// One name destructured from the `$component` initializer context.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BrowserComponentBinding {
+    pub name: String,
+    pub local_name: String,
+    pub start: usize,
+    pub end: usize,
+    pub references: Vec<(usize, usize)>,
+}
+
+/// One root-unresolved `$component` call authenticated by OXC semantics.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BrowserComponentCall {
+    pub call_start: usize,
+    pub call_end: usize,
+    pub callee_start: usize,
+    pub callee_end: usize,
+    pub open_paren_end: usize,
+    pub argument_start: Option<usize>,
+    pub argument_end: Option<usize>,
+}
+
+/// One statically named public binding declared by Vue Options.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BrowserPublicName {
+    pub authored_name: String,
+    pub exposed_name: String,
+    pub origin: String,
+    pub name_start: usize,
+    pub name_end: usize,
+    pub value_start: Option<usize>,
+    pub value_end: Option<usize>,
+    pub required: Option<bool>,
+    pub has_default: Option<bool>,
+    pub default_is_null: Option<bool>,
+    pub type_source: Option<String>,
+}
+
+/// Conservative knowledge for one Vue Options namespace.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BrowserOptionsSection {
+    pub name: String,
+    pub state: String,
+    pub start: Option<usize>,
+    pub end: Option<usize>,
+    pub unknown_reason: Option<String>,
+}
+
+/// One component-instance member reference with a proven receiver.
+///
+/// The span normally covers the member name in `receiver.name`. For the
+/// `$i18n` member only, it may instead cover a read of a local variable that
+/// holds `receiver.$i18n` and is never reassigned, so a consumer that needs
+/// the identifier written at the call site reads it from the span.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BrowserComponentMemberReference {
+    pub receiver: String,
+    pub name: String,
+    pub start: usize,
+    pub end: usize,
+}
+
+/// One event name declared by the Vue Options `emits` section.
+///
+/// The span covers the string literal of an array entry or the key of an
+/// object entry, as authored.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BrowserEmitName {
+    pub name: String,
+    pub start: usize,
+    pub end: usize,
+}
+
+/// Source facts proven inside runtime `$component` initializers.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BrowserComponentAnalysis {
+    pub valid: bool,
+    pub references: Vec<BrowserReference>,
+    pub bindings: Vec<BrowserComponentBinding>,
+    pub scope_writes: Vec<BrowserScopeWrite>,
+    pub component_calls: Vec<BrowserComponentCall>,
+    pub public_names: Vec<BrowserPublicName>,
+    pub sections: Vec<BrowserOptionsSection>,
+    pub member_references: Vec<BrowserComponentMemberReference>,
+    /// What each `$component` call proves about its `emits` section, in call
+    /// order. It is kept apart from `sections` because declared events are
+    /// not instance members: an unreadable `emits` must not make every
+    /// instance name unknown.
+    pub emits_sections: Vec<BrowserOptionsSection>,
+    /// The event names of every `complete` emits section.
+    pub emit_names: Vec<BrowserEmitName>,
+}
+
+/// Parse one browser expression/statement and return its exact free roots.
 pub fn analyze_browser_source(source: &str, mode: BrowserAnalysisMode) -> BrowserAnalysis {
     let (prefix, suffix) = match mode {
         BrowserAnalysisMode::Expression => (
@@ -285,6 +345,12 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
             references: Vec::new(),
             bindings: Vec::new(),
             scope_writes: Vec::new(),
+            component_calls: Vec::new(),
+            public_names: Vec::new(),
+            sections: Vec::new(),
+            member_references: Vec::new(),
+            emits_sections: Vec::new(),
+            emit_names: Vec::new(),
         };
     }
     let built = SemanticBuilder::new_compiler()
@@ -297,10 +363,16 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
             references: Vec::new(),
             bindings: Vec::new(),
             scope_writes: Vec::new(),
+            component_calls: Vec::new(),
+            public_names: Vec::new(),
+            sections: Vec::new(),
+            member_references: Vec::new(),
+            emits_sections: Vec::new(),
+            emit_names: Vec::new(),
         };
     }
     let semantic = built.semantic;
-    let mut visitor = ComponentVisitor::new(semantic.scoping(), false);
+    let mut visitor = ComponentVisitor::new(source, semantic.scoping());
     visitor.visit_program(&parsed.program);
     visitor.scope_writes.sort_by(|left, right| {
         (left.name_start, left.name_end, &left.name).cmp(&(
@@ -310,6 +382,53 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
         ))
     });
     visitor.scope_writes.dedup();
+    let component_symbols = visitor
+        .bindings
+        .iter()
+        .filter(|binding| binding.name == "component")
+        .map(|binding| binding.symbol_id)
+        .collect::<Vec<_>>();
+    let mut alias_members = AliasMemberVisitor {
+        scoping: semantic.scoping(),
+        component_symbols: &component_symbols,
+        references: Vec::new(),
+    };
+    alias_members.visit_program(&parsed.program);
+    visitor.member_references.extend(alias_members.references);
+    // Component code often stores the i18n service once
+    // (`const i18n = component.$i18n`) and calls `i18n.bind(...)` later. The
+    // i18n extension only preloads messages for calls on a proven `$i18n`,
+    // so each read of such a variable is reported as that member too.
+    let mut i18n_aliases = I18nAliasVisitor {
+        scoping: semantic.scoping(),
+        members: &visitor.member_references,
+        aliases: Vec::new(),
+    };
+    i18n_aliases.visit_program(&parsed.program);
+    for (receiver, symbol) in i18n_aliases.aliases {
+        for reference in semantic.scoping().get_resolved_references(symbol) {
+            let span = semantic.nodes().get_node(reference.node_id()).span();
+            visitor
+                .member_references
+                .push(BrowserComponentMemberReference {
+                    receiver: receiver.clone(),
+                    name: "$i18n".to_string(),
+                    start: span.start as usize,
+                    end: span.end as usize,
+                });
+        }
+    }
+    visitor
+        .component_calls
+        .sort_by_key(|call| (call.call_start, call.call_end));
+    visitor.component_calls.dedup();
+    visitor
+        .public_names
+        .sort_by_key(|name| (name.name_start, name.name_end));
+    visitor
+        .member_references
+        .sort_by_key(|reference| (reference.start, reference.end));
+    visitor.member_references.dedup();
     let mut bindings = visitor
         .bindings
         .into_iter()
@@ -370,6 +489,12 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
         references,
         bindings,
         scope_writes: visitor.scope_writes,
+        component_calls: visitor.component_calls,
+        public_names: visitor.public_names,
+        sections: visitor.sections,
+        member_references: visitor.member_references,
+        emits_sections: visitor.emits_sections,
+        emit_names: visitor.emit_names,
     }
 }
 
@@ -379,18 +504,66 @@ pub fn analyze_component_scope_writes(source: &str) -> Vec<BrowserScopeWrite> {
 }
 
 struct ComponentVisitor<'semantic> {
+    source: &'semantic str,
     scoping: &'semantic Scoping,
-    require_proven_initializer: bool,
     initializer_ranges: Vec<(usize, usize)>,
     bindings: Vec<ComponentBindingCandidate>,
     scope_writes: Vec<BrowserScopeWrite>,
+    component_calls: Vec<BrowserComponentCall>,
+    public_names: Vec<BrowserPublicName>,
+    sections: Vec<BrowserOptionsSection>,
+    member_references: Vec<BrowserComponentMemberReference>,
+    emits_sections: Vec<BrowserOptionsSection>,
+    emit_names: Vec<BrowserEmitName>,
 }
 
 impl<'a> Visit<'a> for ComponentVisitor<'_> {
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
         if self.is_unresolved_identifier(&call.callee, "$component") {
+            let callee = call.callee.span();
+            let call_span = call.span();
+            let search_end = call
+                .arguments
+                .first()
+                .map_or(call_span.end as usize, |argument| {
+                    argument.span().start as usize
+                });
+            let open_paren_end = self.source[callee.end as usize..search_end]
+                .find('(')
+                .map_or(callee.end as usize, |offset| {
+                    callee.end as usize + offset + 1
+                });
+            let argument_span = call.arguments.first().map(GetSpan::span);
+            self.component_calls.push(BrowserComponentCall {
+                call_start: call_span.start as usize,
+                call_end: call_span.end as usize,
+                callee_start: callee.start as usize,
+                callee_end: callee.end as usize,
+                open_paren_end,
+                argument_start: argument_span.map(|span| span.start as usize),
+                argument_end: argument_span.map(|span| span.end as usize),
+            });
             if let Some(argument) = call.arguments.first().and_then(Argument::as_expression) {
-                self.collect_initializer(argument);
+                if let Expression::ObjectExpression(options) = argument.without_parentheses() {
+                    self.collect_initializer(argument, false);
+                    let span = options.span();
+                    self.initializer_ranges
+                        .push((span.start as usize, span.end as usize));
+                    self.collect_options(options);
+                } else {
+                    self.collect_initializer(argument, true);
+                    if matches!(
+                        argument.without_parentheses(),
+                        Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_)
+                    ) {
+                        // The runtime treats a function literal as
+                        // `{onServerRender: fn}`, so it declares no Options
+                        // names and every section is known to be empty.
+                        self.collect_absent_options();
+                    } else {
+                        self.collect_unknown_options(argument.span());
+                    }
+                }
             }
         }
         walk::walk_call_expression(self, call);
@@ -398,13 +571,319 @@ impl<'a> Visit<'a> for ComponentVisitor<'_> {
 }
 
 impl<'semantic> ComponentVisitor<'semantic> {
-    fn new(scoping: &'semantic Scoping, require_proven_initializer: bool) -> Self {
+    fn new(source: &'semantic str, scoping: &'semantic Scoping) -> Self {
         Self {
+            source,
             scoping,
-            require_proven_initializer,
             initializer_ranges: Vec::new(),
             bindings: Vec::new(),
             scope_writes: Vec::new(),
+            component_calls: Vec::new(),
+            public_names: Vec::new(),
+            sections: Vec::new(),
+            member_references: Vec::new(),
+            emits_sections: Vec::new(),
+            emit_names: Vec::new(),
+        }
+    }
+
+    fn collect_options(&mut self, options: &ObjectExpression<'_>) {
+        const SECTIONS: [&str; 6] = ["props", "methods", "computed", "inject", "data", "setup"];
+        let options_start = options.span.start as usize;
+        for section_name in SECTIONS {
+            let mut state = BrowserOptionsSection {
+                name: section_name.to_string(),
+                state: "absent".to_string(),
+                start: None,
+                end: None,
+                unknown_reason: None,
+            };
+            for item in &options.properties {
+                let Some(property) = item.as_property() else {
+                    state.state = "unknown".to_string();
+                    state.unknown_reason = Some("top-level-spread".to_string());
+                    self.public_names.retain(|name| {
+                        name.origin != section_name || name.name_start < options_start
+                    });
+                    continue;
+                };
+                if property.computed {
+                    state.state = "unknown".to_string();
+                    state.unknown_reason = Some("computed-top-level-key".to_string());
+                    self.public_names.retain(|name| {
+                        name.origin != section_name || name.name_start < options_start
+                    });
+                    continue;
+                }
+                if !property.key.is_specific_static_name(section_name) {
+                    continue;
+                }
+                self.public_names
+                    .retain(|name| name.origin != section_name || name.name_start < options_start);
+                if let (Some(start), Some(end)) = (state.start, state.end) {
+                    self.member_references
+                        .retain(|reference| reference.start < start || reference.end > end);
+                }
+                let span = property.span();
+                state.start = Some(span.start as usize);
+                state.end = Some(span.end as usize);
+                state.unknown_reason = None;
+                if let Some(object) = section_object(section_name, &property.value) {
+                    state.state = "complete".to_string();
+                    self.collect_section_names(section_name, object, &mut state);
+                } else if section_name == "props" || section_name == "inject" {
+                    if let Expression::ArrayExpression(array) = property.value.without_parentheses()
+                    {
+                        state.state = "complete".to_string();
+                        for element in &array.elements {
+                            let Some(expression) = element.as_expression() else {
+                                state.state = "unknown".to_string();
+                                state.unknown_reason = Some("non-literal-entry".to_string());
+                                continue;
+                            };
+                            if let Expression::StringLiteral(literal) =
+                                expression.without_parentheses()
+                            {
+                                let span = literal.span();
+                                let authored = literal.value.to_string();
+                                self.public_names.push(public_name(
+                                    authored,
+                                    section_name,
+                                    span.start as usize,
+                                    span.end as usize,
+                                    None,
+                                    None,
+                                ));
+                            } else {
+                                state.state = "unknown".to_string();
+                                state.unknown_reason = Some("non-literal-entry".to_string());
+                            }
+                        }
+                    } else {
+                        state.state = "unknown".to_string();
+                        state.unknown_reason = Some("non-literal-section".to_string());
+                    }
+                } else {
+                    state.state = "unknown".to_string();
+                    state.unknown_reason = Some("indirect-section".to_string());
+                }
+                if matches!(section_name, "methods" | "computed" | "data") {
+                    self.member_references
+                        .extend(bound_instance_members(section_name, &property.value));
+                }
+            }
+            self.sections.push(state);
+        }
+        // `mixins` and `extends` merge another options object into this one,
+        // so any section can gain names this source does not show.
+        let inherits = options.properties.iter().any(|item| {
+            item.as_property().is_some_and(|property| {
+                !property.computed
+                    && (property.key.is_specific_static_name("mixins")
+                        || property.key.is_specific_static_name("extends"))
+            })
+        });
+        if inherits {
+            for state in &mut self.sections {
+                state.state = "unknown".to_string();
+                state.unknown_reason = Some("inherited-options".to_string());
+            }
+        }
+        self.collect_emits(options, inherits);
+        // Vue also calls lifecycle hooks, `provide()`, and `watch` handlers
+        // with `this` set to the instance, so their member reads are proven
+        // too. Any other option is read by code Vue does not know, which may
+        // call it with a different `this`, so its reads prove nothing.
+        for item in &options.properties {
+            let Some(property) = item.as_property() else {
+                continue;
+            };
+            if property.computed {
+                continue;
+            }
+            let Some(name) = property.key.static_name() else {
+                continue;
+            };
+            if !INSTANCE_BOUND_OPTIONS.contains(&name.as_ref()) {
+                continue;
+            }
+            self.member_references
+                .extend(bound_hook_members(&name, &property.value));
+        }
+    }
+
+    /// Read the `emits` section: an array of string literals or an object
+    /// whose static keys name the events. Anything else leaves the declared
+    /// events unknown, so a consumer must accept every event name.
+    fn collect_emits(&mut self, options: &ObjectExpression<'_>, inherits: bool) {
+        let mut state = BrowserOptionsSection {
+            name: "emits".to_string(),
+            state: "absent".to_string(),
+            start: None,
+            end: None,
+            unknown_reason: None,
+        };
+        let mut names = Vec::new();
+        for item in &options.properties {
+            // A spread or a computed key may add or replace `emits`, as the
+            // other sections treat them, until a later explicit `emits`.
+            let Some(property) = item.as_property() else {
+                state.state = "unknown".to_string();
+                state.unknown_reason = Some("top-level-spread".to_string());
+                names.clear();
+                continue;
+            };
+            if property.computed {
+                state.state = "unknown".to_string();
+                state.unknown_reason = Some("computed-top-level-key".to_string());
+                names.clear();
+                continue;
+            }
+            if !property.key.is_specific_static_name("emits") {
+                continue;
+            }
+            // A later `emits` key replaces an earlier one in the object.
+            names.clear();
+            let span = property.span();
+            state.start = Some(span.start as usize);
+            state.end = Some(span.end as usize);
+            state.state = "complete".to_string();
+            state.unknown_reason = None;
+            match property.value.without_parentheses() {
+                Expression::ArrayExpression(array) => {
+                    for element in &array.elements {
+                        match element.as_expression().map(Expression::without_parentheses) {
+                            Some(Expression::StringLiteral(literal)) => {
+                                let span = literal.span();
+                                names.push(BrowserEmitName {
+                                    name: literal.value.to_string(),
+                                    start: span.start as usize,
+                                    end: span.end as usize,
+                                });
+                            }
+                            _ => {
+                                state.state = "unknown".to_string();
+                                state.unknown_reason = Some("non-literal-entry".to_string());
+                            }
+                        }
+                    }
+                }
+                Expression::ObjectExpression(object) => {
+                    for entry in &object.properties {
+                        let Some(entry) = entry.as_property() else {
+                            state.state = "unknown".to_string();
+                            state.unknown_reason = Some("object-spread".to_string());
+                            continue;
+                        };
+                        let name = if entry.computed {
+                            None
+                        } else {
+                            entry.key.static_name()
+                        };
+                        let Some(name) = name else {
+                            state.state = "unknown".to_string();
+                            state.unknown_reason = Some("computed-key".to_string());
+                            continue;
+                        };
+                        let span = entry.key.span();
+                        names.push(BrowserEmitName {
+                            name: name.into_owned(),
+                            start: span.start as usize,
+                            end: span.end as usize,
+                        });
+                    }
+                }
+                _ => {
+                    state.state = "unknown".to_string();
+                    state.unknown_reason = Some("non-literal-section".to_string());
+                }
+            }
+        }
+        // A mixin or parent options object may declare more events.
+        if inherits {
+            state.state = "unknown".to_string();
+            state.unknown_reason = Some("inherited-options".to_string());
+        }
+        if state.state == "complete" {
+            self.emit_names.extend(names);
+        }
+        self.emits_sections.push(state);
+    }
+
+    fn collect_absent_options(&mut self) {
+        self.emits_sections.push(BrowserOptionsSection {
+            name: "emits".to_owned(),
+            state: "absent".to_owned(),
+            start: None,
+            end: None,
+            unknown_reason: None,
+        });
+        for name in ["props", "methods", "computed", "inject", "data", "setup"] {
+            self.sections.push(BrowserOptionsSection {
+                name: name.to_owned(),
+                state: "absent".to_owned(),
+                start: None,
+                end: None,
+                unknown_reason: None,
+            });
+        }
+    }
+
+    fn collect_unknown_options(&mut self, span: oxc_span::Span) {
+        self.emits_sections.push(BrowserOptionsSection {
+            name: "emits".to_owned(),
+            state: "unknown".to_owned(),
+            start: Some(span.start as usize),
+            end: Some(span.end as usize),
+            unknown_reason: Some("indirect-options".to_owned()),
+        });
+        for name in ["props", "methods", "computed", "inject", "data", "setup"] {
+            self.sections.push(BrowserOptionsSection {
+                name: name.to_owned(),
+                state: "unknown".to_owned(),
+                start: Some(span.start as usize),
+                end: Some(span.end as usize),
+                unknown_reason: Some("indirect-options".to_owned()),
+            });
+        }
+    }
+
+    fn collect_section_names(
+        &mut self,
+        section_name: &str,
+        object: &ObjectExpression<'_>,
+        state: &mut BrowserOptionsSection,
+    ) {
+        for item in &object.properties {
+            let Some(property) = item.as_property() else {
+                state.state = "unknown".to_string();
+                state.unknown_reason = Some("object-spread".to_string());
+                continue;
+            };
+            if property.computed {
+                state.state = "unknown".to_string();
+                state.unknown_reason = Some("computed-key".to_string());
+                continue;
+            }
+            let Some(name) = property.key.static_name() else {
+                state.state = "unknown".to_string();
+                state.unknown_reason = Some("dynamic-key".to_string());
+                continue;
+            };
+            let key_span = property.key.span();
+            let details = if section_name == "props" {
+                prop_details(&property.value, self.source)
+            } else {
+                None
+            };
+            self.public_names.push(public_name(
+                name.into_owned(),
+                section_name,
+                key_span.start as usize,
+                key_span.end as usize,
+                Some(property.value.span()),
+                details,
+            ));
         }
     }
 
@@ -421,43 +900,25 @@ impl<'semantic> ComponentVisitor<'semantic> {
             })
     }
 
-    fn collect_initializer<'a>(&mut self, expression: &Expression<'a>) {
+    fn collect_initializer<'a>(&mut self, expression: &Expression<'a>, authenticate_context: bool) {
         match expression.without_parentheses() {
             Expression::ArrowFunctionExpression(function) => {
-                self.collect_arrow(function);
+                self.collect_arrow(function, authenticate_context);
             }
             Expression::FunctionExpression(function) => {
-                self.collect_function(function);
+                self.collect_function(function, authenticate_context);
             }
             Expression::ObjectExpression(object) => {
-                // A later duplicate, spread, or computed key can replace init.
-                // Member errors require one statically selected callback.
-                if self.require_proven_initializer {
-                    let mut init_count = 0;
-                    for property in &object.properties {
-                        let Some(property) = property.as_property() else {
-                            return;
-                        };
-                        let Some(name) = property.key.static_name() else {
-                            return;
-                        };
-                        if name == "init" {
-                            init_count += 1;
-                            if property.kind != oxc_ast::ast::PropertyKind::Init {
-                                return;
-                            }
-                        }
-                    }
-                    if init_count != 1 {
-                        return;
-                    }
-                }
                 for property in &object.properties {
                     let Some(property) = property.as_property() else {
                         continue;
                     };
-                    if property.key.is_specific_static_name("init") {
-                        self.collect_initializer(&property.value);
+                    // The runtime renames `init` (the 0.5.1 spelling) to
+                    // `onServerRender`, so both receive the same context.
+                    if property.key.is_specific_static_name("init")
+                        || property.key.is_specific_static_name("onServerRender")
+                    {
+                        self.collect_initializer(&property.value, true);
                     }
                 }
             }
@@ -465,12 +926,18 @@ impl<'semantic> ComponentVisitor<'semantic> {
         }
     }
 
-    fn collect_arrow<'a>(&mut self, function: &oxc_ast::ast::ArrowFunctionExpression<'a>) {
+    fn collect_arrow<'a>(
+        &mut self,
+        function: &oxc_ast::ast::ArrowFunctionExpression<'a>,
+        authenticate_context: bool,
+    ) {
         let span = function.span();
         self.initializer_ranges
             .push((span.start as usize, span.end as usize));
-        self.bindings
-            .extend(component_context_bindings(&function.params));
+        if authenticate_context {
+            self.bindings
+                .extend(component_context_bindings(&function.params));
+        }
         if let Some((scope_name, scope_symbol)) = scope_parameter(&function.params) {
             let mut visitor = ScopeWriteVisitor::new(scope_name, scope_symbol, self.scoping);
             match &function.body {
@@ -482,12 +949,14 @@ impl<'semantic> ComponentVisitor<'semantic> {
         }
     }
 
-    fn collect_function<'a>(&mut self, function: &Function<'a>) {
+    fn collect_function<'a>(&mut self, function: &Function<'a>, authenticate_context: bool) {
         let span = function.span();
         self.initializer_ranges
             .push((span.start as usize, span.end as usize));
-        self.bindings
-            .extend(component_context_bindings(&function.params));
+        if authenticate_context {
+            self.bindings
+                .extend(component_context_bindings(&function.params));
+        }
         if let (Some((scope_name, scope_symbol)), Some(body)) =
             (scope_parameter(&function.params), &function.body)
         {
@@ -499,13 +968,28 @@ impl<'semantic> ComponentVisitor<'semantic> {
     }
 }
 
+/// Every field the runtime puts on the `onServerRender` context (`runCallback`
+/// in `citry/_vue/client.js`). A destructured name outside this list is not a
+/// context value, so it gets no binding.
+const COMPONENT_CONTEXT_NAMES: &[&str] = &[
+    "component",
+    "revision",
+    "onEvent",
+    "id",
+    "els",
+    "state",
+    "sendEvent",
+    "loading",
+    "error",
+    "i18n",
+];
+
 struct ComponentBindingCandidate {
     name: String,
     local_name: String,
     start: usize,
     end: usize,
     symbol_id: SymbolId,
-    direct: bool,
 }
 
 fn component_context_bindings(params: &FormalParameters<'_>) -> Vec<ComponentBindingCandidate> {
@@ -520,6 +1004,9 @@ fn component_context_bindings(params: &FormalParameters<'_>) -> Vec<ComponentBin
         .iter()
         .filter_map(|property| {
             let name = property.key.static_name()?;
+            if !COMPONENT_CONTEXT_NAMES.contains(&name.as_ref()) {
+                return None;
+            }
             let identifier = property.value.get_binding_identifier()?;
             let span = identifier.span();
             Some(ComponentBindingCandidate {
@@ -528,10 +1015,6 @@ fn component_context_bindings(params: &FormalParameters<'_>) -> Vec<ComponentBin
                 start: span.start as usize,
                 end: span.end as usize,
                 symbol_id: identifier.symbol_id(),
-                direct: matches!(
-                    property.value,
-                    oxc_ast::ast::BindingPattern::BindingIdentifier(_)
-                ),
             })
         })
         .collect()
@@ -672,13 +1155,362 @@ impl<'a> Visit<'a> for ScopeWriteVisitor<'_, '_> {
     }
 
     // Writes scheduled inside another function do not happen synchronously
-    // during component initialization, so they cannot prove Alpine bindings.
+    // during component initialization, so they cannot prove server bindings.
     fn visit_function(&mut self, _function: &Function<'a>, _flags: ScopeFlags) {}
 
     fn visit_arrow_function_expression(
         &mut self,
         _function: &oxc_ast::ast::ArrowFunctionExpression<'a>,
     ) {
+    }
+}
+
+fn section_object<'a>(
+    section: &str,
+    value: &'a Expression<'a>,
+) -> Option<&'a ObjectExpression<'a>> {
+    if section != "data" && section != "setup" {
+        return match value.without_parentheses() {
+            Expression::ObjectExpression(object) => Some(object),
+            _ => None,
+        };
+    }
+    match value.without_parentheses() {
+        Expression::ArrowFunctionExpression(function) => match &function.body {
+            ArrowFunctionBody::FunctionBody(body) => direct_return_object(&body.statements),
+            body => match body.to_expression().without_parentheses() {
+                Expression::ObjectExpression(object) => Some(object),
+                _ => None,
+            },
+        },
+        Expression::FunctionExpression(function) => function
+            .body
+            .as_ref()
+            .and_then(|body| direct_return_object(&body.statements)),
+        _ => None,
+    }
+}
+
+fn direct_return_object<'a>(
+    statements: &'a oxc_allocator::Vec<'a, oxc_ast::ast::Statement<'a>>,
+) -> Option<&'a ObjectExpression<'a>> {
+    if statements.len() != 1 {
+        return None;
+    }
+    let oxc_ast::ast::Statement::ReturnStatement(statement) = &statements[0] else {
+        return None;
+    };
+    match statement.argument.as_ref()?.without_parentheses() {
+        Expression::ObjectExpression(object) => Some(object),
+        _ => None,
+    }
+}
+
+fn public_name(
+    authored_name: String,
+    origin: &str,
+    name_start: usize,
+    name_end: usize,
+    value_span: Option<oxc_span::Span>,
+    prop_details: Option<(bool, bool, bool, Option<String>)>,
+) -> BrowserPublicName {
+    let exposed_name = if origin == "props" {
+        camelize_prop(&authored_name)
+    } else {
+        authored_name.clone()
+    };
+    BrowserPublicName {
+        authored_name,
+        exposed_name,
+        origin: origin.to_string(),
+        name_start,
+        name_end,
+        value_start: value_span.map(|span| span.start as usize),
+        value_end: value_span.map(|span| span.end as usize),
+        required: prop_details.as_ref().map(|details| details.0),
+        has_default: prop_details.as_ref().map(|details| details.1),
+        default_is_null: prop_details.as_ref().map(|details| details.2),
+        type_source: prop_details.and_then(|details| details.3),
+    }
+}
+
+fn prop_details(
+    value: &Expression<'_>,
+    source: &str,
+) -> Option<(bool, bool, bool, Option<String>)> {
+    let Expression::ObjectExpression(object) = value.without_parentheses() else {
+        return Some((
+            false,
+            false,
+            false,
+            Some(source[value.span().start as usize..value.span().end as usize].to_string()),
+        ));
+    };
+    let mut required = false;
+    let mut has_default = false;
+    let mut default_is_null = false;
+    let mut type_source = None;
+    for item in &object.properties {
+        let property = item.as_property()?;
+        if property.computed || property.key.static_name().is_none() {
+            return None;
+        }
+        if property.key.is_specific_static_name("required") {
+            required = matches!(property.value.without_parentheses(), Expression::BooleanLiteral(value) if value.value);
+        } else if property.key.is_specific_static_name("default") {
+            has_default = true;
+            default_is_null = matches!(
+                property.value.without_parentheses(),
+                Expression::NullLiteral(_)
+            );
+        } else if property.key.is_specific_static_name("type") {
+            let span = property.value.span();
+            type_source = Some(source[span.start as usize..span.end as usize].to_string());
+        }
+    }
+    Some((required, has_default, default_is_null, type_source))
+}
+
+fn camelize_prop(name: &str) -> String {
+    let mut result = String::with_capacity(name.len());
+    let mut characters = name.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character == '-'
+            && characters
+                .peek()
+                .is_some_and(|next| next.is_ascii_alphanumeric() || *next == '_')
+        {
+            result.push(characters.next().unwrap().to_ascii_uppercase());
+        } else {
+            result.push(character);
+        }
+    }
+    result
+}
+
+fn bound_instance_members(
+    section: &str,
+    value: &Expression<'_>,
+) -> Vec<BrowserComponentMemberReference> {
+    let mut visitor = InstanceMemberVisitor::default();
+    match (section, value.without_parentheses()) {
+        ("methods" | "computed", Expression::ObjectExpression(object)) => {
+            for item in &object.properties {
+                let Some(property) = item.as_property() else {
+                    continue;
+                };
+                if matches!(
+                    property.value.without_parentheses(),
+                    Expression::FunctionExpression(_)
+                ) {
+                    visitor.visit_expression(&property.value);
+                } else if section == "computed" {
+                    if let Expression::ObjectExpression(descriptor) =
+                        property.value.without_parentheses()
+                    {
+                        for descriptor_item in &descriptor.properties {
+                            let Some(descriptor_property) = descriptor_item.as_property() else {
+                                continue;
+                            };
+                            if !descriptor_property.computed
+                                && (descriptor_property.key.is_specific_static_name("get")
+                                    || descriptor_property.key.is_specific_static_name("set"))
+                                && matches!(
+                                    descriptor_property.value.without_parentheses(),
+                                    Expression::FunctionExpression(_)
+                                )
+                            {
+                                visitor.visit_expression(&descriptor_property.value);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ("data", Expression::FunctionExpression(_)) => visitor.visit_expression(value),
+        _ => {}
+    }
+    visitor.references
+}
+
+/// Options Vue calls with `this` set to the component instance, apart from
+/// the `methods`, `computed` and `data` sections handled with their names.
+const INSTANCE_BOUND_OPTIONS: [&str; 16] = [
+    "beforeCreate",
+    "created",
+    "beforeMount",
+    "mounted",
+    "beforeUpdate",
+    "updated",
+    "beforeUnmount",
+    "unmounted",
+    "activated",
+    "deactivated",
+    "errorCaptured",
+    "renderTracked",
+    "renderTriggered",
+    "serverPrefetch",
+    "provide",
+    "watch",
+];
+
+fn bound_hook_members(name: &str, value: &Expression<'_>) -> Vec<BrowserComponentMemberReference> {
+    let mut visitor = InstanceMemberVisitor::default();
+    match value.without_parentheses() {
+        Expression::FunctionExpression(_) => visitor.visit_expression(value),
+        Expression::ObjectExpression(object) if name == "watch" => {
+            for item in &object.properties {
+                let Some(property) = item.as_property() else {
+                    continue;
+                };
+                match property.value.without_parentheses() {
+                    Expression::FunctionExpression(_) => visitor.visit_expression(&property.value),
+                    // `{ handler() {...}, deep: true }` keeps its handler bound.
+                    Expression::ObjectExpression(descriptor) => {
+                        for descriptor_item in &descriptor.properties {
+                            let Some(descriptor_property) = descriptor_item.as_property() else {
+                                continue;
+                            };
+                            if !descriptor_property.computed
+                                && descriptor_property.key.is_specific_static_name("handler")
+                                && matches!(
+                                    descriptor_property.value.without_parentheses(),
+                                    Expression::FunctionExpression(_)
+                                )
+                            {
+                                visitor.visit_expression(&descriptor_property.value);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+    visitor.references
+}
+
+#[derive(Default)]
+struct InstanceMemberVisitor {
+    ordinary_function_depth: usize,
+    references: Vec<BrowserComponentMemberReference>,
+}
+
+struct AliasMemberVisitor<'symbols, 'semantic> {
+    scoping: &'semantic Scoping,
+    component_symbols: &'symbols [SymbolId],
+    references: Vec<BrowserComponentMemberReference>,
+}
+
+impl<'a> Visit<'a> for AliasMemberVisitor<'_, '_> {
+    fn visit_static_member_expression(
+        &mut self,
+        member: &oxc_ast::ast::StaticMemberExpression<'a>,
+    ) {
+        if let Some(identifier) = member.object.get_identifier_reference() {
+            let symbol = self
+                .scoping
+                .get_reference(identifier.reference_id())
+                .symbol_id();
+            if symbol.is_some_and(|symbol| self.component_symbols.contains(&symbol)) {
+                let span = member.property.span();
+                self.references.push(BrowserComponentMemberReference {
+                    receiver: "component".to_string(),
+                    name: member.property.name.to_string(),
+                    start: span.start as usize,
+                    end: span.end as usize,
+                });
+            }
+        }
+        walk::walk_static_member_expression(self, member);
+    }
+}
+
+/// Find local variables that hold a proven `$i18n` member.
+///
+/// A variable qualifies when its declaration is a plain identifier whose
+/// initializer is exactly `receiver.$i18n` for an already proven receiver, and
+/// nothing assigns or redeclares it afterwards. A `let` or `var` that is never
+/// reassigned or redeclared holds the same service as a `const`, so all three
+/// count.
+/// Destructuring, optional chaining, computed keys, and a variable copied from
+/// another variable are not followed; their calls are not preloaded.
+struct I18nAliasVisitor<'members, 'semantic> {
+    scoping: &'semantic Scoping,
+    // Proven member reads. Only a `$i18n` property span in this list may
+    // start an alias, so an alias inherits the receiver proof those reads have.
+    members: &'members [BrowserComponentMemberReference],
+    // The aliased member's receiver and the variable's symbol.
+    aliases: Vec<(String, SymbolId)>,
+}
+
+impl<'a> Visit<'a> for I18nAliasVisitor<'_, '_> {
+    fn visit_variable_declarator(&mut self, declarator: &VariableDeclarator<'a>) {
+        let alias = match (
+            &declarator.id,
+            declarator
+                .init
+                .as_ref()
+                .map(Expression::without_parentheses),
+        ) {
+            (
+                oxc_ast::ast::BindingPattern::BindingIdentifier(identifier),
+                Some(Expression::StaticMemberExpression(member)),
+            ) if member.property.name == "$i18n" => {
+                let span = member.property.span;
+                self.members
+                    .iter()
+                    .find(|reference| {
+                        reference.name == "$i18n"
+                            && reference.start == span.start as usize
+                            && reference.end == span.end as usize
+                    })
+                    .map(|reference| (reference.receiver.clone(), identifier.symbol_id()))
+            }
+            _ => None,
+        };
+        // A later assignment or a second `var` declaration could replace the
+        // service before a call runs, so such a variable proves nothing.
+        if let Some((receiver, symbol)) = alias {
+            if !self.scoping.symbol_is_mutated(symbol)
+                && self.scoping.symbol_redeclarations(symbol).is_empty()
+            {
+                self.aliases.push((receiver, symbol));
+            }
+        }
+        walk::walk_variable_declarator(self, declarator);
+    }
+}
+
+impl<'a> Visit<'a> for InstanceMemberVisitor {
+    fn visit_function(&mut self, function: &Function<'a>, flags: ScopeFlags) {
+        self.ordinary_function_depth += 1;
+        if self.ordinary_function_depth == 1 {
+            walk::walk_function(self, function, flags);
+        }
+        self.ordinary_function_depth -= 1;
+    }
+
+    fn visit_static_member_expression(
+        &mut self,
+        member: &oxc_ast::ast::StaticMemberExpression<'a>,
+    ) {
+        if self.ordinary_function_depth <= 1
+            && matches!(
+                member.object.without_parentheses(),
+                Expression::ThisExpression(_)
+            )
+        {
+            let span = member.property.span();
+            self.references.push(BrowserComponentMemberReference {
+                receiver: "this".to_string(),
+                name: member.property.name.to_string(),
+                start: span.start as usize,
+                end: span.end as usize,
+            });
+        }
+        walk::walk_static_member_expression(self, member);
     }
 }
 
@@ -734,74 +1566,100 @@ mod tests {
     }
 
     #[test]
-    fn component_scope_writes_cover_direct_static_forms_but_not_rebinding_or_later_work() {
-        let source = r#"
-$component(({ scope: alpineScope }) => {
-  alpineScope.title = data.title;
-  alpineScope["count"] = 2;
-  Object.assign(alpineScope, { active: true, "display-name": label, ...other });
-  alpineScope = other;
-  alpineScope.afterRebind = false;
-  { const alpineScope = {}; alpineScope.shadowed = true; }
-  queueMicrotask(() => { alpineScope.late = true; });
-});
-"#;
+    fn binding_pattern_reports_nested_bindings_and_initializer_references() {
+        let source = "{ item: local = fallback, nested: [first, ...rest], [key]: computed }";
+        let analysis = analyze_browser_binding_pattern(source);
 
-        let writes = analyze_component_scope_writes(source);
-
+        assert!(analysis.valid);
         assert_eq!(
-            writes
+            analysis
+                .bindings
                 .iter()
-                .map(|write| write.name.as_str())
+                .map(|item| item.name.as_str())
                 .collect::<Vec<_>>(),
-            ["title", "count", "active", "display-name"]
+            ["local", "first", "rest", "computed"]
         );
-        assert!(writes.iter().all(|write| {
-            source.get(write.name_start..write.name_end).is_some()
-                && source.get(write.value_start..write.value_end).is_some()
-        }));
+        assert_eq!(
+            analysis
+                .references
+                .iter()
+                .map(|item| item.name.as_str())
+                .collect::<Vec<_>>(),
+            ["fallback", "key"]
+        );
+        for item in analysis.bindings.iter().chain(&analysis.references) {
+            assert_eq!(
+                &source.as_bytes()[item.start..item.end],
+                item.name.as_bytes()
+            );
+        }
     }
 
     #[test]
-    fn component_scope_writes_require_the_runtime_component_helper() {
-        let source = r#"
-const $component = (callback) => callback({ scope: {} });
-$component(({ scope }) => { scope.fake = true; });
-"#;
+    fn binding_pattern_offsets_are_authored_utf8_bytes_and_invalid_is_empty() {
+        let source = "{ café: résumé = fallback }";
+        let analysis = analyze_browser_binding_pattern(source);
+        assert!(analysis.valid);
+        assert_eq!(analysis.bindings[0].name, "résumé");
+        assert_eq!(
+            &source.as_bytes()[analysis.bindings[0].start..analysis.bindings[0].end],
+            "résumé".as_bytes()
+        );
+        assert_eq!(analysis.references[0].name, "fallback");
 
-        assert!(analyze_component_scope_writes(source).is_empty());
+        let invalid = analyze_browser_binding_pattern("{ item:");
+        assert!(!invalid.valid);
+        assert!(invalid.bindings.is_empty());
+        assert!(invalid.references.is_empty());
+
+        for escaped in ["x) => {}; (y", "x) => ((y"] {
+            let escaped = analyze_browser_binding_pattern(escaped);
+            assert!(!escaped.valid);
+            assert!(escaped.bindings.is_empty());
+            assert!(escaped.references.is_empty());
+        }
     }
 
     #[test]
-    fn component_config_init_is_analyzed_but_dynamic_scope_keys_are_not() {
-        let source = r#"
-$component({
-  props: {},
-  init({ scope }) {
-    scope.ready = true;
-    scope[key] = false;
-  },
-});
-"#;
-
+    fn binding_pattern_accepts_vue_parameter_lists_and_top_level_rest() {
+        let parameters = analyze_browser_binding_pattern("x, y = fallback");
+        assert!(parameters.valid);
         assert_eq!(
-            analyze_component_scope_writes(source)
+            parameters
+                .bindings
                 .iter()
-                .map(|write| write.name.as_str())
+                .map(|item| item.name.as_str())
                 .collect::<Vec<_>>(),
-            ["ready"]
+            ["x", "y"]
         );
+        assert_eq!(parameters.references[0].name, "fallback");
+
+        let rest = analyze_browser_binding_pattern("...args");
+        assert!(rest.valid);
+        assert_eq!(rest.bindings[0].name, "args");
+        assert!(rest.references.is_empty());
+
+        let empty = analyze_browser_binding_pattern("");
+        assert!(empty.valid);
+        assert!(empty.bindings.is_empty());
+        assert!(empty.references.is_empty());
+
+        for classic_name in ["await", "yield", "eval", "arguments"] {
+            let classic = analyze_browser_binding_pattern(classic_name);
+            assert!(classic.valid, "classic Vue parameter {classic_name}");
+            assert_eq!(classic.bindings[0].name, classic_name);
+        }
     }
 
     #[test]
     fn component_analysis_reports_context_bindings_and_only_initializer_free_names() {
         let source = r#"
 const outside = missingOutside;
-$component(({ scope: alpineScope, data, props: clientProps }) => {
+$component({ onServerRender({ component: current, revision, onEvent: listen, data }) {
   const local = data.title;
-  alpineScope.ready = local;
-  console.log(clientProps, missingInside);
-});
+  current.ready = local;
+  listen("cart:changed", detail => console.log(revision, detail, missingInside));
+} });
 "#;
 
         let analysis = analyze_component_source(source);
@@ -814,9 +1672,9 @@ $component(({ scope: alpineScope, data, props: clientProps }) => {
                 .map(|binding| (binding.name.as_str(), binding.local_name.as_str()))
                 .collect::<Vec<_>>(),
             [
-                ("scope", "alpineScope"),
-                ("data", "data"),
-                ("props", "clientProps")
+                ("component", "current"),
+                ("revision", "revision"),
+                ("onEvent", "listen"),
             ]
         );
         assert!(analysis
@@ -830,14 +1688,6 @@ $component(({ scope: alpineScope, data, props: clientProps }) => {
                 .map(|reference| reference.name.as_str())
                 .collect::<Vec<_>>(),
             ["console", "missingInside"]
-        );
-        assert_eq!(
-            analysis
-                .scope_writes
-                .iter()
-                .map(|write| write.name.as_str())
-                .collect::<Vec<_>>(),
-            ["ready"]
         );
     }
 
@@ -853,6 +1703,543 @@ $component(({ scope }) => { console.log(scope, missing); });
         assert!(analysis.valid);
         assert!(analysis.references.is_empty());
         assert!(analysis.bindings.is_empty());
-        assert!(analysis.scope_writes.is_empty());
+    }
+
+    #[test]
+    fn component_options_report_authenticated_calls_sections_and_public_names() {
+        let source = r#"const prefix = 1;
+$component /* kept */ ({
+  props: ["display-name", "count"],
+  methods: { save() {}, ...extraMethods },
+  computed: { total() { return this.$i18n.locale.length } },
+  inject: { service: "service" },
+  data() { return { ready: true } },
+  setup: () => ({ selected: prefix }),
+});"#;
+        let analysis = analyze_component_source(source);
+
+        assert!(analysis.valid);
+        assert_eq!(analysis.component_calls.len(), 1);
+        let call = &analysis.component_calls[0];
+        assert_eq!(&source[call.callee_start..call.callee_end], "$component");
+        assert_eq!(&source[call.open_paren_end - 1..call.open_paren_end], "(");
+        assert_eq!(
+            analysis
+                .public_names
+                .iter()
+                .map(|name| (name.origin.as_str(), name.exposed_name.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("props", "displayName"),
+                ("props", "count"),
+                ("methods", "save"),
+                ("computed", "total"),
+                ("inject", "service"),
+                ("data", "ready"),
+                ("setup", "selected"),
+            ]
+        );
+        assert_eq!(
+            analysis
+                .sections
+                .iter()
+                .find(|section| section.name == "methods")
+                .map(|section| (section.state.as_str(), section.unknown_reason.as_deref())),
+            Some(("unknown", Some("object-spread")))
+        );
+        assert_eq!(
+            analysis
+                .member_references
+                .iter()
+                .map(|reference| (reference.receiver.as_str(), reference.name.as_str()))
+                .collect::<Vec<_>>(),
+            [("this", "$i18n")]
+        );
+    }
+
+    fn emits_facts(source: &str) -> (Vec<(String, Option<String>)>, Vec<String>) {
+        let analysis = analyze_component_source(source);
+        assert!(analysis.valid);
+        (
+            analysis
+                .emits_sections
+                .iter()
+                .map(|section| (section.state.clone(), section.unknown_reason.clone()))
+                .collect(),
+            analysis
+                .emit_names
+                .iter()
+                .map(|name| source[name.start..name.end].to_string())
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn emits_sections_report_declared_event_names() {
+        let complete = |names: &[&str]| {
+            (
+                vec![("complete".to_string(), None)],
+                names
+                    .iter()
+                    .map(|name| (*name).to_string())
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(
+            emits_facts("$component({ emits: ['drop-task', \"open\"] })"),
+            complete(&["'drop-task'", "\"open\""])
+        );
+        assert_eq!(
+            emits_facts(
+                "$component({ emits: { 'drop-task'(id) { return true }, open: null, [key]: null } })"
+            ),
+            (
+                vec![("unknown".to_string(), Some("computed-key".to_string()))],
+                Vec::new()
+            )
+        );
+        assert_eq!(
+            emits_facts("$component({ emits: { 'drop-task': (id) => true, open: null } })"),
+            complete(&["'drop-task'", "open"])
+        );
+        // A later explicit `emits` replaces an earlier spread's contribution.
+        assert_eq!(
+            emits_facts("$component({ ...base, emits: ['a'] })"),
+            complete(&["'a'"])
+        );
+        for (source, reason) in [
+            ("$component({ emits: names })", "non-literal-section"),
+            ("$component({ emits: ['a', name] })", "non-literal-entry"),
+            ("$component({ emits: ['a'], ...more })", "top-level-spread"),
+            ("$component({ emits: { ...base } })", "object-spread"),
+            (
+                "$component({ emits: ['a'], mixins: [shared] })",
+                "inherited-options",
+            ),
+            ("$component(options)", "indirect-options"),
+        ] {
+            assert_eq!(
+                emits_facts(source),
+                (
+                    vec![("unknown".to_string(), Some(reason.to_string()))],
+                    Vec::new()
+                ),
+                "{source}"
+            );
+        }
+        for source in [
+            "$component({ data() { return {} } })",
+            "$component(({ component }) => {})",
+        ] {
+            assert_eq!(
+                emits_facts(source),
+                (vec![("absent".to_string(), None)], Vec::new()),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn emit_calls_on_the_instance_are_member_references() {
+        let source = "$component({ methods: { m() { this.$emit('a', 1) } }, \
+            onServerRender({ component }) { component.$emit('b') } })";
+        let analysis = analyze_component_source(source);
+        assert_eq!(
+            analysis
+                .member_references
+                .iter()
+                .map(|reference| (
+                    reference.receiver.as_str(),
+                    &source[reference.start..reference.end]
+                ))
+                .collect::<Vec<_>>(),
+            [("this", "$emit"), ("component", "$emit")]
+        );
+    }
+
+    #[test]
+    fn later_top_level_spread_invalidates_sections_until_explicitly_restored() {
+        let analysis = analyze_component_source(
+            "$component({ props: { first: Number }, ...other, props: { final: Number } })",
+        );
+        let props = analysis
+            .sections
+            .iter()
+            .find(|section| section.name == "props")
+            .unwrap();
+        assert_eq!(props.state, "complete");
+        assert_eq!(
+            analysis
+                .public_names
+                .iter()
+                .filter(|name| name.origin == "props")
+                .map(|name| name.authored_name.as_str())
+                .collect::<Vec<_>>(),
+            ["final"]
+        );
+    }
+
+    #[test]
+    fn computed_top_level_key_invalidates_every_earlier_section() {
+        let analysis = analyze_component_source(
+            "$component({ props: { first: Number }, methods: { save() {} }, [section]: replacement })",
+        );
+        assert!(analysis.public_names.is_empty());
+        assert!(analysis.sections.iter().all(|section| {
+            section.state == "unknown"
+                && section.unknown_reason.as_deref() == Some("computed-top-level-key")
+        }));
+    }
+
+    #[test]
+    fn prop_descriptor_dynamic_members_keep_name_but_invalidate_details() {
+        for source in [
+            "$component({ props: { value: { type: String, ...details } } })",
+            "$component({ props: { value: { type: String, [key]: option } } })",
+        ] {
+            let analysis = analyze_component_source(source);
+            let value = analysis
+                .public_names
+                .iter()
+                .find(|name| name.authored_name == "value")
+                .unwrap();
+            assert_eq!(
+                (
+                    value.required,
+                    value.has_default,
+                    value.type_source.as_deref()
+                ),
+                (None, None, None)
+            );
+        }
+    }
+
+    #[test]
+    fn vue_prop_camelization_preserves_repeated_hyphen() {
+        let analysis = analyze_component_source(
+            "$component({ props: ['foo--bar', 'foo-_bar', 'plain_name'] })",
+        );
+        assert_eq!(
+            analysis
+                .public_names
+                .iter()
+                .map(|name| name.exposed_name.as_str())
+                .collect::<Vec<_>>(),
+            ["foo-Bar", "foo_bar", "plain_name"]
+        );
+    }
+
+    #[test]
+    fn indirect_options_keep_every_namespace_unknown() {
+        let analysis = analyze_component_source("$component(options)");
+
+        assert!(analysis.public_names.is_empty());
+        assert!(analysis.sections.iter().all(|section| {
+            section.state == "unknown"
+                && section.unknown_reason.as_deref() == Some("indirect-options")
+        }));
+    }
+
+    #[test]
+    fn callback_literals_declare_no_options_names() {
+        for source in [
+            "$component(({ component }) => { component.ready })",
+            "$component(function ({ component }) { component.ready })",
+        ] {
+            let analysis = analyze_component_source(source);
+
+            assert!(analysis.public_names.is_empty());
+            assert_eq!(analysis.sections.len(), 6);
+            assert!(analysis
+                .sections
+                .iter()
+                .all(|section| section.state == "absent" && section.unknown_reason.is_none()));
+            assert_eq!(analysis.member_references.len(), 1);
+        }
+    }
+
+    #[test]
+    fn duplicate_sections_keep_only_the_effective_names_and_member_references() {
+        let analysis = analyze_component_source(
+            "$component({ methods: { old() { return this.oldValue } }, methods: { current() { return this.currentValue } } })",
+        );
+
+        assert_eq!(
+            analysis
+                .public_names
+                .iter()
+                .map(|name| name.authored_name.as_str())
+                .collect::<Vec<_>>(),
+            ["current"]
+        );
+        assert_eq!(
+            analysis
+                .member_references
+                .iter()
+                .map(|reference| reference.name.as_str())
+                .collect::<Vec<_>>(),
+            ["currentValue"]
+        );
+    }
+
+    #[test]
+    fn this_is_authenticated_only_in_vue_bound_options_functions() {
+        let analysis = analyze_component_source(
+            "$component({ setup() { return { value: this.setupValue } }, onServerRender() { return this.serverValue }, computed: { doubled: { get() { return this.getValue }, set(value) { this.setValue = value } } } })",
+        );
+
+        assert_eq!(
+            analysis
+                .member_references
+                .iter()
+                .map(|reference| reference.name.as_str())
+                .collect::<Vec<_>>(),
+            ["getValue", "setValue"]
+        );
+    }
+
+    #[test]
+    fn lifecycle_hooks_and_watch_handlers_bind_this() {
+        let analysis = analyze_component_source(
+            "$component({ mounted() { const i = this.$i18n; i.tr('m'); this.hookValue }, provide() { return { p: this.provided } }, watch: { a() { this.watchValue }, b: { handler() { this.handlerValue }, deep: true } }, emits: ['x'] })",
+        );
+
+        let mut names = analysis
+            .member_references
+            .iter()
+            .map(|reference| reference.name.as_str())
+            .collect::<Vec<_>>();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            [
+                "$i18n",
+                "$i18n",
+                "handlerValue",
+                "hookValue",
+                "provided",
+                "watchValue"
+            ]
+        );
+    }
+
+    #[test]
+    fn only_options_vue_calls_on_the_instance_bind_this() {
+        let analysis = analyze_component_source(
+            "$component({ asyncData() { this.custom }, customOption: function () { this.other }, created() { this.known } })",
+        );
+
+        let names = analysis
+            .member_references
+            .iter()
+            .map(|reference| reference.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["known"]);
+    }
+
+    #[test]
+    fn mixins_and_extends_leave_every_section_unknown() {
+        for source in [
+            "$component({ mixins: [shared], methods: { m() {} } })",
+            "$component({ extends: base, methods: { m() {} } })",
+        ] {
+            let analysis = analyze_component_source(source);
+            assert!(analysis.valid);
+            assert!(analysis.sections.iter().all(|section| {
+                section.state == "unknown"
+                    && section.unknown_reason.as_deref() == Some("inherited-options")
+            }));
+        }
+    }
+
+    #[test]
+    fn restored_context_fields_are_bindings_and_unknown_names_are_not() {
+        let source = r#"$component({ init({ id, els: roots, state, sendEvent: send, loading, error, i18n, scope, data }) {
+  send("save", { id, count: roots.length, state, busy: loading(), failed: error(), i18n, scope, data });
+} });"#;
+        let analysis = analyze_component_source(source);
+
+        assert!(analysis.valid);
+        assert_eq!(
+            analysis
+                .bindings
+                .iter()
+                .map(|binding| (
+                    binding.name.as_str(),
+                    binding.local_name.as_str(),
+                    binding.references.len()
+                ))
+                .collect::<Vec<_>>(),
+            [
+                ("id", "id", 1),
+                ("els", "roots", 1),
+                ("state", "state", 1),
+                ("sendEvent", "send", 1),
+                ("loading", "loading", 1),
+                ("error", "error", 1),
+                ("i18n", "i18n", 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn init_and_on_server_render_authenticate_context_aliases() {
+        let analysis = analyze_component_source(
+            "$component({ init({ onEvent: ignored }) { ignored(\"init\", () => {}); } }); $component({ onServerRender({ component: direct, onEvent: listen }) { direct.x; listen(\"server\", () => {}); } }); $component({ onServerRender({ component: current }) { current.z } })",
+        );
+        assert_eq!(
+            analysis
+                .bindings
+                .iter()
+                .map(|binding| binding.local_name.as_str())
+                .collect::<Vec<_>>(),
+            ["ignored", "direct", "listen", "current"]
+        );
+    }
+
+    #[test]
+    fn i18n_alias_reads_are_reported_as_i18n_members() {
+        let source = r#"$component({
+  onServerRender: ({ component: e }) => {
+    const t = e.$el, i = e.$i18n;
+    i.bind({});
+    let j = (e.$i18n);
+    j?.tr("a");
+    var v = e.$i18n;
+    v.tr("b");
+    { const e = other; const k = e.$i18n; k.bind({}); }
+  },
+  methods: { run() { const m = this.$i18n; return m.tr("c"); } },
+})"#;
+        let analysis = analyze_component_source(source);
+
+        let found = analysis
+            .member_references
+            .iter()
+            .filter(|reference| reference.name == "$i18n")
+            .map(|reference| {
+                (
+                    reference.receiver.as_str(),
+                    &source[reference.start..reference.end],
+                )
+            })
+            .collect::<Vec<_>>();
+        // Each variable is reported at the `$i18n` read in its initializer and
+        // at every later read of the variable; the alias of a shadowing `e` is
+        // not.
+        assert_eq!(
+            found,
+            [
+                ("component", "$i18n"),
+                ("component", "i"),
+                ("component", "$i18n"),
+                ("component", "j"),
+                ("component", "$i18n"),
+                ("component", "v"),
+                ("this", "$i18n"),
+                ("this", "m"),
+            ]
+        );
+    }
+
+    #[test]
+    fn i18n_alias_is_not_followed_in_unsupported_forms() {
+        let source = r#"$component({
+  onServerRender: ({ component }) => {
+    let a = component.$i18n;
+    a = other;
+    a.bind({});
+    var b = component.$i18n;
+    var b = other;
+    b.bind({});
+    const { bind } = component.$i18n;
+    bind({});
+    const c = component?.$i18n;
+    c.bind({});
+    const d = component["$i18n"];
+    d.bind({});
+    const f = component.$i18n;
+    const g = f;
+    g.bind({});
+  },
+})"#;
+        let analysis = analyze_component_source(source);
+
+        let found = analysis
+            .member_references
+            .iter()
+            .filter(|reference| reference.name == "$i18n")
+            .map(|reference| &source[reference.start..reference.end])
+            .collect::<Vec<_>>();
+        // Only the member reads themselves remain proven. The one alias read
+        // is `f` copied into `g`; `g.bind` is not followed.
+        assert_eq!(found, ["$i18n", "$i18n", "$i18n", "$i18n", "$i18n", "f"]);
+    }
+
+    #[test]
+    fn server_callback_component_alias_members_are_scope_authenticated() {
+        let analysis = analyze_component_source(
+            "$component({ onServerRender({ component: instance, revision, onEvent: subscribe }) { instance.$i18n.resolve(revision); { const instance = other; instance.$i18n; } } })",
+        );
+
+        assert_eq!(
+            analysis
+                .bindings
+                .iter()
+                .map(|binding| (binding.name.as_str(), binding.local_name.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("component", "instance"),
+                ("revision", "revision"),
+                ("onEvent", "subscribe"),
+            ]
+        );
+        assert_eq!(
+            analysis
+                .member_references
+                .iter()
+                .map(|reference| (reference.receiver.as_str(), reference.name.as_str()))
+                .collect::<Vec<_>>(),
+            [("component", "$i18n")]
+        );
+    }
+
+    #[test]
+    fn options_this_and_helper_selection_follow_javascript_scope() {
+        let source = r#"
+const $component = value => value;
+$component({ methods: { fake() { return this.$i18n } } });
+if (enabled) globalThis.$component({ methods: { property() { return this.$i18n } } });
+if (enabled) realComponent({});
+"#;
+        let shadowed = analyze_component_source(source);
+        assert!(shadowed.component_calls.is_empty());
+        assert!(shadowed.member_references.is_empty());
+
+        let source = r#"if (enabled) $component({
+  props: { "naïve-name": { type: String } },
+  data: () => ({ lexical: this.$i18n }),
+  methods: {
+    regular() { (() => this.$i18n)(); function nested() { return this.$i18n } },
+  },
+});"#;
+        let analysis = analyze_component_source(source);
+        assert_eq!(analysis.component_calls.len(), 1);
+        assert_eq!(
+            analysis
+                .public_names
+                .iter()
+                .find(|name| name.origin == "props")
+                .map(|name| name.exposed_name.as_str()),
+            Some("naïveName")
+        );
+        assert_eq!(
+            analysis
+                .member_references
+                .iter()
+                .map(|reference| reference.name.as_str())
+                .collect::<Vec<_>>(),
+            ["$i18n"]
+        );
     }
 }

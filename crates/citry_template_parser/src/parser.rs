@@ -1218,7 +1218,7 @@ fn parse_html_attribute(
                     return Err(context.error_from_local_span(
                         attr_span,
                         format!(
-                            "'{}' takes no value. Write the bare marker ('{}') to opt the element subtree or component range out of morphing.",
+                            "'{}' takes no value. Write the bare marker ('{}') on an HTML element to keep its contents as the server first rendered them.",
                             META_ATTR_IGNORE, META_ATTR_IGNORE
                         ),
                     ));
@@ -1644,8 +1644,16 @@ fn validate_node(
     validate_citry_tag_spelling(node, context)?;
     validate_fill_placement(node, tag_stack, context)?;
     validate_client_props_placement(node, context)?;
+    validate_component_tag_vue_directives(node, context)?;
+    validate_slot_tag_vue_directives(node, context)?;
     validate_attributes_present(node, context)?;
     validate_meta_attr_placement(node, context)?;
+    validate_ignored_element_contents(node, tag_stack, context)?;
+    validate_vue_listener_modifiers(node, context)?;
+    validate_element_once_memo(node, context)?;
+    validate_element_vue_directives(node, context)?;
+    validate_vue_builtin_component_tag(node, context)?;
+    validate_vue_binding_python_conflicts(node, context)?;
     validate_attribute_conflicts(node, context)?;
     validate_attribute_values(node, context)?;
     validate_fill_names(node, fill_nodes, context)?;
@@ -1708,16 +1716,8 @@ fn validate_citry_tag_name_spelling(
     Ok(())
 }
 
-/// Validate the two authored forms of Citry's client props directive.
-///
-/// The direct form carries a browser expression as inert text. The
-/// server-dynamic form evaluates Python and supplies that complete browser
-/// expression. Both belong only on component call sites; `<c-element>` and
-/// ordinary tags render plain HTML and cannot own the directive.
+/// Reject the retired client-props aliases with the native Vue replacement.
 fn validate_client_props_placement(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
-    let tag_name = node.tag_name();
-    let is_component_boundary = is_component_boundary_tag(tag_name);
-
     for attr in node.attrs() {
         let name = attr.key.content.as_str();
         let is_case_variant = name.eq_ignore_ascii_case(CLIENT_PROPS_ATTR)
@@ -1726,41 +1726,10 @@ fn validate_client_props_placement(node: &Node, context: &ParserContext) -> Resu
             continue;
         }
 
-        let (line, col) = attr.token.line_col;
-        if name != CLIENT_PROPS_ATTR && name != DYNAMIC_CLIENT_PROPS_ATTR {
-            return Err(context.error_from_token(
-                &attr.token,
-                format!(
-                    "Citry client directive names are lowercase. Write '{}' or '{}' instead of '{}'.",
-                    CLIENT_PROPS_ATTR, DYNAMIC_CLIENT_PROPS_ATTR, name
-                ),
-            ));
-        }
-
-        if name == CLIENT_PROPS_ATTR
-            && !attr
-                .inner_value
-                .as_ref()
-                .is_some_and(|value| !value.content.trim().is_empty())
-        {
-            return Err(context.error_from_token(
-                &attr.token,
-                format!(
-                    "'{}' must have a non-empty client expression value, e.g. {}=\"{{ theme: currentTheme }}\".",
-                    CLIENT_PROPS_ATTR, CLIENT_PROPS_ATTR
-                ),
-            ));
-        }
-
-        if !is_component_boundary {
-            return Err(context.error_from_token(
-                &attr.token,
-                format!(
-                    "'{}' is not supported on '<{}>' (line {}, column {}). It is a client props directive and belongs on a Citry component tag, including '<c-component>'.",
-                    name, tag_name, line, col
-                ),
-            ));
-        }
+        return Err(context.error_from_token(
+            &attr.token,
+            format!("'{name}' was removed; use native Vue ':prop' or 'v-bind' syntax"),
+        ));
     }
 
     Ok(())
@@ -1778,11 +1747,298 @@ fn is_component_boundary_tag(tag_name: &str) -> bool {
 
 fn is_component_boundary_handler_attr(name: &str) -> bool {
     let resolved = name.strip_prefix("c-").unwrap_or(name);
-    resolved.starts_with('@') || resolved.starts_with("x-on:")
+    resolved.starts_with('@')
 }
 
 fn is_component_tag_client_binding_attr(name: &str) -> bool {
-    is_client_props_attr(name) || is_component_boundary_handler_attr(name)
+    is_client_props_attr(name)
+        || is_component_boundary_handler_attr(name)
+        || name == "v-bind"
+        || name == "v-on"
+        || name == "ref"
+        || name.starts_with(':')
+        || name.starts_with('@')
+        || name.starts_with("v-bind:")
+        || name.starts_with("v-on:")
+        || is_component_tag_vue_directive(name)
+}
+
+/// Vue's own directives that never pass through a component tag. Every
+/// other `v-` name that is not listed here and not handled above is a custom
+/// directive the caller registered.
+const VUE_BUILT_IN_DIRECTIVES: &[&str] = &[
+    "bind", "on", "show", "if", "else-if", "else", "for", "model", "slot", "html", "text", "once",
+    "memo", "cloak", "pre", "is",
+];
+
+/// Whether a `v-` directive other than `v-bind`/`v-on` is carried by a
+/// component tag, in any argument or modifier form.
+///
+/// The browser applies these to the generated Vue component call: `v-if`,
+/// `v-else-if`, and `v-else` decide whether the call renders, `v-model`
+/// becomes a `modelValue` prop and an `update:modelValue` listener, and
+/// `v-show` or a custom directive reaches the element the child renders at
+/// its root. `validate_component_tag_vue_directives` rejects the argument
+/// and modifier forms these directives do not accept, so it can name the fix.
+fn is_component_tag_vue_directive(name: &str) -> bool {
+    // Only a `v-` spelling can name one of these; `#name` and `.name` are
+    // the slot and DOM-property shorthands.
+    if !name.starts_with("v-") {
+        return false;
+    }
+    match vue_directive_name(name) {
+        Some("show" | "if" | "else-if" | "else" | "model") => true,
+        Some(directive) => is_custom_vue_directive(directive),
+        None => false,
+    }
+}
+
+/// Whether a directive name (without its `v-`) names a custom directive.
+///
+/// `v-c-*` and `v-citry-*` belong to Citry's own browser runtime (the
+/// translation and Events bindings), so a component tag does not pass them
+/// on as a caller's directive.
+///
+/// The name is compared in lowercase, so `v-If` is not taken for a custom
+/// directive that Vue would look up and skip without an error.
+fn is_custom_vue_directive(directive: &str) -> bool {
+    let lowercase = directive.to_ascii_lowercase();
+    !directive.is_empty()
+        && !VUE_BUILT_IN_DIRECTIVES.contains(&lowercase.as_str())
+        && !lowercase.starts_with("c-")
+        && !lowercase.starts_with("citry-")
+}
+
+/// The Vue directive a component-tag attribute spells, without its argument
+/// or modifiers: `v-model:title.trim` gives `model`, the slot shorthand
+/// `#header` gives `slot`, and the DOM-property shorthand `.value` gives
+/// `prop`. Citry's own `#c-*` metadata and every non-directive name give
+/// `None`.
+fn vue_directive_name(name: &str) -> Option<&str> {
+    if let Some(argument) = name.strip_prefix('#') {
+        return (!argument.starts_with("c-")).then_some("slot");
+    }
+    if name.len() > 1 && name.starts_with('.') {
+        return Some("prop");
+    }
+    let directive = name.strip_prefix("v-")?;
+    Some(&directive[..directive.find([':', '.']).unwrap_or(directive.len())])
+}
+
+/// Like `vue_directive_name`, but also returns a directive for two spellings
+/// that a component tag or `<c-slot>` would otherwise pass on as a plain
+/// attribute without a trace. An uppercase `V-` prefix names its directive, because HTML treats
+/// `V-SHOW` as the same name as `v-show`. The `^title` key gives `attr`,
+/// because Vue's runtime reads it as `v-bind:title.attr`. Mirrors
+/// `_vue_directive_name` in `citry.client_directives`.
+fn citry_tag_vue_directive_name(name: &str) -> Option<&str> {
+    // A bare `^` is rejected too, because no plain attribute has that name.
+    if name.starts_with('^') {
+        return Some("attr");
+    }
+    if let Some(directive) = name.strip_prefix("V-") {
+        return Some(&directive[..directive.find([':', '.']).unwrap_or(directive.len())]);
+    }
+    vue_directive_name(name)
+}
+
+/// What to write instead of a Vue directive that a component tag cannot carry.
+///
+/// Shared wording with `citry.client_directives`, which reports the same
+/// directives when they arrive at render time through `c-bind`.
+fn component_tag_directive_hint(directive: &str) -> &'static str {
+    match directive {
+        "if" | "else-if" | "else" => {
+            "Write 'v-if', 'v-else-if', and 'v-else' without an argument or modifiers."
+        }
+        "for" => "A browser 'v-for' cannot create Citry components. Repeat the component with '<c-for>'.",
+        "slot" => "Pass slot content with '<c-fill name=\"...\">' inside the component tag.",
+        "html" | "text" => {
+            "This directive would replace the child's own content. Pass the value as a prop or through '<c-fill>' and render it inside the child."
+        }
+        "show" => "Write 'v-show' without an argument or modifiers.",
+        "model" => "Name the prop after 'v-model:', or write 'v-model' alone for 'modelValue'.",
+        "bind" => {
+            "Bind an object with a plain 'v-bind=\"...\"', or bind each prop as ':name=\"...\"'."
+        }
+        "on" => {
+            "Write each listener as '@event=\"...\"' or 'v-on:event=\"...\"', or bind a listener object with a plain 'v-on=\"...\"'."
+        }
+        "prop" | "attr" => "Pass the value as a component prop with ':name=\"...\"'.",
+        // Pointing these at an element inside the child would only move the
+        // failure, because component templates reject them everywhere.
+        "once" | "memo" => {
+            "Citry does not support 'v-once' or 'v-memo' in component templates, on elements or component tags. Remove the directive."
+        }
+        _ if directive.to_ascii_lowercase() != directive => {
+            "Vue's own directives and Citry's 'v-c-*' and 'v-citry-*' names are lowercase."
+        }
+        _ if directive.starts_with("c-") || directive.starts_with("citry-") => {
+            "Citry reserves 'v-c-*' and 'v-citry-*' for its own browser runtime."
+        }
+        _ => "Put the directive on an element inside the child's template.",
+    }
+}
+
+/// Reject Vue directives that have no meaning on a Citry component tag.
+///
+/// A component tag carries props (`v-bind`/`:`), listeners (`v-on`/`@`),
+/// the `v-if`/`v-else-if`/`v-else` chain, `v-model`, a plain `v-show`, and
+/// custom directives. Every other directive would otherwise reach the child
+/// as a Python kwarg and be dropped without a trace, so the template fails
+/// to compile instead. The `c-` form (`c-v-for`) is rejected the same way,
+/// because it names the same directive with a Python-computed value; the
+/// `c-` form of a supported directive fails when the page renders, because
+/// its expression must be written in the template.
+fn validate_component_tag_vue_directives(
+    node: &Node,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    if !is_component_boundary_tag(tag_name) {
+        return Ok(());
+    }
+    for attr in node.attrs() {
+        if attr.kind == HtmlAttrKind::Meta {
+            continue;
+        }
+        let name = attr.key.content.as_str();
+        let logical_name = name.strip_prefix("c-").unwrap_or(name);
+        let Some(directive) = citry_tag_vue_directive_name(logical_name) else {
+            continue;
+        };
+        let has_value = attr
+            .inner_value
+            .as_ref()
+            .is_some_and(|value| !value.content.trim().is_empty());
+        // Props (`v-bind:name`, or one `v-bind` object) and listeners
+        // (`v-on:event`, or one `v-on` object) cross the boundary. The
+        // argument-less `v-bind.prop` form has no component-call translation,
+        // and the condition directives and `v-show` take neither an argument nor
+        // modifiers, just as on an element.
+        // `v-model:` or `v-on:` with nothing after the colon names no prop or event.
+        let empty_argument = logical_name
+            .split_once(':')
+            .is_some_and(|(_, rest)| rest.is_empty() || rest.starts_with('.'));
+        let supported = !empty_argument
+            && (logical_name == "v-bind"
+                || logical_name == "v-on"
+                || logical_name.starts_with("v-bind:")
+                || logical_name.starts_with("v-on:")
+                || matches!(logical_name, "v-show" | "v-if" | "v-else-if" | "v-else")
+                || (logical_name.starts_with("v-")
+                    && (directive == "model" || is_custom_vue_directive(directive))));
+        if !supported {
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "Vue directive '{name}' is not supported on the component tag '<{tag_name}>'. {}",
+                    // Vue reads `V-SHOW` as a plain attribute, so the prefix
+                    // is the first thing to fix, whatever directive follows it.
+                    if logical_name.starts_with("V-") {
+                        "Vue reads a directive only when its 'v-' prefix is lowercase."
+                    } else {
+                        component_tag_directive_hint(directive)
+                    }
+                ),
+            ));
+        }
+        // Vue compiles these from their expression, so an empty value would
+        // fail later in the browser compiler with a less direct message.
+        let example = match logical_name {
+            "v-show" => Some("v-show=\"open\""),
+            "v-if" => Some("v-if=\"open\""),
+            "v-else-if" => Some("v-else-if=\"open\""),
+            _ if directive == "model" => Some("v-model=\"query\""),
+            _ => None,
+        };
+        if let (Some(example), false) = (example, has_value) {
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "'{name}' on the component tag '<{tag_name}>' needs a Vue expression, for example '{example}'."
+                ),
+            ));
+        }
+        // `v-else` follows the branch before it and has no condition of its own.
+        if logical_name == "v-else" && has_value {
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "'{name}' on the component tag '<{tag_name}>' takes no value. Write 'v-else' alone, or 'v-else-if=\"...\"' for another condition."
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// What to write instead of a Vue directive on `<c-slot>`.
+///
+/// Shared wording with `citry.client_directives`, which reports the same
+/// directives when they arrive at render time through `c-bind`.
+fn slot_tag_directive_hint(directive: &str) -> &'static str {
+    match directive {
+        "if" | "else-if" | "else" => {
+            "Wrap the slot in '<template v-if=\"...\">' for a browser-side condition, or use '<c-if>' when Python decides."
+        }
+        "for" => "Repeat the slot with '<c-for>'.",
+        "show" => "Wrap the slot in an element that carries 'v-show'.",
+        "slot" => "Name the slot with 'name=\"...\"'; the caller fills it with '<c-fill name=\"...\">'.",
+        "on" => "Put the listener on an element around the slot or inside the fill.",
+        "bind" | "prop" | "attr" => {
+            "Vue slot props are not supported. Pass Python slot data as a plain attribute ('item=\"text\"') or a 'c-' attribute ('c-item=\"expr\"')."
+        }
+        _ => "Put the directive on an element around the slot or inside its fallback content.",
+    }
+}
+
+/// Reject Vue directives on `<c-slot>`.
+///
+/// Every `<c-slot>` attribute other than its name and `required` becomes
+/// Python slot data, so a `v-if`, `:prop`, or `@event` there would reach the
+/// fill as a data key and the browser would never see it. The template fails
+/// to compile instead. The `c-` form (`c-v-if`) is rejected the same way,
+/// because it names the same directive with a Python-computed value.
+fn validate_slot_tag_vue_directives(
+    node: &Node,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    if tag_name != C_SLOT_TAG {
+        return Ok(());
+    }
+    for attr in node.attrs() {
+        // `#c-*` metadata has its own placement rules.
+        if attr.kind == HtmlAttrKind::Meta {
+            continue;
+        }
+        let name = attr.key.content.as_str();
+        let logical_name = name.strip_prefix("c-").unwrap_or(name);
+        // The `:` and `@` shorthands spell `v-bind` and `v-on`; every other
+        // directive form (`v-*` or `V-*`, `#name`, `.name`, `^name`) is
+        // named by the helper.
+        let directive = if logical_name.starts_with(':') {
+            Some("bind")
+        } else if logical_name.starts_with('@') {
+            Some("on")
+        } else {
+            citry_tag_vue_directive_name(logical_name)
+        };
+        let Some(directive) = directive else {
+            continue;
+        };
+        return Err(context.error_from_token(
+            &attr.token,
+            format!(
+                "Vue directive '{name}' is not supported on '<{tag_name}>'. Its attributes other than 'name' and 'required' become Python slot data, which the browser never sees. {}",
+                // Every directive is rejected here, so `V-IF` gets the same
+                // advice as `v-if`.
+                slot_tag_directive_hint(&directive.to_ascii_lowercase())
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Validate where `#c-*` framework-metadata attributes may sit.
@@ -1795,7 +2051,9 @@ fn is_component_tag_client_binding_attr(name: &str) -> bool {
 ///   identity tags. On an element they control ordinary morph behavior; on a
 ///   component tag they describe the child's DOM range. `<c-component>` is a
 ///   component identity tag, while `<c-element>` keeps ordinary selected-
-///   element semantics.
+///   element semantics for `#c-key`.
+/// - `#c-ignore` is rejected on `<c-element>` in both forms, because the
+///   checks on a kept element's tag and contents need the tag written out.
 /// - The reserved structural tags (`<c-if>`, `<c-for>`, `<c-slot>`,
 ///   `<c-fill>`, `<c-raw>`) render no identity of their own, so both metadata
 ///   members are rejected there.
@@ -1816,18 +2074,42 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
                     return Err(context.error_from_token(
                         &attr.token,
                         format!(
-                            "'{}' is not supported on '<{}>' (line {}, column {}). It belongs on a plain HTML element (the morph pairing key) or on a component tag (the key of the child instance).",
+                            "'{}' is not supported on '<{}>' (line {}, column {}). It belongs on a plain HTML element or a component tag, where it is the key Vue uses to match that element or child instance across renders.",
                             META_ATTR_KEY, tag_name, line, col
                         ),
                     ));
                 }
             }
             META_ATTR_IGNORE => {
+                // `<c-element>` picks its tag only when it renders, and its
+                // static form compiles to a plain tag that skips the
+                // contents checks below, so neither form can promise which
+                // contents the browser keeps. The author writes the plain
+                // tag instead.
+                if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+                    // Name the tag the author picked when the static form
+                    // says it, so the suggested rewrite is the one to type.
+                    let example_tag = node
+                        .attrs()
+                        .iter()
+                        .find(|candidate| candidate.key.content == "is")
+                        .and_then(|candidate| candidate.inner_value.as_ref())
+                        .map(|value| value.content.as_str())
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or("div");
+                    return Err(context.error_from_token(
+                        &attr.token,
+                        format!(
+                            "'{}' is not supported on '<{}>' (line {}, column {}). Write the element as a plain HTML tag, such as <{} {}>, to keep its contents as the server first rendered them.",
+                            META_ATTR_IGNORE, tag_name, line, col, example_tag, META_ATTR_IGNORE
+                        ),
+                    ));
+                }
                 if is_reserved_citry_tag_identity(tag_name) {
                     return Err(context.error_from_token(
                         &attr.token,
                         format!(
-                            "'{}' is not supported on '<{}>' (line {}, column {}). It belongs on a plain HTML element (the ignored subtree) or on a component tag (the ignored component range).",
+                            "'{}' is not supported on '<{}>' (line {}, column {}). Put it on a plain HTML element, whose contents the browser then keeps as the server first rendered them.",
                             META_ATTR_IGNORE, tag_name, line, col
                         ),
                     ));
@@ -1847,6 +2129,641 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
         }
     }
     Ok(())
+}
+
+/// The modifiers Vue handles itself on any event: event options,
+/// propagation and target checks, modifier-key checks, and mouse buttons.
+/// The list matches `resolveModifiers` in Vue's `compiler-dom` (3.5).
+/// Vue reads every other modifier as a key name: it checks `event.key` on a
+/// keyboard event or a dynamic event name, and drops the modifier on any
+/// other event, which has no key.
+const VUE_NON_KEY_MODIFIERS: [&str; 14] = [
+    "stop", "prevent", "self", "capture", "once", "passive", "ctrl", "shift", "alt", "meta",
+    "exact", "left", "right", "middle",
+];
+
+/// Whether a static event name is a keyboard event, where key-name modifiers
+/// work. The name must match exactly: on an element, Vue listens for an event
+/// spelled `KeyDown` or `key-down` as written, and the browser never sends
+/// one.
+fn is_vue_keyboard_event(event: &str) -> bool {
+    matches!(event, "keydown" | "keyup" | "keypress")
+}
+
+/// What to write instead of a modifier that is not a key name on a
+/// non-keyboard event: the usual mistakes get their own advice.
+fn non_key_modifier_hint(modifier: &str) -> String {
+    match modifier {
+        "native" => "Vue 3 has no '.native' modifier: a listener on a component tag already hears the child's root element events that the child does not declare. Remove '.native'.".to_string(),
+        "trim" | "lazy" | "number" => format!(
+            "'.{modifier}' is a 'v-model' modifier. Put it on 'v-model', or remove it from the listener."
+        ),
+        _ => format!(
+            "Remove '.{modifier}', or listen to 'keydown' or 'keyup' to react to a key."
+        ),
+    }
+}
+
+/// What to write instead of an Alpine event modifier that Vue does not have,
+/// or `None` for a modifier Vue accepts (including every key name).
+///
+/// Vue reads an unknown modifier as a key name, so a listener that carries
+/// one of these silently ignores it or never runs, depending on the event.
+fn alpine_only_modifier_hint(modifier: &str) -> Option<&'static str> {
+    Some(match modifier {
+        "outside" | "away" => {
+            "Add a 'click' listener to document in mounted(), check whether this.$el contains event.target, and remove the listener in unmounted()."
+        }
+        "window" => {
+            "Add the listener with window.addEventListener(...) in mounted() and remove it in unmounted()."
+        }
+        "document" => {
+            "Add the listener with document.addEventListener(...) in mounted() and remove it in unmounted()."
+        }
+        "debounce" | "throttle" => {
+            "Delay the work inside the method instead, for example with setTimeout. To call a server event handler, a '@c-*' binding such as '@c-input.debounce' accepts this modifier."
+        }
+        "camel" | "dot" => {
+            "Add the listener for the exact event name with addEventListener(...) in mounted(), on an element you reach through a 'ref', and remove it in unmounted()."
+        }
+        "cmd" | "super" => "Use Vue's '.meta' modifier instead.",
+        "period" | "comma" | "slash" | "equal" => {
+            "Vue matches key modifiers against the key's name, so check the key in the listener instead, for example @keydown=\"if ($event.key === '.') go();\"."
+        }
+        _ => return None,
+    })
+}
+
+/// Reject `v-once` and `v-memo` on a plain HTML element when the template loads.
+///
+/// Citry's Vue target renders without Vue's render cache, so the directive
+/// would otherwise fail later with a message that does not name it. A
+/// component tag reports the same directives through
+/// `validate_component_tag_vue_directives`.
+fn validate_element_once_memo(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    if has_citry_component_prefix(node.tag_name()) {
+        return Ok(());
+    }
+    for attr in node.attrs() {
+        let name = attr.key.content.as_str();
+        let Some(directive @ ("once" | "memo")) = vue_directive_name(name) else {
+            continue;
+        };
+        let (line, col) = attr.token.line_col;
+        return Err(context.error_from_token(
+            &attr.token,
+            format!(
+                "'v-{directive}' on <{}> (line {line}, column {col}): {} To keep an element's contents as the server first rendered them, put '{}' on the element.",
+                node.tag_name(),
+                component_tag_directive_hint(directive),
+                META_ATTR_IGNORE
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// Reject Vue directives on an HTML element that Vue would not run as written.
+///
+/// Vue reads a directive only when it is spelled exactly: an uppercase `V-`
+/// prefix (`V-IF`) makes a plain attribute, so the element always shows, and
+/// a built-in name in another case (`v-If`) makes a custom directive named
+/// `If`. Citry's own browser runtime owns `v-c-*` and `v-citry-*`. `v-show`,
+/// `v-if`, `v-else-if`, `v-for`, `v-model`, `v-html`, and `v-text` need an
+/// expression (an empty `v-html` would clear the element). `v-show` takes no
+/// argument or modifiers, `v-model` on an element takes no argument, and
+/// `v-is` has no element meaning in Vue 3. Vue would otherwise drop these
+/// silently or fail at render with a message that does not name the
+/// directive. Component tags and `<c-slot>` report the same mistakes through
+/// their own checks. A custom directive may use any case (`v-Tooltip`),
+/// because Vue looks it up by that name (and its camelCase and PascalCase
+/// forms), never in lowercase.
+fn validate_element_vue_directives(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    if has_citry_component_prefix(tag_name) && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+        return Ok(());
+    }
+    for attr in node.attrs() {
+        if attr.kind == HtmlAttrKind::Meta {
+            continue;
+        }
+        let name = attr.key.content.as_str();
+        let (line, col) = attr.token.line_col;
+        let fail = |problem: String| {
+            Err(context.error_from_token(
+                &attr.token,
+                format!("'{name}' on <{tag_name}> (line {line}, column {col}) {problem}"),
+            ))
+        };
+        let (prefix, rest) = match (name.strip_prefix("v-"), name.strip_prefix("V-")) {
+            (Some(rest), _) => ("v-", rest),
+            (None, Some(rest)) => ("V-", rest),
+            _ => continue,
+        };
+        let split = rest.find([':', '.']).unwrap_or(rest.len());
+        let (directive, suffix) = rest.split_at(split);
+        let lowercase = directive.to_ascii_lowercase();
+        let built_in = VUE_BUILT_IN_DIRECTIVES.contains(&lowercase.as_str());
+        if prefix == "V-" {
+            // A built-in name is lowercased in the fix too; a custom name
+            // keeps its case, because Vue looks it up as written.
+            let fixed = if built_in {
+                lowercase.as_str()
+            } else {
+                directive
+            };
+            return fail(format!(
+                "is not a Vue directive, because Vue reads a directive only when its 'v-' prefix is lowercase. Vue would write it as a plain attribute. Write 'v-{fixed}{suffix}'."
+            ));
+        }
+        if built_in && directive != lowercase {
+            return fail(format!(
+                "uses a Vue directive name in the wrong case. Vue's own directives are lowercase, and Vue would look up 'v-{directive}' as a custom directive named '{directive}'. Write 'v-{lowercase}{suffix}'."
+            ));
+        }
+        if lowercase.starts_with("c-") || lowercase.starts_with("citry-") {
+            return fail(
+                "uses a name Citry reserves: 'v-c-*' and 'v-citry-*' belong to Citry's own browser runtime. Give the directive another name.".to_string(),
+            );
+        }
+        if directive == "show" && !suffix.is_empty() {
+            return fail("takes no argument or modifiers. Write 'v-show=\"...\"'.".to_string());
+        }
+        if directive == "model" && suffix.starts_with(':') {
+            return fail(
+                "names an argument, which only a component tag's 'v-model' takes. On a form element, write 'v-model=\"...\"'.".to_string(),
+            );
+        }
+        if directive == "is" {
+            return fail(
+                "is not supported: Vue 3 reads 'v-is' only in its compatibility build. To choose a component in Python, write a component tag inside '<c-if>'; to choose an element's tag, use '<c-element c-is=\"...\">'.".to_string(),
+            );
+        }
+        // The example keeps the modifiers the author wrote, such as `.lazy`.
+        let sample = match directive {
+            "show" | "if" | "else-if" => "open",
+            "for" => "item in items",
+            "model" => "query",
+            "html" => "html",
+            "text" => "label",
+            _ => continue,
+        };
+        let example = format!("{name}=\"{sample}\"");
+        let has_value = attr
+            .inner_value
+            .as_ref()
+            .is_some_and(|value| !value.content.trim().is_empty());
+        if !has_value {
+            return fail(format!("needs a Vue expression, for example '{example}'."));
+        }
+    }
+    Ok(())
+}
+
+/// Reject Vue's built-in components (`<Transition>`, `<Teleport>`, ...) when
+/// the template loads.
+///
+/// On an interactive page Vue's compiler would turn the tag into a helper that
+/// Citry's compiler output does not allow, so rendering would fail with a
+/// message about compiler helpers. On a static page the browser would show it
+/// as an unknown element. Rejecting it here gives one clear message on every
+/// page, and `citry check` and the editor report it too. Vue matches the
+/// PascalCase and kebab-case spellings; any letter case is matched here,
+/// because no standard HTML element uses these names.
+fn validate_vue_builtin_component_tag(
+    node: &Node,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let name = &node.start_tag().name;
+    let tag_name = name.content.as_str();
+    let (component, hint) = match tag_name.to_ascii_lowercase().as_str() {
+        "transition" => ("Transition", VUE_TRANSITION_HINT),
+        "transition-group" | "transitiongroup" => ("TransitionGroup", VUE_TRANSITION_HINT),
+        "keep-alive" | "keepalive" => (
+            "KeepAlive",
+            "To keep a child's state while it is out of view, leave it rendered and hide it with 'v-show'.",
+        ),
+        "teleport" => (
+            "Teleport",
+            "To show content above the rest of the page, such as a dialog or popover, use the HTML '<dialog>' element or the 'popover' attribute, or Citry UI's '<c-CDialog>' and '<c-CPopover>' components.",
+        ),
+        "suspense" => (
+            "Suspense",
+            "To show a placeholder while data loads, keep a loading flag in the component's data and switch between the placeholder and the content with 'v-if' and 'v-else'.",
+        ),
+        _ => return Ok(()),
+    };
+    let (line, col) = name.line_col;
+    Err(context.error_from_token(
+        name,
+        format!(
+            "'<{tag_name}>' (line {line}, column {col}) is Vue's built-in '{component}' component, which Citry templates do not support. {hint}"
+        ),
+    ))
+}
+
+/// Shared by `<Transition>` and `<TransitionGroup>`, which both animate
+/// elements as they enter and leave.
+const VUE_TRANSITION_HINT: &str = "To animate an element, give it a CSS transition or animation and change its class with ':class'.";
+
+/// The attribute a Vue binding (`:name` or `v-bind:name`) sets, and whether
+/// it carries modifiers such as `.prop`. `None` for anything else, including
+/// a dynamic name (`:[name]`), which cannot be compared when the template
+/// loads.
+fn vue_bound_attribute(name: &str) -> Option<(&str, bool)> {
+    // `.name` and `^name` are Vue's short forms of `:name.prop` and
+    // `:name.attr`, so they count as modified bindings.
+    let (rest, shorthand) = match name.strip_prefix(['.', '^']) {
+        Some(rest) => (rest, true),
+        None => (
+            name.strip_prefix("v-bind:")
+                .or_else(|| name.strip_prefix(':'))?,
+            false,
+        ),
+    };
+    if rest.is_empty() || rest.starts_with('[') {
+        return None;
+    }
+    Some(match rest.split_once('.') {
+        Some((target, _)) => (target, true),
+        None => (rest, shorthand),
+    })
+}
+
+/// Whether a `c-*` attribute on an HTML element is a Python value for the
+/// attribute of the same name. Control flow (`c-for`, `c-if`, ...), a
+/// `<c-element>`'s `c-is`, and `c-bind` set no attribute of their own name.
+fn python_attribute_value(attr: &HtmlAttr) -> bool {
+    let name = attr.key.content.as_str();
+    matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template)
+        && name.starts_with("c-")
+        && name != C_BIND_ATTR
+        && name != "c-is"
+        && !CONTROL_FLOW_GROUPS
+            .iter()
+            .any(|group| group.contains(&name))
+}
+
+/// Reject a Python value and a Vue binding that set the same attribute on one
+/// element.
+///
+/// On an HTML element Python computes a `c-*` attribute while rendering, and
+/// Vue then applies the element's bindings on top, so a `:title` would
+/// silently replace a `c-title` (and a `:key` would compete with `#c-key` for
+/// the element's identity). Rendering stops with an error in that case, so
+/// the template is rejected when it loads, where `citry check` and the editor
+/// report it too. A `:class` or `:style` without modifiers is the exception:
+/// Vue joins it with the Python value exactly as it joins a static `class`
+/// or `style`. A component tag is exempt, because its `c-*` attributes are
+/// Python inputs and its bindings are Vue props.
+fn validate_vue_binding_python_conflicts(
+    node: &Node,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    if has_citry_component_prefix(tag_name) && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+        return Ok(());
+    }
+    let attrs = node.attrs();
+    for binding in attrs {
+        let Some((target, has_modifiers)) = vue_bound_attribute(&binding.key.content) else {
+            continue;
+        };
+        // Vue merges only these exact keys; `:Class` is a different key.
+        if !has_modifiers && matches!(target, "class" | "style") {
+            continue;
+        }
+        let target = target.to_ascii_lowercase();
+        let python = attrs.iter().find(|attr| {
+            let name = attr.key.content.as_str();
+            if target == "key" && name == META_ATTR_KEY {
+                return true;
+            }
+            python_attribute_value(attr)
+                && name
+                    .strip_prefix("c-")
+                    .is_some_and(|rest| rest.eq_ignore_ascii_case(&target))
+        });
+        let Some(python) = python else {
+            continue;
+        };
+        let (line, col) = binding.token.line_col;
+        let python_name = &python.key.content;
+        let binding_name = &binding.key.content;
+        let fix = if target == "key" {
+            format!(
+                "Keep '{python_name}' to key the element from Python, or remove it and keep '{binding_name}'."
+            )
+        } else if matches!(target.as_str(), "class" | "style") {
+            format!(
+                "Remove the modifier and write ':{target}', which Vue joins with '{python_name}'."
+            )
+        } else {
+            format!(
+                "Set the attribute in one place: keep '{python_name}' when Python decides the value, or keep '{binding_name}' and send the value to the browser with js_data()."
+            )
+        };
+        return Err(context.error_from_token(
+            &binding.token,
+            format!(
+                "'{binding_name}' on <{tag_name}> (line {line}, column {col}) sets the same attribute as '{python_name}'. {fix}"
+            ),
+        ));
+    }
+    // An object `v-bind="..."` or a dynamic name (`:[name]`) may set any
+    // attribute, including one a Python value sets, and which ones is only
+    // known in the browser. Rendering refuses the combination, so it is
+    // reported here as well.
+    let open_binding = attrs.iter().find(|attr| {
+        let name = attr.key.content.as_str();
+        name == "v-bind"
+            || name.starts_with("v-bind.")
+            || name.starts_with(":[")
+            || name.starts_with("v-bind:[")
+            || name.starts_with(".[")
+            || name.starts_with("^[")
+    });
+    let python = attrs.iter().find(|attr| {
+        let name = attr.key.content.as_str();
+        name == C_BIND_ATTR || name == META_ATTR_KEY || python_attribute_value(attr)
+    });
+    if let (Some(binding), Some(python)) = (open_binding, python) {
+        let (line, col) = binding.token.line_col;
+        return Err(context.error_from_token(
+            &binding.token,
+            format!(
+                "'{}' on <{tag_name}> (line {line}, column {col}) may set any attribute, so it cannot be combined with '{}', which Python sets. Bind each attribute Vue owns by name, such as ':title', or compute every attribute in Python.",
+                binding.key.content, python.key.content
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// Reject event modifiers on a Vue listener (`@event` or `v-on:event`) that
+/// Vue would silently drop, or that would stop the listener from running.
+///
+/// Vue reads every modifier outside `VUE_NON_KEY_MODIFIERS` as a key name.
+/// On a keyboard event the listener then runs only for that key, but on any
+/// other static event Vue drops the modifier, because the event has no key:
+/// `@click.enter` would run on every click. Two kinds of modifier are
+/// rejected: Alpine modifiers that Vue lacks, on any event, and key names on
+/// an event whose static name is not a keyboard event. A dynamic event name
+/// (`@[name]`) is checked only for Alpine modifiers, because its event is
+/// known only in the browser.
+///
+/// A '@c-*' binding is a Citry Events binding with its own modifiers, such as
+/// '.debounce', so the Events compiler checks it, with the same key rule.
+fn validate_vue_listener_modifiers(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    for attr in node.attrs() {
+        let name = attr.key.content.as_str();
+        let Some(listener) = name
+            .strip_prefix("v-on:")
+            .or_else(|| name.strip_prefix('@'))
+        else {
+            continue;
+        };
+        if name.starts_with("@c-") {
+            continue;
+        }
+        // A dynamic event name (`@[name]`) may itself contain dots, so the
+        // modifiers start after its closing bracket.
+        let (event, modifiers) = if listener.starts_with('[') {
+            (
+                None,
+                listener
+                    .find(']')
+                    .map_or("", |close| &listener[close + 1..]),
+            )
+        } else {
+            match listener.find('.') {
+                Some(dot) => (Some(&listener[..dot]), &listener[dot..]),
+                None => (Some(listener), ""),
+            }
+        };
+        let (line, col) = attr.token.line_col;
+        for modifier in modifiers.split('.').skip(1) {
+            // Vue compares modifiers case-sensitively, so `.OUTSIDE` is an
+            // unknown modifier too and Vue would read it as a key name.
+            if let Some(hint) = alpine_only_modifier_hint(&modifier.to_ascii_lowercase()) {
+                return Err(context.error_from_token(
+                    &attr.token,
+                    format!(
+                        "'{name}' (line {line}, column {col}) uses '.{modifier}', which is not a Vue event modifier. Vue would read '.{modifier}' as a key name, so the listener would not do what '.{modifier}' asks. {hint}"
+                    ),
+                ));
+            }
+            // Only a static, non-keyboard event name can be judged here; a
+            // keyboard event accepts any key name, including custom ones.
+            let Some(event) = event.filter(|event| !is_vue_keyboard_event(event)) else {
+                continue;
+            };
+            if VUE_NON_KEY_MODIFIERS.contains(&modifier) {
+                continue;
+            }
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "'{name}' (line {line}, column {col}) uses '.{modifier}' on the '{event}' event. Vue reads a modifier it does not know as a key name, and only keyboard events ('keydown', 'keyup', 'keypress') have a key, so Vue would ignore '.{modifier}' and run the listener on every '{event}' event. On other events Vue accepts '.stop', '.prevent', '.self', '.capture', '.once', '.passive', '.ctrl', '.shift', '.alt', '.meta', '.exact', and the mouse buttons '.left', '.right', and '.middle'. {}",
+                    non_key_modifier_hint(modifier)
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The Citry tags a `#c-ignore` element may contain. Each one renders plain
+/// HTML on the server, so the element's contents can be written once as HTML
+/// that the browser keeps unchanged afterwards.
+const IGNORED_CONTENT_CITRY_TAGS: [&str; 6] = [
+    C_IF_TAG,
+    C_ELIF_TAG,
+    C_ELSE_TAG,
+    C_FOR_TAG,
+    C_EMPTY_TAG,
+    C_RAW_TAG,
+];
+
+/// One piece of a `#c-ignore` element's contents that needs Vue to work.
+enum IgnoredContentProblem<'a> {
+    /// A component, slot, or other Citry tag that renders through Vue.
+    Tag(&'a Token),
+    /// A Vue binding, Events binding, or template ref on a child element.
+    Binding {
+        attr: &'a HtmlAttr,
+        owner: &'a Token,
+    },
+}
+
+/// Keep a `#c-ignore` element's contents to what the server can write once.
+///
+/// In an interactive component the server renders the contents of a
+/// `#c-ignore` element to HTML once, and the browser keeps those nodes for the
+/// life of the component instance, so a library can take them over. A child
+/// component, a slot, or a Vue binding inside would never render or run
+/// there, so the template is rejected when it loads. The check applies on
+/// static pages too, so a template does not become invalid when its page
+/// later turns interactive.
+fn validate_ignored_element_contents(
+    node: &Node,
+    tag_stack: &[TagStackEntry],
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    // Only a plain HTML element keeps its contents; `#c-ignore` on a component
+    // tag is reported by the Python runtime, where the component is known.
+    let tag_name = node.tag_name();
+    if has_citry_component_prefix(tag_name) {
+        return Ok(());
+    }
+    let Some(ignore_attr) = node
+        .attrs()
+        .iter()
+        .find(|attr| attr.kind == HtmlAttrKind::Meta && attr.key.content == META_ATTR_IGNORE)
+    else {
+        return Ok(());
+    };
+    let (line, col) = ignore_attr.token.line_col;
+    let lower_tag = tag_name.to_ascii_lowercase();
+    // These placements have no element contents that the browser could keep,
+    // so they fail on every page rather than only once the page is interactive.
+    let placement_problem = if is_html_void_element(&lower_tag) {
+        Some(format!(
+            "<{tag_name}> has no contents to keep. Remove '{META_ATTR_IGNORE}'."
+        ))
+    } else if matches!(
+        lower_tag.as_str(),
+        "script" | "style" | "textarea" | "title"
+    ) {
+        Some(format!(
+            "<{tag_name}> holds text, not elements, so there is nothing to keep. Remove '{META_ATTR_IGNORE}'."
+        ))
+    } else if matches!(
+        lower_tag.as_str(),
+        "table" | "thead" | "tbody" | "tfoot" | "tr" | "colgroup"
+    ) {
+        // Vue keeps the contents behind one placeholder element, and the
+        // HTML parser moves any such element out of a table's rows and
+        // sections, so the kept contents would land outside the table.
+        Some(
+            "Table rows and sections can hold only table elements, so the browser cannot keep their contents as one block. Put '#c-ignore' on a <div> that wraps the <table>, or on a <td> or <th> inside it."
+                .to_string(),
+        )
+    } else if lower_tag == "svg"
+        || lower_tag == "math"
+        || tag_stack.iter().any(|entry| {
+            let ancestor = entry.start_tag.name.content.to_ascii_lowercase();
+            ancestor == "svg" || ancestor == "math"
+        })
+    {
+        Some(format!(
+            "The browser keeps the contents as HTML, and SVG or MathML contents cannot be kept that way. Put '{META_ATTR_IGNORE}' on an HTML element that wraps the <svg> or <math> element."
+        ))
+    } else {
+        None
+    };
+    if let Some(problem) = placement_problem {
+        return Err(context.error_from_token(
+            &ignore_attr.token,
+            format!(
+                "'{META_ATTR_IGNORE}' is not supported on <{tag_name}> (line {line}, column {col}). {problem}"
+            ),
+        ));
+    }
+    let Node::WithBody { body, .. } = node else {
+        return Ok(());
+    };
+    let Some(problem) = find_ignored_content_problem(body) else {
+        return Ok(());
+    };
+    let owner = format!(
+        "'{}' on <{}> (line {}, column {}) keeps the element's contents exactly as the server first rendered them",
+        META_ATTR_IGNORE, tag_name, line, col
+    );
+    let allowed = format!(
+        "Inside a '{}' element, write plain HTML, '{{{{ }}}}' expressions, '<c-if>', '<c-for>', and '<c-raw>'.",
+        META_ATTR_IGNORE
+    );
+    let (token, message) = match problem {
+        IgnoredContentProblem::Tag(child) => {
+            let (child_line, child_col) = child.line_col;
+            (
+                child,
+                format!(
+                    "{owner}, so they cannot hold <{}> (line {}, column {}): it needs Vue to render it. {allowed} Move <{}> outside the <{}> element.",
+                    child.content, child_line, child_col, child.content, tag_name
+                ),
+            )
+        }
+        IgnoredContentProblem::Binding { attr, owner: child } => {
+            let (attr_line, attr_col) = attr.token.line_col;
+            let name = attr.key.content.as_str();
+            // A template ref is the natural first attempt for handing a child
+            // to a library, so say how to reach the child instead.
+            let fix = if name == "ref" {
+                format!(
+                    "Put the 'ref' on the <{}> element itself and find the child from there, for example with this.$refs.<name>.querySelector(...).",
+                    tag_name
+                )
+            } else {
+                format!(
+                    "Move the <{}> element that has the binding outside the <{}> element.",
+                    child.content, tag_name
+                )
+            };
+            (
+                &attr.token,
+                format!(
+                    "{owner}, so the browser never runs '{}' on <{}> (line {}, column {}). {allowed} {fix}",
+                    name, child.content, attr_line, attr_col
+                ),
+            )
+        }
+    };
+    Err(context.error_from_token(token, message))
+}
+
+/// Find the first child tag or attribute, in source order, that a `#c-ignore`
+/// element cannot keep as server-written HTML.
+fn find_ignored_content_problem(body: &Template) -> Option<IgnoredContentProblem<'_>> {
+    for element in &body.elements {
+        let TemplateElement::Node(child) = element else {
+            continue;
+        };
+        let child_tag = child.tag_name();
+        if has_citry_component_prefix(child_tag)
+            && !IGNORED_CONTENT_CITRY_TAGS
+                .iter()
+                .any(|allowed| citry_component_tag_eq(child_tag, allowed))
+        {
+            return Some(IgnoredContentProblem::Tag(&child.start_tag().name));
+        }
+        for attr in child.attrs() {
+            if attr.kind == HtmlAttrKind::Meta {
+                continue;
+            }
+            let name = attr.key.content.as_str();
+            // `@event`, `:attr`, `v-*`, `#slot`, `.prop`, the `$c-*` browser
+            // bindings, and `ref` all need Vue to read the element.
+            let needs_vue = name.starts_with('@')
+                || name.starts_with(':')
+                || name.starts_with("$c-")
+                || name == "ref"
+                || vue_directive_name(name).is_some();
+            if needs_vue {
+                return Some(IgnoredContentProblem::Binding {
+                    attr,
+                    owner: &child.start_tag().name,
+                });
+            }
+        }
+        if let Node::WithBody { body, .. } = child {
+            if let Some(problem) = find_ignored_content_problem(body) {
+                return Some(problem);
+            }
+        }
+    }
+    None
 }
 
 /// Validate semantic attribute values whose contracts are narrower than the
@@ -3036,8 +3953,7 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
         .map(|attr| attr.key.content.as_str())
         .filter(|&name| {
             name != C_BIND_ATTR
-                && !is_client_props_attr(name)
-                && !(is_component_boundary && is_component_boundary_handler_attr(name))
+                && !(is_component_boundary && is_component_tag_client_binding_attr(name))
         })
         .collect();
     let has_c_bind = attrs.iter().any(|attr| attr.key.content == C_BIND_ATTR);

@@ -6,6 +6,8 @@
   message variants, trigger conditions, examples, severities, reporting
   surfaces, and documentation links.
 - Added generated Python, Rust, and TypeScript bindings plus drift validation.
+- Added an optional `fix` field that tells the reader how to resolve a
+  diagnostic. The public reference shows it after the message and examples.
 - Recorded `citry.python.*` as a provider-owned family whose suffixes and
   messages are not copied into the Citry catalog.
 - Added stable Alpine-variable, server-event, and client-prop diagnostics for
@@ -17,3 +19,6 @@
   declarations in the checker and language server.
 - Extended the i18n argument and unknown-message contracts to checked `$c-tr`
   syntax, message outputs, and typed browser named values.
+- Added `citry.i18n.missing-param-type`, the configurable `citry check`
+  warning for a message variable without a `# @param` type, which the i18n
+  compiler already reported.

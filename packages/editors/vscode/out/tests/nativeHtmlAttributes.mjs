@@ -190,11 +190,11 @@ function nativeAttributeProjection(authoredName) {
   if (authoredName.startsWith(":c-")) {
     return void 0;
   }
-  const alpineName = authoredName.startsWith(":") ? authoredName.slice(1) : "";
-  if (!/^[A-Za-z_:][A-Za-z0-9_:-]*$/.test(alpineName)) {
+  const vueName = authoredName.startsWith(":") ? authoredName.slice(1) : "";
+  if (!/^[A-Za-z_:][A-Za-z0-9_:-]*$/.test(vueName)) {
     return void 0;
   }
-  return { nativeName: asciiLowercase(alpineName), prefixLength: 1 };
+  return { nativeName: asciiLowercase(vueName), prefixLength: 1 };
 }
 function nestedTemplateValue(value) {
   return value.startsWith("<>") && value.endsWith("</>") || /^<[A-Za-z]/.test(value);

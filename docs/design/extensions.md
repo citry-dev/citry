@@ -189,8 +189,8 @@ from the component's C3 MRO, then builds the effective class on the extension's
 `Config` (with the component bound). That effective class is instantiated per
 render and attached as `component.view`.
 
-Nested declarations inherit automatically. The child does not repeat its
-parent's nested class in the base list:
+Nested config declarations inherit automatically. The child does not repeat
+its parent's nested class in the base list:
 
 ```python
 class Parent(Component):
@@ -215,6 +215,18 @@ C3 order as their component owners. A nearer declaration wins an attribute
 conflict. An explicit `View = None` stops component-level inheritance at that
 point while retaining the current Citry instance's global defaults and the
 extension's factory defaults.
+
+This combining applies to settings classes: extension config classes such as
+`View`, and the built-in `Events`, `Lint`, `Cache`, `I18n`, `Debug`, and
+`Preview`. The classes that describe data (`Kwargs`, `Slots`, `State`,
+`TemplateData`, `JsData`, `CssData`) follow ordinary Python lookup instead:
+the nearest declaration applies, a plain child declaration replaces the
+parent's class, and a child extends the parent's fields only by naming the
+parent's class as a base. Two separate bases that declare different data
+classes, with none on the subclass, fail at component definition.
+Section 4.2 of [`component_introspection.md`](component_introspection.md)
+lists the data class rules for the five schema roles, and section 3.2 of
+[`events.md`](events.md) covers `State`.
 
 Each installed extension owns one valid Python `class_name`. Those names must
 be unique, and extensions cannot claim the core schema names or the Events
@@ -434,16 +446,24 @@ observation point for extensions that need metrics or diagnostics.
 ### 7.2 Post-render return type: `CitryRender | str | None`
 
 `on_component_rendered` accepts **`CitryRender | str | None`**. A returned
-`str` is convenience: it is wrapped as a single-part `CitryRender` (treated as
-already-serialized HTML). Keeping the struct form available means deps stay
-recoverable; the `str` form is the easy path. (DJC used `str` only, because its
-render output was a string.)
+`str` is convenience: it is wrapped as a single-part `CitryRender`. It follows
+the rule of a `{{ ... }}` value, the same as `on_render`: a plain `str` is text
+and is escaped, while `Markup` (or any object with `__html__`) is inserted as
+HTML. When Citry renders for Vue (an interactive page) the plain `str` becomes
+a text part and `Markup` a trusted-HTML part, so static and interactive pages show the same thing.
+Any other non-`None` value raises `TypeError`. Keeping the struct form
+available means deps stay recoverable; the `str` form is the easy path. (DJC
+used `str` only, because its render output was a string.)
 
 ### 7.3 `on_component_rendered` operates on the `CitryRender`
 
 Receives `render: CitryRender | None` + `error`. Return a `CitryRender`/`str` to
 replace output, raise to replace the error, return `None` to keep the original.
-Threading semantics preserved from DJC.
+Threading semantics preserved from DJC. Each extension receives the result of
+the one before it, so a returned `str` or `Markup` is wrapped in a `CitryRender`
+right away, by the same text-or-HTML rule. A later extension therefore always
+sees a render (or `None`), and `str(ctx.render)` is HTML with the earlier text
+already escaped. `on_slot_rendered` threads the same way.
 
 ### 7.4 `on_template_compiled` fires at the node list, not a Template object
 

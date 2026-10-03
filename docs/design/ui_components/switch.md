@@ -50,7 +50,7 @@ Server inputs are `name`, `value`, `id`, `checked`, `required`, `disabled`,
 `invalid`, `size`, `label_pos`, `class_`, `style`, `attrs`, and `input_attrs`.
 Sizes are `sm`, `md`, and `lg`; label positions are `start` and `end`.
 
-Client `$c-props` supports `checked`, `value`, `required`, `disabled`,
+Native Vue component props support `checked`, `value`, `required`, `disabled`,
 `invalid`, `size`, and `label_pos`. Valid client checkedness controls current
 state; omission releases control. Field owns required/disabled/invalid when
 composed. Form disabled remains dominant.
@@ -148,10 +148,11 @@ and the initialized marker.
 
 Named strings become exact plain strings, normalize CRLF/CR to LF, and reject
 U+0000. IDs reject emptiness and ASCII whitespace. Attribute mappings are
-copied. Root and input maps reject Citry/runtime namespaces, structural Alpine
-directives, object binding, semantic replacement, visibility/focus ownership,
-native checkedness, switch role, Field markers, and dynamic bindings to owned
-relationships. Static trusted event handlers and unrelated metadata remain.
+copied. Root and input maps reject Citry/runtime namespaces, executable Vue or
+legacy directives, object binding, semantic replacement, visibility/focus
+ownership, native checkedness, switch role, Field markers, and dynamic bindings
+to owned relationships. Static unrelated metadata remains. Authors attach
+native listeners with Vue event bindings on the component call.
 
 ## 16. Assets and performance
 

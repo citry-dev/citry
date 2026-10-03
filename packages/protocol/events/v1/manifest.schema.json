@@ -1,18 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "citry-events/1 browser manifest",
-  "description": "The strict JSON object inside one data-citry-events script tag.",
+  "description": "The strict Events manifest the server builds for one render before it copies each record into the matching component's Vue app data.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocol", "clientGraphRevision", "componentClasses", "componentInstances"],
+  "required": ["protocol", "componentClasses", "componentInstances"],
   "properties": {
     "protocol": {
       "const": "citry-events/1"
-    },
-    "clientGraphRevision": {
-      "type": ["string", "null"],
-      "pattern": "^[0-9a-f]{64}$",
-      "description": "The client-graph revision emitted with the same render, or null when that render has no client graph."
     },
     "componentClasses": {
       "type": "array",

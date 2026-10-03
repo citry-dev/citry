@@ -5,8 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from textwrap import dedent, indent
 
+import pytest
+
 from citry.analysis import (
     analyze_css_data_source,
+    analyze_js_data_source,
     analyze_template_data_source,
     python_class_asset_resolution_signature,
     python_class_defines_direct_method,
@@ -208,6 +211,83 @@ def test_owner_and_direct_method_resolution_decline_ambiguity_and_decorators():
     assert python_class_defines_direct_method(duplicate, "Card", "template_data") is None
     assert python_class_defines_direct_method(replaced, "Card", "template_data") is None
     assert analyze_template_data_source(replaced, "Card", kwargs_fields=()) is None
+
+
+# Each method form Citry can call as component.method(kwargs, slots): the
+# decorator line (if any) and the receiver parameter that precedes kwargs.
+_METHOD_FORMS = pytest.mark.parametrize(
+    ("decorator", "receiver"),
+    [("", "self, "), ("@staticmethod\n    ", ""), ("@classmethod\n    ", "cls, ")],
+    ids=["instance", "staticmethod", "classmethod"],
+)
+
+
+@_METHOD_FORMS
+def test_static_and_class_data_methods_bind_kwargs_after_the_receiver(decorator, receiver):
+    source = (
+        "class Card:\n"
+        f"    {decorator}def template_data({receiver}kwargs, slots):\n"
+        "        if slots:\n"
+        "            return kwargs\n"
+        "        return {'label': 'Hi'}\n"
+        f"    {decorator}def js_data({receiver}options, slots):\n"
+        "        return {'open': options.open}\n"
+    )
+
+    shape = analyze_template_data_source(source, "Card", kwargs_fields=("high",))
+    js_shape = analyze_js_data_source(source, "Card")
+
+    assert shape is not None
+    assert shape.completeness == "closed"
+    assert shape.parameters == ("kwargs", "slots")
+    roots = {root.name: root for root in shape.roots}
+    assert set(roots) == {"high", "label"}
+    # "high" can only come from the kwargs parameter, which proves the
+    # analyzer bound kwargs to the right name for every method form.
+    assert roots["high"].origins == frozenset({"kwargs"})
+    assert js_shape is not None
+    assert js_shape.parameters == ("options", "slots")
+    assert [root.name for root in js_shape.roots] == ["open"]
+
+
+@pytest.mark.parametrize(
+    "prelude",
+    [
+        "    @cache\n",
+        "    @staticmethod\n    @cache\n",
+        "    @builtins.staticmethod\n",
+        "    staticmethod = cache\n    @staticmethod\n",
+    ],
+    ids=["other", "stacked", "attribute", "rebound"],
+)
+def test_data_methods_with_an_unknown_decorator_stay_unprovable(prelude):
+    source = f"class Card:\n{prelude}    def template_data(kwargs, slots):\n        return {{'label': 'Hi'}}\n"
+
+    assert analyze_template_data_source(source, "Card", kwargs_fields=()) is None
+
+
+def test_a_star_import_makes_a_decorated_method_unprovable():
+    source = (
+        "from helpers import *\n"
+        "class Card:\n"
+        "    @staticmethod\n"
+        "    def template_data(kwargs, slots):\n"
+        "        return {'label': 'Hi'}\n"
+    )
+
+    assert analyze_template_data_source(source, "Card", kwargs_fields=()) is None
+
+
+def test_a_module_level_rebinding_of_staticmethod_makes_the_method_unprovable():
+    source = (
+        "from helpers import memo as staticmethod\n"
+        "class Card:\n"
+        "    @staticmethod\n"
+        "    def template_data(kwargs, slots):\n"
+        "        return {'label': 'Hi'}\n"
+    )
+
+    assert analyze_template_data_source(source, "Card", kwargs_fields=()) is None
 
 
 def test_raise_terminates_flow_and_nested_call_side_effects_taint_a_mapping():
@@ -486,6 +566,87 @@ def test_literal_boolean_branches_exclude_unreachable_returns():
     assert [root.name for root in true_branch.roots] == ["actual"]
     assert false_branch.roots[0].presence == "always"
     assert true_branch.roots[0].presence == "always"
+
+
+def test_many_checks_that_leave_mappings_alone_keep_the_returned_literal_known():
+    # Eight `if` statements give 256 paths, far past the branch limit, but
+    # none of them changes a tracked mapping, so every path ends the same.
+    checks = "".join(f"if check_{index}:\n    count += {index}\n" for index in range(8))
+    _source, shape = _shape(checks + 'return {"a": one, "b": two}\n')
+
+    assert shape.completeness == "closed"
+    assert shape.open_reasons == ()
+    assert [(root.name, root.presence) for root in shape.roots] == [("a", "always"), ("b", "always")]
+
+
+def test_branch_limit_still_applies_when_paths_build_different_mappings():
+    # Each `if` may add its own key, so the paths build 2**n different
+    # mappings: 32 fit the limit, 64 do not.
+    def writes(count: int) -> str:
+        flags = "".join(f"if flag_{index}:\n    data['k{index}'] = {index}\n" for index in range(count))
+        return "data = {}\n" + flags + "return data\n"
+
+    _source, within = _shape(writes(5))
+    _source, beyond = _shape(writes(6))
+
+    assert within.completeness == "closed"
+    assert [(root.name, root.presence) for root in within.roots] == [
+        (f"k{index}", "conditional") for index in range(5)
+    ]
+    assert beyond.completeness == "open"
+    assert beyond.open_reasons == ("analysis branch limit exceeded",)
+    assert beyond.roots == ()
+
+
+def test_paths_that_differ_only_in_mapping_sharing_stay_separate():
+    # Both paths hold two empty mappings, but only the first makes `b` the
+    # same mapping as `a`, so the write through `b` reaches `a` on one path.
+    _source, shape = _shape(
+        """
+        a = {}
+        if condition:
+            b = a
+        else:
+            b = {}
+        b["x"] = 1
+        return a
+        """,
+    )
+
+    assert shape.completeness == "closed"
+    assert [(root.name, root.presence) for root in shape.roots] == [("x", "conditional")]
+
+
+def test_paths_that_differ_only_in_open_reasons_or_definitions_stay_separate():
+    # One path leaves `data` empty and fully known, the other updates it from
+    # an unknown value. Merging them would claim the result is fully known.
+    _source, unknown_update = _shape(
+        """
+        data = {}
+        if condition:
+            pass
+        else:
+            data.update(other)
+        return data
+        """,
+    )
+    # Both paths set the same key, but from different lines, and the editor
+    # offers both lines as definitions.
+    _source, two_definitions = _shape(
+        """
+        if condition:
+            data = {"a": 1}
+        else:
+            data = {"a": 2}
+        return data
+        """,
+    )
+
+    assert unknown_update.completeness == "open"
+    assert unknown_update.open_reasons == ("unknown mapping update",)
+    assert two_definitions.completeness == "closed"
+    assert [root.name for root in two_definitions.roots] == ["a"]
+    assert [definition.key_range.start.line for definition in two_definitions.roots[0].definitions] == [4, 6]
 
 
 def test_generator_method_never_claims_return_statement_mappings():

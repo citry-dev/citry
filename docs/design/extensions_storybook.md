@@ -76,7 +76,7 @@ The spike pins Storybook 10.5.4 and compares:
 
 Both adapters currently pass the static Button, Field/Input, Table, and
 server-selected Tabs previews plus a private reactive-state pressure case. The
-interactive case proves CSS and JavaScript activation, local Alpine state,
+interactive case proves CSS and JavaScript activation, local Vue state,
 delayed and failed readiness, stale-response rejection, last-good-preview
 retention, Storybook failure status, and cleanup on replacement and basic
 navigation.
@@ -89,7 +89,7 @@ comparison is recorded in
 [`adapter-exploration.md`](extensions_storybook/adapter-exploration.md).
 
 The connected hidden candidate used during replacement is staging, not an
-isolation boundary. Citry and Alpine initialize before promotion, so global
+isolation boundary. Citry and Vue initialize before promotion, so global
 listeners, Events, focus, teleports, CSS, and remote work could overlap the
 current preview. A general extension needs either a two-phase activation
 contract or a deliberately narrower readiness guarantee before it claims

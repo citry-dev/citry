@@ -34,6 +34,7 @@ from citry.ext.events.dispatcher import (
     TransportContext,
 )
 from citry.ext.events.errors import EventError
+from citry.ext.events.results import HTML_RENDER_ENCODER
 from citry.ext.events.tokens import mint_state_token, verify_state_token
 from citry.extension import Extension
 from citry.util.routing import RouteResponse
@@ -201,10 +202,18 @@ class TestHappyPaths:
         assert action["target"] == "render:c9zk1q00"
         # No capabilities field means the baseline, which excludes morph.
         assert action["swap"] == "replace"
-        assert "Clicked 1 times" in action["html"]
+        # The fragment's JSON block carries the new state; parse it so the
+        # check reads values, not formatting.
+        match = re.search(r"<script\b[^>]*data-citry-vue-fragment[^>]*>(.*?)</script>", action["html"], re.DOTALL)
+        assert match is not None
+        manifest = json.loads(match.group(1))["vue"]["prepared"]["manifest"]
+        [root] = [o for o in manifest["occurrences"] if o["id"] == manifest["rootId"]]
+        assert root["eventContext"]["publicState"] == {"count": 1, "name": "Counter"}
+        # The rendered text shows the new count, not only the stored state.
+        assert root["preparedData"]["citryText1"] == "1"
         # The fragment carries its own manifests; the state action is not
         # needed because the fresh manifest carries the new token.
-        assert "data-citry-events" in action["html"]
+        assert root["eventContext"]["stateToken"]
         assert all(a["action"] != "state" for a in item["actions"])
 
     def test_morph_when_the_client_advertises_it(self):
@@ -219,6 +228,78 @@ class TestHappyPaths:
         result = _dispatch(c, call, envelope_extra={"capabilities": {"swaps": ["replace", "morph"]}})
         [action] = result["results"][0]["actions"]
         assert action["swap"] == "morph"
+
+    def test_configured_render_encoder_is_selected_by_negotiated_renderer(self):
+        c = _citry()
+        counter = _counter(c)
+
+        class PreparedEncoder:
+            renderer = "vue-prepared/1"
+
+            def encode(self, action, target, context):
+                assert context.citry is c
+                assert context.handler.name == "increment"
+                assert context.transport == "http"
+                assert context.caller_render_id == "counter_1"
+                return {
+                    "action": "render",
+                    "target": target,
+                    "swap": action.swap,
+                    "renderer": self.renderer,
+                    "prepared": {"count": 1},
+                }
+
+        dispatcher = EventsDispatcher(render_encoders=(PreparedEncoder(),), preferred_renderer="vue-prepared/1")
+        call = {
+            "componentClassId": counter.class_id,
+            "handlerName": "increment",
+            "callerRenderId": "counter_1",
+            "stateToken": _token(counter),
+        }
+        capabilities = {
+            "actions": ["render", "state"],
+            "swaps": ["morph"],
+            "renderers": ["vue-prepared/1", "html-fragment/1"],
+        }
+        [item] = _dispatch(
+            c,
+            call,
+            dispatcher=dispatcher,
+            envelope_extra={"capabilities": capabilities},
+        )["results"]
+        assert item["actions"] == [
+            {
+                "action": "render",
+                "target": "render:counter_1",
+                "swap": "morph",
+                "renderer": "vue-prepared/1",
+                "prepared": {"count": 1},
+            }
+        ]
+
+    def test_configured_render_encoder_requires_client_support(self):
+        class PreparedEncoder:
+            renderer = "vue-prepared/1"
+
+            def encode(self, action, target, context):  # pragma: no cover - rejected before encoding
+                raise AssertionError
+
+        c = _citry()
+        counter = _counter(c)
+        dispatcher = EventsDispatcher(render_encoders=(PreparedEncoder(),), preferred_renderer="vue-prepared/1")
+        call = {"componentClassId": counter.class_id, "handlerName": "increment", "stateToken": _token(counter)}
+        [item] = _dispatch(c, call, dispatcher=dispatcher)["results"]
+        assert item["error"]["code"] == "handler_error"
+
+    def test_render_encoder_registry_rejects_unknown_and_duplicate_names(self):
+        class UnknownEncoder:
+            renderer = "unknown/1"
+
+        with pytest.raises(ValueError, match="Unknown render encoder renderer"):
+            EventsDispatcher(render_encoders=(UnknownEncoder(),), preferred_renderer="unknown/1")
+
+        with pytest.raises(ValueError, match="already registered"):
+            EventsDispatcher(render_encoders=(HTML_RENDER_ENCODER, HTML_RENDER_ENCODER))
 
     def test_rename_emits_state_first_then_event_then_data(self):
         c = _citry()
@@ -242,6 +323,7 @@ class TestHappyPaths:
         assert state_action["targetRenderId"] == "c9zk1q00"
         verified = verify_state_token(state_action["stateToken"], cls=counter, secrets=[SIGNING_KEY])
         assert verified.state_kwargs == {"count": 0, "name": "Tally"}
+        assert state_action["publicState"] == {"count": 0, "name": "Tally"}
         # The handler did not address the dispatch, so the server
         # self-addressed it to the calling instance, with the timing fields.
         assert event_action == {
@@ -273,7 +355,7 @@ class TestHappyPaths:
         assert second["ok"] is False
         assert second["error"]["code"] == "handler_error"
 
-    def test_compat_targetless_render_uses_the_internal_root_target(self):
+    def test_compat_targetless_render_uses_the_internal_compat_target(self):
         c = _citry()
 
         class Result(Component):
@@ -293,7 +375,8 @@ class TestHappyPaths:
         [item] = EventsDispatcher().dispatch(envelope, ctx)["results"]
         [action] = item["actions"]
         assert action["action"] == "render"
-        assert action["target"] == ":root"
+        # A valid render target that Citry's generated render IDs never equal.
+        assert action["target"] == "render:_compat"
 
 
 class TestStateResign:
@@ -323,6 +406,146 @@ class TestStateResign:
         assert kinds == ["state", "data"]
         verified = verify_state_token(item["actions"][0]["stateToken"], cls=Bumper, secrets=[SIGNING_KEY])
         assert verified.state_kwargs["count"] == 11
+        # The browser shows these values in `$state`; the token alone would leave it stale.
+        assert item["actions"][0]["publicState"] == {"count": 11, "name": "Counter"}
+
+    def test_state_action_carries_only_public_fields_in_sorted_order(self):
+        c = _citry()
+
+        class Vault(Component):
+            citry = c
+            template = "<div>v</div>"
+
+            class State:
+                zeta: int = 0
+                internal_note: str = "hidden"
+                alpha: str = "a"
+                _public = ("zeta", "alpha")
+
+            class Events:
+                def touch(self, state):
+                    state.zeta += 1
+                    state.internal_note = "still hidden"
+                    state.alpha = "b"
+
+        call = {
+            "componentClassId": Vault.class_id,
+            "handlerName": "touch",
+            "callerRenderId": "v1",
+            "stateToken": _token(Vault),
+        }
+        [state_action] = _dispatch(c, call)["results"][0]["actions"]
+        # A field outside `_public` stays in the signed token and never reaches the browser.
+        assert state_action["publicState"] == {"alpha": "b", "zeta": 1}
+        assert list(state_action["publicState"]) == ["alpha", "zeta"]
+
+    def test_state_action_sends_a_tuple_as_a_list(self):
+        c = _citry()
+
+        class Tagged(Component):
+            citry = c
+            template = "<div>t</div>"
+
+            class State:
+                tags: list[str] | None = None
+
+            class Events:
+                def tag(self, state):
+                    state.tags = ("a", "b")
+
+        call = {
+            "componentClassId": Tagged.class_id,
+            "handlerName": "tag",
+            "callerRenderId": "t1",
+            "stateToken": _token(Tagged),
+        }
+        [state_action] = _dispatch(c, call)["results"][0]["actions"]
+        # The token stores the tuple as a JSON list, so the browser receives the same form.
+        assert state_action["publicState"] == {"tags": ["a", "b"]}
+
+    def test_public_value_outside_the_browser_number_range_is_an_encoding_error(self):
+        c = _citry()
+
+        class Huge(Component):
+            citry = c
+            template = "<div>h</div>"
+
+            class State:
+                n: int = 0
+
+            class Events:
+                def grow(self, state):
+                    state.n = 2**1100
+
+        call = {
+            "componentClassId": Huge.class_id,
+            "handlerName": "grow",
+            "callerRenderId": "h1",
+            "stateToken": _token(Huge),
+        }
+        [item] = _dispatch(c, call)["results"]
+        assert item["ok"] is False
+        assert item["error"]["code"] == "handler_error"
+
+    def test_server_storage_state_action_carries_public_values(self):
+        c = _citry()
+
+        class Stored(Component):
+            citry = c
+            template = "<div>s</div>"
+
+            class State:
+                count: int = 0
+                _storage = "server"
+
+            class Events:
+                def bump(self, state):
+                    state.count += 1
+
+        token = mint_state_token(
+            Stored.State(),
+            class_id=Stored.class_id,
+            secret=SIGNING_KEY,
+            max_age=None,
+            max_bytes=8192,
+            storage="server",
+            cache=c.cache,
+        )
+        call = {
+            "componentClassId": Stored.class_id,
+            "handlerName": "bump",
+            "callerRenderId": "s1",
+            "stateToken": token,
+        }
+        [state_action] = _dispatch(c, call)["results"][0]["actions"]
+        # The token is only a cache key here, so the values must travel beside it.
+        assert state_action["stateToken"].startswith("ces1.")
+        assert state_action["publicState"] == {"count": 1}
+
+    def test_state_without_public_fields_sends_an_empty_object(self):
+        c = _citry()
+
+        class Hidden(Component):
+            citry = c
+            template = "<div>h</div>"
+
+            class State:
+                count: int = 0
+                _public = ()
+
+            class Events:
+                def bump(self, state):
+                    state.count += 1
+
+        call = {
+            "componentClassId": Hidden.class_id,
+            "handlerName": "bump",
+            "callerRenderId": "h1",
+            "stateToken": _token(Hidden),
+        }
+        [state_action] = _dispatch(c, call)["results"][0]["actions"]
+        assert state_action["action"] == "state"
+        assert state_action["publicState"] == {}
 
     def test_render_targeting_elsewhere_still_refreshes_the_token(self):
         # A render that does not re-render the calling instance carries no
@@ -344,7 +567,7 @@ class TestStateResign:
                     from citry.ext.events.actions import Render
 
                     state.count += 1
-                    return Render(Badge(), target="#badge")
+                    return Render(Badge(), target="mark:badge")
 
         call = {
             "componentClassId": Mutator.class_id,
@@ -353,8 +576,12 @@ class TestStateResign:
             "stateToken": _token(Mutator),
         }
         result = _dispatch(c, call)
-        kinds = [action["action"] for action in result["results"][0]["actions"]]
+        actions = result["results"][0]["actions"]
+        kinds = [action["action"] for action in actions]
         assert kinds == ["state", "render"]
+        assert actions[0]["publicState"] == {"count": 1, "name": "Counter"}
+        # The wire form names the caller, since a marker name is unique only inside it.
+        assert actions[1]["target"] == "mark:i9:badge"
 
     def test_unchanged_state_mints_nothing(self):
         c = _citry()
@@ -452,6 +679,8 @@ class TestUpdates:
         # token even though the handler itself mutated nothing.
         assert kinds == ["state", "data"]
         assert item["actions"][1]["value"] == {"title": "Drafts"}
+        # `secret_note` is outside `_public`, so it stays in the signed token only.
+        assert item["actions"][0]["publicState"] == {"title": "Drafts"}
 
     def test_non_writable_update_is_a_per_field_422(self):
         c = _citry()
@@ -1148,12 +1377,15 @@ class TestPipelineOrder:
             [{"action": "data", "value": 1, "delay": True}],
             [{"action": "data", "value": 1, "wait": 1}],
             [{"action": "data", "value": 1, "wait": False}],
-            [{"action": "render", "target": "#target", "swap": "replace", "html": 1}],
+            [{"action": "render", "target": "render:target", "swap": "replace", "html": 1}],
+            [{"action": "render", "target": "#target", "swap": "replace", "html": "<p>x</p>"}],
             [{"action": "render", "target": "", "swap": "replace", "html": "<p>x</p>"}],
             [{"action": "render", "target": "render:MixedCase", "swap": "replace", "html": "<p>x</p>"}],
             [{"action": "data"}],
-            [{"action": "state", "targetRenderId": "", "stateToken": "token"}],
-            [{"action": "state", "targetRenderId": "MixedCase", "stateToken": "token"}],
+            [{"action": "state", "targetRenderId": "", "stateToken": "token", "publicState": {}}],
+            [{"action": "state", "targetRenderId": "MixedCase", "stateToken": "token", "publicState": {}}],
+            [{"action": "state", "targetRenderId": "target", "stateToken": "token"}],
+            [{"action": "state", "targetRenderId": "target", "stateToken": "token", "publicState": []}],
             [{"action": "event", "eventName": "citry:reserved"}],
             [{"action": "redirect", "url": ""}],
             [{"action": "url", "url": "/next", "mode": "reload"}],
@@ -2023,12 +2255,89 @@ class TestCapabilities:
 
             class Events:
                 def append(self):
-                    return actions.Render(Badge(), target="#target", swap="append")
+                    return actions.Render(Badge(), swap="append")
 
-        call = {"componentClassId": Renderer.class_id, "handlerName": "append"}
+        call = {"componentClassId": Renderer.class_id, "handlerName": "append", "callerRenderId": "r1"}
         capabilities = {"actions": ["render"], "swaps": ["replace"]}
         [item] = _dispatch(c, call, envelope_extra={"capabilities": capabilities})["results"]
         assert item["error"]["code"] == "handler_error"
+
+    def test_morph_downgrades_to_replace_only_for_html_fragments(self):
+        html = {"action": "render", "target": "render:r1", "swap": "morph", "html": "<p></p>"}
+        prepared = {
+            "action": "render",
+            "target": "render:r1",
+            "swap": "morph",
+            "renderer": "vue-prepared/1",
+            "prepared": {},
+        }
+        capabilities = {
+            "actions": frozenset({"render"}),
+            "swaps": frozenset({"replace"}),
+            "renderers": frozenset({"html-fragment/1", "vue-prepared/1"}),
+        }
+        [downgraded] = EventsDispatcher._apply_capabilities([html], capabilities, handler="h")
+        assert downgraded["swap"] == "replace"
+        # Prepared Vue content has no replace form, so the call fails instead of
+        # sending a render the client would reject.
+        with pytest.raises(ValueError, match="only an HTML fragment's 'morph' downgrades"):
+            EventsDispatcher._apply_capabilities([prepared], capabilities, handler="h")
+
+    def test_vue_renderer_names_a_swap_it_cannot_apply(self):
+        from citry.ext.events.renderers import VuePreparedRenderEncoder
+
+        c = _citry()
+
+        class Badge(Component):
+            citry = c
+            template = "<span>badge</span>"
+
+        def prepare(_element, _context):
+            raise AssertionError("the swap check runs before any content is prepared")
+
+        # A self-targeted Render may pick any swap, but prepared content only morphs.
+        encoder = VuePreparedRenderEncoder(prepare)
+        with pytest.raises(ValueError, match="supports only swap='morph'; got 'inner'"):
+            encoder.encode(actions.Render(Badge(), swap="inner"), "render:r1", None)  # type: ignore[arg-type]
+
+    def test_callerless_render_errors_point_to_a_render_target(self):
+        from citry.ext.events.results import encode_actions
+
+        c = _citry()
+
+        class Badge(Component):
+            citry = c
+            template = "<span>badge</span>"
+
+        # Both hints must name a target form that works without a caller.
+        with pytest.raises(ValueError, match=r"'save' has no target.*target=\"render:<id>\""):
+            encode_actions([actions.Render(Badge())], instance_id=None, handler="save")
+        with pytest.raises(ValueError, match=r"'save' targets 'mark:badge'.*target=\"render:<id>\""):
+            encode_actions([actions.Render(Badge(), target="mark:badge")], instance_id=None, handler="save")
+
+    def test_html_marker_target_without_a_caller_fails_the_call(self):
+        c = _citry()
+
+        class Badge(Component):
+            citry = c
+            template = "<span>badge</span>"
+
+        class Renderer(Component):
+            citry = c
+            template = "<div>r</div>"
+
+            class Events:
+                def badge(self):
+                    return actions.Render(Badge(), target="mark:badge")
+
+        # The wire form mark:<callerRenderId>:<name> needs a caller to name.
+        call = {"componentClassId": Renderer.class_id, "handlerName": "badge"}
+        [item] = _dispatch(c, call)["results"]
+        assert item["error"]["code"] == "handler_error"
+
+        compat = TransportContext(transport="http", citry=c, response_mode="compat")
+        [item] = EventsDispatcher().dispatch(_envelope(call), compat)["results"]
+        assert item["actions"][0]["target"] == "render:_compat"
 
 
 class TestDebugHint:

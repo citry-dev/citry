@@ -37,12 +37,13 @@ import json
 import logging
 from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry._protocol.events import (
     CAPABILITIES_BASELINE_V1,
     PROTOCOL,
+    RENDERERS,
     CallEnvelopeFailure,
     ProtocolValueError,
     assemble_owned_ok_result,
@@ -66,6 +67,9 @@ from citry.ext.events.csrf import _MSG_CSRF_FAILED
 from citry.ext.events.errors import EventError, wire_error
 from citry.ext.events.handlers import event_options
 from citry.ext.events.results import (
+    HTML_RENDER_ENCODER,
+    RenderEncoder,
+    RenderEncodingContext,
     coerce_result,
     encode_actions,
     extract_download_result,
@@ -73,6 +77,7 @@ from citry.ext.events.results import (
     warn_unreturned_actions,
 )
 from citry.ext.events.schemas import validate_args
+from citry.ext.events.state import public_state_values
 from citry.ext.events.tokens import (
     InvalidStateError,
     StaleStateError,
@@ -124,13 +129,6 @@ _NOT_ANSWERED: Any = object()
 # visible (design 3.4).
 _VISIBLE_KINDS = frozenset({"render", "data", "event", "redirect", "url"})
 
-# Compatibility/no-JS responses consume render HTML as the whole response
-# before it reaches a client. Giving an otherwise targetless render this
-# schema-valid internal target keeps on_event_result hooks on the wire shape;
-# the target itself is never sent in compatibility mode.
-_COMPAT_RENDER_TARGET = ":root"
-
-
 ################################################
 # THE SHAPES THE DISPATCHER RECEIVES AND INJECTS
 ################################################
@@ -146,12 +144,12 @@ class TransportContext:
     passed to [`EventsDispatcher.dispatch`][citry.ext.events.EventsDispatcher.dispatch].
 
     Attributes:
-        transport: The transport's name (``"http"``, later ``"ws"``); handlers
-            see it as ``event.transport``.
+        transport: The transport's name, such as ``"http"``; handlers see it
+            as ``event.transport``.
         citry: The engine the call dispatches against.
         host_request: The untouched host request object (Django's
-            ``HttpRequest``, the ASGI scope, a WS connection); ``None`` when
-            the transport has none.
+            ``HttpRequest``, the ASGI scope, or a custom transport's own
+            object); ``None`` when the transport has none.
         headers: A case-insensitive view of the request headers; empty when
             the transport carries none.
         response_mode: ``"wire"`` for an ordinary result envelope, or
@@ -172,7 +170,7 @@ class EventRequest:
     """
     The ``request`` value injected into event handlers.
 
-    The framework-neutral request fields (design 3.3), always populated: the
+    The framework-neutral request fields, always populated: the
     HTTP routes fill everything; other transports fill what they carry. The
     untouched host object stays reachable as ``native``, and
     ``event.transport`` says which transport built it.
@@ -217,7 +215,7 @@ class CallEvent:
         transport: The transport that carried the call (``"http"``, ...).
         args: The raw, unvalidated wire args payload. Guards read this when
             they need payload values, because one guard covers handlers with
-            different schemas (design 3.5).
+            different schemas.
 
     """
 
@@ -374,10 +372,29 @@ class EventsDispatcher:
     [`TransportContext`][citry.ext.events.TransportContext], so
     one instance (or a fresh one per call) serves every transport. The HTTP
     routes own the built-in usage; a custom transport (a GraphQL mutation
-    resolver, say) decodes its request into the call envelope of design 4.2
+    resolver, say) decodes its request into the same JSON call that Citry's
+    browser code sends (the ``citry-events/1`` call envelope)
     and calls [`dispatch`][citry.ext.events.EventsDispatcher.dispatch]
     (or its async twin) directly.
     """
+
+    def __init__(
+        self,
+        *,
+        render_encoders: tuple[RenderEncoder, ...] = (HTML_RENDER_ENCODER,),
+        preferred_renderer: str = "html-fragment/1",
+    ) -> None:
+        registry: dict[str, RenderEncoder] = {}
+        for encoder in render_encoders:
+            if encoder.renderer not in RENDERERS:
+                raise ValueError(f"Unknown render encoder renderer {encoder.renderer!r}.")
+            if encoder.renderer in registry:
+                raise ValueError(f"A render encoder is already registered for {encoder.renderer!r}.")
+            registry[encoder.renderer] = encoder
+        if preferred_renderer not in registry:
+            raise ValueError(f"The preferred renderer {preferred_renderer!r} has no registered encoder.")
+        self._render_encoders = registry
+        self._preferred_renderer = preferred_renderer
 
     def dispatch(
         self,
@@ -400,7 +417,7 @@ class EventsDispatcher:
         private event loop.
 
         Args:
-            envelope: The decoded call envelope (design 4.2).
+            envelope: The decoded ``citry-events/1`` call envelope.
             ctx: What the transport knows about the request.
             request: The neutral request injected into handlers as
                 ``request``; ``None`` builds an empty one carrying
@@ -417,7 +434,7 @@ class EventsDispatcher:
                 its own protection, or a direct caller).
 
         Returns:
-            The result envelope (design 4.3), or the handler's
+            The ``citry-events/1`` result envelope, or the handler's
             ``RouteResponse`` when the per-event escape hatch was used.
 
         """
@@ -457,8 +474,7 @@ class EventsDispatcher:
         The one behavioral difference from
         [`dispatch`][citry.ext.events.EventsDispatcher.dispatch]:
         ``async def`` event handlers are awaited on the running loop, and
-        sync handlers are offloaded to a worker thread
-        (``citry.util.routing.call_maybe_sync``) so they cannot block it.
+        sync handlers run in a worker thread so they cannot block it.
 
         Args:
             envelope: The decoded call envelope.
@@ -892,8 +908,9 @@ class EventsDispatcher:
         The ``RouteResponse`` escape hatch: per-event HTTP route only.
 
         The handler opts out of bundling and must run through its own HTTP
-        route. State cannot change because this response bypasses the normal
-        state-token refresh.
+        route. State cannot change because this response has no result
+        envelope, so no ``state`` action can carry the new State token and
+        public State values to the browser.
         """
         if ctx.transport != "http" or not per_event:
             msg = (
@@ -929,15 +946,40 @@ class EventsDispatcher:
         capabilities: dict[str, frozenset[str]],
     ) -> dict[str, Any]:
         """Encode, apply capabilities, emit ``on_event_result``, re-sign state, echo send_sequence."""
-        if ctx.response_mode == "compat" and plan.instance_id is None:
-            actions = [
-                replace(action, target=_COMPAT_RENDER_TARGET)
-                if isinstance(action, Render) and action.target is None
-                else action
-                for action in actions
-            ]
+        if ctx.response_mode == "compat":
+            capabilities = {name: frozenset(values) for name, values in CAPABILITIES_BASELINE_V1.items()}
         try:
-            encoded = encode_actions(actions, instance_id=plan.instance_id, handler=plan.handler.name)
+            advertised_renderers = capabilities["renderers"]
+            if ctx.response_mode == "compat":
+                renderer = HTML_RENDER_ENCODER.renderer
+            elif self._preferred_renderer in advertised_renderers:
+                renderer = self._preferred_renderer
+            else:
+                renderer = next(
+                    (name for name in self._render_encoders if name in advertised_renderers),
+                    self._preferred_renderer,
+                )
+            if any(isinstance(action, Render) for action in actions) and renderer not in advertised_renderers:
+                raise ValueError(
+                    f"Event handler {plan.handler.name!r} produced a render, but no configured renderer"
+                    " was advertised by the client."
+                )
+            encoder = self._render_encoders[renderer]
+            encoded = encode_actions(
+                actions,
+                instance_id=plan.instance_id,
+                handler=plan.handler.name,
+                render_encoder=encoder,
+                render_context=RenderEncodingContext(
+                    citry=ctx.citry,
+                    caller_render_id=plan.instance_id,
+                    handler=plan.handler,
+                    transport=ctx.transport,
+                    renderer=renderer,
+                    headers=dict(ctx.headers),
+                    response_mode=ctx.response_mode,
+                ),
+            )
         except ProtocolValueError:
             return build_error_result(build_error(500, "handler_error", _MSG_UNENCODABLE_RESULT), plan.send_sequence)
         encoded = self._apply_capabilities(encoded, capabilities, handler=plan.handler.name)
@@ -962,16 +1004,29 @@ class EventsDispatcher:
                 )
         else:
             final_actions = encoded
-        final_actions = self._resign_state(plan, ctx, final_actions, capabilities)
+        try:
+            final_actions = self._resign_state(plan, ctx, final_actions, capabilities)
+        except ProtocolValueError:
+            # A public State value the browser cannot read (such as an integer wider
+            # than a browser number) is a result encoding failure, not a handler bug.
+            return build_error_result(build_error(500, "handler_error", _MSG_UNENCODABLE_RESULT), plan.send_sequence)
         final_actions = self._apply_capabilities(final_actions, capabilities, handler=plan.handler.name)
 
         if _debug_enabled() and plan.state is not None and self._state_changed(plan):
             kinds = {action.get("action") for action in final_actions}
             if not (kinds & _VISIBLE_KINDS):
+                # Only a `state` action that reached the response updates `$state`.
+                refreshed = (
+                    " The browser receives the new public State for `$state` and State bindings,"
+                    " but server-rendered content stays as it was."
+                    if "state" in kinds
+                    else ""
+                )
                 logger.debug(
                     f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} mutated"
                     f" state but returned nothing visible (no render, data, dispatch, redirect, or URL"
-                    f" action). If the page should update, return a rendering, e.g. 'return state.render()'."
+                    f" action).{refreshed} If the page should change, return a rendering,"
+                    f" e.g. 'return state.render()'."
                 )
 
         try:
@@ -1032,13 +1087,13 @@ class EventsDispatcher:
         capabilities: dict[str, frozenset[str]],
     ) -> list[dict[str, Any]]:
         """
-        Changed State means a fresh token in the response (design 4.3).
+        Changed State means a fresh token and fresh public values in the response (design 4.3).
 
         A render that re-renders the calling instance needs no companion (the
-        fresh fragment's manifest carries the new token); otherwise a
-        ``state`` action is placed before the handler's own actions. The
+        fresh fragment's manifest carries the new token and values); otherwise
+        a ``state`` action is placed before the handler's own actions. The
         placement breaks no ordering promise: the action is server-added, and
-        the client applies a result's token refresh before the actions array
+        the client applies a result's State refresh before the actions array
         either way.
         """
         if plan.state is None or not self._state_changed(plan):
@@ -1074,10 +1129,12 @@ class EventsDispatcher:
             # emitting one anyway would violate the capability contract.
             logger.warning(
                 f"Event handler {plan.handler.name!r} mutated state, but the client's advertised"
-                f" capabilities exclude the 'state' action; the token refresh is dropped."
+                f" capabilities exclude the 'state' action; the State refresh is dropped."
             )
             return wire_actions
-        state_action = build_state_action(plan.instance_id, token)
+        # The browser shows public State through `$state` and State bindings, and
+        # nothing else will refresh them: the caller is not rendered again here.
+        state_action = build_state_action(plan.instance_id, token, public_state_values(plan.state, meta))
         return [state_action, *wire_actions]
 
     @staticmethod
@@ -1090,12 +1147,14 @@ class EventsDispatcher:
         """
         Never emit an action kind or swap outside the client's advertised set.
 
-        The one defined downgrade is ``morph`` to ``replace`` (protocol spec
-        section 5); anything else outside the set is an encode-time error,
-        because dropping or reordering actions is never allowed.
+        The only allowed downgrade turns an HTML-fragment render's ``morph``
+        into ``replace`` (protocol spec "Capabilities"); anything else outside
+        the set is an encode-time error, because dropping or reordering actions
+        is never allowed.
         """
         swaps = capabilities["swaps"]
         kinds = capabilities["actions"]
+        renderers = capabilities["renderers"]
         applied: list[dict[str, Any]] = []
         for action in wire_actions:
             kind = action.get("action")
@@ -1107,15 +1166,23 @@ class EventsDispatcher:
                 )
                 raise ValueError(msg)
             if kind == "render":
+                renderer = action.get("renderer", "html-fragment/1")
+                if renderer not in renderers:
+                    raise ValueError(
+                        f"Event handler {handler!r} produced a render with renderer {renderer!r}, which"
+                        " the client did not advertise."
+                    )
                 swap = action.get("swap")
                 if swap not in swaps:
-                    if swap == "morph" and "replace" in swaps:
+                    # Prepared Vue content can only morph, so only an HTML
+                    # fragment has a replace to fall back to.
+                    if swap == "morph" and "replace" in swaps and renderer == "html-fragment/1":
                         action = {**action, "swap": "replace"}  # noqa: PLW2901 - the downgraded copy is the point
                     else:
                         msg = (
                             f"Event handler {handler!r} produced a render with swap {swap!r}, which"
-                            f" the client's advertised capabilities do not include (only 'morph'"
-                            f" downgrades, to 'replace')."
+                            f" the client's advertised capabilities do not include (only an HTML"
+                            f" fragment's 'morph' downgrades, to 'replace')."
                         )
                         raise ValueError(msg)
             applied.append(action)

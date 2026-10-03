@@ -70,7 +70,11 @@ class CreateCommand(ExtensionCommand):
         # survive; otherwise build PascalCase from the snake/kebab form.
         class_name = raw_name if raw_name.isidentifier() and raw_name[:1].isupper() else snake_to_pascal(file_stem)
 
-        if not class_name.isidentifier() or keyword.iskeyword(class_name):
+        # The name becomes both the class name and the module name, so check
+        # both: ``class`` gives a valid class ``Class`` but a ``class.py`` that
+        # no ``import`` statement can name. Soft keywords such as ``match``
+        # still import fine, so only hard keywords are refused.
+        if not all(part.isidentifier() and not keyword.iskeyword(part) for part in (class_name, file_stem)):
             print(style_warning(f"{raw_name!r} is not a usable component name."))
             raise SystemExit(1)
         if file_stem.startswith("__"):

@@ -390,9 +390,16 @@ def test_inherited_file_and_layout_origins(tmp_path, monkeypatch):
 
     # inspect.getfile is the provenance boundary; leave all rendering and file IO real.
     original = inspect.getfile
+
+    def getfile_with_preview_declaration(obj):
+        qualname = getattr(obj, "__qualname__", "")
+        if isinstance(qualname, str) and qualname.endswith("Parent.Preview"):
+            return str(declaration)
+        return original(obj)
+
     monkeypatch.setattr(
         "citry.ext.preview.extension.inspect.getfile",
-        lambda obj: str(declaration) if obj.__qualname__.endswith("Parent.Preview") else original(obj),
+        getfile_with_preview_declaration,
     )
     html = _html(PreviewRenderer(ext), Child)
     assert "<article" in html

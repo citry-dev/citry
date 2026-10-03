@@ -20,6 +20,7 @@ from typing import Any, NoReturn
 from lsprotocol import types
 from pygls.client import JsonRPCClient
 
+from citry._source_lines import line_break_count, source_lines
 from citry_lsp.uri import canonical_document_uri, file_uri_path
 
 TY_VERSION = "0.0.78"
@@ -83,9 +84,13 @@ class TyAnalyzer:
         *,
         executable: Path | None = None,
         python_prefix: Path | None = None,
+        request_timeout: float = _REQUEST_TIMEOUT_SECONDS,
     ) -> None:
         self.workspace = workspace.resolve()
         self._executable = executable
+        # The editor drops a slow answer to stay responsive; a batch check
+        # passes a longer bound, because there a timeout fails the command.
+        self._request_timeout = request_timeout
         # citry-lsp itself is launched by the selected interpreter. Passing
         # that interpreter's prefix explicitly keeps ty from rediscovering a
         # different ambient or workspace environment.
@@ -426,7 +431,7 @@ class TyAnalyzer:
             client = _configured_client(self._python_prefix)
             await client.start_io(str(executable), "server", cwd=self.workspace)
             params = _initialize_params(self.workspace, self._python_prefix)
-            await _bounded_client_request(client, types.INITIALIZE, params, _REQUEST_TIMEOUT_SECONDS)
+            await _bounded_client_request(client, types.INITIALIZE, params, self._request_timeout)
             client.protocol.notify(types.INITIALIZED, types.InitializedParams())
         except asyncio.CancelledError:
             if client is not None:
@@ -480,7 +485,7 @@ class TyAnalyzer:
         if operation is not None:
             self._active_requests.add(operation)
         try:
-            return await _bounded_client_request(client, method, params, _REQUEST_TIMEOUT_SECONDS)
+            return await _bounded_client_request(client, method, params, self._request_timeout)
         except asyncio.CancelledError:
             # Cancellation belongs to this editor request, not to the shared
             # analyzer generation. The bounded request leaves its pygls
@@ -634,16 +639,17 @@ def position_at_offset(source: str, offset: int) -> types.Position:
     """Convert a Python string index to an LSP UTF-16 position."""
     bounded = min(max(offset, 0), len(source))
     before = source[:bounded]
-    line = before.count("\n")
-    line_text = before.rsplit("\n", 1)[-1]
-    return types.Position(line, len(line_text.encode("utf-16-le")) // 2)
+    # The line starts after the last CR or LF; a CR LF pair counts once.
+    line_start = max(before.rfind("\n"), before.rfind("\r")) + 1
+    line_text = before[line_start:]
+    return types.Position(line_break_count(before), len(line_text.encode("utf-16-le")) // 2)
 
 
 def offset_at_position(source: str, position: types.Position) -> int | None:
     """Convert an LSP UTF-16 position to a Python string index exactly."""
     if position.line < 0 or position.character < 0:
         return None
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     if position.line >= len(lines):
         if position.line == 0 and not lines and position.character == 0:
             return 0

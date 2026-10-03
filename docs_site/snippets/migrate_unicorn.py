@@ -104,7 +104,7 @@ class ContactForm(Component):
     citry = citry_app
 
     class Events:
-        def submit(self, data: ContactIn):
+        def save(self, data: ContactIn):
             if "@" not in data.email:
                 raise EventError(
                     "Please fix the errors.",
@@ -113,9 +113,9 @@ class ContactForm(Component):
             return ContactForm()
 
     template = """
-      <form @c-submit.prevent="submit">
+      <form @c-submit.prevent="save">
         <input name="email">
-        <span x-text="$error('save')?.fieldErrors.email"></span>
+        <span v-text="$error('save')?.fieldErrors.email"></span>
         <button type="submit">Send</button>
       </form>
     """

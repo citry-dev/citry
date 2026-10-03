@@ -14,7 +14,7 @@
  * - Back-to-top button (revealed after scrolling a screenful down)
  */
 
-(function () {
+(globalThis.__citryDocsReady || Promise.resolve()).then(function () {
   'use strict';
 
   // ----------------------------------------------------------------
@@ -95,6 +95,30 @@
   var exampleColorScheme = window.matchMedia('(prefers-color-scheme: dark)');
   exampleColorScheme.addEventListener('change', function () {
     if (getStoredTheme() === 'auto') syncExampleFrameThemes('auto');
+  });
+
+  // YouTube embeds are opt-in. Even a loading="lazy" iframe can trigger a
+  // third-party cookie inspection during Lighthouse's initial page audit, so
+  // keep the initial document iframe-free and create it only after activation.
+  document.addEventListener('click', function (event) {
+    var target = event.target && event.target.closest
+      ? event.target.closest('[data-youtube-load]')
+      : null;
+    if (!target || target.tagName !== 'BUTTON') return;
+
+    var root = target.closest('.youtube-video');
+    var source = root && root.getAttribute('data-youtube-embed-url');
+    if (!root || !source || root.querySelector('iframe')) return;
+
+    var iframe = document.createElement('iframe');
+    iframe.className = 'youtube-video__frame';
+    iframe.src = source;
+    iframe.title = root.getAttribute('data-youtube-title') || 'YouTube video';
+    iframe.loading = 'lazy';
+    iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+    iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+    iframe.allowFullscreen = true;
+    target.replaceWith(iframe);
   });
 
   // Build-rendered Citry UI previews report their document height from their
@@ -759,4 +783,4 @@
       window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     });
   }
-})();
+});

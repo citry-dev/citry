@@ -5,9 +5,10 @@ The project gate: run every check in one pass and report all results.
 Phases: uv lock, cargo fmt, cargo clippy, cargo test, ruff check, ruff format,
 mypy, pyright, the private protocol packages, citry-client (tsc, biome, and the
 canary over the events client package), the generated docs playground bundle,
-the VS Code language extension, pytest, and the custom validators
-(scripts/validate.py). Every phase runs even after an earlier one fails, so a
-single invocation surfaces every problem at once instead of one-at-a-time.
+the VS Code language extension, pytest, the Vue render parity check over the
+pages the pytest phase recorded, and the custom validators (scripts/validate.py).
+Every phase runs even after an earlier one fails, so a single invocation
+surfaces every problem at once instead of one-at-a-time.
 
 This only CHECKS; it never edits files. Fix the reported issues yourself, then
 re-run. It assumes the workspace is already set up (`uv sync --all-packages`,
@@ -24,6 +25,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Literal, cast
@@ -46,7 +48,7 @@ def _crate_flags() -> list[str]:
     return flags
 
 
-def _pytest_command(profile: CheckProfile) -> list[str]:
+def _pytest_command(profile: CheckProfile, parity_corpus: Path) -> list[str]:
     """Build the deterministic non-browser pytest command for one profile."""
     command = [
         "uv",
@@ -63,6 +65,11 @@ def _pytest_command(profile: CheckProfile) -> list[str]:
         "loadfile",
         "--durations",
         "30",
+        # Record every Vue page the suite prepares, so the parity phase can
+        # compare the server's HTML with Vue's without a second test run.
+        "-p",
+        "scripts.vue_render_parity.collect",
+        f"--vue-render-parity-corpus={parity_corpus}",
     ]
     if profile == "full":
         # Coverage is integration evidence, so routine implementation checks do
@@ -94,7 +101,21 @@ def _qualification_pytest_command() -> list[str]:
     ]
 
 
-def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
+def _vue_render_parity_command(parity_corpus: Path) -> list[str]:
+    """Compare the pages the pytest phase recorded; never rerun the tests."""
+    return [
+        "uv",
+        "run",
+        "--no-sync",
+        "python",
+        "scripts/vue_render_parity/check.py",
+        "--reuse",
+        "--corpus",
+        str(parity_corpus),
+    ]
+
+
+def _phases(profile: CheckProfile = "full", *, parity_corpus: Path) -> list[tuple[str, list[str]]]:
     crates = _crate_flags()
     uvr = ["uv", "run", "--no-sync"]
     return [
@@ -118,6 +139,7 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
                 # the typed-base contract test runs under mypy, not pytest
                 "packages/py/citry/tests/test_events_typing.py",
                 "packages/py/citry/tests/test_library_component_typing.py",
+                "packages/py/citry/tests/test_nested_schema_typing.py",
                 "packages/py/citry_lsp/citry_lsp",
                 "packages/py/citry_ui/citry_ui",
                 "packages/py/citry_ui/tests/typing_contract.py",
@@ -150,6 +172,7 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
                 str(_REPO_ROOT / ".venv" / "bin" / "python"),
                 "packages/py/citry/tests/test_events_typing.py",
                 "packages/py/citry/tests/test_library_component_typing.py",
+                "packages/py/citry/tests/test_nested_schema_typing.py",
                 "packages/py/citry_ui/tests/typing_contract.py",
             ],
         ),
@@ -176,7 +199,6 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
                 "-m",
                 "packages.protocol._tooling.check",
                 "packages/protocol/events/v1",
-                "packages/protocol/client_graph/v1",
             ],
         ),
         (
@@ -188,10 +210,6 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
             ["pnpm", "--dir", "packages/protocol/events/v1/js", "run", "check"],
         ),
         (
-            "client graph protocol JavaScript",
-            ["pnpm", "--dir", "packages/protocol/client_graph/v1/js", "run", "check"],
-        ),
-        (
             "docs-playground",
             ["pnpm", "--dir", "docs_site/_internal/frontend", "run", "check"],
         ),
@@ -199,13 +217,23 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
             "vscode-extension",
             ["pnpm", "--dir", "packages/editors/vscode", "run", "check"],
         ),
+        # Citry UI commits minified `*.min.js` and CSS files built from
+        # readable `*.source.*` files, and an edit or merge that changes a
+        # source without rebuilding ships a stale file. The check takes about
+        # a second, so it runs with the other Node phases and catches this
+        # before the browser CI lane.
+        ("citry-ui assets", ["pnpm", "run", "citry-ui:check-assets"]),
         # Real development-server supervisors are sensitive to CPU starvation,
         # so exercise them before the four-worker portable suite starts.
         ("pytest reload servers", _reload_server_pytest_command()),
         # Browser tests have their own four-worker CI lane. Excluding them by
         # marker keeps this command identical whether Playwright is installed or
         # not, while xdist makes the rest of the portable suite use all four CPUs.
-        ("pytest", _pytest_command(profile)),
+        ("pytest", _pytest_command(profile, parity_corpus)),
+        # Runs the server's hydration renderer and Vue's `renderToString` (in
+        # Node, from the citry-client package's node_modules) over the pages
+        # the pytest phase just recorded, and fails on any difference.
+        ("vue render parity", _vue_render_parity_command(parity_corpus)),
         # These deep stress proofs are part of the full integration boundary,
         # but tracing them makes their run several times slower without adding
         # useful coverage. The version matrix also runs them without coverage.
@@ -247,6 +275,36 @@ def _run(cmd: list[str], *, capture: bool, phase_name: str) -> tuple[int, str]:
             )
 
 
+def _run_phase(name: str, cmd: list[str], *, agent: bool) -> dict[str, object]:
+    """Run one phase and return its report entry, printing progress as it goes."""
+    if not agent:
+        print(f"\n=== {name} ===")
+    else:
+        print(f"[check] starting {name}", file=sys.stderr, flush=True)
+    phase_started = time.monotonic()
+    code, output = _run(cmd, capture=agent, phase_name=name)
+    duration = time.monotonic() - phase_started
+    result: dict[str, object] = {
+        "name": name,
+        "command": " ".join(cmd),
+        "status": "PASSED" if code == 0 else "FAILED",
+        "durationSeconds": round(duration, 3),
+    }
+    if code != 0:
+        result["exitCode"] = code
+        if agent:
+            result["details"] = "\n".join(output.splitlines()[-_TAIL_LINES:]).strip() or "(no output)"
+    if not agent:
+        print(f"{'PASS' if code == 0 else 'FAIL'}: {name} ({duration:.2f}s)")
+    else:
+        print(
+            f"[check] {'PASS' if code == 0 else 'FAIL'} {name} ({duration:.2f}s)",
+            file=sys.stderr,
+            flush=True,
+        )
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the repository check suite (lint, types, tests, validators).")
     parser.add_argument(
@@ -264,33 +322,11 @@ def main(argv: list[str] | None = None) -> int:
 
     results: list[dict[str, object]] = []
     gate_started = time.monotonic()
-    for name, cmd in _phases(profile):
-        if not agent:
-            print(f"\n=== {name} ===")
-        else:
-            print(f"[check] starting {name}", file=sys.stderr, flush=True)
-        phase_started = time.monotonic()
-        code, output = _run(cmd, capture=agent, phase_name=name)
-        duration = time.monotonic() - phase_started
-        result: dict[str, object] = {
-            "name": name,
-            "command": " ".join(cmd),
-            "status": "PASSED" if code == 0 else "FAILED",
-            "durationSeconds": round(duration, 3),
-        }
-        if code != 0:
-            result["exitCode"] = code
-            if agent:
-                result["details"] = "\n".join(output.splitlines()[-_TAIL_LINES:]).strip() or "(no output)"
-        results.append(result)
-        if not agent:
-            print(f"{'PASS' if code == 0 else 'FAIL'}: {name} ({duration:.2f}s)")
-        else:
-            print(
-                f"[check] {'PASS' if code == 0 else 'FAIL'} {name} ({duration:.2f}s)",
-                file=sys.stderr,
-                flush=True,
-            )
+    # A directory per gate run keeps two gates in one worktree from reading
+    # each other's recorded pages, and never compares a stale page.
+    with tempfile.TemporaryDirectory(prefix="citry-vue-render-parity-") as parity_corpus:
+        for name, cmd in _phases(profile, parity_corpus=Path(parity_corpus)):
+            results.append(_run_phase(name, cmd, agent=agent))
 
     failed = [str(r["name"]) for r in results if r["status"] == "FAILED"]
     total_duration = time.monotonic() - gate_started

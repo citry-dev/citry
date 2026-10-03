@@ -8,11 +8,13 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from citry import Citry, Component, Extension, ForeignSpan, ForeignSpanSet
+from citry import Citry, Component, Extension, ForeignSpan, ForeignSpanSet, LintSettings
 from citry.__main__ import main
 from citry._app_selection import CheckAppSelection
 from citry._checker import TRANSFORM_NOTE, check_project
+from citry._diagnostic_catalog import I18N_CATALOG_INVALID, I18N_MISSING_PARAM_TYPE, TEMPLATE_MARKER_NAME_INVALID
 from citry.ext.i18n import DateFormat, FormatRegistry, NumberFormat
+from citry.ext.i18n.extension import I18nExtension
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -67,6 +69,15 @@ class TestModeSelection:
 
         assert _run_main(args) == 2
         assert "--static cannot be combined with an app selection" in capsys.readouterr().err
+
+    def test_types_needs_the_registry_mode(self, monkeypatch, capsys):
+        def forbidden(*args, **kwargs):
+            raise AssertionError("a mode error must not start analysis")
+
+        monkeypatch.setattr("citry.commands.check.check_project", forbidden)
+
+        assert _run_main(["check", "--static", "--types"]) == 2
+        assert "--types needs the app's registry" in capsys.readouterr().err
 
     @pytest.mark.parametrize(
         "args",
@@ -292,40 +303,6 @@ class TestRegistryMode:
         assert len(report.findings) == 1
         assert "Broken.template" in report.findings[0].origin
 
-    def test_static_component_props_report_unknown_and_missing_keys(self, tmp_path):
-        engine = Citry(autodiscover=False)
-
-        class Child(Component):
-            citry = engine
-            js = """
-              $component({
-                props: {
-                  title: { type: String, required: true },
-                  count: { type: Number, required: true },
-                  enabled: { type: Boolean, required: true },
-                },
-                init() {},
-              });
-            """
-            template = """
-              <span></span>
-            """
-
-        class Parent(Component):
-            citry = engine
-            template = """
-              <c-child $c-props="{ title: title, count: 'many', extra: true }" />
-              <c-child $c-props="{ title, ...{} }" />
-            """
-
-        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-
-        assert [finding.code for finding in report.findings if finding.code.startswith("citry.browser.")] == [
-            "citry.browser.incompatible-component-prop",
-            "citry.browser.unknown-component-prop",
-            "citry.browser.missing-component-prop",
-        ]
-
     def test_complete_tag_rules_validate_registered_aliases(self, tmp_path):
         engine = Citry(autodiscover=False)
 
@@ -489,10 +466,72 @@ class TestRegistryMode:
 
         report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
 
-        assert report.findings[0].code == "citry.i18n.missing-param-type"
+        # The Rust compiler spells this code itself, so the generated constant
+        # proves the reported code is the catalogued one.
+        assert report.findings[0].code == I18N_MISSING_PARAM_TYPE
         assert report.findings[0].severity == "warning"
         assert "without an @param" in report.findings[0].message
         assert report.exit_code == 0
+
+    def test_invalid_inline_messages_report_a_located_catalog_finding(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        # A selector variable without an @param type is a compile error, so
+        # check must report it instead of raising out of the run.
+        class Picker(Component):
+            citry = engine
+            messages = """
+                items = { $count ->
+                    [one] One item
+                   *[other] Many items
+                }
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert len(report.findings) == 1
+        finding = report.findings[0]
+        assert finding.code == I18N_CATALOG_INVALID
+        assert "selector $count must have type int or Decimal" in finding.message
+        assert finding.origin.endswith("::Picker.messages")
+        assert (finding.line, finding.column, finding.end_line, finding.end_column) == (2, 11, 2, 17)
+        assert report.exit_code == 1
+
+    def test_catalog_failure_without_a_source_position_names_the_catalog(self, tmp_path, monkeypatch):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = "known = Known"
+
+        def fail_to_load(_extension: object) -> None:
+            raise RuntimeError("catalog package unreadable")
+
+        # A failure that is not a compile error has no position to report.
+        monkeypatch.setattr(I18nExtension, "_load_project_sources", fail_to_load)
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [(finding.origin, finding.code, finding.line) for finding in report.findings] == [
+            ("i18n catalog", I18N_CATALOG_INVALID, None),
+        ]
+        assert "RuntimeError: catalog package unreadable" in report.findings[0].message
 
     def test_literal_tr_checks_attributes_arguments_and_literal_types(self, tmp_path):
         engine = Citry(
@@ -722,7 +761,7 @@ class TestRegistryMode:
             citry = engine
             template = """
             <c-i18n c-client="True" tag="main">
-              <span x-text="$i18n.format.number(total, {format: 'missing'})"></span>
+              <span v-text="$i18n.format.number(total, {format: 'missing'})"></span>
             </c-i18n>
             """
             messages = "unused = Present"
@@ -735,6 +774,43 @@ class TestRegistryMode:
         profile_findings = [finding for finding in report.findings if finding.code == "citry.i18n.argument-invalid"]
         assert len(profile_findings) == 1
         assert "Unknown i18n format profile 'missing' for number" in profile_findings[0].message
+
+    def test_guarded_formatter_profiles_are_unchecked_without_i18n_settings(self, tmp_path):
+        # Component messages make i18n available, but only configured i18n
+        # has profiles and gives the browser `$i18n`, so guarded calls pass
+        # while an unguarded call, which fails when it runs, is reported.
+        engine = Citry(autodiscover=False)
+
+        class Host(Component):
+            citry = engine
+
+            class I18n:
+                messages_locale = "en-US"
+
+            def label(self) -> str:
+                return self.i18n.format.number(3, format="missing") if self.i18n.configured else "3"
+
+            def guarded_block(self) -> str:
+                if not self.i18n.configured:
+                    return "4"
+                return self.i18n.format.number(4, format="missing")
+
+            def unguarded(self) -> str:
+                return self.i18n.format.number(5, format="unguarded")
+
+            js = """
+            const i18n = component.$i18n;
+            const label = i18n ? i18n.format.number(3, { format: 'missing' }) : '3';
+            """
+            messages = """
+            unused = Present
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.message for finding in report.findings if finding.code.startswith("citry.i18n.")] == [
+            "Unknown i18n format profile 'unguarded' for number; configured profiles: none.",
+        ]
 
     @pytest.mark.parametrize("attr", ["which", "None"])
     def test_literal_missing_id_is_checked_when_attr_is_not_a_string(self, tmp_path, attr):
@@ -783,7 +859,10 @@ class TestRegistryMode:
 
         assert report.findings == ()
 
-    def test_client_message_ids_and_cross_language_plain_fallback_are_checked(self, tmp_path):
+    def test_client_message_ids_are_checked_and_plain_fallback_is_a_warning(self, tmp_path):
+        # A missing translation still renders through the fallback chain, so
+        # plain tr() text that falls back is a warning that keeps the exit
+        # code at 0; an unknown client message ID stays an error.
         engine = Citry(
             autodiscover=False,
             extensions_defaults={
@@ -796,18 +875,188 @@ class TestRegistryMode:
 
         class Host(Component):
             citry = engine
-            messages = "known-message = Known"
-            template = '{{ tr("known-message") }}'
+            messages = """
+            known-message = Known
+            """
+            template = """
+            {{ tr("known-message") }}
+            """
 
             class I18n:
                 client_messages = ("missing-client-message",)
 
         report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
 
-        assert [finding.code for finding in report.findings] == [
-            "citry.i18n.client-message-invalid",
-            "citry.i18n.cross-language-fallback",
+        assert [(finding.code, finding.severity) for finding in report.findings] == [
+            ("citry.i18n.client-message-invalid", "error"),
+            ("citry.i18n.cross-language-fallback", "warning"),
         ]
+        assert "no translation for: cs-CZ" in report.findings[1].message
+
+    def test_partial_translations_pass_check_by_default(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US", "cs-CZ"),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = """
+            greeting = Hello
+            """
+            template = """
+            {{ tr("greeting") }}
+            """
+
+            def label(self) -> str:
+                return self.i18n.tr("greeting")
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [(finding.code, finding.severity) for finding in report.findings] == [
+            ("citry.i18n.cross-language-fallback", "warning"),
+            ("citry.i18n.cross-language-fallback", "warning"),
+        ]
+        assert report.exit_code == 0
+
+    @pytest.mark.parametrize(
+        ("app_rule", "component_rule", "expected"),
+        [
+            ("error", None, ["error", "error", "error"]),
+            ("ignore", None, []),
+            ("ignore", "error", ["error", "error", "error"]),
+            ("error", "ignore", []),
+        ],
+    )
+    def test_cross_language_fallback_severity_follows_lint_settings(
+        self,
+        tmp_path,
+        app_rule,
+        component_rule,
+        expected,
+    ):
+        engine = Citry(
+            autodiscover=False,
+            lint=LintSettings(rule_i18n_cross_language_fallback=app_rule),
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US", "cs-CZ"),
+                }
+            },
+        )
+        lint = {} if component_rule is None else {"rule_i18n_cross_language_fallback": component_rule}
+
+        class Host(Component):
+            citry = engine
+            messages = """
+            greeting = Hello
+            """
+            template = """
+            {{ tr("greeting") }}
+            """
+            Lint = type("Lint", (), lint)
+
+            class I18n:
+                client_messages = ("greeting",)
+
+            def label(self) -> str:
+                return self.i18n.tr("greeting")
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        # One finding each for the client message, the Python call, and the
+        # template call.
+        assert [finding.code for finding in report.findings] == ["citry.i18n.cross-language-fallback"] * len(expected)
+        assert [finding.severity for finding in report.findings] == expected
+        assert report.exit_code == (1 if expected else 0)
+
+    def test_shared_template_reports_fallback_at_the_strictest_consumer_severity(self, tmp_path):
+        shared = tmp_path / "shared.html"
+        shared.write_text('{{ tr("greeting") }}', encoding="utf-8")
+        engine = Citry(
+            dirs=[tmp_path],
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US", "cs-CZ"),
+                }
+            },
+        )
+
+        class Lenient(Component):
+            citry = engine
+            template_file = "shared.html"
+            messages = """
+            greeting = Hello
+            """
+
+            class Lint:
+                rule_i18n_cross_language_fallback = "ignore"
+
+        class Strict(Component):
+            citry = engine
+            template_file = "shared.html"
+
+            class Lint:
+                rule_i18n_cross_language_fallback = "error"
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [(finding.code, finding.severity) for finding in report.findings] == [
+            ("citry.i18n.cross-language-fallback", "error"),
+        ]
+
+        # Once every component that shares the template ignores the rule,
+        # nothing is reported.
+        Strict.Lint.rule_i18n_cross_language_fallback = "ignore"
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert report.findings == ()
+
+    def test_rich_message_fallback_stays_an_error_when_plain_fallback_is_ignored(self, tmp_path):
+        # Rendering <c-trans> in a locale without its translation raises, so
+        # the fallback setting cannot turn this finding off.
+        engine = Citry(
+            autodiscover=False,
+            lint=LintSettings(rule_i18n_cross_language_fallback="ignore"),
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US", "cs-CZ"),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = """
+            # @param {Slot} $link
+            terms = Read { $link }.
+                .title = Terms
+            """
+            template = """
+            <c-trans message="terms" c-values="{}">
+              <c-fill name="link"><a href="/terms">terms</a></c-fill>
+            </c-trans>
+            <c-trans message="terms" attr="title" c-values="{}" />
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [(finding.code, finding.severity) for finding in report.findings] == [
+            ("citry.i18n.rich-message-fallback", "error"),
+            ("citry.i18n.rich-message-fallback", "error"),
+        ]
+        assert "'terms.title'" in report.findings[1].message
+        assert "no translation for: cs-CZ" in report.findings[0].message
+        assert report.exit_code == 1
 
     def test_expression_strings_that_look_like_templates_do_not_create_unknowns(self, tmp_path):
         engine = Citry(autodiscover=False)
@@ -1250,7 +1499,42 @@ def test_registry_check_reports_js_data_wire_and_literal_server_event_problems(t
     assert {finding.severity for finding in report.findings if "unsupported-type" in finding.code} == {"warning"}
 
 
-def test_registry_check_joins_inferred_js_data_values_to_kwargs_types(tmp_path, monkeypatch, capsys):
+# Each method form Citry can call as component.method(kwargs, slots): the
+# decorator line (if any) and the receiver parameter that precedes kwargs.
+_METHOD_FORMS = pytest.mark.parametrize(
+    ("decorator", "receiver"),
+    [("", "self, "), ("    @staticmethod\n", ""), ("    @classmethod\n", "cls, ")],
+    ids=["instance", "staticmethod", "classmethod"],
+)
+
+
+@_METHOD_FORMS
+def test_registry_check_infers_template_data_for_every_method_form(tmp_path, monkeypatch, capsys, decorator, receiver):
+    monkeypatch.chdir(tmp_path)
+    spec = _write_app(
+        tmp_path,
+        "from typing import NamedTuple\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(autodiscover=False)\n"
+        "class Badge(Component):\n"
+        "    citry = engine\n"
+        "    class Kwargs(NamedTuple):\n"
+        "        high: bool\n"
+        f"{decorator}"
+        f"    def template_data({receiver}kwargs, slots):\n"
+        "        return {'label': 'Hot', 'high': kwargs.high}\n"
+        "    template = '<span c-class=\"{\\'hot\\': high}\">{{ label }}</span>'\n",
+    )
+
+    assert _run_main(["--app", spec, "check", "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["findings"] == []
+
+
+@_METHOD_FORMS
+def test_registry_check_joins_inferred_js_data_values_to_kwargs_types(
+    tmp_path, monkeypatch, capsys, decorator, receiver
+):
     monkeypatch.chdir(tmp_path)
     spec = _write_app(
         tmp_path,
@@ -1262,7 +1546,8 @@ def test_registry_check_joins_inferred_js_data_values_to_kwargs_types(tmp_path, 
         "    class Kwargs:\n"
         "        invalid: set[str]\n"
         "        submitting: bool = False\n"
-        "    def js_data(self, options: Kwargs, slots):\n"
+        f"{decorator}"
+        f"    def js_data({receiver}options: Kwargs, slots):\n"
         "        return {'submitting': options.submitting, 'invalid': options.invalid}\n",
     )
 
@@ -1315,14 +1600,75 @@ def test_registry_check_reports_unknown_alpine_roots_and_respects_component_poli
             colors: list[str]
 
         class Lint:
-            rule_unknown_alpine_variable = "warning"
-            alpine_variables = {"customGlobal": str}
+            rule_unknown_vue_variable = "warning"
+            vue_variables = {"customGlobal": str}
 
     report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-    findings = [item for item in report.findings if item.code == "citry.alpine.unknown-variable"]
+    findings = [item for item in report.findings if item.code == "citry.vue.unknown-variable"]
 
     assert [(item.message, item.severity) for item in findings] == [
-        ("Alpine variable 'disabled1' is not available in this component.", "warning")
+        ("Vue variable 'disabled1' is not available in this component.", "warning")
+    ]
+
+
+def test_registry_check_reports_a_vue_read_of_a_python_loop_variable_once(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = """
+          <ul>
+            <li c-for="item in items" :title="item" v-text="label"></li>
+            <li c-for="label in items" :title="label"></li>
+          </ul>
+        """
+
+        class JsData:
+            label: str
+
+    class Relaxed(Component):
+        citry = engine
+        template = '<p c-for="entry in items" :title="entry"></p>'
+
+        class Lint:
+            rule_unknown_vue_variable = "ignore"
+
+    class Quiet(Component):
+        citry = engine
+        template = '<p c-for="row in items" :title="row"></p>'
+
+        class Lint:
+            rule_unknown_vue_variable = "ignore"
+            rule_vue_python_variable = "ignore"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [
+        (item.code, item.severity, item.message)
+        for item in report.findings
+        if item.code in {"citry.vue.python-variable", "citry.vue.unknown-variable"}
+    ]
+
+    # `label` is also a js_data key, so Vue silently shows that browser value
+    # instead of the loop value, and the warning names both meanings.
+    assert findings == [
+        (
+            "citry.vue.unknown-variable",
+            "error",
+            "Vue variable 'item' is not available in this component. 'item' is a Python variable here, "
+            "which the browser never sees; pass its value with a c- attribute or loop with Vue's v-for.",
+        ),
+        (
+            "citry.vue.python-variable",
+            "warning",
+            "Vue reads the component's browser value 'label' here, not the Python loop or slot variable "
+            "'label'. Use c-title=\"label\" for the Python value, or rename one of them.",
+        ),
+        (
+            "citry.vue.python-variable",
+            "warning",
+            "Vue reads 'entry' from browser state, but 'entry' is a Python variable here. "
+            'Use c-title="entry" to pass the Python value.',
+        ),
     ]
 
 
@@ -1337,22 +1683,38 @@ def test_registry_check_defaults_unknown_alpine_roots_to_error(tmp_path):
             disabled: bool
 
     report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-    findings = [item for item in report.findings if item.code == "citry.alpine.unknown-variable"]
+    findings = [item for item in report.findings if item.code == "citry.vue.unknown-variable"]
 
     assert len(findings) == 1
     assert findings[0].severity == "error"
 
 
-@pytest.mark.parametrize(
-    ("mode", "expected_severity", "expected_exit"),
-    [("off", None, 0), ("warn", "warning", 0), ("strict", "error", 1)],
-)
-def test_registry_check_applies_the_configured_csp_compatibility_mode(
-    tmp_path,
-    mode,
-    expected_severity,
-    expected_exit,
-):
+def test_registry_check_consumes_native_vue_options_namespace(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = '<button @click="save()" :title="label"></button>'
+        js = "$component({ methods: { save() {} }, computed: { label() { return 'ready' } } })"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    assert not [item for item in report.findings if item.code == "citry.vue.unknown-variable"]
+
+
+def test_registry_check_declines_unknown_vue_namespace_after_options_spread(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = '<button @click="dynamicName()"></button>'
+        js = "$component({ methods: { save() {} }, ...dynamicOptions })"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    assert not [item for item in report.findings if item.code == "citry.vue.unknown-variable"]
+
+
+@pytest.mark.parametrize("mode", ["off", "warn", "strict"])
+def test_registry_check_does_not_apply_the_retired_expression_csp_evaluator(tmp_path, mode):
     engine = Citry(autodiscover=False, security_csp=mode)
 
     class Card(Component):
@@ -1363,48 +1725,8 @@ def test_registry_check_applies_the_configured_csp_compatibility_mode(
             items: list[dict[str, int]]
 
     report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-    findings = [item for item in report.findings if item.code == "citry.csp.incompatible-browser-code"]
 
-    assert report.exit_code == expected_exit
-    assert [item.severity for item in findings] == ([] if expected_severity is None else [expected_severity])
-
-
-def test_registry_check_reports_one_csp_finding_for_a_shared_template(tmp_path):
-    (tmp_path / "shared.html").write_text('<button @click="items.map(item => item.id)"></button>', encoding="utf-8")
-    engine = Citry(dirs=[tmp_path], autodiscover=False, security_csp="strict")
-
-    class First(Component):
-        citry = engine
-        template_file = "shared.html"
-
-        class JsData:
-            items: list[dict[str, int]]
-
-    class Second(Component):
-        citry = engine
-        template_file = "shared.html"
-
-        class JsData:
-            items: list[dict[str, int]]
-
-    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-
-    assert [item.code for item in report.findings].count("citry.csp.incompatible-browser-code") == 1
-
-
-def test_registry_check_reports_malformed_csp_expression_without_crashing(tmp_path):
-    engine = Citry(autodiscover=False, security_csp="strict")
-
-    class Card(Component):
-        citry = engine
-        template = '<span x-text="\'unterminated"></span>'
-
-    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-    findings = [item for item in report.findings if item.code == "citry.csp.incompatible-browser-code"]
-
-    assert report.exit_code == 1
-    assert len(findings) == 1
-    assert "unterminated string" in findings[0].message
+    assert not [item for item in report.findings if item.code == "citry.csp.incompatible-browser-code"]
 
 
 def test_registry_check_reports_unknown_component_js_variables_and_missing_context_binding(tmp_path):
@@ -1414,9 +1736,11 @@ def test_registry_check_reports_unknown_component_js_variables_and_missing_conte
         citry = engine
         js = """
         const outside = notCheckedHere;
-        $component(({ data }) => {
-          console.log(data.ready, configuredClient);
-          scope.ready = data.ready;
+        $component({
+          onServerRender({ component }) {
+            console.log(component.ready, configuredClient);
+            scope.ready = component.ready;
+          }
         });
         """
 
@@ -1450,4 +1774,464 @@ def test_registry_check_respects_component_js_rule_severity(tmp_path):
 
     assert [(item.message, item.severity) for item in findings] == [
         ("Component JavaScript variable 'missingClient' is not defined.", "warning")
+    ]
+
+
+_VUE_COMPONENT_PROP_JS = """
+$component({ props: {
+  requiredTitle: { type: String, required: true },
+  requiredCount: { type: Number, required: true },
+  requiredRows: { type: Array, required: true },
+  requiredDefault: { type: Boolean, required: true, default: false },
+  optionalText: { type: String },
+  optionalMixed: { type: [String, Number] },
+  defaultedCount: { type: Number, default: 1 },
+} });
+"""
+_VUE_COMPONENT_PROP_CODES = {
+    "citry.browser.missing-component-prop",
+    "citry.browser.incompatible-component-prop",
+}
+
+
+def _check_vue_component_prop_template(
+    tmp_path: Path,
+    template_source: str,
+    *,
+    dynamic_props: bool = False,
+):
+    engine = Citry(autodiscover=False)
+    type(
+        "Card",
+        (Component,),
+        {
+            "citry": engine,
+            "template": "<div></div>",
+            "js": _VUE_COMPONENT_PROP_JS,
+            "__module__": __name__,
+        },
+    )
+    page_namespace: dict[str, object] = {
+        "citry": engine,
+        "template": template_source,
+        "__module__": __name__,
+    }
+    if dynamic_props:
+
+        class PageJsData:
+            dynamic_props: dict[str, str]
+
+        page_namespace["JsData"] = PageJsData
+    type("Page", (Component,), page_namespace)
+    return check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+
+def _vue_component_prop_findings(report):
+    return [finding for finding in report.findings if finding.code in _VUE_COMPONENT_PROP_CODES]
+
+
+def _check_mark_template(tmp_path: Path, template_source: str):
+    engine = Citry(autodiscover=False)
+    type(
+        "Page",
+        (Component,),
+        {"citry": engine, "template": template_source, "__module__": __name__},
+    )
+    return check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+
+def test_registry_check_reports_native_vue_component_prop_presence_and_literal_types(tmp_path):
+    valid = (
+        '<c-card :required-title="\'ready\'" :requiredCount="2" v-bind:required-rows="[]" '
+        ':requiredDefault="false" :optional-text="null" :optional-mixed="null" '
+        ':defaultedCount="null" ordinary="fall-through attribute" />'
+    )
+    assert _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, valid)) == []
+
+    missing = _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, "<c-card />"))
+    assert [finding.code for finding in missing] == ["citry.browser.missing-component-prop"] * 4
+    assert [finding.message for finding in missing] == [
+        "Required Vue prop 'requiredTitle' is missing for <c-card>.",
+        "Required Vue prop 'requiredCount' is missing for <c-card>.",
+        "Required Vue prop 'requiredRows' is missing for <c-card>.",
+        "Required Vue prop 'requiredDefault' is missing for <c-card>.",
+    ]
+    assert all(finding.start_index == 1 and finding.end_index == 7 for finding in missing)
+
+    incompatible_source = (
+        '<c-card :required-title="1" :requiredCount="\'many\'" :requiredRows="1" :requiredDefault="false" />'
+    )
+    incompatible = _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, incompatible_source))
+    assert [finding.code for finding in incompatible] == ["citry.browser.incompatible-component-prop"] * 3
+    assert [finding.message for finding in incompatible] == [
+        "Vue prop 'required-title' expects string, but this binding is number.",
+        "Vue prop 'requiredCount' expects number, but this binding is string.",
+        "Vue prop 'requiredRows' expects unknown[], but this binding is number.",
+    ]
+    expected_ranges = (
+        (incompatible_source.index(':required-title="') + len(':required-title="'), 1),
+        (incompatible_source.index(':requiredCount="') + len(':requiredCount="'), len("'many'")),
+        (incompatible_source.index(':requiredRows="') + len(':requiredRows="'), 1),
+    )
+    assert [(finding.start_index, finding.end_index) for finding in incompatible] == [
+        (start, start + width) for start, width in expected_ranges
+    ]
+
+
+def test_registry_check_tracks_vue_component_prop_spread_order_and_dynamic_uncertainty(tmp_path):
+    check = lambda source: _vue_component_prop_findings(  # noqa: E731 - keep scenario inputs compact
+        _check_vue_component_prop_template(tmp_path, source, dynamic_props=True)
+    )
+    static_object = (
+        "<c-card v-bind=\"{ requiredTitle: 'ready', requiredCount: 2, requiredRows: [], requiredDefault: false }\" />"
+    )
+    assert check(static_object) == []
+
+    assert check('<c-card v-bind="dynamic_props" />') == []
+
+    explicit_after_dynamic = '<c-card v-bind="dynamic_props" :required-title="1" />'
+    after = check(explicit_after_dynamic)
+    assert [finding.code for finding in after] == ["citry.browser.incompatible-component-prop"]
+    assert after[0].message == "Vue prop 'required-title' expects string, but this binding is number."
+    assert after[0].start_index == explicit_after_dynamic.index(':required-title="') + len(':required-title="')
+    assert after[0].end_index == after[0].start_index + 1
+
+    explicit_before_dynamic = '<c-card :required-title="1" v-bind="dynamic_props" />'
+    assert check(explicit_before_dynamic) == []
+
+
+def test_registry_check_maps_vue_prop_ranges_after_utf8_text(tmp_path):
+    source = 'é<c-card :required-title="1" :requiredCount="2" :requiredRows="[]" :requiredDefault="false" />'
+
+    findings = _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, source))
+
+    assert len(findings) == 1
+    finding = findings[0]
+    value_start = len(source[: source.index(':required-title="') + len(':required-title="')].encode("utf-8"))
+    utf16_column = len(source[: source.index(':required-title="') + len(':required-title="')].encode("utf-16-le")) // 2
+    assert finding.code == "citry.browser.incompatible-component-prop"
+    assert (finding.start_index, finding.end_index) == (value_start, value_start + 1)
+    assert (finding.line, finding.column, finding.end_line, finding.end_column) == (
+        0,
+        utf16_column,
+        0,
+        utf16_column + 1,
+    )
+
+
+@pytest.mark.parametrize("asset_kind", ["inline", "file"])
+def test_registry_check_precollects_shared_vue_props_without_loading_js(tmp_path, monkeypatch, asset_kind):
+    import citry.component as component_module
+
+    def fail_load_js(*args, **kwargs):
+        pytest.fail("the registry check must inspect authored JavaScript without loading the component asset")
+
+    monkeypatch.setattr(component_module, "load_js", fail_load_js)
+    engine = Citry(autodiscover=False)
+    browser_source: dict[str, object] = {}
+    if asset_kind == "inline":
+        browser_source["js"] = _VUE_COMPONENT_PROP_JS
+    else:
+        javascript_file = tmp_path / "props.js"
+        javascript_file.write_text(_VUE_COMPONENT_PROP_JS, encoding="utf-8")
+        browser_source["js_file"] = javascript_file
+
+    card_namespace = {
+        "citry": engine,
+        "template": "<div></div>",
+        "__module__": __name__,
+        **browser_source,
+    }
+    Card = type("Card", (Component,), card_namespace)
+    type("AliasCard", (Card,), {"name": "alias-card", "__module__": __name__})
+
+    shared_template = tmp_path / "shared.html"
+    shared_template.write_text("<c-card /><c-alias-card />", encoding="utf-8")
+    for page_name in ("PageOne", "PageTwo"):
+        type(
+            page_name,
+            (Component,),
+            {"citry": engine, "template_file": shared_template, "__module__": __name__},
+        )
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    findings = _vue_component_prop_findings(report)
+    expected = [
+        f"Required Vue prop '{name}' is missing for <c-card>."
+        for name in ("requiredTitle", "requiredCount", "requiredRows", "requiredDefault")
+    ] + [
+        f"Required Vue prop '{name}' is missing for <c-alias-card>."
+        for name in ("requiredTitle", "requiredCount", "requiredRows", "requiredDefault")
+    ]
+    assert [finding.message for finding in findings] == expected
+    assert len([finding for finding in report.findings if finding.origin == str(shared_template)]) == 8
+
+
+def test_registry_check_keeps_unknown_child_diagnostics_and_known_vue_props(tmp_path):
+    source = (
+        '<c-card :required-title="\'ready\'" :requiredCount="2" :requiredRows="[]" '
+        ':requiredDefault="false" ordinary="fall-through" /><c-ghost />'
+    )
+
+    report = _check_vue_component_prop_template(tmp_path, source)
+
+    assert _vue_component_prop_findings(report) == []
+    assert [(finding.code, finding.message) for finding in report.findings] == [
+        ("citry.template.unknown-component", "Component <c-ghost> is not registered.")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "message", "start_marker", "end_marker"),
+    [
+        (
+            '<c-component is="mark" />',
+            "Marker requires a literal name attribute.",
+            "c-component",
+            "c-component",
+        ),
+        (
+            '<c-component is="mark" :name="dynamic" />',
+            "Marker name must be a static literal.",
+            ":name",
+            "dynamic",
+        ),
+        (
+            '<c-component is="mark" name="9bad" />',
+            "Marker name must match [A-Za-z][A-Za-z0-9_-]*.",
+            "9bad",
+            "9bad",
+        ),
+        (
+            '<c-component is="mark" name="valid" title="extra" />',
+            "Marker accepts only its name attribute.",
+            "title",
+            "title",
+        ),
+        (
+            '<c-component is="mark" name="valid" NAME="other" />',
+            "Marker accepts only its name attribute.",
+            "NAME",
+            "NAME",
+        ),
+        (
+            '<c-component is="mark" name="valid"><c-fill name="Default">x</c-fill></c-component>',
+            "Marker accepts only its default slot.",
+            "Default",
+            "Default",
+        ),
+        (
+            '<c-component is="mark" name="valid"><c-fill c-name="fillName">x</c-fill></c-component>',
+            "Marker accepts only its default slot.",
+            "fillName",
+            "fillName",
+        ),
+        (
+            '<c-mark name="9bad" />',
+            "Marker name must match [A-Za-z][A-Za-z0-9_-]*.",
+            "9bad",
+            "9bad",
+        ),
+    ],
+)
+def test_registry_check_reports_invalid_literal_marker_authoring(
+    tmp_path: Path,
+    source: str,
+    message: str,
+    start_marker: str,
+    end_marker: str,
+):
+    report = _check_mark_template(tmp_path, source)
+
+    findings = [finding for finding in report.findings if finding.code == TEMPLATE_MARKER_NAME_INVALID]
+
+    assert len(findings) == 1
+    finding = findings[0]
+    expected_start = len(source[: source.index(start_marker)].encode("utf-8"))
+    expected_end = len(source[: source.index(end_marker) + len(end_marker)].encode("utf-8"))
+    assert finding.message == message
+    assert (finding.start_index, finding.end_index) == (expected_start, expected_end)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<c-component c-is="selector" name="valid" />',
+        '<c-component is="card" />',
+    ],
+)
+def test_registry_check_leaves_dynamic_and_nonmark_component_selectors_alone(tmp_path: Path, source: str):
+    report = _check_mark_template(tmp_path, source)
+
+    assert not [finding for finding in report.findings if finding.code == TEMPLATE_MARKER_NAME_INVALID]
+
+
+@pytest.mark.parametrize(
+    ("source", "message_fragment"),
+    [
+        ('<c-mark :name="dynamic" />', "must have one of the following attributes: 'name', 'c-name'"),
+        ('<c-mark NAME="other" />', "Found invalid attributes: NAME"),
+        ('<c-component is="mark" name="one" name="two" />', "Duplicate attribute 'name' found."),
+    ],
+)
+def test_registry_check_keeps_parser_owned_mark_syntax_rejections(tmp_path: Path, source: str, message_fragment: str):
+    report = _check_mark_template(tmp_path, source)
+
+    assert [finding.code for finding in report.findings] == ["citry.parse.syntax"]
+    assert message_fragment in report.findings[0].message
+
+
+def test_registry_check_reports_leftover_alpine_attributes_with_component_severities(tmp_path):
+    engine = Citry(autodiscover=False, lint=LintSettings(rule_alpine_cloak="warning"))
+
+    class Card(Component):
+        citry = engine
+        template = """
+          <div x-data="{ open: false }" x-cloak>
+            <c-inner x-label="'kwarg'" />
+          </div>
+        """
+
+    # No Kwargs schema, so the tag accepts `x-label` as a keyword argument.
+    class Inner(Component):
+        citry = engine
+        template = "<p>inner</p>"
+
+    class Picker(Component):
+        citry = engine
+        template = '<input x-mask="99/99">'
+
+        class Lint:
+            rule_alpine_attribute = "ignore"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [
+        (item.code, item.severity, item.line)
+        for item in report.findings
+        if item.code.startswith("citry.template.alpine-")
+    ]
+
+    # The component tag's `x-label` is a kwarg, the application lowered
+    # x-cloak to a warning, and Picker ignores the attribute rule.
+    assert findings == [
+        ("citry.template.alpine-attribute", "warning", 1),
+        ("citry.template.alpine-cloak", "warning", 1),
+    ]
+
+
+def test_static_check_reports_leftover_alpine_attributes_with_default_severities(tmp_path):
+    (tmp_path / "card.py").write_text(
+        "from citry import Component\nclass Card(Component):\n    template = '<div x-show=\"open\" x-cloak></div>'\n",
+        encoding="utf-8",
+    )
+
+    report = check_project(CheckAppSelection(), tmp_path)
+
+    assert [(item.code, item.severity) for item in report.findings] == [
+        ("citry.template.alpine-attribute", "warning"),
+        ("citry.template.alpine-cloak", "error"),
+    ]
+
+
+def test_registry_check_reports_invalid_attribute_values_with_component_severities(tmp_path):
+    engine = Citry(autodiscover=False, lint=LintSettings(rule_invalid_attribute_value="error"))
+
+    class Card(Component):
+        citry = engine
+        template = """
+          <div draggable="treu">
+            <input type="datetime">
+          </div>
+        """
+
+    class Legacy(Component):
+        citry = engine
+        template = '<div dir="sideways"></div>'
+
+        class Lint:
+            rule_invalid_attribute_value = "ignore"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [
+        (item.severity, item.line, item.column, item.end_column)
+        for item in report.findings
+        if item.code == "citry.template.invalid-attribute-value"
+    ]
+
+    # The application raised the rule to an error, and Legacy ignores it.
+    # Each finding spans the value inside its quotes.
+    assert findings == [("error", 1, 16, 20), ("error", 2, 15, 23)]
+
+
+def test_static_check_reports_invalid_attribute_values_with_the_default_severity(tmp_path):
+    (tmp_path / "card.py").write_text(
+        "from citry import Component\nclass Card(Component):\n    template = '<a target=\"_new\">a</a>'\n",
+        encoding="utf-8",
+    )
+
+    report = check_project(CheckAppSelection(), tmp_path)
+
+    assert [(item.code, item.severity) for item in report.findings] == [
+        ("citry.template.invalid-attribute-value", "warning"),
+    ]
+
+
+def test_registry_check_reports_undeclared_emits_and_child_listeners(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Lane(Component):
+        citry = engine
+        template = """
+          <section></section>
+        """
+        js = """
+          $component({
+            emits: ['drop-task'],
+            methods: {
+              drop() {
+                this.$emit('drop-task');
+                this.$emit('drop-tsak');
+              },
+            },
+          });
+        """
+
+    class Board(Component):
+        citry = engine
+        template = """
+          <c-Lane
+            @drop-task="move($event)"
+            @drop-tsak="move($event)"
+            @click="move($event)"
+          ></c-Lane>
+          <button @click="$emit('moved')"></button>
+        """
+        js = """
+          $component({
+            emits: ['changed'],
+            methods: { move() {} },
+          });
+        """
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = sorted(
+        (item.code, item.severity, item.message)
+        for item in report.findings
+        if item.code.startswith("citry.browser.undeclared-")
+    )
+
+    # `@click` may be a native event, so only the hyphenated typo is reported.
+    assert findings == [
+        (
+            "citry.browser.undeclared-component-event",
+            "warning",
+            "Component 'c-lane' does not declare event 'drop-tsak' in its emits option.",
+        ),
+        (
+            "citry.browser.undeclared-emit",
+            "error",
+            "Event 'drop-tsak' is not declared in this component's emits option.",
+        ),
+        ("citry.browser.undeclared-emit", "error", "Event 'moved' is not declared in this component's emits option."),
     ]
