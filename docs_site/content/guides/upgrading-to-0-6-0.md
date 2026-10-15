@@ -534,15 +534,16 @@ Vue, and even when the value is `None`:
 
 Pass the values the binding needs through `js_data()` or props.
 
-If Alpine or another script reads these attributes on an HTML element,
-spread its long-form names instead. Citry writes them as plain
-attributes:
+If a script you load yourself, such as Alpine, reads these attributes on
+an HTML element, spread its long-form names instead. Citry writes them as
+plain attributes on HTML elements; on a component tag, an `x-on:` name
+still stops the render:
 
 ```python
 # Stops the render: '@click' and ':class' are Vue syntax
 attrs = {"@click": "open = true", ":class": "classes"}
 
-# Works: Alpine reads the long form the same way
+# Works: your own Alpine script reads the long form
 attrs = {"x-on:click": "open = true", "x-bind:class": "classes"}
 ```
 
@@ -995,10 +996,11 @@ argument.
 15. Check component tags for `:x`, `v-*`, and `ref` attributes the child
     read as kwargs, and for `x-on:`, timed `@c-*` bindings, and `@c-poll`.
 16. Move `c-:attr`, `c-@event`, and Vue keys in `c-bind` into the
-    template, or spell an Alpine key in its long form (`x-on:click`), set an attribute such as `title` with `c-title` or `:title`
-    but not both, and write Vue-bound group content inside the group's
-    tag. Set several attributes with a `c-bind` mapping, not with quotes
-    inside a `Markup` value.
+    template, or spell an Alpine key in its long form (`x-on:click`).
+    Set an attribute such as `title` with `c-title` or `:title` but not
+    both, and write Vue-bound group content inside the group's tag. Set
+    several attributes with a `c-bind` mapping, not with quotes inside a
+    `Markup` value.
 17. Keep `#c-ignore` only on HTML elements whose contents a library
     manages, and move it off component tags, table row elements, and
     `<c-element>`.

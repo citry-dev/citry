@@ -1574,8 +1574,9 @@ Chronological record of triage and porting work. Newest entries at the bottom.
   filter, translation, positional-input, and registered-flag drops.
 - Closed the highest-priority Citry-native gap. Rust compilation now locks
   authored `c-c-foo`, `c-c-c-foo`, `c-c-bind`, and `c-:class` keys; Python
-  rendering locks exact-one-prefix removal, the Vue/Alpine colon bridge, and
-  literal keys supplied through `c-bind`.
+  rendering locks exact-one-prefix removal and literal keys supplied through
+  `c-bind`. A stripped name that Vue reads as code, such as `c-:class`, now
+  fails the render with `citry.VueCodeError`.
 - Reconciled claims made stale by later work: the coverage gate is active,
   sandbox equivalence/access-control coverage is complete, Alpine compatibility
   has Events browser coverage, `ViewEvents` has landed, and djc Defaults and

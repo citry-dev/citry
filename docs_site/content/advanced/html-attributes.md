@@ -197,8 +197,8 @@ An attribute mapping carries plain HTML attributes only. Citry never runs
 a name from the mapping as Vue code. A name that starts with `v-`, `@`,
 `:`, `.`, `^`, or `#`, in any letter case, such as `:title` or `@click`,
 is Vue syntax. Rendering a template that spreads such a name raises
-`citry.VueCodeError`, on every page, even one that does not use Vue, and
-whatever the value, even `None`. It fails even when the template writes
+`citry.VueCodeError` on every page, including one without Vue, whatever
+the value (even `None`). It fails even when the template writes
 the same binding on the element. Write Vue bindings and event listeners
 directly on the element in the template, and remove them from the
 mapping.

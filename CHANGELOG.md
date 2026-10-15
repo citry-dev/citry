@@ -50,9 +50,9 @@ walks through every step.
   attribute such as `c-@click`, or an `on_attrs_resolved` hook that sets
   an attribute name starting with `v-`, `:`, `.`, `^`, `@`, or `#` now
   raises the new `citry.VueCodeError`, a `TypeError`, when the template
-  renders, on every page. In 0.5.1 these names reached HTML elements,
-  where Alpine read them; spread the long form, such as `x-on:click` or
-  `x-bind:class`, instead
+  renders, on every page. If a script you load yourself, such as Alpine,
+  read these names on an HTML element, spread the long form, such as
+  `x-on:click`
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#move-python-bindings)).
 - **Component JavaScript moves to Vue Options:** the `$component` callback
   gets a smaller context, and `js_data()` keys that start with `$` or `_`

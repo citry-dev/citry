@@ -307,8 +307,9 @@ Python data never sets a name that Vue reads as code. When the stripped name
 (or a `c-bind` key, or a name an `on_attrs_resolved` hook adds or changes)
 starts with `v-`, `:`, `.`, `^`, `@`, or `#` in any letter case, rendering
 raises `citry.VueCodeError`, on every page, whether or not it starts Vue. The
-`@c-*` and `:c-*` Events bindings are the exception. The single check lives in
-`citry.attrs.reject_vue_code_attr_name`; `ElementAttrsNode` finds a `c-*` name
+`@c-*` and `:c-*` Events bindings are the exception. The rule is
+`is_vue_code_attr_name` and the message is `vue_code_error` (both in
+`citry.attrs`); every check calls them. `ElementAttrsNode` finds a `c-*` name
 once when it is built, and caches each `c-bind` key after its first check.
 
 ---

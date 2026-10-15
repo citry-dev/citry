@@ -376,7 +376,9 @@ accepts.
     element, such as `@click` beside a `c-bind` mapping with an
     `'@click'` key: remove the key from the mapping. In an Events
     response, the call fails with a server error and the log shows the
-    `VueCodeError`.
+    `VueCodeError`. A `c-` spelling of a directive that a component tag
+    never carries, such as `c-#item`, `c-.prop`, or `c-^title`, fails
+    earlier, when the template loads.
 
     Citry's own `@c-` and `:c-` Events bindings are the exception: a
     `c-bind` key may set them. See [Bind events in templates](/events/bindings/).

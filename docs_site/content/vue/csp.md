@@ -94,18 +94,20 @@ template:
 
 Citry rejects a key that Vue would read as code: a name that starts with
 `v-`, `:`, `@`, `#`, `.`, or `^`, in any letter case. The key fails
-whatever its value, even `None`, because a `None` would remove a listener
-written in the template. Citry's own `@c-` and `:c-` Events bindings are
-allowed. The same check applies to a directive written with a `c-`
-prefix, such as `c-v-if`, `c-@click`, or `c-:title`, because its value is
-also a Python expression, and to a name that an extension's
-`on_attrs_resolved` hook adds.
+whatever its value, even `None`: the name itself is Python data choosing
+Vue code. Citry's own `@c-` and `:c-` Events bindings are allowed. The
+same check applies to a directive written with a `c-` prefix, such as
+`c-v-if`, `c-@click`, or `c-:title`, because its value is also a Python
+expression, and to a name that an extension's `on_attrs_resolved` hook
+adds or changes.
 
 The check runs while the template renders, so `render()` raises
 `citry.VueCodeError`. It fails the same way on HTML elements and
 component tags, and on every page, even one that never starts Vue.
 `VueCodeError` is a `TypeError`, so code that already catches `TypeError`
-keeps working.
+keeps working. A `c-` spelling of a directive that a component tag never
+carries, such as `c-#item`, `c-.prop`, or `c-^title` on `<c-Card>`, fails
+earlier, when the template loads.
 
 [Keep Vue in templates](/advanced/html-attributes/#keep-vue-in-templates)
 covers the attribute mapping side of this rule.

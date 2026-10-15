@@ -139,8 +139,9 @@ the browser should change it later, and send the starting value with
 
 !!! warning "Citry rejects Vue code from `c-bind`"
 
-    Citry rejects a Vue directive, `:` binding, or `@` listener that comes
-    from `c-bind` or is written with a `c-` prefix, such as `c-v-if`.
+    Citry rejects a Vue directive, `:` binding, or `@` listener, or any
+    name that starts with `.`, `^`, or `#`, that comes from `c-bind` or is
+    written with a `c-` prefix, such as `c-v-if`.
     Rendering the template raises `citry.VueCodeError`, on every page,
     even one that does not use Vue. Write the directive directly in the
     template, as in `v-if="open"`.
