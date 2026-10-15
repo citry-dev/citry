@@ -19,6 +19,13 @@
   `browser_fragment_matches_nodes()`, `scan_output_html()`,
   `static_html_node_count()`, and `validate_html_fragment_boundary()`.
 
+### Changed
+
+- `CompiledCatalog.browser_artifact_json()` now includes
+  `bundle_directions`, the writing direction of each locale whose messages
+  it contains, and raises `I18nCompileError` for a locale whose direction
+  cannot be determined.
+
 ## v1.7.1
 
 _11 Sep 2026_
