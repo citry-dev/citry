@@ -290,8 +290,10 @@ call site and does not enter fallthrough attrs. Plain component attributes keep
 their Python-kwarg meaning.
 
 Python `c-bind`, `c-*` evaluation, interpolation, hooks, and public fabricated
-metadata cannot create executable Vue `v-on` syntax. Those inputs are rejected
-at the Python provenance boundary. Dynamic `<component :is>` calls remain
+metadata cannot create executable Vue `v-on` syntax. A name from `c-bind`, a
+`c-*` attribute, or an `on_attrs_resolved` hook fails while the template
+renders, on every page, with `citry.VueCodeError`; interpolation in a written
+binding fails as a template error. Dynamic `<component :is>` calls remain
 outside this contract and continue to use the native compiler's existing
 rejection rules.
 
@@ -1241,12 +1243,12 @@ message that names the directive and says what to write instead:
 
 A `c-` spelling of a rejected directive (`c-v-for`) fails the same way. The
 parser also rejects a `v-show`, `v-if`, `v-else-if`, or `v-model` without an
-expression, and a `v-else` with a value. A key that reaches the call only at
-render time, through `c-bind`, fails when the page renders:
-`classify_component_tag_client_binding_key` reports a rejected directive with
-the same wording, and a carried one fails like every other executable Vue
-binding (including the `c-v-if` spelling), because its expression must be
-written in the template. `v-model:key` and `v-model:citry-id` fail the
+expression, and a `v-else` with a value. A Vue-prefixed key that reaches the
+call only at render time, through `c-bind` or a `c-*` spelling such as
+`c-v-if`, fails when the page renders with `citry.VueCodeError`, the error
+every element raises when Python data sets a name Vue reads as code. For a
+directive the tag never carries, the message reuses the parser's hint (such
+as `<c-for>` for `v-for`). `v-model:key` and `v-model:citry-id` fail the
 render as `:key` does, because the call's own identity would override the
 model value. A transparent child (such as `<c-provide>`) renders
 its content in place and has no Vue component to receive any of these, so

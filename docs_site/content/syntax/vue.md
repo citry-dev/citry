@@ -94,9 +94,10 @@ for every directive and modifier.
 !!! warning "Citry rejects Vue code from `c-bind`"
 
     Citry rejects a Vue directive, `:` binding, or `@` listener that comes
-    from `c-bind` or is written with a `c-` prefix, such as `c-v-if`, and
-    the page fails to render. Write the directive directly in the template,
-    as in `v-if="open"`.
+    from `c-bind` or is written with a `c-` prefix, such as `c-v-if`.
+    Rendering the template raises `citry.VueCodeError`, on every page,
+    even one that does not use Vue. Write the directive directly in the
+    template, as in `v-if="open"`.
     [Security and CSP](/vue/csp/#c-bind-never-carries-vue-code) explains
     why.
 

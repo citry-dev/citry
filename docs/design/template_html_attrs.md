@@ -301,9 +301,15 @@ usual).
 | `c-c-c-foo="'bar'"` | `c-c-foo="bar"` (literal `c-c-foo`) |
 | `c-c-bind="'lit'"` | `c-bind="lit"` (literal `c-bind`, not a spread) |
 
-The common use is a framework "bridge" attribute: `c-:class="expr"` strips one
-`c-` and emits `:class="..."`, which Vue or Alpine then reads. Keys inside a
-`c-bind` mapping are always literal and never get this treatment.
+Keys inside a `c-bind` mapping are always literal and never get this treatment.
+
+Python data never sets a name that Vue reads as code. When the stripped name
+(or a `c-bind` key, or a name an `on_attrs_resolved` hook adds or changes)
+starts with `v-`, `:`, `.`, `^`, `@`, or `#` in any letter case, rendering
+raises `citry.VueCodeError`, on every page, whether or not it starts Vue. The
+`@c-*` and `:c-*` Events bindings are the exception. The single check lives in
+`citry.attrs.reject_vue_code_attr_name`; `ElementAttrsNode` finds a `c-*` name
+once when it is built, and caches each `c-bind` key after its first check.
 
 ---
 

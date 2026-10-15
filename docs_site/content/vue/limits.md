@@ -179,10 +179,11 @@ binding on an element inside the tag.
 
 ### Vue code in `c-bind`
 
-The page fails to render, and the error names an attribute such as
-`'@click'`. A Vue directive, `:` binding, or `@` listener came from
-`c-bind`, or was written with a `c-` prefix such as `c-v-if`. Write it
-directly in the template. See
+Rendering the template raises `citry.VueCodeError`, and the error names
+an attribute such as `'@click'`. A Vue directive, `:` binding, or `@`
+listener came from `c-bind`, or was written with a `c-` prefix such as
+`c-v-if`. This happens on every page, even one that does not use Vue.
+Write it directly in the template. See
 [No Vue code in `c-bind`](/vue/csp/#c-bind-never-carries-vue-code).
 
 ## Diagnose failures { #diagnose-failures }
