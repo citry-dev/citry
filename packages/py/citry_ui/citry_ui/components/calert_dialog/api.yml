@@ -45,7 +45,7 @@ events:
         name: onOpenChange
         signature: {display: '(requestedOpen: boolean, detail: CAlertDialogOpenChangeDetail) => void', interfaces: [CAlertDialogOpenChangeDetail]}
         trigger: An owned trigger, Escape, explicit decision, or external native close requests a different visible state.
-        detail: {display: '{reason: "trigger" | "escape" | "action" | "native", controlled: boolean, source: Element | EventTarget | null, returnValue: string}', interfaces: [CAlertDialogOpenChangeDetail]}
+        detail: {display: '{reason: "trigger" | "escape" | "action" | "native" | "ancestor", controlled: boolean, source: Element | EventTarget | null, returnValue: string}', interfaces: [CAlertDialogOpenChangeDetail]}
         behavior: Uncontrolled requests commit before notification. Controlled requests wait for the owner. Cancel and Action return `cancel` and `action` respectively.
 
 methods: []
@@ -103,6 +103,6 @@ interfaces:
   - {id: default-slot, kind: record, name: CAlertDialogDefaultSlotData, entries: []}
   - {id: cancel-slot, kind: record, name: CAlertDialogCancelSlotData, entries: [{id: attrs, name: cancel_attrs, type: 'dict[str, object]', meaning: 'Owned close marker, cancel return value, and autofocus.'}, {id: type, name: cancel_type, type: 'Literal["button"]', meaning: Form-safe native Button type.}]}
   - {id: action-slot, kind: record, name: CAlertDialogActionSlotData, entries: [{id: attrs, name: action_attrs, type: 'dict[str, object]', meaning: Owned close marker and action return value.}, {id: type, name: action_type, type: 'Literal["button"]', meaning: Form-safe native Button type.}]}
-  - {id: open-change-detail, kind: record, name: CAlertDialogOpenChangeDetail, entries: [{id: reason, name: reason, type: '"trigger" | "escape" | "action" | "native"', meaning: Request origin.}, {id: controlled, name: controlled, type: boolean, meaning: Whether client open currently owns state.}, {id: source, name: source, type: 'Element | EventTarget | null', meaning: Browser source associated with the request.}, {id: return-value, name: returnValue, type: string, meaning: 'cancel, action, or an empty string.'}]}
+  - {id: open-change-detail, kind: record, name: CAlertDialogOpenChangeDetail, entries: [{id: reason, name: reason, type: '"trigger" | "escape" | "action" | "native" | "ancestor"', meaning: Request origin.}, {id: controlled, name: controlled, type: boolean, meaning: Whether client open currently owns state.}, {id: source, name: source, type: 'Element | EventTarget | null', meaning: Browser source associated with the request.}, {id: return-value, name: returnValue, type: string, meaning: 'cancel, action, or an empty string.'}]}
 
 translations: []

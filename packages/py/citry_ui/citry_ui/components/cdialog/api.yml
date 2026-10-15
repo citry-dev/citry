@@ -92,7 +92,7 @@ events:
         name: onOpenChange
         signature: {display: '(requestedOpen: boolean, detail: CDialogOpenChangeDetail) => void', interfaces: [CDialogOpenChangeDetail]}
         trigger: An owned trigger, built-in close, explicit action, Escape, outside press, or native close requests a different open state. A server re-render that removes an open dialog does not call it, because the owner removed the dialog.
-        detail: {display: '{reason: "trigger" | "close-button" | "action" | "escape" | "outside" | "native", controlled: boolean, source: Element | EventTarget | null, returnValue: string}', interfaces: [CDialogOpenChangeDetail]}
+        detail: {display: '{reason: "trigger" | "close-button" | "action" | "escape" | "outside" | "native" | "ancestor", controlled: boolean, source: Element | EventTarget | null, returnValue: string}', interfaces: [CDialogOpenChangeDetail]}
         behavior: Uncontrolled requests commit before notification. Controlled requests, including successful Dialog Form submission, wait for the owner. An external native close is reconciled immediately and a stale true input cannot reopen it. Owner commits do not notify.
 
 methods: []
@@ -162,7 +162,7 @@ interfaces:
     kind: record
     name: CDialogOpenChangeDetail
     entries:
-      - {id: reason, name: reason, type: '"trigger" | "close-button" | "action" | "escape" | "outside" | "native"', meaning: Source of the open or close request.}
+      - {id: reason, name: reason, type: '"trigger" | "close-button" | "action" | "escape" | "outside" | "native" | "ancestor"', meaning: Source of the open or close request.}
       - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client `open` value currently owns state.}
       - {id: source, name: source, type: 'Element | EventTarget | null', meaning: Browser source associated with the request.}
       - {id: return-value, name: returnValue, type: string, meaning: Explicit action value or native Dialog Form return value; empty for other requests.}

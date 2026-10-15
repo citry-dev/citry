@@ -14,6 +14,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component
+from citry_ui.components.ccommand_palette import CCommandPaletteCommand
 
 pytestmark = pytest.mark.e2e
 
@@ -898,6 +899,109 @@ _TEMPLATES: dict[str, str] = {
         </div>
       </section>
     """,
+    "ccommand_palette": """
+      <section>
+        <output id="owner-step">{{ step }}</output>
+        <button
+          id="advance-owner"
+          type="button"
+          @c-click="advance"
+        >Advance</button>
+        <button
+          id="open-on-server"
+          type="button"
+          @c-click="open_on_server"
+        >Open on server</button>
+        <button
+          id="close-on-server"
+          type="button"
+          @c-click="close_on_server"
+        >Close on server</button>
+        <button
+          id="disable-on-server"
+          type="button"
+          @c-click="disable_on_server"
+        >Disable on server</button>
+        <button
+          id="enable-on-server"
+          type="button"
+          @c-click="enable_on_server"
+        >Enable on server</button>
+        <button
+          id="disable-and-open-on-server"
+          type="button"
+          @c-click="disable_and_open_on_server"
+        >Disable and open on server</button>
+        <button
+          id="disable-and-close-on-server"
+          type="button"
+          @c-click="disable_and_close_on_server"
+        >Disable and close on server</button>
+        <button
+          id="remove-on-server"
+          type="button"
+          @c-click="remove_on_server"
+        >Remove on server</button>
+        <div id="overlay-slot">
+          <c-if cond="not show"></c-if>
+          <c-elif cond="controlled">
+            <c-CCommandPalette
+              label="Overlay commands"
+              c-entries="palette_entries"
+              :open="clientOpen"
+              :onOpenChange="(open, detail) => { log(open, detail); clientOpen = open; }"
+            >
+              <c-fill name="activator" data="{ activator_attrs }">
+                <c-CButton c-attrs="activator_attrs">Open overlay</c-CButton>
+              </c-fill>
+            </c-CCommandPalette>
+          </c-elif>
+          <c-elif cond="pair">
+            <div class="instance">
+              <c-CCommandPalette
+                label="Overlay commands"
+                c-entries="palette_entries"
+                c-open="server_open"
+                c-disabled="disabled"
+                :onOpenChange="(open, detail) => log(open, detail, 1)"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <c-CButton c-attrs="activator_attrs">Open overlay</c-CButton>
+                </c-fill>
+              </c-CCommandPalette>
+            </div>
+            <div class="instance">
+              <c-CCommandPalette
+                label="Overlay commands"
+                c-entries="palette_entries"
+                c-open="server_open"
+                c-disabled="disabled"
+                :onOpenChange="(open, detail) => log(open, detail, 2)"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <c-CButton c-attrs="activator_attrs">Open overlay</c-CButton>
+                </c-fill>
+              </c-CCommandPalette>
+            </div>
+          </c-elif>
+          <c-else>
+            <div class="instance">
+              <c-CCommandPalette
+                label="Overlay commands"
+                c-entries="palette_entries"
+                c-open="server_open"
+                c-disabled="disabled"
+                :onOpenChange="(open, detail) => log(open, detail)"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <c-CButton c-attrs="activator_attrs">Open overlay</c-CButton>
+                </c-fill>
+              </c-CCommandPalette>
+            </div>
+          </c-else>
+        </div>
+      </section>
+    """,
     "calert_dialog": """
       <section>
         <output id="owner-step">{{ step }}</output>
@@ -1482,7 +1586,11 @@ _OPENING: dict[str, tuple[str, str]] = {
     "cpopover": ("button", ".cui-popover"),
     "cmenu": ("button", "[role=menu]"),
     "ctour": ("button", "dialog"),
+    "ccommand_palette": ("button", "dialog"),
 }
+
+# Components whose open popup is a modal dialog. CTour's dialog is not modal.
+_MODAL = {"cdialog", "calert_dialog", "cdrawer", "ccommand_palette"}
 
 # Components whose server render takes an `open` input, and those that take
 # `disabled`.
@@ -1502,12 +1610,15 @@ _SECOND = "#overlay-slot > .instance:nth-child(2)"
 # part that is not hidden. A popover left in the top layer with `hidden` set
 # is not visible, so it does not count. A dialog that is still modal but no
 # longer `open` is hidden yet keeps blocking the page; it is neither open nor
-# closed, so the check returns null and the caller fails.
-_IS_OPEN = """([scope, selector]) => {
+# closed, so the check returns null and the caller fails. A modal family's
+# dialog that is `open` but not modal is shown without blocking the page or
+# taking Escape; that is not a real open either, so it also returns null.
+_IS_OPEN = """([scope, selector, modal]) => {
   const popup = document.querySelector(scope + ' ' + selector);
   if (!popup) return false;
   if (popup.tagName === 'DIALOG') {
     if (popup.matches(':modal') && !popup.open) return null;
+    if (modal && popup.open && !popup.matches(':modal')) return null;
     return popup.open;
   }
   if (popup.hidden) return false;
@@ -1575,6 +1686,7 @@ def _owner_page(component: str, *, controlled: bool = False, pair: bool = False)
                     citry_ui.CMultiSelectOption("b", "Beta"),
                 ],
                 "combobox_options": [citry_ui.CComboboxOption("a", "Alpha"), citry_ui.CComboboxOption("b", "Beta")],
+                "palette_entries": [CCommandPaletteCommand("a", "Alpha")],
             }
 
         template = _TEMPLATES[component]
@@ -1648,9 +1760,9 @@ def _scope(controlled: bool = False) -> str:
 
 
 def _is_open(page: Any, component: str, scope: str = _FIRST) -> bool:
-    state = page.evaluate(_IS_OPEN, [scope, _OPENING[component][1]])
+    state = page.evaluate(_IS_OPEN, [scope, _OPENING[component][1], component in _MODAL])
     if state is None:
-        pytest.fail(f"{component} left a hidden dialog in the top layer, still blocking the page")
+        pytest.fail(f"{component} left its dialog half open: hidden but modal, or shown but not modal")
     return bool(state)
 
 
@@ -1672,7 +1784,7 @@ def _assert_page_released(page: Any, component: str) -> None:
 def _wait_open(page: Any, component: str, *, open_: bool = True, scope: str = _FIRST) -> None:
     page.wait_for_function(
         f"args => ({_IS_OPEN})(args) === {'true' if open_ else 'false'}",
-        arg=[scope, _OPENING[component][1]],
+        arg=[scope, _OPENING[component][1], component in _MODAL],
     )
 
 
@@ -2015,3 +2127,192 @@ def test_server_rerender_that_removes_an_open_overlay_reports_nothing_and_releas
         })"""
     )
     assert released == {"overflow": "", "inert": [], "focusConnected": True}
+
+
+# An overlay inside another one. The outer and the inner each take their own
+# server `open` input, so the server can close the outer while it leaves the
+# inner's input as it was.
+_NESTED_TAGS = {"cdialog": "CDialog", "cdrawer": "CDrawer"}
+
+
+def _nested_page(outer: str, inner: str) -> tuple[Citry, str]:
+    app = Citry(secret="citry-ui-nested-overlay-rerender-e2e", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(citry_ui)
+    outer_tag = _NESTED_TAGS[outer]
+    inner_tag = _NESTED_TAGS[inner]
+
+    class NestedOwner(Component):
+        citry = app
+
+        class Kwargs:
+            step: int = 0
+            outer_open: bool = False
+            inner_open: bool = False
+
+        class State(Kwargs):
+            pass
+
+        class Events:
+            def advance(self, state: Any) -> NestedOwner:
+                return _nested_next(state)
+
+            def open_outer_on_server(self, state: Any) -> NestedOwner:
+                return _nested_next(state, outer_open=True)
+
+            def open_both_on_server(self, state: Any) -> NestedOwner:
+                return _nested_next(state, outer_open=True, inner_open=True)
+
+            def close_outer_on_server(self, state: Any) -> NestedOwner:
+                return _nested_next(state, outer_open=False)
+
+        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {"step": kwargs.step, "outer_open": kwargs.outer_open, "inner_open": kwargs.inner_open}
+
+        template = f"""
+          <section>
+            <output id="owner-step">{{{{ step }}}}</output>
+            <button
+              id="advance-owner"
+              type="button"
+              @c-click="advance"
+            >Advance</button>
+            <button
+              id="open-outer-on-server"
+              type="button"
+              @c-click="open_outer_on_server"
+            >Open outer on server</button>
+            <button
+              id="open-both-on-server"
+              type="button"
+              @c-click="open_both_on_server"
+            >Open both on server</button>
+            <button
+              id="close-outer-on-server"
+              type="button"
+              @c-click="close_outer_on_server"
+            >Close outer on server</button>
+            <div id="outer-root">
+              <c-{outer_tag}
+                c-open="outer_open"
+                :onOpenChange="(open, detail) => log(open, detail, 'outer')"
+              >
+                <c-fill name="activator" data="{{ activator_attrs }}">
+                  <button
+                    type="button"
+                    c-bind="activator_attrs"
+                  >Open outer</button>
+                </c-fill>
+                <c-fill name="title">Outer overlay</c-fill>
+                <c-fill name="default">
+                  <div id="inner-root">
+                    <c-{inner_tag}
+                      c-open="inner_open"
+                      :onOpenChange="(open, detail) => log(open, detail, 'inner')"
+                    >
+                      <c-fill name="activator" data="{{ activator_attrs }}">
+                        <button
+                          type="button"
+                          c-bind="activator_attrs"
+                        >Open inner</button>
+                      </c-fill>
+                      <c-fill name="title">Inner overlay</c-fill>
+                      <c-fill name="default">Inner body</c-fill>
+                    </c-{inner_tag}>
+                  </div>
+                </c-fill>
+              </c-{outer_tag}>
+            </div>
+          </section>
+        """
+        js = """
+          $component({
+            methods: {
+              log(open, detail, instance) {
+                window.__openChanges.push({ open, reason: detail?.reason, instance });
+              },
+            },
+          });
+        """
+
+    def _nested_next(state: Any, **changes: Any) -> NestedOwner:
+        values = {"step": state.step + 1, "outer_open": state.outer_open, "inner_open": state.inner_open}
+        values.update(changes)
+        return NestedOwner(**values)
+
+    class Page(Component):
+        citry = app
+
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /><c-css /></head>
+            <body>
+              <c-nested-owner />
+              <c-js />
+            </body>
+          </html>
+        """
+        js = """
+          $component({
+            data() {
+              window.__openChanges = [];
+              return {};
+            },
+          });
+        """
+
+    return app, str(Page())
+
+
+# Whether the outer and the inner dialog element are open.
+_NESTED_OPEN = """() => ({
+  outer: document.querySelector('#outer-root dialog').open,
+  inner: document.querySelector('#inner-root dialog').open,
+})"""
+
+
+@pytest.mark.parametrize("opened_by", ["user", "server"])
+@pytest.mark.parametrize(
+    ("outer", "inner"),
+    [("cdialog", "cdialog"), ("cdrawer", "cdialog"), ("cdialog", "cdrawer")],
+)
+def test_server_close_of_an_outer_overlay_closes_an_open_inner_one_and_releases_the_page(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    send_event: Any,
+    settle_timers: Any,
+    outer: str,
+    inner: str,
+    opened_by: str,
+) -> None:
+    """Closing the outer overlay on the server also closes an open inner one, reports it, and frees the page."""
+    app, html = _nested_page(outer, inner)
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    wait_for_citry_ready()
+    if opened_by == "server":
+        _server_event(page, send_event, "#open-both-on-server", "open_both_on_server", 1)
+    else:
+        _server_event(page, send_event, "#open-outer-on-server", "open_outer_on_server", 1)
+        page.locator("#inner-root").get_by_role("button", name="Open inner").click()
+    page.wait_for_function(f"(({_NESTED_OPEN})()).inner === true")
+    opened = page.evaluate("window.__openChanges")
+
+    _server_event(page, send_event, "#close-outer-on-server", "close_outer_on_server", 2)
+    settle_timers()
+
+    assert page.evaluate(_NESTED_OPEN) == {"outer": False, "inner": False}
+    _assert_page_released(page, f"{outer} holding {inner}")
+    # The server closed the outer overlay, which reports nothing; the inner
+    # one closed because its ancestor did, which its owner hears about.
+    assert page.evaluate("window.__openChanges")[len(opened) :] == [
+        {"open": False, "reason": "ancestor", "instance": "inner"}
+    ]
+
+    # A later re-render that leaves the inner's server `open` unchanged keeps
+    # it closed, as the ancestor close left it.
+    _server_event(page, send_event, "#advance-owner", "advance", 3)
+    settle_timers()
+    assert page.evaluate(_NESTED_OPEN) == {"outer": False, "inner": False}
+    _assert_page_released(page, f"{outer} holding {inner}")

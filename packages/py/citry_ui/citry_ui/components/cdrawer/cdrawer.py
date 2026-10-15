@@ -765,7 +765,29 @@ class CDrawer(LibraryComponent):
           // reopening it: the modal state, scroll lock, and focus stay as they are.
           // The effect below then keeps it open, or closes it when the server's
           // `open` input changed to false.
+          //
+          // A server re-render runs an enclosing dialog's callback first, and that
+          // run may close it. This drawer was already handed over, so that close
+          // could not reach it, and taking it over open would leave a modal drawer
+          // inside a closed dialog: invisible, yet blocking the page. Close it
+          // instead and report the close as "ancestor" once the callback is known.
+          let ancestorClose = null;
           if (handoff?.open && drawer.open) {
+            for (let node = composedParent(host); node; node = composedParent(node)) {
+              if (!(node instanceof HTMLDialogElement)) continue;
+              let modal = false;
+              try { modal = node.matches(":modal"); } catch { modal = false; }
+              if (!node.open && !modal) ancestorClose = node;
+              break;
+            }
+          }
+          if (ancestorClose) {
+            expectedNativeClose = true;
+            drawer.close();
+            unlockScroll();
+            internalOpen = false;
+            suppressedControlledOpen = props.open === true;
+          } else if (handoff?.open && drawer.open) {
             appliedOpen = true;
             previousFocus = handoff.previousFocus;
             drawer.setAttribute("data-open", "");
@@ -819,6 +841,7 @@ class CDrawer(LibraryComponent):
               if (nextOpen) pendingOpenSource = null;
             }
           });
+          if (ancestorClose) notify(false, "ancestor", ancestorClose, "", true);
           if (structureValid) host.setAttribute("data-citry-drawer-initialized", "");
 
           return () => {
