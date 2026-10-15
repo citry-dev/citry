@@ -784,7 +784,12 @@ class TestHookReturnedContent:
 
     @PAGES
     def test_unsupported_component_hook_value_is_rejected(self, interactive, document):
-        with pytest.raises(TypeError, match="on_component_rendered for Replaced returned a value of type int"):
+        # The error names the extension, and the component path says where.
+        msg = (
+            r"An error occurred while rendering components Page > Replaced:\n"
+            r"on_component_rendered of extension 'replace' returned a value of type int for Replaced"
+        )
+        with pytest.raises(TypeError, match=msg):
             str(self._page("component", 42, interactive=interactive, document=document)())
 
     @PAGES
@@ -884,6 +889,170 @@ class TestHookReturnedContent:
         values = [value for item in assembly.view.occurrences for value in item.prepared_data.values()]
         assert "<b>bold</b>" in values
         assert all("opaqueHtml" not in item.prepared_data for item in assembly.view.occurrences)
+
+
+class TestHookReturnTypeChecks:
+    """
+    A hook whose return replaces a value is checked as soon as it returns.
+
+    A wrong type raises ``TypeError`` naming the hook and the extension,
+    before the next extension runs, so the next extension is never blamed
+    for a value it did not produce.
+    """
+
+    @staticmethod
+    def _chain(hook, first_value, calls):
+        # The first extension returns ``first_value``; the second records
+        # what it receives and keeps it.
+        def first(self, ctx):
+            return first_value
+
+        def second(self, ctx):
+            calls.append(ctx)
+
+        first_ext = type("First", (Extension,), {"name": "first", hook: first})
+        second_ext = type("Second", (Extension,), {"name": "second", hook: second})
+        return [first_ext, second_ext]
+
+    @pytest.mark.parametrize("hook", ["on_component_rendered", "on_slot_rendered"])
+    def test_bad_render_return_stops_before_next_extension(self, hook):
+        calls = []
+        app = _Citry(extensions=self._chain(hook, 5, calls), autodiscover=False)
+
+        class Holder(Component):
+            citry = app
+            template = "<section><c-slot>fallback</c-slot></section>"
+
+        target = "Holder" if hook == "on_component_rendered" else "slot 'default' of Holder"
+        msg = f"{hook} of extension 'first' returned a value of type int for {target}, which Citry cannot put"
+        with pytest.raises(TypeError, match=msg) as info:
+            str(Holder())
+        assert calls == []
+        if hook == "on_component_rendered":
+            assert str(info.value).startswith("An error occurred while rendering components Holder:\n")
+
+    def test_bad_component_return_is_not_passed_on_as_the_render_error(self):
+        # Another extension that recovers from render errors must not get
+        # a chance to swallow the bad return: it never runs.
+        calls = []
+
+        class Recover(Extension):
+            name = "recover"
+
+            def on_component_rendered(self, ctx):
+                calls.append(ctx.error)
+                return Markup("<p>recovered</p>")
+
+        exts = [*self._chain("on_component_rendered", object(), [])[:1], Recover]
+        app = _Citry(extensions=exts, autodiscover=False)
+
+        class Card(Component):
+            citry = app
+            template = "<p>card</p>"
+
+        with pytest.raises(TypeError, match="extension 'first' returned a value of type object for Card"):
+            str(Card())
+        assert calls == []
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (Markup("<b>bold</b>"), ">bold</b>"),
+            ("<i>text</i>", "&lt;i&gt;text&lt;/i&gt;"),
+            ("own-render", "<p"),
+            (None, "<p"),
+        ],
+        ids=["markup", "str", "citry-render", "none"],
+    )
+    def test_valid_component_returns_pass_through_two_extensions(self, value, expected):
+        calls = []
+
+        def first(self, ctx):
+            # "own-render" stands for the CitryRender the hook received.
+            return ctx.render if value == "own-render" else value
+
+        def second(self, ctx):
+            calls.append(ctx.render)
+
+        exts = [
+            type("First", (Extension,), {"name": "first", "on_component_rendered": first}),
+            type("Second", (Extension,), {"name": "second", "on_component_rendered": second}),
+        ]
+        app = _Citry(extensions=exts, autodiscover=False)
+
+        class Card(Component):
+            citry = app
+            template = "<p>card</p>"
+
+        html = str(Card())
+        # The second extension always receives a render, never a bare value.
+        assert len(calls) == 1
+        assert isinstance(calls[0], CitryRender)
+        assert expected in html
+        assert ("card" in html) == (expected == "<p")
+
+    @pytest.mark.parametrize(
+        ("hook", "target"),
+        [
+            ("on_template_loaded", "the template of Page"),
+            ("on_template_compiled", "a compiled template of Page"),
+            ("on_messages_loaded", "the messages of Page"),
+            ("on_js_loaded", "the JS of Page"),
+            ("on_css_loaded", "the CSS of Page"),
+            ("on_attrs_resolved", "<p> in Page"),
+            ("on_serialize", "the page's HTML"),
+        ],
+    )
+    def test_bad_value_return_stops_before_next_extension(self, hook, target):
+        calls = []
+        app = _Citry(
+            extensions=self._chain(hook, 5, calls),
+            autodiscover=False,
+            extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
+        )
+        msg = f"{hook} of extension 'first' returned a value of type int for {target}, which is not a "
+
+        # Every hook here runs when the page renders, not when the class is
+        # defined, so one render reaches each of them.
+        class Page(Component):
+            citry = app
+            template = """
+                <p c-class="'x'">{{ tr('hi') }}</p>
+            """
+            js = """
+                console.log(1)
+            """
+            css = """
+                p { color: red }
+            """
+            messages = """
+                hi = Hi
+            """
+
+        with pytest.raises(TypeError, match=msg):
+            str(Page())
+        assert calls == []
+
+    def test_bad_foreign_compiled_return_names_the_extension(self):
+        class Host(Extension):
+            name = "host"
+
+            def on_template_foreign_spans(self, ctx):
+                return ForeignSpanSet((ForeignSpan(0, len(ctx.content.encode())),))
+
+            def on_template_foreign_compiled(self, ctx):
+                ctx.mark_resolved(*ctx.claims)
+                return 5
+
+        app = _Citry(extensions=[Host], autodiscover=False)
+
+        class Card(Component):
+            citry = app
+            template = "{% value %}"
+
+        msg = "on_template_foreign_compiled of extension 'host' returned a value of type int for a compiled template"
+        with pytest.raises(TypeError, match=msg):
+            str(Card())
 
 
 class TestTemplateHooks:

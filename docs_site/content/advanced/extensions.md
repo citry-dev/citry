@@ -91,6 +91,11 @@ class UppercaseOutput(Extension):
 When several extensions change the same value, each receives the result of
 the one before it, in the order you installed them.
 
+Return the type the hook expects, which the reference lists for each
+hook. If a hook returns any other value, Citry raises `TypeError` right
+away, before the next extension runs. The message names the hook and the
+extension, so you know which one to fix.
+
 The [`Extension` reference][citry.Extension] lists every hook and its
 context. Hooks cover component classes and registration, component inputs
 and data, rendered components and slots, attributes, serialization,
