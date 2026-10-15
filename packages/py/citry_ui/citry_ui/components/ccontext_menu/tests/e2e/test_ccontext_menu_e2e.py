@@ -1755,7 +1755,7 @@ def test_untrusted_root_waits_without_rewriting_itself(page) -> None:
     """A root the page has broken stays not ready and makes no DOM changes until the page changes it again."""
     # The menus become ready on timers, so the clock runs normally through the
     # load and is paused before the page breaks the root; after that only
-    # `run_for()` moves it.
+    # `run_for()` moves it, until the final open checks resume it.
     page.clock.install()
     errors = _load(page)
     page.clock.pause_at(page.evaluate("Date.now() + 1_000"))
@@ -1824,10 +1824,11 @@ def test_untrusted_root_waits_without_rewriting_itself(page) -> None:
     target.focus()
     page.keyboard.press("Shift+F10")
     page.wait_for_function("document.querySelector('#geometry-menu')?.matches(':popover-open')")
-    # The page broke the root on purpose, so the only errors are the
-    # controller's reports of that.
-    assert errors
-    assert all("CContextMenu" in error and "invalid" in error for error in errors), errors
+    # The page broke the root once, so the controller reports it exactly
+    # once, and nothing else logs an error.
+    broken_root = "[citry-ui] CContextMenu cannot open because page code changed its markup;"
+    assert len(errors) == 1, errors
+    assert errors[0].startswith(broken_root), errors
 
 
 def test_disabled_focus_fallback_removes_temporary_body_tabindex(page) -> None:

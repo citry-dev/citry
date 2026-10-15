@@ -52,8 +52,8 @@
   said the menu was open.
 - `CContextMenu` no longer keeps the page busy when page code changes its
   markup into a form it cannot use. It now waits for the next change instead
-  of rewriting its markup on every timer tick, and logs one console error
-  until the markup is usable again.
+  of rewriting its markup on every timer tick, and logs a single console
+  error while the markup stays unusable.
 - An open `CDialog` stays open when a server event re-renders the component
   that contains it, and calls `onOpenChange(false)` with reason `"native"`
   when that re-render removes it. Previously it closed in both cases without

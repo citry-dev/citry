@@ -1470,21 +1470,27 @@
                   !0,
                 ));
           };
+          // Log one error when the root breaks, and again only after it
+          // recovers and breaks again. The repair makes no DOM change while it
+          // waits, so nothing else (such as the Menu's own structure check)
+          // tells the developer why the menu stopped opening. A lost browser
+          // capability gets its own message, because restoring the markup
+          // would not help there.
+          const reportBrokenRoot = (capabilityLost = !1) => {
+            const key = capabilityLost ? "capability-lost" : "structure";
+            M.has(key) ||
+              (M.add(key),
+              console.error(
+                capabilityLost
+                  ? "[citry-ui] CContextMenu cannot open because a browser feature it needs (popovers or CSS anchor positioning) is no longer available; it stays closed."
+                  : "[citry-ui] CContextMenu cannot open because page code changed its markup; it stays closed until that markup is restored.",
+                i,
+              ));
+          };
           // Both readiness paths (the event handlers through Qe() and the
           // mutation watcher) repair under this one condition: the root's
           // state attributes disagree with the menu, or a menu that was ready
           // before, or whose surface is initialized, is not ready now.
-          // Report a broken root once per broken episode. The repair makes no
-          // DOM change while it waits, so nothing else (such as the Menu's own
-          // structure check) tells the developer why the menu stopped opening.
-          const reportBrokenRoot = () => {
-            M.has("structure") ||
-              (M.add("structure"),
-              console.error(
-                "[citry-ui] CContextMenu root structure is invalid; the menu stays closed until the page restores it.",
-                i,
-              ));
-          };
           const needsRepair = () =>
             !Qt() || (!h && (vt || c.hasAttribute("data-citry-menu-initialized")));
           const Fe = () => {
@@ -1492,7 +1498,7 @@
                 const e = !Z();
                 if (!qe() || !ye() || !G() || e) {
                   if (e && capInvalid) return;
-                  reportBrokenRoot();
+                  reportBrokenRoot(e);
                   return (
                     (capInvalid = e),
                     ne(!1),
@@ -1540,7 +1546,7 @@
                   ne(c.hasAttribute("data-citry-menu-initialized")),
                   // A repair that leaves an initialized menu not ready means
                   // the page broke a part the repair does not own.
-                  h ? M.delete("structure") : c.hasAttribute("data-citry-menu-initialized") && reportBrokenRoot());
+                  h ? (M.delete("structure"), M.delete("capability-lost")) : c.hasAttribute("data-citry-menu-initialized") && reportBrokenRoot());
               }
             },
             Qe = () => {
