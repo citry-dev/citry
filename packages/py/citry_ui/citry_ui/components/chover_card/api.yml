@@ -66,7 +66,7 @@ events:
       - id: on-open-change
         name: onOpenChange
         signature: {display: '(requestedOpen: boolean, detail: CHoverCardOpenChangeDetail) => void', interfaces: [CHoverCardOpenChangeDetail]}
-        trigger: Hover, focus, pointer departure, blur, Escape, trigger press, a peer HoverCard, or external native visibility requests another state; disabling an open card also closes it.
+        trigger: Hover, focus, pointer departure, blur, Escape, trigger press, a peer HoverCard, or external native visibility requests another state; disabling an open card also closes it and calls it with reason `disabled`.
         detail: {display: '{reason: "hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal" | "disabled", controlled: boolean, forced: boolean, source: EventTarget | null}', interfaces: [CHoverCardOpenChangeDetail]}
         behavior: Uncontrolled requests commit before notification. Controlled requests wait for the owner. Owner commits do not notify.
 

@@ -240,8 +240,9 @@ A server re-render that keeps the Dialog keeps an open uncontrolled Dialog
 open when the server `open` value is unchanged, and opens or closes it to
 match a changed value without calling `onOpenChange`. A re-render that removes
 an open Dialog does not call `onOpenChange`: the owner removed it, so there is
-nothing to report. Its cleanup still leaves the modal state, releases the
-scroll lock, and returns focus.
+nothing to report. Its cleanup still takes the dialog out of modal mode,
+releases the scroll lock, and returns focus to the opener when focus was lost
+and the opener is still on the page.
 
 ## 5. State model
 

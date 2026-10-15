@@ -358,6 +358,7 @@ def _server_event(page: Any, send_event: Any, button: str, handler: str) -> None
 def test_unrelated_rerender_keeps_the_tour_step_so_next_reaches_the_following_step(
     page: Any, serve_citry_ui_live: Any, wait_for_citry_ready: Any, send_event: Any
 ) -> None:
+    """An unrelated server re-render keeps the user's step, so Next moves on to step three."""
     tour = _open_rerendered_tour_at_step_two(page, serve_citry_ui_live, wait_for_citry_ready)
 
     # The server's `active` input stays 0, so the tour keeps the step the user
@@ -381,6 +382,7 @@ def test_unrelated_rerender_keeps_the_tour_step_so_next_reaches_the_following_st
 def test_server_change_of_active_moves_the_open_tour(
     page: Any, serve_citry_ui_live: Any, wait_for_citry_ready: Any, send_event: Any
 ) -> None:
+    """A server change of `active` moves the open tour to that step without calling `onActiveChange`."""
     tour = _open_rerendered_tour_at_step_two(page, serve_citry_ui_live, wait_for_citry_ready)
 
     # A changed server `active` wins over the user's step, without a callback,

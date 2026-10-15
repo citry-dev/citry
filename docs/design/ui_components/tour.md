@@ -110,8 +110,10 @@ when the server `open` value is unchanged, and opens or closes to match a
 changed value without calling `onOpenChange`. The active step follows the
 same rule: the Tour keeps the step the user reached while the server `active`
 value is unchanged, and moves to a changed value without calling
-`onActiveChange`. A re-render that removes an open Tour does not call
-`onOpenChange`.
+`onActiveChange`. After the server closes the Tour and opens it again with
+`active` unchanged, the Tour resumes at the step the user reached; to restart
+it, the server changes `active`. A re-render that removes an open Tour does
+not call `onOpenChange`.
 
 ## 5. State model
 
