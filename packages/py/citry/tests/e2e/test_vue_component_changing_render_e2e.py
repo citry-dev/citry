@@ -221,7 +221,7 @@ def test_component_change_inside_a_fill_and_in_a_keyed_loop(page: Any, serve_liv
 
 
 @pytest.mark.e2e
-def test_component_change_stays_inside_its_own_vue_app(page: Any, serve_live: Any) -> None:
+def test_component_change_stays_inside_its_own_vue_app(page: Any, serve_live: Any, wait_for_citry_ready: Any) -> None:
     engine = Citry(secret="vue-component-change-apps-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -251,13 +251,15 @@ def test_component_change_stays_inside_its_own_vue_app(page: Any, serve_live: An
     page.on("pageerror", lambda error: faults.append(str(error)))
     base = serve_live(engine, Page().render().serialize(), Wrapper().render().serialize(deps_strategy="fragment"))
     page.goto(base + "/")
-    page.wait_for_function("() => __citryRuntime._apps.size === 1")
+    # The registry gains each app before it mounts; the second app's button
+    # does nothing until that app has mounted.
+    wait_for_citry_ready()
     page.evaluate(
         "() => fetch('/fragment').then((r) => r.text()).then((html) => {"
         " const target = document.createElement('div'); target.id = 'second';"
         " document.body.append(target); target.innerHTML = html; })"
     )
-    page.wait_for_function("() => __citryRuntime._apps.size === 2")
+    wait_for_citry_ready(2)
     page.wait_for_selector("#second .submit")
 
     page.locator("#second .submit").click()

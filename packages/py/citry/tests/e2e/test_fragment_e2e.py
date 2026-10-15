@@ -200,7 +200,7 @@ def test_fragment_local_dependency_assets_load_on_demand(page: Any, serve_live: 
     assert page.locator("link[data-citry-vue-style-app][data-citry-css-url]").count() == 1
 
 
-def test_content_page_dedupes_a_reused_components_css(page: Any, serve_live: Any) -> None:
+def test_content_page_dedupes_a_reused_components_css(page: Any, serve_live: Any, wait_for_citry_ready: Any) -> None:
     # The initial page and a later fragment share the same content-addressed
     # stylesheet. Each Vue app owns its own style node, while the browser
     # fetches the immutable URL only once.
@@ -225,7 +225,9 @@ def test_content_page_dedupes_a_reused_components_css(page: Any, serve_live: Any
     page.goto(base + "/")
 
     page.wait_for_selector(".card")
-    page.wait_for_function("() => __citryRuntime._apps.size === 1")
+    # The registry gains the app before it mounts; the stylesheet request the
+    # next check counts is made while it mounts.
+    wait_for_citry_ready()
     initial_css_requests = [url for url in requests if "/citry/ext/events/assets/" in url and url.endswith(".css")]
     assert len(initial_css_requests) == 1
 
@@ -237,7 +239,7 @@ def test_content_page_dedupes_a_reused_components_css(page: Any, serve_live: Any
         " document.body.append(target); target.innerHTML = html; })"
     )
     page.wait_for_selector("#target .card")
-    page.wait_for_function("() => __citryRuntime._apps.size === 2")
+    wait_for_citry_ready(2)
     page.wait_for_function(
         "() => getComputedStyle(document.querySelector('#target .card')).color === 'rgb(0, 128, 128)'"
     )

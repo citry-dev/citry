@@ -295,9 +295,9 @@ def test_component_js_data_is_isolated_per_document_instance(page: Any, serve_do
     ]
 
 
-def test_component_css_applies_with_injected_vars(page: Any, serve_document: Any) -> None:
+def test_component_css_applies_with_injected_vars(page: Any, serve_document: Any, open_citry_page: Any) -> None:
     html = _build_page()().render().serialize(deps_strategy="document")
-    page.goto(serve_document(html))
+    open_citry_page(serve_document(html))
     color = page.eval_on_selector(".widget", "el => getComputedStyle(el).color")
     assert color == "rgb(12, 34, 56)"
 

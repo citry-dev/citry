@@ -55,7 +55,10 @@ def _collect_errors(page: Any) -> list[str]:
 
 @pytest.mark.parametrize("handler", ["bump_none", "bump_data", "bump_mark"])
 def test_state_bindings_show_values_a_handler_changed_without_rendering(
-    page: Any, serve_live: Any, handler: str
+    page: Any,
+    serve_live: Any,
+    handler: str,
+    open_citry_page: Any,
 ) -> None:
     app = _engine("state-refresh-test")
 
@@ -120,7 +123,7 @@ def test_state_bindings_show_values_a_handler_changed_without_rendering(
 
     dispatcher_for(app)
     errors = _collect_errors(page)
-    page.goto(serve_live(app, Counter().render().serialize(), "") + "/")
+    open_citry_page(serve_live(app, Counter().render().serialize(), "") + "/")
     page.wait_for_selector("#count")
     assert page.locator("#count").text_content() == "0"
 
@@ -137,7 +140,7 @@ def test_state_bindings_show_values_a_handler_changed_without_rendering(
     assert errors == []
 
 
-def test_nested_child_shows_its_own_changed_state(page: Any, serve_live: Any) -> None:
+def test_nested_child_shows_its_own_changed_state(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     app = _engine("state-refresh-child-test")
 
     class Child(Component):
@@ -187,7 +190,7 @@ def test_nested_child_shows_its_own_changed_state(page: Any, serve_live: Any) ->
 
     dispatcher_for(app)
     errors = _collect_errors(page)
-    page.goto(serve_live(app, Parent().render().serialize(), "") + "/")
+    open_citry_page(serve_live(app, Parent().render().serialize(), "") + "/")
     page.wait_for_selector("#child-clicks")
 
     page.locator("#child-go").click()
@@ -199,7 +202,9 @@ def test_nested_child_shows_its_own_changed_state(page: Any, serve_live: Any) ->
     assert errors == []
 
 
-def test_a_browser_write_made_while_a_call_is_in_flight_is_kept_and_sent_next(page: Any, serve_live: Any) -> None:
+def test_a_browser_write_made_while_a_call_is_in_flight_is_kept_and_sent_next(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     app = _engine("state-refresh-pending-test")
     slow_started = threading.Event()
     release = threading.Event()
@@ -249,7 +254,7 @@ def test_a_browser_write_made_while_a_call_is_in_flight_is_kept_and_sent_next(pa
     dispatcher_for(app)
     calls = _collect_calls(page)
     errors = _collect_errors(page)
-    page.goto(serve_live(app, Draft().render().serialize(), "") + "/")
+    open_citry_page(serve_live(app, Draft().render().serialize(), "") + "/")
     page.wait_for_selector("#count")
 
     page.locator("#slow").click()
@@ -273,7 +278,9 @@ class PickIn:
     value: int
 
 
-def test_a_slow_answer_cancelled_by_a_newer_call_does_not_replace_newer_state(page: Any, serve_live: Any) -> None:
+def test_a_slow_answer_cancelled_by_a_newer_call_does_not_replace_newer_state(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     app = _engine("state-refresh-supersede-test")
     slow_started = threading.Event()
     release = threading.Event()
@@ -316,7 +323,7 @@ def test_a_slow_answer_cancelled_by_a_newer_call_does_not_replace_newer_state(pa
 
     dispatcher_for(app)
     errors = _collect_errors(page)
-    page.goto(serve_live(app, Picker().render().serialize(), "") + "/")
+    open_citry_page(serve_live(app, Picker().render().serialize(), "") + "/")
     page.wait_for_selector("#count")
 
     page.locator("#first").click()
@@ -331,7 +338,7 @@ def test_a_slow_answer_cancelled_by_a_newer_call_does_not_replace_newer_state(pa
     assert errors == []
 
 
-def test_a_delayed_state_refresh_loses_to_a_newer_answer(page: Any, serve_live: Any) -> None:
+def test_a_delayed_state_refresh_loses_to_a_newer_answer(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     app = _engine("state-refresh-delayed-test")
 
     class Delayed(Component):
@@ -361,7 +368,7 @@ def test_a_delayed_state_refresh_loses_to_a_newer_answer(page: Any, serve_live: 
 
     dispatcher_for(app)
     errors = _collect_errors(page)
-    page.goto(serve_live(app, Delayed().render().serialize(), "") + "/")
+    open_citry_page(serve_live(app, Delayed().render().serialize(), "") + "/")
     page.wait_for_selector("#count")
 
     # Schedule an old refresh that would show 99, then let a real call answer first.

@@ -25,7 +25,9 @@ _STEPS = (
 )
 
 
-def test_keyed_rows_in_a_supplied_slot_survive_reorder_insert_and_remove(page: Any, serve_live: Any) -> None:
+def test_keyed_rows_in_a_supplied_slot_survive_reorder_insert_and_remove(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-slot-keyed-rows-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     board_render_id = ""
@@ -95,7 +97,7 @@ def test_keyed_rows_in_a_supplied_slot_survive_reorder_insert_and_remove(page: A
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
     page.wait_for_function("document.querySelectorAll('.row').length === 3")
 
     def rows() -> list[str]:
@@ -169,7 +171,9 @@ def test_keyed_rows_in_a_supplied_slot_survive_reorder_insert_and_remove(page: A
     assert faults == []
 
 
-def test_component_inside_a_transparent_wrapper_in_a_fill_mounts(page: Any, serve_document: Any) -> None:
+def test_component_inside_a_transparent_wrapper_in_a_fill_mounts(
+    page: Any, serve_document: Any, open_citry_page: Any
+) -> None:
     engine = Citry(autodiscover=False)
 
     class Box(Component):
@@ -208,7 +212,7 @@ def test_component_inside_a_transparent_wrapper_in_a_fill_mounts(page: Any, serv
 
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_document(Page().render().serialize(deps_strategy="document")))
+    open_citry_page(serve_document(Page().render().serialize(deps_strategy="document")))
     page.wait_for_function("document.querySelectorAll('.box').length === 2")
 
     assert page.locator(".box #outer").inner_text() == "outer"

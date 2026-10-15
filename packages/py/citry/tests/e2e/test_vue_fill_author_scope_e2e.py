@@ -128,7 +128,9 @@ def test_fill_bindings_read_and_write_the_authors_data(
 
 
 def test_events_update_of_a_component_between_author_and_receiver_keeps_the_page_working(
-    page: Any, serve_live: Any
+    page: Any,
+    serve_live: Any,
+    open_citry_page: Any,
 ) -> None:
     engine = Citry(secret="fill-author-scope-update-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -193,7 +195,7 @@ def test_events_update_of_a_component_between_author_and_receiver_keeps_the_page
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.on("console", lambda message: faults.append(message.text) if message.type == "error" else None)
-    page.goto(serve_live(engine, Author().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Author().render().serialize(), "") + "/")
     page.wait_for_function("document.querySelector('#text')?.textContent === 'Lexical'")
     page.locator("#inc").click()
     page.wait_for_function("document.querySelector('#author-count').textContent === '1'")

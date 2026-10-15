@@ -198,7 +198,9 @@ def test_browser_isolates_fallback_text_exactly_as_the_server_does(
     assert faults == []
 
 
-def test_real_serialized_apps_own_separate_stylesheet_nodes(page: Any, serve_live: Any) -> None:
+def test_real_serialized_apps_own_separate_stylesheet_nodes(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(autodiscover=False)
     engine.set_mounted_prefix("/citry")
 
@@ -224,7 +226,9 @@ def test_real_serialized_apps_own_separate_stylesheet_nodes(page: Any, serve_liv
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.goto(serve_live(engine, html, "") + "/")
-    page.wait_for_function("__citryRuntime._apps.size === 2")
+    # Each app adds its stylesheet while it mounts, after the registry has
+    # gained it, so wait for both mounts before counting the stylesheets.
+    wait_for_citry_ready(2)
     assert page.locator("[data-citry-vue-style-app][data-citry-css-url]").count() == 2
     assert page.locator("#authored-style").count() == 1
     color = page.locator(".owned-style").first.evaluate("element => getComputedStyle(element).color")
@@ -1008,7 +1012,9 @@ def test_prepared_stylesheets_are_owned_per_app_and_never_adopt_authored_links(
     assert result["final"] == {"authored": True, "first": False, "second": False, "apps": 0}
 
 
-def test_i18n_service_is_ready_before_data_provide_and_immediate_watchers(page: Any, serve_live: Any) -> None:
+def test_i18n_service_is_ready_before_data_provide_and_immediate_watchers(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     # The docs promise `this.$i18n` in `data()`, lifecycle hooks, `provide()`
     # and watch handlers, so read it in each one Vue runs before `created()`,
     # under two providers with different locales, and then switch one
@@ -1089,7 +1095,7 @@ probe-greeting = Hello
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.on("console", lambda message: faults.append(message.text) if message.type == "error" else None)
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
     page.locator(".probe").nth(1).wait_for()
 
     def read(index: int) -> dict[str, str | None]:

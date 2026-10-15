@@ -11,7 +11,7 @@ from citry import Citry, Component
 pytestmark = pytest.mark.e2e
 
 
-def test_nested_template_uses_caller_vue_scope(page, serve_document) -> None:
+def test_nested_template_uses_caller_vue_scope(page, serve_document, open_citry_page) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     app = Citry(autodiscover=False)
@@ -33,7 +33,7 @@ def test_nested_template_uses_caller_vue_scope(page, serve_document) -> None:
         def js_data(self, kwargs, slots):
             return {"label": "page"}
 
-    page.goto(serve_document(Page().render().serialize()))
+    open_citry_page(serve_document(Page().render().serialize()))
     button = page.locator("button.lexical")
     assert button.text_content() == "page"
     button.click()
@@ -41,7 +41,7 @@ def test_nested_template_uses_caller_vue_scope(page, serve_document) -> None:
     assert errors == []
 
 
-def test_nested_template_inside_supplied_slot_keeps_page_scope(page, serve_document) -> None:
+def test_nested_template_inside_supplied_slot_keeps_page_scope(page, serve_document, open_citry_page) -> None:
     app = Citry(autodiscover=False)
 
     class Card(Component):
@@ -65,5 +65,5 @@ def test_nested_template_inside_supplied_slot_keeps_page_scope(page, serve_docum
         def js_data(self, kwargs, slots):
             return {"label": "page"}
 
-    page.goto(serve_document(Page().render().serialize()))
+    open_citry_page(serve_document(Page().render().serialize()))
     assert page.locator("span.nested").text_content() == "page"

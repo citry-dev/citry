@@ -33,7 +33,9 @@ def _zone_html(page: Any) -> str:
     return page.locator("#zone").inner_html().replace("<!--[-->", "").replace("<!--]-->", "")
 
 
-def test_opaque_html_updates_as_keyed_inert_static_ranges(page: Any, serve_live: Any) -> None:
+def test_opaque_html_updates_as_keyed_inert_static_ranges(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(secret="opaque-html-e2e-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -82,7 +84,8 @@ def test_opaque_html_updates_as_keyed_inert_static_ranges(page: Any, serve_live:
     page.on("pageerror", lambda error: faults.append(str(error)))
     base = serve_live(engine, Opaque(stage=0).render().serialize(), "")
     page.goto(base + "/")
-    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 0")
+    # `revision` is already 0 before the app mounts; `citry:ready` comes after.
+    wait_for_citry_ready()
     assert _zone_html(page) == body_a
     assert page.locator("#opaque-a").text_content() == "{{ unsafe }}"
     page.locator("#opaque-a").click()
@@ -143,7 +146,9 @@ def test_opaque_html_updates_as_keyed_inert_static_ranges(page: Any, serve_live:
 
 
 def test_static_html_replacement_loses_mounted_listener_while_vue_patch_preserves_it(
-    page: Any, serve_live: Any
+    page: Any,
+    serve_live: Any,
+    wait_for_citry_ready: Any,
 ) -> None:
     engine = Citry(secret="opaque-static-listener-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -193,7 +198,8 @@ def test_static_html_replacement_loses_mounted_listener_while_vue_patch_preserve
     page.on("pageerror", lambda error: faults.append(str(error)))
     base = serve_live(engine, Opaque(stage=0).render().serialize(), "")
     page.goto(base + "/")
-    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 0")
+    # `revision` is already 0 before the app mounts; `citry:ready` comes after.
+    wait_for_citry_ready()
     page.wait_for_function("window.__nativeState?.cleanupCount === 0")
 
     initial = page.evaluate("""() => {
@@ -267,7 +273,9 @@ def test_static_html_replacement_loses_mounted_listener_while_vue_patch_preserve
     assert faults == []
 
 
-def test_hydrated_static_vnode_keeps_node_and_native_listener_on_unchanged_render(page: Any, serve_live: Any) -> None:
+def test_hydrated_static_vnode_keeps_node_and_native_listener_on_unchanged_render(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(secret="opaque-static-hydration-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     body = '<span id="opaque-span" title="inert">same</span>'
@@ -320,7 +328,8 @@ def test_hydrated_static_vnode_keeps_node_and_native_listener_on_unchanged_rende
     base = serve_live(engine, _capture_served_nodes(html, "#opaque-span"), "")
     page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
     page.goto(base + "/")
-    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 0")
+    # `revision` is already 0 before the app mounts; `citry:ready` comes after.
+    wait_for_citry_ready()
     page.wait_for_function("window.__citryHydrationReport !== undefined")
     initial = page.evaluate("""() => ({
       sameServerNode:window.__servedNodes[0]===document.querySelector('#opaque-span'),
@@ -508,7 +517,9 @@ def test_root_opaque_html_mounts_multiple_roots_without_a_wrapper(page: Any, ser
     assert faults == []
 
 
-def test_changed_python_summary_updates_during_render_action(page: Any, serve_live: Any) -> None:
+def test_changed_python_summary_updates_during_render_action(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(secret="changed-python-summary-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     calls = {"page": 0, "summary": 0, "sibling": 0}
@@ -609,7 +620,8 @@ def test_changed_python_summary_updates_during_render_action(page: Any, serve_li
 
     page.goto(serve_live(engine, html, "") + "/")
     page.wait_for_function("window.__changedSummaryReady?.length === 1")
-    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 0")
+    # `revision` is already 0 before the app mounts; `citry:ready` comes after.
+    wait_for_citry_ready()
     initial = page.evaluate("""() => {
       const summary=document.querySelector('#summary');
       const sibling=document.querySelector('#local-sibling');

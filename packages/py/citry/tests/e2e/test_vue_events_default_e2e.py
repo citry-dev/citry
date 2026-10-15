@@ -181,7 +181,9 @@ def _grouped_marker_state(page: Any) -> dict[str, Any]:
 
 
 @pytest.mark.e2e
-def test_public_events_renderer_mounts_and_applies_a_real_render(page: Any, serve_live: Any) -> None:
+def test_public_events_renderer_mounts_and_applies_a_real_render(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-public-e2e-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -217,8 +219,7 @@ def test_public_events_renderer_mounts_and_applies_a_real_render(page: Any, serv
         lambda request: calls.append(request.post_data_json) if request.url.endswith("/ext/events/call") else None,
     )
     base = serve_live(engine, html, "")
-    page.goto(base + "/")
-    page.wait_for_timeout(500)
+    open_citry_page(base + "/")
     assert page.locator("#counter").count() == 1, (faults, page.content())
     assert page.locator("#counter").text_content() == "0"
     page.locator("#counter").click()
@@ -232,7 +233,9 @@ def test_public_events_renderer_mounts_and_applies_a_real_render(page: Any, serv
 
 @pytest.mark.e2e
 def test_vue_events_callback_subscriptions_and_root_lifecycle_do_not_stale_or_stack(
-    page: Any, serve_live: Any
+    page: Any,
+    serve_live: Any,
+    open_citry_page: Any,
 ) -> None:
     engine = Citry(secret="vue-events-public-compat-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -282,7 +285,7 @@ def test_vue_events_callback_subscriptions_and_root_lifecycle_do_not_stale_or_st
             window.__vueEventLifecycle.push({name, detail: event.detail, els: event.detail?.els?.length ?? null}));
         """
     )
-    page.goto(serve_live(engine, Page(count=0).render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Page(count=0).render().serialize(), "") + "/")
     page.wait_for_function("document.querySelector('#refresh')?.textContent === '0'")
 
     applied = page.evaluate(
@@ -344,7 +347,9 @@ def test_vue_events_callback_subscriptions_and_root_lifecycle_do_not_stale_or_st
 
 
 @pytest.mark.e2e
-def test_custom_transport_forwards_request_context_for_a_render(page: Any, serve_live: Any) -> None:
+def test_custom_transport_forwards_request_context_for_a_render(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     # A custom transport that relays the envelope with the request it is given
     # must be able to receive a Render of the component on screen, which the
     # server can only build from the Vue app, occurrence and revision headers.
@@ -373,7 +378,7 @@ def test_custom_transport_forwards_request_context_for_a_render(page: Any, serve
     dispatcher_for(engine)
     page_errors: list[str] = []
     page.on("pageerror", lambda error: page_errors.append(str(error)))
-    page.goto(serve_live(engine, Page(count=0).render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Page(count=0).render().serialize(), "") + "/")
     page.wait_for_function("document.querySelector('#refresh')?.textContent === '0'")
     page.evaluate(
         """() => {
@@ -417,7 +422,7 @@ def test_custom_transport_forwards_request_context_for_a_render(page: Any, serve
 
 
 @pytest.mark.e2e
-def test_instance_on_event_listeners_outlive_server_renders(page: Any, serve_live: Any) -> None:
+def test_instance_on_event_listeners_outlive_server_renders(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     # Only a listener added while onServerRender runs (its `onEvent`, or
     # `$onEvent` called synchronously inside it) is released with that run.
     # One added later from a hook, method or timer lives as long as the
@@ -460,7 +465,7 @@ def test_instance_on_event_listeners_outlive_server_renders(page: Any, serve_liv
     dispatcher_for(engine)
     page_errors: list[str] = []
     page.on("pageerror", lambda error: page_errors.append(str(error)))
-    page.goto(serve_live(engine, Page(count=0).render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Page(count=0).render().serialize(), "") + "/")
     page.wait_for_function("document.querySelector('#refresh')?.textContent === '0'")
 
     for count in (1, 2):
@@ -930,7 +935,7 @@ def test_marker_group_rejections_leave_state_and_dom_uncommitted(
 
 
 @pytest.mark.e2e
-def test_same_type_render_can_target_a_mounted_sibling(page: Any, serve_live: Any) -> None:
+def test_same_type_render_can_target_a_mounted_sibling(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-sibling-target-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     target_render_id = ""
@@ -965,7 +970,7 @@ def test_same_type_render_can_target_a_mounted_sibling(page: Any, serve_live: An
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
     page.locator("#left").click()
     page.wait_for_function("document.querySelector('#right')?.textContent === 'updated'")
 
@@ -975,7 +980,9 @@ def test_same_type_render_can_target_a_mounted_sibling(page: Any, serve_live: An
 
 
 @pytest.mark.e2e
-def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: Any, serve_live: Any) -> None:
+def test_events_render_targets_reorder_and_remove_keyed_v_model_children(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-passive-target-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     target_render_id = ""
@@ -1054,7 +1061,7 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
     for key in ("a", "b"):
         page.locator(f'[data-key="{key}"] input').fill(f"local-{key}")
         page.wait_for_function(
@@ -1165,7 +1172,9 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
 
 
 @pytest.mark.e2e
-def test_template_v_for_keyed_model_nodes_reorder_and_remove(page: Any, serve_document: Any) -> None:
+def test_template_v_for_keyed_model_nodes_reorder_and_remove(
+    page: Any, serve_document: Any, open_citry_page: Any
+) -> None:
     engine = Citry(autodiscover=False)
 
     class KeyedPlainRows(Component):
@@ -1199,7 +1208,7 @@ def test_template_v_for_keyed_model_nodes_reorder_and_remove(page: Any, serve_do
 
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_document(KeyedPlainRows().render().serialize()))
+    open_citry_page(serve_document(KeyedPlainRows().render().serialize()))
     page.wait_for_function("document.querySelectorAll('.plain-row').length === 2")
     for row, value in (("a", "typed-a"), ("b", "typed-b")):
         page.locator(f'.plain-row[data-row="{row}"]').fill(value)
@@ -1247,7 +1256,7 @@ def test_template_v_for_keyed_model_nodes_reorder_and_remove(page: Any, serve_do
 
 
 @pytest.mark.e2e
-def test_accepted_ancestor_render_can_retire_event_caller(page: Any, serve_live: Any) -> None:
+def test_accepted_ancestor_render_can_retire_event_caller(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-ancestor-target-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     ancestor_render_id = ""
@@ -1278,7 +1287,7 @@ def test_accepted_ancestor_render_can_retire_event_caller(page: Any, serve_live:
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, ancestor.render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, ancestor.render().serialize(), "") + "/")
     page.locator("#replace-ancestor").click()
     page.wait_for_function("document.querySelector('#ancestor .status')?.textContent === 'done'")
 
@@ -1288,7 +1297,9 @@ def test_accepted_ancestor_render_can_retire_event_caller(page: Any, serve_live:
 
 
 @pytest.mark.e2e
-def test_unmounted_component_js_app_runs_without_events_routes(page: Any, serve_document: Any) -> None:
+def test_unmounted_component_js_app_runs_without_events_routes(
+    page: Any, serve_document: Any, open_citry_page: Any
+) -> None:
     engine = Citry(autodiscover=False)
 
     class LocalCounter(Component):
@@ -1301,8 +1312,7 @@ def test_unmounted_component_js_app_runs_without_events_routes(page: Any, serve_
     assert "data-citry-vue-document" in html
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_document(html))
-    page.wait_for_timeout(500)
+    open_citry_page(serve_document(html))
     assert page.locator("#local-counter").text_content() == "0", (
         faults,
         page.locator("#local-counter").evaluate("el => el.__vueParentComponent?.proxy?.$data"),
@@ -1315,7 +1325,9 @@ def test_unmounted_component_js_app_runs_without_events_routes(page: Any, serve_
 
 
 @pytest.mark.e2e
-def test_imperative_send_preserves_structured_event_error_for_caller(page: Any, serve_live: Any) -> None:
+def test_imperative_send_preserves_structured_event_error_for_caller(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-imperative-error-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -1337,7 +1349,7 @@ def test_imperative_send_preserves_structured_event_error_for_caller(page: Any, 
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Form().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Form().render().serialize(), "") + "/")
     page.locator("#imperative-error").click()
     page.wait_for_function("globalThis.__imperativeError !== undefined")
     assert page.evaluate("globalThis.__imperativeError") == {
@@ -1351,7 +1363,7 @@ def test_imperative_send_preserves_structured_event_error_for_caller(page: Any, 
 
 
 @pytest.mark.e2e
-def test_server_render_callback_failure_remains_terminal(page: Any, serve_live: Any) -> None:
+def test_server_render_callback_failure_remains_terminal(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-terminal-callback-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -1369,7 +1381,7 @@ def test_server_render_callback_failure_remains_terminal(page: Any, serve_live: 
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Broken().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Broken().render().serialize(), "") + "/")
     page.locator("#break-callback").click()
     page.wait_for_function("globalThis.__citryRuntime._apps.size === 0")
     assert len(faults) == 1
@@ -1455,7 +1467,7 @@ def test_dispatch_uses_one_canonical_live_root_for_every_vue_root_shape(page: An
 
 
 @pytest.mark.e2e
-def test_a_removed_component_comes_back_with_its_stylesheet(page: Any, serve_live: Any) -> None:
+def test_a_removed_component_comes_back_with_its_stylesheet(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     page.set_default_timeout(5_000)
     engine = Citry(secret="vue-returning-style-owner-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -1502,7 +1514,7 @@ def test_a_removed_component_comes_back_with_its_stylesheet(page: Any, serve_liv
         "**/returning-owner.css",
         lambda route: route.fulfill(body=".returning-owner{color:rgb(12, 34, 56)}", content_type="text/css"),
     )
-    page.goto(serve_live(engine, Panel().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Panel().render().serialize(), "") + "/")
     sheet = '[data-citry-css-url="/returning-owner.css"]'
     color = "element => getComputedStyle(element).color"
     page.locator("#badge").wait_for()
@@ -1613,7 +1625,7 @@ def test_shared_stylesheet_survives_until_its_last_occurrence_owner_is_removed(
 
 
 @pytest.mark.e2e
-def test_native_get_and_attachment_use_the_per_event_routes(page: Any, serve_live: Any) -> None:
+def test_native_get_and_attachment_use_the_per_event_routes(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-http-selection-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/tenant/citry")
 
@@ -1652,7 +1664,7 @@ def test_native_get_and_attachment_use_the_per_event_routes(page: Any, serve_liv
     page.on("request", lambda request: requests.append(request) if "/ext/events/e/" in request.url else None)
     page.on("pageerror", lambda error: faults.append(str(error)))
     base = serve_live(engine, html, "", prefix="/tenant/citry")
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.locator("#run-search").click()
     page.wait_for_function("document.querySelector('#search-result')?.textContent === 'a/b:x,y'")
     search_request = next(request for request in requests if request.method == "GET")
@@ -1672,7 +1684,9 @@ def test_native_get_and_attachment_use_the_per_event_routes(page: Any, serve_liv
 
 
 @pytest.mark.e2e
-def test_two_serialized_vue_apps_share_runtime_without_reset(page: Any, serve_document: Any) -> None:
+def test_two_serialized_vue_apps_share_runtime_without_reset(
+    page: Any, serve_document: Any, open_citry_page: Any
+) -> None:
     engine = Citry(autodiscover=False)
 
     class LocalCounter(Component):
@@ -1701,8 +1715,7 @@ def test_two_serialized_vue_apps_share_runtime_without_reset(page: Any, serve_do
     )
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_document(html))
-    page.wait_for_timeout(500)
+    open_citry_page(serve_document(html), apps=2)
     assert page.evaluate("__vueAfterFirst === Vue && __citryVueAfterFirst === __citryRuntime.compilerRuntime")
     assert page.evaluate(
         "__citryVueIdentities.length >= 1 && __citryVueIdentities.every(x => x === __citryRuntime.compilerRuntime)"
@@ -3023,7 +3036,9 @@ def test_static_component_site_hydrates_with_sibling_and_csr_parity(
 
 
 @pytest.mark.e2e
-def test_child_render_selects_fallback_instead_of_retained_parent_slot(page: Any, serve_live: Any) -> None:
+def test_child_render_selects_fallback_instead_of_retained_parent_slot(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     page.set_default_timeout(3000)
     engine = Citry(secret="vue-slot-subtree-e2e-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -3065,7 +3080,7 @@ def test_child_render_selects_fallback_instead_of_retained_parent_slot(page: Any
         """
     )
     base = serve_live(engine, html, "")
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.locator("#supplied-slot").wait_for()
     page.locator("#reset-slot").click()
     page.locator("#fallback-slot").wait_for()
@@ -3082,7 +3097,7 @@ def test_child_render_selects_fallback_instead_of_retained_parent_slot(page: Any
 
 
 @pytest.mark.e2e
-def test_supplied_slot_event_dispatches_to_lexical_parent(page: Any, serve_live: Any) -> None:
+def test_supplied_slot_event_dispatches_to_lexical_parent(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-slot-lexical-events-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -3123,14 +3138,14 @@ def test_supplied_slot_event_dispatches_to_lexical_parent(page: Any, serve_live:
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     base = serve_live(engine, html, "")
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.locator("#lexical-event").click()
     page.wait_for_function("document.querySelector('#lexical-event')?.textContent === '2'")
     assert faults == []
 
 
 @pytest.mark.e2e
-def test_native_event_args_use_lexical_vue_scope(page: Any, serve_live: Any) -> None:
+def test_native_event_args_use_lexical_vue_scope(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-native-event-args-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -3165,14 +3180,16 @@ def test_native_event_args_use_lexical_vue_scope(page: Any, serve_live: Any) -> 
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     base = serve_live(engine, html, "")
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.locator(".choice").nth(1).click()
     page.wait_for_function("document.querySelector('#chosen')?.textContent === '4'")
     assert faults == []
 
 
 @pytest.mark.e2e
-def test_native_runtime_event_spread_coexists_with_an_authored_timed_event(page: Any, serve_live: Any) -> None:
+def test_native_runtime_event_spread_coexists_with_an_authored_timed_event(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-runtime-event-coexist-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -3196,7 +3213,7 @@ def test_native_runtime_event_spread_coexists_with_an_authored_timed_event(page:
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Mixed().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Mixed().render().serialize(), "") + "/")
     button = page.locator("#mixed")
     assert button.get_attribute("class") == "mixed-static"
     assert button.evaluate("element => element.style.color") == "red"
@@ -3293,7 +3310,9 @@ def test_component_runtime_event_spread_uses_declared_emit_from_multiple_roots(
 
 
 @pytest.mark.e2e
-def test_multi_root_wrapper_forwards_attrs_and_object_events_to_a_chosen_child(page: Any, serve_live: Any) -> None:
+def test_multi_root_wrapper_forwards_attrs_and_object_events_to_a_chosen_child(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(autodiscover=False)
     engine.set_mounted_prefix("/citry")
 
@@ -3394,7 +3413,7 @@ def test_multi_root_wrapper_forwards_attrs_and_object_events_to_a_chosen_child(p
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Parent().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Parent().render().serialize(), "") + "/")
     try:
         page.locator("#forwarded-child").wait_for(timeout=5_000)
     except _PlaywrightTimeoutError:
@@ -3656,7 +3675,7 @@ def test_native_runtime_event_modifiers_apply_key_self_and_once(
 
 
 @pytest.mark.e2e
-def test_key_filtered_binding_checks_the_key_before_prevent(page: Any, serve_live: Any) -> None:
+def test_key_filtered_binding_checks_the_key_before_prevent(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-key-before-prevent-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -3692,7 +3711,7 @@ def test_key_filtered_binding_checks_the_key_before_prevent(page: Any, serve_liv
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.goto(serve_live(engine, KeyedInput().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, KeyedInput().render().serialize(), "") + "/")
     # Record, after the binding ran, whether each key's default was prevented.
     page.evaluate(
         "window.prevented = [];"
@@ -3723,7 +3742,7 @@ def test_key_filtered_binding_checks_the_key_before_prevent(page: Any, serve_liv
 
 
 @pytest.mark.e2e
-def test_vue_listener_with_two_keys_sends_for_either_key(page: Any, serve_live: Any) -> None:
+def test_vue_listener_with_two_keys_sends_for_either_key(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     # An `@c-*` binding takes one key filter, and its load error points to a
     # Vue listener instead. Prove that listener calls the handler for both
     # keys and for no other key.
@@ -3755,7 +3774,7 @@ def test_vue_listener_with_two_keys_sends_for_either_key(page: Any, serve_live: 
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.goto(serve_live(engine, EitherKey().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, EitherKey().render().serialize(), "") + "/")
     field = page.locator("#field")
     field.press_sequentially("ab")
     page.wait_for_timeout(60)
@@ -3768,7 +3787,7 @@ def test_vue_listener_with_two_keys_sends_for_either_key(page: Any, serve_live: 
 
 
 @pytest.mark.e2e
-def test_key_filtered_state_binding_sends_only_for_that_key(page: Any, serve_live: Any) -> None:
+def test_key_filtered_state_binding_sends_only_for_that_key(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-state-key-filter-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -3807,7 +3826,7 @@ def test_key_filtered_state_binding_sends_only_for_that_key(page: Any, serve_liv
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.goto(serve_live(engine, Search().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Search().render().serialize(), "") + "/")
 
     for field_id, handler, text in (("authored", "authored", "ab"), ("runtime", "runtime", "cd")):
         field = page.locator(f"#{field_id}")
@@ -3829,7 +3848,9 @@ def test_key_filtered_state_binding_sends_only_for_that_key(page: Any, serve_liv
 
 @pytest.mark.e2e
 def test_native_runtime_event_once_survives_unrelated_binding_revisions_and_replaces_changed_handler(
-    page: Any, serve_live: Any
+    page: Any,
+    serve_live: Any,
+    open_citry_page: Any,
 ) -> None:
     engine = Citry(secret="vue-runtime-event-once-revision-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -3885,7 +3906,7 @@ def test_native_runtime_event_once_survives_unrelated_binding_revisions_and_repl
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.goto(serve_live(engine, RuntimeEvents(revision=0).render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, RuntimeEvents(revision=0).render().serialize(), "") + "/")
 
     with page.expect_request("**/ext/events/call") as initial_once:
         page.locator("#runtime-once").click()
@@ -3924,7 +3945,7 @@ def test_native_runtime_event_once_survives_unrelated_binding_revisions_and_repl
 
 
 @pytest.mark.e2e
-def test_native_runtime_event_arguments_include_form_fields(page: Any, serve_live: Any) -> None:
+def test_native_runtime_event_arguments_include_form_fields(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-runtime-event-form-args-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -3948,7 +3969,7 @@ def test_native_runtime_event_arguments_include_form_fields(page: Any, serve_liv
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Contact().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Contact().render().serialize(), "") + "/")
     page.locator('#runtime-form input[name="email"]').fill("person@example.test")
 
     with page.expect_request("**/ext/events/call") as submitted:
@@ -4155,7 +4176,9 @@ def test_native_runtime_debounce_keeps_pending_work_across_reordered_revision(
 
 
 @pytest.mark.e2e
-def test_native_runtime_event_dispatch_errors_reach_vue_error_handler(page: Any, serve_live: Any) -> None:
+def test_native_runtime_event_dispatch_errors_reach_vue_error_handler(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-runtime-event-error-routing-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -4192,7 +4215,7 @@ def test_native_runtime_event_dispatch_errors_reach_vue_error_handler(page: Any,
         });
         """
     )
-    page.goto(serve_live(engine, BrokenDispatch().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, BrokenDispatch().render().serialize(), "") + "/")
     page.locator("#async-error").wait_for()
     page.evaluate(
         """() => {
@@ -4371,7 +4394,9 @@ def test_event_response_is_rejected_after_source_generation_changes(
 
 
 @pytest.mark.e2e
-def test_empty_call_run_adds_a_component_with_options_and_events(page: Any, serve_live: Any) -> None:
+def test_empty_call_run_adds_a_component_with_options_and_events(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-empty-call-run-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -4453,7 +4478,7 @@ def test_empty_call_run_adds_a_component_with_options_and_events(page: Any, serv
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.on("console", lambda message: console.append(message.text) if message.type == "error" else None)
     base = serve_live(engine, html, "")
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     assert page.locator(".run-child").count() == 0
     assert page.evaluate("[globalThis.__firstChildRuns || 0, globalThis.__secondChildRuns || 0]") == [0, 0]
     page.locator("#add-run-child").click()

@@ -54,7 +54,7 @@ def test_large_benchmark_mounts_and_switches_server_rendered_tabs(page: Any, ser
     assert page_errors == []
 
 
-def test_benchmark_attachment_rows_follow_parent_state(page: Any, serve_live: Any) -> None:
+def test_benchmark_attachment_rows_follow_parent_state(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     attachments = [
         _FIXTURE.RenderedAttachment(url="/first", text="First", tags=["Tag 9"]),
         _FIXTURE.RenderedAttachment(url="/second", text="Second", tags=["Tag 10"]),
@@ -110,7 +110,7 @@ def test_benchmark_attachment_rows_follow_parent_state(page: Any, serve_live: An
 
     page_errors: list[str] = []
     page.on("pageerror", lambda error: page_errors.append(str(error)))
-    page.goto(serve_live(_FIXTURE.app, AttachmentHarness().render().serialize(), "") + "/")
+    open_citry_page(serve_live(_FIXTURE.app, AttachmentHarness().render().serialize(), "") + "/")
     rows = page.locator("[data-benchmark-initial-attachment]")
     assert rows.count() == 2
     rows.nth(1).get_by_role("button", name="Edit").click()
@@ -127,7 +127,9 @@ def test_benchmark_attachment_rows_follow_parent_state(page: Any, serve_live: An
     assert page_errors == []
 
 
-def test_benchmark_dialog_uses_controlled_native_model_and_escape(page: Any, serve_live: Any) -> None:
+def test_benchmark_dialog_uses_controlled_native_model_and_escape(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     class DialogHarness(_FIXTURE.Component):
         citry = _FIXTURE.app
         name = "BenchmarkDialogHarness"
@@ -143,7 +145,7 @@ def test_benchmark_dialog_uses_controlled_native_model_and_escape(page: Any, ser
 
     page_errors: list[str] = []
     page.on("pageerror", lambda error: page_errors.append(str(error)))
-    page.goto(serve_live(_FIXTURE.app, DialogHarness().render().serialize(), "") + "/")
+    open_citry_page(serve_live(_FIXTURE.app, DialogHarness().render().serialize(), "") + "/")
     content = page.locator("#dialog-content")
     assert content.is_hidden()
     page.locator("#open-dialog").click()

@@ -434,7 +434,7 @@ def test_real_coordinator_persists_i18n_translation_into_plugin_preparation(page
 
 
 @pytest.mark.e2e
-def test_cross_target_new_child_can_send_its_own_event(page: Any, serve_live: Any) -> None:
+def test_cross_target_new_child_can_send_its_own_event(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-new-child-target-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     target_render_id = ""
@@ -483,7 +483,7 @@ def test_cross_target_new_child_can_send_its_own_event(page: Any, serve_live: An
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
 
     page.locator("#add-child").click()
     page.wait_for_function("document.querySelector('#new-child')?.textContent === 'child-ready'")
@@ -495,7 +495,7 @@ def test_cross_target_new_child_can_send_its_own_event(page: Any, serve_live: An
 
 
 @pytest.mark.e2e
-def test_unchanged_definition_renders_new_js_data_key(page: Any, serve_live: Any) -> None:
+def test_unchanged_definition_renders_new_js_data_key(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-new-data-key-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -513,7 +513,7 @@ def test_unchanged_definition_renders_new_js_data_key(page: Any, serve_live: Any
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Shape().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Shape().render().serialize(), "") + "/")
     page.locator("#shape").click()
     page.wait_for_function("document.querySelector('#shape')?.textContent === 'ready'")
 

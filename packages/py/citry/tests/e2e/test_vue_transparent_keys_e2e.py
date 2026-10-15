@@ -13,7 +13,9 @@ from citry.ext.events.renderers import dispatcher_for
 pytestmark = pytest.mark.e2e
 
 
-def test_keyed_transparent_wrappers_move_descendants_and_keep_runtime_events(page: Any, serve_live: Any) -> None:
+def test_keyed_transparent_wrappers_move_descendants_and_keep_runtime_events(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-transparent-key-move-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     rows_render_id = ""
@@ -76,7 +78,7 @@ def test_keyed_transparent_wrappers_move_descendants_and_keep_runtime_events(pag
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
     page.wait_for_function("document.querySelectorAll('.keyed-row').length === 2")
 
     for key in ("a", "b"):

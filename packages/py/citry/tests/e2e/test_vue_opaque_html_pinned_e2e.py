@@ -46,7 +46,7 @@ async ({first, second, hostId}) => {
 """
 
 
-def _open_citry_page(page: Any, serve_document: Any) -> None:
+def _open_citry_page(page: Any, serve_document: Any, wait_for_citry_ready: Any) -> None:
     engine = Citry(autodiscover=False)
 
     class Shell(Component):
@@ -59,14 +59,18 @@ def _open_citry_page(page: Any, serve_document: Any) -> None:
         """
 
     page.goto(serve_document(Shell().render().serialize()))
-    page.wait_for_function("document.querySelector('#shell') && window.__citryRuntime?._apps.size === 1")
+    # The registry gains the app before it mounts, and the block driver needs
+    # the mounted app, so wait for `citry:ready`.
+    wait_for_citry_ready()
 
 
 @pytest.mark.e2e
-def test_a_pinned_block_keeps_its_first_nodes_across_renders(page: Any, serve_document: Any) -> None:
+def test_a_pinned_block_keeps_its_first_nodes_across_renders(
+    page: Any, serve_document: Any, wait_for_citry_ready: Any
+) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
-    _open_citry_page(page, serve_document)
+    _open_citry_page(page, serve_document, wait_for_citry_ready)
     first = {"html": '<div class="block">one</div>', "nodeCount": 1, "pinned": True}
     # A later record, pinned or not, does not replace the block the first render made.
     second = {"html": '<div class="block">two</div>', "nodeCount": 1}
@@ -79,10 +83,10 @@ def test_a_pinned_block_keeps_its_first_nodes_across_renders(page: Any, serve_do
 
 
 @pytest.mark.e2e
-def test_an_unpinned_block_follows_new_html(page: Any, serve_document: Any) -> None:
+def test_an_unpinned_block_follows_new_html(page: Any, serve_document: Any, wait_for_citry_ready: Any) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
-    _open_citry_page(page, serve_document)
+    _open_citry_page(page, serve_document, wait_for_citry_ready)
     first = {"html": '<div class="block">one</div>', "nodeCount": 1}
     second = {"html": '<div class="block">two</div>', "nodeCount": 1}
     outcome = page.evaluate(_DRIVE_BLOCK, {"first": first, "second": second, "hostId": "unpinned"})
@@ -100,8 +104,10 @@ def test_an_unpinned_block_follows_new_html(page: Any, serve_document: Any) -> N
         {"html": "<b>x</b>", "nodeCount": 1, "keep": True},
     ],
 )
-def test_a_pinned_key_other_than_true_is_rejected(page: Any, serve_document: Any, record: dict[str, Any]) -> None:
-    _open_citry_page(page, serve_document)
+def test_a_pinned_key_other_than_true_is_rejected(
+    page: Any, serve_document: Any, record: dict[str, Any], wait_for_citry_ready: Any
+) -> None:
+    _open_citry_page(page, serve_document, wait_for_citry_ready)
     message = page.evaluate(
         """
         (record) => {
