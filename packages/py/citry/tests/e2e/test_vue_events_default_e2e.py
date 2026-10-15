@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import time
@@ -17,34 +18,19 @@ pytest.importorskip("playwright.sync_api")
 _PlaywrightTimeoutError = pytest.importorskip("playwright.sync_api").TimeoutError
 
 
-def _pause_fake_clock(page: Any) -> None:
-    # Clock calls are separate protocol commands. Choose an explicit future
-    # virtual timestamp, then set Date to it before pausing at that timestamp,
-    # so the target cannot become stale between the two commands.
-    target = page.evaluate("new Date(Date.now() + 1_000).toISOString()")
-    page.clock.set_fixed_time(target)
-    page.clock.pause_at(target)
-
-
-def _watch_citry_ready(page: Any) -> None:
-    page.add_init_script(
-        """
-        window.__citryReadyApps = [];
-        document.addEventListener('citry:ready', event => {
-          window.__citryReadyApps.push(event.detail.appId);
-        });
-        """
-    )
-
-
-def _wait_for_citry_ready(page: Any) -> None:
-    page.wait_for_function("window.__citryReadyApps?.length === 1")
-
-
-def _wait_for_two_runtime_rows(page: Any, faults: list[str], console_errors: list[str], status: int | None) -> None:
+def _wait_for_two_runtime_rows(
+    page: Any,
+    wait_for_citry_ready: Any,
+    faults: list[str],
+    console_errors: list[str],
+    status: int | None,
+) -> None:
     try:
         page.wait_for_selector(".runtime-row", timeout=5000)
         page.wait_for_function("document.querySelectorAll('.runtime-row').length === 2", timeout=5000)
+        # The server writes both rows into the page, so they exist before Vue
+        # mounts and attaches their listeners. Wait for the mount as well.
+        wait_for_citry_ready()
     except _PlaywrightTimeoutError:
         page_state = page.evaluate(
             """() => ({
@@ -1536,7 +1522,9 @@ def test_a_removed_component_comes_back_with_its_stylesheet(page: Any, serve_liv
 
 
 @pytest.mark.e2e
-def test_shared_stylesheet_survives_until_its_last_occurrence_owner_is_removed(page: Any, serve_live: Any) -> None:
+def test_shared_stylesheet_survives_until_its_last_occurrence_owner_is_removed(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     page.set_default_timeout(5_000)
     engine = Citry(secret="vue-shared-style-owner-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -1602,10 +1590,9 @@ def test_shared_stylesheet_survives_until_its_last_occurrence_owner_is_removed(p
         "**/shared-owner.css",
         lambda route: route.fulfill(body=".shared-owner{color:rgb(12, 34, 56)}", content_type="text/css"),
     )
-    _watch_citry_ready(page)
     base = serve_live(engine, html, "")
     page.goto(base + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     page.locator("#second-owner").wait_for()
     sheet = '[data-citry-css-url="/shared-owner.css"]'
     assert page.locator(sheet).count() == 1
@@ -1732,7 +1719,9 @@ def test_two_serialized_vue_apps_share_runtime_without_reset(page: Any, serve_do
 
 
 @pytest.mark.e2e
-def test_selected_static_hydration_reuses_one_parent_leaf_root(page: Any, serve_document: Any) -> None:
+def test_selected_static_hydration_reuses_one_parent_leaf_root(
+    page: Any, serve_document: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(autodiscover=False)
     calls = {"parent": 0, "leaf": 0}
 
@@ -1766,9 +1755,8 @@ def test_selected_static_hydration_reuses_one_parent_leaf_root(page: Any, serve_
     faults: list[str] = []
     page.on("console", lambda message: warnings.append(message.text) if message.type in {"warning", "error"} else None)
     page.on("pageerror", lambda error: faults.append(str(error)))
-    _watch_citry_ready(page)
     page.goto(serve_document(control_html))
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     control_dom = page.evaluate(
         """() => {
           const node = document.querySelector('[id^="citry-vue-"]').firstElementChild;
@@ -1806,7 +1794,7 @@ def test_selected_static_hydration_reuses_one_parent_leaf_root(page: Any, serve_
     )
     html = html[:bootstrap_tag] + capture + html[bootstrap_tag:]
     page.goto(serve_document(html))
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     page.wait_for_function("window.__citryHydrationReport !== undefined")
     parity = page.evaluate(
         """control => {
@@ -1867,7 +1855,9 @@ def test_selected_static_hydration_reuses_one_parent_leaf_root(page: Any, serve_
 
 
 @pytest.mark.e2e
-def test_static_physical_document_shell_hydrates_with_csr_parity(page: Any, serve_document: Any) -> None:
+def test_static_physical_document_shell_hydrates_with_csr_parity(
+    page: Any, serve_document: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(autodiscover=False)
     calls = {"page": 0, "leaf": 0}
 
@@ -1906,9 +1896,8 @@ def test_static_physical_document_shell_hydrates_with_csr_parity(page: Any, serv
     faults: list[str] = []
     page.on("console", lambda message: warnings.append(message.text) if message.type in {"warning", "error"} else None)
     page.on("pageerror", lambda error: faults.append(str(error)))
-    _watch_citry_ready(page)
     page.goto(serve_document(control_html))
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     control_dom = page.evaluate(
         """() => {
           const root = document.querySelector('[id^="citry-vue-"]').firstElementChild;
@@ -1948,7 +1937,7 @@ def test_static_physical_document_shell_hydrates_with_csr_parity(page: Any, serv
     )
     hydrated_html = hydrated_html[:bootstrap_tag] + capture + hydrated_html[bootstrap_tag:]
     page.goto(serve_document(hydrated_html))
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     page.wait_for_function("window.__citryHydrationReport !== undefined")
     result = page.evaluate(
         """control => {
@@ -1996,7 +1985,7 @@ def test_static_physical_document_shell_hydrates_with_csr_parity(page: Any, serv
 
 
 @pytest.mark.e2e
-def test_plain_python_text_hydrates_with_csr_parity(page: Any, serve_document: Any) -> None:
+def test_plain_python_text_hydrates_with_csr_parity(page: Any, serve_document: Any, wait_for_citry_ready: Any) -> None:
     engine = Citry(autodiscover=False)
     calls = 0
     escaped_calls = 0
@@ -2015,9 +2004,8 @@ def test_plain_python_text_hydrates_with_csr_parity(page: Any, serve_document: A
     assert calls == 1
     control_html = rendered.serialize(ssr=False)
     page.on("pageerror", lambda error: pytest.fail(str(error)))
-    _watch_citry_ready(page)
     page.goto(serve_document(control_html))
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     control_facts = page.evaluate(
         """() => [document.querySelector('[id^="citry-vue-"]').firstElementChild,
           ...document.querySelector('[id^="citry-vue-"]').firstElementChild.querySelectorAll('*')]
@@ -2042,7 +2030,7 @@ def test_plain_python_text_hydrates_with_csr_parity(page: Any, serve_document: A
     warnings: list[str] = []
     page.on("console", lambda message: warnings.append(message.text) if message.type in {"warning", "error"} else None)
     page.goto(serve_document(hydrated_html))
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     page.wait_for_function("window.__citryHydrationReport !== undefined")
     result = page.evaluate(
         """control => {
@@ -2088,7 +2076,7 @@ def test_plain_python_text_hydrates_with_csr_parity(page: Any, serve_document: A
     assert "<b>unsafe</b>" not in escaped_html
     assert "<main>Python &amp; entity text &lt;b&gt;unsafe&lt;/b&gt;</main>" in escaped_html
     page.goto(serve_document(escaped_html))
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     page.wait_for_function("window.__citryHydrationReport !== undefined")
     escaped_result = page.evaluate(
         """() => {
@@ -2110,7 +2098,9 @@ def test_plain_python_text_hydrates_with_csr_parity(page: Any, serve_document: A
 
 
 @pytest.mark.e2e
-def test_events_page_hydrates_then_renders_updated_summary(page: Any, serve_live: Any) -> None:
+def test_events_page_hydrates_then_renders_updated_summary(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(secret="events-ssr-revision-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     calls = {"page": 0, "summary": 0}
@@ -2180,9 +2170,8 @@ def test_events_page_hydrates_then_renders_updated_summary(page: Any, serve_live
     </script>"""
     html = html[:bootstrap_tag] + capture + html[bootstrap_tag:]
 
-    _watch_citry_ready(page)
     page.goto(serve_live(engine, html, "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     page.wait_for_function("window.__citryHydrationReport !== undefined")
     initial = page.evaluate(
         """() => {
@@ -2230,7 +2219,9 @@ def test_events_page_hydrates_then_renders_updated_summary(page: Any, serve_live
 
 
 @pytest.mark.e2e
-def test_recorded_python_if_for_nested_page_hydrates_with_csr_parity(page: Any, serve_live: Any) -> None:
+def test_recorded_python_if_for_nested_page_hydrates_with_csr_parity(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(autodiscover=False)
     calls = {"page": 0, "leaf": 0}
 
@@ -2269,9 +2260,8 @@ def test_recorded_python_if_for_nested_page_hydrates_with_csr_parity(page: Any, 
     assert calls == {"page": 1, "leaf": 1}
     control_html = rendered.serialize(ssr=False)
     assert calls == {"page": 1, "leaf": 1}
-    _watch_citry_ready(page)
     page.goto(serve_live(engine, control_html, "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     control = page.evaluate(
         """() => {
           const host=document.querySelector('[id^="citry-vue-"]');
@@ -2317,7 +2307,7 @@ def test_recorded_python_if_for_nested_page_hydrates_with_csr_parity(page: Any, 
     </script>"""
     html = html[:bootstrap_tag] + capture + html[bootstrap_tag:]
     page.goto(serve_live(engine, html, "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     page.wait_for_function("window.__citryHydrationReport !== undefined")
     result = page.evaluate(
         """() => {
@@ -2348,7 +2338,9 @@ def test_recorded_python_if_for_nested_page_hydrates_with_csr_parity(page: Any, 
 
 
 @pytest.mark.e2e
-def test_recorded_python_if_for_group_renders_complete_update_after_event(page: Any, serve_live: Any) -> None:
+def test_recorded_python_if_for_group_renders_complete_update_after_event(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(secret="python-branch-loop-ssr-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     calls = {"page": 0, "leaf": 0}
@@ -2410,9 +2402,8 @@ def test_recorded_python_if_for_group_renders_complete_update_after_event(page: 
     assert calls == {"page": 1, "leaf": 1}
     control_html = rendered.serialize(ssr=False)
     assert calls == {"page": 1, "leaf": 1}
-    _watch_citry_ready(page)
     page.goto(serve_live(engine, control_html, "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     control = page.evaluate(
         """() => {
           const host=document.querySelector('[id^="citry-vue-"]');
@@ -2457,7 +2448,7 @@ def test_recorded_python_if_for_group_renders_complete_update_after_event(page: 
     # mounted in the browser rather than that nobody asked.
     page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
     page.goto(serve_live(engine, html, "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     initial = page.evaluate(
         """() => {
           const host=document.querySelector('[id^="citry-vue-"]');
@@ -2511,7 +2502,9 @@ def test_recorded_python_if_for_group_renders_complete_update_after_event(page: 
 
 
 @pytest.mark.e2e
-def test_plain_component_root_preserves_parent_fallthrough_in_csr_and_ssr(page: Any, serve_live: Any) -> None:
+def test_plain_component_root_preserves_parent_fallthrough_in_csr_and_ssr(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(autodiscover=False)
     parent_js = """\
 $component({
@@ -2578,7 +2571,6 @@ $component({inheritAttrs:false});"""
         js = parent_js
 
     page.add_init_script("globalThis.__citryHydrationDiagnostics = true")
-    _watch_citry_ready(page)
     faults: list[str] = []
     console_faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
@@ -2626,7 +2618,7 @@ $component({inheritAttrs:false});"""
             console_start = len(console_faults)
             fault_start = len(faults)
             page.goto(serve_live(engine, html, "") + "/")
-            _wait_for_citry_ready(page)
+            wait_for_citry_ready()
             if hydrates:
                 page.wait_for_function("window.__citryHydrationReport !== undefined")
             initial = page.evaluate(
@@ -2699,7 +2691,9 @@ $component({inheritAttrs:false});"""
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("use_ssr", [False, True], ids=["mounted", "hydrated"])
-def test_caller_v_show_controls_component_root(page: Any, serve_live: Any, use_ssr: bool) -> None:
+def test_caller_v_show_controls_component_root(
+    page: Any, serve_live: Any, use_ssr: bool, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(secret="vue-show-component-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -2760,9 +2754,8 @@ $component({
             ("unsupported-directive", "shell", "main")
         ], admission
 
-    _watch_citry_ready(page)
     page.goto(serve_live(engine, html, "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     if use_ssr:
         page.wait_for_function("window.__citryHydrationReport !== undefined")
         probe = page.evaluate("window.__citryHydrationReport")
@@ -2802,7 +2795,9 @@ $component({
 
 
 @pytest.mark.e2e
-def test_server_render_switches_between_shown_and_plain_calls(page: Any, serve_live: Any) -> None:
+def test_server_render_switches_between_shown_and_plain_calls(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     # Python picks a different authored call on each render. Each call has
     # its own Vue key, so Vue replaces the child instead of carrying the old
     # call's hidden root over to the plain call.
@@ -2848,9 +2843,8 @@ $component({data(){return {visible:false};}});"""
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.on("console", lambda message: faults.append(message.text) if message.type == "error" else None)
-    _watch_citry_ready(page)
     page.goto(serve_live(engine, Page(shown=True).render().serialize(ssr=False), "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     display = "() => document.querySelector('main section')?.style.display"
     assert page.evaluate(display) == "none"
     page.locator("#flip").click()
@@ -2899,7 +2893,9 @@ $component({data(){return {visible:false};}});"""
 
 
 @pytest.mark.e2e
-def test_static_component_site_hydrates_with_sibling_and_csr_parity(page: Any, serve_document: Any) -> None:
+def test_static_component_site_hydrates_with_sibling_and_csr_parity(
+    page: Any, serve_document: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(autodiscover=False)
     calls = {"page": 0, "summary": 0}
 
@@ -2941,9 +2937,8 @@ def test_static_component_site_hydrates_with_sibling_and_csr_parity(page: Any, s
         lambda message: control_warnings.append(message.text) if message.type in {"warning", "error"} else None,
     )
     page.on("pageerror", lambda error: control_faults.append(str(error)))
-    _watch_citry_ready(page)
     page.goto(serve_document(control_html))
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     control_dom = page.evaluate(
         """() => {
           const main = document.querySelector('[id^="citry-vue-"] main');
@@ -2991,7 +2986,7 @@ def test_static_component_site_hydrates_with_sibling_and_csr_parity(page: Any, s
     control_warnings.clear()
     control_faults.clear()
     page.goto(serve_document(hydrated_html))
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     page.wait_for_function("window.__citryHydrationReport !== undefined")
     result = page.evaluate(
         """control => {
@@ -3218,7 +3213,9 @@ def test_native_runtime_event_spread_coexists_with_an_authored_timed_event(page:
 
 
 @pytest.mark.e2e
-def test_component_runtime_event_spread_uses_declared_emit_from_multiple_roots(page: Any, serve_live: Any) -> None:
+def test_component_runtime_event_spread_uses_declared_emit_from_multiple_roots(
+    page: Any, serve_live: Any, open_citry_page: Any, send_event: Any
+) -> None:
     engine = Citry(autodiscover=False)
     engine.set_mounted_prefix("/citry")
 
@@ -3269,7 +3266,9 @@ def test_component_runtime_event_spread_uses_declared_emit_from_multiple_roots(p
     requests: list[Any] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.on("request", lambda request: requests.append(request))
-    page.goto(serve_live(engine, Parent().render().serialize(), "") + "/")
+    # The trigger buttons are server-written, so they exist before Vue mounts
+    # and attaches the listeners a click needs.
+    open_citry_page(serve_live(engine, Parent().render().serialize(), "") + "/")
     with page.expect_request("**/ext/events/call") as authored_request:
         page.locator(".component-authored-trigger").nth(1).click()
     assert authored_request.value.post_data_json["calls"][0]["handlerName"] == "custom"
@@ -3280,8 +3279,9 @@ def test_component_runtime_event_spread_uses_declared_emit_from_multiple_roots(p
     assert form_request.value.post_data_json["calls"][0]["handlerName"] == "form"
     assert form_request.value.post_data_json["calls"][0]["args"] == {"value": "from-form"}
 
-    page.locator(".component-runtime-trigger").first.click()
-    page.wait_for_timeout(500)
+    # Events calls from one app go out one at a time, so wait for this call to
+    # finish instead of guessing how long the earlier two take.
+    send_event(page.locator(".component-runtime-trigger").first.click, handler="go")
     event_requests = [request for request in requests if request.url.endswith("/ext/events/call")]
     assert faults == [], (faults, page.content())
     assert len(event_requests) == 3, page.content()
@@ -3420,7 +3420,10 @@ def test_multi_root_wrapper_forwards_attrs_and_object_events_to_a_chosen_child(p
 @pytest.mark.parametrize("force_direct", [False, True], ids=["leaf", "direct"])
 @pytest.mark.e2e
 def test_runtime_spread_preserves_empty_source_attributes_and_dynamic_true(
-    page: Any, serve_live: Any, force_direct: bool
+    page: Any,
+    serve_live: Any,
+    force_direct: bool,
+    wait_for_citry_ready: Any,
 ) -> None:
     extensions = []
     if force_direct:
@@ -3454,9 +3457,8 @@ def test_runtime_spread_preserves_empty_source_attributes_and_dynamic_true(
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    _watch_citry_ready(page)
     page.goto(serve_live(engine, Surface().render().serialize(), "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
 
     button = page.locator("#source-values")
     assert button.get_attribute("data-bare") == ""
@@ -3466,7 +3468,9 @@ def test_runtime_spread_preserves_empty_source_attributes_and_dynamic_true(
 
 
 @pytest.mark.e2e
-def test_native_runtime_event_spread_loop_rows_dispatch_to_their_owning_component(page: Any, serve_live: Any) -> None:
+def test_native_runtime_event_spread_loop_rows_dispatch_to_their_owning_component(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     engine = Citry(secret="vue-runtime-event-loop-owner-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -3496,7 +3500,9 @@ def test_native_runtime_event_spread_loop_rows_dispatch_to_their_owning_componen
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     response = page.goto(serve_live(engine, Rows().render().serialize(), "") + "/")
     rows = page.locator(".runtime-row")
-    _wait_for_two_runtime_rows(page, faults, console_errors, response.status if response else None)
+    _wait_for_two_runtime_rows(
+        page, wait_for_citry_ready, faults, console_errors, response.status if response else None
+    )
 
     with page.expect_request("**/ext/events/call") as first_request:
         rows.nth(0).click()
@@ -3512,7 +3518,7 @@ def test_native_runtime_event_spread_loop_rows_dispatch_to_their_owning_componen
 
 @pytest.mark.e2e
 def test_native_runtime_event_spread_selected_branch_loop_routes_dispatch_correctly(
-    page: Any, serve_live: Any
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
 ) -> None:
     engine = Citry(secret="vue-runtime-event-selected-loop-route-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -3542,7 +3548,9 @@ def test_native_runtime_event_spread_selected_branch_loop_routes_dispatch_correc
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     response = page.goto(serve_live(engine, Rows().render().serialize(), "") + "/")
     rows = page.locator(".runtime-row")
-    _wait_for_two_runtime_rows(page, faults, console_errors, response.status if response else None)
+    _wait_for_two_runtime_rows(
+        page, wait_for_citry_ready, faults, console_errors, response.status if response else None
+    )
     assert page.locator("#unselected-branch").count() == 0
 
     with page.expect_request("**/ext/events/call") as first_request:
@@ -3560,7 +3568,9 @@ def test_native_runtime_event_spread_selected_branch_loop_routes_dispatch_correc
 
 
 @pytest.mark.e2e
-def test_native_runtime_event_modifiers_apply_key_self_and_once(page: Any, serve_live: Any) -> None:
+def test_native_runtime_event_modifiers_apply_key_self_and_once(
+    page: Any, serve_live: Any, open_citry_page: Any, send_event: Any, wait_for_count: Any
+) -> None:
     engine = Citry(secret="vue-runtime-event-modifiers-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -3605,16 +3615,21 @@ def test_native_runtime_event_modifiers_apply_key_self_and_once(page: Any, serve
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.goto(serve_live(engine, Surface().render().serialize(), "") + "/")
+    # Before the mount, a key press reaches plain HTML, so the "nothing was
+    # sent" check below would pass without testing the key and self guards.
+    open_citry_page(serve_live(engine, Surface().render().serialize(), "") + "/")
     page.locator("#surface").press("x")
     page.locator("#surface-child").press("Enter")
+    # Nothing to wait for when nothing is sent; the exact lists below would
+    # also show a stray call, because calls from one app go out in order.
     page.wait_for_timeout(60)
     assert calls == []
 
     with page.expect_request("**/ext/events/call") as activated_request:
         page.locator("#surface").press("Enter")
     page.locator("#surface").press("Enter")
-    page.wait_for_timeout(60)
+    # The second call leaves only after the first one finishes.
+    wait_for_count(calls, 2)
 
     assert activated_request.value.post_data_json["calls"][0]["handlerName"] == "activated"
     assert [call["handlerName"] for call in calls] == ["activated", "activated"]
@@ -3628,11 +3643,14 @@ def test_native_runtime_event_modifiers_apply_key_self_and_once(page: Any, serve
     page.wait_for_timeout(60)
     assert [call["handlerName"] for call in calls] == ["activated", "activated"]
 
-    with page.expect_request("**/ext/events/call") as valid_once_request:
-        page.locator("#runtime-once-valid").press("Enter")
+    # Let the first call finish, so a second one from the repeated press would
+    # go out at once and land in `calls` within the short wait below.
+    valid_once_response = send_event(
+        lambda: page.locator("#runtime-once-valid").press("Enter"), handler="runtime_valid"
+    )
     page.locator("#runtime-once-valid").press("Enter")
     page.wait_for_timeout(60)
-    assert valid_once_request.value.post_data_json["calls"][0]["handlerName"] == "runtime_valid"
+    assert valid_once_response.request.post_data_json["calls"][0]["handlerName"] == "runtime_valid"
     assert [call["handlerName"] for call in calls] == ["activated", "activated", "runtime_valid"]
     assert faults == []
 
@@ -3942,7 +3960,9 @@ def test_native_runtime_event_arguments_include_form_fields(page: Any, serve_liv
 
 
 @pytest.mark.e2e
-def test_native_runtime_event_revision_cancels_pending_debounce_work(page: Any, serve_live: Any) -> None:
+def test_native_runtime_event_revision_cancels_pending_debounce_work(
+    page: Any, serve_live: Any, open_citry_page: Any, send_event: Any, fake_clock: Any, wait_for_count: Any
+) -> None:
     engine = Citry(secret="vue-runtime-event-debounce-revision-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -3987,25 +4007,33 @@ def test_native_runtime_event_revision_cancels_pending_debounce_work(page: Any, 
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.clock.install()
-    page.goto(serve_live(engine, DebouncedRuntimeEvents(revision=0).render().serialize(), "") + "/")
+    # A running clock would let the 120 ms debounce fire on its own while a slow
+    # runner is still waiting for the replacement render, and a click before
+    # the mount would never start the debounce at all.
+    fake_clock.install_paused()
+    open_citry_page(serve_live(engine, DebouncedRuntimeEvents(revision=0).render().serialize(), "") + "/")
     page.locator("#runtime-debounce").click()
 
-    with page.expect_request("**/ext/events/call") as replacement:
-        page.locator("#replace-handler").click()
-    assert replacement.value.post_data_json["calls"][0]["handlerName"] == "replace_handler"
+    replacement = send_event(page.locator("#replace-handler").click, handler="replace_handler")
+    assert replacement.request.post_data_json["calls"][0]["handlerName"] == "replace_handler"
     page.wait_for_function("document.querySelector('#revision')?.textContent === '1'")
-    page.clock.run_for(200)
+    fake_clock.run_for(200)
     assert [call["handlerName"] for call in calls] == ["replace_handler"]
 
     with page.expect_request("**/ext/events/call") as new_handler:
         page.locator("#runtime-debounce").click()
     assert new_handler.value.post_data_json["calls"][0]["handlerName"] == "immediate"
+    # Calls from one app go out in order, so a cancelled debounce that fired
+    # late would sit between the two calls here.
+    wait_for_count(calls, 2)
+    assert [call["handlerName"] for call in calls] == ["replace_handler", "immediate"]
     assert faults == []
 
 
 @pytest.mark.e2e
-def test_native_runtime_debounce_keeps_pending_work_across_reordered_revision(page: Any, serve_live: Any) -> None:
+def test_native_runtime_debounce_keeps_pending_work_across_reordered_revision(
+    page: Any, serve_live: Any, open_citry_page: Any, fake_clock: Any, wait_for_count: Any
+) -> None:
     engine = Citry(secret="vue-runtime-event-debounce-retained-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -4067,10 +4095,12 @@ def test_native_runtime_debounce_keeps_pending_work_across_reordered_revision(pa
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.clock.install()
-    page.goto(serve_live(engine, RetainedDebounce(revision=0).render().serialize(), "") + "/")
+    # Pause the clock before the page starts its timers, and act only after
+    # the mount: a click on the server-written form before it would never
+    # start the debounce.
+    fake_clock.install_paused()
+    open_citry_page(serve_live(engine, RetainedDebounce(revision=0).render().serialize(), "") + "/")
     page.evaluate("window.__retainedDebounceElement=document.querySelector('#runtime-debounce')")
-    _pause_fake_clock(page)
 
     def timing_snapshot() -> dict[str, Any]:
         return page.evaluate(
@@ -4088,7 +4118,7 @@ def test_native_runtime_debounce_keeps_pending_work_across_reordered_revision(pa
     page.locator("#debounce-field").fill("captured")
     page.locator("#debounce-trigger").click()
     page.locator("#debounce-field").fill("after-submit")
-    page.clock.run_for(60)
+    fake_clock.run_for(60)
     before_revision_timing = timing_snapshot()
 
     with page.expect_request("**/ext/events/call") as revision_request:
@@ -4096,12 +4126,18 @@ def test_native_runtime_debounce_keeps_pending_work_across_reordered_revision(pa
     assert revision_request.value.post_data_json["calls"][0]["handlerName"] == "advance"
     page.wait_for_function("document.querySelector('#debounce-revision')?.textContent === '1'")
     after_revision_timing = timing_snapshot()
-    page.clock.run_for(59)
+    # 60 ms of the 120 ms debounce remain. Stop short of that deadline and then
+    # cross it, rather than stepping to 119 and then 120 ms where a fraction of
+    # a millisecond decides whether the timer fires.
+    fake_clock.run_short_of(60)
     before_deadline_timing = timing_snapshot()
     assert [call["handlerName"] for call in calls] == ["advance"]
 
-    page.clock.run_for(1)
-    page.wait_for_timeout(20)
+    fake_clock.run_past_deadline()
+    # The request event reaches Python after the page sends it. A timeout here
+    # falls through to the assertion below, which prints the timing snapshots.
+    with contextlib.suppress(pytest.fail.Exception):
+        wait_for_count(calls, 2)
     delayed_calls = [call for call in calls if call["handlerName"] == "delayed"]
     after_deadline_timing = timing_snapshot()
     assert len(delayed_calls) == 1, (
@@ -4186,7 +4222,9 @@ def test_native_runtime_event_dispatch_errors_reach_vue_error_handler(page: Any,
 
 
 @pytest.mark.e2e
-def test_hidden_logical_child_remounts_with_latest_revision_data(page: Any, serve_live: Any) -> None:
+def test_hidden_logical_child_remounts_with_latest_revision_data(
+    page: Any, serve_live: Any, open_citry_page: Any, send_event: Any
+) -> None:
     engine = Citry(secret="vue-hidden-child-e2e-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -4226,22 +4264,24 @@ def test_hidden_logical_child_remounts_with_latest_revision_data(page: Any, serv
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Parent(value=0).render().serialize(), "") + "/")
-    page.wait_for_timeout(200)
+    open_citry_page(serve_live(engine, Parent(value=0).render().serialize(), "") + "/")
     assert page.locator("#revise-hidden-child").count() == 1, (faults, page.content())
     assert page.locator("#hidden-child").count() == 0
 
-    page.locator("#revise-hidden-child").click()
-    page.wait_for_timeout(200)
+    # The child must stay hidden through a revision that changes its data, so
+    # the revision has to be applied before the toggle shows it.
+    send_event(page.locator("#revise-hidden-child").click, handler="revise")
     assert page.locator("#hidden-child").count() == 0
     page.locator("#toggle-hidden-child").click()
-    page.wait_for_timeout(200)
+    page.locator("#hidden-child").wait_for()
     assert page.locator("#hidden-child").text_content() == "1", (faults, page.content())
     assert faults == []
 
 
 @pytest.mark.e2e
-def test_event_response_is_rejected_after_source_generation_changes(page: Any, serve_live: Any) -> None:
+def test_event_response_is_rejected_after_source_generation_changes(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any, wait_for_count: Any
+) -> None:
     engine = Citry(secret="vue-source-generation-e2e-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -4263,7 +4303,6 @@ def test_event_response_is_rejected_after_source_generation_changes(page: Any, s
 
         class Events:
             def increment(self, state: ChildState):
-                time.sleep(0.3)
                 state.count += 1
                 return actions.Dispatch("stale:ping", {"count": state.count})
 
@@ -4283,11 +4322,16 @@ def test_event_response_is_rejected_after_source_generation_changes(page: Any, s
     dispatcher_for(engine)
     faults: list[str] = []
     requests: list[str] = []
+    held: list[Any] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.on(
         "request",
         lambda request: requests.append(request.url) if request.url.endswith("/ext/events/call") else None,
     )
+    # Hold the call until the child has been removed and shown again. A server
+    # delay only makes that order likely, and a slow browser can still read
+    # the response before its second click.
+    page.route("**/ext/events/call", lambda route: held.append(route))
     page.add_init_script(
         """
         window.__citryRejections = [];
@@ -4299,18 +4343,19 @@ def test_event_response_is_rejected_after_source_generation_changes(page: Any, s
         });
         """
     )
-    _watch_citry_ready(page)
     page.goto(serve_live(engine, Parent().render().serialize(), "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     initial_generation = page.evaluate(
         """()=>{const app=[...__citryRuntime._apps.values()][0];return [...app.mounted.values()]
           .find(item=>item.record.occurrenceId!==app.rootId).record.generation}"""
     )
     page.locator("#slow-child").click()
+    wait_for_count(held, 1)
     page.locator("#toggle-slow-child").click()
     assert page.locator("#slow-child").count() == 0
     page.locator("#toggle-slow-child").click()
     page.wait_for_function("document.querySelector('#slow-child')?.textContent === '0'")
+    held[0].continue_()
     page.wait_for_function(
         "window.__citryGenerationSettled === true && [...__citryRuntime._apps.values()][0]?.busy === false"
     )
@@ -4488,7 +4533,7 @@ def test_empty_call_run_adds_a_component_with_options_and_events(page: Any, serv
     ],
 )
 def test_nested_leaf_whitespace_matches_client_mount_after_hydration(
-    page: Any, serve_live: Any, leaf_template: str, leaf_text: str
+    page: Any, serve_live: Any, leaf_template: str, leaf_text: str, wait_for_citry_ready: Any
 ) -> None:
     engine = Citry(autodiscover=False)
 
@@ -4505,7 +4550,6 @@ def test_nested_leaf_whitespace_matches_client_mount_after_hydration(
     rendered = Page().render()
     warnings: list[str] = []
     page.on("console", lambda message: warnings.append(message.text) if message.type in {"warning", "error"} else None)
-    _watch_citry_ready(page)
     observed = {}
     for ssr in (False, True):
         if ssr:
@@ -4513,7 +4557,7 @@ def test_nested_leaf_whitespace_matches_client_mount_after_hydration(
         html = rendered.serialize(ssr=ssr)
         assert ('"hydrate":true' in html) is ssr
         page.goto(serve_live(engine, html, "") + "/")
-        page.wait_for_function("window.__citryReadyApps?.length === 1")
+        wait_for_citry_ready()
         observed[ssr] = page.evaluate(
             """() => ({leaf: document.querySelector('section').firstElementChild.textContent,
               probe: window.__citryHydrationReport || null})"""

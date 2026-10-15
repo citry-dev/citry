@@ -23,7 +23,7 @@ def _client_bundle_source(vue_root: Path) -> str:
     return f"{fragments_source}\n{client_source}"
 
 
-def test_two_serialized_i18n_apps_keep_independent_locales(page: Any) -> None:
+def test_two_serialized_i18n_apps_keep_independent_locales(page: Any, wait_for_citry_ready: Any) -> None:
     english = Citry(
         autodiscover=False, extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}}
     )
@@ -48,7 +48,9 @@ def test_two_serialized_i18n_apps_keep_independent_locales(page: Any) -> None:
     page.on("pageerror", lambda error: faults.append(str(error)))
     page.route("http://citry.test/", lambda route: route.fulfill(body=body, content_type="text/html"))
     page.goto("http://citry.test/", wait_until="commit")
-    page.wait_for_timeout(500)
+    # Vue writes the locale text while each app mounts, so wait for both
+    # mounts instead of guessing how long they take.
+    wait_for_citry_ready(2)
     assert page.locator(".english").text_content() == "en-US"
     assert page.locator(".czech").text_content() == "cs"
     assert len(page.evaluate("() => [...__citryRuntime._apps.keys()]")) == 2
@@ -247,7 +249,7 @@ def test_real_serialized_apps_own_separate_stylesheet_nodes(page: Any, serve_liv
     assert faults == []
 
 
-def test_i18n_plugin_mounts_through_start_prepared(page: Any) -> None:
+def test_i18n_plugin_mounts_through_start_prepared(page: Any, wait_for_citry_ready: Any) -> None:
     engine = Citry(
         autodiscover=False,
         extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
@@ -264,7 +266,8 @@ def test_i18n_plugin_mounts_through_start_prepared(page: Any) -> None:
     html = Page().render().serialize()
     page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
     page.goto("http://citry.test/", wait_until="commit")
-    page.wait_for_timeout(500)
+    # The locale text is written by Vue, so read it only after the mount.
+    wait_for_citry_ready()
     assert page.locator("#locale").count() == 1, (faults, page.content())
     debug = page.evaluate("""() => [...__citryRuntime._apps.values()].map(app =>
       [...app.mounted].map(([id, value]) => ({id, name:value.component.$options.name,
@@ -296,7 +299,7 @@ def test_i18n_plugin_mounts_through_start_prepared(page: Any) -> None:
     assert faults == []
 
 
-def test_declarative_binding_keeps_last_valid_values_and_recovers(page: Any) -> None:
+def test_declarative_binding_keeps_last_valid_values_and_recovers(page: Any, wait_for_citry_ready: Any) -> None:
     engine = Citry(
         autodiscover=False,
         extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
@@ -322,9 +325,12 @@ def test_declarative_binding_keeps_last_valid_values_and_recovers(page: Any) -> 
     html = Page().render().serialize()
     page.route("http://citry.test/", lambda route: route.fulfill(body=html, content_type="text/html"))
     page.goto("http://citry.test/", wait_until="commit")
-    page.wait_for_timeout(500)
+    # The server wrote "Server" into the greeting; the bound "Ada" appears
+    # only once the app has mounted.
+    wait_for_citry_ready()
     assert page.locator("#greeting").text_content() == "Hello \u2068Ada\u2069", (faults, page.content())
     page.locator("#invalidate").click()
+    # The greeting must not change, so there is no new state to wait for.
     page.wait_for_timeout(50)
     assert page.locator("#greeting").text_content() == "Hello \u2068Ada\u2069"
     page.locator("#change").click()

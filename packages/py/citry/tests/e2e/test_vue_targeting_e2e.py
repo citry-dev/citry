@@ -13,21 +13,6 @@ from citry.ext.events.renderers import dispatcher_for
 pytest.importorskip("playwright.sync_api")
 
 
-def _watch_citry_ready(page: Any) -> None:
-    page.add_init_script(
-        """
-        window.__citryReadyApps = [];
-        document.addEventListener('citry:ready', event => {
-          window.__citryReadyApps.push(event.detail.appId);
-        });
-        """
-    )
-
-
-def _wait_for_citry_ready(page: Any) -> None:
-    page.wait_for_function("window.__citryReadyApps?.length === 1")
-
-
 @pytest.mark.e2e
 @pytest.mark.parametrize(
     ("corruption", "message"),
@@ -37,7 +22,11 @@ def _wait_for_citry_ready(page: Any) -> None:
     ],
 )
 def test_address_preflight_rejects_before_immediate_state_commit(
-    page: Any, serve_live: Any, corruption: str, message: str
+    page: Any,
+    serve_live: Any,
+    corruption: str,
+    message: str,
+    wait_for_citry_ready: Any,
 ) -> None:
     engine = Citry(secret="vue-address-preflight-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -120,9 +109,8 @@ def test_address_preflight_rejects_before_immediate_state_commit(
     page.add_init_script("""window.__addressErrors=[];
       addEventListener('error',event=>__addressErrors.push(String(event.error||event.message)));
       addEventListener('unhandledrejection',event=>__addressErrors.push(String(event.reason)));""")
-    _watch_citry_ready(page)
     page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     revision = page.evaluate("[...__citryRuntime._apps.values()][0].revision")
     html = page.locator("#target-panel").first.inner_html()
 
@@ -162,6 +150,8 @@ def test_runtime_event_reference_preflight_rejects_before_state_and_dom_commit(
     runtime_handler: str,
     table_name: str,
     runtime_prefix: str,
+    open_citry_page: Any,
+    fake_clock: Any,
 ) -> None:
     engine = Citry(secret="vue-runtime-event-preflight-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -256,7 +246,12 @@ def test_runtime_event_reference_preflight_rejects_before_state_and_dom_commit(
           addEventListener('error',event=>window.__runtimeEventErrors.push(String(event.error||event.message)));
           addEventListener('unhandledrejection',event=>window.__runtimeEventErrors.push(String(event.reason)));"""
     )
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    # The `@c-poll.1s` case only needs the poll binding in the corrupted render.
+    # With a running clock the poll would also fire every second and send its
+    # own calls through the corrupting route, which expects a refresh result.
+    fake_clock.install_paused()
+    # The caller's mounted state is read below, so wait for the mount.
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
     target_html = page.locator("#target-panel").inner_html()
 
     def caller_state_and_app_context() -> dict[str, Any]:
@@ -527,7 +522,9 @@ def test_unchanged_definition_renders_new_js_data_key(page: Any, serve_live: Any
 
 
 @pytest.mark.e2e
-def test_render_that_replaces_the_app_root_component_names_both_and_the_fix(page: Any, serve_live: Any) -> None:
+def test_render_that_replaces_the_app_root_component_names_both_and_the_fix(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     # Vue fixes an app's root component when it creates the app, so a Render
     # into the app root must keep its component. A nested component may be
     # replaced (see test_vue_component_changing_render_e2e.py).
@@ -547,9 +544,8 @@ def test_render_that_replaces_the_app_root_component_names_both_and_the_fix(page
                 return actions.Render(Done())
 
     dispatcher_for(engine)
-    _watch_citry_ready(page)
     page.goto(serve_live(engine, Form().render().serialize(), "") + "/")
-    _wait_for_citry_ready(page)
+    wait_for_citry_ready()
     form_type = page.evaluate(
         """[...[...__citryRuntime._apps.values()][0].occurrences.values()]
           .find(occurrence => occurrence.typeKey.startsWith('Form_')).typeKey"""

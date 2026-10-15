@@ -67,7 +67,9 @@ def _declaration_components(engine: Citry) -> None:
             return {"label": "Physical", "count": 100, "text": "physical"}
 
 
-def test_fill_bindings_read_and_write_the_authors_data(page: Any, serve_live: Any) -> None:
+def test_fill_bindings_read_and_write_the_authors_data(
+    page: Any, serve_live: Any, open_citry_page: Any, send_event: Any
+) -> None:
     engine = Citry(secret="fill-author-scope-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     received: list[str] = []
@@ -104,7 +106,9 @@ def test_fill_bindings_read_and_write_the_authors_data(page: Any, serve_live: An
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Author().render().serialize(), "") + "/")
+    # The server may already have written "Lexical", so wait for the mount
+    # that attaches the click and input listeners used below.
+    open_citry_page(serve_live(engine, Author().render().serialize(), "") + "/")
     page.wait_for_function("document.querySelector('#text')?.textContent === 'Lexical'")
 
     page.locator("#inc").click()
@@ -114,10 +118,11 @@ def test_fill_bindings_read_and_write_the_authors_data(page: Any, serve_live: An
 
     # Both Events bindings reach the author's handler, including the one
     # whose argument reads the author's data.
-    page.locator("#event").click()
-    page.locator("#event-static").click()
+    # The server handler fills `received` before it answers, so a finished
+    # call proves its value is in the list.
+    send_event(page.locator("#event").click, handler="ping")
+    send_event(page.locator("#event-static").click, handler="ping")
     page.wait_for_function("() => document.querySelectorAll('.physical .receiver #text').length === 1")
-    page.wait_for_timeout(300)
     assert received == ["Lexical", "static"]
     assert faults == []
 

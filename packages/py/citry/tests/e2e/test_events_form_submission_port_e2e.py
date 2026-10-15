@@ -15,8 +15,6 @@ from citry.ext.events import ViewEvents, actions
 
 pytestmark = pytest.mark.e2e
 
-READY = "window.__citryRuntime && __citryRuntime._apps.size === 1"
-
 
 def _form_port() -> tuple[Citry, str, type[Component]]:
     engine = Citry(secret="e2e-secret")  # noqa: S106 - deterministic test signing key
@@ -83,7 +81,9 @@ def _form_port() -> tuple[Citry, str, type[Component]]:
     return engine, str(Page()), ContactForm
 
 
-def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(page: Any, serve_live: Any) -> None:
+def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     """The old HTMX CSS target becomes a Citry marker target and keeps the form page."""
     engine, html, contact_form = _form_port()
     requests: list[Any] = []
@@ -91,7 +91,8 @@ def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(page: 
     page.on("request", lambda request: requests.append(request) if request.url.endswith("/ext/events/call") else None)
     base = serve_live(engine, html, "")
     page.goto(base + "/")
-    page.wait_for_function(READY)
+    # `_apps` gains the app before Vue mounts it; `citry:ready` comes after.
+    wait_for_citry_ready()
     page.fill(".runtime-form input[name=name]", "John Doe")
     page.click(".runtime-form button[type=submit]")
     page.wait_for_function("document.querySelector('.thanks')?.innerText.includes('John Doe')")
@@ -109,7 +110,9 @@ def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(page: 
     assert call["args"] == {"name": "John Doe"}
 
 
-def test_view_events_native_form_reaches_the_verb_compatibility_route(page: Any, serve_live: Any) -> None:
+def test_view_events_native_form_reaches_the_verb_compatibility_route(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     """The initial verb-shaped migration remains available as a native form POST."""
     engine, html, contact_form = _form_port()
 
@@ -129,7 +132,8 @@ def test_view_events_native_form_reaches_the_verb_compatibility_route(page: Any,
     page.on("request", capture)
     base = serve_live(engine, html, "")
     page.goto(base + "/")
-    page.wait_for_function(READY)
+    # `_apps` gains the app before Vue mounts it; `citry:ready` comes after.
+    wait_for_citry_ready()
     page.fill(".native-form input[name=name]", "John Doe")
     page.click(".native-form button[type=submit]")
     page.wait_for_function("document.querySelector('.thanks')?.innerText.includes('John Doe')")

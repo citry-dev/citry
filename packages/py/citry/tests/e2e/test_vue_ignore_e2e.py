@@ -34,7 +34,9 @@ def _capture_served_nodes(html: str, selector: str) -> str:
     return html[:first_script] + capture + html[first_script:]
 
 
-def test_a_server_render_leaves_the_ignored_contents_untouched(page: Any, serve_live: Any) -> None:
+def test_a_server_render_leaves_the_ignored_contents_untouched(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="ignore-e2e-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -68,8 +70,9 @@ def test_a_server_render_leaves_the_ignored_contents_untouched(page: Any, serve_
     # Remember the canvas the browser parsed from the served page, before Vue starts.
     served = _capture_served_nodes(Chart(stage=0).render().serialize(), "#canvas")
     base = serve_live(engine, served, "")
-    page.goto(base + "/")
-    page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 0")
+    # The app's revision is already 0 when its configuration is read, before
+    # Vue adopts the served nodes, so wait for the mount itself.
+    open_citry_page(base + "/")
     # Vue adopted the served nodes instead of building new ones.
     assert page.evaluate("window.__servedNodes.length === 1 && window.__servedInShell[0] === false")
     assert page.evaluate("window.__servedNodes[0] === document.querySelector('#canvas')")

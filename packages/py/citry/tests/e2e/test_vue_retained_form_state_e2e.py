@@ -19,12 +19,14 @@ from citry.ext.events.renderers import dispatcher_for
 pytestmark = pytest.mark.e2e
 
 
-def _open(page: Any, serve_live: Any, engine: Citry, root: Component) -> list[str]:
+def _open(page: Any, open_citry_page: Any, serve_live: Any, engine: Citry, root: Component) -> list[str]:
     engine.set_mounted_prefix("/citry")
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, root.render().serialize(), "") + "/")
+    # The fields and outputs the tests wait on are server-written, so they are
+    # in the page before Vue mounts and attaches the listeners the tests use.
+    open_citry_page(serve_live(engine, root.render().serialize(), "") + "/")
     return faults
 
 
@@ -36,7 +38,9 @@ def _send(page: Any, selector: str) -> None:
     )
 
 
-def test_a_constant_input_value_keeps_the_typed_text_until_the_template_changes_it(page: Any, serve_live: Any) -> None:
+def test_a_constant_input_value_keeps_the_typed_text_until_the_template_changes_it(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-retained-constant-value", autodiscover=False)  # noqa: S106
 
     class Profile(Component):
@@ -80,7 +84,7 @@ def test_a_constant_input_value_keeps_the_typed_text_until_the_template_changes_
             <main><c-profile /></main>
         """
 
-    faults = _open(page, serve_live, engine, Page())
+    faults = _open(page, open_citry_page, serve_live, engine, Page())
     page.wait_for_function("document.querySelector('.clicks')?.textContent === '0'")
     role = page.locator(".role")
     assert role.input_value() == "Owner"
@@ -108,7 +112,9 @@ def test_a_constant_input_value_keeps_the_typed_text_until_the_template_changes_
     assert faults == []
 
 
-def test_a_server_value_keeps_the_typed_text_until_the_server_changes_it(page: Any, serve_live: Any) -> None:
+def test_a_server_value_keeps_the_typed_text_until_the_server_changes_it(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-retained-server-value", autodiscover=False)  # noqa: S106
 
     class Account(Component):
@@ -166,7 +172,7 @@ def test_a_server_value_keeps_the_typed_text_until_the_server_changes_it(page: A
             <main><c-account /></main>
         """
 
-    faults = _open(page, serve_live, engine, Page())
+    faults = _open(page, open_citry_page, serve_live, engine, Page())
     page.wait_for_function("document.querySelector('.clicks')?.textContent === '0'")
     values = """() => Object.fromEntries(['email', 'spread', 'bio', 'plan', 'mirror'].map(
       name => [name, document.querySelector('.' + name).value]))"""
@@ -220,7 +226,7 @@ def test_a_server_value_keeps_the_typed_text_until_the_server_changes_it(page: A
     assert faults == []
 
 
-def test_a_field_the_user_did_not_edit_follows_the_server(page: Any, serve_live: Any) -> None:
+def test_a_field_the_user_did_not_edit_follows_the_server(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(secret="vue-retained-unedited-fields", autodiscover=False)  # noqa: S106
 
     class Plans(Component):
@@ -260,7 +266,7 @@ def test_a_field_the_user_did_not_edit_follows_the_server(page: Any, serve_live:
             <main><c-plans /></main>
         """
 
-    faults = _open(page, serve_live, engine, Page())
+    faults = _open(page, open_citry_page, serve_live, engine, Page())
     page.wait_for_function("document.querySelector('.plan')?.value === 'pro'")
     page.locator(".role").fill("Editor")
 
@@ -280,7 +286,9 @@ def test_a_field_the_user_did_not_edit_follows_the_server(page: Any, serve_live:
     assert faults == []
 
 
-def test_reordering_keyed_rows_keeps_the_slotted_input_its_focus_and_text(page: Any, serve_live: Any) -> None:
+def test_reordering_keyed_rows_keeps_the_slotted_input_its_focus_and_text(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-retained-keyed-slot-rows", autodiscover=False)  # noqa: S106
 
     class Grid(Component):
@@ -330,7 +338,7 @@ def test_reordering_keyed_rows_keeps_the_slotted_input_its_focus_and_text(page: 
             <main><c-inventory /></main>
         """
 
-    faults = _open(page, serve_live, engine, Page())
+    faults = _open(page, open_citry_page, serve_live, engine, Page())
     page.wait_for_function("document.querySelectorAll('[data-row]').length === 2")
     beta = page.locator('input[name="beta"]')
     beta.fill("draft 27")
@@ -355,7 +363,9 @@ def test_reordering_keyed_rows_keeps_the_slotted_input_its_focus_and_text(page: 
     assert faults == []
 
 
-def test_a_server_render_removes_and_restores_an_element_with_a_runtime_directive(page: Any, serve_live: Any) -> None:
+def test_a_server_render_removes_and_restores_an_element_with_a_runtime_directive(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-retained-removed-directive-site", autodiscover=False)  # noqa: S106
 
     class GrandLeaf(Component):
@@ -418,7 +428,7 @@ def test_a_server_render_removes_and_restores_an_element_with_a_runtime_directiv
             <main><c-toggle /></main>
         """
 
-    faults = _open(page, serve_live, engine, Page())
+    faults = _open(page, open_citry_page, serve_live, engine, Page())
     page.wait_for_function("document.querySelector('.wrap .leaf .grand') !== null")
     assert page.evaluate("globalThis.__leafMounts") == 1
 
@@ -438,7 +448,7 @@ def test_a_server_render_removes_and_restores_an_element_with_a_runtime_directiv
 
 @pytest.mark.parametrize("through_middle", [False, True], ids=["direct", "passed-on"])
 def test_a_server_render_replaces_an_element_around_a_slot_with_a_caller_component(
-    page: Any, serve_live: Any, through_middle: bool
+    page: Any, serve_live: Any, open_citry_page: Any, through_middle: bool
 ) -> None:
     engine = Citry(secret="vue-retained-replaced-slot-outlet", autodiscover=False)  # noqa: S106
 
@@ -530,7 +540,7 @@ def test_a_server_render_replaces_an_element_around_a_slot_with_a_caller_compone
             <main><c-toggle /></main>
         """
 
-    faults = _open(page, serve_live, engine, Page())
+    faults = _open(page, open_citry_page, serve_live, engine, Page())
     page.wait_for_function("document.querySelector('.wrap .leaf')?.textContent === 'fresh'")
     assert page.evaluate("globalThis.__leafMounts") == 1
     page.locator(".wrap .leaf").click()
@@ -551,7 +561,9 @@ def test_a_server_render_replaces_an_element_around_a_slot_with_a_caller_compone
     assert faults == []
 
 
-def test_radio_and_checkbox_models_with_constant_values_keep_working(page: Any, serve_live: Any) -> None:
+def test_radio_and_checkbox_models_with_constant_values_keep_working(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="vue-retained-constant-choices", autodiscover=False)  # noqa: S106
 
     class Picker(Component):
@@ -577,7 +589,7 @@ def test_radio_and_checkbox_models_with_constant_values_keep_working(page: Any, 
             <main><c-picker /></main>
         """
 
-    faults = _open(page, serve_live, engine, Page())
+    faults = _open(page, open_citry_page, serve_live, engine, Page())
     page.wait_for_function("document.querySelector('.state')?.textContent === 'b|y'")
     checked = "selector => document.querySelector(selector).checked"
     assert [page.evaluate(checked, name) for name in (".ra", ".rb", ".cx", ".cy")] == [False, True, False, True]
