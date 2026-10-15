@@ -315,13 +315,19 @@ def test_empty_popup_escape_and_tab_close_from_the_trigger(page: Any, serve_citr
 
 
 def test_delayed_controlled_open_focuses_and_controlled_acceptance_announces(
-    page: Any, serve_citry_ui_live: Any
+    page: Any, serve_citry_ui_live: Any, fake_clock: Any
 ) -> None:
+    # The page accepts each open and value request 40 ms later on a real timer.
+    # A slow runner can spend that long between the click and the check that
+    # nothing changed yet, so the clock is paused and moved only on purpose,
+    # each time 10 ms past the 40 ms deadline so the timer surely fires.
+    fake_clock.install_paused()
     errors = _load(page, serve_citry_ui_live)
     root = page.locator("#controlled-place")
     trigger = root.locator('[data-citry-ui-part="trigger"]')
     trigger.click()
     assert trigger.get_attribute("aria-expanded") == "false"
+    fake_clock.run_for(50)
     page.wait_for_function(
         "document.querySelector('#controlled-place [data-citry-ui-part=trigger]').getAttribute('aria-expanded') === 'true'"
     )
@@ -329,11 +335,13 @@ def test_delayed_controlled_open_focuses_and_controlled_acceptance_announces(
 
     trigger.click()
     assert page.evaluate("document.activeElement?.dataset?.citryUiPart") == "trigger"
+    fake_clock.run_for(50)
     page.wait_for_function(
         "document.querySelector('#controlled-place [data-citry-ui-part=trigger]').getAttribute('aria-expanded') === 'false'"
     )
     assert page.evaluate("document.activeElement?.dataset?.citryUiPart") == "trigger"
     trigger.click()
+    fake_clock.run_for(50)
     page.wait_for_function(
         "document.querySelector('#controlled-place [data-citry-ui-part=trigger]').getAttribute('aria-expanded') === 'true'"
     )
@@ -341,6 +349,7 @@ def test_delayed_controlled_open_focuses_and_controlled_acceptance_announces(
     root.get_by_role("treeitem", name="Asia").click()
     root.get_by_role("treeitem", name="Tokyo").click()
     assert root.locator('[data-citry-ui-part="value"]').inner_text() == "World / Europe / Prague"
+    fake_clock.run_for(50)
     page.wait_for_function(
         "document.querySelector('#controlled-place [data-citry-ui-part=value]').textContent === 'World / Asia / Tokyo'"
     )

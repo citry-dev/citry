@@ -2062,6 +2062,7 @@ def test_correlated_rerender_effective_disabled_emits_one_forced_close_and_resto
 def test_correlated_rerender_preserves_open_tree_and_focus_across_non_open_configuration_changes(
     page: Any,
     serve_citry_ui_live: Any,
+    send_event: Any,
     config_case: str,
 ) -> None:
     app, html = _configuration_handoff_page(config_case)
@@ -2085,10 +2086,14 @@ def test_correlated_rerender_preserves_open_tree_and_focus_across_non_open_confi
 
     # The open menus and the focus are already in place before the click, so
     # waiting for them alone can pass before the server's re-render arrives.
-    # Wait for the event response, then two frames for Vue to apply it.
-    with page.expect_response(lambda response: "/ext/events/" in response.url):
-        page.locator(".change-menu-configuration").evaluate("element => element.click()")
-    page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+    # The menu copies its new settings onto the surface in a Vue effect that
+    # runs while the re-render is applied, so once the call has finished every
+    # setting below is in place. The loop setting is never written to the page,
+    # so this wait is the only thing that proves it changed before ArrowUp.
+    send_event(
+        lambda: page.locator(".change-menu-configuration").evaluate("element => element.click()"),
+        handler="change",
+    )
     page.wait_for_function("document.querySelectorAll('#configuration-menu [role=menu]:popover-open').length === 2")
     page.wait_for_function(
         "[...document.querySelectorAll('[role=menuitem]')].some(item => "

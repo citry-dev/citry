@@ -142,8 +142,9 @@ def test_controlled_single_rejection_acceptance_release_and_configuration(page: 
     page.wait_for_function(
         "document.querySelector('.brand-listbox [data-value=grace]').getAttribute('aria-selected') === 'true'"
     )
-    page.evaluate("window.__listboxState.value = undefined")
-    page.wait_for_timeout(20)
+    # Releasing control reaches the listbox through a Vue update, so wait for
+    # that update to finish before clicking.
+    page.evaluate("() => { window.__listboxState.value = undefined; return Citry.vue.nextTick(); }")
     _option(page, ".brand-listbox", "margaret").click()
     assert _option(page, ".brand-listbox", "margaret").get_attribute("aria-selected") == "true"
 

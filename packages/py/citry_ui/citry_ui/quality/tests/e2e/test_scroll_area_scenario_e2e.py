@@ -160,6 +160,7 @@ def test_scroll_area_quality_native_semantics_callback_style_and_axe(page: Any, 
 def test_scroll_area_signed_retained_replacement_removal_and_restore(
     page: Any,
     serve_citry_ui_live: Any,
+    settle_timers: Any,
 ) -> None:
     console_errors: list[str] = []
     page_errors: list[str] = []
@@ -174,7 +175,23 @@ def test_scroll_area_signed_retained_replacement_removal_and_restore(
     page.goto(base_url + "/", wait_until="load")
     _wait_for_all_ready(page)
 
+    def lifecycle_callbacks() -> int:
+        return int(page.locator("[data-quality-lifecycle-callbacks]").text_content())
+
+    def wait_for_scroll_callbacks(before: int) -> int:
+        # The scroll event and the frame that reports it run after `scrollTo()`
+        # returns, so a fixed delay could read the count before the report
+        # lands. Wait for the report, then one timer and two frames for any
+        # trailing one, so later renders can be compared with this count.
+        page.wait_for_function(
+            "before => Number(document.querySelector('[data-quality-lifecycle-callbacks]').textContent) > before",
+            arg=before,
+        )
+        settle_timers()
+        return lifecycle_callbacks()
+
     lifecycle = page.locator("#quality-scroll-area-lifecycle")
+    callbacks_before_scroll = lifecycle_callbacks()
     lifecycle.evaluate("element => element.scrollTo(180, 140)")
     page.wait_for_function(
         """() => {
@@ -194,8 +211,7 @@ def test_scroll_area_signed_retained_replacement_removal_and_restore(
           };
         }"""
     )
-    page.wait_for_timeout(50)
-    callback_baseline = int(page.locator("[data-quality-lifecycle-callbacks]").text_content())
+    callback_baseline = wait_for_scroll_callbacks(callbacks_before_scroll)
 
     def refresh(step: int) -> None:
         page.evaluate(
@@ -264,6 +280,7 @@ def test_scroll_area_signed_retained_replacement_removal_and_restore(
     )
     assert restored == {"differsFromReplacement": True, "left": 0, "top": 0}
 
+    callbacks_before_scroll = lifecycle_callbacks()
     page.locator("#quality-scroll-area-lifecycle").evaluate("element => element.scrollTo(90, 80)")
     page.wait_for_function(
         """() => {
@@ -272,8 +289,7 @@ def test_scroll_area_signed_retained_replacement_removal_and_restore(
         }"""
     )
     page.locator("#quality-scroll-area-lifecycle").focus()
-    page.wait_for_timeout(50)
-    callback_before_final_retain = int(page.locator("[data-quality-lifecycle-callbacks]").text_content())
+    callback_before_final_retain = wait_for_scroll_callbacks(callbacks_before_scroll)
 
     refresh(5)
     page.wait_for_selector("#quality-scroll-area-lifecycle[data-citry-scroll-area-initialized]")

@@ -116,6 +116,12 @@ _FRAMEWORK_CSS_ORDER = """() => {
 }"""
 
 
+_ALL_DOCUMENT_APPS_READY = """() => {
+  const apps = document.querySelectorAll('script[type="application/json"][data-citry-vue-document]').length;
+  return (window.__citryReadyApps?.length ?? 0) >= apps;
+}"""
+
+
 @pytest.fixture
 def open_scenario(
     page: Any,
@@ -132,6 +138,10 @@ def open_scenario(
 
     `framework_css` adds a third-party stylesheet either before every Citry
     stylesheet or after all of them, and checks that order before returning.
+
+    It returns once every Citry app on the page has dispatched `citry:ready`.
+    `page.goto()` returns at `load`, which comes before the runtime mounts, so
+    a click right after it can reach server HTML with no handler attached.
     """
 
     def open_(
@@ -150,16 +160,18 @@ def open_scenario(
                 pytest.fail("the scenario page has no <head> to hold the framework stylesheet")
             stylesheet = f'<style data-quality-external-css="">{framework_css}</style>'
             html = html.replace("<head>", "<head>" + stylesheet, 1)
-        if framework_css is not None:
-            page.add_init_script(_RECORD_CITRY_READY)
+        page.add_init_script(_RECORD_CITRY_READY)
         base_url = serve_citry_ui_live(rendered.app, html)
         page.goto(base_url + "/", wait_until="load")
+        # Each Citry app on the page starts from one configuration block, so
+        # the block count says how many `citry:ready` events to wait for. A
+        # scenario without client components has no block and returns at once.
+        page.wait_for_function(_ALL_DOCUMENT_APPS_READY)
         if framework_css is None:
             return rendered
         # The app inserts its stylesheets while it mounts; after `citry:ready`
         # every stylesheet the first render needs is in `<head>`. A stylesheet
         # loaded later for new content would still land after this one.
-        page.wait_for_function("() => window.__citryReadyApps.length > 0")
         page.wait_for_selector(rendered.scenario.ready_selector, state="attached")
         if framework_css_after_citry:
             page.evaluate(_FRAMEWORK_CSS_LAST, framework_css)

@@ -324,7 +324,12 @@ def test_hover_delay_surface_bridge_and_departure_close(page):
     assert page.evaluate("window.__tooltipRequest.reason") == "pointer-leave"
 
 
-def test_open_peer_warms_next_tooltip_and_closes_previous(page):
+def test_open_peer_warms_next_tooltip_and_closes_previous(page, fake_clock):
+    # Ganymede waits 600 ms before opening unless an open peer has warmed it.
+    # A wall-clock budget for that difference fails on a slow runner, so the
+    # page's clock stays paused: the warmed tooltip must open while no page
+    # time passes at all, which its 600 ms delay could never do.
+    fake_clock.install_paused()
     _load(page)
     _europa_trigger(page).focus()
     page.wait_for_function("document.querySelector('#europa-tooltip').matches(':popover-open')")
@@ -336,7 +341,7 @@ def test_open_peer_warms_next_tooltip_and_closes_previous(page):
     page.wait_for_function("!document.querySelector('#europa-tooltip').matches(':popover-open')")
     elapsed = page.evaluate("started => performance.now() - started", started)
 
-    assert elapsed < 300
+    assert elapsed == 0
     assert not _europa(page).evaluate("element => element.matches(':popover-open')")
     assert page.locator("#ganymede-tooltip").evaluate("element => element.matches(':popover-open')")
 
