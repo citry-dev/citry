@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import citry_ui
-from citry import Citry, Component, Const, Extension, Slot
+from citry import Citry, Component, Const, Extension, Slot, VueCodeError
 from citry._vue import events as vue_events
 from citry._vue.capture import (
     PreparedAttribute,
@@ -1830,17 +1830,19 @@ def test_component_call_writes_authored_vue_bindings_verbatim(attribute: str, co
 
 
 @pytest.mark.parametrize(
-    ("template", "data"),
+    ("template", "data", "error", "match"),
     [
-        ('<c-Child c-bind="bindings" />', {"bindings": {":disabled": "blocked"}}),
-        ('<c-Child c-bind="bindings" />', {"bindings": {"v-on": "listeners"}}),
-        ('<c-Child c-:disabled="binding" />', {"binding": "blocked"}),
-        ('<c-Child c-v-on="binding" />', {"binding": "listeners"}),
-        ('<c-Child :disabled="{{ binding }}" />', {"binding": "blocked"}),
-        ('<c-Child v-on="{{ listeners }}" />', {"listeners": {}}),
+        # A Vue name that Python data sets fails with VueCodeError.
+        ('<c-Child c-bind="bindings" />', {"bindings": {":disabled": "blocked"}}, VueCodeError, "sets ':disabled'"),
+        ('<c-Child c-bind="bindings" />', {"bindings": {"v-on": "listeners"}}, VueCodeError, "sets 'v-on'"),
+        ('<c-Child c-:disabled="binding" />', {"binding": "blocked"}, VueCodeError, "sets ':disabled'"),
+        ('<c-Child c-v-on="binding" />', {"binding": "listeners"}, VueCodeError, "sets 'v-on'"),
+        # A written binding whose value interpolates data is a template error.
+        ('<c-Child :disabled="{{ binding }}" />', {"binding": "blocked"}, RuntimeError, "template interpolation"),
+        ('<c-Child v-on="{{ listeners }}" />', {"listeners": {}}, RuntimeError, "template interpolation"),
     ],
 )
-def test_component_call_rejects_executable_bindings_from_runtime_data(template, data) -> None:
+def test_component_call_rejects_executable_bindings_from_runtime_data(template, data, error, match) -> None:
     registry = Citry(autodiscover=False)
 
     class Child(Component):
@@ -1855,7 +1857,7 @@ def test_component_call_rejects_executable_bindings_from_runtime_data(template, 
 
     Parent.template = template
 
-    with pytest.raises(RuntimeError, match=r"must be authored directly|cannot use template interpolation"):
+    with pytest.raises(error, match=match):
         render_prepared_direct(Parent())
 
 
@@ -2366,7 +2368,7 @@ def test_dynamic_element_rejects_source_data_target_collision_and_executable_spr
         def template_data(self, kwargs, slots):
             return {"tag": "section", "attrs": {"@click": "attack()"}}
 
-    with pytest.raises(RuntimeError, match="must be authored directly"):
+    with pytest.raises(VueCodeError, match=r"c-bind on <c-element> sets '@click'"):
         render_prepared_direct(Forged())
 
 
@@ -2458,7 +2460,9 @@ def test_dynamic_element_preserves_only_authored_bindings_unchanged_by_hooks() -
         def js_data(self, kwargs, slots):
             return {"label": "safe"}
 
-    with pytest.raises(TypeError, match=r"tag-dependent or executable.*:title"):
+    # The hook changed a binding written in the template, so Python data now
+    # sets Vue code; VueCodeError is still a TypeError.
+    with pytest.raises(VueCodeError, match=r"on_attrs_resolved extension hook sets ':title' on <section>"):
         render_prepared_direct(App())
 
 

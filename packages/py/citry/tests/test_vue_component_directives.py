@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, VueCodeError
 from citry._vue.capture import render_prepared_direct
 from citry._vue.compiler import NativeCompiler
 from citry._vue.direct_capture import assemble_typed_render
@@ -98,15 +98,15 @@ class TestRejectedDirectives:
         ["v-for", "v-html", "#header", "v-once", "^title", "V-SHOW", "V-ON:click", "V-BIND:x", "V-focus", "V-If"],
     )
     def test_directive_from_a_python_spread_fails_at_render(self, key):
+        # Python data may not name Vue code, so the key fails with the same
+        # error a plain HTML element gives, not the template-syntax error.
         page = _pages(
             "<section>child</section>",
             '<main><c-child c-bind="attrs" /></main>',
             {"attrs": {key: "open"}},
         )
 
-        with pytest.raises(
-            RuntimeError, match=rf"Vue directive '{re.escape(key)}' is not supported on the component tag"
-        ):
+        with pytest.raises(VueCodeError, match=rf"c-bind on <c-child> sets '{re.escape(key)}'"):
             page().render()
 
     @pytest.mark.parametrize(
@@ -124,7 +124,7 @@ class TestRejectedDirectives:
             {"attrs": {key: "open"}},
         )
 
-        with pytest.raises(RuntimeError, match=re.escape(hint)):
+        with pytest.raises(VueCodeError, match=re.escape(hint)):
             page().render()
 
     @pytest.mark.parametrize("key", ["^title", "V-SHOW"])
@@ -137,9 +137,7 @@ class TestRejectedDirectives:
             {"attrs": {key: None}},
         )
 
-        with pytest.raises(
-            RuntimeError, match=rf"Vue directive '{re.escape(key)}' is not supported on the component tag"
-        ):
+        with pytest.raises(VueCodeError, match=rf"c-bind on <c-child> sets '{re.escape(key)}'"):
             page().render()
 
     @pytest.mark.parametrize(
@@ -164,8 +162,9 @@ class TestRejectedDirectives:
             },
         )
 
-        with pytest.raises(RuntimeError, match=rf"Executable Vue binding '{key}' on <c-child> must be authored"):
+        with pytest.raises(VueCodeError, match=rf"on <c-child> sets '{re.escape(key)}'") as caught:
             page().render()
+        assert "Write Vue directives, bindings, and listeners directly in the template." in str(caught.value)
 
     @pytest.mark.parametrize(
         ("attribute", "name"),

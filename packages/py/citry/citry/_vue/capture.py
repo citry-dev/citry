@@ -13,7 +13,7 @@ from inspect import getattr_static
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from citry.attrs import _html_attr_identity, is_vue_directive_name, merge_attrs
+from citry.attrs import _html_attr_identity, is_vue_directive_name, merge_attrs, vue_code_error
 from citry.citry_render import (
     CitryRender,
     SimpleVueRecord,
@@ -921,13 +921,11 @@ class PreparedElementOpenNode(ElementAttrsNode):
         static = self._static_prepared
         if static is not None:
             return static
-        shadowed_vue_keys: set[str] = set()
-        resolved, extension_validated = self._resolve_for_output(context, shadowed_vue_keys)
+        resolved, extension_validated = self._resolve_for_output(context)
         return self._prepared_from_resolved(
             resolved,
             context=context,
             extension_validated=extension_validated,
-            shadowed_vue_keys=shadowed_vue_keys,
         )
 
     def _format(
@@ -947,7 +945,6 @@ class PreparedElementOpenNode(ElementAttrsNode):
         context: CitryContext,
         extension_validated: bool,
         owner_name: str | None = None,
-        shadowed_vue_keys: set[str] | None = None,
     ) -> PreparedElementOpen:
         from citry.nodes import StaticHtmlAttr  # noqa: PLC0415
 
@@ -1030,14 +1027,9 @@ class PreparedElementOpenNode(ElementAttrsNode):
         data_attrs = merge_attrs(data_attrs)
         dynamic_keys = {attr.key.removeprefix("c-") for attr in self.attrs if not isinstance(attr, StaticHtmlAttr)}
         preserved_source: dict[str, PreparedAttribute] = {}
-        # A Vue binding that a c-bind mapping also set is not template source
-        # anymore, even when the template's value won the merge: keeping it as
-        # source would hide the mapping's Vue key from the check below.
-        shadowed_identities = {_html_attr_identity(key) for key in shadowed_vue_keys or ()}
         for attr, source_text in self._static_source_attrs:
             if (
                 attr.key not in dynamic_keys
-                and _html_attr_identity(attr.key) not in shadowed_identities
                 and attr.key in data_attrs
                 and type(data_attrs[attr.key]) is type(attr.value)
                 and data_attrs[attr.key] == attr.value
@@ -1142,14 +1134,10 @@ class PreparedElementCloseNode(Node):
 
 def _reject_executable_dynamic_attrs(attrs: Mapping[str, object], *, tag: str) -> None:
     for name in attrs:
-        # The same mistake caught later, while the render is turned into
-        # HTML, raises this type, so a caller catches one type on every path.
+        # The render-time checks reject these names first; this late check
+        # raises the same error if a new path ever skips them.
         if is_vue_directive_name(name):
-            raise UnsupportedPreparedView(
-                f"Python-resolved attribute {name!r} on <{tag}> cannot introduce Vue syntax; "
-                "Vue directives and bindings must be authored statically in the template. Remove "
-                f"{name!r} from the c-bind mapping or c-* attribute that sets it."
-            )
+            raise vue_code_error(name, tag_name=tag, origin="data")
 
 
 _EVENT_BINDING_KEYS = frozenset(

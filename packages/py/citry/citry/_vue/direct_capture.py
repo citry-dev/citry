@@ -12,7 +12,14 @@ from html import escape, unescape
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeGuard, TypeVar, cast
 
-from citry.attrs import _html_attr_identity, format_attrs, validate_html_attr_name
+from citry.attrs import (
+    VueCodeError,
+    _html_attr_identity,
+    format_attrs,
+    is_vue_code_message,
+    validate_html_attr_name,
+    vue_code_error,
+)
 from citry.citry_render import (
     CitryRender,
     Placeholder,
@@ -455,6 +462,10 @@ def assemble_typed_render(
         projected_data_keys: set[str] | None = None,
     ) -> None:
         if part.vue_errors:
+            # A stored Vue-code error keeps its own type, so a caller catches
+            # VueCodeError on every path that rejects the same mistake.
+            if is_vue_code_message(part.vue_errors[0]):
+                raise VueCodeError(part.vue_errors[0])
             raise UnsupportedPreparedView(part.vue_errors[0])
         # The generated evaluator writes only strict JSON (see
         # _copy_evaluated_json), so its data only needs a copy. Other leaf
@@ -2209,13 +2220,11 @@ def assemble_typed_render(
                                     "one prepared control site has conflicting authored metadata"
                                 )
                     unsafe_data_attrs = [name for name in effective_data_attrs if _unsafe_dynamic_dom_property(name)]
+                    # The render-time checks reject these names first; this late
+                    # check raises the same error if a new path ever skips them.
                     executable_data_attrs = [name for name in effective_data_attrs if is_vue_directive_name(name)]
                     if executable_data_attrs:
-                        raise UnsupportedPreparedView(
-                            f"Python-resolved attributes {executable_data_attrs!r} on <{part.tag}> cannot introduce "
-                            "Vue syntax; Vue directives and bindings must be authored statically in the "
-                            "template. Remove them from the c-bind mapping or c-* attribute that sets them."
-                        )
+                        raise vue_code_error(executable_data_attrs[0], tag_name=part.tag, origin="data")
                     if unsafe_data_attrs:
                         raise UnsupportedPreparedView(
                             "prepared dynamic DOM property is unsafe for the bounded Vue target: "
@@ -2306,10 +2315,11 @@ def assemble_typed_render(
                     if browser_read_trackers:
                         note_attribute_reads(data_owner_id, part.tag, part.authored_attrs)
                         note_event_reads(data_owner_id, part.tag, part)
+                    vue_code_attrs = [name for name in part.attrs if type(name) is str and is_vue_directive_name(name)]
+                    if vue_code_attrs:
+                        raise vue_code_error(vue_code_attrs[0], tag_name=part.tag, origin="data")
                     invalid_attrs = [
-                        name
-                        for name in part.attrs
-                        if type(name) is not str or is_vue_directive_name(name) or _unsafe_dynamic_dom_property(name)
+                        name for name in part.attrs if type(name) is not str or _unsafe_dynamic_dom_property(name)
                     ]
                     if invalid_attrs:
                         raise UnsupportedPreparedView(

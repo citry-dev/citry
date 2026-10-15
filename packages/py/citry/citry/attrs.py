@@ -39,7 +39,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from functools import lru_cache
-from typing import Any, TypeAlias
+from typing import Any, Literal, TypeAlias, cast
 
 import wrapt
 
@@ -70,6 +70,131 @@ def is_vue_directive_name(name: str) -> bool:
     # Python-resolved names are data. Vue must never read one as code, and
     # HTML names are case-insensitive, so `V-ON:click` must not slip past.
     return name.casefold().startswith(_VUE_DIRECTIVE_PREFIXES)
+
+
+class VueCodeError(TypeError):
+    """
+    Raised when Python data sets an attribute name that Vue would read as code.
+
+    Vue reads an attribute whose name starts with `v-`, `:`, `.`, `^`, `@`,
+    or `#` (in any letter case) as a directive, a binding, a listener, or a
+    slot, and evaluates its value as JavaScript. Citry lets only the template
+    author write such names. When one of them comes from Python data
+    instead, the render fails with this error. Python data sets attribute
+    names in three places:
+
+    - a `c-bind` mapping, such as `c-bind="attrs"` where `attrs` holds
+      `{"@click": "save()"}`;
+    - a `c-*` attribute whose name, without the `c-`, starts with one of
+      those prefixes, such as `c-v-if="is_open"`;
+    - an extension's `on_attrs_resolved` hook that adds such a name, or
+      changes the value of one written in the template.
+
+    The check runs on HTML elements and component tags, on every page,
+    while the template renders. It runs even on a page that does not start
+    Vue, so the same template never works on one page and fails on another.
+    Citry's own `@c-*` event bindings and `:c-*` State bindings are not
+    Vue code, so `c-bind` may still carry them.
+
+    `VueCodeError` subclasses `TypeError`, so code that catches
+    `TypeError` around a render keeps working.
+
+    Example:
+        Write Vue syntax in the template and pass only its data from
+        Python:
+
+        ```citry-html
+        <!-- Fails: the mapping sets "@click" -->
+        <button c-bind="{'@click': 'save()'}">Save</button>
+
+        <!-- Works: the listener is written in the template -->
+        <button @click="save()">Save</button>
+        ```
+
+    """
+
+
+# Citry's own binding namespaces start with a Vue prefix but are not Vue
+# code: the Events extension turns `@c-*` and `:c-*` into its own markup, and
+# `#c-*` framework attributes have their own, more specific error.
+_CITRY_OWNED_ATTR_PREFIXES = ("@c-", ":c-", "#c-")
+
+
+def is_vue_code_attr_name(name: object) -> bool:
+    """Return whether Python data must not set this attribute name, because Vue would read it as code."""
+    # Non-strings are left to `validate_html_attr_name`, which names the bad type.
+    return isinstance(name, str) and is_vue_directive_name(name) and not name.startswith(_CITRY_OWNED_ATTR_PREFIXES)
+
+
+def vue_code_error(
+    name: str,
+    *,
+    tag_name: str,
+    origin: Literal["c-bind", "c-attr", "hook", "data"],
+    hint: str | None = None,
+) -> VueCodeError:
+    """
+    Build the one error every Vue-code check raises, so each path reads the same.
+
+    ``origin`` says where the name came from, so the message can point at it:
+    a ``c-bind`` mapping, a ``c-*`` attribute, an ``on_attrs_resolved``
+    hook, or (``"data"``) a late check that can no longer tell which.
+    ``hint`` replaces the general fix when the caller knows a better one,
+    such as `<c-fill>` for a `#slot` name on a component tag, where writing
+    the directive in the template would fail too.
+    """
+    tag = f"<{tag_name}>"
+    if origin == "c-bind":
+        subject = f"c-bind on {tag} sets {name!r}"
+    elif origin == "c-attr":
+        subject = f"'c-{name}' on {tag} sets {name!r}"
+    elif origin == "hook":
+        subject = f"An on_attrs_resolved extension hook sets {name!r} on {tag}"
+    else:
+        subject = f"Python data sets {name!r} on {tag}"
+    rule = (
+        "Python data from c-bind, c-* attributes, and extension hooks may set only plain attribute names, "
+        "on every page, even one that does not use Vue."
+    )
+    if hint is not None:
+        fix = hint
+    elif origin == "hook":
+        fix = (
+            "Return only plain attribute names from the hook, and write Vue directives, bindings, and "
+            "listeners directly in the template."
+        )
+    else:
+        fix = "Write Vue directives, bindings, and listeners directly in the template."
+    return VueCodeError(f"{subject}{_VUE_CODE_MESSAGE_MARK} {rule} {fix}")
+
+
+# Every `vue_code_error` message carries this text. A Vue leaf keeps its
+# errors as text so render caches can store them, and the code that raises
+# them later uses the text to raise `VueCodeError` again.
+_VUE_CODE_MESSAGE_MARK = ", which Vue would read as code."
+
+
+def is_vue_code_message(message: str) -> bool:
+    """Return whether an error text stored as a string came from `vue_code_error`."""
+    return _VUE_CODE_MESSAGE_MARK in message
+
+
+def reject_vue_code_attr_name(
+    name: object,
+    *,
+    tag_name: str,
+    origin: Literal["c-bind", "c-attr", "hook", "data"],
+    hint: str | None = None,
+) -> None:
+    """
+    Raise `VueCodeError` when Python data sets an attribute name Vue would read as code.
+
+    Every place where Python data chooses an attribute name calls this, so
+    the rule and its wording live in one function. Names written literally
+    in the template never reach it.
+    """
+    if is_vue_code_attr_name(name):
+        raise vue_code_error(cast("str", name), tag_name=tag_name, origin=origin, hint=hint)
 
 
 def _html_attr_identity(name: str) -> str:

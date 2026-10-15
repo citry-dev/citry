@@ -77,12 +77,14 @@ from citry._i18n_directives import looks_like_i18n_binding
 from citry.attrs import (
     _format_resolved_attrs_to_str,
     _has_default_attr_formatting,
-    _html_attr_identity,
     _merge_resolved_attrs,
     format_attrs,
+    is_vue_code_attr_name,
     is_vue_directive_name,
     merge_attrs,
+    reject_vue_code_attr_name,
     validate_html_attr_name,
+    vue_code_error,
 )
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement, _ElementMorphMetadata
@@ -104,6 +106,7 @@ from citry.client_directives import (
     has_client_props_key,
     is_client_props_key,
     resolve_component_tag_client_binding_value,
+    unsupported_component_tag_directive_hint,
     unsupported_slot_tag_directive_message,
 )
 from citry.constness import (
@@ -991,15 +994,16 @@ class ElementAttrsNode(Node):
         self._resolved_keys = tuple(attr.key.removeprefix("c-") for attr in attrs)
         self._has_spread = any(attr.key == "c-bind" for attr in attrs)
         self._validated_spread_keys: set[str] = set()
-        # The names of the Vue bindings written on this tag (`@click`), in the
-        # form `_html_attr_identity` gives them (lowercase, except Citry's
-        # case-sensitive `@c-`/`:c-` names). A c-bind key with one of these
-        # names collides with the written binding. The template never
-        # changes, so the names are collected once when the node is built.
-        self._written_vue_identities = frozenset(
-            _html_attr_identity(attr.key)
-            for attr in attrs
-            if isinstance(attr, StaticHtmlAttr) and not attr.key.startswith("c-") and is_vue_directive_name(attr.key)
+        # A `c-*` attribute such as `c-v-if` lets Python data fill a Vue
+        # directive. Its name is fixed in the template, so it is found once
+        # here and every render only checks this one field.
+        self._vue_code_attr_key = next(
+            (
+                resolved_key
+                for attr, resolved_key in zip(attrs, self._resolved_keys, strict=True)
+                if attr.key.startswith("c-") and attr.key != "c-bind" and is_vue_code_attr_name(resolved_key)
+            ),
+            None,
         )
         self._has_runtime_events_candidate = self._has_spread or any(
             attr.key.startswith(("@c-", ":c-"))
@@ -1033,18 +1037,9 @@ class ElementAttrsNode(Node):
         resolved, validate_keys = self._resolve_for_output(context)
         return self._format(resolved, context, validate_keys=validate_keys)
 
-    def _resolve_for_output(
-        self,
-        context: CitryContext,
-        shadowed_vue_keys: set[str] | None = None,
-    ) -> tuple[dict[str, Any], bool]:
-        """
-        Resolve and run attribute hooks once, before target-specific formatting.
-
-        ``shadowed_vue_keys``, when given, collects the names of Vue bindings
-        that both a ``c-bind`` mapping and the template set on this tag.
-        """
-        resolved = self._resolve(context, shadowed_vue_keys)
+    def _resolve_for_output(self, context: CitryContext) -> tuple[dict[str, Any], bool]:
+        """Resolve and run attribute hooks once, before target-specific formatting."""
+        resolved = self._resolve(context)
         runtime_candidate = self._runtime_extension_candidate(resolved)
 
         # Let extensions rewrite the resolved dict (e.g. class dedup). Fires
@@ -1091,7 +1086,7 @@ class ElementAttrsNode(Node):
             for key in resolved
         )
 
-    def _resolve(self, context: CitryContext, shadowed_vue_keys: set[str] | None = None) -> dict[str, Any]:
+    def _resolve(self, context: CitryContext) -> dict[str, Any]:
         """
         Collect the attribute contributions and merge them into one dict.
 
@@ -1100,6 +1095,10 @@ class ElementAttrsNode(Node):
         ``on_attrs_resolved`` hook sees them already gone). A ``Const``
         marker is unwrapped so the normalizers see the real value.
         """
+        # Every render path for this element resolves its attributes here,
+        # so a `c-v-if`-style attribute fails on every page, with or without Vue.
+        if self._vue_code_attr_key is not None:
+            raise vue_code_error(self._vue_code_attr_key, tag_name=self.tag_name, origin="c-attr")
         if not self._has_spread:
             items: list[tuple[str, Any]] = []
             for attr, resolved_key in zip(self.attrs, self._resolved_keys, strict=True):
@@ -1108,7 +1107,7 @@ class ElementAttrsNode(Node):
                 items.append((resolved_key, const_value(attr.resolve(context))))
             merged = _merge_resolved_attrs(items)
         else:
-            merged = self._resolve_with_spread(context, shadowed_vue_keys)
+            merged = self._resolve_with_spread(context)
         # `#c-*` framework attributes (`#c-key`, `#c-ignore`) are
         # template-authored only in v1: authored on the tag, the compiler
         # handles them before this node exists, so one arriving here came
@@ -1131,22 +1130,9 @@ class ElementAttrsNode(Node):
             )
         return {key: value for key, value in merged.items() if value is not None and value is not False}
 
-    def _resolve_with_spread(
-        self,
-        context: CitryContext,
-        shadowed_vue_keys: set[str] | None = None,
-    ) -> dict[str, Any]:
+    def _resolve_with_spread(self, context: CitryContext) -> dict[str, Any]:
         """Resolve the general path used when a dynamic ``c-bind`` is present."""
         items: list[tuple[str, Any]] = []
-        # A spread key that Vue reads as a binding (`@click`) and a binding
-        # written on the same tag share one attribute name, so the merge below
-        # keeps one value and the other disappears. Report such keys so the
-        # caller can still see that the c-bind mapping set a Vue binding. Only
-        # `PreparedElementOpenNode.render`, which builds the opening tag for
-        # the Vue path, passes a set, and only a tag with a written Vue
-        # binding can collide, so every other render skips the per-key check.
-        written_vue = self._written_vue_identities
-        report_to = shadowed_vue_keys if written_vue else None
         for attr, compiled_key in zip(self.attrs, self._resolved_keys, strict=True):
             if attr.key == "c-bind":
                 value = const_value(attr.resolve(context))
@@ -1163,19 +1149,6 @@ class ElementAttrsNode(Node):
                     )
                     raise TypeError(msg)
                 for key, item in value.items():
-                    # None and False remove an attribute instead of setting
-                    # one, so only a live value can carry Vue syntax.
-                    if (
-                        report_to is not None
-                        # A str subclass (a StrEnum member) names the same
-                        # attribute, so it must not slip past the check.
-                        and isinstance(key, str)
-                        and item is not None
-                        and item is not False
-                        and is_vue_directive_name(key)
-                        and _html_attr_identity(key) in written_vue
-                    ):
-                        report_to.add(key)
                     # Only bounded exact strings can share validation across
                     # renders. Values and user-defined key behavior stay live.
                     cacheable_key = type(key) is str and len(key) <= 256
@@ -1183,6 +1156,10 @@ class ElementAttrsNode(Node):
                         items.append((key, const_value(item)))
                         continue
                     resolved_key = validate_html_attr_name(key, where=f"c-bind on <{self.tag_name}>")
+                    # The key is rejected whatever its value: even `None`
+                    # would remove a listener written in the template. A key
+                    # that passes is cached below, so repeat renders skip this.
+                    reject_vue_code_attr_name(resolved_key, tag_name=self.tag_name, origin="c-bind")
                     if looks_like_i18n_binding(resolved_key):
                         if context._simple_scope is not None:
                             msg = (
@@ -1203,10 +1180,6 @@ class ElementAttrsNode(Node):
                 if attr.key.startswith("c-"):
                     _reject_reserved_events_attr(compiled_key, tag_name=self.tag_name)
                 items.append((compiled_key, const_value(attr.resolve(context))))
-        # Whether the page uses Vue is not known while attributes resolve, so
-        # the keys above are reported, not raised. The Vue check in the
-        # prepared opening tag rejects them; a page without Vue keeps
-        # writing them as text.
         return _merge_resolved_attrs(items)
 
     def _format(
@@ -1388,11 +1361,23 @@ def _is_special_component_input_key(key: str) -> bool:
     """
     Whether a fixed component attr must go through the full client-binding checks in ``_resolve_inputs``.
 
-    Every ``v-*``, ``#*``, and ``.*`` name goes through them, including Vue
-    syntax a component tag rejects, so the classifier can report it rather
-    than letting it become a kwarg the child never reads.
+    Every name Vue reads as a directive or binding goes through them,
+    including Vue syntax a component tag rejects, so the classifier can
+    report it rather than letting it become a kwarg the child never reads.
     """
-    return key == "ref" or key.startswith(("@", ":", "#", ".", "$c-", "x-on:", "v-"))
+    return key == "ref" or key.startswith(("$c-", "x-on:")) or is_vue_directive_name(key)
+
+
+def _component_tag_vue_code_hint(key: str, *, component_boundary: bool) -> str | None:
+    """
+    Pick the fix for a Vue-code name that Python data put on a component tag.
+
+    A directive the tag cannot carry at all (`v-for`, `#slot`, `.prop`) gets
+    the hint the template parser gives for it, because writing it in the
+    template would fail as well. `<c-element>` renders a plain HTML element,
+    so it takes the general advice.
+    """
+    return unsupported_component_tag_directive_hint(key) if component_boundary else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1483,6 +1468,19 @@ class ComponentNode(Node):
             raise ValueError("<c-mark> requires one directly authored literal 'name' attribute.")
         self._has_plain_component_inputs = name != "element" and all(
             attr.key != "c-bind" and not _is_special_component_input_key(attr.key.removeprefix("c-")) for attr in attrs
+        )
+        # A `c-*` input such as `c-v-if` lets Python data fill a Vue binding.
+        # Its name is fixed in the template, so it is found once here and
+        # every render only checks this one field.
+        self._vue_code_attr_key = next(
+            (
+                attr.key.removeprefix("c-")
+                for attr in attrs
+                if attr.key.startswith("c-")
+                and attr.key != "c-bind"
+                and is_vue_code_attr_name(attr.key.removeprefix("c-"))
+            ),
+            None,
         )
         self._metadata_locus: Literal["range", "element"] | None = None
         self.key: ExprHtmlAttr | None = None
@@ -1688,6 +1686,15 @@ class ComponentNode(Node):
         new object every render; equal values still land on the same cache
         entry.
         """
+        # Checked before any input resolves, so the error is the same on every
+        # page, whether or not the page goes on to start Vue.
+        if self._vue_code_attr_key is not None:
+            raise vue_code_error(
+                self._vue_code_attr_key,
+                tag_name=f"c-{self.name}",
+                origin="c-attr",
+                hint=_component_tag_vue_code_hint(self._vue_code_attr_key, component_boundary=self.name != "element"),
+            )
         if self._has_plain_component_inputs:
             plain_kwargs: dict[str, Any] = {}
             for attr in self.attrs:
@@ -1761,10 +1768,13 @@ class ComponentNode(Node):
                     ComponentTagClientBindingKind.PROPS_OBJECT,
                 }:
                     return False
+                # Names from c-bind and c-* already failed with VueCodeError, so
+                # this catches a written binding whose value another template
+                # language filled in.
                 if source is not ComponentTagClientBindingSource.DIRECT or type(attr) is not StaticHtmlAttr:
                     raise RuntimeError(
-                        f"Executable Vue binding {resolved_key!r} on <c-element> must be authored directly "
-                        "with a static template value; it cannot come from c-bind or c-* evaluation."
+                        f"Vue binding {resolved_key!r} on <c-element> must be written in the template "
+                        "with a plain text value."
                     )
                 if "{{" in str(raw_value):
                     raise RuntimeError(
@@ -1788,12 +1798,15 @@ class ComponentNode(Node):
                 )
                 element_attr_contributions.append({resolved_key: raw_value})
                 return True
+            # Vue-prefixed names from c-bind and c-* already failed with
+            # VueCodeError. What remains is `ref` from Python data, or a written
+            # binding whose value another template language filled in.
             if client_binding_kind is not ComponentTagClientBindingKind.CITRY_HANDLER and (
                 source is not ComponentTagClientBindingSource.DIRECT or type(attr) is not StaticHtmlAttr
             ):
                 raise RuntimeError(
-                    f"Executable Vue binding {resolved_key!r} on <{tag_name}> must be authored directly "
-                    "with a static template value; it cannot come from c-bind, c-* evaluation, or templates."
+                    f"Vue binding {resolved_key!r} on <{tag_name}> must be written in the template "
+                    "with a plain text value."
                 )
             if client_binding_kind is not ComponentTagClientBindingKind.CITRY_HANDLER and "{{" in str(raw_value):
                 raise RuntimeError(
@@ -1861,6 +1874,17 @@ class ComponentNode(Node):
                         raise TypeError(msg)
                     else:
                         resolved_bound_key = bound_key
+                    # A mapping key is Python data, so it may not name Vue
+                    # code, even with a None value that would only remove it.
+                    if is_vue_code_attr_name(resolved_bound_key):
+                        raise vue_code_error(
+                            resolved_bound_key,
+                            tag_name=tag_name,
+                            origin="c-bind",
+                            hint=_component_tag_vue_code_hint(
+                                resolved_bound_key, component_boundary=component_boundary
+                            ),
+                        )
                     reject_component_state_binding(resolved_bound_key)
                     _reject_dynamic_translation_binding(resolved_bound_key, tag_name=tag_name)
                     if apply_client_binding(

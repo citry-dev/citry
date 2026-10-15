@@ -17,7 +17,9 @@ from citry.attrs import (
     _html_attr_identity,
     format_attrs,
     merge_attrs,
+    reject_vue_code_attr_name,
     validate_html_attr_name,
+    vue_code_error,
 )
 from citry.citry_render import _VALUE_CONTEXT, CitryRender, RenderPart
 from citry.constness import Const, _ConstMapping, const_value
@@ -465,6 +467,9 @@ def _simple_json_fixed_attrs(operation: _Open) -> tuple[tuple[str, ExprHtmlAttr]
     node = operation.node
     if (
         operation.renderer is not node
+        # A `c-v-if`-style attribute must reach the ordinary resolver, which
+        # raises VueCodeError for it; this direct evaluator would skip that.
+        or node._vue_code_attr_key is not None
         or node._static_prepared is not None
         or node._has_spread
         or node._event_bindings
@@ -2882,6 +2887,9 @@ def _fixed_attrs_plan(node: PreparedElementOpenNode, renderer: Node) -> tuple[tu
     """Return a direct evaluator for unique, fixed-name ordinary attributes."""
     if (
         renderer is not node
+        # A `c-v-if`-style attribute must reach the ordinary resolver, which
+        # raises VueCodeError for it; this direct evaluator would skip that.
+        or node._vue_code_attr_key is not None
         or node._static_prepared is not None
         or node._has_spread
         or node._event_bindings
@@ -3218,12 +3226,11 @@ def _attach_error(error: Exception, node: Node, context: CitryContext | None) ->
 def _validate_open(value: PreparedElementOpen) -> str | None:
     data_targets = {_html_attr_identity(name): name for name in value.data_attrs}
     for name in value.data_attrs:
+        # The render-time checks reject these names when Python data sets
+        # them. The message is kept with the leaf, and `assemble_typed_render`
+        # raises it as VueCodeError only if the leaf is used.
         if is_vue_directive_name(name):
-            return (
-                f"Python-resolved attribute {name!r} on <{value.tag}> cannot introduce Vue syntax; "
-                "Vue directives and bindings must be authored statically in the template. Remove "
-                f"{name!r} from the c-bind mapping or c-* attribute that sets it."
-            )
+            return str(vue_code_error(name, tag_name=value.tag, origin="data"))
         normalized = name.casefold()
         if normalized in {"innerhtml", "outerhtml", "textcontent", "innertext"} or normalized.startswith("on"):
             return f"prepared dynamic DOM property is unsafe for the bounded Vue target: {name!r}"
@@ -3268,12 +3275,11 @@ def _validate_data_attrs(value: dict[str, object], *, tag: str) -> str | None:
     if private is not None:
         return f"reserved Events metadata cannot be introduced through Python attributes: {private!r}"
     for name in value:
+        # The render-time checks reject these names when Python data sets
+        # them. The message is kept with the leaf, and `assemble_typed_render`
+        # raises it as VueCodeError only if the leaf is used.
         if is_vue_directive_name(name):
-            return (
-                f"Python-resolved attribute {name!r} on <{tag}> cannot introduce Vue syntax; "
-                "Vue directives and bindings must be authored statically in the template. Remove "
-                f"{name!r} from the c-bind mapping or c-* attribute that sets it."
-            )
+            return str(vue_code_error(name, tag_name=tag, origin="data"))
         normalized = name.casefold()
         if normalized in {"innerhtml", "outerhtml", "textcontent", "innertext"} or normalized.startswith("on"):
             return f"prepared dynamic DOM property is unsafe for the bounded Vue target: {name!r}"
@@ -3343,6 +3349,7 @@ def _spread_with_source_attrs(
         if attr.key == "c-bind":
             for key, value in resolved.items():
                 name = validate_html_attr_name(key, where=f"c-bind on <{node.tag}>")
+                reject_vue_code_attr_name(name, tag_name=node.tag, origin="c-bind")
                 _reject_dynamic_translation_binding(name, tag_name=node.tag)
                 _reject_reserved_events_attr(name, tag_name=node.tag)
                 items.append((name, const_value(value)))
@@ -3474,6 +3481,7 @@ def _root_spread_plan(node: PreparedElementOpenNode, keys: tuple[str, ...]) -> t
             # The full merge validates spread names in this order; a failure
             # here sends the row there so it raises the same error.
             validate_html_attr_name(name, where=f"c-bind on <{node.tag}>")
+            reject_vue_code_attr_name(name, tag_name=node.tag, origin="c-bind")
             _reject_dynamic_translation_binding(name, tag_name=node.tag)
             _reject_reserved_events_attr(name, tag_name=node.tag)
         if any(is_client_props_key(name, tag_name=node.tag) for name in names):

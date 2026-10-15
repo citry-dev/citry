@@ -23,7 +23,7 @@ from citry._vue.capture import (
     prepared_browser_binding,
     prepared_render_active,
 )
-from citry.attrs import merge_attrs, validate_html_attr_name
+from citry.attrs import merge_attrs, reject_vue_code_attr_name, validate_html_attr_name, vue_code_error
 from citry.citry_render import _render_value
 from citry.client_directives import (
     CLIENT_PROPS_ATTR,
@@ -235,6 +235,14 @@ class I18nBindingElementAttrsNode(Node):
         component_i18n = cast("Any", component).i18n
         if not self.has_static_binding and component_i18n._extension._compiled_catalog is None:
             return self.original.render(context)
+        # This path resolves the attributes itself instead of calling the
+        # wrapped node, so it repeats that node's check for `c-v-if`-style names.
+        if self.original._vue_code_attr_key is not None:
+            raise vue_code_error(
+                self.original._vue_code_attr_key,
+                tag_name=self.original.tag_name,
+                origin="c-attr",
+            )
         collector = cast("Any", component).i18n._bindings
         declarations: OrderedDict[tuple[str, str | None], _Declaration] = OrderedDict()
         contributions: list[Mapping[str, Any]] = []
@@ -254,6 +262,7 @@ class I18nBindingElementAttrsNode(Node):
                 contribution: dict[str, Any] = {}
                 for key, value in raw.items():
                     resolved_key = validate_html_attr_name(key, where=f"c-bind on <{self.original.tag_name}>")
+                    reject_vue_code_attr_name(resolved_key, tag_name=self.original.tag_name, origin="c-bind")
                     if _apply_directive(
                         declarations,
                         resolved_key,

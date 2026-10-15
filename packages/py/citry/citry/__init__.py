@@ -44,6 +44,7 @@ from citry.analysis import (
     prepare_python_component_assets,
 )
 from citry.attrs import (
+    VueCodeError,
     format_attrs,
     merge_attrs,
     normalize_class,
@@ -391,6 +392,7 @@ __all__ = [
     "URLRoute",
     "UnitFormat",
     "UnresolvedComponentReference",
+    "VueCodeError",
     "citry",
     "collect_compiled_body_fills",
     "const_value",

@@ -12,7 +12,7 @@ import re
 
 import pytest
 
-from citry import Citry, Component, Const, Extension
+from citry import Citry, Component, Const, Extension, VueCodeError
 from citry.component_render import _compile_nested_template
 from citry.constness import precompute_const_parts
 from citry.ext.events import extension as events_extension_module
@@ -213,16 +213,16 @@ class TestLiteralFrameworkPrefix:
         template = '<div c-c-foo="first" c-c-c-foo="second" c-c-bind="third">x</div>'
         assert _html(template, first="a", second="b", third="c") == '<div c-foo="a" c-c-foo="b" c-bind="c">x</div>'
 
-    def test_colon_bridge_emits_literal_colon_attribute(self):
-        assert (
+    def test_colon_prefixed_attribute_is_rejected_as_vue_code(self):
+        # Stripping `c-` here would let Python data fill a Vue binding, so the
+        # render fails on every page instead (see test_vue_code_error.py).
+        with pytest.raises(VueCodeError, match=r"'c-:class' on <div> sets ':class'"):
             _html('<div c-:class="binding">x</div>', binding="{ active: true }")
-            == '<div :class="{ active: true }">x</div>'
-        )
 
     def test_c_bind_mapping_keys_are_already_literal(self):
         template = '<div c-bind="attrs">x</div>'
-        attrs = {"c-foo": "a", ":class": "b"}
-        assert _html(template, attrs=attrs) == '<div c-foo="a" :class="b">x</div>'
+        attrs = {"c-foo": "a", "x-bind:class": "b"}
+        assert _html(template, attrs=attrs) == '<div c-foo="a" x-bind:class="b">x</div>'
 
 
 class TestClassAndStyleMerging:

@@ -44,6 +44,7 @@ from citry._nested_declarations import (
     _compose_nested_declaration_class,
     _get_nested_class_declarations,
 )
+from citry.attrs import is_vue_code_attr_name, vue_code_error
 from citry.constness import _const_mapping, _ConstMapping, _refresh_const_mapping
 from citry.introspection import (
     ComponentExtensionInfo,
@@ -926,6 +927,15 @@ class Extension:
 
         Fires per element per render, only for elements with at least one
         dynamic attribute (a ``c-*`` value or a ``c-bind`` spread).
+
+        Raises:
+            VueCodeError: Citry raises [`VueCodeError`][citry.VueCodeError]
+                when the hook adds an attribute name that Vue would read as
+                code (one starting with ``v-``, ``:``, ``.``, ``^``, ``@``,
+                or ``#``), or changes the value of such an attribute written
+                in the template. Removing one, or keeping it unchanged, is
+                allowed.
+
         """
 
     def on_render_context_merge(self, ctx: OnRenderContextMergeContext) -> None:
@@ -1146,6 +1156,25 @@ _COMPONENT_CONFIG_API_OWNERS = {
     "Events": "events",
     "I18n": "i18n",
 }
+
+
+def _reject_vue_code_from_attrs_hook(before: Mapping[str, Any], after: Mapping[str, Any], *, tag_name: str) -> None:
+    """
+    Raise `VueCodeError` when attribute hooks added a Vue-code name or changed one's value.
+
+    A hook that keeps a binding written in the template, or removes it, has
+    not put Python data into Vue code, so both are allowed.
+    """
+    for key, value in after.items():
+        if not is_vue_code_attr_name(key):
+            continue
+        if key in before:
+            previous = before[key]
+            # Written template values are strings or `True`; comparing equal
+            # values of the same type keeps an unchanged copy allowed.
+            if previous is value or (type(previous) is type(value) and previous == value):
+                continue
+        raise vue_code_error(key, tag_name=tag_name, origin="hook")
 
 
 class ExtensionManager:
@@ -2079,6 +2108,10 @@ class ExtensionManager:
         extensions = self._attrs_resolved_extensions(runtime_candidate=runtime_candidate)
         if not extensions:
             return attrs
+        # Hooks may change the dict in place, so keep the names and values
+        # they were given. Any Vue-named key in it was written in the template,
+        # because c-bind and c-* keys with those names already failed.
+        before = dict(attrs)
         ctx = OnAttrsResolvedContext(
             citry=self.citry,
             component=component,
@@ -2089,6 +2122,7 @@ class ExtensionManager:
             out = extension.on_attrs_resolved(ctx)
             if out is not None:
                 ctx = replace(ctx, attrs=out)
+        _reject_vue_code_from_attrs_hook(before, ctx.attrs, tag_name=tag_name)
         return ctx.attrs
 
     # ----- Template hooks -----

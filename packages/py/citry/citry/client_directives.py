@@ -255,9 +255,18 @@ def unsupported_component_tag_directive_message(key: str, *, tag_name: str) -> s
     Returns ``None`` for the directives a component tag carries: ``v-bind``
     and ``v-on`` (with their ``:`` and ``@`` forms and their object forms), the ``v-if`` chain,
     ``v-model``, a bare ``v-show``, and custom directives. The template
-    parser reports the same wording for directly authored attributes; this
-    covers keys that only appear at render time.
+    parser reports the same wording for directly authored attributes. A key
+    from ``c-bind`` or a ``c-*`` attribute fails earlier with ``VueCodeError``,
+    which reuses the hint from ``unsupported_component_tag_directive_hint``.
     """
+    hint = unsupported_component_tag_directive_hint(key)
+    if hint is None:
+        return None
+    return f"Vue directive {key!r} is not supported on the component tag '<{tag_name}>'. {hint}"
+
+
+def unsupported_component_tag_directive_hint(key: str) -> str | None:
+    """Return what to write instead of a Vue directive a component tag cannot carry, or ``None`` if it can."""
     directive = _vue_directive_name(key)
     if directive is None:
         return None
@@ -280,7 +289,7 @@ def unsupported_component_tag_directive_message(key: str, *, tag_name: str) -> s
         hint = "Citry reserves 'v-c-*' and 'v-citry-*' for its own browser runtime."
     else:
         hint = _COMPONENT_TAG_DIRECTIVE_HINTS.get(directive, _OTHER_DIRECTIVE_HINT)
-    return f"Vue directive {key!r} is not supported on the component tag '<{tag_name}>'. {hint}"
+    return hint
 
 
 # What to write instead of a Vue directive on `<c-slot>`, by directive name.
