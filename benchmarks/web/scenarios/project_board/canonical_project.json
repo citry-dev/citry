@@ -1,0 +1,516 @@
+{
+  "_provenance": {
+    "extraction": "Python AST literal_eval of data_json, then JSON decode",
+    "source": "packages/py/citry/tests/test_benchmark_citry.py",
+    "source_sha256": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  },
+  "data": {
+    "comments_by_notes_1": {
+      "1": [
+        {
+          "fields": {
+            "modified_by": 1,
+            "notes": "Test note one two three",
+            "parent": 1
+          },
+          "pk": 3
+        },
+        {
+          "fields": {
+            "modified_by": 1,
+            "notes": "Test note 2",
+            "parent": 1
+          },
+          "pk": 4
+        }
+      ]
+    },
+    "comments_by_notes_2": {
+      "1": [
+        {
+          "fields": {
+            "modified_by": 1,
+            "parent": 1,
+            "text": "Test note 6"
+          },
+          "pk": 1
+        },
+        {
+          "fields": {
+            "modified_by": 1,
+            "parent": 1,
+            "text": "Test note 5"
+          },
+          "pk": 2
+        },
+        {
+          "fields": {
+            "modified_by": 1,
+            "parent": 1,
+            "text": "Test note 4"
+          },
+          "pk": 4
+        },
+        {
+          "fields": {
+            "modified_by": 1,
+            "parent": 1,
+            "text": "Test note 3"
+          },
+          "pk": 6
+        }
+      ]
+    },
+    "comments_by_notes_3": {
+      "2": [
+        {
+          "fields": {
+            "modified_by": 1,
+            "parent": 2,
+            "text": "Test note 1"
+          },
+          "pk": 1
+        },
+        {
+          "fields": {
+            "modified_by": 1,
+            "parent": 2,
+            "text": "Test note 0"
+          },
+          "pk": 3
+        }
+      ]
+    },
+    "contacts": [],
+    "notes_1": [
+      {
+        "fields": {
+          "created": "2025-02-07T08:59:58.689Z",
+          "modified": "2025-02-07T08:59:58.689Z",
+          "project": 1,
+          "text": "Test note 1"
+        },
+        "pk": 1
+      },
+      {
+        "fields": {
+          "created": "2025-02-07T08:59:58.689Z",
+          "modified": "2025-02-07T08:59:58.689Z",
+          "project": 1,
+          "text": "Test note 2"
+        },
+        "pk": 2
+      }
+    ],
+    "notes_2": [
+      {
+        "fields": {
+          "created": "2024-02-07T11:20:49.085Z",
+          "modified": "2024-02-07T11:20:55.003Z",
+          "project": 1,
+          "text": "Test note x"
+        },
+        "pk": 1
+      }
+    ],
+    "notes_3": [
+      {
+        "fields": {
+          "created": "2024-02-07T11:20:49.085Z",
+          "modified": "2024-02-07T11:20:55.003Z",
+          "project": 1,
+          "text": "Test note 2"
+        },
+        "pk": 2
+      }
+    ],
+    "organizations": [
+      {
+        "fields": {
+          "created": "2025-02-07T16:27:49.837Z",
+          "modified": "2025-02-07T16:27:49.837Z",
+          "name": "Org Name"
+        },
+        "pk": 1
+      }
+    ],
+    "outputs": [
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 16",
+            "phase": 8
+          },
+          "pk": 14
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 15",
+            "phase": 8
+          },
+          "pk": 15
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 14",
+            "phase": 8
+          },
+          "pk": 16
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 13",
+            "phase": 8
+          },
+          "pk": 17
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": true,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 12",
+            "phase": 4
+          },
+          "pk": 18
+        },
+        [
+          [
+            {
+              "fields": {
+                "created_by": 1,
+                "output": 18,
+                "text": "Test bookmark",
+                "url": "http://localhost:8000/create/bookmmarks/9/"
+              },
+              "pk": 19
+            },
+            []
+          ]
+        ],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": 14,
+            "description": "",
+            "name": "Lorem ipsum 11",
+            "phase": 7
+          },
+          "pk": 20
+        },
+        [],
+        [
+          [
+            {
+              "fields": {
+                "completed": false,
+                "dependency": null,
+                "description": "",
+                "name": "Lorem ipsum 10",
+                "phase": 8
+              },
+              "pk": 14
+            },
+            []
+          ]
+        ]
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 9",
+            "phase": 7
+          },
+          "pk": 21
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 8",
+            "phase": 7
+          },
+          "pk": 22
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 7",
+            "phase": 7
+          },
+          "pk": 23
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 6",
+            "phase": 7
+          },
+          "pk": 24
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 5",
+            "phase": 6
+          },
+          "pk": 25
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 4",
+            "phase": 6
+          },
+          "pk": 26
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": null,
+            "description": "",
+            "name": "Lorem ipsum 3",
+            "phase": 5
+          },
+          "pk": 27
+        },
+        [],
+        []
+      ],
+      [
+        {
+          "fields": {
+            "completed": false,
+            "dependency": 14,
+            "description": "",
+            "name": "Lorem ipsum 2",
+            "phase": 7
+          },
+          "pk": 28
+        },
+        [],
+        [
+          [
+            {
+              "fields": {
+                "completed": false,
+                "dependency": null,
+                "description": "",
+                "name": "Lorem ipsum 1",
+                "phase": 8
+              },
+              "pk": 14
+            },
+            []
+          ]
+        ]
+      ]
+    ],
+    "phase_templates": [
+      {
+        "fields": {
+          "created": "2025-02-07T16:27:49.837Z",
+          "description": "## Phase 3",
+          "modified": "2025-02-07T16:27:49.837Z",
+          "name": "Phase 3",
+          "type": "PHASE_3"
+        },
+        "pk": 3
+      },
+      {
+        "fields": {
+          "created": "2025-02-07T16:27:49.837Z",
+          "description": "## Phase 2",
+          "modified": "2025-02-07T16:27:49.837Z",
+          "name": "Phase 2",
+          "type": "PHASE_2"
+        },
+        "pk": 4
+      },
+      {
+        "fields": {
+          "created": "2025-02-07T16:27:49.837Z",
+          "description": "## Phase 4",
+          "modified": "2025-02-07T16:27:49.837Z",
+          "name": "Phase 4",
+          "type": "PHASE_4"
+        },
+        "pk": 5
+      },
+      {
+        "fields": {
+          "created": "2025-02-07T16:27:49.837Z",
+          "description": "## Phase 5",
+          "modified": "2025-02-07T16:27:49.837Z",
+          "name": "Phase 5",
+          "type": "PHASE_5"
+        },
+        "pk": 6
+      },
+      {
+        "fields": {
+          "created": "2025-02-07T16:27:49.837Z",
+          "description": "## Phase 1",
+          "modified": "2025-02-07T16:27:49.837Z",
+          "name": "Phase 1",
+          "type": "PHASE_1"
+        },
+        "pk": 2
+      }
+    ],
+    "phase_titles": {
+      "LEGACY": "Legacy",
+      "PHASE_0": "Phase 0",
+      "PHASE_1": "Phase 1",
+      "PHASE_2": "Phase 2",
+      "PHASE_3": "Phase 3",
+      "PHASE_4": "Phase 4",
+      "PHASE_5": "Phase 5"
+    },
+    "phases": [
+      {
+        "fields": {
+          "phase_template": 3,
+          "project": 1
+        },
+        "pk": 8
+      },
+      {
+        "fields": {
+          "phase_template": 4,
+          "project": 1
+        },
+        "pk": 7
+      },
+      {
+        "fields": {
+          "phase_template": 5,
+          "project": 1
+        },
+        "pk": 6
+      },
+      {
+        "fields": {
+          "phase_template": 6,
+          "project": 1
+        },
+        "pk": 5
+      },
+      {
+        "fields": {
+          "phase_template": 2,
+          "project": 1
+        },
+        "pk": 4
+      }
+    ],
+    "project": {
+      "fields": {
+        "end_date": "2024-02-07",
+        "name": "Project Name",
+        "organization": 1,
+        "start_date": "2022-02-06",
+        "status": "INPROGRESS"
+      },
+      "pk": 1
+    },
+    "project_tags": [],
+    "roles_with_users": [
+      {
+        "fields": {
+          "name": "Assistant",
+          "project": 1,
+          "user": 2
+        },
+        "pk": 6
+      },
+      {
+        "fields": {
+          "name": "Owner",
+          "project": 1,
+          "user": 2
+        },
+        "pk": 7
+      }
+    ],
+    "status_updates": [],
+    "user_is_project_member": true,
+    "user_is_project_owner": true,
+    "users": [
+      {
+        "fields": {
+          "is_staff": true,
+          "name": "UserName"
+        },
+        "pk": 2
+      }
+    ]
+  }
+}
