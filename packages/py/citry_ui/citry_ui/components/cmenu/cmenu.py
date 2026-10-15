@@ -1229,14 +1229,20 @@ class CMenu(LibraryComponent):
           const primaryTransactions = new Set();
           let refreshNativeDisabledObserver = () => {};
           const disabledElement = controllerOptions.disabledElement ?? trigger;
-          // A kept menu's trigger may still carry the `disabled` this component
-          // set for the previous render. That one is not the author's, so a kept
-          // menu counts a disabled trigger as author-set only if the previous run
-          // did; otherwise re-enabling on the server would leave it disabled.
-          const previousAuthorDisabled = surface.__citryUiMenuRuntime?.authorDirectDisabled;
+          // The trigger's `disabled` as the author's markup or page code left it.
+          // The previous run's cleanup put that value back before Vue applied
+          // this render, so a `disabled` the component set for an earlier render
+          // is never read here as the author's.
+          let authorTriggerDisabled = trigger.disabled;
+          // The last `disabled` this run wrote, so the cleanup can tell whether
+          // anything else changed the trigger since.
+          let writtenTriggerDisabled = null;
+          // While the server disables the Menu, a disabled trigger may only be
+          // the server value the author forwards through `activator_disabled`,
+          // so it does not count as the author's own disable.
           let authorDirectDisabled = externalActivation || controllerOptions.ownsTriggerDisabled
             ? false
-            : trigger.disabled && !data.disabled && previousAuthorDisabled !== false;
+            : authorTriggerDisabled && !data.disabled;
           let committedEffectiveDisabled = externalActivation
             ? Boolean(controllerOptions.ownerDisabled?.())
             : trigger.matches(":disabled");
@@ -1636,6 +1642,7 @@ class CMenu(LibraryComponent):
             if (trigger.disabled !== desiredDisabled) {
               trigger.disabled = desiredDisabled;
             }
+            writtenTriggerDisabled = desiredDisabled;
           };
           const focusFallback = () => {
             const preferred = controllerOptions.focusReturnTarget?.()
@@ -2830,7 +2837,10 @@ class CMenu(LibraryComponent):
               records.some((record) => record.type === "attributes" && record.target === trigger)
               && trigger.disabled !== (configuration.disabled || authorDirectDisabled)
             ) {
+              // Page code changed the trigger's `disabled`; that is now the
+              // author's value, for this run and for the cleanup to put back.
               authorDirectDisabled = trigger.disabled;
+              authorTriggerDisabled = trigger.disabled;
             }
             updateTrigger();
             const effectiveDisabled = effectiveOwnerDisabled();
@@ -2959,8 +2969,22 @@ class CMenu(LibraryComponent):
             // applied the next generation's server-disabled attribute before
             // this cleanup runs.
             runtimeState.effectiveDisabled = committedEffectiveDisabled;
-            runtimeState.authorDirectDisabled = authorDirectDisabled;
             unregisterNativeDisabled();
+            // Put back the author's `disabled` before Vue applies the next render.
+            // Vue writes the attribute only when the author's binding changes, so
+            // without this a value the component set would outlive the render
+            // and the next run would read it as the author's. Leave the trigger
+            // alone when something other than this run changed it since its last
+            // write, because that value is newer than anything recorded here.
+            if (
+              !externalActivation
+              && !controllerOptions.ownsTriggerDisabled
+              && writtenTriggerDisabled !== null
+              && trigger.disabled === writtenTriggerDisabled
+              && trigger.disabled !== authorTriggerDisabled
+            ) {
+              trigger.disabled = authorTriggerDisabled;
+            }
             structureObserver.disconnect();
             host.removeEventListener("click", onClick, true);
             host.removeEventListener("keydown", onKeydown, true);

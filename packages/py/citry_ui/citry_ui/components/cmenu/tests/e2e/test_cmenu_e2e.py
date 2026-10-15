@@ -2241,3 +2241,170 @@ def test_update_during_close_keeps_the_close_animation_and_reports_one_close(pag
         {"open": True, "reason": "trigger"},
         {"open": False, "reason": "escape"},
     ]
+
+
+def _author_disabled_page(activator: str, *, start_disabled: bool) -> tuple[Citry, str]:
+    """Return a page whose server events change the Menu's and the author's trigger `disabled`."""
+    app = Citry(secret="citry-ui-menu-author-disabled", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(ComponentLibrary("citry-ui-menu-author-disabled", _MENU_COMPONENTS))
+    # The three ways an author can write the activator's `disabled`: not at
+    # all, bound to server data, or as a literal attribute that never changes.
+    activator_disabled = {
+        "none": "",
+        "bound": 'c-disabled="author_disabled"',
+        "literal": "disabled",
+    }[activator]
+
+    class AuthorDisabledMenu(Component):
+        citry = app
+
+        class Kwargs:
+            menu_disabled: bool = start_disabled
+            author_disabled: bool = False
+
+        class State(Kwargs):
+            pass
+
+        class Slots:
+            pass
+
+        class Events:
+            def toggle_menu(self, state):
+                state.menu_disabled = not state.menu_disabled
+                return AuthorDisabledMenu(menu_disabled=state.menu_disabled, author_disabled=state.author_disabled)
+
+            def toggle_author(self, state):
+                state.author_disabled = not state.author_disabled
+                return AuthorDisabledMenu(menu_disabled=state.menu_disabled, author_disabled=state.author_disabled)
+
+            def toggle_both(self, state):
+                state.menu_disabled = not state.menu_disabled
+                state.author_disabled = not state.author_disabled
+                return AuthorDisabledMenu(menu_disabled=state.menu_disabled, author_disabled=state.author_disabled)
+
+        template = (
+            """
+          <section>
+            <button
+              class="toggle-menu"
+              type="button"
+              @c-click="toggle_menu"
+            >Toggle Menu disabled</button>
+            <button
+              class="toggle-author"
+              type="button"
+              @c-click="toggle_author"
+            >Toggle author disabled</button>
+            <button
+              class="toggle-both"
+              type="button"
+              @c-click="toggle_both"
+            >Toggle both</button>
+            <c-CMenu
+              #c-key="'author-disabled-menu'"
+              id="author-disabled-menu"
+              c-disabled="menu_disabled"
+            >
+              <c-fill
+                name="activator"
+                data="{ activator_attrs }"
+              >
+                <button
+                  type="button"
+                  __ACTIVATOR_DISABLED__
+                  c-bind="activator_attrs"
+                >Author disabled trigger</button>
+              </c-fill>
+              <c-fill name="default">
+                <c-CMenuItem value="first">First command</c-CMenuItem>
+              </c-fill>
+            </c-CMenu>
+          </section>
+        """
+        ).replace("__ACTIVATOR_DISABLED__", activator_disabled)
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, bool]:
+            del slots
+            return {"menu_disabled": kwargs.menu_disabled, "author_disabled": kwargs.author_disabled}
+
+    class Page(Component):
+        citry = app
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <c-css />
+            </head>
+            <body>
+              <c-author-disabled-menu />
+              <c-js />
+            </body>
+          </html>
+        """
+
+    return app, str(Page())
+
+
+@pytest.mark.parametrize(
+    ("activator", "menu_disabled", "steps", "expected"),
+    [
+        # The Menu alone disables its trigger, then enables it again.
+        pytest.param("none", False, ["toggle_menu", "toggle_menu"], [False, True, False], id="menu-re-enable"),
+        # The author's own binding disables and re-enables the trigger.
+        pytest.param("bound", False, ["toggle_author", "toggle_author"], [False, True, False], id="author-binding"),
+        # The author's literal `disabled` outlasts the Menu's disable and re-enable.
+        pytest.param("literal", False, ["toggle_menu", "toggle_menu"], [True, True, True], id="literal-after-toggle"),
+        # The same holds when the Menu starts disabled and the server enables it.
+        pytest.param("literal", True, ["toggle_menu", "toggle_author"], [True, True, True], id="literal-from-start"),
+        # One render disables both; the author's disable outlasts the Menu's.
+        pytest.param(
+            "bound",
+            False,
+            ["toggle_both", "toggle_menu", "toggle_author"],
+            [False, True, True, False],
+            id="author-and-menu-together",
+        ),
+    ],
+)
+def test_server_rerender_keeps_the_authors_trigger_disabled(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    send_event: Any,
+    settle_timers: Any,
+    activator: str,
+    menu_disabled: bool,
+    steps: list[str],
+    expected: list[bool],
+) -> None:
+    """The trigger is disabled exactly when the Menu or the author disables it, across server re-renders."""
+    app, html = _author_disabled_page(activator, start_disabled=menu_disabled)
+    base = serve_citry_ui_live(app, html)
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(base + "/")
+    wait_for_citry_ready()
+    page.wait_for_function(
+        "document.querySelector('#author-disabled-menu')?.hasAttribute('data-citry-menu-initialized')"
+    )
+    trigger = page.get_by_role("button", name="Author disabled trigger")
+
+    def disabled_after_settle() -> bool:
+        # The Menu writes the trigger's `disabled` from its reconcile, which
+        # may run on a zero-delay timer after the re-render.
+        settle_timers()
+        return bool(trigger.evaluate("element => element.disabled"))
+
+    observed = [disabled_after_settle()]
+    for step in steps:
+        selector = "." + step.replace("_", "-")
+        # Click through the DOM: a disabled trigger does not block these buttons,
+        # but a Playwright click would wait for actionability on overlays.
+        send_event(
+            lambda selector=selector: page.locator(selector).evaluate("element => element.click()"), handler=step
+        )
+        observed.append(disabled_after_settle())
+    assert observed == expected
+    assert errors == []
