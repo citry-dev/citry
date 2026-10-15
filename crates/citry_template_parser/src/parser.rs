@@ -1645,6 +1645,7 @@ fn validate_node(
     validate_fill_placement(node, tag_stack, context)?;
     validate_client_props_placement(node, context)?;
     validate_component_tag_vue_directives(node, context)?;
+    validate_vue_slot_template_in_component(node, tag_stack, context)?;
     validate_slot_tag_vue_directives(node, context)?;
     validate_attributes_present(node, context)?;
     validate_meta_attr_placement(node, context)?;
@@ -1990,6 +1991,113 @@ fn slot_tag_directive_hint(directive: &str) -> &'static str {
             "Vue slot props are not supported. Pass Python slot data as a plain attribute ('item=\"text\"') or a 'c-' attribute ('c-item=\"expr\"')."
         }
         _ => "Put the directive on an element around the slot or inside its fallback content.",
+    }
+}
+
+/// Reject a Vue slot `<template>` (`#name`, `v-slot`, `v-slot:name`) in the
+/// body of a Citry component tag.
+///
+/// A Citry component fills its slots from `<c-fill>`, so the `<template>`
+/// would land in the default slot: a page without Vue shows nothing, and a
+/// page with Vue shows its content in the default slot, while the named slot
+/// keeps its fallback. The template fails to load instead, with the
+/// `<c-fill>` to write.
+///
+/// The check looks through `<c-if>`, `<c-for>`, and their branches, because
+/// they leave the `<template>` directly in the component's body. It covers
+/// every Citry component tag, including `<c-component>`. It skips
+/// `<c-element>`, which renders a plain HTML element that may be a Vue
+/// component registered by a plugin. It also skips a `<template>` whose
+/// nearest tag is anything else, or that sits at the root of a template, a
+/// `<c-fill>`, or a `<c-slot>` fallback, because that content can end up
+/// inside a Vue component that the parser cannot see.
+fn validate_vue_slot_template_in_component(
+    node: &Node,
+    tag_stack: &[TagStackEntry],
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    if !node.tag_name().eq_ignore_ascii_case("template") {
+        return Ok(());
+    }
+    let Some((attr, argument)) = node.attrs().iter().find_map(|attr| {
+        // `#c-*` is Citry metadata, never a slot name.
+        if attr.kind == HtmlAttrKind::Meta {
+            return None;
+        }
+        vue_slot_argument(attr.key.content.as_str()).map(|argument| (attr, argument))
+    }) else {
+        return Ok(());
+    };
+    // The nearest tag that is not control flow decides what the `<template>`
+    // fills; control flow renders its content in place.
+    let Some(parent) = tag_stack
+        .iter()
+        .rev()
+        .map(|entry| entry.start_tag.name.content.as_str())
+        .find(|tag| !CONTROL_FLOW_TAGS.contains(tag))
+    else {
+        return Ok(());
+    };
+    if !is_component_boundary_tag(parent) {
+        return Ok(());
+    }
+    let name = attr.key.content.as_str();
+    let template_tag = node.tag_name();
+    // A bracketed argument is a Vue expression; Citry names a slot from
+    // Python with `c-name`.
+    let fill = match argument {
+        Some(argument) if argument.starts_with('[') => {
+            "'<c-fill c-name=\"...\">' with the slot name as a Python expression".to_string()
+        }
+        Some(argument) if !argument.is_empty() => {
+            // Vue slot names take no modifiers, so a `.` ends the name.
+            let slot = &argument[..argument.find('.').unwrap_or(argument.len())];
+            format!("'<c-fill name=\"{slot}\">'")
+        }
+        _ => "'<c-fill name=\"default\">'".to_string(),
+    };
+    // Vue slot props (`#item="{ row }"`) map to the fill's `data` variable.
+    let data_hint = if attr
+        .inner_value
+        .as_ref()
+        .is_some_and(|value| !value.content.trim().is_empty())
+    {
+        " Read the slot's data with the fill's 'data=\"...\"' attribute."
+    } else {
+        ""
+    };
+    Err(context.error_from_token(
+        &attr.token,
+        format!(
+            "Vue slot syntax '<{template_tag} {name}>' does not fill a slot of <{parent}>; use {fill} instead.{data_hint}"
+        ),
+    ))
+}
+
+/// The argument of a Vue slot attribute: `Some(Some("title"))` for `#title`
+/// or `v-slot:title`, `Some(None)` for `v-slot` and `v-slot.mod`, and `None`
+/// for any other attribute. The `c-` form (`c-v-slot:title`) counts too,
+/// because it names the same directive with a Python-computed value. Any
+/// letter case of `v-slot` counts, because the HTML parser lowercases
+/// attribute names and every spelling is a mistake inside a component tag.
+fn vue_slot_argument(name: &str) -> Option<Option<&str>> {
+    let logical_name = name.strip_prefix("c-").unwrap_or(name);
+    if let Some(argument) = logical_name.strip_prefix('#') {
+        // `#c-*` is Citry metadata.
+        return (!argument.starts_with("c-")).then_some(Some(argument));
+    }
+    let prefix = logical_name.get(..6)?;
+    if !prefix.eq_ignore_ascii_case("v-slot") {
+        return None;
+    }
+    let rest = &logical_name[6..];
+    if let Some(argument) = rest.strip_prefix(':') {
+        Some(Some(argument))
+    } else if rest.is_empty() || rest.starts_with('.') {
+        Some(None)
+    } else {
+        // `v-slots` or `v-slotted` is another (custom) directive.
+        None
     }
 }
 

@@ -177,6 +177,13 @@ binding on an element inside the tag.
 `<c-slot>` accepts no Vue syntax either; see
 [`v-if` around a slot](/vue/slots/#v-if-around-a-slot).
 
+### Vue slot syntax { #vue-slot-syntax }
+
+`<c-Panel><template #title>...</template></c-Panel>` fails when the
+template loads. Fill a Citry component's slot with
+`<c-fill name="title">`. See
+[`<template #name>` slots](/vue/slots/#vue-slot-syntax).
+
 ### Vue code in `c-bind`
 
 Rendering the template raises `citry.VueCodeError`, and the error names
