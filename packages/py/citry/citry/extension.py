@@ -31,7 +31,7 @@ serialize hooks, plus the ``emit`` mechanism for extension-owned custom hooks
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from importlib import import_module
@@ -63,7 +63,7 @@ from citry.util.exception import set_component_error_message
 from citry.util.misc import snake_to_pascal
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Iterator
 
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
@@ -939,8 +939,8 @@ class Extension:
 
         Raises:
             TypeError: Citry raises it when the hook returns a value that
-                is not a ``dict`` or ``None``, before any later extension
-                runs. The message names the extension.
+                is not a mapping, such as a ``dict``, or ``None``, before
+                any later extension runs. The message names the extension.
             VueCodeError: Citry raises [`VueCodeError`][citry.VueCodeError]
                 when the hook adds an attribute name that Vue would read as
                 code (one starting with ``v-``, ``:``, ``.``, ``^``, ``@``,
@@ -1080,8 +1080,9 @@ class Extension:
 
         Raises:
             TypeError: Citry raises it when the hook returns a value that
-                is not a ``list`` or ``None``, before any later extension
-                runs. The message names the extension and the component.
+                is not a sequence, such as a ``list``, or ``None``, before
+                any later extension runs. A ``str`` is not accepted. The
+                message names the extension and the component.
 
         """
 
@@ -1098,8 +1099,9 @@ class Extension:
 
         Raises:
             TypeError: Citry raises it when the hook returns a value that
-                is not a ``list`` or ``None``, before any later extension
-                runs. The message names the extension and the component.
+                is not a sequence, such as a ``list``, or ``None``, before
+                any later extension runs. A ``str`` is not accepted. The
+                message names the extension and the component.
 
         """
 
@@ -1213,7 +1215,7 @@ _COMPONENT_CONFIG_API_OWNERS = {
 
 
 # How a render hook's bad return ends its error message. A render hook
-# hands content back to the page, so the fix lists what the page accepts.
+# hands content back to the page, so the message lists what the page accepts.
 _PAGE_CONTENT_HINT = (
     "which Citry cannot put on the page. Return Markup for HTML, a str for text, a CitryRender, "
     "or None to keep the output."
@@ -1240,13 +1242,67 @@ def _is_page_content(value: object) -> bool:
     Whether a render hook's return is content Citry can put on the page.
 
     That is a ``CitryRender``, a ``str`` (text), or an object with
-    ``__html__`` such as [`Markup`][citry.Markup] (HTML), the values a
-    ``{{ ... }}`` expression would insert.
+    ``__html__`` such as [`Markup`][citry.Markup] (HTML), the text-or-HTML
+    values a ``{{ ... }}`` expression inserts; other types are rejected, not
+    turned into text.
     """
     # Imported lazily: loading citry_render loads this module first.
     from citry.citry_render import CitryRender  # noqa: PLC0415
 
     return isinstance(value, (CitryRender, str)) or getattr_static(value, "__html__", None) is not None
+
+
+# What a value normalizer below returns for a value the hook may not return.
+# None cannot mark it, because None already means "keep the current value".
+_REJECTED: Any = object()
+
+
+def _as_str(value: object) -> Any:
+    """Accept a ``str`` hook return (Markup included) as it is."""
+    return value if isinstance(value, str) else _REJECTED
+
+
+def _as_node_list(value: object) -> Any:
+    """
+    Accept a node-list hook return: a ``list``, or any other sequence copied into one.
+
+    Callers and later extensions change the list in place, so a tuple
+    becomes a list before they see it. A ``str`` is a sequence of characters,
+    not nodes, so it is rejected.
+    """
+    if isinstance(value, list):
+        return value
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return list(value)
+    return _REJECTED
+
+
+def _as_attrs_dict(value: object) -> Any:
+    """
+    Accept an attributes hook return: a ``dict``, or any other mapping copied into one.
+
+    Later extensions and the attribute formatter change the dict in place,
+    so a read-only mapping becomes a dict before they see it.
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, Mapping):
+        return dict(value)
+    return _REJECTED
+
+
+def _as_list_of_items(value: object) -> Any:
+    """
+    Accept a list hook return: a ``list``, or any other iterable copied into one.
+
+    A ``str`` or a mapping iterates as characters or keys, never as the
+    items the caller wants, so both are rejected.
+    """
+    if isinstance(value, list):
+        return value
+    if isinstance(value, Iterable) and not isinstance(value, (str, bytes, bytearray, Mapping)):
+        return list(value)
+    return _REJECTED
 
 
 def _reject_vue_code_from_attrs_hook(before: Mapping[str, Any], after: Mapping[str, Any], *, tag_name: str) -> None:
@@ -1766,19 +1822,21 @@ class ExtensionManager:
         custom hook for others to implement.
 
         Examples:
-            Most named hooks delegate here. ``on_component_data`` notifies every
-            extension that defines it (``"none"``)::
+            ``on_render_context_merge`` notifies every extension that
+            defines it (``"none"``)::
 
-                manager.emit("on_component_data", ctx)
+                manager.emit("on_render_context_merge", ctx)
 
-            ``on_template_loaded`` threads ``ctx.content`` through the extensions
-            (``"map"``) and returns the final string::
+            A custom hook can thread ``ctx.value`` through the extensions
+            (``"map"``) and return the final value. ``emit`` does not check
+            the type of each return, so the code that reads the result
+            should check it::
 
                 manager.emit(
-                    "on_template_loaded",
+                    "on_my_value",
                     ctx,
                     result="map",
-                    field="content",
+                    field="value",
                 )
 
             A custom hook can let an extension short-circuit (``"first"`` returns
@@ -1816,24 +1874,27 @@ class ExtensionManager:
         ctx: Any,
         *,
         field: str,
-        expected: type,
+        normalize: Callable[[object], Any],
         target: str,
         hint: str,
     ) -> Any:
         """
         Thread ``ctx.<field>`` through hook ``name`` like ``emit(result="map")``, checking each return.
 
-        A return that is not ``None`` and not an ``expected`` instance raises
-        ``TypeError`` before the next extension runs, so the error names the
-        extension that returned it rather than whichever code read it next.
+        ``normalize`` turns each return that is not ``None`` into the value
+        the next extension receives, or returns ``_REJECTED``. A rejected
+        return raises ``TypeError`` before the next extension runs, so the
+        error names the extension that returned it rather than whichever code
+        read it next.
         """
         for extension in self._extensions_with_hook(name):
             out = getattr(extension, name)(ctx)
             if out is None:
                 continue
-            if not isinstance(out, expected):
+            value = normalize(out)
+            if value is _REJECTED:
                 raise _hook_return_error(name, extension, out, target, hint)
-            ctx = replace(ctx, **{field: out})
+            ctx = replace(ctx, **{field: value})
         return getattr(ctx, field)
 
     # ----- Per-component config classes -----
@@ -2148,9 +2209,9 @@ class ExtensionManager:
                     if not _is_page_content(out):
                         from citry.component_render import _component_path  # noqa: PLC0415
 
-                        component_name = type(component).__name__
+                        target = f"component {type(component).__name__}"
                         bad_return = _hook_return_error(
-                            "on_component_rendered", extension, out, component_name, _PAGE_CONTENT_HINT
+                            "on_component_rendered", extension, out, target, _PAGE_CONTENT_HINT
                         )
                         set_component_error_message(bad_return, _component_path(component))
                         raise bad_return
@@ -2265,11 +2326,12 @@ class ExtensionManager:
             # Later extensions and the attribute formatter read and change a
             # dict, so a different value would fail there without naming the
             # extension that returned it.
-            if not isinstance(out, dict):
-                hint = "which is not a dict. Return the new attributes as a dict, or None to keep them."
+            new_attrs = _as_attrs_dict(out)
+            if new_attrs is _REJECTED:
+                hint = "which is not a mapping. Return the new attributes as a dict, or None to keep them."
                 target = f"<{tag_name}> in {type(component).__name__}"
                 raise _hook_return_error("on_attrs_resolved", extension, out, target, hint)
-            ctx = replace(ctx, attrs=out)
+            ctx = replace(ctx, attrs=new_attrs)
         _reject_vue_code_from_attrs_hook(before, ctx.attrs, tag_name=tag_name)
         if hidden:
             restore_template_empty_values(ctx.attrs, hidden)
@@ -2297,7 +2359,7 @@ class ExtensionManager:
                 template_kind=template_kind,
             ),
             field="content",
-            expected=str,
+            normalize=_as_str,
             target=f"the template of {component_class.__name__}",
             hint="which is not a str. Return the new template as a str, or None to keep it.",
         )
@@ -2455,11 +2517,12 @@ class ExtensionManager:
             if result is not None:
                 # The claim checks below walk the returned list, and would
                 # fail on another value without naming this extension.
-                if not isinstance(result, list):
-                    hint = "which is not a list. Return the new node list, or None to keep it."
+                new_nodes = _as_node_list(result)
+                if new_nodes is _REJECTED:
+                    hint = "which is not a sequence of nodes. Return the new nodes as a list, or None to keep them."
                     target = f"a compiled template of {component_class.__name__}"
                     raise _hook_return_error("on_template_foreign_compiled", extension, result, target, hint)
-                nodes = result
+                nodes = new_nodes
             other_after = tuple(claim for claim in claims_in(nodes) if claim.provider != extension.name)
             if other_after != other_before:
                 changed = sorted({claim.claim_id for claim in (*other_before, *other_after)})
@@ -2533,9 +2596,9 @@ class ExtensionManager:
                 template_kind=template_kind,
             ),
             field="nodes",
-            expected=list,
+            normalize=_as_node_list,
             target=f"a compiled template of {component_class.__name__}",
-            hint="which is not a list. Return the new node list, or None to keep it.",
+            hint="which is not a sequence of nodes. Return the new nodes as a list, or None to keep them.",
         )
 
     def on_template_reset(self, component_class: type[Component]) -> None:
@@ -2552,7 +2615,7 @@ class ExtensionManager:
             "on_js_loaded",
             OnJsLoadedContext(citry=self.citry, component_class=component_class, content=content),
             field="content",
-            expected=str,
+            normalize=_as_str,
             target=f"the JS of {component_class.__name__}",
             hint="which is not a str. Return the new JS as a str, or None to keep it.",
         )
@@ -2562,7 +2625,7 @@ class ExtensionManager:
             "on_css_loaded",
             OnCssLoadedContext(citry=self.citry, component_class=component_class, content=content),
             field="content",
-            expected=str,
+            normalize=_as_str,
             target=f"the CSS of {component_class.__name__}",
             hint="which is not a str. Return the new CSS as a str, or None to keep it.",
         )

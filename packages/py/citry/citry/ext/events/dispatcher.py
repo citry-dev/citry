@@ -86,6 +86,7 @@ from citry.ext.events.tokens import (
     mint_state_token,
     verify_state_token,
 )
+from citry.extension import _as_list_of_items
 from citry.util.logger import logger
 from citry.util.routing import RouteHeaders, RouteResponse, call_maybe_sync
 
@@ -993,9 +994,18 @@ class EventsDispatcher:
                 events=plan.events,
                 actions=encoded,
             )
-            final_actions = ctx.citry.extensions.emit("on_event_result", result_ctx, result="map", field="actions")
-            if not isinstance(final_actions, list):
-                final_actions = list(final_actions)
+            # Each extension's return is checked before the next one runs, so
+            # a value that is not a list of actions is reported against the
+            # extension that returned it. A tuple or other iterable becomes a
+            # list here.
+            final_actions = ctx.citry.extensions._thread_checked(
+                "on_event_result",
+                result_ctx,
+                field="actions",
+                normalize=_as_list_of_items,
+                target=f"event handler {plan.handler.name!r} of {plan.comp_cls.__name__}",
+                hint="which is not a list. Return the new actions as a list, or None to keep them.",
+            )
             try:
                 final_actions = self._validate_hook_actions(final_actions, handler=plan.handler.name)
             except ProtocolValueError:

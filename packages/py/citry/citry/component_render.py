@@ -1646,25 +1646,8 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
         raise out_error
     if new_render is None:
         return render
-    if not isinstance(new_render, CitryRender):
-        # A returned plain str is text and Markup is HTML, the same rule as
-        # on_render, so user input in the hook's string cannot add a script.
-        replacement = _text_or_html_part(new_render, _ON_COMPONENT_RENDERED_TEXT_SOURCE)
-        if replacement is None:
-            msg = (
-                f"on_component_rendered for {type(component).__name__} returned a value of type "
-                f"{type(new_render).__name__}, which Citry cannot put on the page. Return Markup for "
-                "HTML, a str for text, a CitryRender, or None to keep the output."
-            )
-            err = TypeError(msg)
-            set_component_error_message(err, _component_path(component))
-            raise err
-        return CitryRender(
-            parts=[replacement],
-            context=render.context,
-            is_component_root=render.is_component_root,
-            is_transparent_root=render.frame.is_transparent_root,
-        )
+    # The manager already turned a returned str or Markup into a render in
+    # this context, and rejected any other type, naming the extension.
     if isinstance(new_render, CitryRender) and new_render is not render:
         from citry.citry_render import RenderDecoration  # noqa: PLC0415
 

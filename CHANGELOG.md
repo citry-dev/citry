@@ -216,11 +216,13 @@ walks through every step.
   `str(result)` with extra HTML no longer writes the component's
   `data-cid-*` attribute twice on one tag.
 - An extension hook that returns a value of the wrong type, such as an
-  `on_component_rendered()` that returns a number or an `on_serialize()`
-  that returns something other than a `str`, now raises `TypeError` that
-  names the hook and the extension, before the next extension runs.
-  Before, the error blamed the next extension or appeared later without
-  naming either, and `serialize()` returned the value `on_serialize()` gave.
+  `on_component_rendered()` that returns a number, an `on_serialize()`
+  that returns something other than a `str`, or an `on_event_result()`
+  that returns something other than a list of actions, now raises a
+  `TypeError` that names the hook and the extension, before the next
+  extension runs. Before, the error blamed the next extension or appeared
+  later without naming the extension, and `serialize()` returned whatever
+  `on_serialize()` gave.
 - An attribute that an `on_dependencies()` hook adds to a script or
   stylesheet in one render no longer appears in later renders of the same
   component.

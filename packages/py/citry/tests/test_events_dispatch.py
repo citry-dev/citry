@@ -1348,6 +1348,75 @@ class TestPipelineOrder:
         assert observed == [[{"action": "data", "value": {"count": 1}}]]
         assert [action["action"] for action in item["actions"]] == ["state", "data"]
 
+    @pytest.mark.parametrize("value", [5, "data", {"action": "data", "value": 1}])
+    def test_bad_result_hook_return_names_the_extension(self, value, caplog):
+        # The check runs before the next extension, so the error names the
+        # extension that returned the value, and the next one never runs.
+        calls = []
+
+        class Broken(Extension):
+            name = "broken"
+
+            def on_event_result(self, ctx):
+                return value
+
+        class Reader(Extension):
+            name = "reader"
+
+            def on_event_result(self, ctx):
+                calls.append(ctx.actions)
+
+        c = _citry(extensions=[Broken, Reader])
+
+        class Endpoint(Component):
+            citry = c
+            template = "<div>e</div>"
+
+            class Events:
+                def read(self):
+                    return {"value": 1}
+
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            [item] = _dispatch(c, {"componentClassId": Endpoint.class_id, "handlerName": "read"})["results"]
+        assert item["error"]["code"] == "handler_error"
+        # The browser gets the generic message; the server log names the hook.
+        expected = (
+            f"on_event_result of extension 'broken' returned a value of type {type(value).__name__} "
+            "for event handler 'read' of Endpoint"
+        )
+        assert any(expected in str(record.exc_info[1]) for record in caplog.records if record.exc_info)
+        assert calls == []
+
+    @pytest.mark.parametrize("kind", ["tuple", "generator"])
+    def test_result_hook_iterable_reaches_the_next_extension_as_a_list(self, kind):
+        received = []
+
+        class First(Extension):
+            name = "first"
+
+            def on_event_result(self, ctx):
+                return tuple(ctx.actions) if kind == "tuple" else (action for action in ctx.actions)
+
+        class Reader(Extension):
+            name = "reader"
+
+            def on_event_result(self, ctx):
+                received.append(ctx.actions)
+
+        c = _citry(extensions=[First, Reader])
+
+        class Endpoint(Component):
+            citry = c
+            template = "<div>e</div>"
+
+            class Events:
+                def read(self):
+                    return {"value": 1}
+
+        [item] = _dispatch(c, {"componentClassId": Endpoint.class_id, "handlerName": "read"})["results"]
+        assert item["actions"] == [{"action": "data", "value": {"value": 1}}]
+        assert received == [[{"action": "data", "value": {"value": 1}}]]
+
     def test_result_hook_cannot_inject_an_unadvertised_action(self):
         class Injector(Extension):
             name = "injector"

@@ -3,8 +3,10 @@
 # ruff: noqa: ANN, D101, D102, D106, ARG002, PLC0415
 
 import time
+from collections import UserDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import field
+from types import MappingProxyType
 
 import pytest
 
@@ -787,7 +789,7 @@ class TestHookReturnedContent:
         # The error names the extension, and the component path says where.
         msg = (
             r"An error occurred while rendering components Page > Replaced:\n"
-            r"on_component_rendered of extension 'replace' returned a value of type int for Replaced"
+            r"on_component_rendered of extension 'replace' returned a value of type int for component Replaced"
         )
         with pytest.raises(TypeError, match=msg):
             str(self._page("component", 42, interactive=interactive, document=document)())
@@ -923,7 +925,7 @@ class TestHookReturnTypeChecks:
             citry = app
             template = "<section><c-slot>fallback</c-slot></section>"
 
-        target = "Holder" if hook == "on_component_rendered" else "slot 'default' of Holder"
+        target = "component Holder" if hook == "on_component_rendered" else "slot 'default' of Holder"
         msg = f"{hook} of extension 'first' returned a value of type int for {target}, which Citry cannot put"
         with pytest.raises(TypeError, match=msg) as info:
             str(Holder())
@@ -950,7 +952,7 @@ class TestHookReturnTypeChecks:
             citry = app
             template = "<p>card</p>"
 
-        with pytest.raises(TypeError, match="extension 'first' returned a value of type object for Card"):
+        with pytest.raises(TypeError, match="extension 'first' returned a value of type object for component Card"):
             str(Card())
         assert calls == []
 
@@ -1053,6 +1055,85 @@ class TestHookReturnTypeChecks:
         msg = "on_template_foreign_compiled of extension 'host' returned a value of type int for a compiled template"
         with pytest.raises(TypeError, match=msg):
             str(Card())
+
+    @pytest.mark.parametrize("hook", ["on_template_compiled", "on_template_foreign_compiled"])
+    def test_node_list_hook_may_return_a_tuple(self, hook):
+        # A tuple of nodes is accepted and copied into a list, which later
+        # code may change in place.
+        received = []
+
+        class Host(Extension):
+            name = "host"
+
+            def on_template_foreign_spans(self, ctx):
+                if hook != "on_template_foreign_compiled":
+                    return None
+                start = ctx.content.encode().find(b"{% value %}")
+                return ForeignSpanSet((ForeignSpan(start, start + len(b"{% value %}")),))
+
+            def on_template_foreign_compiled(self, ctx):
+                from citry.nodes import ForeignNode
+
+                ctx.mark_resolved(*ctx.claims)
+                return tuple("HOST" if isinstance(item, ForeignNode) else item for item in ctx.nodes)
+
+            def on_template_compiled(self, ctx):
+                if hook == "on_template_compiled":
+                    return tuple(ctx.nodes)
+                return None
+
+        class Reader(Extension):
+            name = "reader"
+
+            def on_template_compiled(self, ctx):
+                received.append(ctx.nodes)
+
+        app = _Citry(extensions=[Host, Reader], autodiscover=False)
+
+        class Card(Component):
+            citry = app
+            template = "A{% value %}B" if hook == "on_template_foreign_compiled" else "<p>card</p>"
+
+        html = str(Card())
+        assert "AHOSTB" in html if hook == "on_template_foreign_compiled" else ">card</p>" in html
+        assert received
+        assert all(type(nodes) is list for nodes in received)
+
+    @pytest.mark.parametrize("kind", ["mapping-proxy", "user-dict"])
+    def test_attrs_hook_may_return_any_mapping(self, kind):
+        # A read-only or dict-like mapping is copied into a dict before the
+        # next extension and the attribute formatter change it.
+        received = []
+
+        class AttrsDict(UserDict):
+            pass
+
+        class Replace(Extension):
+            name = "replace"
+
+            def on_attrs_resolved(self, ctx):
+                attrs = {**ctx.attrs, "data-x": "1"}
+                return MappingProxyType(attrs) if kind == "mapping-proxy" else AttrsDict(attrs)
+
+        class Reader(Extension):
+            name = "reader"
+
+            def on_attrs_resolved(self, ctx):
+                received.append(ctx.attrs)
+                ctx.attrs["data-y"] = "2"
+
+        app = _Citry(extensions=[Replace, Reader], autodiscover=False)
+
+        class Card(Component):
+            citry = app
+            template = """
+                <p c-class="'x'">card</p>
+            """
+
+        html = str(Card())
+        assert 'data-x="1"' in html
+        assert 'data-y="2"' in html
+        assert [type(attrs) for attrs in received] == [dict]
 
 
 class TestTemplateHooks:
