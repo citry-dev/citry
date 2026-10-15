@@ -4126,9 +4126,8 @@ def test_native_runtime_debounce_keeps_pending_work_across_reordered_revision(
     assert revision_request.value.post_data_json["calls"][0]["handlerName"] == "advance"
     page.wait_for_function("document.querySelector('#debounce-revision')?.textContent === '1'")
     after_revision_timing = timing_snapshot()
-    # 60 ms of the 120 ms debounce remain. Stop short of that deadline and then
-    # cross it, rather than stepping to 119 and then 120 ms where a fraction of
-    # a millisecond decides whether the timer fires.
+    # 60 ms of the 120 ms debounce remain. Check at 119 ms that nothing was
+    # sent, then cross the deadline.
     fake_clock.run_short_of(60)
     before_deadline_timing = timing_snapshot()
     assert [call["handlerName"] for call in calls] == ["advance"]

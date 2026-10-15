@@ -20,8 +20,9 @@ class CombinedTimingArgs:
 @pytest.mark.parametrize(
     ("binding", "steps", "expected"),
     # Each step is (milliseconds to advance, value to click or None). No click
-    # and no final step lands exactly on a debounce or throttle deadline: a
-    # fraction of a millisecond would decide such a step. In the first case
+    # and no final step lands exactly on a debounce or throttle deadline,
+    # because such a step tests the timer's boundary rule rather than the
+    # ordering of throttle and debounce this test is about. In the first case
     # click 1 opens a 50 ms window that clicks 2 and 3 fall inside and click 4
     # (at 55 ms) falls outside; in the second, click 3 (at 25 ms) is admitted
     # after the 20 ms window and its debounce replaces click 1's.
@@ -124,6 +125,12 @@ def test_combined_control_timing_keeps_rejected_drafts_but_debounces_admitted_ch
     # The admitted change's 50 ms debounce ends at 75 ms; step past it.
     fake_clock.run_for(60)
     wait_for_count(calls, 1)
+    # The one call carries the admitted value, not the rejected draft.
+    assert calls[0]["calls"][0]["stateUpdates"] == {"query": "latest-admitted"}
+    # A debounce the admitted change failed to replace would fire in the same
+    # step, and its request could reach Python just after the first one.
+    page.wait_for_timeout(20)
+    assert len(calls) == 1
 
 
 def test_combined_pending_debounce_survives_an_unchanged_revision(
@@ -175,7 +182,7 @@ def test_combined_pending_debounce_survives_an_unchanged_revision(
     fake_clock.run_for(10)
     page.locator("#advance").click()
     page.wait_for_function("__citryRuntime._apps.values().next().value.revision > 0")
-    # The debounce ends at 50 ms; stop 10 ms past it, not on it.
+    # The debounce ends at 50 ms; cross it rather than stop on it.
     fake_clock.run_for(50)
     wait_for_count(calls, 2)
     assert calls.count("delayed") == 1

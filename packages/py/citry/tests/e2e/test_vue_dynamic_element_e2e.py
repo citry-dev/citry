@@ -107,12 +107,12 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
     page.clock.run_for(5_000)
     assert calls == []
     page.evaluate("globalThis.__citryDocumentHidden=false;document.dispatchEvent(new Event('visibilitychange'))")
-    # DOM/event processing can advance the fake clock by a fractional millisecond
-    # after the visibility handler schedules the interval. Leave a small margin
-    # before asserting that the one-second deadline has not arrived.
-    page.clock.run_for(990)
+    # Showing the page restarts the one-second interval. The paused clock moves
+    # only when the test moves it, so check one millisecond before the deadline
+    # that nothing was sent, then cross it.
+    fake_clock.run_short_of(1_000)
     assert calls == []
-    page.clock.run_for(10)
+    fake_clock.run_past_deadline()
     page.wait_for_function(
         "() => { const app=__citryRuntime._apps.values().next().value; "
         "return !app.mounted.get(app.rootId).component.$loading('poll'); }"
@@ -128,10 +128,12 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
     page.clock.run_for(1)
     assert [call["handlerName"] for call in sent_calls()].count("refresh") == 1
     assert [call for call in sent_calls() if call["handlerName"] == "poll"] == []
-    page.clock.run_for(490)
+    # The refreshed revision restarted the poll, so its deadline is 500 ms
+    # away; check one millisecond before it, then cross it.
+    fake_clock.run_short_of(500)
     assert [call for call in sent_calls() if call["handlerName"] == "poll"] == []
     with page.expect_request(poll_route_pattern):
-        page.clock.run_for(10)
+        fake_clock.run_past_deadline()
     page.wait_for_function(
         "() => { const app=__citryRuntime._apps.values().next().value; "
         "return !app.mounted.get(app.rootId).component.$loading('poll'); }"
@@ -344,9 +346,8 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
     assert authored_request.value.post_data_json["calls"][0]["handlerName"] == "authored"
 
     assert len(calls_for("poll")) == 1
-    # The 500 ms above plus these steps reach the one-second deadline. Stop
-    # short of it with a margin, because landing on it exactly leaves a
-    # fraction of a millisecond to decide whether the poll fires.
+    # The 500 ms above plus these steps reach the one-second deadline. Check
+    # one millisecond before it that no poll went out, then cross it.
     fake_clock.run_short_of(500)
     assert len(calls_for("poll")) == 1
     fake_clock.run_past_deadline()
@@ -362,8 +363,8 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
     page.clock.run_for(2_000)
     assert len(calls_for("poll")) == 2
     page.evaluate("globalThis.__citryDocumentHidden=false;document.dispatchEvent(new Event('visibilitychange'))")
-    # Showing the page restarts the one-second interval; keep a margin on both
-    # sides of that deadline for the same reason as above.
+    # Showing the page restarts the one-second interval; check one millisecond
+    # before it, then cross it.
     fake_clock.run_short_of(1_000)
     assert len(calls_for("poll")) == 2
     fake_clock.run_past_deadline()
@@ -508,9 +509,8 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(
     assert all(lifetime["current"] for mounted in after_remove["mounted"] for lifetime in mounted["lifetimes"])
     poll_count_after_remove = len(poll_routes)
     # poll_b finished at this clock time, so its next poll is one second away.
-    # Stop short of that deadline with a margin, check that nothing was sent,
-    # then cross it; landing exactly on it is decided by a fraction of a
-    # millisecond.
+    # Stop one millisecond short of that deadline, check that nothing was
+    # sent, then cross it.
     fake_clock.run_short_of(1_000)
     page.wait_for_timeout(30)
     assert len(poll_routes) == poll_count_after_remove
@@ -703,8 +703,8 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(
     first.click()
     first.click()
     second.click()
-    # Keep a margin from the 40 ms debounce deadline on both sides; landing on
-    # it exactly is decided by a fraction of a millisecond.
+    # Check one millisecond before the 40 ms debounce deadline that nothing
+    # was sent, then cross it.
     fake_clock.run_short_of(40)
     assert calls == []
     fake_clock.run_past_deadline()
@@ -717,8 +717,8 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(
     # The admitted click's request goes out after the earlier calls finish,
     # so wait for it rather than counting right after the clicks.
     wait_for_count(calls, 3)
-    # Step past the 80 ms throttle window with a margin, so the next click is
-    # admitted however the clock rounds.
+    # Step past the 80 ms throttle window rather than onto its edge, so the
+    # next click checks admission after the window, not the boundary rule.
     page.clock.run_for(90)
     page.locator("#throttled").click()
     wait_for_count(calls, 4)
