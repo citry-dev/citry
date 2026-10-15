@@ -91,16 +91,6 @@ for every directive and modifier.
     and `v-If` as a custom directive named `If`. Names that start with `v-c-`
     or `v-citry-` fail too, because Citry keeps them for its own use.
 
-!!! warning "Citry rejects Vue code from `c-bind`"
-
-    Citry rejects a Vue directive, `:` binding, or `@` listener that comes
-    from `c-bind` or is written with a `c-` prefix, such as `c-v-if`.
-    Rendering the template raises `citry.VueCodeError`, on every page,
-    even one that does not use Vue. Write the directive directly in the
-    template, as in `v-if="open"`.
-    [Security and CSP](/vue/csp/#c-bind-never-carries-vue-code) explains
-    why.
-
 ## Choose `v-for` or `<c-for>`
 
 Use `v-for` and `v-if` for HTML that the browser adds, removes, or repeats
@@ -146,6 +136,16 @@ from Vue, such as `c-title` with `:title`, fails when the template loads:
 Keep only `c-title` when Python decides the value. Keep only `:title` when
 the browser should change it later, and send the starting value with
 [`js_data()`](/vue/component-options/#seed-browser-data-from-python).
+
+!!! warning "Citry rejects Vue code from `c-bind`"
+
+    Citry rejects a Vue directive, `:` binding, or `@` listener that comes
+    from `c-bind` or is written with a `c-` prefix, such as `c-v-if`.
+    Rendering the template raises `citry.VueCodeError`, on every page,
+    even one that does not use Vue. Write the directive directly in the
+    template, as in `v-if="open"`.
+    [Security and CSP](/vue/csp/#c-bind-never-carries-vue-code) explains
+    why.
 
 ## Vue on component tags
 
