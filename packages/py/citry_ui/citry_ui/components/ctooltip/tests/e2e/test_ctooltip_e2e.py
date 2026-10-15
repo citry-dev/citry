@@ -317,9 +317,8 @@ def test_hover_delay_surface_bridge_and_departure_close(page, fake_clock):
     fake_clock.run_past_deadline()
     page.wait_for_function("document.querySelector('#europa-tooltip').matches(':popover-open')")
 
-    # Moving onto the tooltip surface leaves the trigger. Keeping the pointer
-    # on the tooltip itself must keep it open past the whole 120 ms close
-    # delay.
+    # Moving onto the tooltip surface leaves the trigger. A pointer resting on
+    # the tooltip itself must hold it open past the whole 120 ms close delay.
     _europa(page).hover()
     fake_clock.run_for(160)
     assert _europa(page).evaluate("element => element.matches(':popover-open')")
