@@ -11,7 +11,7 @@ inputs:
     channel: server
     entries:
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the host ID and bases dialog title and description IDs.}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets initial open state.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible open state. A server re-render that changes it opens or closes the tour. A re-render that leaves it unchanged keeps the current state.}
       - {id: active, name: active, type: int, default: {kind: literal, value: 0}, effect: Sets the initial zero-based step index.}
       - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: Enables the built-in close action and permitted dismissal.}
       - {id: close-on-escape, name: close_on_escape, type: bool, default: {kind: literal, value: true}, effect: Allows Escape dismissal when dismissible.}

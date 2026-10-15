@@ -754,7 +754,7 @@ class CMultiSelect(LibraryComponent):
           // once, the same way a disabled component closes within one run.
           const sameServerOpen=Boolean(prior)&&prior.serverOpen===data.open;
           let internalOpen=sameServerOpen?Boolean(prior.internalOpen):data.open;
-          let pendingDisabledHandoff=Boolean(prior?.shown)&&sameServerOpen;
+          let pendingDisabledHandoff=Boolean(prior?.shown);
           let logicalOpen=false, highlightedValue=prior?.highlightedValue??null;
           let controlledValue=false, controlledOpen=false, clientValue, clientOpen;
           let onValueChange=null,onOpenChange=null,nativeInvalid=false,active=true,generation=0;

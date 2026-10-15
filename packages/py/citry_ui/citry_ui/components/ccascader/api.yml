@@ -33,7 +33,7 @@ inputs:
       - {id: open, name: open, type: boolean, omitted: Uncontrolled server open state., effect: Controls popup visibility.}
       - {id: disabled, name: disabled, type: boolean, omitted: Uses the server value., effect: Reactively disables interaction and form inputs.}
       - {id: on-value-change, name: onValueChange, type: function, omitted: No component callback runs., effect: Receives selection requests.}
-      - {id: on-open-change, name: onOpenChange, type: function, omitted: No component callback runs., effect: Receives popup requests.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No component callback runs., effect: "Receives popup requests and the close caused by disabling an open popup."}
   - id: ccascader-option-server-inputs
     component: CCascaderOption
     channel: server
@@ -60,7 +60,7 @@ events:
     component: CCascader
     entries:
       - {id: value-change, name: onValueChange, signature: {display: '(value: string[], detail: CCascaderValueChangeDetail) => void', interfaces: [CCascaderValueChangeDetail]}, trigger: An allowed Option is activated., detail: {display: '{value, labels, previousValue, controlled, source, option, sourceEvent}', interfaces: [CCascaderValueChangeDetail]}, behavior: Commits only while uncontrolled.}
-      - {id: open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CCascaderOpenChangeDetail) => void', interfaces: [CCascaderOpenChangeDetail]}, trigger: The popup is requested open or closed., detail: {display: '{open, reason, sourceEvent}', interfaces: [CCascaderOpenChangeDetail]}, behavior: Commits only while uncontrolled.}
+      - {id: open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CCascaderOpenChangeDetail) => void', interfaces: [CCascaderOpenChangeDetail]}, trigger: "The popup is requested open or closed, or disabling closes an open popup.", detail: {display: '{open, reason, sourceEvent}', interfaces: [CCascaderOpenChangeDetail]}, behavior: Commits only while uncontrolled.}
 
 methods: []
 

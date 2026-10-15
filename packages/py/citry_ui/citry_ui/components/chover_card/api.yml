@@ -42,7 +42,7 @@ inputs:
         effect: Controls requested placement and `data-placement`.
       - {id: arrow, name: arrow, type: boolean, omitted: Uses the server input., effect: Reactively shows or hides the decorative arrow.}
       - {id: size, name: size, type: CHoverCardSize, omitted: Uses the server input., effect: Reactively changes card geometry.}
-      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a component callback., effect: "Receives hover, focus, dismissal, peer, press, and external-native visibility requests."}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a component callback., effect: "Receives hover, focus, dismissal, peer, press, and external-native visibility requests, and the close caused by disabling an open card."}
 
 slots:
   - id: chover-card-slots
@@ -66,7 +66,7 @@ events:
       - id: on-open-change
         name: onOpenChange
         signature: {display: '(requestedOpen: boolean, detail: CHoverCardOpenChangeDetail) => void', interfaces: [CHoverCardOpenChangeDetail]}
-        trigger: Hover, focus, pointer departure, blur, Escape, trigger press, a peer HoverCard, or external native visibility requests another state.
+        trigger: Hover, focus, pointer departure, blur, Escape, trigger press, a peer HoverCard, or external native visibility requests another state, or disabling closes an open card.
         detail: {display: '{reason: "hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal" | "disabled", controlled: boolean, forced: boolean, source: EventTarget | null}', interfaces: [CHoverCardOpenChangeDetail]}
         behavior: Uncontrolled requests commit before notification. Controlled requests wait for the owner. Owner commits do not notify.
 

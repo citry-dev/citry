@@ -93,7 +93,7 @@ inputs:
       - {id: load-options, name: loadOptions, type: {display: '(request: CComboboxLoadRequest) => Promise<CComboboxItem[]> | CComboboxItem[]', interfaces: [CComboboxLoadRequest, CComboboxItem]}, omitted: Uses local filtering., effect: 'Loads one complete replacement collection for the committed query. `null` disables remote mode. Replacing or removing the function aborts current work; a valid replacement reloads a qualifying open query.'}
       - {id: on-value-change, name: onValueChange, type: function, omitted: Does not notify a selection callback., effect: Receives user and reset selection requests.}
       - {id: on-input-value-change, name: onInputValueChange, type: function, omitted: Does not notify a query callback., effect: Receives user and reset query requests.}
-      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a visibility callback., effect: Receives user-authored popup requests and query-threshold closure.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a visibility callback., effect: "Receives user-authored popup requests, query-threshold closure, and the close caused by disabling an open popup."}
       - {id: on-load-error, name: onLoadError, type: function, omitted: Does not notify a loading-error callback., effect: Receives current non-abort remote failures after safe error presentation.}
 
 slots:
@@ -123,7 +123,7 @@ events:
       - id: on-open-change
         name: onOpenChange
         signature: {display: '(open: boolean, detail: CComboboxOpenChangeDetail) => void', interfaces: [CComboboxOpenChangeDetail]}
-        trigger: Input, focus, trigger, keyboard, selection, Escape, outside press, blur, reset, or threshold requests different visibility.
+        trigger: Input, focus, trigger, keyboard, selection, Escape, outside press, blur, reset, or threshold requests different visibility, or disabling closes an open popup.
         detail: {display: '{reason: "input" | "focus" | "trigger" | "keyboard" | "selection" | "escape" | "outside" | "blur" | "reset" | "minimum-characters" | "disabled", controlled: boolean, source: EventTarget | null}', interfaces: [CComboboxOpenChangeDetail]}
         behavior: Uncontrolled visibility and ARIA commit before notification. Controlled requests wait for the owner. Owner commits do not notify.
       - id: on-load-error

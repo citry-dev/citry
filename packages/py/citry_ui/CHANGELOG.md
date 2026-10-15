@@ -54,26 +54,28 @@
   markup into a form it cannot use. It now waits for the next change instead
   of rewriting its markup on every timer tick, and logs a single console
   error while the markup stays unusable.
-- An open `CDialog` stays open when a server event re-renders the component
-  that contains it, and calls `onOpenChange(false)` with reason `"native"`
-  when that re-render removes it. Previously it closed in both cases without
-  calling `onOpenChange`.
-- An open `CHoverCard`, `CSelect`, `CMultiSelect`, `CCombobox`,
-  `CCascader`, `CColorPicker`, `CDatePicker`, `CDateRange`, or `CTimePicker`
-  stays open when a server event re-renders the component that contains it.
-  Previously it closed without calling `onOpenChange`.
-- When a server event changes the `open` input you pass to `CDialog`,
-  `CPopover`, `CMenu`, `CHoverCard`, `CSelect`, `CMultiSelect`, `CCombobox`,
-  `CCascader`, or `CColorPicker`, the component now opens or closes to match.
-  Some of these ignored the change, in one or both directions. When the
-  `open` input stays the same, the component keeps its current state.
+- An open `CDialog`, `CAlertDialog`, `CDrawer`, `CTour`, `CHoverCard`,
+  `CSelect`, `CMultiSelect`, `CCombobox`, `CCascader`, `CColorPicker`,
+  `CDatePicker`, `CDateRange`, or `CTimePicker` stays open when a server
+  event re-renders the component that contains it. Previously it closed
+  without calling `onOpenChange`, and a `CDrawer` or `CTour` the user had
+  closed could reopen.
+- When a server event changes the `open` input you pass to `CPopover`,
+  `CMenu`, `CHoverCard`, `CSelect`, or `CMultiSelect`, the component now
+  opens or closes to match; previously it could ignore the change. Across
+  these and `CDialog`, `CAlertDialog`, `CDrawer`, `CTour`, `CCombobox`,
+  `CCascader`, and `CColorPicker`, an unchanged `open` input keeps the
+  component's current state.
+- The `CMenu` trigger and the `CTimePicker` control no longer stay disabled
+  after a server event disables and then re-enables them.
 - `CHoverCard`, `CSelect`, `CMultiSelect`, `CCombobox`, `CCascader`,
   `CColorPicker`, `CDatePicker`, `CDateRange`, and `CTimePicker` now close
   when they are disabled while open, and call `onOpenChange(false)`. Some
   stayed open and others closed without the callback. `CSelect` and
   `CMultiSelect` report reason `"ancestor"`, as they already did when
   disabled from the browser; the others report the new reason `"disabled"`,
-  as `CMenu` does.
+  as `CMenu` does. They report the close even when the same server event
+  also changes `open`.
 
 ## [0.2.2] - 2026-09-11
 

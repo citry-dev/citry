@@ -288,13 +288,14 @@ $component({
       // it, as CMenu does. The owner did not ask for that close, so it is
       // reported once, and only when the popup was showing before this update:
       // on this run's first update that means the previous run left it open.
+      // A render that disables a showing popup closes it because of the
+      // disable, even when it also changes the server's `open` input.
       const wasShowing = reactiveReady ? previousOpen : Boolean(handoff?.open);
-      if (disabled && currentOpen) {
-        currentOpen = false;
-        if (wasShowing) {
-          try { openCallback?.(false, {open:false, reason:'disabled', sourceEvent:null}); }
-          catch (error) { console.error('[citry-ui] CCascader onOpenChange callback failed.', error, root); }
-        }
+      const disableClosesShowing = disabled && wasShowing && (currentOpen || !reactiveReady);
+      if (disabled && currentOpen) currentOpen = false;
+      if (disableClosesShowing) {
+        try { openCallback?.(false, {open:false, reason:'disabled', sourceEvent:null}); }
+        catch (error) { console.error('[citry-ui] CCascader onOpenChange callback failed.', error, root); }
       }
       sync();
       if (reactiveReady && !previousOpen && currentOpen) queueMicrotask(() => focus(itemFor(current) ?? visible()[0]));

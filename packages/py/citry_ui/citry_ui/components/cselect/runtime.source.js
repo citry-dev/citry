@@ -87,7 +87,9 @@ $component({
     // Set when the previous run left the popup showing. If this run cannot
     // reopen it because the re-render disabled the select, the close is
     // reported once, the same way a disabled select closes within one run.
-    let pendingDisabledHandoff = Boolean(prior?.shown) && sameServerOpen;
+    // The disable is what closes it, so this holds even when the same render
+    // also changed the server's `open` input.
+    let pendingDisabledHandoff = Boolean(prior?.shown);
     let logicalOpen = false;
     let highlightedValue = prior?.highlightedValue ?? null;
     let controlledValue = false;

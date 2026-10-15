@@ -63,7 +63,7 @@ inputs:
       - {id: variant, name: variant, type: {display: CDatePickerVariant, interfaces: [CDatePickerVariant]}, omitted: Uses the server input., effect: Controls field presentation.}
       - {id: size, name: size, type: {display: CDatePickerSize, interfaces: [CDatePickerSize]}, omitted: Uses the server input., effect: Controls coordinated sizing.}
       - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic value callback., effect: Receives Calendar clear native and reset value requests.}
-      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic visibility callback., effect: Receives trigger selection dismissal reset and forced-close requests.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic visibility callback., effect: "Receives trigger, selection, dismissal, reset, and forced-close requests, including the close caused by disabling an open popup."}
 
 slots: []
 

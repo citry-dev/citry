@@ -316,10 +316,6 @@ class CDialog(LibraryComponent):
           let suppressStaleControlledOpen = false;
           let pendingControlledReturnValue = "";
           let onOpenChange = null;
-          // True while this run has handed an open dialog to the next callback
-          // run. If no later run takes it over, the dialog closes and
-          // `onOpenChange` receives `false`.
-          let handedOffOpen = false;
           let configuration = {
             dismissible: data.dismissible,
             closeOnEscape: data.closeOnEscape,
@@ -489,16 +485,11 @@ class CDialog(LibraryComponent):
               console.error("[citry-ui] CDialog could not enter modal state.");
             },
             handoffAborted: () => {
+              // No later run kept the dialog, so the page removed it. The owner
+              // removed it, so the close is not reported to `onOpenChange`.
               appliedOpen = false;
               updateActivators(false);
               syncRuntimeDialog(false);
-              // The dialog was open when this run handed it off and no later run kept
-              // it, so it closed; report that to `onOpenChange` the same way a
-              // native close is reported.
-              if (handedOffOpen) {
-                handedOffOpen = false;
-                notify(false, "native", null, "");
-              }
             },
           });
 
@@ -577,18 +568,19 @@ class CDialog(LibraryComponent):
           return () => {
             host.removeEventListener("click", onHostClick);
             dialog[serverOpenKey] = data.open;
-            const wasOpen = appliedOpen;
             // A server revision runs this cleanup and then the callback again on the
             // same dialog, so an open dialog is handed to the next callback run.
             const handedOff = controller.cleanup({ handoff: true });
-            handedOffOpen = handedOff && wasOpen;
             if (handedOff) {
-              // Vue runs this cleanup before an unmount removes the dialog from the
-              // page. By the next microtask the removal is done, so a disconnected
-              // dialog releases the scroll lock now rather than when the handoff expires.
-              queueMicrotask(() => {
+              // The runtime runs this cleanup before Vue patches the page, and Vue
+              // patches in a microtask queued after this one. By the next task the
+              // patch is done, so a dialog the page removed is disconnected and
+              // releases the scroll lock, modal state, and focus now rather than when
+              // the handoff expires. A kept dialog's next run has already taken the
+              // handoff by then, so this finds nothing to abort.
+              setTimeout(() => {
                 if (!dialog.isConnected) controllerRuntime.abortHandoff(dialog);
-              });
+              }, 0);
             }
             appliedOpen = false;
             updateActivators(false);
@@ -596,9 +588,6 @@ class CDialog(LibraryComponent):
             if (!handedOff) {
               host.removeAttribute("data-citry-dialog-initialized");
               host.removeAttribute("data-citry-alert-dialog-initialized");
-              // The controller closed an open dialog without a handoff, so the owner
-              // would otherwise still believe it is open.
-              if (wasOpen) notify(false, "native", null, "");
             }
           };
         },

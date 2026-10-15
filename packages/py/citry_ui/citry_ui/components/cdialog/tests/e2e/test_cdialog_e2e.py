@@ -636,10 +636,10 @@ def _server_owner_page(*, keep_dialog: bool) -> tuple[Citry, str]:
 
 
 @pytest.mark.parametrize("keep_dialog", [True, False], ids=["kept", "removed"])
-def test_server_rerender_keeps_an_open_dialog_or_reports_its_close(
+def test_server_rerender_keeps_an_open_dialog_or_removes_it_silently(
     page, serve_citry_ui_live, wait_for_citry_ready, send_event, wait_for_count, keep_dialog
 ):
-    """A server re-render keeps an open uncontrolled dialog open, or reports the close when it removes it."""
+    """A server re-render keeps an open uncontrolled dialog open, or removes it without calling `onOpenChange`."""
     app, html = _server_owner_page(keep_dialog=keep_dialog)
     page.goto(serve_citry_ui_live(app, html) + "/")
     wait_for_citry_ready()
@@ -666,9 +666,9 @@ def test_server_rerender_keeps_an_open_dialog_or_reports_its_close(
         assert page.evaluate("document.querySelector('dialog').open")
         assert page.evaluate("window.__ownedDialogEvents") == [{"open": True, "reason": "trigger"}]
     else:
-        page.wait_for_function("window.__ownedDialogEvents.length === 2")
         assert page.locator("dialog").count() == 0
-        assert page.evaluate("window.__ownedDialogEvents") == [
-            {"open": True, "reason": "trigger"},
-            {"open": False, "reason": "native"},
-        ]
+        # The owner removed the dialog, so nothing is reported; the page still
+        # gets back its scroll and leaves no modal or inert content behind.
+        page.wait_for_function("!document.querySelector(':modal') && !document.documentElement.style.overflow")
+        assert page.evaluate("document.querySelectorAll('[inert]').length") == 0
+        assert page.evaluate("window.__ownedDialogEvents") == [{"open": True, "reason": "trigger"}]

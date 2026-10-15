@@ -9,7 +9,7 @@ inputs:
     channel: server
     entries:
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Sets native Dialog identity and title, description, and activator relationships.'}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible initial modal state.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible modal state. A server re-render that changes it opens or closes the dialog. A re-render that leaves it unchanged keeps the current state. A valid client `open` input controls later state.}
       - {id: close-on-escape, name: close_on_escape, type: bool, default: {kind: literal, value: true}, effect: Permits Escape and platform cancel requests.}
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CAlertDialogSize]}, default: {kind: literal, value: sm}, effect: Sets bounded decision-surface width.}
       - {id: scroll, name: scroll, type: {display: '"body" | "dialog"', interfaces: [CAlertDialogScroll]}, default: {kind: literal, value: body}, effect: Chooses the overflow owner.}

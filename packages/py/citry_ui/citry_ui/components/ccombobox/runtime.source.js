@@ -1075,8 +1075,9 @@
 
             if (configuration.disabled || configuration.readonly) {
               // On this run's first update, the popup was showing only if the
-              // previous run left it open.
-              const wasShowing = firstRun ? Boolean(handoff?.open) && open : open;
+              // previous run left it open. The disable is what closes it, so
+              // that holds even when the render also changed the server's `open`.
+              const wasShowing = firstRun ? Boolean(handoff?.open) : open;
               abortRequest();
               highlightedValue = null;
               applyOpen(false);

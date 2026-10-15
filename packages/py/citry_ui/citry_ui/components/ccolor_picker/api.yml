@@ -39,7 +39,7 @@ inputs:
       - {id: readonly, name: readonly, type: boolean, omitted: Uses the server value., effect: Reactively prevents mutation.}
       - {id: format, name: format, type: {display: CColorPickerFormat, interfaces: [CColorPickerFormat]}, omitted: Uses the server value., effect: Controls the editable representation.}
       - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic callback runs., effect: Receives valid color requests.}
-      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic callback runs., effect: Receives popup visibility requests.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic callback runs., effect: "Receives popup visibility requests and the close caused by disabling an open popup."}
 
 slots: []
 
@@ -48,7 +48,7 @@ events:
     component: CColorPicker
     entries:
       - {id: value, name: onValueChange, signature: {display: '(value: string, detail: CColorPickerValueChangeDetail) => void', interfaces: [CColorPickerValueChangeDetail]}, trigger: A valid area hue text swatch native or reset request occurs., detail: {display: '{value, previousValue, rgb, hsl, hsv, controlled, source, sourceEvent}', interfaces: [CColorPickerValueChangeDetail]}, behavior: Commits and dispatches native input and change only while uncontrolled.}
-      - {id: open, name: onOpenChange, signature: {display: '(open: boolean, detail: CColorPickerOpenChangeDetail) => void', interfaces: [CColorPickerOpenChangeDetail]}, trigger: The popup requests a visibility change., detail: {display: '{open, reason, sourceEvent}', interfaces: [CColorPickerOpenChangeDetail]}, behavior: Commits only while uncontrolled.}
+      - {id: open, name: onOpenChange, signature: {display: '(open: boolean, detail: CColorPickerOpenChangeDetail) => void', interfaces: [CColorPickerOpenChangeDetail]}, trigger: "The popup requests a visibility change, or disabling closes an open popup.", detail: {display: '{open, reason, sourceEvent}', interfaces: [CColorPickerOpenChangeDetail]}, behavior: Commits only while uncontrolled.}
 
 methods: []
 

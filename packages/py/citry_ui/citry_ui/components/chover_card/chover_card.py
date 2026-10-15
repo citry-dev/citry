@@ -942,10 +942,13 @@ class CHoverCard(LibraryComponent):
               layerCoordinator.clearSuppression(layer);
             }
             // On this run's first update the card was showing only if the previous
-            // run left it open.
-            const wasShowing = updated ? logicalOpen : sameServerOpen && Boolean(initialHandoff.open);
+            // run left it open. A render that disables a showing card closes it
+            // because of the disable, even when it also changes the server's
+            // `open` input, so that first update reports the close either way.
+            const firstUpdate = !updated;
+            const wasShowing = firstUpdate ? Boolean(initialHandoff?.open) : logicalOpen;
             updated = true;
-            if (configuration.disabled && nextOpen && wasShowing) {
+            if (configuration.disabled && wasShowing && (nextOpen || firstUpdate)) {
               // Disabling an open card hides it, as CMenu does. The owner did not
               // ask for that close, so tell it once, and stop an uncontrolled card
               // from coming back on its own when it is enabled again.

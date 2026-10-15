@@ -24,7 +24,14 @@ $component({
     const handoff = previousHandoff?.kind === 'tour'
       ? previousHandoff : {kind: 'tour', restoreFocus: null};
     host[handoffKey] = handoff;
-    let internalOpen = Boolean(data.open);
+    // A server re-render runs this callback again on the same tour, and the
+    // previous run's cleanup stores its open state with the server's `open`
+    // input on the handoff. A kept tour keeps its own open state while that
+    // input is unchanged, so a tour the user opened or closed stays that way;
+    // a changed input wins.
+    const handedOver = 'serverOpen' in handoff;
+    const sameServerOpen = handedOver && handoff.serverOpen === Boolean(data.open);
+    let internalOpen = sameServerOpen ? handoff.open : Boolean(data.open);
     let internalActive = data.active;
     let controlledOpen = false;
     let controlledActive = false;
@@ -426,6 +433,14 @@ $component({
       }
       if (nextOpen && resolveIndex(active, 1) === null) {
         if (appliedOpen) requestOpen(false, 'missing-target', null);
+      } else if (firstReconcile && handedOver && nextOpen && appliedOpen) {
+        // The previous run left this tour open and this run keeps it. Restore the
+        // open markers the re-render may have reset and restart the geometry
+        // tracking, but leave focus where the user has it.
+        host.toggleAttribute('data-open', true);
+        dialog.toggleAttribute('data-open', true);
+        updateActivators(true);
+        startGeometry();
       } else if (nextOpen !== appliedOpen || firstReconcile) {
         applyOpen(nextOpen);
       }
@@ -433,6 +448,8 @@ $component({
     });
     host.setAttribute('data-citry-tour-initialized', '');
     return () => {
+      handoff.open = appliedOpen;
+      handoff.serverOpen = Boolean(data.open);
       host.removeEventListener('click', onClick);
       host.ownerDocument.removeEventListener('keydown', onKeyDown, true);
       host.ownerDocument.removeEventListener('pointerdown', onPointerDown, true);
