@@ -12,7 +12,9 @@ from citry.slots import Slot
 pytestmark = pytest.mark.e2e
 
 
-def test_python_slot_keeps_nested_authored_fill_in_its_lexical_vue_scope(page, serve_document) -> None:
+def test_python_slot_keeps_nested_authored_fill_in_its_lexical_vue_scope(
+    page, serve_document, open_citry_page
+) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     app = Citry(autodiscover=False)
@@ -39,7 +41,8 @@ def test_python_slot_keeps_nested_authored_fill_in_its_lexical_vue_scope(page, s
         citry = app
         template = "<main><c-slot /></main><aside><c-slot /></aside>"
 
-    page.goto(serve_document(Host(slots={"default": Content()}).render().serialize()))
+    # The buttons are server HTML; clicking before the app mounts reaches no handler.
+    open_citry_page(serve_document(Host(slots={"default": Content()}).render().serialize()))
     buttons = page.locator("button.lexical")
     assert buttons.all_text_contents() == ["caller", "caller"]
     buttons.first.click()
@@ -47,7 +50,7 @@ def test_python_slot_keeps_nested_authored_fill_in_its_lexical_vue_scope(page, s
     assert errors == []
 
 
-def test_transparent_root_mounts_python_composed_multiroot_component(page, serve_document) -> None:
+def test_transparent_root_mounts_python_composed_multiroot_component(page, serve_document, open_citry_page) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     app = Citry(autodiscover=False)
@@ -68,16 +71,17 @@ def test_transparent_root_mounts_python_composed_multiroot_component(page, serve
         '<c-shell><c-fill name="default"><c-slot name="content" /></c-fill></c-shell>',
         slots={"content": Slot(lambda ctx: Widget().render(provides=ctx.provides))},
     )
-    page.goto(serve_document(rendered.serialize()))
+    # The button is server HTML, but the mount counter is set by the component's
+    # JS, so wait for the app rather than for the button.
+    open_citry_page(serve_document(rendered.serialize()))
 
-    page.wait_for_selector("button.value")
     assert page.locator("button.value").text_content() == "ready"
     assert page.locator("span.tail").text_content() == "tail"
     assert page.evaluate("() => globalThis.__multiMounts") == 1
     assert errors == []
 
 
-def test_transparent_root_mounts_empty_python_composed_component(page, serve_document) -> None:
+def test_transparent_root_mounts_empty_python_composed_component(page, serve_document, open_citry_page) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     app = Citry(autodiscover=False)
@@ -91,15 +95,15 @@ def test_transparent_root_mounts_empty_python_composed_component(page, serve_doc
         '<c-slot name="content" />',
         slots={"content": Slot(lambda ctx: VoidWidget().render(provides=ctx.provides))},
     )
-    page.goto(serve_document(rendered.serialize()))
+    # The host element is server HTML; the mount counter needs the mounted app.
+    open_citry_page(serve_document(rendered.serialize()))
 
-    page.wait_for_function("document.querySelector('[id^=citry-vue-]') !== null")
     assert page.locator("body").inner_text() == ""
     assert page.evaluate("() => globalThis.__emptyMounts") == 1
     assert errors == []
 
 
-def test_prepared_component_without_events_unmounts_cleanly(page, serve_document) -> None:
+def test_prepared_component_without_events_unmounts_cleanly(page, serve_document, open_citry_page) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     app = Citry(autodiscover=False)
@@ -112,9 +116,10 @@ def test_prepared_component_without_events_unmounts_cleanly(page, serve_document
             return {"label": "Ready"}
 
     rendered = app.render_template('<main id="owner"><c-widget /></main>')
-    page.goto(serve_document(rendered.serialize()))
+    # The registry holds the app before it mounts, when `vueApp` is still unset,
+    # so wait for the mount before unmounting it.
+    open_citry_page(serve_document(rendered.serialize()))
     page.wait_for_selector("button.no-events")
-    page.wait_for_function("() => __citryRuntime._apps.size === 1")
     page.evaluate("""() => {
       const [appId, record] = [...__citryRuntime._apps.entries()][0];
       globalThis.__noEventsAppId = appId;
@@ -563,7 +568,9 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(
     assert errors == []
 
 
-def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel(page, serve_live) -> None:
+def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel(
+    page, serve_live, wait_for_count, settle_timers
+) -> None:
     """A pending fragment stylesheet is owned until startup accepts or cancels it."""
     import base64
     import json
@@ -627,15 +634,33 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
     """
     url = serve_live(app, document, "")
 
+    answered_styles: list[str] = []
+
     def slow_style(route) -> None:
         time.sleep(0.35)
         route.continue_()
+        answered_styles.append(route.request.url)
 
     page.route(f"**{replacement_style_urls[0]}", slow_style)
     page.route(f"**{cancelled_style_urls[0]}", slow_style)
     page.goto(url)
-    page.wait_for_selector(".slow-replacement", timeout=5_000)
-    page.wait_for_timeout(500)
+    # The replacement's markup is inserted before it mounts, so wait for its
+    # mount and its delayed stylesheet rather than for the element.
+    page.wait_for_function("() => window.__replacementMounted === true", timeout=5_000)
+    page.wait_for_function(
+        "() => getComputedStyle(document.querySelector('.slow-replacement')).color === 'rgb(4, 5, 6)'"
+    )
+    # Cancelling the cleared host's startup logs one console error.
+    wait_for_count(console_errors, 1)
+    # Once both delayed stylesheets have been answered, a cancelled startup
+    # that still held its stylesheet would mount or keep its link right away.
+    wait_for_count(answered_styles, 2)
+    page.wait_for_function(
+        'url => document.querySelectorAll(`link[href="${url}"]`).length === 0', arg=cancelled_style_urls[0]
+    )
+    # Checking that the cancelled startup did not mount needs a short wait for
+    # something that should not happen; one timer and two frames cover it.
+    settle_timers()
 
     assert page.evaluate("() => window.__existingUnmounted") is True
     assert page.evaluate("() => window.__replacementMounted") is True

@@ -780,6 +780,7 @@ def test_native_debounce_long_delay_uses_signed_timeout_chunks(
     binding_kind: str,
     first_callback_time: int,
     expects_remainder: bool,
+    open_citry_page: Any,
 ) -> None:
     maximum_timeout = 2_147_483_647
     requested_delay = 2_147_483_648
@@ -841,7 +842,7 @@ def test_native_debounce_long_delay_uses_signed_timeout_chunks(
           value: () => globalThis.__citryLongDelayClock.now,
         });"""
     )
-    page.goto(serve_live(engine, LongDelay().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, LongDelay().render().serialize(), "") + "/")
 
     try:
         page.evaluate(
@@ -889,7 +890,8 @@ def test_native_debounce_long_delay_uses_signed_timeout_chunks(
                   control.dispatchEvent(new Event("input", { bubbles: true }));
                 }"""
             )
-        page.wait_for_timeout(10)
+        # The debounce asks for its first timeout chunk as it handles the event.
+        page.wait_for_function("globalThis.__citryLongDelayHarness.timers.length > 0")
         initial_timers = page.evaluate(
             """() => globalThis.__citryLongDelayHarness.timers.map(
               ({ delay, cancelled, fired }) => ({ delay, cancelled, fired })
@@ -979,7 +981,9 @@ def test_native_debounce_long_delay_uses_signed_timeout_chunks(
         assert call["args"] == {}
 
 
-def test_native_state_control_debounces_and_preserves_the_live_draft(page: Any, serve_live: Any) -> None:
+def test_native_state_control_debounces_and_preserves_the_live_draft(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(
         secret="native-control-browser-secret",  # noqa: S106 - deterministic test signing key
         autodiscover=False,
@@ -1015,7 +1019,7 @@ def test_native_state_control_debounces_and_preserves_the_live_draft(page: Any, 
     base = serve_live(engine, Search().render().serialize(), "")
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.locator("#query").fill("native")
     assert page.locator("#query").input_value() == "native"
     page.wait_for_function("__citryRuntime._apps.values().next().value.revision === 1")
@@ -1025,7 +1029,9 @@ def test_native_state_control_debounces_and_preserves_the_live_draft(page: Any, 
     assert faults == []
 
 
-def test_native_state_controls_apply_boolean_list_and_custom_values(page: Any, serve_live: Any) -> None:
+def test_native_state_controls_apply_boolean_list_and_custom_values(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(
         secret="native-control-matrix-secret",  # noqa: S106 - deterministic test signing key
         autodiscover=False,
@@ -1057,8 +1063,9 @@ def test_native_state_controls_apply_boolean_list_and_custom_values(page: Any, s
     base = serve_live(engine, Controls().render().serialize(), "")
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(base + "/")
-    page.wait_for_timeout(100)
+    # The mount writes the control values, so they are in place once the app
+    # is ready.
+    open_citry_page(base + "/")
     assert faults == [], page.content()
     assert page.locator("#enabled").is_checked()
     assert page.eval_on_selector("#tags", "element => [...element.selectedOptions].map(option => option.value)") == [
@@ -1067,7 +1074,9 @@ def test_native_state_controls_apply_boolean_list_and_custom_values(page: Any, s
     assert page.eval_on_selector("#custom", "element => element.value") == {"answer": 42}
 
 
-def test_native_control_unmount_cancels_debounce_and_pending_custom_upgrade(page: Any, serve_live: Any) -> None:
+def test_native_control_unmount_cancels_debounce_and_pending_custom_upgrade(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(
         secret="native-control-cleanup-secret",  # noqa: S106 - deterministic test signing key
         autodiscover=False,
@@ -1092,7 +1101,7 @@ def test_native_control_unmount_cancels_debounce_and_pending_custom_upgrade(page
 
     dispatcher_for(engine)
     base = serve_live(engine, Cleanup().render().serialize(), "")
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.locator("#cleanup-query").fill("pending")
     page.evaluate("__citryRuntime._apps.values().next().value.vueApp.unmount()")
     page.evaluate(
@@ -1104,7 +1113,9 @@ def test_native_control_unmount_cancels_debounce_and_pending_custom_upgrade(page
     assert page.evaluate("__citryRuntime._apps.size") == 0
 
 
-def test_native_control_recovers_when_live_input_type_becomes_valid_again(page: Any, serve_live: Any) -> None:
+def test_native_control_recovers_when_live_input_type_becomes_valid_again(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(
         secret="native-control-recovery-secret",  # noqa: S106 - deterministic test signing key
         autodiscover=False,
@@ -1124,7 +1135,7 @@ def test_native_control_recovers_when_live_input_type_becomes_valid_again(page: 
         template = '<input id="recover" type="checkbox" :c-enabled>'
 
     base = serve_live(engine, Recovery().render().serialize(), "")
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.evaluate("""() => {const el=document.querySelector('#recover');el.setAttribute('type','button');
       __citryRuntime._apps.values().next().value.mounted.values().next().value.component.$forceUpdate()}""")
     page.wait_for_timeout(0)
@@ -1134,7 +1145,7 @@ def test_native_control_recovers_when_live_input_type_becomes_valid_again(page: 
     assert page.locator("#recover").is_checked()
 
 
-def test_custom_control_setter_event_does_not_echo_to_server(page: Any, serve_live: Any) -> None:
+def test_custom_control_setter_event_does_not_echo_to_server(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(
         secret="native-control-echo-secret",  # noqa: S106 - deterministic test signing key
         autodiscover=False,
@@ -1157,13 +1168,15 @@ def test_custom_control_setter_event_does_not_echo_to_server(page: Any, serve_li
     page.add_init_script("""customElements.define('x-echo',class extends HTMLElement{
       set value(value){this._value=value;this.dispatchEvent(new Event('change'))}get value(){return this._value}})""")
     base = serve_live(engine, Echo().render().serialize(), "")
-    page.goto(base + "/")
+    open_citry_page(base + "/")
+    # An echoed change would send an event and raise the revision after the
+    # mount; give it a short time to show up before checking that it did not.
     page.wait_for_timeout(100)
     assert page.eval_on_selector("#echo", "element => element.value") == "seed"
     assert page.evaluate("__citryRuntime._apps.values().next().value.revision") == 0
 
 
-def test_custom_control_setter_failure_is_local_and_recovers(page: Any, serve_live: Any) -> None:
+def test_custom_control_setter_failure_is_local_and_recovers(page: Any, serve_live: Any, open_citry_page: Any) -> None:
     engine = Citry(
         secret="native-control-setter-recovery",  # noqa: S106 - deterministic test signing key
         autodiscover=False,
@@ -1188,7 +1201,7 @@ def test_custom_control_setter_failure_is_local_and_recovers(page: Any, serve_li
     base = serve_live(engine, Setter().render().serialize(), "")
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.evaluate("""() => {const mounted=__citryRuntime._apps.values().next().value.mounted.values().next().value;
       mounted.record.state.values.value='bad';mounted.component.$forceUpdate()}""")
     page.wait_for_timeout(0)
@@ -1436,7 +1449,9 @@ def test_supplied_slot_poll_uses_live_lexical_caller_scope(
     assert faults == []
 
 
-def test_checkbox_invalid_state_value_is_local_and_next_boolean_recovers(page: Any, serve_live: Any) -> None:
+def test_checkbox_invalid_state_value_is_local_and_next_boolean_recovers(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(
         secret="native-checkbox-recovery-secret",  # noqa: S106 - deterministic test signing key
         autodiscover=False,
@@ -1457,7 +1472,7 @@ def test_checkbox_invalid_state_value_is_local_and_next_boolean_recovers(page: A
 
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Checkbox().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Checkbox().render().serialize(), "") + "/")
     page.evaluate("""() => {const mounted=__citryRuntime._apps.values().next().value.mounted.values().next().value;
       mounted.record.state.values.enabled='invalid';mounted.component.$forceUpdate()}""")
     page.wait_for_timeout(0)
@@ -1469,7 +1484,9 @@ def test_checkbox_invalid_state_value_is_local_and_next_boolean_recovers(page: A
     assert faults == []
 
 
-def test_extension_styles_accumulate_for_the_app_lifetime_across_revision(page: Any, serve_live: Any) -> None:
+def test_extension_styles_accumulate_for_the_app_lifetime_across_revision(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     class Probe(Extension):
         name = "probe"
 
@@ -1517,7 +1534,7 @@ def test_extension_styles_accumulate_for_the_app_lifetime_across_revision(page: 
     base = serve_live(engine, Page().render().serialize(), external_script)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.wait_for_function("globalThis.__citryExternalRuns?.join() === '0'")
     assert page.evaluate("globalThis.__citryExternalRuns") == ["0"]
     page.locator("#rev").click()
@@ -2397,7 +2414,9 @@ def test_lazy_native_events_bridge_publishes_reactive_loading_and_error(page: An
     }
 
 
-def test_dynamic_element_changes_tag_across_a_prepared_revision(page: Any, serve_live: Any) -> None:
+def test_dynamic_element_changes_tag_across_a_prepared_revision(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="dynamic-element-e2e", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -2427,14 +2446,16 @@ def test_dynamic_element_changes_tag_across_a_prepared_revision(page: Any, serve
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     base = serve_live(engine, View(tag="section").render().serialize(), "")
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.wait_for_function("document.querySelector('#inside')?.parentElement?.tagName === 'SECTION'")
     page.locator("#swap").click()
     page.wait_for_function("document.querySelector('#inside')?.parentElement?.tagName === 'ARTICLE'")
     assert faults == []
 
 
-def test_dynamic_element_native_binding_survives_section_to_input_revision(page: Any, serve_live: Any) -> None:
+def test_dynamic_element_native_binding_survives_section_to_input_revision(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="dynamic-element-native-binding-e2e", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -2463,7 +2484,7 @@ def test_dynamic_element_native_binding_survives_section_to_input_revision(page:
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, View(tag="section").render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, View(tag="section").render().serialize(), "") + "/")
     page.wait_for_selector("section#dynamic-native", state="attached")
     page.locator("#swap-native").click()
     page.wait_for_function("document.querySelector('#dynamic-native')?.tagName === 'INPUT'")
@@ -2471,7 +2492,9 @@ def test_dynamic_element_native_binding_survives_section_to_input_revision(page:
     assert faults == []
 
 
-def test_uncontrolled_native_baseline_change_wins_over_dirty_value(page: Any, serve_live: Any) -> None:
+def test_uncontrolled_native_baseline_change_wins_over_dirty_value(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="native-baseline-change-e2e", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -2500,7 +2523,7 @@ def test_uncontrolled_native_baseline_change_wins_over_dirty_value(page: Any, se
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, View(value="server-before").render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, View(value="server-before").render().serialize(), "") + "/")
     input_locator = page.locator("#uncontrolled-baseline")
     input_locator.fill("browser-dirty")
     page.locator("#change-baseline").click()
@@ -2509,7 +2532,9 @@ def test_uncontrolled_native_baseline_change_wins_over_dirty_value(page: Any, se
     assert faults == []
 
 
-def test_unchanged_uncontrolled_native_properties_survive_server_publication(page: Any, serve_live: Any) -> None:
+def test_unchanged_uncontrolled_native_properties_survive_server_publication(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="native-baseline-unchanged-e2e", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -2542,7 +2567,7 @@ def test_unchanged_uncontrolled_native_properties_survive_server_publication(pag
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, View(step=0).render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, View(step=0).render().serialize(), "") + "/")
     page.locator("#uncontrolled-text").fill("browser-text")
     page.locator("#uncontrolled-check").check()
     page.locator("#uncontrolled-select").select_option("b")
@@ -2554,7 +2579,9 @@ def test_unchanged_uncontrolled_native_properties_survive_server_publication(pag
     assert faults == []
 
 
-def test_native_vue_ownership_releases_when_server_definition_removes_binding(page: Any, serve_live: Any) -> None:
+def test_native_vue_ownership_releases_when_server_definition_removes_binding(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="native-ownership-release-e2e", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -2593,7 +2620,7 @@ def test_native_vue_ownership_releases_when_server_definition_removes_binding(pa
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, View(owned=True, step=0).render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, View(owned=True, step=0).render().serialize(), "") + "/")
     before = page.locator("#ownership-input")
     before.fill("browser-dirty")
     page.locator("#release-ownership").click()
@@ -2609,6 +2636,7 @@ def test_native_vue_ownership_releases_when_server_definition_removes_binding(pa
 def test_dynamic_element_keeps_authored_vue_bindings_and_key_across_revision(
     page: Any,
     serve_live: Any,
+    open_citry_page: Any,
 ) -> None:
     engine = Citry(secret="dynamic-element-bindings-e2e", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -2642,7 +2670,7 @@ def test_dynamic_element_keeps_authored_vue_bindings_and_key_across_revision(
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, View(tag="section", key="first").render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, View(tag="section", key="first").render().serialize(), "") + "/")
     page.wait_for_selector("section#dynamic-bound[title='ready:0']")
     page.evaluate("window.__firstDynamicElement = document.querySelector('#dynamic-bound')")
     page.locator("#dynamic-bound").click()
@@ -2657,6 +2685,7 @@ def test_dynamic_element_keeps_authored_vue_bindings_and_key_across_revision(
 def test_cached_dynamic_elements_keep_independent_instance_state(
     page: Any,
     serve_live: Any,
+    open_citry_page: Any,
 ) -> None:
     engine = Citry(secret="dynamic-element-slot-cache-e2e", autodiscover=False)  # noqa: S106
 
@@ -2681,9 +2710,8 @@ def test_cached_dynamic_elements_keep_independent_instance_state(
 
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
     buttons = page.locator(".cached-dynamic")
-    page.wait_for_timeout(200)
     assert buttons.count() == 2, (faults, page.content())
     assert buttons.evaluate_all("items => items.map(item => item.title)") == ["cached:0", "cached:0"]
     buttons.nth(0).click()
@@ -2694,7 +2722,9 @@ def test_cached_dynamic_elements_keep_independent_instance_state(
     assert faults == []
 
 
-def test_dynamic_element_in_supplied_slot_uses_lexical_caller_scope(page: Any, serve_live: Any) -> None:
+def test_dynamic_element_in_supplied_slot_uses_lexical_caller_scope(
+    page: Any, serve_live: Any, open_citry_page: Any
+) -> None:
     engine = Citry(secret="dynamic-element-slot-owner-e2e", autodiscover=False)  # noqa: S106
 
     class Receiver(Component):
@@ -2717,7 +2747,7 @@ def test_dynamic_element_in_supplied_slot_uses_lexical_caller_scope(page: Any, s
 
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
-    page.goto(serve_live(engine, Owner().render().serialize(), "") + "/")
+    open_citry_page(serve_live(engine, Owner().render().serialize(), "") + "/")
     button = page.locator(".slot-dynamic")
     assert button.get_attribute("title") == "caller:0"
     button.click()
@@ -2725,7 +2755,9 @@ def test_dynamic_element_in_supplied_slot_uses_lexical_caller_scope(page: Any, s
     assert faults == []
 
 
-def test_dynamic_input_model_type_remounts_from_final_generic_binding(page: Any, serve_document: Any) -> None:
+def test_dynamic_input_model_type_remounts_from_final_generic_binding(
+    page: Any, serve_document: Any, open_citry_page: Any
+) -> None:
     engine = Citry(autodiscover=False)
 
     class DynamicModel(Component):
@@ -2737,7 +2769,7 @@ def test_dynamic_input_model_type_remounts_from_final_generic_binding(page: Any,
         )
         js = "$component({data(){return {value:'7',inputAttrs:{type:'text'}};}});"
 
-    page.goto(serve_document(DynamicModel().render().serialize()))
+    open_citry_page(serve_document(DynamicModel().render().serialize()))
     page.wait_for_selector("#dynamic-model")
     page.evaluate("window.__initialDynamicModel = document.querySelector('#dynamic-model')")
     page.locator("#number-model").click()
@@ -3101,7 +3133,9 @@ def test_component_boundary_authored_el_supports_text_and_empty_children(page: A
 
 
 def test_prepared_root_markers_and_css_variables_follow_physical_roots_across_revision(
-    page: Any, serve_live: Any
+    page: Any,
+    serve_live: Any,
+    open_citry_page: Any,
 ) -> None:
     engine = Citry(secret="prepared-css-roots", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -3148,7 +3182,7 @@ def test_prepared_root_markers_and_css_variables_follow_physical_roots_across_re
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     base = serve_live(engine, CssPage(color="rgb(0, 128, 0)").render().serialize(), "")
-    page.goto(base + "/")
+    open_citry_page(base + "/")
     page.wait_for_function(
         "document.querySelector('#css-slot') && "
         "getComputedStyle(document.querySelector('#css-slot')).color === 'rgb(0, 128, 0)'"
