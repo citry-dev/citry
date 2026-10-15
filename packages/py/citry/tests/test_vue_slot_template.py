@@ -80,6 +80,14 @@ _RENDERING_PAGE_KINDS = ["html", "vue", "simple"]
             "<c-outer><c-card><template #title>T</template></c-card></c-outer>",
             "'<template #title>' does not fill a slot of <c-card>",
         ),
+        (
+            "<c-card><div #title>T</div></c-card>",
+            "Vue slot syntax '<div #title>' does not fill a slot of <c-card>; use '<c-fill name=\"title\">' instead.",
+        ),
+        (
+            '<c-card><c-provide key="k"><template #title>T</template></c-provide></c-card>',
+            "'<template #title>' does not fill a slot of <c-card>",
+        ),
     ],
 )
 def test_vue_slot_template_in_component_tag_fails_to_load(page_kind, body, message):
@@ -105,11 +113,14 @@ def test_c_fill_and_plain_template_still_render(page_kind):
 
 @pytest.mark.parametrize("page_kind", _RENDERING_PAGE_KINDS)
 def test_vue_slot_template_outside_a_citry_component_tag_loads(page_kind):
-    # `<c-element>` renders a plain element, a non-`c-` tag may be a Vue
-    # component from a plugin, and a fill's root content can end up inside one.
+    # `<c-element>` renders the tag you name, a non-`c-` tag may be a Vue
+    # component from a plugin, `<c-provide>` passes its body to the tag
+    # around it, and a fill's root content can reach one through a
+    # transparent component.
     page = _page(
         '<main><c-element is="section"><template #header>H</template></c-element>'
         "<div><template #title>T</template></div>"
+        '<my-widget><c-provide key="k"><template #header>H</template></c-provide></my-widget>'
         '<c-outer><c-fill name="body"><template #title>F</template></c-fill></c-outer></main>',
         page_options=_PAGE_KINDS[page_kind],
     )

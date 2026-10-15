@@ -4211,7 +4211,7 @@ for the current checkout.
 | Authored tag | Current interpretation | Vue preparation requirement |
 | --- | --- | --- |
 | Ordinary HTML | `v-*`, `:foo`, `@event`, `.foo`, and `#name` are generally static attribute strings. Python `c-*` expressions are evaluated separately. | Compile approved JavaScript bindings within the Vue app; preserve their source ranges and distinguish generated values from authored code. |
-| `<template>` | An ordinary HTML tag. `<template #title>` does not declare a Python fill. | Recognize Vue slot syntax only in the correct native component context; continue collecting Python fills through `c-fill`. |
+| `<template>` | An ordinary HTML tag. `<template #title>` does not declare a Python fill; inside a Citry component tag, Vue slot syntax on it (or on any element) fails when the template loads, and the error names the `<c-fill>` to write. | Recognize Vue slot syntax only in the correct native component context; continue collecting Python fills through `c-fill`. |
 | `<c-Card>` | Most static attributes become Python kwargs. `@event` has special Alpine boundary-handler treatment. | Partition browser bindings before Python kwarg resolution. Preserve unprefixed Python kwargs, including user fields named `key`, `ref`, `class`, or `style`. |
 | `<c-component>` | `is`/`c-is` select a Python component. | Resolve that selection on the server. A Vue `:is` must not masquerade as a Python selector. |
 | `<c-element>` | `is`/`c-is` select an HTML tag; remaining attributes use HTML semantics. | Consume the selector and compile the selected element, subject to app-boundary and allowed-tag rules. |

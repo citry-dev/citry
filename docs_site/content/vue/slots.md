@@ -68,13 +68,35 @@ its fallback.
 ```
 
 The same goes for `v-slot` and `#default`, which name the default slot,
-and for `#[expr]`, which becomes `<c-fill c-name="...">` with a Python
-expression.
+for slot syntax on another element, such as `<div #title>`, and for
+`#[expr]`; write `<c-fill c-name="...">` with a Python expression
+instead.
 
-The check covers only Citry component tags, including `<c-component>`.
-`<template #name>` still works inside a Vue component that a
-[Vue plugin](/vue/plugins/) registers, and inside `<c-element>`, which
-renders a plain element.
+The check covers Citry component tags, including `<c-component>`, and
+looks through `<c-provide>` and `<c-cache>` to the tag around them. `<template #name>` still
+works inside a Vue component that a [Vue plugin](/vue/plugins/) registers,
+and inside `<c-element is="my-widget">`, which renders the tag you name,
+so it can be a plugin's Vue component.
+
+Directly inside a `<c-fill>`, `<template #name>` loads, because a
+transparent component (one with `transparent = True`, such as
+`<c-provide>`) can pass that content on to a Vue component that Citry
+cannot see when the template loads. Inside an ordinary component's fill
+it still does nothing: a page with Vue drops the `<template>` wrapper and
+shows its content in that fill, and a page without Vue shows nothing.
+
+To pass a slot template through a transparent component of your own,
+write its default fill out:
+
+```citry-html
+<my-widget>
+  <c-Themed>
+    <c-fill name="default">
+      <template #header>Report</template>
+    </c-fill>
+  </c-Themed>
+</my-widget>
+```
 
 ## Scoped slots { #slot-limits }
 

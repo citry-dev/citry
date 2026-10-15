@@ -42,9 +42,11 @@ walks through every step.
   lists the `x-*` attributes you missed
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#replace-alpine-directives-with-vue)).
 - **Component tag attributes become Vue bindings:** `:name`, `v-*`, and
-  `ref` on a component tag no longer reach the child as kwargs, and
+  `ref` on a component tag no longer reach the child as kwargs,
   `#c-ignore` works only on plain HTML elements, not on component tags or
-  `<c-element>`
+  `<c-element>`, and Vue slot syntax such as `<template #title>` inside a
+  component tag fails when the template loads; fill the slot with
+  `<c-fill name="title">`
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-attributes-on-component-tags)).
 - **Vue names from Python data stop the render:** a `c-bind` key, a `c-*`
   attribute such as `c-@click`, or an `on_attrs_resolved` hook that sets

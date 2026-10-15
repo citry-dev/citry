@@ -1221,7 +1221,35 @@ mod tests {
             ),
             (
                 r#"<c-card><template c-v-slot:title="x">x</template></c-card>"#,
-                r#"'<template c-v-slot:title>' does not fill a slot of <c-card>"#,
+                r#"'<template c-v-slot:title>' does not fill a slot of <c-card>; use '<c-fill name="title">' instead."#,
+            ),
+            // Slot syntax on an element other than `<template>` is the same mistake.
+            (
+                "<c-card><div #title>x</div></c-card>",
+                r#"Vue slot syntax '<div #title>' does not fill a slot of <c-card>; use '<c-fill name="title">' instead."#,
+            ),
+            (
+                r#"<c-card><span v-slot:title="{ a }">x</span></c-card>"#,
+                r#"'<span v-slot:title>' does not fill a slot of <c-card>"#,
+            ),
+            (
+                r#"<c-card><c-element is="div" #title>x</c-element></c-card>"#,
+                r#"'<c-element #title>' does not fill a slot of <c-card>"#,
+            ),
+            // `<c-provide>` and `<c-cache>` render their body in place, so
+            // the template still lands in the outer component's body.
+            (
+                r#"<c-card><c-provide key="k"><template #title>x</template></c-provide></c-card>"#,
+                "does not fill a slot of <c-card>",
+            ),
+            (
+                r#"<c-card><c-cache key="k"><template #title>x</template></c-cache></c-card>"#,
+                "does not fill a slot of <c-card>",
+            ),
+            // `<c-mark>` renders its own boundary.
+            (
+                r#"<my-widget><c-mark name="m"><template #title>x</template></c-mark></my-widget>"#,
+                "does not fill a slot of <c-mark>",
             ),
             // Control flow renders its content in place, so the `<template>`
             // still lands directly in the component body.
@@ -1245,6 +1273,19 @@ mod tests {
         for (input, message) in cases {
             assert_parse_error(input, message);
         }
+    }
+
+    #[test]
+    fn test_vue_slot_template_c_form_has_no_slot_props_hint() {
+        // A `c-` form's value is a Python expression, not Vue slot props.
+        let error = parse_template(
+            r#"<c-card><template c-v-slot:title="x">x</template></c-card>"#,
+            None,
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(!error.contains("Read the slot's data"), "{error}");
     }
 
     #[test]
@@ -1272,8 +1313,17 @@ mod tests {
             r#"<c-element is="my-widget"><template #header>x</template></c-element>"#,
             "<my-widget><template #header>x</template></my-widget>",
             "<c-card><my-widget><template #header>x</template></my-widget></c-card>",
-            // The root of a template, a fill, or a slot fallback can end up
-            // inside a Vue component in another template.
+            // `<c-provide>` passes its body to the tag around it, here a
+            // possible plugin Vue component.
+            r#"<my-widget><c-provide key="k"><template #header>H</template></c-provide></my-widget>"#,
+            r#"<c-provide key="k"><template #header>H</template></c-provide>"#,
+            // Slot syntax on other elements outside a Citry component tag is
+            // left to Vue.
+            "<div><span #title>x</span></div>",
+            "<my-widget><div #title>x</div></my-widget>",
+            // The root of a template, a fill, or a slot fallback can reach a
+            // Vue component through a transparent component, such as
+            // `<c-provide>`, that the parser cannot see.
             "<template #title>T</template>",
             r#"<c-card><c-fill name="body"><template #title>x</template></c-fill></c-card>"#,
             r#"<c-slot name="s"><template #title>x</template></c-slot>"#,
