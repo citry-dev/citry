@@ -1752,9 +1752,10 @@ def test_point_close_capability_loss_and_invalid_target_fail_closed(page) -> Non
 
 
 def test_untrusted_root_waits_without_rewriting_itself(page) -> None:
-    """A root the page has broken stays not ready and does no work until the page changes it again."""
-    # The menus become ready on timers, so the clock runs through the load and
-    # pauses only for the counting below, where only `run_for()` moves it.
+    """A root the page has broken stays not ready and makes no DOM changes until the page changes it again."""
+    # The menus become ready on timers, so the clock runs normally through the
+    # load and is paused before the page breaks the root; after that only
+    # `run_for()` moves it.
     page.clock.install()
     errors = _load(page)
     page.clock.pause_at(page.evaluate("Date.now() + 1_000"))
@@ -1812,6 +1813,17 @@ def test_untrusted_root_waits_without_rewriting_itself(page) -> None:
           && document.querySelector('#geometry-menu').hasAttribute('data-citry-menu-initialized')
         """
     )
+    # The repaired menu must answer both ways of opening it, which go through
+    # the event handlers' readiness check rather than the watcher's.
+    page.clock.resume()
+    target = page.locator("#geometry-target")
+    target.click(button="right")
+    page.wait_for_function("document.querySelector('#geometry-menu')?.matches(':popover-open')")
+    page.keyboard.press("Escape")
+    page.wait_for_function("!document.querySelector('#geometry-menu')?.matches(':popover-open')")
+    target.focus()
+    page.keyboard.press("Shift+F10")
+    page.wait_for_function("document.querySelector('#geometry-menu')?.matches(':popover-open')")
     # The page broke the root on purpose, so the only errors are the
     # controller's reports of that.
     assert errors

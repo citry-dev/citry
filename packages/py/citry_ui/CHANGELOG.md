@@ -50,9 +50,10 @@
   changes the items of an open menu and closes it. Previously the menu
   closed without the callback, so state that follows `onOpenChange` still
   said the menu was open.
-- A `CContextMenu` whose markup page code has changed into a form the
-  component cannot use now waits for the next change instead of rewriting
-  its markup on every timer tick, which kept the page busy.
+- `CContextMenu` no longer keeps the page busy when page code changes its
+  markup into a form it cannot use. It now waits for the next change instead
+  of rewriting its markup on every timer tick, and logs one console error
+  until the markup is usable again.
 
 ## [0.2.2] - 2026-09-11
 

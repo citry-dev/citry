@@ -127,6 +127,30 @@
               active: !0,
             };
           (i.removeAttribute(u), (i[d] = f));
+          // The repair writes an attribute only when its value differs, so a
+          // repair that finds everything in place makes no DOM change and
+          // does not wake the mutation observer that schedules it again.
+          const setAttr = (element, name, value) => {
+              element.getAttribute(name) !== value && element.setAttribute(name, value);
+            },
+            toggleAttr = (element, name, on) => {
+              element.hasAttribute(name) !== on && element.toggleAttribute(name, on);
+            },
+            removeAttr = (element, name) => {
+              element.hasAttribute(name) && element.removeAttribute(name);
+            },
+            setData = (element, key, value) => {
+              element.dataset[key] !== value && (element.dataset[key] = value);
+            },
+            setId = (element, value) => {
+              element.id !== value && (element.id = value);
+            },
+            setStyle = (element, name, value) => {
+              element.style.getPropertyValue(name) !== value && element.style.setProperty(name, value);
+            },
+            removeStyle = (element, name) => {
+              element.style.getPropertyValue(name) !== "" && element.style.removeProperty(name);
+            };
           let m = !0,
             v = null,
             h = !1,
@@ -470,7 +494,7 @@
             ne = (e) => {
               ((h = Boolean(e && W() && Q() && Z())),
                 h && (vt = !0),
-                i.toggleAttribute(u, h));
+                toggleAttr(i, u, h));
             },
             oe = () => {
               ((O = null),
@@ -1446,56 +1470,77 @@
                   !0,
                 ));
           };
+          // Both readiness paths (the event handlers through Qe() and the
+          // mutation watcher) repair under this one condition: the root's
+          // state attributes disagree with the menu, or a menu that was ready
+          // before, or whose surface is initialized, is not ready now.
+          // Report a broken root once per broken episode. The repair makes no
+          // DOM change while it waits, so nothing else (such as the Menu's own
+          // structure check) tells the developer why the menu stopped opening.
+          const reportBrokenRoot = () => {
+            M.has("structure") ||
+              (M.add("structure"),
+              console.error(
+                "[citry-ui] CContextMenu root structure is invalid; the menu stays closed until the page restores it.",
+                i,
+              ));
+          };
+          const needsRepair = () =>
+            !Qt() || (!h && (vt || c.hasAttribute("data-citry-menu-initialized")));
           const Fe = () => {
               if (W()) {
                 const e = !Z();
                 if (!qe() || !ye() || !G() || e) {
                   if (e && capInvalid) return;
+                  reportBrokenRoot();
                   return (
                     (capInvalid = e),
                     ne(!1),
                     de(),
                     v.isOpen()
                       ? void v.forceClose(_() ? "disabled" : "ancestor", s.isConnected ? s : null)
-                      : (Ht(c), te(), oe(), void i.removeAttribute("data-open"))
+                      : (Ht(c), te(), oe(), void removeAttr(i, "data-open"))
                   );
                 }
                 ((capInvalid = !1),
                   (g = !0),
-                  (i.id = n.rootId),
-                  (i.dataset.citryUiPart = "context-menu"),
-                  i.setAttribute("data-citry-context-menu-host", ""),
-                  (i.dataset.size = E.size),
-                  i.toggleAttribute("data-disabled", _()),
-                  i.toggleAttribute("data-open", v.isOpen()),
+                  setId(i, n.rootId),
+                  setData(i, "citryUiPart", "context-menu"),
+                  setAttr(i, "data-citry-context-menu-host", ""),
+                  setData(i, "size", E.size),
+                  toggleAttr(i, "data-disabled", _()),
+                  toggleAttr(i, "data-open", v.isOpen()),
                   v.isOpen() && O
-                    ? (i.dataset.invocation = O.kind)
-                    : i.removeAttribute("data-invocation"),
-                  (s.id = n.targetId),
-                  s.setAttribute("data-citry-context-menu-target", ""),
-                  (l.id = n.pointId),
-                  l.setAttribute("popover", "manual"),
-                  l.setAttribute("aria-hidden", "true"),
-                  l.setAttribute("data-citry-context-menu-point", ""),
-                  l.removeAttribute("inert"),
+                    ? setData(i, "invocation", O.kind)
+                    : removeAttr(i, "data-invocation"),
+                  setId(s, n.targetId),
+                  setAttr(s, "data-citry-context-menu-target", ""),
+                  setId(l, n.pointId),
+                  setAttr(l, "popover", "manual"),
+                  setAttr(l, "aria-hidden", "true"),
+                  setAttr(l, "data-citry-context-menu-point", ""),
+                  removeAttr(l, "inert"),
                   [...l.style]
                     .filter((e) => !["anchor-name", "left", "top"].includes(e))
                     .forEach((e) => l.style.removeProperty(e)),
                   syncPointAnchor(),
-                  l.style.setProperty("anchor-name", n.pointAnchorName),
+                  setStyle(l, "anchor-name", n.pointAnchorName),
                   (R ?? (v.isOpen() ? O : null))
                     ? ae(R ?? O)
-                    : (l.style.removeProperty("left"), l.style.removeProperty("top")),
-                  (c.id = n.surfaceId),
-                  c.setAttribute("popover", "manual"),
-                  c.setAttribute("role", "menu"),
-                  c.setAttribute("aria-label", n.ariaLabel),
-                  (c.dataset.citryUiPart = "menu"),
+                    : (removeStyle(l, "left"), removeStyle(l, "top")),
+                  setId(c, n.surfaceId),
+                  setAttr(c, "popover", "manual"),
+                  setAttr(c, "role", "menu"),
+                  setAttr(c, "aria-label", n.ariaLabel),
+                  setData(c, "citryUiPart", "menu"),
                   (z = i.getRootNode()),
                   v.repairOwned(),
                   v.refreshRootScope(),
                   (g = !1),
-                  ne(c.hasAttribute("data-citry-menu-initialized")));
+                  ne(c.hasAttribute("data-citry-menu-initialized")),
+                  // A repair that leaves an initialized menu not ready means
+                  // the page broke a part the repair does not own.
+                  h ? M.delete("structure") : c.hasAttribute("data-citry-menu-initialized") && reportBrokenRoot());
               }
             },
             Qe = () => {
@@ -1505,11 +1550,7 @@
                 ((capInvalid = !1), Fe());
               }
               if (!Q() || !qe() || !ye() || !Z()) return (Fe(), !1);
-              return (
-                (!Qt() || (!h && c.hasAttribute("data-citry-menu-initialized"))) &&
-                  Fe(),
-                Qt() && h
-              );
+              return (needsRepair() && Fe(), Qt() && h);
             };
           ((He = watchMutations(i, u, d, () => {
             S && Le();
@@ -1532,7 +1573,7 @@
                 // the surface that mark back.
                 if (Q() && qe() && ye() && Z())
                   return (
-                    (!Qt() || (!h && vt)) && Fe(),
+                    needsRepair() && Fe(),
                     (z = i.getRootNode()),
                     v.refreshRootScope(),
                     Ge(),
