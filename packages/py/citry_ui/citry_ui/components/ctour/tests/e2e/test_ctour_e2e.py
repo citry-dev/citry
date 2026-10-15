@@ -231,3 +231,164 @@ def test_escape_shift_tab_environment_axe_and_cleanup(page: Any, serve_citry_ui_
     page.wait_for_timeout(50)
     assert page.evaluate("document.documentElement.style.overflow") == ""
     assert errors == []
+
+
+def _rerender_page() -> tuple[Citry, str]:
+    app = Citry(secret="citry-ui-tour-rerender-e2e", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(citry_ui)
+
+    class TourOwner(Component):
+        citry = app
+
+        class Kwargs:
+            step: int = 0
+            server_active: int = 0
+
+        class State(Kwargs):
+            pass
+
+        class Events:
+            # Each event re-renders the owner with the next render counter, so
+            # the test can wait for the new render by it.
+            def advance(self, state: Any) -> TourOwner:
+                return TourOwner(step=state.step + 1, server_active=state.server_active)
+
+            def last_step_on_server(self, state: Any) -> TourOwner:
+                return TourOwner(step=state.step + 1, server_active=2)
+
+        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {"step": kwargs.step, "server_active": kwargs.server_active}
+
+        template = """
+          <section>
+            <output id="owner-step">{{ step }}</output>
+            <button
+              id="advance-owner"
+              type="button"
+              @c-click="advance"
+            >Advance</button>
+            <button
+              id="last-step-on-server"
+              type="button"
+              @c-click="last_step_on_server"
+            >Last step on server</button>
+            <c-CTour
+              id="rerendered"
+              c-active="server_active"
+              :onActiveChange="(next, detail) => log(next, detail)"
+            >
+              <c-fill name="activator" data="{ activator_attrs }">
+                <button
+                  id="rerendered-start"
+                  type="button"
+                  c-bind="activator_attrs"
+                >Start tour</button>
+              </c-fill>
+              <c-fill name="default">
+                <c-CTourStep value="one">
+                  <c-fill name="title">Step one</c-fill>
+                  <c-fill name="default">First step.</c-fill>
+                </c-CTourStep>
+                <c-CTourStep value="two">
+                  <c-fill name="title">Step two</c-fill>
+                  <c-fill name="default">Second step.</c-fill>
+                </c-CTourStep>
+                <c-CTourStep value="three">
+                  <c-fill name="title">Step three</c-fill>
+                  <c-fill name="default">Third step.</c-fill>
+                </c-CTourStep>
+              </c-fill>
+            </c-CTour>
+          </section>
+        """
+        js = """
+          $component({
+            methods: {
+              log(next, detail) {
+                window.__activeChanges.push([next, detail.reason]);
+              },
+            },
+          });
+        """
+
+    class Page(Component):
+        citry = app
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /><c-css /></head>
+            <body>
+              <c-tour-owner />
+              <c-js />
+            </body>
+          </html>
+        """
+        js = """
+          $component({
+            data() {
+              window.__activeChanges = [];
+              return {};
+            },
+          });
+        """
+
+    return app, str(Page())
+
+
+def _open_rerendered_tour_at_step_two(page: Any, serve_citry_ui_live: Any, wait_for_citry_ready: Any) -> Any:
+    app, html = _rerender_page()
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    wait_for_citry_ready()
+    tour = page.locator("#rerendered")
+    page.locator("#rerendered-start").click()
+    page.wait_for_function("document.querySelector('#rerendered dialog').open")
+    tour.locator('[data-citry-tour-action="next"]:visible').click()
+    page.wait_for_function("document.querySelector('#rerendered').dataset.active === '1'")
+    return tour
+
+
+def _server_event(page: Any, send_event: Any, button: str, handler: str) -> None:
+    # A script click sends the event without moving focus or pressing outside
+    # the tour, either of which could close it on its own.
+    send_event(lambda: page.locator(button).evaluate("element => element.click()"), handler=handler)
+    page.wait_for_function("document.querySelector('#owner-step').textContent === '1'")
+
+
+def test_unrelated_rerender_keeps_the_tour_step_so_next_reaches_the_following_step(
+    page: Any, serve_citry_ui_live: Any, wait_for_citry_ready: Any, send_event: Any
+) -> None:
+    tour = _open_rerendered_tour_at_step_two(page, serve_citry_ui_live, wait_for_citry_ready)
+
+    # The server's `active` input stays 0, so the tour keeps the step the user
+    # chose; Next must then move on to the third step, not repeat the second.
+    _server_event(page, send_event, "#advance-owner", "advance")
+    assert tour.get_attribute("data-active") == "1"
+    tour.locator('[data-citry-tour-action="next"]:visible').click()
+    page.wait_for_function("document.querySelector('#rerendered').dataset.active === '2'")
+    assert tour.get_attribute("data-value") == "three"
+    assert page.evaluate("window.__activeChanges") == [[1, "next"], [2, "next"]]
+    # The dialog's accessible name follows the shown step's title.
+    assert (
+        page.evaluate(
+            "() => { const dialog = document.querySelector('#rerendered dialog');"
+            " return document.getElementById(dialog.getAttribute('aria-labelledby'))?.textContent; }"
+        )
+        == "Step three"
+    )
+
+
+def test_server_change_of_active_moves_the_open_tour(
+    page: Any, serve_citry_ui_live: Any, wait_for_citry_ready: Any, send_event: Any
+) -> None:
+    tour = _open_rerendered_tour_at_step_two(page, serve_citry_ui_live, wait_for_citry_ready)
+
+    # A changed server `active` wins over the user's step, without a callback,
+    # and Previous then steps back from the server's step.
+    _server_event(page, send_event, "#last-step-on-server", "last_step_on_server")
+    page.wait_for_function("document.querySelector('#rerendered').dataset.active === '2'")
+    assert page.evaluate("document.querySelector('#rerendered dialog').open")
+    assert tour.get_attribute("data-value") == "three"
+    tour.locator('[data-citry-tour-action="previous"]:visible').click()
+    page.wait_for_function("document.querySelector('#rerendered').dataset.active === '1'")
+    assert page.evaluate("window.__activeChanges") == [[1, "next"], [1, "previous"]]

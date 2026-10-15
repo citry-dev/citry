@@ -32,11 +32,18 @@ $component({
     const handedOver = 'serverOpen' in handoff;
     const sameServerOpen = handedOver && handoff.serverOpen === Boolean(data.open);
     let internalOpen = sameServerOpen ? handoff.open : Boolean(data.open);
-    let internalActive = data.active;
+    // The active step follows the same rule: a tour the user moved to another
+    // step stays there while the server's `active` input is unchanged, and a
+    // changed input moves it to the server's step. Without this, a re-render
+    // mid-tour would put the runtime back on the server's step while the page
+    // still shows the user's, and Next would repeat a step.
+    const sameServerActive = 'serverActive' in handoff && handoff.serverActive === data.active
+      && Number.isInteger(handoff.active) && handoff.active >= 0 && handoff.active < panels.length;
+    let internalActive = sameServerActive ? handoff.active : data.active;
     let controlledOpen = false;
     let controlledActive = false;
     let appliedOpen = dialog.open;
-    let active = data.active;
+    let active = internalActive;
     let onOpenChange = null;
     let onActiveChange = null;
     let target = null;
@@ -261,9 +268,8 @@ $component({
       queueGeometry();
     };
 
-    const showPanel = (index, source = null) => {
-      const previous = active;
-      active = index;
+    // Mark which panel is current, without scrolling or moving focus.
+    const markPanel = index => {
       const panel = panels[index];
       panels.forEach((candidate, candidateIndex) => {
         const current = candidateIndex === index;
@@ -273,9 +279,18 @@ $component({
       });
       host.dataset.active = String(index);
       host.dataset.value = panel.dataset.value;
-      dialog.setAttribute('aria-labelledby', panel.dataset.titleId);
-      if (panel.dataset.describe === 'true') dialog.setAttribute('aria-describedby', panel.dataset.descriptionId);
+      // The panel's own title and description elements carry the ids the
+      // server wrote, so the dialog's accessible name follows the shown step.
+      const title = panel.querySelector(':scope > header > [data-citry-ui-part="title"]');
+      const description = panel.querySelector(':scope > [data-citry-ui-part="description"]');
+      if (title?.id) dialog.setAttribute('aria-labelledby', title.id);
+      if (panel.dataset.describe === 'true' && description?.id) dialog.setAttribute('aria-describedby', description.id);
       else dialog.removeAttribute('aria-describedby');
+    };
+    const showPanel = (index, source = null) => {
+      const previous = active;
+      active = index;
+      markPanel(index);
       if (appliedOpen && configuration.scroll !== 'none') {
         panelTarget(index)?.scrollIntoView({behavior: configuration.scroll, block: 'nearest', inline: 'nearest'});
       }
@@ -380,6 +395,10 @@ $component({
       notifyOpen(false, 'native', event.target);
     };
 
+    // Vue patches a panel's markup only where the server's step changed, so a
+    // panel the runtime showed for the user's step can stay visible beside the
+    // server's. Mark the current panel on every run so exactly one is shown.
+    markPanel(active);
     host.addEventListener('click', onClick);
     host.ownerDocument.addEventListener('keydown', onKeyDown, true);
     host.ownerDocument.addEventListener('pointerdown', onPointerDown, true);
@@ -450,6 +469,8 @@ $component({
     return () => {
       handoff.open = appliedOpen;
       handoff.serverOpen = Boolean(data.open);
+      handoff.active = active;
+      handoff.serverActive = data.active;
       host.removeEventListener('click', onClick);
       host.ownerDocument.removeEventListener('keydown', onKeyDown, true);
       host.ownerDocument.removeEventListener('pointerdown', onPointerDown, true);
