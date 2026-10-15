@@ -672,3 +672,97 @@ def test_server_rerender_keeps_an_open_dialog_or_removes_it_silently(
         page.wait_for_function("!document.querySelector(':modal') && !document.documentElement.style.overflow")
         assert page.evaluate("document.querySelectorAll('[inert]').length") == 0
         assert page.evaluate("window.__ownedDialogEvents") == [{"open": True, "reason": "trigger"}]
+
+
+def _outer_opener_owner_page() -> tuple[Citry, str]:
+    app = Citry(secret="citry-ui-dialog-removal-focus-e2e", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(citry_ui)
+
+    class DialogOwner(Component):
+        citry = app
+
+        class Kwargs:
+            step: int = 0
+
+        class State(Kwargs):
+            pass
+
+        class Events:
+            def remove(self, state):
+                return DialogOwner(step=state.step + 1)
+
+        # The opener sits outside the dialog, so it is still in the page after
+        # the server render removes the dialog.
+        template = """
+          <section id="dialog-owner">
+            <output id="owner-step">{{ step }}</output>
+            <button
+              id="outer-opener"
+              type="button"
+              @click="dialogOpen = true"
+            >Open from outside</button>
+            <c-if cond="step == 0">
+              <c-CDialog
+                :open="dialogOpen"
+                :onOpenChange="(open) => { dialogOpen = open; }"
+              >
+                <c-fill name="title">Removable dialog</c-fill>
+                <c-fill name="default">
+                  <button
+                    id="remove-dialog-on-server"
+                    type="button"
+                    @c-click="remove"
+                  >Remove on server</button>
+                </c-fill>
+              </c-CDialog>
+            </c-if>
+          </section>
+        """
+
+        js = """
+          $component({
+            data() {
+              return { dialogOpen: false };
+            },
+          });
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"step": kwargs.step}
+
+    class Page(Component):
+        citry = app
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /><c-css /></head>
+            <body><c-dialog-owner /><c-js /></body>
+          </html>
+        """
+
+    return app, str(Page())
+
+
+def test_server_rerender_that_removes_an_open_dialog_returns_focus_to_its_opener(
+    page, serve_citry_ui_live, wait_for_citry_ready, send_event
+):
+    """Removing an open dialog in a server render moves focus back to the opener that is still in the page."""
+    app, html = _outer_opener_owner_page()
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    wait_for_citry_ready()
+    # WebKit does not focus a button that a mouse click activates, so open the
+    # dialog from the keyboard: the opener then has focus in every browser.
+    page.locator("#outer-opener").focus()
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.querySelector('dialog')?.open")
+
+    send_event(
+        lambda: page.locator("#remove-dialog-on-server").evaluate("element => element.click()"),
+        handler="remove",
+    )
+    page.wait_for_function("document.querySelector('#owner-step').textContent === '1'")
+    assert page.locator("dialog").count() == 0
+    # The dialog is released on the next task after the page update, and focus
+    # returns to the opener then rather than staying on the body.
+    page.wait_for_function("document.activeElement?.id === 'outer-opener'", timeout=2_000)

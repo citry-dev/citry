@@ -572,12 +572,11 @@ class CDialog(LibraryComponent):
             // same dialog, so an open dialog is handed to the next callback run.
             const handedOff = controller.cleanup({ handoff: true });
             if (handedOff) {
-              // The runtime runs this cleanup before Vue patches the page, and Vue
-              // patches in a microtask queued after this one. By the next task the
-              // patch is done, so a dialog the page removed is disconnected and
-              // releases the scroll lock, modal state, and focus now rather than when
-              // the handoff expires. A kept dialog's next run has already taken the
-              // handoff by then, so this finds nothing to abort.
+              // Citry runs this cleanup before Vue updates the page, and Vue updates
+              // it in a later microtask, so by the next task a removed dialog is
+              // disconnected and releases its modal state and scroll lock. A kept
+              // dialog is still connected, so the check leaves its handoff for the
+              // next run.
               setTimeout(() => {
                 if (!dialog.isConnected) controllerRuntime.abortHandoff(dialog);
               }, 0);

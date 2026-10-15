@@ -291,6 +291,15 @@ class CDrawer(LibraryComponent):
           // drawer the user opened or closed stays that way; a changed input wins.
           const handoff = drawer[drawerHandoffKey] ?? null;
           delete drawer[drawerHandoffKey];
+          // The template renders the drawer's `open` attribute from the server's
+          // `open` input, so Vue removes it when a server re-render changes that
+          // input to false. That leaves a modal drawer in the top layer, still
+          // blocking the page, with `drawer.open` reading false. Put the attribute
+          // back so the takeover below sees the open drawer and the effect closes
+          // it through the ordinary close path, which releases the scroll lock.
+          let modalShowing = false;
+          try { modalShowing = drawer.matches(":modal"); } catch { modalShowing = false; }
+          if (modalShowing && !drawer.open) drawer.setAttribute("open", "");
           if (handoff?.timer) clearTimeout(handoff.timer);
           const sameServerOpen = Boolean(handoff) && handoff.serverOpen === defaults.open;
           let internalOpen = sameServerOpen ? handoff.open : defaults.open;

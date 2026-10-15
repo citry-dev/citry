@@ -77,6 +77,19 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         documentLocks.delete(documentOwner);
       }
     };
+    // The component templates render the dialog's `open` attribute from the
+    // server's `open` input, so Vue removes the attribute when a server
+    // re-render changes that input to false. Removing the attribute does not
+    // take a modal dialog out of the top layer: it stays modal and keeps
+    // blocking the page while `dialog.open` reads false, and `close()` does
+    // nothing without the attribute. Putting the attribute back makes
+    // `dialog.open` say again whether the dialog is shown, so the ordinary
+    // close path can close it and release the scroll lock.
+    const restoreModalOpen = (dialog) => {
+      let modal = false;
+      try { modal = dialog.matches(":modal"); } catch { modal = false; }
+      if (modal && !dialog.open) dialog.setAttribute("open", "");
+    };
     const register = (record) => {
       if (!modalRecords.includes(record)) modalRecords.push(record);
     };
@@ -158,6 +171,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       };
       const initialFocusTarget = initialFocus?.() ?? null;
 
+      restoreModalOpen(dialog);
       const previous = dialog[handoffKey] ?? null;
       const abortPrevious = () => {
         if (!previous) return;
@@ -446,10 +460,22 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
             timer: null,
             abort() {
               closeDescendants();
+              restoreModalOpen(dialog);
               expectedNativeClose = dialog.open;
               if (dialog.open) dialog.close();
               appliedOpen = false;
               unlock(documentOwner, dialog);
+              // No later run took the dialog over, usually because the page
+              // removed it, which leaves focus on the body. Return focus to the
+              // element that opened it when that element is still in the page.
+              const current = deepActive(documentOwner);
+              const focusLost = current === null
+                || current === documentOwner.body
+                || current === documentOwner.documentElement
+                || current === dialog
+                || dialog.contains(current)
+                || !current.isConnected;
+              if (focusLost && isFocusable(previousFocus)) previousFocus.focus({ preventScroll: true });
               handoffAborted?.();
             },
           };
@@ -500,6 +526,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       abortHandoff,
       deepActive,
       isFocusable,
+      restoreModalOpen,
       counts: () => ({ modals: modalRecords.length }),
     };
   })();

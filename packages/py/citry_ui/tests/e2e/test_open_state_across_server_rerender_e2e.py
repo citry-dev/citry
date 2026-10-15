@@ -1500,11 +1500,16 @@ _SECOND = "#overlay-slot > .instance:nth-child(2)"
 
 # A popup is open when it is an open dialog, or a showing popover or popup
 # part that is not hidden. A popover left in the top layer with `hidden` set
-# is not visible, so it does not count.
+# is not visible, so it does not count. A dialog that is still modal but no
+# longer `open` is hidden yet keeps blocking the page; it is neither open nor
+# closed, so the check returns null and the caller fails.
 _IS_OPEN = """([scope, selector]) => {
   const popup = document.querySelector(scope + ' ' + selector);
   if (!popup) return false;
-  if (popup.tagName === 'DIALOG') return popup.open;
+  if (popup.tagName === 'DIALOG') {
+    if (popup.matches(':modal') && !popup.open) return null;
+    return popup.open;
+  }
   if (popup.hidden) return false;
   return popup.hasAttribute('popover') ? popup.matches(':popover-open') : true;
 }"""
@@ -1643,7 +1648,25 @@ def _scope(controlled: bool = False) -> str:
 
 
 def _is_open(page: Any, component: str, scope: str = _FIRST) -> bool:
-    return bool(page.evaluate(_IS_OPEN, [scope, _OPENING[component][1]]))
+    state = page.evaluate(_IS_OPEN, [scope, _OPENING[component][1]])
+    if state is None:
+        pytest.fail(f"{component} left a hidden dialog in the top layer, still blocking the page")
+    return bool(state)
+
+
+def _assert_page_released(page: Any, component: str) -> None:
+    # A closed overlay must leave nothing modal behind: no dialog in the top
+    # layer, no scroll lock on the page, and real clicks reach the page again.
+    # Playwright's click checks that the target receives the pointer, so it
+    # fails when a hidden modal dialog still covers the page.
+    leftover = page.evaluate(
+        """() => ({
+          modal: [...document.querySelectorAll(':modal')].map(element => element.tagName),
+          overflow: document.documentElement.style.overflow,
+        })"""
+    )
+    assert leftover == {"modal": [], "overflow": ""}, f"{component} left modal state behind: {leftover}"
+    page.locator("#owner-step").click(timeout=2_000)
 
 
 def _wait_open(page: Any, component: str, *, open_: bool = True, scope: str = _FIRST) -> None:
@@ -1791,6 +1814,8 @@ def test_server_open_input_change_opens_and_closes_the_overlay(
     _server_event(page, send_event, "#close-on-server", "close_on_server", 2)
     _wait_open(page, component, open_=False)
     settle_timers()
+    assert not _is_open(page, component)
+    _assert_page_released(page, component)
     # The owner changed its own input, so neither change is reported back.
     assert page.evaluate("window.__openChanges") == []
 
@@ -1816,6 +1841,7 @@ def test_user_close_survives_a_rerender_with_an_unchanged_server_open(
     _server_event(page, send_event, "#advance-owner", "advance", 2)
     settle_timers()
     assert not _is_open(page, component), f"{component} reopened when a re-render kept server open at true"
+    _assert_page_released(page, component)
     assert page.evaluate("window.__openChanges") == closed
 
 
