@@ -31,7 +31,18 @@
             ((scope = root.getRootNode()), (manager = mutationScopes.get(scope)));
             if (!manager) {
               const entries = new Map(),
-                observer = new MutationObserver((records) => {
+                observer = new MutationObserver((allRecords) => {
+                  // An attribute write that left the value as it was changes
+                  // nothing a controller could react to. A repair rewrites
+                  // every owned attribute, so without this filter a root it
+                  // cannot make valid would wake its own watcher, which would
+                  // schedule the same repair again, without end.
+                  const records = allRecords.filter(
+                    (record) =>
+                      "attributes" !== record.type ||
+                      record.oldValue !== record.target.getAttribute(record.attributeName),
+                  );
+                  if (0 === records.length) return;
                   for (const record of records)
                     for (const node of record.addedNodes)
                       if (node instanceof Element)
@@ -54,7 +65,7 @@
                 });
               (observer.observe(
                 scope instanceof Document ? scope.documentElement : scope,
-                { subtree: !0, childList: !0, attributes: !0 },
+                { subtree: !0, childList: !0, attributes: !0, attributeOldValue: !0 },
               ),
                 (manager = { entries, observer }),
                 mutationScopes.set(scope, manager));
@@ -857,6 +868,20 @@
             );
           }
           X && Y.invocation && ((O = Y.invocation), (i.dataset.invocation = O.kind));
+          const readOpenChange = () => {
+            const e = o.onOpenChange;
+            return null == e
+              ? (M.delete("onOpenChange"), null)
+              : "function" == typeof e
+                ? (M.delete("onOpenChange"), e)
+                : (V("onOpenChange", e, "; ignoring the callback"), null);
+          };
+          // Read onOpenChange before the Menu controller starts, not only in
+          // the props read that waits for a valid root on a later timer. On a
+          // server revision the new controller takes over an open menu, and a
+          // close it reports before that later read would otherwise never
+          // reach the callback.
+          w = readOpenChange();
           v = menuRuntime.factory({
             host: i,
             data: { ...n, placement: "bottom-start", matchWidth: !1 },
@@ -924,12 +949,24 @@
               if (e && v) {
                 const e = v.declarationSignature();
                 if (X && null !== Y.menuSignature && Y.menuSignature !== e) {
-                  const e = w;
-                  w = null;
+                  // The server changed the menu items while the menu was open,
+                  // so close it and tell the owner, as for any forced close.
+                  // The new Menu controller reports the close itself only when
+                  // it already counts the menu as open. After a handoff it may
+                  // not yet, and then it just hides the surface, so report the
+                  // close here when the surface was showing.
+                  const reportHere = !v.isOpen() && c.matches(":popover-open");
                   try {
                     v.forceClose(_() ? "disabled" : "ancestor", s);
                   } finally {
-                    ((w = e), (O = null), (Y.invocation = null), te());
+                    reportHere &&
+                      le(!1, {
+                        reason: "ancestor",
+                        controlled: v.isControlled(),
+                        forced: !0,
+                        source: s,
+                      });
+                    ((O = null), (Y.invocation = null), te());
                   }
                 }
                 ((Y.menuSignature = e), (mt = !1));
@@ -1489,11 +1526,13 @@
                     void 0
                   );
                 }
+                // A root that was ready before and is valid again repairs at
+                // once, even when its menu surface lost its own initialized
+                // mark while the root was broken: the repair is what gives
+                // the surface that mark back.
                 if (Q() && qe() && ye() && Z())
                   return (
-                    (!Qt() ||
-                      (!h && vt && c.hasAttribute("data-citry-menu-initialized"))) &&
-                      Fe(),
+                    (!Qt() || (!h && vt)) && Fe(),
                     (z = i.getRootNode()),
                     v.refreshRootScope(),
                     Ge(),
@@ -1545,14 +1584,7 @@
                 closeOnSelect: B("closeOnSelect"),
                 size: j(),
               }),
-                (w = (() => {
-                  const e = o.onOpenChange;
-                  return null == e
-                    ? (M.delete("onOpenChange"), null)
-                    : "function" == typeof e
-                      ? (M.delete("onOpenChange"), e)
-                      : (V("onOpenChange", e, "; ignoring the callback"), null);
-                })()),
+                (w = readOpenChange()),
                 (i.dataset.size = E.size),
                 i.toggleAttribute("data-disabled", _()),
                 _() && de(),

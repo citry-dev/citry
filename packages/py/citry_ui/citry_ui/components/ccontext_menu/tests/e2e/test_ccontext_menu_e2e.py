@@ -1597,6 +1597,7 @@ def test_nested_boundary_server_revision_shadow_move_and_hostile_repair(page, se
 
 
 def test_open_context_menu_reorder_preserves_declaration_order_and_closes_cleanly(page, serve_citry_ui_live) -> None:
+    """A server revision that changes the open menu's items closes it and reports the close to `onOpenChange`."""
     app, html = _reordered_context_menu_page()
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
@@ -1623,7 +1624,13 @@ def test_open_context_menu_reorder_preserves_declaration_order_and_closes_cleanl
         "Second action",
         "First action",
     ]
-    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True]
+    # The owner learns about the forced close, so state that tracks
+    # `onOpenChange` does not still say the menu is open.
+    page.wait_for_function("window.__contextReorderEvents.length === 2")
+    assert page.evaluate("window.__contextReorderEvents") == [
+        {"open": True, "reason": "contextmenu"},
+        {"open": False, "reason": "ancestor"},
+    ]
 
     page.locator("#reorder-context-target").click(button="right")
     page.wait_for_function("document.querySelector('#reorder-context-menu')?.matches(':popover-open')")
@@ -1631,7 +1638,7 @@ def test_open_context_menu_reorder_preserves_declaration_order_and_closes_cleanl
         "Second action",
         "First action",
     ]
-    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True, True]
+    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True, False, True]
     assert errors == []
 
 
@@ -1742,6 +1749,73 @@ def test_point_close_capability_loss_and_invalid_target_fail_closed(page) -> Non
     )
     page.wait_for_function("!document.querySelector('#hostile')?.hasAttribute('data-citry-context-menu-initialized')")
     assert not any("is not a function" in error for error in errors)
+
+
+def test_untrusted_root_waits_without_rewriting_itself(page) -> None:
+    """A root the page has broken stays not ready and does no work until the page changes it again."""
+    # The menus become ready on timers, so the clock runs through the load and
+    # pauses only for the counting below, where only `run_for()` moves it.
+    page.clock.install()
+    errors = _load(page)
+    page.clock.pause_at(page.evaluate("Date.now() + 1_000"))
+    page.evaluate(
+        """
+          () => {
+            document.querySelector('#geometry').removeAttribute('data-citry-context-menu-initialized');
+            document.querySelector('#geometry-point').style.setProperty(
+              'anchor-name', '--_cui-menu-anchor-ref-untrusted'
+            );
+            document.querySelector('#geometry-menu').style.setProperty(
+              'position-anchor', '--_cui-untrusted-menu-anchor'
+            );
+          }
+        """
+    )
+    # Let the controller react to the break once before counting.
+    page.clock.run_for(50)
+    page.evaluate(
+        """
+          () => {
+            const root = document.querySelector('#geometry');
+            window.__geometryWrites = 0;
+            new MutationObserver((records) => {
+              window.__geometryWrites += records.length;
+            }).observe(root, { subtree: true, attributes: true, childList: true });
+          }
+        """
+    )
+    # Each repair rewrites the root's attributes and wakes the controller's
+    # own observer, so a controller that reacts to its own writes would
+    # rewrite the root on every timer tick while nothing else changes.
+    page.clock.run_for(1_000)
+    assert page.evaluate("window.__geometryWrites") == 0
+    assert not page.locator("#geometry").evaluate(
+        "element => element.hasAttribute('data-citry-context-menu-initialized')"
+    )
+
+    page.evaluate(
+        """
+          () => {
+            document.querySelector('#geometry-point').style.setProperty(
+              'anchor-name', '--_cui-menu-anchor-ref-handoff'
+            );
+            document.querySelector('#geometry-menu').style.setProperty(
+              'position-anchor', '--_cui-menu-anchor-ref-handoff'
+            );
+          }
+        """
+    )
+    page.clock.run_for(50)
+    page.wait_for_function(
+        """
+          document.querySelector('#geometry').hasAttribute('data-citry-context-menu-initialized')
+          && document.querySelector('#geometry-menu').hasAttribute('data-citry-menu-initialized')
+        """
+    )
+    # The page broke the root on purpose, so the only errors are the
+    # controller's reports of that.
+    assert errors
+    assert all("CContextMenu" in error and "invalid" in error for error in errors), errors
 
 
 def test_disabled_focus_fallback_removes_temporary_body_tabindex(page) -> None:

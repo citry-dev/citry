@@ -46,6 +46,13 @@
   markup while the menu is starting up, for example right after a server
   re-render. Previously the callback was not called for that menu until its
   props changed.
+- `CContextMenu` now calls `onOpenChange(false)` when a server re-render
+  changes the items of an open menu and closes it. Previously the menu
+  closed without the callback, so state that follows `onOpenChange` still
+  said the menu was open.
+- A `CContextMenu` whose markup page code has changed into a form the
+  component cannot use now waits for the next change instead of rewriting
+  its markup on every timer tick, which kept the page busy.
 
 ## [0.2.2] - 2026-09-11
 
