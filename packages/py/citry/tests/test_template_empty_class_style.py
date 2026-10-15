@@ -21,7 +21,7 @@ import re
 
 import pytest
 
-from citry import Citry, Component, merge_attrs
+from citry import Citry, Component, Extension, merge_attrs
 from citry.attrs import TEMPLATE_EMPTY_VALUE, format_attrs, template_attr_value
 
 
@@ -245,3 +245,84 @@ def test_the_marker_renders_as_written_only_when_nothing_else_sets_the_attribute
     assert format_attrs(merge_attrs({"class": TEMPLATE_EMPTY_VALUE}, {"class": "on"})) == 'class="on"'
     assert format_attrs(merge_attrs({"style": TEMPLATE_EMPTY_VALUE}, {"style": None})) == ""
     assert format_attrs(merge_attrs({"style": TEMPLATE_EMPTY_VALUE}, {"style": ""})) == ""
+
+
+# What an `on_attrs_resolved` hook does with the written empty class:
+# keep it, replace it with text, or remove it.
+HOOK_ACTIONS = pytest.mark.parametrize(
+    ("action", "expected"),
+    [
+        ("keep", '<p class title="t">x</p>'),
+        ("replace", '<p class="from-hook" title="t">x</p>'),
+        ("remove", '<p title="t">x</p>'),
+    ],
+)
+
+
+def _apply_hook_action(attrs: dict[str, object], action: str) -> dict[str, object]:
+    if action == "replace":
+        attrs["class"] = "from-hook"
+    elif action == "remove":
+        del attrs["class"]
+    return attrs
+
+
+@HOOK_ACTIONS
+def test_attrs_hook_sees_the_compiled_true_for_a_written_empty_class(action: str, expected: str) -> None:
+    seen: list[object] = []
+
+    class Spy(Extension):
+        name = "spy"
+
+        def on_attrs_resolved(self, ctx):
+            # The hook gets the value the template compiled to, never the
+            # renderer's private marker.
+            seen.append(ctx.attrs.get("class"))
+            assert type(ctx.attrs["class"]) is bool
+            return _apply_hook_action(dict(ctx.attrs), action)
+
+    engine = Citry(autodiscover=False, extensions=[Spy])
+
+    class Card(Component):
+        citry = engine
+        template = """
+          <main><p class c-title="title">x</p></main>
+        """
+
+        def template_data(self, kwargs, slots) -> dict[str, object]:
+            return {"title": "t"}
+
+    html = _strip_cid(str(Card()))
+
+    assert seen == [True]
+    assert f"<main>{expected}</main>" in html
+
+
+@HOOK_ACTIONS
+def test_input_hook_sees_the_compiled_true_on_a_dynamic_element(action: str, expected: str) -> None:
+    seen: list[object] = []
+
+    class Spy(Extension):
+        name = "spy"
+
+        def on_component_input(self, ctx):
+            if "class" in ctx.kwargs:
+                seen.append(ctx.kwargs["class"])
+                assert type(ctx.kwargs["class"]) is bool
+                _apply_hook_action(ctx.kwargs, action)
+
+    engine = Citry(autodiscover=False, extensions=[Spy])
+
+    class Card(Component):
+        citry = engine
+        template = """
+          <main><c-element is="p" class c-bind="attrs">x</c-element></main>
+        """
+
+        def template_data(self, kwargs, slots) -> dict[str, object]:
+            return {"attrs": {"title": "t"}}
+
+    html = _strip_cid(str(Card()))
+
+    assert seen == [True]
+    assert f"<main>{expected}</main>" in html

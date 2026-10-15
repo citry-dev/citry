@@ -245,8 +245,38 @@ class _TemplateEmptyValue(str):
     __slots__ = ()
 
 
-# The one marker the renderer uses; copies compare by type, not identity.
+# The one marker the renderer uses. Code checks for the marker with
+# isinstance(), not `is`, so a copy made by deepcopy or pickle still counts.
 TEMPLATE_EMPTY_VALUE = _TemplateEmptyValue()
+
+
+def hide_template_empty_values(values: dict[str, Any]) -> tuple[str, ...]:
+    """
+    Put back the parser's ``True`` for each written empty ``class``/``style`` before an extension hook.
+
+    Extension hooks receive the attribute values the template compiled to, so
+    a hook never sees the private marker. Returns the names that held the
+    marker, for ``restore_template_empty_values`` to use after the hooks run.
+    The dict is changed in place with ``dict.__setitem__``, so a mapping that
+    tracks values beside its entries keeps that record.
+    """
+    names = tuple(name for name, value in values.items() if isinstance(value, _TemplateEmptyValue))
+    for name in names:
+        dict.__setitem__(values, name, True)  # noqa: FBT003 - the value the parser gives it
+    return names
+
+
+def restore_template_empty_values(values: dict[str, Any], names: tuple[str, ...]) -> None:
+    """
+    Turn a ``True`` the hooks left in place back into the marker.
+
+    Only a name that still holds exactly ``True`` gets the marker back. A hook
+    that replaced or removed the value gets what it asked for, and a ``True``
+    a hook moved to another name stays an ordinary boolean attribute there.
+    """
+    for name in names:
+        if name in values and values[name] is True:
+            dict.__setitem__(values, name, TEMPLATE_EMPTY_VALUE)
 
 
 def template_attr_value(name: str, value: Any) -> Any:
@@ -676,10 +706,12 @@ def _format_resolved_attrs_to_str(coalesced: Mapping[str, Any]) -> str:
         # which a browser reads as disabled because the attribute is present.
         value = _underlying(value)  # noqa: PLW2901
         identity = _html_attr_identity(key)
-        if isinstance(value, _TemplateEmptyValue):
+        if identity in {"class", "style"} and isinstance(value, _TemplateEmptyValue):
             # The template wrote this class or style empty and nothing else
-            # set it, so it renders as written, like the same tag on a page
-            # with no Python values. Every other empty class or style is left out.
+            # set it, so it renders as a bare attribute, as the tag would on
+            # a page with no Python values. Every other empty class or style
+            # is left out. The renderer only places the marker on these two
+            # names; on any other name it falls through as an empty string.
             parts.append(escape_to_str(key))
             continue
         if identity == "class" and value is not None:

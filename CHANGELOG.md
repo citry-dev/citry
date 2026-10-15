@@ -238,10 +238,11 @@ walks through every step.
   (default 2000) if a page really nests deeper.
 - An element with an empty `class` or `style`, such as
   `<p class c-class="name">` or `<p style="" c-style="styles">`, no
-  longer raises `TypeError: Invalid class value: True` (or the `style`
-  equivalent) when it also has a `c-class`, `c-style`, `c-bind`, or other
-  `c-*` attribute. The empty attribute adds nothing to the value from
-  Python.
+  longer raises `TypeError: Invalid class value: True` (or
+  `Invalid style value: True`) when it also has a `c-class`, `c-style`,
+  `c-bind`, or other `c-*` attribute. The empty attribute adds nothing to
+  the value from Python. With no Python value, the element keeps the empty
+  attribute.
 
 ## v0.5.1
 

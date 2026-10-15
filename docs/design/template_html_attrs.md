@@ -342,6 +342,15 @@ Resolution per key:
 - `class`, `style`: every contribution is kept, in order, and the list
   normalizes per section 3 at the end. Order is contribution order, so later
   entries override (style) or can disable (class dict) earlier ones.
+- a `class` or `style` written empty in the template (`<p class>` or
+  `<p style="">`, which compiles to `True`): it adds nothing when Python also
+  sets the attribute through `c-class`, `c-style`, or a `c-bind` key, even to
+  an empty value or `None`, so the element renders as if only the Python
+  value were there. When nothing from Python sets it, the element keeps the
+  empty attribute as written. The renderer carries it through the merge as a
+  private empty marker (`attrs.TEMPLATE_EMPTY_VALUE`), because a `True` from
+  Python data in `class` or `style` is a mistake and still raises
+  `TypeError`.
 - every other ordinary attribute key: last contribution wins.
 
 Attribute output order is **first-seen order of each key**, so adding a
@@ -515,7 +524,11 @@ context field (`extension.py:516`).
 
 The hook fires **after resolution, before formatting**: it sees the final
 merged dict (`class`/`style` already normalized to strings, booleans still
-`True`, omitted attributes already gone) and can rewrite any value. The two
+`True`, omitted attributes already gone) and can rewrite any value. A
+`class` or `style` that the template wrote empty and nothing else set
+reaches the hook as `True`, the value it compiled to; when the hook leaves
+that `True` in place, the element renders the empty attribute as written.
+`on_component_input` sees a dynamic `<c-element>`'s inputs the same way. The two
 alternative timings lose: a before-resolution hook would expose the
 internal per-source contribution list as public API for little gain (a
 post-processor wants the outcome, not the inputs), and an after-formatting

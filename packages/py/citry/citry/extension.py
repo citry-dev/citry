@@ -44,7 +44,12 @@ from citry._nested_declarations import (
     _compose_nested_declaration_class,
     _get_nested_class_declarations,
 )
-from citry.attrs import is_vue_code_attr_name, vue_code_error
+from citry.attrs import (
+    hide_template_empty_values,
+    is_vue_code_attr_name,
+    restore_template_empty_values,
+    vue_code_error,
+)
 from citry.constness import _const_mapping, _ConstMapping, _refresh_const_mapping
 from citry.introspection import (
     ComponentExtensionInfo,
@@ -1991,6 +1996,11 @@ class ExtensionManager:
         # component, so the allocation is worth avoiding on the construction path.
         if not self.has_hook("on_component_input"):
             return
+        # A dynamic <c-element> carries a written empty class or style as a
+        # private marker; hooks see the parser's True instead, see
+        # hide_template_empty_values.
+        raw_kwargs = component.raw_kwargs
+        hidden = hide_template_empty_values(raw_kwargs) if isinstance(raw_kwargs, dict) else ()
         for extension in self._extensions_with_hook("on_component_input"):
             extension.on_component_input(
                 OnComponentInputContext(
@@ -2006,6 +2016,8 @@ class ExtensionManager:
                 component.raw_kwargs = _const_mapping(component.raw_kwargs)
             raw_kwargs = cast("_ConstMapping", component.raw_kwargs)
             component._const_candidates.update(raw_kwargs._const_values)
+        if hidden:
+            restore_template_empty_values(component.raw_kwargs, hidden)
 
     def on_component_data(
         self,
@@ -2236,6 +2248,9 @@ class ExtensionManager:
         # Hooks may change the dict in place, so keep the names and values
         # they were given. Any Vue-named key in it was written in the template,
         # because c-bind and c-* keys with those names already failed.
+        # A written empty class or style reaches hooks as the parser's True,
+        # never as the renderer's private marker (hide_template_empty_values).
+        hidden = hide_template_empty_values(attrs)
         before = dict(attrs)
         ctx = OnAttrsResolvedContext(
             citry=self.citry,
@@ -2256,6 +2271,8 @@ class ExtensionManager:
                 raise _hook_return_error("on_attrs_resolved", extension, out, target, hint)
             ctx = replace(ctx, attrs=out)
         _reject_vue_code_from_attrs_hook(before, ctx.attrs, tag_name=tag_name)
+        if hidden:
+            restore_template_empty_values(ctx.attrs, hidden)
         return ctx.attrs
 
     # ----- Template hooks -----
