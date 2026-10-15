@@ -1,0 +1,13 @@
+<section c-id="tab['id']" c-data-tab-panel="tab['id']" v-show="activeTab === tab_id">
+<h2>{{ tab['title'] }}</h2>
+<article c-for="note in tab['notes']" c-data-note-id="note['id']">
+<p class="note-text">{{ note['text'] }}</p>
+<details>
+<summary>Comments</summary>
+<article c-for="comment in note['comments']" c-data-comment-id="comment['id']">
+<span class="comment-author">{{ comment['author'] }}</span>
+<p class="comment-text">{{ comment['text'] }}</p>
+</article>
+</details>
+</article>
+</section>

@@ -1,0 +1,28 @@
+{
+  "htmx.min.js": {
+    "url": "https://registry.npmjs.org/htmx.org/-/htmx.org-2.0.10.tgz",
+    "member": "package/dist/htmx.min.js",
+    "sha256": "71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de",
+    "bytes": 51238,
+    "package_integrity": "sha512-kdeJe7ZVwaS6QMz/ebBIVtZdpwen6L0OQ5GOhPV9MKBb196TCZeZu4yA7ZIQsaLKv7EpXz+So7KSXNuHXhj7Cw=="
+  },
+  "htmx.LICENSE": {
+    "url": "https://registry.npmjs.org/htmx.org/-/htmx.org-2.0.10.tgz",
+    "member": "package/LICENSE",
+    "sha256": "d3d2456f76414f2456104660ebd65aff1c04cd7966b942bdabd63f3cdb316a38",
+    "bytes": 642,
+    "package_integrity": "sha512-kdeJe7ZVwaS6QMz/ebBIVtZdpwen6L0OQ5GOhPV9MKBb196TCZeZu4yA7ZIQsaLKv7EpXz+So7KSXNuHXhj7Cw=="
+  },
+  "alpine.min.js": {
+    "url": "https://registry.npmjs.org/alpinejs/-/alpinejs-3.17.2.tgz",
+    "member": "package/dist/cdn.min.js",
+    "sha256": "abe5b75652884ce02c634ab1028b04758ec75fa874fd7a9bea1a0d97ebe5b2c3",
+    "bytes": 55744,
+    "package_integrity": "sha512-xbnG3LlnmFkiNO49C+qhqjEDqOdB0snKqvT48ZVp8TakpZOpsoQbc/jAxpptQRjZi7c9rLeCfvwQ/XOSirIZFQ=="
+  },
+  "alpine.LICENSE": {
+    "url": "https://raw.githubusercontent.com/alpinejs/alpine/v3.17.2/LICENSE.md",
+    "sha256": "08b7502da6e7aa1d0bbdc97d220fbf669b9366c61bd0f072238283c89bc4773a",
+    "bytes": 1092
+  }
+}

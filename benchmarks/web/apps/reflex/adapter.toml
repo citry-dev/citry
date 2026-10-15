@@ -1,0 +1,10 @@
+[app]
+name = "reflex"
+port = 8917
+transport = "websocket"
+rendering = "browser"
+audit = "/__bench/operations"
+launch = ["{python}", "-m", "uvicorn", "app:application", "--host", "127.0.0.1", "--port", "{port}", "--ws-per-message-deflate", "false"]
+health = "/health"
+build = [["{python}", "build.py"]]
+source_exclude = [".web", ".reflex", ".toolchain", ".states", "reflex.lock", "assets/external"]

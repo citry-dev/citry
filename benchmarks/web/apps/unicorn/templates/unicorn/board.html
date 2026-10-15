@@ -1,0 +1,67 @@
+<section id="board" data-project-id="{{ project.id }}" data-revision="{{ revision }}" data-session="{{ session }}" data-operation="{{ operation }}" data-visible-count="{{ visible_count }}" data-total-count="{{ total_count }}">
+<input type="hidden" name="operation" value="manual" unicorn:model.defer="operation" unicorn:key="operation">
+<nav id="project-navbar">Project workspace</nav>
+<aside id="project-sidebar">
+<h2>Phases</h2>
+<nav aria-label="Project phases">
+{% for phase in phase_groups %}
+<a href="#phase-{{ phase.id }}">{{ phase.title }}</a>
+{% endfor %}
+</nav>
+<h2>Bookmarks</h2>
+{% for bookmark in bookmarks %}
+<a data-bookmark-id="{{ bookmark.id }}" data-bookmark-name="{{ bookmark.text }}" href="{{ bookmark.url }}">
+<span class="bookmark-name">{{ bookmark.text }}</span>
+</a>
+{% endfor %}
+</aside>
+<header id="project-header">
+<p id="project-organization">{{ project.organization }}</p>
+<h1 id="board-title">{{ title }}</h1>
+<p>
+<span id="project-start-date">{{ project.start_date }}</span> – <span id="project-end-date">{{ project.end_date }}</span> · <span id="project-status">{{ project.status }}</span>
+</p>
+</header>
+<div class="toolbar">
+<form unicorn:submit.prevent="act('filter')">
+<label for="query">Filter outputs</label>
+<input id="query" unicorn:model.defer="query" value="{{ query }}">
+<button data-bench-action="filter">Filter</button>
+</form>
+<form unicorn:submit.prevent="act('save')" novalidate>
+<label for="title-input">Project title</label>
+<input id="title-input" unicorn:model.defer="title_input" value="{{ title_input }}">
+<button data-bench-action="save">Save</button>
+</form>
+</div>
+<p id="form-error" role="alert">{{ error }}</p>
+<p id="form-notice" role="status">{{ notice }}</p>
+<div class="toolbar">
+<form unicorn:submit.prevent="act('insert')">
+<button data-bench-action="insert">Insert output</button>
+</form>
+<form unicorn:submit.prevent="act('reorder')">
+<button data-bench-action="reorder">Reverse outputs</button>
+</form>
+<form unicorn:submit.prevent="act('remove')">
+<button data-bench-action="remove">Remove inserted output</button>
+</form>
+<form unicorn:submit.prevent="act('probe')">
+<button data-bench-action="probe">Check server</button>
+</form>
+</div>
+<p>
+<span id="visible-count">{{ visible_count }}</span> visible outputs</p>
+<div id="project-tabs" x-data="{ activeTab: 'outputs' }">
+<div role="tablist">
+<button type="button" data-tab-target="project-info" @click="activeTab='project-info'">Project Info</button>
+<button type="button" data-tab-target="notes-1" @click="activeTab='notes-1'">Notes 1</button>
+<button type="button" data-tab-target="notes-2" @click="activeTab='notes-2'">Notes 2</button>
+<button type="button" data-tab-target="notes-3" @click="activeTab='notes-3'">Notes 3</button>
+<button type="button" data-tab-target="outputs" @click="activeTab='outputs'">Outputs</button>
+</div>
+{% include "unicorn/partials/project_info.html" %}
+{% include "unicorn/partials/note_panels.html" %}
+{% include "unicorn/partials/outputs.html" %}
+</div>
+</section>
