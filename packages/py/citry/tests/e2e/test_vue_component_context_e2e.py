@@ -250,7 +250,7 @@ def _sign_tokens_with_an_unknown_secret(page: Any) -> None:
 
 
 @pytest.mark.e2e
-def test_stale_state_after_a_deploy_asks_once_to_reload(page: Any, serve_live: Any) -> None:
+def test_stale_state_after_a_deploy_asks_once_to_reload(page: Any, open_citry_page: Any, serve_live: Any) -> None:
     engine = Citry(secret="vue-version-skew-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     skew = _stale_token_page(engine)
@@ -272,8 +272,8 @@ def test_stale_state_after_a_deploy_asks_once_to_reload(page: Any, serve_live: A
             cancelable: event.cancelable}));
         """
     )
-    page.goto(serve_live(engine, skew(count=0).render().serialize(), "") + "/")
-    page.wait_for_function("document.querySelector('#skew')?.textContent === '0'")
+    # The server wrote the count, so waiting for its text does not show the app mounted.
+    open_citry_page(serve_live(engine, skew(count=0).render().serialize(), "") + "/")
     _sign_tokens_with_an_unknown_secret(page)
 
     page.locator("#skew").click()
@@ -292,7 +292,9 @@ def test_stale_state_after_a_deploy_asks_once_to_reload(page: Any, serve_live: A
 
 
 @pytest.mark.e2e
-def test_cancelling_the_version_notification_suppresses_the_reload_prompt(page: Any, serve_live: Any) -> None:
+def test_cancelling_the_version_notification_suppresses_the_reload_prompt(
+    page: Any, open_citry_page: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="vue-version-skew-cancel-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     skew = _stale_token_page(engine)
@@ -311,8 +313,8 @@ def test_cancelling_the_version_notification_suppresses_the_reload_prompt(page: 
         document.addEventListener('citry:events:after', () => { window.__skewFinished = true; });
         """
     )
-    page.goto(serve_live(engine, skew(count=0).render().serialize(), "") + "/")
-    page.wait_for_function("document.querySelector('#skew')?.textContent === '0'")
+    # The server wrote the count, so waiting for its text does not show the app mounted.
+    open_citry_page(serve_live(engine, skew(count=0).render().serialize(), "") + "/")
     _sign_tokens_with_an_unknown_secret(page)
     page.locator("#skew").click()
     # Citry decides on the prompt right after the `stale` listeners return and
@@ -323,7 +325,9 @@ def test_cancelling_the_version_notification_suppresses_the_reload_prompt(page: 
 
 
 @pytest.mark.e2e
-def test_a_call_whose_component_is_gone_still_notifies_document_listeners(page: Any, serve_live: Any) -> None:
+def test_a_call_whose_component_is_gone_still_notifies_document_listeners(
+    page: Any, open_citry_page: Any, wait_for_count: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="vue-version-skew-gone-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     skew = _stale_token_page(engine)
@@ -344,8 +348,8 @@ def test_a_call_whose_component_is_gone_still_notifies_document_listeners(page: 
           });
         """
     )
-    page.goto(serve_live(engine, skew(count=0).render().serialize(), "") + "/")
-    page.wait_for_function("document.querySelector('#skew')?.textContent === '0'")
+    # The server wrote the count, so waiting for its text does not show the app mounted.
+    open_citry_page(serve_live(engine, skew(count=0).render().serialize(), "") + "/")
 
     # Hold the call at the network layer so the component can be unmounted while
     # the call is still in flight, then let the stale token reach the server.
@@ -357,11 +361,7 @@ def test_a_call_whose_component_is_gone_still_notifies_document_listeners(page: 
     page.route("**/ext/events/call", hold)
     page.locator("#skew").click()
     page.wait_for_function("window.__goneEvents.length === 1")
-    deadline = 50
-    while not held and deadline:
-        page.wait_for_timeout(20)
-        deadline -= 1
-    assert held, "the event call never reached the network"
+    wait_for_count(held, 1)
     page.evaluate("__citryRuntime._apps.values().next().value.vueApp.unmount()")
     held[0].continue_()
     page.wait_for_function("window.__goneEvents.some(item => item.name === 'after')")
@@ -515,7 +515,7 @@ def _release_with_an_unknown_signature(route: Any) -> None:
 
 @pytest.mark.e2e
 def test_a_stale_state_answer_for_a_component_without_elements_prompts_from_document(
-    page: Any, serve_live: Any
+    page: Any, open_citry_page: Any, wait_for_count: Any, serve_live: Any
 ) -> None:
     engine = Citry(secret="vue-version-skew-hidden-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -558,14 +558,16 @@ def test_a_stale_state_answer_for_a_component_without_elements_prompts_from_docu
     dialogs: list[str] = []
     page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
     page.add_init_script(_record_lifecycle_at_document())
-    page.goto(serve_live(engine, Hidden(count=0).render().serialize(), "") + "/")
-    page.wait_for_function("document.querySelector('#hidden-skew')?.textContent === '0'")
+    # The server wrote the count, so waiting for its text does not show the app mounted.
+    open_citry_page(serve_live(engine, Hidden(count=0).render().serialize(), "") + "/")
     held = _hold_event_calls(page)
     page.locator("#hidden-skew").click()
     page.wait_for_function("window.__lifecycle.length === 1")
     page.evaluate("window.__hidden.shown = false")
     page.wait_for_function("document.querySelector('#hidden-skew') === null")
-    assert len(held) == 1
+    # `before` fires before the request starts, so the route handler may not
+    # have run yet.
+    wait_for_count(held, 1)
     _release_with_an_unknown_signature(held[0])
     page.wait_for_function("window.__lifecycle.some(item => item.name === 'after')")
 
@@ -585,7 +587,9 @@ def test_a_stale_state_answer_for_a_component_without_elements_prompts_from_docu
 
 
 @pytest.mark.e2e
-def test_an_unmounted_component_keeps_its_id_and_its_dropped_call_does_not_prompt(page: Any, serve_live: Any) -> None:
+def test_an_unmounted_component_keeps_its_id_and_its_dropped_call_does_not_prompt(
+    page: Any, open_citry_page: Any, wait_for_count: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="vue-version-skew-unmounted-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -631,15 +635,17 @@ def test_an_unmounted_component_keeps_its_id_and_its_dropped_call_does_not_promp
     dialogs: list[str] = []
     page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
     page.add_init_script(_record_lifecycle_at_document())
-    page.goto(serve_live(engine, Holder().render().serialize(), "") + "/")
-    page.wait_for_function("document.querySelector('#child-skew')?.textContent === '0'")
+    # The server wrote the count, so waiting for its text does not show the app mounted.
+    open_citry_page(serve_live(engine, Holder().render().serialize(), "") + "/")
     held = _hold_event_calls(page)
     page.locator("#child-skew").click()
     page.wait_for_function("window.__lifecycle.length === 1")
     # Unmounting the child cancels its call, while the app and its Events bridge stay live.
     page.locator("#drop-child").click()
     page.wait_for_function("window.__lifecycle.some(item => item.name === 'after')")
-    assert len(held) == 1
+    # The browser dropped the call without waiting for its request, so the
+    # route handler may not have run yet.
+    wait_for_count(held, 1)
     # The server would answer `stale_state`, but the browser already dropped the call.
     _release_with_an_unknown_signature(held[0])
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,17 +24,9 @@ def _client_bundle_source(vue_root: Path) -> str:
     return f"{fragments_source}\n{client_source}"
 
 
-def _pause_clock_before_load(page: Any) -> None:
-    """Install a paused fake clock so only explicit run_for calls move timers."""
-    # An installed clock follows real time until it is paused. Pausing after
-    # navigation leaves a window where a slow page load or network round trip
-    # fires a poll timer early, so pause before the page starts its timers.
-    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    page.clock.install(time=start)
-    page.clock.pause_at(start + timedelta(seconds=1))
-
-
-def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycle(page: Any, serve_live: Any) -> None:
+def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycle(
+    page: Any, fake_clock: Any, open_citry_page: Any, wait_for_count: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="native-poll-lifecycle-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -83,28 +74,22 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
     held_poll_routes: list[Any] = []
     poll_route_pattern = re.compile(r"/ext/events/call$")
 
-    def wait_for_held_routes(count: int) -> None:
-        deadline = time.monotonic() + 5
-        while len(held_poll_routes) < count and time.monotonic() < deadline:
-            page.wait_for_timeout(10)
-        assert len(held_poll_routes) == count
-
     page.route(
         poll_route_pattern,
         lambda route: held_poll_routes.append(route)
         if route.request.post_data_json["calls"][0]["handlerName"] == "poll"
         else route.continue_(),
     )
-    _pause_clock_before_load(page)
-    page.goto(serve_live(engine, Poller().render().serialize(), "") + "/")
+    fake_clock.install_paused()
+    open_citry_page(serve_live(engine, Poller().render().serialize(), "") + "/")
 
     page.clock.run_for(3_000)
-    wait_for_held_routes(1)
+    wait_for_count(held_poll_routes, 1)
     first_values = [call["args"]["value"] for call in held_poll_routes[0].request.post_data_json["calls"]]
     if len(first_values) == 1:
         with page.expect_request(poll_route_pattern):
             held_poll_routes[0].continue_()
-        wait_for_held_routes(2)
+        wait_for_count(held_poll_routes, 2)
     assert sorted(
         call["args"]["value"] for route in held_poll_routes for call in route.request.post_data_json["calls"]
     ) == [1, 2]
@@ -176,7 +161,9 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
     assert faults == []
 
 
-def test_native_poll_rechecks_lifetime_after_argument_side_effects(page: Any, serve_live: Any) -> None:
+def test_native_poll_rechecks_lifetime_after_argument_side_effects(
+    page: Any, fake_clock: Any, open_citry_page: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="native-poll-argument-lifetime-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -202,8 +189,8 @@ def test_native_poll_rechecks_lifetime_after_argument_side_effects(page: Any, se
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    _pause_clock_before_load(page)
-    page.goto(serve_live(engine, Poller().render().serialize(), "") + "/")
+    fake_clock.install_paused()
+    open_citry_page(serve_live(engine, Poller().render().serialize(), "") + "/")
     page.clock.run_for(1_000)
     page.locator("output").wait_for(state="detached")
     page.clock.run_for(2_000)
@@ -212,7 +199,9 @@ def test_native_poll_rechecks_lifetime_after_argument_side_effects(page: Any, se
     assert page.evaluate("!__citryRuntime._apps.values().next().value.terminal")
 
 
-def test_native_polling_argument_failure_uses_vue_terminal_boundary(page: Any, serve_live: Any) -> None:
+def test_native_polling_argument_failure_uses_vue_terminal_boundary(
+    page: Any, fake_clock: Any, open_citry_page: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="native-poll-error-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -235,8 +224,8 @@ def test_native_polling_argument_failure_uses_vue_terminal_boundary(page: Any, s
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    _pause_clock_before_load(page)
-    page.goto(serve_live(engine, BrokenPoll().render().serialize(), "") + "/")
+    fake_clock.install_paused()
+    open_citry_page(serve_live(engine, BrokenPoll().render().serialize(), "") + "/")
     page.clock.run_for(1_000)
     page.wait_for_function("globalThis.__citryRuntime._apps.values().next().value.terminal === true")
     assert faults == ["Citry polling arguments must be a plain object"]
@@ -246,7 +235,7 @@ def test_native_polling_argument_failure_uses_vue_terminal_boundary(page: Any, s
 
 
 def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibility(
-    page: Any, serve_live: Any
+    page: Any, fake_clock: Any, open_citry_page: Any, wait_for_count: Any, serve_live: Any
 ) -> None:
     engine = Citry(secret="runtime-poll-revision-lifetime-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
@@ -314,12 +303,6 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
         else:
             route.continue_()
 
-    def wait_for_held_polls(count: int) -> None:
-        deadline = time.monotonic() + 5
-        while len(held_polls) < count and time.monotonic() < deadline:
-            page.wait_for_timeout(10)
-        assert len(held_polls) == count
-
     def calls_for(handler: str) -> list[dict[str, Any]]:
         return [call for batch in request_batches for call in batch["calls"] if call["handlerName"] == handler]
 
@@ -328,12 +311,12 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
         Object.defineProperty(document,'hidden',{configurable:true,get:()=>globalThis.__citryDocumentHidden});"""
     )
     page.route(event_url, route_poll)
-    _pause_clock_before_load(page)
-    page.goto(serve_live(engine, RuntimePoll(revision=0).render().serialize(), "") + "/")
+    fake_clock.install_paused()
+    open_citry_page(serve_live(engine, RuntimePoll(revision=0).render().serialize(), "") + "/")
     page.locator("#runtime-poller").wait_for()
 
     page.clock.run_for(1_000)
-    wait_for_held_polls(1)
+    wait_for_count(held_polls, 1)
     assert held_polls[0].request.post_data_json["calls"][0]["handlerName"] == "poll"
 
     # The next deadline passes while this request is unresolved, but no second poll may start.
@@ -361,10 +344,13 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
     assert authored_request.value.post_data_json["calls"][0]["handlerName"] == "authored"
 
     assert len(calls_for("poll")) == 1
-    page.clock.run_for(499)
+    # The 500 ms above plus these steps reach the one-second deadline. Stop
+    # short of it with a margin, because landing on it exactly leaves a
+    # fraction of a millisecond to decide whether the poll fires.
+    fake_clock.run_short_of(500)
     assert len(calls_for("poll")) == 1
-    page.clock.run_for(1)
-    wait_for_held_polls(2)
+    fake_clock.run_past_deadline()
+    wait_for_count(held_polls, 2)
     assert len(calls_for("poll")) == 2
     held_polls[1].continue_()
     page.wait_for_function(
@@ -376,10 +362,12 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
     page.clock.run_for(2_000)
     assert len(calls_for("poll")) == 2
     page.evaluate("globalThis.__citryDocumentHidden=false;document.dispatchEvent(new Event('visibilitychange'))")
-    page.clock.run_for(999)
+    # Showing the page restarts the one-second interval; keep a margin on both
+    # sides of that deadline for the same reason as above.
+    fake_clock.run_short_of(1_000)
     assert len(calls_for("poll")) == 2
-    page.clock.run_for(1)
-    wait_for_held_polls(3)
+    fake_clock.run_past_deadline()
+    wait_for_count(held_polls, 3)
     assert len(calls_for("poll")) == 3
     held_polls[2].continue_()
     page.wait_for_function(
@@ -394,7 +382,9 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
     assert faults == []
 
 
-def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any, serve_live: Any) -> None:
+def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(
+    page: Any, fake_clock: Any, open_citry_page: Any, send_event: Any, wait_for_count: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="runtime-poll-loop-lifetimes-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -445,13 +435,6 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
         else:
             route.continue_()
 
-    def wait_for_poll_routes(count: int) -> None:
-        deadline = time.monotonic() + 5
-        while len(poll_routes) < count and time.monotonic() < deadline:
-            page.wait_for_timeout(10)
-        page.wait_for_timeout(30)
-        assert len(poll_routes) == count
-
     def poll_lifetime_snapshot() -> dict[str, Any]:
         return page.evaluate(
             """() => {
@@ -474,23 +457,26 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
         return sum(len(mounted["lifetimes"]) for mounted in snapshot["mounted"])
 
     page.route(event_url, route_poll)
-    _pause_clock_before_load(page)
-    page.goto(serve_live(engine, PollRows(rows=["a", "b"]).render().serialize(), "") + "/")
+    fake_clock.install_paused()
+    open_citry_page(serve_live(engine, PollRows(rows=["a", "b"]).render().serialize(), "") + "/")
     page.wait_for_function(
         "() => [...document.querySelectorAll('.row-poller')].map(node => node.dataset.row).join(',') === 'a,b'"
     )
 
     page.clock.run_for(1_000)
-    wait_for_poll_routes(1)
+    wait_for_count(poll_routes, 1)
     first_poll = poll_routes[0].request.post_data_json["calls"][0]
     assert first_poll["handlerName"] == "poll_a"
+    # Calls from one app go out one at a time, so poll_b must not reach the
+    # network while poll_a is held. Nothing marks "did not send", so give a
+    # request that was wrongly started a moment to arrive before checking.
     page.wait_for_timeout(30)
     assert len(poll_routes) == 1
 
     with page.expect_request(event_url) as second_poll_request:
         poll_routes[0].continue_()
     assert second_poll_request.value.post_data_json["calls"][0]["handlerName"] == "poll_b"
-    wait_for_poll_routes(2)
+    wait_for_count(poll_routes, 2)
     second_poll = poll_routes[1].request.post_data_json["calls"][0]
     assert second_poll["handlerName"] == "poll_b"
     assert [first_poll["handlerName"], second_poll["handlerName"]] == ["poll_a", "poll_b"]
@@ -508,9 +494,11 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
         lifetime["current"] for mounted in completed_initial_polls["mounted"] for lifetime in mounted["lifetimes"]
     )
 
-    with page.expect_request(event_url) as removal_request:
-        page.locator("#remove-first-poller").click()
-    assert removal_request.value.post_data_json["calls"][0]["handlerName"] == "remove_first"
+    # The new row list is in the DOM before the runtime finishes the revision
+    # (it updates the poll lifetimes and runs the callbacks afterwards), so wait
+    # for the call to finish before reading the lifetimes.
+    removal_response = send_event(lambda: page.locator("#remove-first-poller").click(), handler="remove_first")
+    assert removal_response.request.post_data_json["calls"][0]["handlerName"] == "remove_first"
     page.wait_for_function(
         "() => [...document.querySelectorAll('.row-poller')].map(node => node.dataset.row).join(',') === 'b'"
     )
@@ -519,8 +507,15 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     assert event_lifetime_count(after_remove) == 1
     assert all(lifetime["current"] for mounted in after_remove["mounted"] for lifetime in mounted["lifetimes"])
     poll_count_after_remove = len(poll_routes)
-    page.clock.run_for(1_000)
-    wait_for_poll_routes(poll_count_after_remove + 1)
+    # poll_b finished at this clock time, so its next poll is one second away.
+    # Stop short of that deadline with a margin, check that nothing was sent,
+    # then cross it; landing exactly on it is decided by a fraction of a
+    # millisecond.
+    fake_clock.run_short_of(1_000)
+    page.wait_for_timeout(30)
+    assert len(poll_routes) == poll_count_after_remove
+    fake_clock.run_past_deadline()
+    wait_for_count(poll_routes, poll_count_after_remove + 1)
     after_survivor_interval = poll_lifetime_snapshot()
     assert len(poll_routes) == poll_count_after_remove + 1, (
         f"initial={completed_initial_polls}, after removal={after_remove}, "
@@ -546,7 +541,9 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     assert faults == []
 
 
-def test_native_event_and_control_throttle_use_monotonic_time_and_replace_cleanup(page: Any, serve_live: Any) -> None:
+def test_native_event_and_control_throttle_use_monotonic_time_and_replace_cleanup(
+    page: Any, open_citry_page: Any, wait_for_count: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="native-event-throttle-clock-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -577,7 +574,8 @@ def test_native_event_and_control_throttle_use_monotonic_time_and_replace_cleanu
         """globalThis.__citryPerfNow=100;
         Object.defineProperty(performance,'now',{configurable:true,value:()=>globalThis.__citryPerfNow});"""
     )
-    page.goto(serve_live(engine, Throttled().render().serialize(), "") + "/")
+    # The script below clicks at once; before the mount the button has no handler.
+    open_citry_page(serve_live(engine, Throttled().render().serialize(), "") + "/")
     page.evaluate(
         """() => {
           const button=document.querySelector('#clock-throttle');
@@ -611,7 +609,14 @@ def test_native_event_and_control_throttle_use_monotonic_time_and_replace_cleanu
           globalThis.clearTimeout=realClearTimeout;
         }"""
     )
-    page.wait_for_timeout(120)
+    # The admitted clicks queue and go out one at a time, so wait for the
+    # expected requests, then for the queue to empty, before checking that no
+    # extra request followed.
+    wait_for_count(calls, 3)
+    page.wait_for_function(
+        "() => [...__citryRuntime._apps.values().next().value.mounted.values()]"
+        ".every(({component}) => !component.$loading('record'))"
+    )
     assert len(calls) == 3
 
     calls.clear()
@@ -634,11 +639,20 @@ def test_native_event_and_control_throttle_use_monotonic_time_and_replace_cleanu
           Date.now=realDateNow;
         }"""
     )
-    page.wait_for_timeout(120)
+    # The admitted clicks queue and go out one at a time, so wait for the
+    # expected requests, then for the queue to empty, before checking that no
+    # extra request followed.
+    wait_for_count(calls, 3)
+    page.wait_for_function(
+        "() => [...__citryRuntime._apps.values().next().value.mounted.values()]"
+        ".every(({component}) => !component.$loading('record'))"
+    )
     assert len(calls) == 3
 
 
-def test_native_dom_event_timing_is_per_element_and_drops_retired_work(page: Any, serve_live: Any) -> None:
+def test_native_dom_event_timing_is_per_element_and_drops_retired_work(
+    page: Any, fake_clock: Any, open_citry_page: Any, wait_for_count: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="native-event-timing-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -681,33 +695,33 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(page: Any
         else None,
     )
     base = serve_live(engine, Timed().render().serialize(), "")
-    _pause_clock_before_load(page)
-    page.goto(base + "/")
+    fake_clock.install_paused()
+    open_citry_page(base + "/")
     page.locator("#refresh").wait_for()
-
-    def wait_for_call_count(count: int) -> None:
-        deadline = time.monotonic() + 5
-        while len(calls) < count and time.monotonic() < deadline:
-            page.wait_for_timeout(10)
-        assert len(calls) == count
 
     first, second = page.locator(".debounced").all()
     first.click()
     first.click()
     second.click()
-    page.clock.run_for(39)
+    # Keep a margin from the 40 ms debounce deadline on both sides; landing on
+    # it exactly is decided by a fraction of a millisecond.
+    fake_clock.run_short_of(40)
     assert calls == []
-    page.clock.run_for(1)
-    wait_for_call_count(2)
+    fake_clock.run_past_deadline()
+    wait_for_count(calls, 2)
     args = [call["calls"][0]["args"]["value"] for call in calls]
     assert args == [2, 3]
 
     page.locator("#throttled").click()
     page.locator("#throttled").click()
-    assert len(calls) == 3
-    page.clock.run_for(80)
+    # The admitted click's request goes out after the earlier calls finish,
+    # so wait for it rather than counting right after the clicks.
+    wait_for_count(calls, 3)
+    # Step past the 80 ms throttle window with a margin, so the next click is
+    # admitted however the clock rounds.
+    page.clock.run_for(90)
     page.locator("#throttled").click()
-    wait_for_call_count(4)
+    wait_for_count(calls, 4)
     args = [call["calls"][0]["args"]["value"] for call in calls]
     assert args[-2:] == [4, 6]
 
@@ -716,7 +730,7 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(page: Any
     page.locator("#refresh").click()
     page.wait_for_function("__citryRuntime._apps.values().next().value.revision > 0")
     page.clock.run_for(130)
-    page.wait_for_timeout(20)
+    wait_for_count(calls, before + 2)
     assert [(call["calls"][0]["handlerName"], call["calls"][0]["args"]) for call in calls[before:]] == [
         ("refresh", {}),
         ("record", {"value": 7}),
@@ -728,6 +742,8 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(page: Any
     )
     page.locator("#conditional").wait_for(state="detached")
     page.clock.run_for(130)
+    # A dropped debounce leaves no state to wait for, so give a wrongly sent
+    # request a moment to arrive before checking that none did.
     page.wait_for_timeout(20)
     assert len(calls) == before + 2
     assert (
@@ -741,6 +757,7 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(page: Any
     page.locator("#pending").click()
     page.evaluate("__citryRuntime._apps.values().next().value.vueApp.unmount()")
     page.clock.run_for(130)
+    # As above: give a wrongly sent request a moment to arrive.
     page.wait_for_timeout(20)
     assert len(calls) == before + 2
     assert faults == []
@@ -1183,7 +1200,9 @@ def test_custom_control_setter_failure_is_local_and_recovers(page: Any, serve_li
     assert faults == []
 
 
-def test_custom_control_getter_failure_and_non_json_value_do_not_adopt_or_send(page: Any, serve_live: Any) -> None:
+def test_custom_control_getter_failure_and_non_json_value_do_not_adopt_or_send(
+    page: Any, open_citry_page: Any, send_event: Any, wait_for_count: Any, serve_live: Any
+) -> None:
     engine = Citry(
         secret="native-control-getter-recovery",  # noqa: S106 - deterministic test signing key
         autodiscover=False,
@@ -1221,10 +1240,15 @@ def test_custom_control_getter_failure_and_non_json_value_do_not_adopt_or_send(p
         if "could not adopt control value into State" in message.text
         else None,
     )
-    page.goto(serve_live(engine, Getter().render().serialize(), "") + "/")
+    # Before the mount the change events below reach no listener, and the
+    # checks that nothing was sent would pass for the wrong reason.
+    open_citry_page(serve_live(engine, Getter().render().serialize(), "") + "/")
 
     page.eval_on_selector("#getter", "element => {element.mode='throw';element.dispatchEvent(new Event('change'))}")
     page.eval_on_selector("#getter", "element => {element.mode='invalid';element.dispatchEvent(new Event('change'))}")
+    wait_for_count(reports, 1)
+    # A rejected value sends nothing, so there is no state to wait for; give a
+    # wrongly sent request a moment to reach the server before checking.
     page.wait_for_timeout(50)
     assert seen == []
     assert (
@@ -1235,11 +1259,13 @@ def test_custom_control_getter_failure_and_non_json_value_do_not_adopt_or_send(p
     )
     assert len(reports) == 1
 
-    page.eval_on_selector(
-        "#getter",
-        "element => {element.mode='valid';element._value='recovered';element.dispatchEvent(new Event('change'))}",
+    send_event(
+        lambda: page.eval_on_selector(
+            "#getter",
+            "element => {element.mode='valid';element._value='recovered';element.dispatchEvent(new Event('change'))}",
+        ),
+        handler="refresh",
     )
-    page.wait_for_timeout(100)
     assert seen == ["recovered"]
     assert (
         page.evaluate(
@@ -1250,7 +1276,9 @@ def test_custom_control_getter_failure_and_non_json_value_do_not_adopt_or_send(p
     assert faults == []
 
 
-def test_native_controls_send_checkbox_multiselect_and_custom_values_upward(page: Any, serve_live: Any) -> None:
+def test_native_controls_send_checkbox_multiselect_and_custom_values_upward(
+    page: Any, open_citry_page: Any, send_event: Any, serve_live: Any
+) -> None:
     engine = Citry(
         secret="native-control-upward-secret",  # noqa: S106 - deterministic test signing key
         autodiscover=False,
@@ -1288,17 +1316,25 @@ def test_native_controls_send_checkbox_multiselect_and_custom_values_upward(page
         "customElements.define('x-up',class extends HTMLElement{"
         "set value(v){this._value=v}get value(){return this._value}})"
     )
-    page.goto(serve_live(engine, Upward().render().serialize(), "") + "/")
-    page.locator("#up-enabled").check()
-    page.locator("#up-tags").select_option(["a", "b"])
-    page.eval_on_selector("#up-custom", "element => {element.value='new';element.dispatchEvent(new Event('change'))}")
-    page.wait_for_timeout(100)
+    open_citry_page(serve_live(engine, Upward().render().serialize(), "") + "/")
+    # Each control change sends one call; wait for each to finish so the
+    # server has recorded it before the checks below.
+    send_event(lambda: page.locator("#up-enabled").check(), handler="enabled")
+    send_event(lambda: page.locator("#up-tags").select_option(["a", "b"]), handler="tags")
+    send_event(
+        lambda: page.eval_on_selector(
+            "#up-custom", "element => {element.value='new';element.dispatchEvent(new Event('change'))}"
+        ),
+        handler="custom",
+    )
     assert ("enabled", True) in seen
     assert ("tags", ["a", "b"]) in seen
     assert ("custom", "new") in seen
 
 
-def test_supplied_slot_control_sends_through_its_lexical_owner(page: Any, serve_live: Any) -> None:
+def test_supplied_slot_control_sends_through_its_lexical_owner(
+    page: Any, open_citry_page: Any, send_event: Any, serve_live: Any
+) -> None:
     engine = Citry(
         secret="native-control-slot-owner-secret",  # noqa: S106 - deterministic test signing key
         autodiscover=False,
@@ -1327,13 +1363,14 @@ def test_supplied_slot_control_sends_through_its_lexical_owner(page: Any, serve_
         template = '<c-receiver><c-fill name="body"><input id="slot-query" c-bind="attrs"></c-fill></c-receiver>'
 
     dispatcher_for(engine)
-    page.goto(serve_live(engine, Owner().render().serialize(), "") + "/")
-    page.locator("#slot-query").fill("lexical")
-    page.wait_for_timeout(100)
+    open_citry_page(serve_live(engine, Owner().render().serialize(), "") + "/")
+    send_event(lambda: page.locator("#slot-query").fill("lexical"), handler="refresh")
     assert seen == ["lexical"]
 
 
-def test_supplied_slot_poll_uses_live_lexical_caller_scope(page: Any, serve_live: Any) -> None:
+def test_supplied_slot_poll_uses_live_lexical_caller_scope(
+    page: Any, fake_clock: Any, open_citry_page: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="native-poll-slot-owner-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -1372,8 +1409,8 @@ def test_supplied_slot_poll_uses_live_lexical_caller_scope(page: Any, serve_live
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    _pause_clock_before_load(page)
-    page.goto(serve_live(engine, Owner().render().serialize(), "") + "/")
+    fake_clock.install_paused()
+    open_citry_page(serve_live(engine, Owner().render().serialize(), "") + "/")
     page.locator("#slot-poll").wait_for()
 
     with page.expect_request(poll_endpoint):
@@ -2804,7 +2841,9 @@ def test_dynamic_void_and_namespaced_elements_mount_through_start_prepared(page:
     assert faults == []
 
 
-def test_component_boundary_citry_event_dispatches_from_vue_child(page: Any, serve_live: Any) -> None:
+def test_component_boundary_citry_event_dispatches_from_vue_child(
+    page: Any, open_citry_page: Any, send_event: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="component-boundary-event", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -2841,10 +2880,9 @@ def test_component_boundary_citry_event_dispatches_from_vue_child(page: Any, ser
         lambda request: calls.append(request.post_data_json) if request.url.endswith("/ext/events/call") else None,
     )
     base = serve_live(engine, Parent(count=0).render().serialize(), "")
-    page.goto(base + "/")
-    page.wait_for_function("document.querySelector('#component-events')?.textContent === '0'")
-    page.locator("#child-emitter").click()
-    page.wait_for_timeout(500)
+    # The server already wrote "0", so that text does not show the app mounted.
+    open_citry_page(base + "/")
+    send_event(lambda: page.locator("#child-emitter").click(), handler="increment")
     assert page.locator("#component-events").text_content() == "1", (faults, calls, page.content())
 
 

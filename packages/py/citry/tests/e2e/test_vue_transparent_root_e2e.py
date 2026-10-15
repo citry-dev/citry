@@ -124,7 +124,9 @@ def test_prepared_component_without_events_unmounts_cleanly(page, serve_document
     assert errors == []
 
 
-def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve_live) -> None:
+def test_fragment_manager_loads_and_mounts_python_composed_component(
+    page, serve_live, wait_for_citry_ready, wait_for_count
+) -> None:
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -171,7 +173,10 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
     )
     page.goto(url)
 
-    page.wait_for_timeout(1_000)
+    # The page fetches the fragment after load and the manager mounts it after
+    # that, so a fixed sleep can check before the mount on a slow runner. The
+    # app's `citry:ready` comes once it has mounted with its stylesheet.
+    wait_for_citry_ready()
     assert errors == [], page.content()
     assert page.locator('[id^="citry-vue-"]').count() == 1, page.content()
     assert page.locator("script[data-citry-vue-fragment]").count() == 1, page.content()
@@ -343,7 +348,8 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
       globalThis.__stalledLink = document.querySelector('link[href$="/stalled-fragment.css"]');
       __cancelledHost.id = __cancelledHost.id + '-changed';
     }""")
-    assert len(stalled_routes) == 1
+    # The link is in the DOM before its request reaches the route handler.
+    wait_for_count(stalled_routes, 1)
     assert "host changed while mounting" in page.evaluate("() => __cancelledResult")
     cancelled = page.evaluate("""() => ({
       app: __citryRuntime._apps.has(__cancelledAppId),
@@ -419,6 +425,9 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
       __lateScriptHost.remove();
     }""")
     assert "host changed while mounting" in page.evaluate("() => __lateScriptFirst")
+    # The script element exists before its request reaches the route handler,
+    # so the list can still be empty here.
+    wait_for_count(late_script_routes, 1)
     late_script_routes[0].abort()
     # Route abort delivery and the script element's error cleanup are separate
     # browser tasks. Wait for the cancelled request's actual script cleanup
@@ -434,11 +443,7 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
     page.wait_for_function(
         "() => document.querySelectorAll('script[src$=\"/late-extension-script.js\"]').length === 1"
     )
-    for _ in range(50):
-        if len(late_script_routes) == 2:
-            break
-        page.wait_for_timeout(20)
-    assert len(late_script_routes) == 2
+    wait_for_count(late_script_routes, 2)
     expected_abort_errors = [error for error in errors if "net::ERR_FAILED" in error]
     assert len(expected_abort_errors) == 1
     errors.remove(expected_abort_errors[0])
@@ -530,7 +535,8 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
     }""")
     page.wait_for_function("() => document.querySelector('link[href$=\"/delayed-fragment.css\"]') !== null")
     page.evaluate("() => __relocatedDestination.append(__relocatedHost)")
-    assert len(delayed_routes) == 1
+    # As above, the link exists before its request reaches the route handler.
+    wait_for_count(delayed_routes, 1)
     delayed_routes[0].fulfill(body=".fragment-value { color: rgb(4, 5, 6); }", content_type="text/css")
     assert "host changed while mounting" in page.evaluate("() => __relocatedResult")
     page.wait_for_function("() => !__citryRuntime._apps.has(__relocatedAppId)")

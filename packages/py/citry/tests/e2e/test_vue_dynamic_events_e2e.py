@@ -17,7 +17,9 @@ class DynamicClickArgs:
     value: int
 
 
-def test_dynamic_element_dispatches_lexical_event_arguments(page: Any, serve_live: Any) -> None:
+def test_dynamic_element_dispatches_lexical_event_arguments(
+    page: Any, open_citry_page: Any, send_event: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="dynamic-events-browser", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -41,16 +43,20 @@ def test_dynamic_element_dispatches_lexical_event_arguments(page: Any, serve_liv
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
-    page.locator("#choice").click()
-    page.wait_for_function("() => !__citryRuntime._apps.values().next().value.busy")
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
+    # `busy` is already false before the request goes out, so waiting on it
+    # can read `calls` before the click's request was recorded. Wait for the
+    # call to finish instead.
+    send_event(lambda: page.locator("#choice").click(), handler="choose")
 
     [call] = [call for request in calls for call in request["calls"]]
     assert call["handlerName"] == "choose"
     assert call["args"] == {"value": 7}
 
 
-def test_dynamic_control_keeps_lexical_state_across_real_tag_change(page: Any, serve_live: Any) -> None:
+def test_dynamic_control_keeps_lexical_state_across_real_tag_change(
+    page: Any, open_citry_page: Any, serve_live: Any
+) -> None:
     engine = Citry(secret="dynamic-control-browser", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -86,7 +92,8 @@ def test_dynamic_control_keeps_lexical_state_across_real_tag_change(page: Any, s
         if request.url.endswith("/ext/events/call") and request.post_data_json
         else None,
     )
-    page.goto(serve_live(engine, Search().render().serialize(), "") + "/")
+    # A fill before the mount changes the input without sending anything.
+    open_citry_page(serve_live(engine, Search().render().serialize(), "") + "/")
 
     control = page.locator("#dynamic-control")
     assert control.evaluate("element => element.tagName") == "INPUT"
@@ -112,7 +119,9 @@ def test_dynamic_control_keeps_lexical_state_across_real_tag_change(page: Any, s
     ],
     ids=["plain-fill", "transparent-in-fill"],
 )
-def test_component_event_in_a_fill_dispatches_to_the_fill_author(page: Any, serve_live: Any, fill: str) -> None:
+def test_component_event_in_a_fill_dispatches_to_the_fill_author(
+    page: Any, open_citry_page: Any, send_event: Any, serve_live: Any, fill: str
+) -> None:
     engine = Citry(secret="fill-author-events-browser", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -145,9 +154,9 @@ def test_component_event_in_a_fill_dispatches_to_the_fill_author(page: Any, serv
     )
     page_errors: list[str] = []
     page.on("pageerror", lambda error: page_errors.append(str(error)))
-    page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
-    page.get_by_role("button", name="save").click()
-    page.wait_for_function("() => !__citryRuntime._apps.values().next().value.busy")
+    open_citry_page(serve_live(engine, Page().render().serialize(), "") + "/")
+    # As above, `busy` is false before the request goes out; wait for the call.
+    send_event(lambda: page.get_by_role("button", name="save").click(), handler="save")
 
     [call] = [call for request in calls for call in request["calls"]]
     assert call["handlerName"] == "save"
