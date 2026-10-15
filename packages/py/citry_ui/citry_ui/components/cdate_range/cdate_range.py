@@ -663,7 +663,10 @@ class CDateRange(LibraryComponent):
           const initialValue = defaults.value ? { ...defaults.value } : null;
           let draftStart = null;
           let previewEnd = null;
-          let internalOpen = false;
+          // A server re-render that keeps this picker keeps its Vue instance, so the
+          // popup's open state from the previous run carries over instead of the
+          // popup closing without telling the owner.
+          let internalOpen = scope.dateRangeOpen === true;
           let controlledValue = false;
           let controlledOpen = false;
           let nativeInvalid = false;

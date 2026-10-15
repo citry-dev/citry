@@ -69,7 +69,12 @@
           let visibleItems = [];
           let selectedValue = server.value;
           let query = server.inputValue;
-          let open = server.open;
+          // A server re-render runs the cleanup below and then this callback again on
+          // the same element; the open state it left carries over, so a kept popup
+          // stays open instead of closing without telling the owner.
+          const openHandoffKey = Symbol.for("citry-ui:combobox-open-handoff");
+          let open = root[openHandoffKey] ?? server.open;
+          delete root[openHandoffKey];
           let highlightedValue = null;
           let querySelectionValue = data.inputValueExplicit ? null : server.value;
           let controlledValue = false;
@@ -1132,6 +1137,7 @@
           root.setAttribute("data-citry-combobox-initialized", "");
 
           return () => {
+            root[openHandoffKey] = open;
             destroyed = true;
             abortRequest();
             root.removeEventListener("click", onRootClick);

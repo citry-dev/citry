@@ -20,7 +20,12 @@ $component({
     let accepted = [...data.value];
     let current = [...accepted];
     let activePath = [...accepted];
-    let currentOpen = data.open;
+    // A server re-render runs the cleanup below and then this callback again on
+    // the same element; the open state it left carries over, so a kept popup
+    // stays open instead of closing without telling the owner.
+    const openHandoffKey = Symbol.for('citry-ui:cascader-open-handoff');
+    let currentOpen = root[openHandoffKey] ?? data.open;
+    delete root[openHandoffKey];
     let controlledValue = false;
     let controlledOpen = false;
     let disabled = data.disabled;
@@ -285,6 +290,7 @@ $component({
       reactiveReady = true;
     });
     return () => {
+      root[openHandoffKey] = currentOpen;
       if (typeTimer) clearTimeout(typeTimer);
       if (outsideListening) document.removeEventListener('pointerdown', onOutside, true);
       if (resizeListening) window.removeEventListener('resize', placePopup);

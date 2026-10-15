@@ -565,3 +565,99 @@ def test_removal_while_open_releases_document_state_and_component_resources(page
 
     assert page.evaluate("document.documentElement.style.overflow") == ""
     assert page.locator("#profile-dialog").count() == 0
+
+
+def _server_owner_page(*, keep_dialog: bool) -> tuple[Citry, str]:
+    app = Citry(secret="citry-ui-dialog-rerender-e2e", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(citry_ui)
+
+    class DialogOwner(Component):
+        citry = app
+
+        class Kwargs:
+            step: int = 0
+
+        class State(Kwargs):
+            pass
+
+        class Events:
+            def advance(self, state):
+                return DialogOwner(step=state.step + 1)
+
+        template = """
+          <section id="dialog-owner">
+            <output id="owner-step">{{ step }}</output>
+            <c-if cond="show_dialog">
+              <c-CDialog
+                id="owned-dialog"
+                :onOpenChange="(open, detail) => window.__ownedDialogEvents.push({ open, reason: detail.reason })"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <c-CButton c-attrs="activator_attrs">Open owned dialog</c-CButton>
+                </c-fill>
+                <c-fill name="title">Owned dialog</c-fill>
+                <c-fill name="default">
+                  <button id="advance-owner" type="button" @c-click="advance">Advance owner</button>
+                </c-fill>
+              </c-CDialog>
+            </c-if>
+          </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            # The first render always shows the dialog; later renders keep it only
+            # when the test asks for an unchanged dialog.
+            return {"step": kwargs.step, "show_dialog": keep_dialog or kwargs.step == 0}
+
+    class Page(Component):
+        citry = app
+        js = """$component({data(){window.__ownedDialogEvents=[];return{};}});"""
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /><c-css /></head>
+            <body><c-dialog-owner /><c-js /></body>
+          </html>
+        """
+
+    return app, str(Page())
+
+
+@pytest.mark.parametrize("keep_dialog", [True, False], ids=["kept", "removed"])
+def test_server_rerender_keeps_an_open_dialog_or_reports_its_close(
+    page, serve_citry_ui_live, wait_for_citry_ready, send_event, wait_for_count, keep_dialog
+):
+    """A server re-render keeps an open uncontrolled dialog open, or reports the close when it removes it."""
+    app, html = _server_owner_page(keep_dialog=keep_dialog)
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    wait_for_citry_ready()
+    page.get_by_role("button", name="Open owned dialog").click()
+    page.wait_for_function("document.querySelector('dialog')?.open")
+
+    # Hold the server's answer until the dialog is known to be open, so the
+    # re-render always lands on an open dialog. Only the call is held: the
+    # render may also fetch new component definitions under /ext/events/.
+    held: list = []
+    page.route("**/ext/events/call", lambda route: held.append(route))
+    page.locator("#advance-owner").evaluate("element => element.click()")
+    wait_for_count(held, 1)
+    assert page.evaluate("document.querySelector('dialog').open")
+    send_event(lambda: held[0].continue_(), handler="advance")
+    page.unroute("**/ext/events/call")
+    page.wait_for_function("document.querySelector('#owner-step').textContent === '1'")
+
+    if keep_dialog:
+        # The handed-off dialog would be closed one second later if the new
+        # render did not take it over. Checking that it stays open needs a
+        # wait past that deadline.
+        page.wait_for_timeout(1_100)
+        assert page.evaluate("document.querySelector('dialog').open")
+        assert page.evaluate("window.__ownedDialogEvents") == [{"open": True, "reason": "trigger"}]
+    else:
+        page.wait_for_function("window.__ownedDialogEvents.length === 2")
+        assert page.locator("dialog").count() == 0
+        assert page.evaluate("window.__ownedDialogEvents") == [
+            {"open": True, "reason": "trigger"},
+            {"open": False, "reason": "native"},
+        ]

@@ -615,7 +615,10 @@ class CTimePicker(LibraryComponent):
           const profile = data.showSeconds ? 'citry-ui-time-picker-display-seconds' : 'citry-ui-time-picker-display';
           let current = input.value || defaults.value || null;
           let initialValue = defaults.value || null;
-          let internalOpen = false;
+          // A server re-render that keeps this picker keeps its Vue instance, so the
+          // popup's open state from the previous run carries over instead of the
+          // popup closing without telling the owner.
+          let internalOpen = scope.timePickerOpen === true;
           let controlledValue = false;
           let controlledOpen = false;
           let nativeInvalid = false;

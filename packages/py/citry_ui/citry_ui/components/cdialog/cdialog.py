@@ -310,6 +310,9 @@ class CDialog(LibraryComponent):
           let suppressStaleControlledOpen = false;
           let pendingControlledReturnValue = "";
           let onOpenChange = null;
+          // True while this run has handed an open dialog to the next callback
+          // run. If no run takes it over, the dialog closes and the owner hears it.
+          let handedOffOpen = false;
           let configuration = {
             dismissible: data.dismissible,
             closeOnEscape: data.closeOnEscape,
@@ -482,11 +485,20 @@ class CDialog(LibraryComponent):
               appliedOpen = false;
               updateActivators(false);
               syncRuntimeDialog(false);
+              // The dialog was open when this run handed it off and no later run kept
+              // it, so it really closed; tell the owner, as a native close would.
+              if (handedOffOpen) {
+                handedOffOpen = false;
+                notify(false, "native", null, "");
+              }
             },
           });
 
           if (controller.retained) {
             appliedOpen = controller.isOpen();
+            // A server re-render that keeps the dialog keeps its open state too, so
+            // the effect below does not close it back to the server's default.
+            internalOpen = appliedOpen;
             dialog.toggleAttribute("data-open", appliedOpen);
             updateActivators(appliedOpen);
             syncRuntimeDialog(appliedOpen);
@@ -553,9 +565,11 @@ class CDialog(LibraryComponent):
 
           return () => {
             host.removeEventListener("click", onHostClick);
+            const wasOpen = appliedOpen;
             // A server revision runs this cleanup and then the callback again on the
             // same dialog, so an open dialog is handed to the next callback run.
             const handedOff = controller.cleanup({ handoff: true });
+            handedOffOpen = handedOff && wasOpen;
             if (handedOff) {
               // Vue runs this cleanup before an unmount removes the dialog from the
               // page. By the next microtask the removal is done, so a disconnected
@@ -570,6 +584,9 @@ class CDialog(LibraryComponent):
             if (!handedOff) {
               host.removeAttribute("data-citry-dialog-initialized");
               host.removeAttribute("data-citry-alert-dialog-initialized");
+              // The controller closed an open dialog without a handoff, so the owner
+              // would otherwise still believe it is open.
+              if (wasOpen) notify(false, "native", null, "");
             }
           };
         },

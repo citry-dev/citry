@@ -616,6 +616,13 @@ $component({
       fieldsetObservers.push(observer);
     }
     const unregisterCapabilities = field?.registerCapabilities({required:true, readonly:true});
+    // The stylesheet hides the popup until this mark is present. A server
+    // re-render hands an open popup to this run, and the effect below reopens it
+    // at once, so the mark must already be back or the reopen measures a hidden
+    // popup, fails, and closes it without telling the owner.
+    root.setAttribute('data-citry-select-initialized', '');
+    nativeSelect.tabIndex = -1;
+    nativeSelect.setAttribute('aria-hidden', 'true');
     Citry.vue.watchEffect(() => {
       clientValue = props.value;
       clientOpen = props.open;
@@ -644,9 +651,6 @@ $component({
       };
       reconcileControlled();
     });
-    root.setAttribute('data-citry-select-initialized', '');
-    nativeSelect.tabIndex = -1;
-    nativeSelect.setAttribute('aria-hidden', 'true');
     reconcileControlled();
 
     return () => {

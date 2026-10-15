@@ -54,6 +54,14 @@
   markup into a form it cannot use. It now waits for the next change instead
   of rewriting its markup on every timer tick, and logs one console error
   until the markup is usable again.
+- An open `CDialog` stays open when a server event re-renders the component
+  that contains it, and calls `onOpenChange(false)` with reason `"native"`
+  when that re-render removes it. Previously it closed in both cases without
+  calling `onOpenChange`.
+- An open `CHoverCard`, `CSelect`, `CMultiSelect`, `CCombobox`,
+  `CCascader`, `CColorPicker`, `CDatePicker`, `CDateRange`, or `CTimePicker`
+  stays open when a server event re-renders the component that contains it.
+  Previously it closed without calling `onOpenChange`.
 
 ## [0.2.2] - 2026-09-11
 

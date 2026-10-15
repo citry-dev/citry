@@ -605,7 +605,10 @@ class CDatePicker(LibraryComponent):
           const mutations = runtime.mutations(root);
           const owned = mutations.owned;
           let current = input.value || data.serverValue || null;
-          let internalOpen = false;
+          // A server re-render that keeps this picker keeps its Vue instance, so the
+          // popup's open state from the previous run carries over instead of the
+          // popup closing without telling the owner.
+          let internalOpen = scope.datePickerOpen === true;
           let controlledValue = false;
           let controlledOpen = false;
           let visibleDate = current || undefined;

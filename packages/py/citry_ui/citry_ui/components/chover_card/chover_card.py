@@ -879,6 +879,11 @@ class CHoverCard(LibraryComponent):
           surface.addEventListener("pointerenter", onSurfacePointerEnter);
           surface.addEventListener("pointerleave", onSurfacePointerLeave);
           surface.addEventListener("toggle", onToggle);
+          // The stylesheet hides the card until this mark is present. A server
+          // re-render hands an open card to this run and the effect below reopens
+          // it at once, so the mark must already be back or the reopen measures a
+          // hidden card, fails, and closes it without telling the owner.
+          host.setAttribute("data-citry-hover-card-initialized", "");
           effect(() => {
             const suppliedOpen = props.open;
             let nextOpen = internalOpen;
@@ -936,7 +941,6 @@ class CHoverCard(LibraryComponent):
               pendingRequest = null;
             }
           });
-          host.setAttribute("data-citry-hover-card-initialized", "");
 
           return () => {
             active = false;
