@@ -260,11 +260,11 @@ title, optional description, and activator. Callback values are ordinary data.
 
 Server `open=True` is visible but not modal without JavaScript, matching native
 Dialog limits. Initialization upgrades it with `showModal()` only when
-eligible. Correlated rerenders preserve committed uncontrolled open state when
-the server `open` fallback is unchanged and open or close the Drawer to match a
-changed value without calling `onOpenChange`, preserve controlled intent, update
-placement/size/scroll without close/reopen, and transfer semantic focus state
-without old-generation callbacks.
+eligible. Correlated rerenders keep the committed open state when the server
+`open` value is unchanged. A changed value opens or closes the Drawer to match,
+without calling `onOpenChange`. Re-renders also preserve controlled intent,
+update placement/size/scroll without close/reopen, and transfer semantic focus
+state without old-generation callbacks.
 
 Cleanup closes descendants, releases modal and scroll ownership, removes all
 listeners/observers/tasks, clears activator state, and restores focus once.

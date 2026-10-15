@@ -461,10 +461,10 @@ and open state are truthful before activation.
 Each activation is scoped to the nearest root. Same-identity morphing preserves
 uncontrolled value, query, compatible highlight, focus and selection range,
 accepted remote collection, and request supersession. Open state carries over
-only when the server `open` value is unchanged; a changed value opens or
-closes the popup to match without calling `onOpenChange`. A render that
-disables an open popup closes it and reports one forced close with reason
-`disabled`, including when the same render also changes `open`. A replacement with new
+only when the server `open` value is unchanged; a changed value opens or closes
+the popup to match without calling `onOpenChange`. A render that disables an
+open popup closes it and reports one forced close with reason `disabled`,
+including when the same render also changes `open`. A replacement with new
 identity gets server defaults. Cleanup aborts and invalidates requests, clears
 timers, removes document and Form listeners, releases Field native-invalid
 state, drops option nodes and callbacks, and cannot reopen or notify late.

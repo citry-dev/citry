@@ -219,7 +219,7 @@ and Menu declarations there.
 | Input | Type | Default | Class | Validation and effect |
 |---|---|---|---|---|
 | `id` | `str | None` | generated | structural | stable surface and relationship identity |
-| `open` | `bool` | `False` | server state | server-visible visibility and uncontrolled fallback; on a server re-render, a changed value opens or closes it to match and an unchanged value keeps its current state |
+| `open` | `bool` | `False` | server state | server-visible state and uncontrolled fallback; on a server re-render, a changed value opens or closes it to match and an unchanged value keeps its current state |
 | `disabled` | `bool` | `False` | reactive configuration | disables the activator and forcibly closes the tree |
 | `loop` | `bool` | `True` | reactive configuration | wraps arrow navigation and typeahead search |
 | `placement` | `CMenuPlacement` | `"bottom-start"` | reactive configuration | preferred logical root placement |

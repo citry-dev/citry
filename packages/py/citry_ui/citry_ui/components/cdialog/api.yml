@@ -91,7 +91,7 @@ events:
       - id: on-open-change
         name: onOpenChange
         signature: {display: '(requestedOpen: boolean, detail: CDialogOpenChangeDetail) => void', interfaces: [CDialogOpenChangeDetail]}
-        trigger: An owned trigger, built-in close, explicit action, Escape, outside press, or native close requests a different open state. A server re-render that removes an open dialog does not call it; the dialog is simply gone.
+        trigger: An owned trigger, built-in close, explicit action, Escape, outside press, or native close requests a different open state. A server re-render that removes an open dialog does not call it, because the owner removed the dialog.
         detail: {display: '{reason: "trigger" | "close-button" | "action" | "escape" | "outside" | "native", controlled: boolean, source: Element | EventTarget | null, returnValue: string}', interfaces: [CDialogOpenChangeDetail]}
         behavior: Uncontrolled requests commit before notification. Controlled requests, including successful Dialog Form submission, wait for the owner. An external native close is reconciled immediately and a stale true input cannot reopen it. Owner commits do not notify.
 

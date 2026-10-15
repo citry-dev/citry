@@ -62,12 +62,22 @@
   closed could reopen.
 - When a server event changes the `open` input you pass to `CPopover`,
   `CMenu`, `CHoverCard`, `CSelect`, or `CMultiSelect`, the component now
-  opens or closes to match; previously it could ignore the change. Across
-  these and `CDialog`, `CAlertDialog`, `CDrawer`, `CTour`, `CCombobox`,
-  `CCascader`, and `CColorPicker`, an unchanged `open` input keeps the
-  component's current state.
+  opens or closes to match; previously it could ignore the change. In all of
+  these, and in `CDialog`, `CAlertDialog`, `CDrawer`, `CTour`, `CCombobox`,
+  `CCascader`, and `CColorPicker`, a server event that leaves `open`
+  unchanged keeps the component as it is.
 - The `CMenu` trigger and the `CTimePicker` control no longer stay disabled
   after a server event disables and then re-enables them.
+- Closing a `CDialog`, `CAlertDialog`, or `CDrawer` by changing its `open`
+  input in a server event now closes it fully. Previously an invisible modal
+  stayed on the page, kept scrolling locked, and blocked clicks.
+- A `CDialog` that a server event removes while it is open now returns focus
+  to the element that opened it, if that element is still on the page.
+- An open `CTour` keeps the step the user reached when a server event
+  re-renders the component that contains it, and moves to a new step when
+  the server changes `active`. Previously Next repeated a step after such a
+  re-render. Its dialog also keeps the current step's title and description
+  as its accessible name after the user moves between steps.
 - `CHoverCard`, `CSelect`, `CMultiSelect`, `CCombobox`, `CCascader`,
   `CColorPicker`, `CDatePicker`, `CDateRange`, and `CTimePicker` now close
   when they are disabled while open, and call `onOpenChange(false)`. Some

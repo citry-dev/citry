@@ -239,9 +239,9 @@ client-prop lifecycle.
 A server re-render that keeps the Dialog keeps an open uncontrolled Dialog
 open when the server `open` value is unchanged, and opens or closes it to
 match a changed value without calling `onOpenChange`. A re-render that removes
-an open Dialog does not call `onOpenChange`: the Dialog stops existing rather
-than closing in the browser, as with every other overlay. Its cleanup still
-closes native modal state, releases the scroll lock, and restores focus.
+an open Dialog does not call `onOpenChange`: the owner removed it, so there is
+nothing to report. Its cleanup still leaves the modal state, releases the
+scroll lock, and returns focus.
 
 ## 5. State model
 

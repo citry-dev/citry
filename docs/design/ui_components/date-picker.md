@@ -291,12 +291,12 @@ composition hidden. Parent initialization wires client scope before composed
 children consume `$c-props`; only after the first synchronized display is
 ready does it mark the root enhanced and reveal the custom control.
 
-A retained morph preserves a valid uncontrolled value when its server
-baseline is unchanged, while fresh server inputs become new fallbacks. The
-picker keeps its Vue instance, and with it the popup's open state, so a popup
-that was open before the re-render stays open; DatePicker has no server `open`
-input. A render that disables an open popup closes it and reports one forced
-close with reason `disabled`. An open overlay closes safely if replacement invalidates its
+A retained morph preserves a valid uncontrolled value when its server baseline
+is unchanged, while fresh server inputs become new fallbacks. The picker keeps
+its Vue instance, and with it the popup's open state, so a popup that was open
+before the re-render stays open; DatePicker has no server `open` input. A
+render that disables an open popup closes it and reports one forced close with
+reason `disabled`. An open overlay closes safely if replacement invalidates its
 owner. Cleanup releases Form/reset/fieldset listeners, i18n subscription,
 composed callbacks, and any retained handoff. A fragment inserted after locale
 switch formats its first exposed display in the provider's current locale.
