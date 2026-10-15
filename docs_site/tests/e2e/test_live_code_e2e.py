@@ -27,6 +27,7 @@ _ACTIVE_PREVIEW = ".citry-live-code__preview:not(.citry-playground__preview--can
 def test_inline_example_loads_lazily_runs_events_and_recovers_a_draft(
     page: Any,
     docs_site_url: str,
+    wait_for_preview_ready: Any,
 ) -> None:
     requests: list[str] = []
     page.on("request", lambda request: requests.append(request.url))
@@ -74,6 +75,8 @@ def test_inline_example_loads_lazily_runs_events_and_recovers_a_draft(
         "width": "1px",
     }
     root.locator('[data-live-tab="result"]').click()
+    # The card is on screen before Vue attaches its click handler.
+    wait_for_preview_ready(root.locator(_ACTIVE_PREVIEW))
     card.locator("button").click()
     expect(card.locator("output")).to_have_text("1", timeout=10_000)
 
@@ -221,6 +224,7 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     page: Any,
     docs_site_url: str,
     playground_runtime: dict[str, Any],
+    wait_for_preview_ready: Any,
 ) -> None:
     page.goto(docs_site_url + "/getting-started/browser-interactivity/", wait_until="domcontentloaded")
     runtime_version = page.evaluate(
@@ -241,6 +245,8 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     counters.locator('[data-live-tab="result"]').click()
     expect(ada).to_contain_text("Ada")
     expect(grace).to_contain_text("Grace")
+    # The counters are on screen before Vue attaches their click handlers.
+    wait_for_preview_ready(counters.locator(_ACTIVE_PREVIEW))
     ada.click()
     expect(ada).to_contain_text("clicked 1 times")
     expect(grace).to_contain_text("clicked 0 times")
@@ -254,6 +260,7 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     choice = connected_preview.locator(".choice-picker__value")
     expect(choice).to_have_text("Ocean")
     connected.locator('[data-live-tab="result"]').click()
+    wait_for_preview_ready(connected.locator(_ACTIVE_PREVIEW))
     connected_preview.locator(".choice-button").click()
     expect(choice).to_have_text("Forest")
 
@@ -293,6 +300,11 @@ def test_inline_runtime_activation_failure_keeps_source_and_retries(page: Any, d
 def test_rapid_activation_restores_the_superseded_block(page: Any, docs_site_url: str) -> None:
     page.goto(docs_site_url + "/__tests__/live-code-multiple/", wait_until="domcontentloaded")
     blocks = page.locator("[data-citry-live-code]")
+    # The page script shows each Try live button only once it has attached the
+    # button's click handler, and it may run after `domcontentloaded`. The
+    # clicks below bypass Playwright's visibility wait, so wait here first.
+    for index in range(blocks.count()):
+        expect(blocks.nth(index).locator("[data-live-activate]")).to_be_visible()
 
     page.evaluate(
         """() => {

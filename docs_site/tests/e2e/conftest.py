@@ -44,7 +44,7 @@ from docs_site._internal.pipeline import render_page
 from docs_site._internal.static_deps import StaticSiteRequestHandler
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
 
 # The release docs workflow sets this after it pins the release it just
@@ -463,3 +463,45 @@ def getting_started_urls() -> Iterator[dict[str, str]]:
             _stop_process(process)
             if process.stdout:
                 process.stdout.close()
+
+
+# Record each Citry app's `citry:ready` event in every frame. Playwright runs
+# init scripts in each new document, iframes included, so every preview frame
+# a run creates gets its own list. A second copy leaves the first in charge.
+_RECORD_CITRY_READY = """
+(() => {
+  if (window.__citryReadyApps) return;
+  window.__citryReadyApps = [];
+  document.addEventListener('citry:ready', event => {
+    window.__citryReadyApps.push(event.detail.appId);
+  });
+})();
+"""
+
+
+@pytest.fixture
+def wait_for_preview_ready(page: Any) -> Callable[..., None]:
+    """
+    Return a function that waits until the Citry apps inside a preview iframe are ready.
+
+    Call it with a locator for the `<iframe>` element. The playground and
+    `<c-live-code>` re-enable their Run button once the preview frame reports
+    that it has inserted the result and started its scripts. The Vue app in
+    that result finishes mounting later, so the server-rendered buttons are
+    already on screen while their handlers are not attached yet, and a click
+    sent then does nothing. The runtime dispatches `citry:ready` once the app
+    has mounted, which is the point where a click reaches it.
+
+    The listener is an init script, so request this fixture before navigating.
+    Each run renders into a new frame, so call this after every run whose
+    result the test then uses.
+    """
+    page.add_init_script(_RECORD_CITRY_READY)
+
+    def wait(frame: Any, *, apps: int = 1) -> None:
+        content = frame.element_handle().content_frame()
+        if content is None:
+            pytest.fail("the preview locator does not point at an iframe")
+        content.wait_for_function("apps => (window.__citryReadyApps?.length ?? 0) >= apps", arg=apps)
+
+    return wait

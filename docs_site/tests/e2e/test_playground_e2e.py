@@ -174,7 +174,11 @@ Page()
 
 # Installs the workspace Citry UI wheel, which usually needs an unreleased Citry.
 @pytest.mark.workspace_citry
-def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_site_url: str) -> None:
+def test_local_authoring_runtime_runs_workspace_citry_ui(
+    page: Any,
+    local_docs_site_url: str,
+    wait_for_preview_ready: Any,
+) -> None:
     console_errors: list[str] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     page.goto(local_docs_site_url + "/playground/", wait_until="domcontentloaded")
@@ -195,6 +199,8 @@ def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_s
     tabs = preview.locator('[role="tab"]')
     expect(tabs).to_have_count(3, timeout=120_000)
     expect(tabs.nth(0)).to_have_attribute("aria-selected", "true")
+    # The tabs are on screen before Vue attaches their click handlers.
+    wait_for_preview_ready(page.locator("#citry-playground-preview"))
     tabs.nth(1).click()
     expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
     expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
@@ -207,6 +213,7 @@ def test_published_runtime_runs_citry_ui_twice(
     page: Any,
     docs_site_url: str,
     playground_runtime: dict[str, Any],
+    wait_for_preview_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
@@ -221,6 +228,8 @@ def test_published_runtime_runs_citry_ui_twice(
     preview = page.frame_locator("#citry-playground-preview")
     tabs = preview.locator('[role="tab"]')
     expect(tabs).to_have_count(3, timeout=120_000)
+    # The tabs are on screen before Vue attaches their click handlers.
+    wait_for_preview_ready(page.locator("#citry-playground-preview"))
     tabs.nth(1).click()
     expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
     expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
@@ -249,7 +258,11 @@ CButton(slots={"default": "Save changes"})
 
 # The tabs page embeds the workspace Citry UI snippet.
 @pytest.mark.workspace_citry
-def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: str) -> None:
+def test_published_runtime_activates_inline_citry_ui(
+    page: Any,
+    docs_site_url: str,
+    wait_for_preview_ready: Any,
+) -> None:
     console_errors: list[str] = []
     page.on(
         "console",
@@ -292,6 +305,8 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
     preview = root.frame_locator(".citry-live-code__preview:not(.citry-playground__preview--candidate)")
     tabs = preview.locator('[role="tab"]')
     expect(tabs).to_have_count(3, timeout=120_000)
+    # The tabs are on screen before Vue attaches their click handlers.
+    wait_for_preview_ready(root.locator(".citry-live-code__preview:not(.citry-playground__preview--candidate)"))
     tabs.nth(1).click()
     expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
     expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
@@ -306,6 +321,7 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
 def test_playground_runs_edits_reports_errors_and_recovers(
     page: Any,
     docs_site_url: str,
+    wait_for_preview_ready: Any,
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(docs_site_url + "/playground/", wait_until="domcontentloaded")
@@ -430,6 +446,8 @@ def test_playground_runs_edits_reports_errors_and_recovers(
     page.wait_for_function("document.querySelector('#citry-playground-run').disabled === false")
     assert stop.is_disabled()
     assert "Welcome, Ada Lovelace." in card.inner_text()
+    # The card is on screen before Vue attaches its click handler.
+    wait_for_preview_ready(page.locator("#citry-playground-preview"))
     card.locator("button").click()
     try:
         expect(card.locator("output")).to_have_text("1", timeout=10_000)
@@ -527,6 +545,8 @@ DataProbe(value="start")
     _run_and_wait(page)
     data_probe = page.frame_locator("#citry-playground-preview").locator("#data-probe")
     data_probe_root = page.frame_locator("#citry-playground-preview").locator("#data-probe-root")
+    # Typing before Vue mounts changes the field but never reaches the component's State.
+    wait_for_preview_ready(page.locator("#citry-playground-preview"))
     page.frame_locator("#citry-playground-preview").locator("#state-input").fill("edited")
     expect(data_probe_root).to_have_attribute("data-state", "edited", timeout=10_000)
     data_probe.click()
@@ -695,6 +715,8 @@ FragmentLoader()
     _run_and_wait(page)
     render_preview = page.frame_locator("#citry-playground-preview")
     load_fragment = render_preview.locator("#load-fragment")
+    # The button is on screen before Vue attaches its click handler.
+    wait_for_preview_ready(page.locator("#citry-playground-preview"))
     load_fragment.click()
     loaded_fragment = render_preview.locator("#fragment-target #loaded-fragment")
     expect(loaded_fragment).to_have_attribute("data-component-js", "rendered", timeout=10_000)
@@ -827,6 +849,8 @@ TutorialPage()
     _run_and_wait(page)
     signup = page.frame_locator("#citry-playground-preview")
     signup.locator('input[name="email"]').wait_for(timeout=10_000)
+    # The form is on screen before Vue attaches its submit handler.
+    wait_for_preview_ready(page.locator("#citry-playground-preview"))
     signup.locator('input[name="email"]').fill("reader@other.test")
     signup.locator('button[type="submit"]').click()
     expect(signup.locator("#signup-error")).to_have_text("Use an @example.com address.", timeout=10_000)
@@ -881,8 +905,9 @@ html""",
     _run_and_wait(page)
     preview_body = page.frame_locator("#citry-playground-preview").locator("body")
     assert preview_body.get_attribute("data-old-run") == "undefined"
-    page.wait_for_timeout(150)
-    assert preview_body.get_attribute("data-old-run-later") == "undefined"
+    # The result sets this attribute from a 100 ms timer, which a slow runner
+    # may not have run yet, so wait for it rather than sleeping a fixed time.
+    expect(preview_body).to_have_attribute("data-old-run-later", "undefined")
 
     stalled_preview = "**/static/playground/preview.html?citry-preview=*"
     page.route(stalled_preview, _stall_preview_render)
@@ -977,6 +1002,8 @@ BrokenEvent()
 """,
     )
     _run_and_wait(page)
+    # The button is on screen before Vue attaches its click handler.
+    wait_for_preview_ready(page.locator("#citry-playground-preview"))
     page.frame_locator("#citry-playground-preview").locator("#broken-event").click()
     page.wait_for_function(
         "document.querySelector('#citry-playground-preview-summary').textContent.includes('event error')"
