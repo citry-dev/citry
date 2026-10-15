@@ -820,9 +820,11 @@ def test_example_recipe_renders_its_live_demo(
 def test_tabs_ui_preview_is_keyboard_operable_at_a_narrow_viewport(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     page.set_viewport_size({"width": 360, "height": 760})
     page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
     demo = demos.nth(1)
     frame_element = demo.locator("[data-ui-preview-frame]")
@@ -848,9 +850,11 @@ def test_tabs_ui_preview_is_keyboard_operable_at_a_narrow_viewport(
 def test_tabs_ui_sampler_and_configurator_are_result_first_and_reactive(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 13
@@ -930,6 +934,7 @@ def test_tabs_ui_sampler_and_configurator_are_result_first_and_reactive(
 def test_tabs_ui_focused_examples_cover_remaining_public_behaviors(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -938,6 +943,7 @@ def test_tabs_ui_focused_examples_cover_remaining_public_behaviors(
     )
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     density_demo = demos.nth(4)
@@ -1031,6 +1037,7 @@ def test_tabs_ui_focused_examples_cover_remaining_public_behaviors(
 def test_dialog_ui_examples_are_result_first_reactive_and_operable(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1038,6 +1045,7 @@ def test_dialog_ui_examples_are_result_first_reactive_and_operable(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/dialog/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 11
@@ -1071,8 +1079,10 @@ def test_dialog_ui_examples_are_result_first_reactive_and_operable(
 def test_dialog_ui_focused_examples_cover_control_focus_forms_and_nesting(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     page.goto(docs_site_url + "/ui-library/components/dialog/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     controlled = demos.nth(3).frame_locator("[data-ui-preview-frame]")
@@ -1117,6 +1127,7 @@ def test_dialog_ui_focused_examples_cover_control_focus_forms_and_nesting(
 def test_combobox_ui_examples_are_result_first_reactive_and_operable(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1124,6 +1135,7 @@ def test_combobox_ui_examples_are_result_first_reactive_and_operable(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/combobox/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 9
@@ -1179,6 +1191,7 @@ def test_combobox_ui_examples_are_result_first_reactive_and_operable(
 def test_table_ui_examples_cover_semantics_footer_overflow_theme_and_environment(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1186,6 +1199,7 @@ def test_table_ui_examples_cover_semantics_footer_overflow_theme_and_environment
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/table/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 9
@@ -1241,6 +1255,7 @@ def test_table_ui_examples_cover_semantics_footer_overflow_theme_and_environment
 def test_textarea_ui_examples_cover_configuration_forms_control_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1248,6 +1263,7 @@ def test_textarea_ui_examples_cover_configuration_forms_control_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/textarea/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 11
@@ -1305,6 +1321,7 @@ def test_textarea_ui_examples_cover_configuration_forms_control_and_theme(
 def test_native_select_ui_examples_cover_groups_control_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1312,6 +1329,7 @@ def test_native_select_ui_examples_cover_groups_control_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/native-select/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 10
@@ -1356,6 +1374,7 @@ def test_native_select_ui_examples_cover_groups_control_and_theme(
 def test_checkbox_ui_examples_cover_configuration_control_mixed_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1363,6 +1382,7 @@ def test_checkbox_ui_examples_cover_configuration_control_mixed_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/checkbox/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 10
@@ -1491,6 +1511,7 @@ def test_recent_batch_ui_previews_render_in_the_public_docs_host(
 def test_cascader_docs_preview_uses_fit_based_columns_and_visually_closes(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1498,6 +1519,7 @@ def test_cascader_docs_preview_uses_fit_based_columns_and_visually_closes(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/cascader/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     frame_selector = 'iframe[src$="/cascader/_previews/at-a-glance/"]'
     page.locator(frame_selector).wait_for(state="attached")
     preview = page.frame_locator(frame_selector)
@@ -1547,6 +1569,7 @@ def test_cascader_docs_preview_uses_fit_based_columns_and_visually_closes(
 def test_infinite_scroll_docs_preview_remains_available_after_repeated_loads(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1554,6 +1577,7 @@ def test_infinite_scroll_docs_preview_remains_available_after_repeated_loads(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/infinite-scroll/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     frame_selector = 'iframe[src$="/infinite-scroll/_previews/automatic/"]'
     frame_element = page.locator(frame_selector)
     frame_element.wait_for(state="attached")
@@ -1576,6 +1600,7 @@ def test_infinite_scroll_docs_preview_remains_available_after_repeated_loads(
 def test_popover_ui_examples_cover_composition_control_nesting_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1583,6 +1608,7 @@ def test_popover_ui_examples_cover_composition_control_nesting_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/popover/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     moon = demos.nth(1).frame_locator("[data-ui-preview-frame]")
@@ -1631,6 +1657,7 @@ def test_popover_ui_examples_cover_composition_control_nesting_and_theme(
 def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1638,6 +1665,7 @@ def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/drawer/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
@@ -1715,6 +1743,7 @@ def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
 def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1722,6 +1751,7 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/menu/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     nested = demos.nth(6).frame_locator("[data-ui-preview-frame]")
@@ -1830,6 +1860,7 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
 def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1837,6 +1868,7 @@ def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/toast/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
@@ -1909,6 +1941,7 @@ def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
 def test_breadcrumbs_ui_examples_cover_semantics_overflow_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1916,6 +1949,7 @@ def test_breadcrumbs_ui_examples_cover_semantics_overflow_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/breadcrumbs/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 9
@@ -1957,6 +1991,7 @@ def test_breadcrumbs_ui_examples_cover_semantics_overflow_and_theme(
 def test_tooltip_ui_examples_cover_focus_text_control_placement_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1964,6 +1999,7 @@ def test_tooltip_ui_examples_cover_focus_text_control_placement_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/tooltip/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
@@ -2000,6 +2036,7 @@ def test_tooltip_ui_examples_cover_focus_text_control_placement_and_theme(
 def test_alert_ui_examples_cover_intent_actions_configuration_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -2007,6 +2044,7 @@ def test_alert_ui_examples_cover_intent_actions_configuration_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/alert/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 10
@@ -2069,6 +2107,7 @@ def test_alert_ui_examples_cover_intent_actions_configuration_and_theme(
 def test_accordion_ui_examples_cover_expansion_nesting_and_configuration(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -2076,6 +2115,7 @@ def test_accordion_ui_examples_cover_expansion_nesting_and_configuration(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/accordion/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 9
@@ -2117,6 +2157,7 @@ def test_accordion_ui_examples_cover_expansion_nesting_and_configuration(
 def test_disclosure_ui_examples_cover_expansion_composition_and_forms(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -2124,6 +2165,7 @@ def test_disclosure_ui_examples_cover_expansion_composition_and_forms(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/disclosure/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 9
@@ -2236,6 +2278,7 @@ def test_disclosure_ui_examples_cover_expansion_composition_and_forms(
 def test_button_ui_sampler_and_configurator_are_result_first_and_reactive(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -2244,6 +2287,7 @@ def test_button_ui_sampler_and_configurator_are_result_first_and_reactive(
     )
     page.set_viewport_size({"width": 360, "height": 760})
     page.goto(docs_site_url + "/ui-library/components/button/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 11
@@ -2300,9 +2344,11 @@ def test_button_ui_sampler_and_configurator_are_result_first_and_reactive(
 def test_button_ui_native_form_and_theme_examples_exercise_public_contracts(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(docs_site_url + "/ui-library/components/button/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
 
     form_demo = page.locator('[data-citry-ui-demo]:has(iframe[src$="/_previews/native-forms/"])')
     form_demo.scroll_into_view_if_needed()
@@ -2332,11 +2378,14 @@ def test_button_ui_native_form_and_theme_examples_exercise_public_contracts(
 def test_form_submission_example_receives_the_native_submit_event(
     page: Any,
     docs_site_url: str,
+    wait_for_preview_ready: Any,
 ) -> None:
     page.goto(docs_site_url + "/examples/form-submission/")
     card = page.locator(".example-card").first
     card.get_by_role("tab", name="Live demo").click()
     frame_element = card.locator('iframe[src="/examples/form-submission/demo/"]')
+    # Vue handles the submit; before it mounts, Submit would post the form natively.
+    wait_for_preview_ready(frame_element)
     assert set(frame_element.get_attribute("sandbox").split()) == {
         "allow-forms",
         "allow-same-origin",
