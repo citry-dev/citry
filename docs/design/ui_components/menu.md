@@ -219,7 +219,7 @@ and Menu declarations there.
 | Input | Type | Default | Class | Validation and effect |
 |---|---|---|---|---|
 | `id` | `str | None` | generated | structural | stable surface and relationship identity |
-| `open` | `bool` | `False` | initial value | initial visibility and uncontrolled fallback |
+| `open` | `bool` | `False` | server state | server-visible visibility and uncontrolled fallback; on a server re-render, a changed value opens or closes it to match and an unchanged value keeps its current state |
 | `disabled` | `bool` | `False` | reactive configuration | disables the activator and forcibly closes the tree |
 | `loop` | `bool` | `True` | reactive configuration | wraps arrow navigation and typeahead search |
 | `placement` | `CMenuPlacement` | `"bottom-start"` | reactive configuration | preferred logical root placement |
@@ -912,7 +912,12 @@ successful reconciliation; it is readiness evidence, not stable public API.
 
 Correlated rerender handoff preserves semantic state only: committed open,
 client-control ownership/value, focused item identity, choice state, and the
-descendant-open path where still valid. The replacement creates a fresh
+descendant-open path where still valid. The committed open state and the open
+submenu path carry over only when the server `open` value is unchanged; a
+changed value opens or closes the root to match, without calling
+`onOpenChange`. A render that disables an open Menu closes it and reports one
+forced close with reason `disabled`, including when the same render also
+changes `open`. The replacement creates a fresh
 generation greater than the handed-off numeric seed. Old timers, microtasks,
 animations, pointer intent, pending notifications, and focus tasks are canceled
 and never transferred or allowed to mutate the replacement. Each mutable or

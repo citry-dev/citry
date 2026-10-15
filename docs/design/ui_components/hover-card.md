@@ -149,7 +149,10 @@ to assistive technology.
 ## 14. Server render, morph, and cleanup
 
 Correlated retained-surface replacement transfers committed open intent only
-when the server open baseline is unchanged. A fresh generation owns timers,
+when the server open baseline is unchanged; a changed baseline opens or closes
+the card to match without calling `onOpenChange`. A render that disables an
+open card closes it and reports one forced close with reason `disabled`,
+including when the same render also changes `open`. A fresh generation owns timers,
 animations, listeners, and layer registration; old work cannot mutate the new
 surface. Removal cancels timers/animation, unregisters, closes native Popover,
 and returns shared coordinator statistics to baseline.

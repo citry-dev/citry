@@ -105,6 +105,12 @@ the last committed value. Invalid values are diagnosed once per episode and
 retain the current valid configuration. Open and active ownership are
 independent.
 
+On a server re-render that keeps the Tour, an open uncontrolled Tour stays open
+when the server `open` value is unchanged, and opens or closes to match a
+changed value without calling `onOpenChange`. The active step is not carried
+over, so the re-rendered Tour shows the server's `active` step. A re-render
+that removes an open Tour does not call `onOpenChange`.
+
 ## 5. State model
 
 The Tour is closed or open at one active step. Opening resolves the requested

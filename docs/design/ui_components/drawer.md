@@ -95,7 +95,7 @@ contain interactive descendants; body and actions may.
 | Python input | Type | Default | Class | Effect |
 |---|---|---|---|---|
 | `id` | `str | None` | generated | structural | native identity and IDREF base |
-| `open` | `bool` | `False` | initial state fallback | server-visible and client-upgraded state |
+| `open` | `bool` | `False` | server state fallback | server-visible and client-upgraded state; on a server re-render, a changed value opens or closes it to match and an unchanged value keeps its current state |
 | `dismissible` | `bool` | `True` | reactive fallback | built-in close plus passive dismissal |
 | `close_on_escape` | `bool` | `True` | reactive fallback | Escape/platform cancel gate |
 | `close_on_outside` | `bool` | `True` | reactive fallback | start-and-end backdrop press gate |
@@ -261,7 +261,8 @@ title, optional description, and activator. Callback values are ordinary data.
 Server `open=True` is visible but not modal without JavaScript, matching native
 Dialog limits. Initialization upgrades it with `showModal()` only when
 eligible. Correlated rerenders preserve committed uncontrolled open state when
-the server `open` fallback is unchanged, preserve controlled intent, update
+the server `open` fallback is unchanged and open or close the Drawer to match a
+changed value without calling `onOpenChange`, preserve controlled intent, update
 placement/size/scroll without close/reopen, and transfer semantic focus state
 without old-generation callbacks.
 

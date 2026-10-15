@@ -199,7 +199,7 @@ component owns the relationships and state machine.
 | `id` | `str` or `None` | Field ID or generated | structural server-only | identity base for input, popup, and options |
 | `value` | `str` or `None` | `None` | initial state | canonical selected identity; may temporarily lack a matching item |
 | `input_value` | `str` or `None` | selected label or empty | initial state | editable query |
-| `open` | `bool` | `False` | initial state | initial popup visibility, forced closed when interaction is blocked or below threshold |
+| `open` | `bool` | `False` | server state | popup visibility, forced closed when interaction is blocked or below threshold; on a server re-render, a changed value opens or closes it to match and an unchanged value keeps its current state |
 | `required`, `disabled`, `readonly`, `invalid` | `bool` or `None` | inherit Field/Form | reactive fallback | form and interaction semantics |
 | `loading` | `bool` | `False` | reactive fallback | external loading presentation |
 | `clearable` | `bool` | `True` | reactive fallback | exposes clear when useful |
@@ -460,7 +460,11 @@ and open state are truthful before activation.
 
 Each activation is scoped to the nearest root. Same-identity morphing preserves
 uncontrolled value, query, compatible highlight, focus and selection range,
-accepted remote collection, and request supersession. A replacement with new
+accepted remote collection, and request supersession. Open state carries over
+only when the server `open` value is unchanged; a changed value opens or
+closes the popup to match without calling `onOpenChange`. A render that
+disables an open popup closes it and reports one forced close with reason
+`disabled`, including when the same render also changes `open`. A replacement with new
 identity gets server defaults. Cleanup aborts and invalidates requests, clears
 timers, removes document and Form listeners, releases Field native-invalid
 state, drops option nodes and callbacks, and cannot reopen or notify late.

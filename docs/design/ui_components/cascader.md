@@ -73,6 +73,11 @@ works the same way. `onValueChange(path, detail)` includes labels,
 An invalid controlled `value` or `open` value is diagnosed once and leaves the
 last valid effective state unchanged. Omitting `value` returns to the retained
 uncontrolled path; omitting `open` releases control at its current state.
+On a server re-render the open state carries over only when the server `open`
+value is unchanged; a changed value opens or closes the popup to match without
+calling `onOpenChange`. A render that disables an open popup closes it and
+reports one forced close with reason `disabled`, including when the same
+render also changes `open`.
 
 ## 5. Forms and localization
 

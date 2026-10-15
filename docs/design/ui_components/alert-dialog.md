@@ -80,7 +80,7 @@ The native Dialog ID is supplied by `id` or generated as
 | Input | Type | Default | Class | Effect |
 |---|---|---|---|---|
 | `id` | `str | None` | `None` | structural | exact native Dialog and relationship prefix |
-| `open` | `bool` | `False` | initial value | initial modal visibility |
+| `open` | `bool` | `False` | server state | modal visibility; on a server re-render, a changed value opens or closes it to match and an unchanged value keeps its current state |
 | `close_on_escape` | `bool` | `True` | reactive configuration | permits Escape as the cancel-equivalent dismissal |
 | `size` | `"sm" | "md" | "lg"` | `"sm"` | reactive configuration | bounded decision surface width |
 | `scroll` | `"body" | "dialog"` | `"body"` | reactive configuration | overflow owner |
@@ -203,7 +203,11 @@ composed in the action Button and controlled `open` state.
 
 Closed server HTML contains a native Dialog without falsely exposed modality.
 Open server HTML is normalized through `showModal()` at activation. Correlated
-rerenders preserve controlled/internal visibility under the Dialog runtime.
+rerenders preserve controlled/internal visibility under the Dialog runtime:
+internal visibility carries over only when the server `open` value is
+unchanged, and a changed value opens or closes the AlertDialog to match. Like
+Dialog, a re-render that removes an open AlertDialog does not call
+`onOpenChange`.
 Cleanup removes listeners, closes descendants and native modal state, releases
 scroll lock, and restores focus only when still appropriate.
 
