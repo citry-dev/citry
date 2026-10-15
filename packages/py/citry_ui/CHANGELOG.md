@@ -42,6 +42,9 @@
   offset restore causes when the area is moved to another place in the page
   before the next frame; the callback previously received that event with a
   `null` source target.
+- `CContextMenu` calls `onOpenChange` after a server re-render even when its
+  trigger area was briefly invalid while the menu started up. The callback
+  previously stayed unbound until the next re-render.
 
 ## [0.2.2] - 2026-09-11
 

@@ -140,6 +140,11 @@
             It = !1,
             Ot = null,
             capInvalid = !1,
+            // Set when reading the props found the root invalid. The next
+            // time the menu becomes ready reads them again; otherwise a
+            // mutation that lands before the first read would leave
+            // onOpenChange unbound for the rest of this render.
+            propsDeferred = !1,
             St = null,
             Xt = [],
             E = {
@@ -929,7 +934,8 @@
                 }
                 ((Y.menuSignature = e), (mt = !1));
               }
-              (!e || pe() ? ne(e) : ne(!1), e && !yt && ((yt = !0), $(() => Pt())));
+              (!e || pe() ? ne(e) : ne(!1),
+                e && (!yt || propsDeferred) && ((yt = !0), $(() => Pt())));
             },
             disabledChanged() {
               W() && (i.toggleAttribute("data-disabled", _()), _() && de());
@@ -1531,7 +1537,8 @@
           (l.addEventListener("toggle", Ye),
             l.addEventListener("beforetoggle", Be),
             (Pt = () => {
-              if (!Qe()) return;
+              if (!Qe()) return void (propsDeferred = !0);
+              propsDeferred = !1;
               ((E = {
                 disabled: B("disabled"),
                 loop: B("loop"),

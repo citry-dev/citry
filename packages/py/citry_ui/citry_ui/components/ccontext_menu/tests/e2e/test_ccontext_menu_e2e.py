@@ -1330,7 +1330,7 @@ def test_callback_exception_rolls_back_before_native_default_continues(page) -> 
     assert sum("context callback boom" in error for error in errors) == 1
 
 
-def test_nested_boundary_server_revision_shadow_move_and_hostile_repair(page, serve_citry_ui_live) -> None:
+def test_nested_boundary_server_revision_shadow_move_and_hostile_repair(page, serve_citry_ui_live, send_event) -> None:
     app, html = _page(refresh=True)
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
@@ -1349,7 +1349,12 @@ def test_nested_boundary_server_revision_shadow_move_and_hostile_repair(page, se
     before = page.locator("#basic-point").bounding_box()
     assert before is not None
     assert page.locator("#basic").get_attribute("data-invocation") == "pointer"
-    page.locator(".refresh-context").evaluate("element => element.click()")
+    # The open menu and its initialized root are already in place before the
+    # click, so waiting for them alone can pass before the server's revision
+    # arrives. A revision that lands during the shadow move or the tampering
+    # below replaces each menu's controller midway and resets the anchors the
+    # later waits expect, so wait until the browser has applied it.
+    send_event(lambda: page.locator(".refresh-context").evaluate("element => element.click()"), handler="refresh")
     page.wait_for_function(
         """
           document.querySelector('#basic')?.hasAttribute('data-citry-context-menu-initialized')
@@ -1790,4 +1795,73 @@ def test_final_cleanup_disconnects_shared_observers_and_clears_readiness(page) -
         "baseline => window.__contextObserverDisconnects > baseline",
         arg=baseline_disconnects,
     )
+    assert errors == []
+
+
+def test_server_revision_binds_the_open_callback_when_the_root_breaks_before_the_first_read(
+    page, serve_citry_ui_live, send_event, wait_for_count
+) -> None:
+    """A server revision that lands while the page breaks the root still binds `onOpenChange` once repaired."""
+    app, html = _page(refresh=True)
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    # Hold the refresh call so the page can arm its mutation below before the
+    # browser applies the server revision.
+    held: list = []
+    page.route(
+        "**/ext/events/**",
+        lambda route: held.append(route) if route.request.method == "POST" else route.continue_(),
+    )
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    page.wait_for_function("document.querySelectorAll('[data-citry-context-menu-initialized]').length === 11")
+    page.locator(".refresh-context").evaluate("element => element.click()")
+    wait_for_count(held, 1)
+    # The revision gives #geometry a new controller. It marks the root ready
+    # and reads the props, onOpenChange included, on a zero-delay timer. Break
+    # the root in the same task that marks it ready, so that read finds an
+    # invalid root.
+    page.evaluate(
+        """
+          () => {
+            const root = document.querySelector('#geometry');
+            const owner = Symbol.for('citry-ui:context-menu-owner');
+            const previous = root[owner];
+            const observer = new MutationObserver(() => {
+              if (root[owner] === previous || !root.hasAttribute('data-citry-context-menu-initialized')) return;
+              observer.disconnect();
+              root.removeAttribute('data-citry-context-menu-initialized');
+              document.querySelector('#geometry-point').style.setProperty(
+                'anchor-name', '--_cui-menu-anchor-ref-untrusted'
+              );
+              document.querySelector('#geometry-menu').style.setProperty(
+                'position-anchor', '--_cui-untrusted-menu-anchor'
+              );
+              window.__geometryBroken = true;
+            });
+            observer.observe(root, { attributes: true });
+          }
+        """
+    )
+    send_event(held[0].continue_, handler="refresh")
+    page.wait_for_function(
+        "window.__geometryBroken"
+        " && !document.querySelector('#geometry').hasAttribute('data-citry-context-menu-initialized')"
+    )
+    page.evaluate(
+        """
+          () => {
+            document.querySelector('#geometry-point').style.setProperty(
+              'anchor-name', '--_cui-menu-anchor-ref-handoff'
+            );
+            document.querySelector('#geometry-menu').style.setProperty(
+              'position-anchor', '--_cui-menu-anchor-ref-handoff'
+            );
+          }
+        """
+    )
+    page.wait_for_function("document.querySelector('#geometry').hasAttribute('data-citry-context-menu-initialized')")
+    page.locator("#geometry-target").click(button="right")
+    page.wait_for_function("document.querySelector('#geometry-menu').matches(':popover-open')")
+    page.wait_for_function("window.__contextState.geometryEvents.length === 1", timeout=5_000)
+    assert page.evaluate("window.__contextState.geometryEvents") == [True]
     assert errors == []
