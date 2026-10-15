@@ -251,7 +251,7 @@ def test_component_change_stays_inside_its_own_vue_app(page: Any, serve_live: An
     page.on("pageerror", lambda error: faults.append(str(error)))
     base = serve_live(engine, Page().render().serialize(), Wrapper().render().serialize(deps_strategy="fragment"))
     page.goto(base + "/")
-    # The registry gains each app before it mounts; the second app's button
+    # `__citryRuntime._apps` gains each app before it mounts; the second app's button
     # does nothing until that app has mounted.
     wait_for_citry_ready()
     page.evaluate(

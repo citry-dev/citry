@@ -59,7 +59,7 @@ def _open_citry_page(page: Any, serve_document: Any, wait_for_citry_ready: Any) 
         """
 
     page.goto(serve_document(Shell().render().serialize()))
-    # The registry gains the app before it mounts, and the block driver needs
+    # `__citryRuntime._apps` gains the app before it mounts, and the block driver needs
     # the mounted app, so wait for `citry:ready`.
     wait_for_citry_ready()
 

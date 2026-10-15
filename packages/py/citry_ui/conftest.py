@@ -132,11 +132,6 @@ def open_scenario(
     It returns once every Citry app on the page has dispatched `citry:ready`.
     `page.goto()` returns at `load`, which comes before the runtime mounts, so
     a click right after it can reach server HTML with no handler attached.
-
-    By default it waits for one app per configuration block in the served
-    page. A scenario that starts another app later, for example by loading a
-    fragment, passes `apps` with the total it expects, and the fixture waits
-    for exactly that many.
     """
 
     def open_(
@@ -145,7 +140,6 @@ def open_scenario(
         transform: Callable[[str], str] | None = None,
         framework_css: str | None = None,
         framework_css_after_citry: bool = False,
-        apps: int | None = None,
     ) -> RenderedScenario:
         rendered = build_scenario(scenario_id)
         # Tests that add a CSP edit the finished document, so apply the edit
@@ -159,18 +153,10 @@ def open_scenario(
         page.add_init_script(_RECORD_CITRY_READY)
         base_url = serve_citry_ui_live(rendered.app, html)
         page.goto(base_url + "/", wait_until="load")
-        if apps is None:
-            # Each Citry app on the page starts from one configuration block, so
-            # the block count says how many `citry:ready` events to wait for. A
-            # scenario without client components has no block and returns at once.
-            page.wait_for_function(_ALL_DOCUMENT_APPS_READY)
-        else:
-            # An app started after load, such as a fragment, has no block in
-            # the served page, so the caller states the total instead.
-            page.wait_for_function("apps => (window.__citryReadyApps?.length ?? 0) >= apps", arg=apps)
-            ready = page.evaluate("() => window.__citryReadyApps.length")
-            if ready != apps:
-                pytest.fail(f"expected {apps} ready Citry apps, got {ready}")
+        # Each Citry app on the page starts from one configuration block, so
+        # the block count says how many `citry:ready` events to wait for. A
+        # scenario without client components has no block and returns at once.
+        page.wait_for_function(_ALL_DOCUMENT_APPS_READY)
         if framework_css is None:
             return rendered
         # The app inserts its stylesheets while it mounts; after `citry:ready`

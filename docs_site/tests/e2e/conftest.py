@@ -552,7 +552,10 @@ def wait_for_ui_previews_ready(page: Any) -> Callable[[], None]:
                 pytest.fail("a UI preview locator does not point at an iframe")
             # The Frame object stays the same when the iframe navigates away
             # from `about:blank`, and the wait restarts in the new document.
-            content.wait_for_function(_UI_PREVIEW_DOCUMENT_READY)
+            # Chromium throttles animation frames in a cross-origin frame that
+            # is off screen, which can stall the default frame-based polling,
+            # so poll on a fixed interval instead.
+            content.wait_for_function(_UI_PREVIEW_DOCUMENT_READY, polling=100)
         page.evaluate("([x, y]) => window.scrollTo(x, y)", scroll)
 
     return wait

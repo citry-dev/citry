@@ -225,7 +225,7 @@ def test_content_page_dedupes_a_reused_components_css(page: Any, serve_live: Any
     page.goto(base + "/")
 
     page.wait_for_selector(".card")
-    # The registry gains the app before it mounts; the stylesheet request the
+    # `__citryRuntime._apps` gains the app before it mounts; the stylesheet request the
     # next check counts is made while it mounts.
     wait_for_citry_ready()
     initial_css_requests = [url for url in requests if "/citry/ext/events/assets/" in url and url.endswith(".css")]
