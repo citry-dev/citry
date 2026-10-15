@@ -142,7 +142,7 @@ interfaces:
     kind: record
     name: CTimePickerOpenChangeDetail
     entries:
-      - {id: reason, name: reason, type: trigger | selection | clear | reset | escape | outside | focus-outside | native | ancestor | modal, meaning: Exact request or forced-close cause.}
+      - {id: reason, name: reason, type: trigger | selection | clear | reset | escape | outside | focus-outside | native | ancestor | modal | disabled, meaning: Exact request or forced-close cause.}
       - {id: controlled, name: controlled, type: boolean, meaning: Whether client open owns ordinary visibility commits.}
       - {id: forced, name: forced, type: boolean, meaning: Whether ancestor or modal safety required closure.}
       - {id: source, name: source, type: 'object | null', meaning: Associated browser source when one exists.}

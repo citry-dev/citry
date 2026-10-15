@@ -18,7 +18,7 @@ inputs:
     column_widths: [fit, 12rem, 7rem, auto]
     entries:
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the Menu surface and activator relationship identity.}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets initial visibility and the uncontrolled fallback.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets visibility and the uncontrolled fallback. A server re-render that changes it opens or closes the menu. A re-render that leaves it unchanged keeps the current state.}
       - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables the activator and force-closes the tree. Native disabled fieldset ancestry also applies.}
       - {id: loop, name: loop, type: bool, default: {kind: literal, value: true}, effect: Wraps arrow navigation and typeahead matching.}
       - {id: placement, name: placement, type: {display: '"top-start" | "top" | "top-end" | "bottom-start" | "bottom" | "bottom-end"', interfaces: [CMenuPlacement]}, default: {kind: literal, value: bottom-start}, effect: Sets the preferred logical root placement.}

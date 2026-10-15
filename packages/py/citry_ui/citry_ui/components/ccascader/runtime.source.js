@@ -21,11 +21,14 @@ $component({
     let current = [...accepted];
     let activePath = [...accepted];
     // A server re-render runs the cleanup below and then this callback again on
-    // the same element; the open state it left carries over, so a kept popup
-    // stays open instead of closing without telling the owner.
+    // the same element. The cleanup stores the open state and the server's
+    // `open` input on the element and this run reads them back, so a popup that
+    // was open before the re-render is still open after it. When the server's
+    // `open` input changed, the popup follows the server instead.
     const openHandoffKey = Symbol.for('citry-ui:cascader-open-handoff');
-    let currentOpen = root[openHandoffKey] ?? data.open;
+    const handoff = root[openHandoffKey];
     delete root[openHandoffKey];
+    let currentOpen = handoff && handoff.serverOpen === data.open ? handoff.open : data.open;
     let controlledValue = false;
     let controlledOpen = false;
     let disabled = data.disabled;
@@ -281,6 +284,18 @@ $component({
       else {invalid.delete('open');currentOpen=controlledOpen?nextOpen:currentOpen;}
       valueCallback = props.onValueChange == null ? null : typeof props.onValueChange === 'function' ? props.onValueChange : (report('onValueChange',props.onValueChange),null);
       openCallback = props.onOpenChange == null ? null : typeof props.onOpenChange === 'function' ? props.onOpenChange : (report('onOpenChange',props.onOpenChange),null);
+      // A disabled cascader cannot stay open, so disabling an open popup closes
+      // it, as CMenu does. The owner did not ask for that close, so it is
+      // reported once, and only when the popup was showing before this update:
+      // on this run's first update that means the previous run left it open.
+      const wasShowing = reactiveReady ? previousOpen : Boolean(handoff?.open);
+      if (disabled && currentOpen) {
+        currentOpen = false;
+        if (wasShowing) {
+          try { openCallback?.(false, {open:false, reason:'disabled', sourceEvent:null}); }
+          catch (error) { console.error('[citry-ui] CCascader onOpenChange callback failed.', error, root); }
+        }
+      }
       sync();
       if (reactiveReady && !previousOpen && currentOpen) queueMicrotask(() => focus(itemFor(current) ?? visible()[0]));
       if (reactiveReady && controlledValue && !same(previousValue, current)) {
@@ -290,7 +305,7 @@ $component({
       reactiveReady = true;
     });
     return () => {
-      root[openHandoffKey] = currentOpen;
+      root[openHandoffKey] = {open: currentOpen, serverOpen: data.open};
       if (typeTimer) clearTimeout(typeTimer);
       if (outsideListening) document.removeEventListener('pointerdown', onOutside, true);
       if (resizeListening) window.removeEventListener('resize', placePopup);

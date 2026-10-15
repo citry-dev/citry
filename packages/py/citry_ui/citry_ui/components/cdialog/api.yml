@@ -11,7 +11,7 @@ inputs:
     column_widths: [fit, 12rem, 7rem, auto]
     entries:
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Sets native identity and title, description, and activator relationships.'}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible initial open state. A valid client `open` input controls later state.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible open state. A server re-render that changes it opens or closes the dialog. A re-render that leaves it unchanged keeps the current state. A valid client `open` input controls later state.}
       - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: Shows the built-in close control and permits passive dismissal. Explicit action bindings remain available when false.}
       - {id: close-on-escape, name: close_on_escape, type: bool, default: {kind: literal, value: true}, effect: Permits Escape and equivalent platform cancel requests when dismissible.}
       - {id: close-on-outside, name: close_on_outside, type: bool, default: {kind: literal, value: true}, effect: Permits a press that begins and ends on this Dialog's backdrop when dismissible.}
@@ -91,7 +91,7 @@ events:
       - id: on-open-change
         name: onOpenChange
         signature: {display: '(requestedOpen: boolean, detail: CDialogOpenChangeDetail) => void', interfaces: [CDialogOpenChangeDetail]}
-        trigger: An owned trigger, built-in close, explicit action, Escape, outside press, or native close requests a different open state.
+        trigger: An owned trigger, built-in close, explicit action, Escape, outside press, or native close requests a different open state. A server re-render that removes an open dialog also reports its close, with reason `native`; this applies to CDialog only.
         detail: {display: '{reason: "trigger" | "close-button" | "action" | "escape" | "outside" | "native", controlled: boolean, source: Element | EventTarget | null, returnValue: string}', interfaces: [CDialogOpenChangeDetail]}
         behavior: Uncontrolled requests commit before notification. Controlled requests, including successful Dialog Form submission, wait for the owner. An external native close is reconciled immediately and a stale true input cannot reopen it. Owner commits do not notify.
 

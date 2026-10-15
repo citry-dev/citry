@@ -598,7 +598,11 @@ def _server_owner_page(*, keep_dialog: bool) -> tuple[Citry, str]:
                 </c-fill>
                 <c-fill name="title">Owned dialog</c-fill>
                 <c-fill name="default">
-                  <button id="advance-owner" type="button" @c-click="advance">Advance owner</button>
+                  <button
+                    id="advance-owner"
+                    type="button"
+                    @c-click="advance"
+                  >Advance owner</button>
                 </c-fill>
               </c-CDialog>
             </c-if>
@@ -612,7 +616,14 @@ def _server_owner_page(*, keep_dialog: bool) -> tuple[Citry, str]:
 
     class Page(Component):
         citry = app
-        js = """$component({data(){window.__ownedDialogEvents=[];return{};}});"""
+        js = """
+          $component({
+            data() {
+              window.__ownedDialogEvents = [];
+              return {};
+            },
+          });
+        """
         template = """
           <!doctype html>
           <html lang="en">

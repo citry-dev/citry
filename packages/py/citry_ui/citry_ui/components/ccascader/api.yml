@@ -16,7 +16,7 @@ inputs:
       - {id: placeholder, name: placeholder, type: str, default: {kind: literal, value: Choose an option}, effect: Supplies empty trigger text or overrides its catalog message.}
       - {id: separator, name: separator, type: str, default: {kind: literal, value: ' / '}, effect: Joins application Option labels in the trigger.}
       - {id: change-on-select, name: change_on_select, type: bool, default: {kind: literal, value: false}, effect: Allows branches as complete selected paths.}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Supplies initial uncontrolled popup state.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Supplies the uncontrolled popup state. A server re-render that changes it opens or closes the popup. A re-render that leaves it unchanged keeps the current state.}
       - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables selection and form output.}
       - {id: size, name: size, type: {display: CCascaderSize, interfaces: [CCascaderSize]}, default: {kind: literal, value: md}, effect: Selects trigger height.}
       - {id: variant, name: variant, type: {display: CCascaderVariant, interfaces: [CCascaderVariant]}, default: {kind: literal, value: outline}, effect: Selects trigger presentation.}
@@ -146,7 +146,7 @@ interfaces:
     name: CCascaderOpenChangeDetail
     entries:
       - {id: open, name: open, type: bool, meaning: Requested popup visibility.}
-      - {id: reason, name: reason, type: str, meaning: Trigger selection escape tab or outside.}
+      - {id: reason, name: reason, type: str, meaning: Trigger selection escape tab outside or disabled.}
       - {id: source-event, name: sourceEvent, type: object, meaning: Native source Event.}
 
 translations:

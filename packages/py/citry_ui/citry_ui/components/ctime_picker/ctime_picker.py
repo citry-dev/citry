@@ -64,6 +64,7 @@ class CTimePickerOpenChangeDetail(TypedDict):
         "native",
         "ancestor",
         "modal",
+        "disabled",
     ]
     controlled: bool
     forced: bool
@@ -616,8 +617,9 @@ class CTimePicker(LibraryComponent):
           let current = input.value || defaults.value || null;
           let initialValue = defaults.value || null;
           // A server re-render that keeps this picker keeps its Vue instance, so the
-          // popup's open state from the previous run carries over instead of the
-          // popup closing without telling the owner.
+          // popup's open state from the previous run carries over, so a popup that
+          // was open before the re-render stays open. The picker has no server
+          // `open` input, so there is no server value for it to follow.
           let internalOpen = scope.timePickerOpen === true;
           let controlledValue = false;
           let controlledOpen = false;
@@ -778,6 +780,10 @@ class CTimePicker(LibraryComponent):
           const unsubscribe = i18n?.subscribe(() => { if (ready) render(); });
 
           effect(() => {
+            // Read before this update changes it: a server re-render keeps this
+            // picker's Vue instance, so on the new run's first update this is the
+            // open state the previous run left.
+            const wasOpen = scope.timePickerOpen === true;
             reportFieldOwned();
             configuration = resolveConfiguration();
             const requestedValue = props.value;
@@ -792,6 +798,14 @@ class CTimePicker(LibraryComponent):
             if (requestedOpen === undefined || requestedOpen === null) { if (controlledOpen) internalOpen = scope.timePickerOpen; controlledOpen = false; resolver.clear('open'); }
             else if (typeof requestedOpen === 'boolean') { const opening = !scope.timePickerOpen && requestedOpen; controlledOpen = true; internalOpen = requestedOpen; scope.timePickerOpen = requestedOpen; resolver.clear('open'); if (opening) focusListbox(); }
             else { resolver.report('open', requestedOpen); if (controlledOpen) internalOpen = scope.timePickerOpen; controlledOpen = false; }
+            // A disabled picker cannot stay open, so disabling an open popup closes
+            // it, as CMenu does. The owner did not ask for that close, so it is
+            // reported once, when the popup was open before this update.
+            if (configuration.disabled && scope.timePickerOpen) {
+              internalOpen = false;
+              scope.timePickerOpen = false;
+              if (wasOpen) resolver.callback('onOpenChange')?.(false, openDetail('disabled', null, true));
+            }
             ready = true;
             render();
           });

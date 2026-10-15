@@ -305,13 +305,20 @@ class CDialog(LibraryComponent):
           };
           const invalidEpisodes = new Map();
           let internalOpen = data.open;
+          // The server's `open` input from the previous run, which the cleanup
+          // stores on the dialog. A kept dialog keeps its own open state only while
+          // this input is unchanged; otherwise it follows the server.
+          const serverOpenKey = Symbol.for("citry-ui:dialog-server-open");
+          const previousServerOpen = dialog[serverOpenKey];
+          delete dialog[serverOpenKey];
           let controlled = false;
           let appliedOpen = false;
           let suppressStaleControlledOpen = false;
           let pendingControlledReturnValue = "";
           let onOpenChange = null;
           // True while this run has handed an open dialog to the next callback
-          // run. If no run takes it over, the dialog closes and the owner hears it.
+          // run. If no later run takes it over, the dialog closes and
+          // `onOpenChange` receives `false`.
           let handedOffOpen = false;
           let configuration = {
             dismissible: data.dismissible,
@@ -486,7 +493,8 @@ class CDialog(LibraryComponent):
               updateActivators(false);
               syncRuntimeDialog(false);
               // The dialog was open when this run handed it off and no later run kept
-              // it, so it really closed; tell the owner, as a native close would.
+              // it, so it closed; report that to `onOpenChange` the same way a
+              // native close is reported.
               if (handedOffOpen) {
                 handedOffOpen = false;
                 notify(false, "native", null, "");
@@ -496,9 +504,12 @@ class CDialog(LibraryComponent):
 
           if (controller.retained) {
             appliedOpen = controller.isOpen();
-            // A server re-render that keeps the dialog keeps its open state too, so
-            // the effect below does not close it back to the server's default.
-            internalOpen = appliedOpen;
+            // A server re-render that keeps the dialog and its `open` input keeps
+            // its open state too, so the effect below does not close it back to the
+            // server's default. A changed `open` input wins instead.
+            if (previousServerOpen === data.open) {
+              internalOpen = appliedOpen;
+            }
             dialog.toggleAttribute("data-open", appliedOpen);
             updateActivators(appliedOpen);
             syncRuntimeDialog(appliedOpen);
@@ -565,6 +576,7 @@ class CDialog(LibraryComponent):
 
           return () => {
             host.removeEventListener("click", onHostClick);
+            dialog[serverOpenKey] = data.open;
             const wasOpen = appliedOpen;
             // A server revision runs this cleanup and then the callback again on the
             // same dialog, so an open dialog is handed to the next callback run.

@@ -37,6 +37,7 @@ class CHoverCardOpenChangeDetail(TypedDict):
         "native",
         "ancestor",
         "modal",
+        "disabled",
     ]
     controlled: bool
     forced: bool
@@ -384,7 +385,12 @@ class CHoverCard(LibraryComponent):
           let active = true;
           let controlled = false;
           let logicalOpen = false;
-          let internalOpen = initialHandoff?.open ?? data.open;
+          // A server re-render hands the previous run's open state to this one, so
+          // a card that was open before the re-render is still open after it. When
+          // the server's `open` input changed, the card follows the server instead.
+          const sameServerOpen = Boolean(initialHandoff) && initialHandoff.serverOpen === data.open;
+          let internalOpen = sameServerOpen ? initialHandoff.open : data.open;
+          let updated = false;
           let onOpenChange = null;
           let animation = null;
           let generation = 0;
@@ -935,6 +941,22 @@ class CHoverCard(LibraryComponent):
             if (!nextOpen) {
               layerCoordinator.clearSuppression(layer);
             }
+            // On this run's first update the card was showing only if the previous
+            // run left it open.
+            const wasShowing = updated ? logicalOpen : sameServerOpen && Boolean(initialHandoff.open);
+            updated = true;
+            if (configuration.disabled && nextOpen && wasShowing) {
+              // Disabling an open card hides it, as CMenu does. The owner did not
+              // ask for that close, so tell it once, and stop an uncontrolled card
+              // from coming back on its own when it is enabled again.
+              if (!controlled) {
+                internalOpen = false;
+              }
+              applyOpen(false, null);
+              notify(false, "disabled", null, true);
+              pendingRequest = null;
+              return;
+            }
             const context = pendingRequest?.nextOpen === nextOpen ? pendingRequest : null;
             applyOpen(nextOpen, context);
             if (context || nextOpen === logicalOpen) {
@@ -944,7 +966,7 @@ class CHoverCard(LibraryComponent):
 
           return () => {
             active = false;
-            surface[handoffKey] = { open: logicalOpen };
+            surface[handoffKey] = { open: logicalOpen, serverOpen: data.open };
             trigger.removeEventListener("pointerenter", onTriggerPointerEnter);
             trigger.removeEventListener("pointerleave", onTriggerPointerLeave);
             trigger.removeEventListener("pointerdown", onTriggerPointerDown, true);

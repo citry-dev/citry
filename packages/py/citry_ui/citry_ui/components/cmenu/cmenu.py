@@ -1728,6 +1728,13 @@ class CMenu(LibraryComponent):
           };
           const applyRootOpen = (nextOpen, context = {}) => {
             if (nextOpen === logicalOpen) {
+              // The previous run leaves an open menu showing so this run can take
+              // it over. When this run starts closed because the server's `open`
+              // input changed, nothing else hides it. A context menu manages its
+              // own handoff, so this applies to a plain menu only.
+              if (!nextOpen && !externalActivation && surface.matches(":popover-open")) {
+                normalizeRootClosed("ancestor", surface);
+              }
               return;
             }
             generation += 1;
