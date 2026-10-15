@@ -130,15 +130,16 @@ class TestCBindSpread:
         with pytest.raises((TypeError, ValueError, RuntimeError)):
             str(Page())
 
-    def test_repeated_spread_preserves_string_subclass_validation(self):
-        class ChangingKey(str):
-            __slots__ = ("reserved",)
+    def test_repeated_spread_checks_string_subclass_by_its_real_text(self):
+        # A str subclass is checked by the text it writes into the HTML, not
+        # by what its overridden methods claim, and on every render.
+        class DisguisedKey(str):
+            __slots__ = ()
 
             def lower(self):
-                return "data-cev-bind" if self.reserved else super().lower()
+                return "title"
 
-        key = ChangingKey("title")
-        key.reserved = False
+        key = DisguisedKey("data-cev-bind")
         c = Citry()
 
         class Page(Component):
@@ -151,12 +152,11 @@ class TestCBindSpread:
               <div c-bind="attrs"></div>
             """
 
-        assert 'title="value"' in str(Page())
-        key.reserved = True
-        with pytest.raises(RuntimeError, match="reserved internal Events namespace") as exc_info:
-            str(Page())
-        assert "'data-cev-*'" in str(exc_info.value)
-        assert "@c-*" in str(exc_info.value)
+        for _ in range(2):
+            with pytest.raises(RuntimeError, match="reserved internal Events namespace") as exc_info:
+                str(Page())
+            assert "'data-cev-*'" in str(exc_info.value)
+            assert "@c-*" in str(exc_info.value)
 
     def test_spreads_mapping_onto_element(self):
         tpl = """<div c-bind="{'class': 'btn', 'disabled': True, 'data-id': item['id']}">y</div>"""

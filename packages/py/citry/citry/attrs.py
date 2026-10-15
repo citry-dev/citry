@@ -69,7 +69,9 @@ def is_vue_directive_name(name: str) -> bool:
     """Return whether Vue would treat an attribute name as a directive or binding."""
     # Python-resolved names are data. Vue must never read one as code, and
     # HTML names are case-insensitive, so `V-ON:click` must not slip past.
-    return name.casefold().startswith(_VUE_DIRECTIVE_PREFIXES)
+    # The unbound `str` methods keep a str subclass that overrides
+    # `casefold` or `startswith` from hiding its real text from the check.
+    return str.startswith(str.casefold(name), _VUE_DIRECTIVE_PREFIXES)
 
 
 class VueCodeError(TypeError):
@@ -123,7 +125,10 @@ _CITRY_OWNED_ATTR_PREFIXES = ("@c-", ":c-", "#c-")
 def is_vue_code_attr_name(name: object) -> bool:
     """Return whether Python data must not set this attribute name, because Vue would read it as code."""
     # Non-strings are left to `validate_html_attr_name`, which names the bad type.
-    return isinstance(name, str) and is_vue_directive_name(name) and not name.startswith(_CITRY_OWNED_ATTR_PREFIXES)
+    # `str.startswith` reads the real text even from a str subclass.
+    return (
+        isinstance(name, str) and is_vue_directive_name(name) and not str.startswith(name, _CITRY_OWNED_ATTR_PREFIXES)
+    )
 
 
 def vue_code_error(
@@ -153,11 +158,15 @@ def vue_code_error(
     else:
         subject = f"Python data sets {name!r} on {tag}"
     rule = (
-        "Python data from c-bind, c-* attributes, and extension hooks may set only plain attribute names, "
-        "on every page, even one that does not use Vue."
+        "Python data from c-bind, c-* attributes, and extension hooks may not set a name that starts with "
+        "v-, :, ., ^, @, or #, even on a page that does not use Vue."
     )
     if hint is not None:
         fix = hint
+    elif str.startswith(str.casefold(name), ("v-c-", "v-citry-")):
+        # Writing these in the template fails too, so the general advice
+        # would send the reader into a second error.
+        fix = "Citry reserves 'v-c-*' and 'v-citry-*' for its own browser runtime; remove the name."
     elif origin == "hook":
         fix = (
             "Return only plain attribute names from the hook, and write Vue directives, bindings, and "
@@ -189,9 +198,9 @@ def reject_vue_code_attr_name(
     """
     Raise `VueCodeError` when Python data sets an attribute name Vue would read as code.
 
-    Every place where Python data chooses an attribute name calls this, so
-    the rule and its wording live in one function. Names written literally
-    in the template never reach it.
+    The rule is `is_vue_code_attr_name` and the message is `vue_code_error`;
+    every check calls them, most through this function. Names written
+    literally in the template never reach it.
     """
     if is_vue_code_attr_name(name):
         raise vue_code_error(cast("str", name), tag_name=tag_name, origin=origin, hint=hint)
@@ -237,14 +246,12 @@ def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str
     if not isinstance(name, str):
         msg = f"{where} must use string attribute names, got {type(name).__name__} key {name!r}."
         raise TypeError(msg)
-    # Only exact strings enter the shared cache. A ``str`` subclass can define
-    # custom hashing/equality, so caching it would both execute user code and
-    # retain an arbitrary object on this render-time validation path.
-    is_valid = (
-        _is_valid_exact_html_attr_name(name)
-        if type(name) is str
-        else bool(name) and not any(char in _INVALID_HTML_ATTR_NAME_CHARS for char in name) and "{#" not in name
-    )
+    if type(name) is not str:
+        # A ``str`` subclass (a StrEnum member) can override methods such as
+        # ``startswith`` or ``__str__``. Every later check and the written
+        # HTML must see the same text, so continue with an exact copy.
+        name = str.__getitem__(name, slice(None))
+    is_valid = _is_valid_exact_html_attr_name(name)
     if not is_valid:
         msg = (
             f"{where} contains invalid HTML attribute name {name!r}. Attribute names must be non-empty and "

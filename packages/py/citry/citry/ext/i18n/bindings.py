@@ -302,7 +302,7 @@ class I18nBindingElementAttrsNode(Node):
 
         resolved = merge_attrs(*contributions)
         for key in resolved:
-            if key.startswith("#c-"):
+            if str.startswith(key, "#c-"):
                 raise RuntimeError(
                     f"{key!r} arrived on <{self.original.tag_name}> through an attribute spread or a "
                     "dynamic attribute. '#c-*' framework attributes are template-authored only: "

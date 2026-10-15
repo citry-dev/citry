@@ -1079,7 +1079,7 @@ class ElementAttrsNode(Node):
         return any(
             isinstance(key, str)
             and (
-                key.startswith(("@c-", ":c-"))
+                str.startswith(key, ("@c-", ":c-"))
                 or key.lower().startswith("data-cev-")
                 or key.lower() in {"data-citry-runtime-control", "data-citry-runtime-events"}
             )
@@ -1114,7 +1114,7 @@ class ElementAttrsNode(Node):
         # through a spread or a dynamic attribute name and would render as a
         # meaningless literal attribute. Fail loudly, naming the fix.
         for merged_key in merged:
-            if merged_key.startswith("#c-"):
+            if str.startswith(merged_key, "#c-"):
                 msg = (
                     f"{merged_key!r} arrived on <{self.tag_name}> through an attribute spread or a "
                     "dynamic attribute. '#c-*' framework attributes are template-authored only: "
@@ -1768,17 +1768,23 @@ class ComponentNode(Node):
                     ComponentTagClientBindingKind.PROPS_OBJECT,
                 }:
                     return False
-                # Names from c-bind and c-* already failed with VueCodeError, so
-                # this catches a written binding whose value another template
-                # language filled in.
-                if source is not ComponentTagClientBindingSource.DIRECT or type(attr) is not StaticHtmlAttr:
+                # Vue-prefixed names from c-bind and c-* already failed with
+                # VueCodeError. What remains is `ref` set from Python data, which
+                # Vue also reads although it has no Vue prefix, or a written
+                # binding whose value another template language filled in.
+                if source is not ComponentTagClientBindingSource.DIRECT:
+                    raise RuntimeError(
+                        f"{resolved_key!r} on <c-element> came from Python data; write "
+                        f'{resolved_key}="name" directly in the template.'
+                    )
+                if type(attr) is not StaticHtmlAttr:
                     raise RuntimeError(
                         f"Vue binding {resolved_key!r} on <c-element> must be written in the template "
                         "with a plain text value."
                     )
                 if "{{" in str(raw_value):
                     raise RuntimeError(
-                        f"Executable Vue binding {resolved_key!r} on <c-element> cannot use template interpolation."
+                        f"Vue binding {resolved_key!r} on <c-element> cannot use template interpolation."
                     )
                 pending_element_bindings.pop(resolved_key, None)
                 pending_element_bindings[resolved_key] = _PendingComponentTagClientBinding(
@@ -1799,19 +1805,22 @@ class ComponentNode(Node):
                 element_attr_contributions.append({resolved_key: raw_value})
                 return True
             # Vue-prefixed names from c-bind and c-* already failed with
-            # VueCodeError. What remains is `ref` from Python data, or a written
+            # VueCodeError. What remains is `ref` set from Python data, which
+            # Vue also reads although it has no Vue prefix, or a written
             # binding whose value another template language filled in.
-            if client_binding_kind is not ComponentTagClientBindingKind.CITRY_HANDLER and (
-                source is not ComponentTagClientBindingSource.DIRECT or type(attr) is not StaticHtmlAttr
-            ):
-                raise RuntimeError(
-                    f"Vue binding {resolved_key!r} on <{tag_name}> must be written in the template "
-                    "with a plain text value."
-                )
+            if client_binding_kind is not ComponentTagClientBindingKind.CITRY_HANDLER:
+                if source is not ComponentTagClientBindingSource.DIRECT:
+                    raise RuntimeError(
+                        f"{resolved_key!r} on <{tag_name}> came from Python data; write "
+                        f'{resolved_key}="name" directly in the template.'
+                    )
+                if type(attr) is not StaticHtmlAttr:
+                    raise RuntimeError(
+                        f"Vue binding {resolved_key!r} on <{tag_name}> must be written in the template "
+                        "with a plain text value."
+                    )
             if client_binding_kind is not ComponentTagClientBindingKind.CITRY_HANDLER and "{{" in str(raw_value):
-                raise RuntimeError(
-                    f"Executable Vue binding {resolved_key!r} on <{tag_name}> cannot use template interpolation."
-                )
+                raise RuntimeError(f"Vue binding {resolved_key!r} on <{tag_name}> cannot use template interpolation.")
             # `v-model:key` would pass its value as the same `key` prop, which
             # the call's own identity then overrides without a trace.
             if resolved_key.split(".", 1)[0] in {
@@ -1939,7 +1948,7 @@ class ComponentNode(Node):
         # dynamic attribute name and would silently become an unusable kwarg.
         # Fail loudly, naming the fix.
         for kwarg_key in kwargs:
-            if isinstance(kwarg_key, str) and kwarg_key.startswith("#c-"):
+            if isinstance(kwarg_key, str) and str.startswith(kwarg_key, "#c-"):
                 msg = (
                     f"{kwarg_key!r} arrived on <c-{self.name}> through an attribute spread or a "
                     "dynamic attribute. '#c-*' framework attributes are template-authored only: "

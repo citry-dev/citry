@@ -161,9 +161,12 @@ def test_python_native_ownership_marker_is_reserved() -> None:
             return {"attrs": {"v-citry-vue-owned": "'value'"}}
 
     # The marker is a `v-` name, so the general Vue-code check stops it while
-    # the template renders, before the reserved-name check could.
-    with pytest.raises(VueCodeError, match="c-bind on <input> sets 'v-citry-vue-owned'"):
+    # the template renders, and names the reservation instead of advising
+    # the author to write it in the template.
+    with pytest.raises(VueCodeError, match="c-bind on <input> sets 'v-citry-vue-owned'") as caught:
         render_prepared(Forged())
+    assert "Citry reserves 'v-c-*' and 'v-citry-*' for its own browser runtime" in str(caught.value)
+    assert "directly in the template" not in str(caught.value)
 
 
 def test_native_vue_ownership_marker_is_vue_internal_metadata() -> None:

@@ -12,6 +12,7 @@ and component tags, whether or not the page starts Vue. Every test calls
 from __future__ import annotations
 
 import traceback
+from enum import StrEnum
 from typing import Any
 
 import pytest
@@ -101,8 +102,9 @@ class TestHtmlElement:
         message = str(_render_error(page)).split("\n")[1]
         assert message == (
             "c-bind on <div> sets '@click', which Vue would read as code. Python data from c-bind, "
-            "c-* attributes, and extension hooks may set only plain attribute names, on every page, even one "
-            "that does not use Vue. Write Vue directives, bindings, and listeners directly in the template."
+            "c-* attributes, and extension hooks may not set a name that starts with v-, :, ., ^, @, or #, "
+            "even on a page that does not use Vue. Write Vue directives, bindings, and listeners directly "
+            "in the template."
         )
 
     def test_citry_events_binding_from_c_bind_is_not_vue_code(self) -> None:
@@ -124,6 +126,55 @@ class TestHtmlElement:
                 return {"attrs": {"@c-click": "go"}}
 
         Page().render()
+
+    @pytest.mark.parametrize("key", ["@C-click", ":C-value", "#C-key"])
+    def test_uppercase_citry_prefix_is_vue_code(self, key: str) -> None:
+        # Only the exact lowercase `@c-`, `:c-`, and `#c-` name Citry's own
+        # bindings; Vue reads `@C-click` as a listener for `C-click`.
+        page = _page('<div c-bind="attrs">x</div>', {"attrs": {key: "go"}}, vue=False)
+        assert f"c-bind on <div> sets {key!r}" in str(_render_error(page))
+
+    def test_str_enum_key_is_checked_like_its_text(self) -> None:
+        class Name(StrEnum):
+            CLICK = "@click"
+
+        page = _page('<div c-bind="attrs">x</div>', {"attrs": {Name.CLICK: "go()"}}, vue=False)
+        assert "c-bind on <div> sets '@click'" in str(_render_error(page))
+
+    @pytest.mark.parametrize("vue", [False, True], ids=["no-vue", "vue"])
+    def test_str_subclass_cannot_hide_its_text_from_the_check(self, vue: bool) -> None:
+        # A subclass that lies through `casefold` or `startswith` still names
+        # `@click` in the HTML, so the check must read the real text.
+        class Disguised(str):
+            __slots__ = ()
+
+            def casefold(self) -> str:
+                return "title"
+
+            def startswith(self, *_args: object, **_kwargs: object) -> bool:
+                return False
+
+        page = _page('<div c-bind="attrs">x</div>', {"attrs": {Disguised("@click"): "go()"}}, vue=vue)
+        assert "c-bind on <div> sets '@click'" in str(_render_error(page))
+
+    def test_a_key_checked_once_does_not_let_a_later_key_through(self) -> None:
+        # Good keys are cached on the node after their first check. A later
+        # render of the same node with a Vue name must still fail, every time.
+        app = Citry(autodiscover=False)
+
+        class Page(Component):
+            citry = app
+            template = """
+                <div c-bind="attrs">x</div>
+            """
+
+            def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+                return {"attrs": kwargs["attrs"]}
+
+        assert 'title="ok"' in Page(attrs={"title": "ok"}).render().serialize(deps_strategy="ignore")
+        for _ in range(2):
+            with pytest.raises(VueCodeError, match="c-bind on <div> sets '@click'"):
+                Page(attrs={"title": "ok", "@click": "go()"}).render()
 
     @pytest.mark.parametrize("key", PLAIN_KEYS)
     def test_plain_names_close_to_vue_syntax_still_render(self, key: str) -> None:
@@ -219,11 +270,17 @@ class TestOtherRenderPaths:
                 <main><c-Row c-for="row in rows" c-attrs="row" title="t" /></main>
             """
 
-            @staticmethod
-            def template_data(_kwargs: Any, _slots: Any) -> dict[str, Any]:
-                return {"rows": [{"id": "a"}, {"id": "b"}, {"@click": "go()"}]}
+            def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+                return {"rows": kwargs["rows"]}
 
-        assert "c-bind on <article> sets '@click'" in str(_render_error(Page))
+        good = [{"id": "a"}, {"id": "b"}]
+        bad = [*good, {"@click": "go()"}]
+        # The first render stores a plan for the good key set; later renders
+        # reuse it, and the bad key set must still fail on every render.
+        assert 'id="a"' in Page(rows=good).render().serialize(deps_strategy="ignore")
+        for _ in range(2):
+            with pytest.raises(VueCodeError, match="c-bind on <article> sets '@click'"):
+                Page(rows=bad).render()
 
     def test_i18n_attribute_binding_path(self) -> None:
         # A `$c-tr` binding sends the element through the i18n resolver, which
@@ -263,9 +320,9 @@ class TestExtensionHook:
         message = str(_render_error(page)).split("\n")[1]
         assert message == (
             "An on_attrs_resolved extension hook sets '@click' on <div>, which Vue would read as code. "
-            "Python data from c-bind, c-* attributes, and extension hooks may set only plain attribute names, "
-            "on every page, even one that does not use Vue. Return only plain attribute names from the hook, "
-            "and write Vue directives, bindings, and listeners directly in the template."
+            "Python data from c-bind, c-* attributes, and extension hooks may not set a name that starts with "
+            "v-, :, ., ^, @, or #, even on a page that does not use Vue. Return only plain attribute names "
+            "from the hook, and write Vue directives, bindings, and listeners directly in the template."
         )
 
     def test_hook_that_changes_a_written_vue_binding_fails(self) -> None:
@@ -286,5 +343,8 @@ class TestExtensionHook:
         kept = _page(template, {"title": "t"}, vue=False, app=self._app(keep))
         removed = _page(template, {"title": "t"}, vue=False, app=self._app(remove))
         # Both render; neither puts Python data into Vue code.
-        kept().render()
-        removed().render()
+        kept_html = kept().render().serialize(deps_strategy="ignore")
+        removed_html = removed().render().serialize(deps_strategy="ignore")
+        assert '@click="save()"' in kept_html
+        assert 'data-x="1"' in kept_html
+        assert "@click" not in removed_html

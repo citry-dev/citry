@@ -3360,7 +3360,7 @@ def _spread_with_source_attrs(
 
     merged = _merge_resolved_attrs(items)
     for name in merged:
-        if name.startswith("#c-"):
+        if str.startswith(name, "#c-"):
             raise RuntimeError(
                 f"{name!r} arrived on <{node.tag}> through an attribute spread. "
                 "'#c-*' framework attributes are template-authored only."
@@ -3493,7 +3493,7 @@ def _root_spread_plan(node: PreparedElementOpenNode, keys: tuple[str, ...]) -> t
     # own value, and a spread value can never replace a static one.
     if len(set(identities)) != len(identities) or {"class", "style"} & set(identities):
         return None
-    if any(name.startswith("#c-") for name in names):
+    if any(str.startswith(name, "#c-") for name in names):
         return None
     # _spread_project_attrs checks the names that survive value filtering;
     # checking every name up front makes that check value-independent.
