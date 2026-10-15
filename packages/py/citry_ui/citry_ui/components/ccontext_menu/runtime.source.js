@@ -140,10 +140,10 @@
             It = !1,
             Ot = null,
             capInvalid = !1,
-            // Set when reading the props found the root invalid. The next
-            // time the menu becomes ready reads them again; otherwise a
-            // mutation that lands before the first read would leave
-            // onOpenChange unbound for the rest of this render.
+            // Set when a props read found the root invalid, so the next time
+            // the menu becomes ready it reads them again. Without it, a page
+            // change that lands before the first read would leave
+            // onOpenChange unset until the props change.
             propsDeferred = !1,
             St = null,
             Xt = [],
