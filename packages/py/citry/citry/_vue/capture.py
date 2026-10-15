@@ -13,7 +13,13 @@ from inspect import getattr_static
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from citry.attrs import _html_attr_identity, is_vue_directive_name, merge_attrs, vue_code_error
+from citry.attrs import (
+    _html_attr_identity,
+    is_unchanged_template_value,
+    is_vue_directive_name,
+    merge_attrs,
+    vue_code_error,
+)
 from citry.citry_render import (
     CitryRender,
     SimpleVueRecord,
@@ -1031,8 +1037,7 @@ class PreparedElementOpenNode(ElementAttrsNode):
             if (
                 attr.key not in dynamic_keys
                 and attr.key in data_attrs
-                and type(data_attrs[attr.key]) is type(attr.value)
-                and data_attrs[attr.key] == attr.value
+                and is_unchanged_template_value(data_attrs[attr.key], attr.value)
             ):
                 preserved_source[attr.key] = PreparedAttribute(
                     attr.key,

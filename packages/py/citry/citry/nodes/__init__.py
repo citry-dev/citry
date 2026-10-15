@@ -75,6 +75,7 @@ from typing_extensions import Unpack, override
 
 from citry._i18n_directives import looks_like_i18n_binding
 from citry.attrs import (
+    TEMPLATE_EMPTY_VALUE,
     _format_resolved_attrs_to_str,
     _has_default_attr_formatting,
     _merge_resolved_attrs,
@@ -83,6 +84,7 @@ from citry.attrs import (
     is_vue_directive_name,
     merge_attrs,
     reject_vue_code_attr_name,
+    template_attr_value,
     validate_html_attr_name,
     vue_code_error,
 )
@@ -992,6 +994,14 @@ class ElementAttrsNode(Node):
         self.attrs = attrs
         self.used_vars = used_vars
         self._resolved_keys = tuple(attr.key.removeprefix("c-") for attr in attrs)
+        # A `class` or `style` written empty (`<p class c-class="c">`) joins
+        # the class/style merge as an empty marker rather than the boolean
+        # `True` the parser gives it, which the merge rejects. Only a written
+        # attribute qualifies, so a `True` from Python data still raises.
+        self._template_empty = tuple(
+            type(attr) is StaticHtmlAttr and template_attr_value(attr.key, attr.value) is TEMPLATE_EMPTY_VALUE
+            for attr in attrs
+        )
         self._has_spread = any(attr.key == "c-bind" for attr in attrs)
         self._validated_spread_keys: set[str] = set()
         # A `c-*` attribute such as `c-v-if` lets Python data fill a Vue
@@ -1101,7 +1111,12 @@ class ElementAttrsNode(Node):
             raise vue_code_error(self._vue_code_attr_key, tag_name=self.tag_name, origin="c-attr")
         if not self._has_spread:
             items: list[tuple[str, Any]] = []
-            for attr, resolved_key in zip(self.attrs, self._resolved_keys, strict=True):
+            for attr, resolved_key, template_empty in zip(
+                self.attrs, self._resolved_keys, self._template_empty, strict=True
+            ):
+                if template_empty:
+                    items.append((resolved_key, TEMPLATE_EMPTY_VALUE))
+                    continue
                 if attr.key.startswith("c-"):
                     _reject_reserved_events_attr(resolved_key, tag_name=self.tag_name)
                 items.append((resolved_key, const_value(attr.resolve(context))))
@@ -1133,7 +1148,12 @@ class ElementAttrsNode(Node):
     def _resolve_with_spread(self, context: CitryContext) -> dict[str, Any]:
         """Resolve the general path used when a dynamic ``c-bind`` is present."""
         items: list[tuple[str, Any]] = []
-        for attr, compiled_key in zip(self.attrs, self._resolved_keys, strict=True):
+        for attr, compiled_key, template_empty in zip(
+            self.attrs, self._resolved_keys, self._template_empty, strict=True
+        ):
+            if template_empty:
+                items.append((compiled_key, TEMPLATE_EMPTY_VALUE))
+                continue
             if attr.key == "c-bind":
                 value = const_value(attr.resolve(context))
                 # A c-bind of None contributes nothing, so an optional
@@ -1917,6 +1937,10 @@ class ComponentNode(Node):
                 continue
             value = attr.resolve(context)
             resolved_key = key.removeprefix("c-")
+            if not component_boundary and type(attr) is StaticHtmlAttr:
+                # A dynamic <c-element> merges its class and style like a
+                # plain element, so a written empty one joins as the marker.
+                value = template_attr_value(resolved_key, value)
             reject_component_state_binding(resolved_key)
             _reject_dynamic_translation_binding(resolved_key, tag_name=tag_name)
             client_binding_source = (

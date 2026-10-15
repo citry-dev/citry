@@ -230,6 +230,12 @@ walks through every step.
   `RecursionError` naming the component instead of running until the
   process runs out of memory. Pass `Citry(max_component_depth=...)`
   (default 2000) if a page really nests deeper.
+- An element with an empty `class` or `style`, such as
+  `<p class c-class="name">` or `<p style="" c-style="styles">`, no
+  longer raises `TypeError: Invalid class value: True` (or the `style`
+  equivalent) when it also has a `c-class`, `c-style`, `c-bind`, or other
+  `c-*` attribute. The empty attribute adds nothing to the value from
+  Python.
 
 ## v0.5.1
 

@@ -16,8 +16,10 @@ from citry.attrs import (
     _has_default_attr_formatting,
     _html_attr_identity,
     format_attrs,
+    is_unchanged_template_value,
     merge_attrs,
     reject_vue_code_attr_name,
+    template_attr_value,
     validate_html_attr_name,
     vue_code_error,
 )
@@ -3354,7 +3356,9 @@ def _spread_with_source_attrs(
                 _reject_reserved_events_attr(name, tag_name=node.tag)
                 items.append((name, const_value(value)))
         elif type(attr) is StaticHtmlAttr:
-            items.append((resolved_key, attr.value))
+            # A written empty class or style joins the merge as an empty
+            # marker, as on the ordinary path, instead of a rejected `True`.
+            items.append((resolved_key, template_attr_value(resolved_key, attr.value)))
         else:
             raise TypeError("simple='vue' c-bind cannot be combined with dynamic server attributes")
 
@@ -3401,8 +3405,7 @@ def _spread_project_attrs(
         if (
             attr.key not in dynamic_keys
             and attr.key in data_attrs
-            and type(data_attrs[attr.key]) is type(attr.value)
-            and data_attrs[attr.key] == attr.value
+            and is_unchanged_template_value(data_attrs[attr.key], attr.value)
         ):
             preserved_source[attr.key] = attr
 

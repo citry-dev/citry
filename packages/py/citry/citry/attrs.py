@@ -228,6 +228,56 @@ def _uncached_html_attr_identity(name: str) -> str:
     return folded
 
 
+class _TemplateEmptyValue(str):
+    """
+    The value of a ``class`` or ``style`` that the template writes empty.
+
+    The template parser turns ``<p class>`` and ``<p class="">`` into the value
+    ``True``, the same value it gives any boolean attribute. The class and
+    style merge rejects ``True``, because from Python data (``c-class="flag"``)
+    it is a mistake worth reporting. The renderer therefore swaps a written
+    empty ``class`` or ``style`` for this marker before merging (see
+    ``template_attr_value``). As an empty string it adds no class names and
+    no style properties, and its own type lets the merge tell it apart from an
+    empty value that came from Python.
+    """
+
+    __slots__ = ()
+
+
+# The one marker the renderer uses; copies compare by type, not identity.
+TEMPLATE_EMPTY_VALUE = _TemplateEmptyValue()
+
+
+def template_attr_value(name: str, value: Any) -> Any:
+    """
+    Return what an attribute written in the template contributes to the merge.
+
+    A written empty ``class`` or ``style`` becomes ``TEMPLATE_EMPTY_VALUE``, so
+    ``<p style="" c-style="s">`` renders the same as ``<p c-style="s">``.
+    Every other written value is returned unchanged. Callers pass only values
+    that come from the template source, never from Python data, so a ``True``
+    computed in Python still reaches the merge and raises there.
+    """
+    if value is True and _html_attr_identity(name) in {"class", "style"}:
+        return TEMPLATE_EMPTY_VALUE
+    return value
+
+
+def is_unchanged_template_value(value: object, written: object) -> bool:
+    """
+    Whether a merged attribute value still equals what the template wrote.
+
+    The Vue render copies an unchanged attribute's source text, so this check
+    decides whether the written text survives. A written empty ``class`` or
+    ``style`` merges to ``TEMPLATE_EMPTY_VALUE`` when nothing else set it, and
+    that still counts as unchanged.
+    """
+    if written is True and isinstance(value, _TemplateEmptyValue):
+        return True
+    return type(value) is type(written) and value == written
+
+
 @lru_cache(maxsize=512)
 def _is_valid_exact_html_attr_name(name: str) -> bool:
     """Cache validation for ordinary strings without retaining arbitrary objects."""
@@ -486,11 +536,12 @@ def _merge_resolved_attrs(items: Iterable[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     identity_to_key: dict[str, str] = {}
     accumulated: dict[str, list[Any]] = {"class": [], "style": []}
+    accumulator = _TemplateEmptyAccumulator()
     for key, value in items:
         identity = _html_attr_identity(key)
         output_key = identity_to_key.setdefault(identity, key)
         if identity in accumulated:
-            if value is not None:
+            if accumulator.add(identity, value) and value is not None:
                 accumulated[identity].append(value)
             result[output_key] = None
         else:
@@ -500,7 +551,38 @@ def _merge_resolved_attrs(items: Iterable[tuple[str, Any]]) -> dict[str, Any]:
             output_key = identity_to_key[identity]
             normalizer = _normalize_class_contributions if identity == "class" else normalize_style
             result[output_key] = normalizer(values)
+        elif accumulator.keeps_written_empty(identity):
+            result[identity_to_key[identity]] = TEMPLATE_EMPTY_VALUE
     return result
+
+
+class _TemplateEmptyAccumulator:
+    """
+    Track, per ``class``/``style``, whether the template wrote it empty and whether anything else set it.
+
+    A written empty ``class`` adds nothing when Python also sets the class
+    (``c-class``, or a ``class`` key in ``c-bind``), even to ``None``: the
+    element renders as if only the Python value were there. When nothing else
+    sets it, the merge keeps the marker so the element still renders the empty
+    attribute the template wrote, the same as a page with no Python values.
+    """
+
+    __slots__ = ("provided", "written_empty")
+
+    def __init__(self) -> None:
+        self.written_empty: set[str] = set()
+        self.provided: set[str] = set()
+
+    def add(self, identity: str, value: Any) -> bool:
+        """Record one contribution; return whether it joins the ordinary merge."""
+        if isinstance(value, _TemplateEmptyValue):
+            self.written_empty.add(identity)
+            return False
+        self.provided.add(identity)
+        return True
+
+    def keeps_written_empty(self, identity: str) -> bool:
+        return identity in self.written_empty and identity not in self.provided
 
 
 def _coalesce_html_attrs(
@@ -512,6 +594,7 @@ def _coalesce_html_attrs(
     result: dict[str, Any] = {}
     identity_to_key: dict[str, str] = {}
     accumulated: dict[str, list[Any]] = {"class": [], "style": []}
+    accumulator = _TemplateEmptyAccumulator()
 
     for attrs in attrs_dicts:
         for authored_key, value in attrs.items():
@@ -523,7 +606,7 @@ def _coalesce_html_attrs(
                 # A None class/style contributes nothing (a spread dict often
                 # carries an optional value), but reserves first-seen position
                 # and spelling just like any other HTML attribute.
-                if value is not None:
+                if accumulator.add(identity, value) and value is not None:
                     accumulated[identity].append(value)
                 result[output_key] = None
             else:
@@ -533,6 +616,10 @@ def _coalesce_html_attrs(
 
     for identity, values in accumulated.items():
         if not values:
+            # Merging an already merged dict again (the Vue render does) must
+            # keep a written empty attribute that nothing else replaced.
+            if accumulator.keeps_written_empty(identity):
+                result[identity_to_key[identity]] = TEMPLATE_EMPTY_VALUE
             continue
         output_key = identity_to_key[identity]
         if normalize_accumulators or len(values) > 1:
@@ -589,6 +676,12 @@ def _format_resolved_attrs_to_str(coalesced: Mapping[str, Any]) -> str:
         # which a browser reads as disabled because the attribute is present.
         value = _underlying(value)  # noqa: PLW2901
         identity = _html_attr_identity(key)
+        if isinstance(value, _TemplateEmptyValue):
+            # The template wrote this class or style empty and nothing else
+            # set it, so it renders as written, like the same tag on a page
+            # with no Python values. Every other empty class or style is left out.
+            parts.append(escape_to_str(key))
+            continue
         if identity == "class" and value is not None:
             if not isinstance(value, str):
                 value = normalize_class(value)  # noqa: PLW2901

@@ -23,7 +23,13 @@ from citry._vue.capture import (
     prepared_browser_binding,
     prepared_render_active,
 )
-from citry.attrs import merge_attrs, reject_vue_code_attr_name, validate_html_attr_name, vue_code_error
+from citry.attrs import (
+    merge_attrs,
+    reject_vue_code_attr_name,
+    template_attr_value,
+    validate_html_attr_name,
+    vue_code_error,
+)
 from citry.citry_render import _render_value
 from citry.client_directives import (
     CLIENT_PROPS_ATTR,
@@ -31,7 +37,7 @@ from citry.client_directives import (
     has_client_props_key,
 )
 from citry.constness import const_value
-from citry.nodes import ElementAttrsNode, ExprNode, Node, _reject_reserved_events_attr
+from citry.nodes import ElementAttrsNode, ExprNode, Node, StaticHtmlAttr, _reject_reserved_events_attr
 from citry.util.html import Markup
 
 from .usage import CLIENT_CONTEXT_KEY
@@ -297,6 +303,10 @@ class I18nBindingElementAttrsNode(Node):
                     tag_name=self.original.tag_name,
                 )
             _reject_reserved_output(resolved_key, self.original.tag_name)
+            if type(attr) is StaticHtmlAttr:
+                # A written empty class or style joins the merge as an empty
+                # marker, as on a plain element, instead of a rejected `True`.
+                raw = template_attr_value(resolved_key, raw)
             contributions.append({resolved_key: raw})
             provenance[_html_identity(resolved_key)] = _capture_for_value(captures, raw)
 
