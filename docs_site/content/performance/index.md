@@ -71,7 +71,10 @@ skip.
 ## Combine options
 
 A component can declare both `simple = True` and `pure = True` when both
-promises hold; `simple = "vue"` cannot be combined with `pure = True`. Its `template_data()` still runs on every call.
+promises hold. Its `template_data()` still runs on every call. A
+`simple = "vue"` component accepts `pure = True` too, but gains
+something only in apps that make Citry render it the ordinary way; see
+[Combining with `pure`](/performance/simple-components/#combining-with-pure).
 
 `Const` values and pure components also speed up the first render of a
 cached component or region. Once a cached entry exists, Citry reuses it

@@ -646,7 +646,10 @@ class Component(metaclass=ComponentMeta):
     ``js_data`` or ``css_data`` callbacks are supported; slots, child calls
     that pass content, provide/inject, instance hooks and instance
     configuration are not. The data callback runs for every invocation;
-    neither mode makes the component pure.
+    neither mode makes the component pure. A ``simple="vue"`` component may
+    also set ``pure = True``, which reuses HTML only while an app-wide feature
+    (configured translations, or an extension with component hooks) makes
+    Citry render the component the ordinary way.
 
     See [Simple components](/performance/simple-components/) for the full contract
     and the [Performance overview](/performance/) to compare the available
@@ -660,8 +663,8 @@ class Component(metaclass=ComponentMeta):
     side-effect-free function of its template variables. The memo lives for
     one root render. It can reuse safe strings around a child or Slot, but the
     child, Slot, ordinary component instances, IDs, and i18n work
-    still run for every occurrence. A separately declared simple component keeps
-    its restricted instance-free contract. A subclass must declare purity again rather than
+    still run for every occurrence. Setting ``pure`` does not lift any
+    ``simple`` restriction. A subclass must declare purity again rather than
     inheriting the promise. See [Pure components](/performance/pure/) for the
     full contract.
     """

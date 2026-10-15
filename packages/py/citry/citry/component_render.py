@@ -556,10 +556,12 @@ def _render_simple_vue_leaf(
 
     try:
         # The call shape belongs to this invocation, so it is checked every time.
+        # A pure class takes this path too: it records template values, not
+        # HTML, so pure has nothing to reuse here. Pure's HTML reuse applies
+        # when engine state sends the call to the ordinary path.
         if (
             type(element) is not CitryElement
             or component_class.transparent
-            or component_class.pure
             or component_class._citry_dynamic_selector
             or element.slots
             or element.component_tag_client_bindings

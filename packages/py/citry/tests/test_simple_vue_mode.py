@@ -649,6 +649,100 @@ def test_simple_vue_with_unknown_component_data_hook_renders_ordinarily() -> Non
     assert callback_calls == 1
 
 
+def _pure_simple_vue_page(
+    *, is_pure: bool, extensions: list[type[Extension]] | None = None
+) -> tuple[type[Component], list[str]]:
+    """Build a page that calls a simple='vue' leaf three times with equal data and once with different data."""
+    # Counted render IDs make two pages comparable byte for byte, so a reused
+    # body that carried another call's ID or marker would show up.
+    render_ids = itertools.count()
+    app = Citry(id_generator=lambda: f"r{next(render_ids)}", extensions=extensions or [])
+    callback_labels: list[str] = []
+
+    class Leaf(Component):
+        citry = app
+        simple = "vue"
+        pure = is_pure
+        template = """
+          <span>{{ label }}</span>
+        """
+
+        class Kwargs:
+            label: str
+
+        @staticmethod
+        def template_data(kwargs: Any, _slots: object) -> dict[str, object]:
+            callback_labels.append(kwargs.label)
+            return {"label": kwargs.label}
+
+    class Page(Component):
+        citry = app
+        template = """
+          <main>
+            <c-leaf label="same" />
+            <c-leaf label="same" />
+            <c-leaf label="same" />
+            <c-leaf label="other" />
+          </main>
+        """
+
+    return Page, callback_labels
+
+
+def _count_pure_captures(monkeypatch: pytest.MonkeyPatch) -> list[object]:
+    """Record each body that pure renders and stores for reuse."""
+    captures: list[object] = []
+    capture = component_render._render_and_capture_pure_body
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        captures.append(args[0])
+        return capture(*args, **kwargs)
+
+    monkeypatch.setattr(component_render, "_render_and_capture_pure_body", counting)
+    return captures
+
+
+def test_simple_vue_accepts_pure_and_renders_the_same_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    captures = _count_pure_captures(monkeypatch)
+    leaf_instances = _observe_leaf_instances(monkeypatch)
+    pure_page, pure_labels = _pure_simple_vue_page(is_pure=True)
+    plain_page, plain_labels = _pure_simple_vue_page(is_pure=False)
+
+    pure_html = pure_page().render().serialize(deps_strategy="ignore")
+    plain_html = plain_page().render().serialize(deps_strategy="ignore")
+
+    assert pure_html == plain_html
+    # The calls took the instance-free path, where pure has no HTML to reuse.
+    assert leaf_instances == []
+    assert captures == []
+    # The instance-free path still runs the data callback for every call.
+    assert pure_labels == plain_labels == ["same", "same", "same", "other"]
+
+
+def test_simple_vue_pure_reuses_html_when_rendering_ordinarily(monkeypatch: pytest.MonkeyPatch) -> None:
+    hook_components: list[str] = []
+
+    class SeeData(Extension):
+        name = "see_pure_simple_vue_component_data"
+
+        def on_component_data(self, ctx: Any) -> None:
+            hook_components.append(type(ctx.component).__name__)
+
+    captures = _count_pure_captures(monkeypatch)
+
+    # The extension hook sends every call to the ordinary path, where pure
+    # renders each distinct set of template data once.
+    pure_page, pure_labels = _pure_simple_vue_page(is_pure=True, extensions=[SeeData])
+    pure_html = pure_page().render().serialize(deps_strategy="ignore")
+    assert hook_components.count("Leaf") == 4
+    assert len(captures) == 2
+
+    plain_page, _plain_labels = _pure_simple_vue_page(is_pure=False, extensions=[SeeData])
+    plain_html = plain_page().render().serialize(deps_strategy="ignore")
+    assert pure_html == plain_html
+    assert pure_labels == ["same", "same", "same", "other"]
+
+
 def _count_admissions(monkeypatch: pytest.MonkeyPatch) -> list[type]:
     """Record each class whose simple='vue' admission record is (re)computed."""
     computed: list[type] = []
