@@ -18,8 +18,8 @@ installed (the default dev env).
 The second half holds the wait helpers. Each one waits for the state that
 proves a step finished, because the obvious wait (a short sleep, a value the
 server already wrote into the page) can pass before the browser has done the
-work. ``packages/py/citry_ui/conftest.py`` keeps a copy of the ones its
-browser tests use; change both together.
+work. ``packages/py/citry_ui/conftest.py`` holds the same region of
+helpers; a test keeps the two copies identical.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from socketserver import ThreadingMixIn
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote, urlsplit
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
 import pytest
@@ -140,6 +141,28 @@ def serve_live() -> Iterator[Callable[..., str]]:
         server.shutdown()
 
 
+@pytest.fixture
+def open_citry_page(page: Any, wait_for_citry_ready: Callable[..., None]) -> Callable[..., None]:
+    """
+    Return a function that navigates to a URL and waits until `apps` Citry apps are ready.
+
+    `page.goto()` returns at the `load` event, which comes before the runtime
+    finishes mounting, so a test that acts right after it races the mount.
+    See `wait_for_citry_ready` for why other signals are not enough.
+    """
+
+    def open_(url: str, *, apps: int = 1) -> None:
+        page.goto(url)
+        wait_for_citry_ready(apps)
+
+    return open_
+
+
+# BEGIN shared browser wait helpers
+# This region is identical in packages/py/citry/tests/e2e/conftest.py and
+# packages/py/citry_ui/conftest.py; packages/py/citry_ui/tests/
+# test_e2e_wait_helper_copies.py fails when the two copies differ.
+
 # Record each app's `citry:ready` event. A test may install this twice on one
 # page (directly and through a fixture), so a second copy leaves the first
 # listener in charge instead of resetting the list.
@@ -166,38 +189,29 @@ def wait_for_citry_ready(page: Any) -> Callable[..., None]:
     server wrote is in the page before Vue mounts. A click sent at that point
     reaches plain HTML and does nothing.
 
+    `wait(apps)` waits until `apps` apps are ready and then fails if more than
+    `apps` are, so a test that expects one app notices a second. Pass
+    `at_least=True` when more apps may legitimately be ready.
+
     The listener is an init script, so request this fixture before navigating;
     an event dispatched before the listener exists would be lost.
     """
     page.add_init_script(_RECORD_CITRY_READY)
 
-    def wait(apps: int = 1) -> None:
+    def wait(apps: int = 1, *, at_least: bool = False) -> None:
         page.wait_for_function("apps => (window.__citryReadyApps?.length ?? 0) >= apps", arg=apps)
+        ready = page.evaluate("() => window.__citryReadyApps.length")
+        if not at_least and ready != apps:
+            pytest.fail(f"expected {apps} ready Citry apps, got {ready}")
 
     return wait
 
 
-@pytest.fixture
-def open_citry_page(page: Any, wait_for_citry_ready: Callable[..., None]) -> Callable[..., None]:
-    """
-    Return a function that navigates to a URL and waits until `apps` Citry apps are ready.
-
-    `page.goto()` returns at the `load` event, which comes before the runtime
-    finishes mounting, so a test that acts right after it races the mount.
-    See `wait_for_citry_ready` for why other signals are not enough.
-    """
-
-    def open_(url: str, *, apps: int = 1) -> None:
-        page.goto(url)
-        wait_for_citry_ready(apps)
-
-    return open_
-
-
 # Count each finished Events call by handler name. The runtime dispatches
-# `citry:events:after` when a call has finished, after it applied the server's
-# actions (a Render included) and ran `onServerRender`. The listener is on the
-# capture phase so a page that stops the event's propagation cannot hide it.
+# `citry:events:after` when a call has finished, after it applied the actions
+# the call waits for (a Render included) and ran `onServerRender`. The listener
+# is on the capture phase so a page that stops the event's propagation cannot
+# hide it.
 _COUNT_FINISHED_EVENTS = """handler => {
   if (!window.__citryFinishedEvents) {
     window.__citryFinishedEvents = [];
@@ -209,6 +223,24 @@ _COUNT_FINISHED_EVENTS = """handler => {
 }"""
 
 
+def _is_event_response(response: Any, handler: str | None) -> bool:
+    """Return whether `response` answers an Events call, and a call to `handler` when one is given."""
+    request = response.request
+    if "/ext/events/" not in request.url:
+        return False
+    if handler is None:
+        return True
+    # A POST carries the call in its JSON body as `calls[0].handlerName`.
+    try:
+        body = request.post_data_json
+    except ValueError:
+        body = None
+    if isinstance(body, dict) and body.get("calls"):
+        return bool(body["calls"][0].get("handlerName") == handler)
+    # A GET call has no body; its URL ends with the handler name instead.
+    return unquote(urlsplit(request.url).path.rsplit("/", 1)[-1]) == handler
+
+
 @pytest.fixture
 def send_event(page: Any) -> Callable[..., Any]:
     """
@@ -216,8 +248,12 @@ def send_event(page: Any) -> Callable[..., Any]:
 
     `send(action, handler=None)` runs `action` (a click, a key press), waits
     for the `/ext/events/` response it causes, then waits until the browser
-    reports one more finished call (for `handler` only, when given). It
-    returns the Playwright response.
+    reports one more finished call. It returns the Playwright response.
+
+    Pass `handler` whenever another call may still be in flight: the wait then
+    matches only the response to a call to that handler, and only a finished
+    call to it. Without `handler`, the first Events response and the first
+    finished call of any handler satisfy the wait.
 
     The response alone is not enough: the browser applies it afterwards,
     across several microtasks and a Vue update. Two animation frames are not
@@ -229,7 +265,7 @@ def send_event(page: Any) -> Callable[..., Any]:
 
     def send(action: Callable[[], object], *, handler: str | None = None) -> Any:
         before = page.evaluate(_COUNT_FINISHED_EVENTS, handler)
-        with page.expect_response(lambda response: "/ext/events/" in response.url) as response:
+        with page.expect_response(lambda response: _is_event_response(response, handler)) as response:
             action()
         page.wait_for_function(
             "([handler, before]) => window.__citryFinishedEvents"
@@ -253,7 +289,9 @@ def wait_for_count(page: Any) -> Callable[..., None]:
     one-shot `assert len(items) == count` right after an action reads the list
     before the callback for a request already in flight has run.
 
-    The final check is exact, so an extra item is still a failure.
+    The final check is exact, but it runs as soon as `count` items arrive, so
+    an item that arrives later is not caught. Follow it with a short negative
+    check when an extra item is the failure the test guards against.
     """
 
     def wait(items: Sized, count: int, *, timeout: float = 5.0) -> None:
@@ -266,14 +304,15 @@ def wait_for_count(page: Any) -> Callable[..., None]:
     return wait
 
 
-# How far each fake-clock step stays from a timer deadline. Handling a DOM
-# event can move the fake clock by a fraction of a millisecond, so a step that
-# lands exactly on a deadline may or may not fire the timer.
-_DEADLINE_MARGIN_MS = 10
+# How far `run_past_deadline()` goes beyond a deadline. A step that lands
+# exactly on a deadline tests the timer's boundary rule rather than the
+# behavior under test, so steps stop just short of a deadline and then cross
+# it by this much.
+_PAST_DEADLINE_MS = 10
 
 
 class FakeClock:
-    """Playwright's fake clock for one page, paused, with steps that keep a margin from timer deadlines."""
+    """Playwright's fake clock for one page, paused before load, with steps that stop short of and cross deadlines."""
 
     def __init__(self, page: Any) -> None:
         self._page = page
@@ -285,7 +324,8 @@ class FakeClock:
         An installed clock follows real time until it is paused, and pausing
         after the page loads leaves a window where a slow load fires a timer
         early. Pausing first means only `run_for()` and the steps below move
-        timers. Mounting the app does not need timers, so the page still
+        timers, and the page's clock does not move while the test clicks or
+        types. Mounting the app does not need timers, so the page still
         becomes ready while the clock is paused.
         """
         start = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -298,17 +338,16 @@ class FakeClock:
 
     def run_short_of(self, ms: int) -> None:
         """
-        Move the clock to a little before a deadline `ms` away, to check that nothing happened yet.
+        Move the clock to one millisecond before a deadline `ms` away, to check that nothing happened yet.
 
-        Pair it with `run_past_deadline()`. Stepping to one millisecond short
-        and then one more lands on the deadline itself, where a fraction of a
-        millisecond decides whether the timer fires.
+        The paused clock moves only when the test moves it, so one millisecond
+        short is a deterministic "not yet". Pair it with `run_past_deadline()`.
         """
-        self._page.clock.run_for(ms - _DEADLINE_MARGIN_MS)
+        self._page.clock.run_for(ms - 1)
 
     def run_past_deadline(self) -> None:
-        """After `run_short_of()`, cross the deadline and stop the same margin after it."""
-        self._page.clock.run_for(2 * _DEADLINE_MARGIN_MS)
+        """After `run_short_of()`, cross the deadline and stop a little after it."""
+        self._page.clock.run_for(1 + _PAST_DEADLINE_MS)
 
 
 @pytest.fixture
@@ -357,3 +396,6 @@ def wait_for_animations() -> Callable[[Any], None]:
         )
 
     return wait
+
+
+# END shared browser wait helpers
