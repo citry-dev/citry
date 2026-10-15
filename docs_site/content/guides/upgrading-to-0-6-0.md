@@ -513,13 +513,16 @@ bindings by how they are spelled:
 
 ## Move Python bindings
 
-**What you see:** the render stops with an error that names the attribute
-and says that a Python-resolved attribute "cannot introduce Vue syntax".
+**What you see:** rendering the template raises `citry.VueCodeError`,
+with a message that names the attribute and says Vue would read it as
+code.
 
-In 0.5.1, Python could build Alpine code as a string and write it into an
-attribute. An interactive component in 0.6.0 rejects a Vue binding built
-in Python, whether it comes from `c-:attr`, `c-@event`, or a `c-bind`
-mapping with a `:x`, `@x`, or `v-*` key:
+In 0.5.1, Python could set an attribute such as `@click` or `:class`
+through `c-bind`, `c-:attr`, or `c-@event`, and Alpine read it in the
+browser. In 0.6.0, an attribute name that comes from Python data must not
+start with `v-`, `:`, `.`, `^`, `@`, or `#`, in any letter case. The
+render fails on every page, including a static page that never loads
+Vue, and even when the value is `None`:
 
 ```citry-html
 {# Stops the render: Python writes browser code #}
@@ -529,9 +532,20 @@ mapping with a `:x`, `@x`, or `v-*` key:
 <div :class="{ active: selected }">...</div>
 ```
 
-Pass the values the binding needs through `js_data()` or props. A static
-page that never loads Vue writes such attributes as plain text, where they
-do nothing.
+Pass the values the binding needs through `js_data()` or props.
+
+If a script you load yourself, such as Alpine, reads these attributes on
+an HTML element, spread its long-form names instead. Citry writes them as
+plain attributes on HTML elements; on a component tag, an `x-on:` name
+still stops the render:
+
+```python
+# Stops the render: '@click' and ':class' are Vue syntax
+attrs = {"@click": "open = true", ":class": "classes"}
+
+# Works: your own Alpine script reads the long form
+attrs = {"x-on:click": "open = true", "x-bind:class": "classes"}
+```
 
 ### Set attributes once
 
@@ -982,10 +996,11 @@ argument.
 15. Check component tags for `:x`, `v-*`, and `ref` attributes the child
     read as kwargs, and for `x-on:`, timed `@c-*` bindings, and `@c-poll`.
 16. Move `c-:attr`, `c-@event`, and Vue keys in `c-bind` into the
-    template, set an attribute such as `title` with `c-title` or `:title`
-    but not both, and write Vue-bound group content inside the group's
-    tag. Set several attributes with a `c-bind` mapping, not with quotes
-    inside a `Markup` value.
+    template, or spell an Alpine key in its long form (`x-on:click`).
+    Set an attribute such as `title` with `c-title` or `:title` but not
+    both, and write Vue-bound group content inside the group's tag. Set
+    several attributes with a `c-bind` mapping, not with quotes inside a
+    `Markup` value.
 17. Keep `#c-ignore` only on HTML elements whose contents a library
     manages, and move it off component tags, table row elements, and
     `<c-element>`.

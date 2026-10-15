@@ -85,8 +85,10 @@ because it can add behavior that breaks the promise.
 A component can declare both `pure = True` and
 [`simple = True`](/performance/simple-components/). The simple component
 rules still apply, and a `simple = True` template that contains
-`<c-slot />` renders again on every call. `simple = "vue"` cannot be
-combined with `pure = True`; every call raises an error.
+`<c-slot />` renders again on every call. A `simple = "vue"`
+component accepts `pure = True` too, but reuses HTML only while an
+app-wide feature, such as translation settings, makes Citry
+[render it the ordinary way](/performance/simple-components/#give-a-simple-component-its-own-vue-state).
 
 ## Related pages
 

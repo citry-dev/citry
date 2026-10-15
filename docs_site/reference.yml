@@ -371,13 +371,16 @@ categories:
   - kind: generated_python
     slug: attributes
     title: HTML attributes
-    intro: Helpers for Vue-like class/style merging on HTML elements.
+    intro: >-
+      Helpers for Vue-like class/style merging on HTML elements, and the error
+      raised when Python data sets an attribute name that Vue reads as code.
     symbols:
       - citry.format_attrs
       - citry.merge_attrs
       - citry.normalize_class
       - citry.normalize_style
       - citry.parse_string_style
+      - citry.VueCodeError
 
   - kind: generated_python
     slug: web

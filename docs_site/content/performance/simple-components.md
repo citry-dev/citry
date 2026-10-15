@@ -214,7 +214,7 @@ A `simple = "vue"` component can use:
 
 It cannot use:
 
-- slots, `transparent = True`, or `pure = True`;
+- slots or `transparent = True`;
 - [provide and inject](/concepts/provide-and-inject/), lifecycle hooks,
   or translation messages;
 - nested configuration such as `State`, `Events`, `Cache`, or `I18n`, or
@@ -377,8 +377,13 @@ A component can declare both `simple = True` and
 [`pure = True`][citry.Component.pure] when both promises hold. Its data
 method still runs on every call. A `simple = True` body that contains
 `<c-slot />` renders again on every call, even with `pure = True`.
-`simple = "vue"` cannot be combined with `pure = True`; every call
-raises an error.
+
+A `simple = "vue"` component can declare `pure = True` too. It has no
+effect while Citry renders the component without an instance. It reuses
+HTML only while one of the app-wide features listed under
+[Add Vue state](#give-a-simple-component-its-own-vue-state) makes Citry
+render the component the ordinary way, for example when translation
+settings are passed to `Citry`.
 
 ## Related pages
 

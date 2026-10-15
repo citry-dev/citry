@@ -196,11 +196,12 @@ than a bare `data-open`. See [`c-*` boolean attrs](/syntax/attributes/#html-elem
 An attribute mapping carries plain HTML attributes only. Citry never runs
 a name from the mapping as Vue code. A name that starts with `v-`, `@`,
 `:`, `.`, `^`, or `#`, in any letter case, such as `:title` or `@click`,
-is Vue syntax. On a page that uses Vue, such a name on an HTML element
-raises `TypeError`, unless its value is `None` or `False`. It fails even
-when the template writes the same binding on the element. Write Vue
-bindings and event listeners directly on the element in the template,
-and remove them from the mapping.
+is Vue syntax. Rendering a template that spreads such a name raises
+`citry.VueCodeError` on every page, including one without Vue, whatever
+the value (even `None`). It fails even when the template writes
+the same binding on the element. Write Vue bindings and event listeners
+directly on the element in the template, and remove them from the
+mapping.
 
 Citry's own `@c-` and `:c-` Events bindings are the exception: a mapping
 may set them. See [Bind events in templates](/events/bindings/).

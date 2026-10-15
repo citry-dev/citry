@@ -20,6 +20,7 @@ from docs_site._internal.config import config
 from docs_site._internal.site_nav import load_site_nav
 
 pytest.importorskip("pytest_playwright")
+from playwright.sync_api import expect
 
 pytestmark = pytest.mark.e2e
 
@@ -900,26 +901,24 @@ def test_tabs_ui_sampler_and_configurator_are_result_first_and_reactive(
 
     page.locator('.djc-header__actions [data-theme-value="light"]').first.click()
     page.wait_for_function("document.documentElement.getAttribute('data-theme') === 'light'")
-    page.wait_for_timeout(50)
     code_background = page.locator(".prose pre").first.evaluate("element => getComputedStyle(element).backgroundColor")
     preview_background = (
         demos.nth(0)
         .locator(".citry-ui-demo__preview")
         .evaluate("element => getComputedStyle(element).backgroundColor")
     )
-    frame_background = sampler.locator("body").evaluate("element => getComputedStyle(element).backgroundColor")
     assert preview_background == code_background
-    assert frame_background == code_background
+    # The docs page tells the preview frame about the new theme with a
+    # message, which the frame handles a little later, so wait for its color.
+    expect(sampler.locator("body")).to_have_css("background-color", code_background)
 
     page.locator('.djc-header__actions [data-theme-value="dark"]').first.click()
     page.wait_for_function("document.documentElement.getAttribute('data-theme') === 'dark'")
-    page.wait_for_timeout(50)
     dark_code_background = page.locator(".prose pre").first.evaluate(
         "element => getComputedStyle(element).backgroundColor"
     )
-    dark_frame_background = sampler.locator("body").evaluate("element => getComputedStyle(element).backgroundColor")
     assert dark_code_background != code_background
-    assert dark_frame_background == dark_code_background
+    expect(sampler.locator("body")).to_have_css("background-color", dark_code_background)
 
     page_font_size = float(page.locator("body").evaluate("element => parseFloat(getComputedStyle(element).fontSize)"))
     preview_font_size = float(
@@ -1673,7 +1672,7 @@ def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
     controlled.get_by_label("Accept requests").uncheck()
     controlled.get_by_role("button", name="Controlled archive").click()
     assert controlled.get_by_role("dialog", name="Controlled archive").is_hidden()
-    assert "trigger: open" in controlled.locator("output").inner_text()
+    expect(controlled.locator("output")).to_contain_text("trigger: open")
     controlled.get_by_label("Accept requests").check()
     controlled.get_by_role("button", name="Controlled archive").click()
     controlled.get_by_role("dialog", name="Controlled archive").wait_for(state="visible")
@@ -1681,7 +1680,9 @@ def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
     native_form = demos.nth(6).frame_locator("[data-ui-preview-frame]")
     native_form.get_by_role("button", name="Choose a chart").click()
     native_form.get_by_role("button", name="Intensity chart").click()
-    assert native_form.locator("output").inner_text() == "Selected: intensity"
+    # The form closes the drawer, and the browser fires the dialog's `close`
+    # event, which writes this text, in a later task than the click.
+    expect(native_form.locator("output")).to_have_text("Selected: intensity")
 
     nested = demos.nth(7).frame_locator("[data-ui-preview-frame]")
     nested.get_by_role("button", name="Open archive tools").click()
@@ -1855,13 +1856,15 @@ def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
     action = demos.nth(4).frame_locator("[data-ui-preview-frame]")
     action.get_by_role("button", name="Show persistent action").click()
     action.get_by_role("button", name="Retry").click()
-    assert action.get_by_text("Retry requested", exact=True).is_visible()
-    assert action.locator('[data-citry-toast-id="offline"]').count() == 1
+    expect(action.get_by_text("Retry requested", exact=True)).to_be_visible()
+    expect(action.locator('[data-citry-toast-id="offline"]')).to_have_count(1)
 
     limited_frame = page.locator('iframe[src="/ui-library/components/toast/_previews/visible-limit/"]')
     limited_frame.scroll_into_view_if_needed()
     limited = page.frame_locator('iframe[src="/ui-library/components/toast/_previews/visible-limit/"]')
-    assert limited.locator('[data-citry-ui-part="toast"]').count() == 2
+    # The frame loads lazily once it scrolls into view, and its script renders
+    # the toasts after that, so wait for them rather than counting at once.
+    expect(limited.locator('[data-citry-ui-part="toast"]')).to_have_count(2)
     dismiss_first = limited.locator('[data-citry-toast-id="queue-1"] [data-citry-toast-dismiss]')
     dismiss_label = dismiss_first.get_attribute("aria-label")
     assert dismiss_label is not None
