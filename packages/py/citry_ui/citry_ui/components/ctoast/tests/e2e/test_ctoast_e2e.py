@@ -379,15 +379,17 @@ def test_correlated_rerender_retains_region_focus_and_does_not_reannounce(
     page.on("pageerror", lambda error: errors.append(str(error)))
     # The live region shows the first announcement for only 250 ms before
     # clearing it, so a slow runner can miss it with a polling wait. Record
-    # every text a polite live region receives from the start instead.
+    # every text a polite live region inside the retained toast receives from
+    # the start instead; other live regions on the page are not under test.
     page.add_init_script(
         """
-        window.__firstPoliteAnnouncements = [];
+        window.__politeAnnouncements = [];
         new MutationObserver(records => {
           for (const record of records) {
             const live = record.target.parentElement?.closest?.('[aria-live=polite]')
               || record.target.closest?.('[aria-live=polite]');
-            if (live?.textContent) window.__firstPoliteAnnouncements.push(live.textContent);
+            if (live?.textContent && live.closest('#retained-toast'))
+              window.__politeAnnouncements.push(live.textContent);
           }
         }).observe(document, {childList: true, characterData: true, subtree: true});
         """
@@ -396,7 +398,7 @@ def test_correlated_rerender_retains_region_focus_and_does_not_reannounce(
     page.wait_for_selector("#retained-toast[data-citry-toast-initialized]")
     toast = page.locator('[data-citry-toast-id="retained"]')
     toast.focus()
-    page.wait_for_function("window.__firstPoliteAnnouncements.includes('Retained notice')")
+    page.wait_for_function("window.__politeAnnouncements.includes('Retained notice')")
     page.evaluate(
         """() => {
           window.__retainedToastRegion = document.querySelector('#retained-toast');
@@ -424,7 +426,7 @@ def test_correlated_rerender_retains_region_focus_and_does_not_reannounce(
     page.wait_for_function("document.activeElement?.dataset.citryToastId === 'retained'")
     # Nothing should be announced again. An announcement writes its text after
     # 20 ms and clears it 250 ms later, so wait past one whole cycle before
-    # checking that none happened; a fixed wait is the only way to see that.
+    # checking that none happened; a fixed wait is the simplest way to see that.
     page.wait_for_timeout(350)
     assert page.evaluate("document.querySelector('#retained-toast') === window.__retainedToastRegion")
     assert page.evaluate(

@@ -6,6 +6,8 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
 import citry_ui
 from citry import Citry, Component
 
@@ -327,21 +329,25 @@ def test_hover_delay_surface_bridge_and_departure_close(page):
 def test_open_peer_warms_next_tooltip_and_closes_previous(page, fake_clock):
     # Ganymede waits 600 ms before opening unless an open peer has warmed it.
     # A wall-clock budget for that difference fails on a slow runner, so the
-    # page's clock stays paused: the warmed tooltip must open while no page
-    # time passes at all, which its 600 ms delay could never do.
+    # page's clock stays paused. The real check is that the warmed tooltip
+    # opens without its delay timer ever running: the paused clock never
+    # reaches 600 ms, so an unwarmed open would time out below.
     fake_clock.install_paused()
     _load(page)
     _europa_trigger(page).focus()
     page.wait_for_function("document.querySelector('#europa-tooltip').matches(':popover-open')")
 
     second = page.get_by_role("button", name="Inspect Ganymede")
-    started = page.evaluate("performance.now()")
     second.hover()
-    page.wait_for_function("document.querySelector('#ganymede-tooltip').matches(':popover-open')")
+    try:
+        page.wait_for_function(
+            "document.querySelector('#ganymede-tooltip').matches(':popover-open')",
+            timeout=2_000,
+        )
+    except PlaywrightTimeoutError:
+        pytest.fail("the warmed Ganymede tooltip did not open without its 600 ms delay")
     page.wait_for_function("!document.querySelector('#europa-tooltip').matches(':popover-open')")
-    elapsed = page.evaluate("started => performance.now() - started", started)
 
-    assert elapsed == 0
     assert not _europa(page).evaluate("element => element.matches(':popover-open')")
     assert page.locator("#ganymede-tooltip").evaluate("element => element.matches(':popover-open')")
 

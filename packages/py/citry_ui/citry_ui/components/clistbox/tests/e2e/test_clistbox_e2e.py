@@ -121,8 +121,9 @@ def _load(page: Any) -> list[str]:
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.set_content(_page(), wait_until="load")
-    page.wait_for_selector(".brand-listbox[data-citry-listbox-initialized]")
-    page.wait_for_selector(".multiple-listbox[data-citry-listbox-initialized]")
+    # Each of the four listboxes initializes on its own zero-delay timer, and
+    # the tests read the locked and right-to-left ones too, so wait for all.
+    page.wait_for_function("document.querySelectorAll('[data-citry-listbox-initialized]').length === 4")
     return errors
 
 
