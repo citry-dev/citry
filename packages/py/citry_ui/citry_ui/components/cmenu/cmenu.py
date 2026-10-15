@@ -1243,6 +1243,49 @@ class CMenu(LibraryComponent):
           let authorDirectDisabled = externalActivation || controllerOptions.ownsTriggerDisabled
             ? false
             : authorTriggerDisabled && !data.disabled;
+          // Vue writes a bound `disabled` through the element's property. When
+          // the Menu has already disabled the trigger, the author's `true`
+          // changes nothing in the DOM, so no mutation record arrives and the
+          // observer below never learns the author's value. The trigger's
+          // `disabled` property therefore reports every write to this run, and
+          // the Menu marks its own writes so only the author's are recorded.
+          // A shared key, so the property hook calls whichever run currently
+          // owns the trigger.
+          const menuAuthorDisabledWriteKey = Symbol.for("citry-ui:menu-author-disabled-write");
+          let writingTriggerDisabled = false;
+          const recordsAuthorDisabled = !externalActivation && !controllerOptions.ownsTriggerDisabled;
+          if (recordsAuthorDisabled && !Object.prototype.hasOwnProperty.call(trigger, "disabled")) {
+            let prototype = Object.getPrototypeOf(trigger);
+            let nativeDisabled = null;
+            while (prototype && !nativeDisabled) {
+              nativeDisabled = Object.getOwnPropertyDescriptor(prototype, "disabled") ?? null;
+              prototype = Object.getPrototypeOf(prototype);
+            }
+            // Only a native control has a `disabled` property; anything else
+            // takes `disabled` as an attribute, which the observer sees.
+            if (nativeDisabled?.get && nativeDisabled?.set) {
+              Object.defineProperty(trigger, "disabled", {
+                configurable: true,
+                enumerable: nativeDisabled.enumerable,
+                get() {
+                  return nativeDisabled.get.call(this);
+                },
+                set(value) {
+                  nativeDisabled.set.call(this, value);
+                  this[menuAuthorDisabledWriteKey]?.(nativeDisabled.get.call(this));
+                },
+              });
+            }
+          }
+          if (recordsAuthorDisabled) {
+            trigger[menuAuthorDisabledWriteKey] = (value) => {
+              if (writingTriggerDisabled) {
+                return;
+              }
+              authorDirectDisabled = value;
+              authorTriggerDisabled = value;
+            };
+          }
           let committedEffectiveDisabled = externalActivation
             ? Boolean(controllerOptions.ownerDisabled?.())
             : trigger.matches(":disabled");
@@ -1640,7 +1683,14 @@ class CMenu(LibraryComponent):
             }
             const desiredDisabled = configuration.disabled || authorDirectDisabled;
             if (trigger.disabled !== desiredDisabled) {
-              trigger.disabled = desiredDisabled;
+              // Mark the write as the Menu's own so the property hook above
+              // does not take it for the author's.
+              writingTriggerDisabled = true;
+              try {
+                trigger.disabled = desiredDisabled;
+              } finally {
+                writingTriggerDisabled = false;
+              }
             }
             writtenTriggerDisabled = desiredDisabled;
           };
@@ -2976,6 +3026,12 @@ class CMenu(LibraryComponent):
             // and the next run would read it as the author's. Leave the trigger
             // alone when something other than this run changed it since its last
             // write, because that value is newer than anything recorded here.
+            // Stop recording author writes first: the restore below is the
+            // Menu's own, and Vue's next patch belongs to the next run, which
+            // reads the trigger's value when it starts.
+            if (recordsAuthorDisabled) {
+              delete trigger[menuAuthorDisabledWriteKey];
+            }
             if (
               !externalActivation
               && !controllerOptions.ownsTriggerDisabled

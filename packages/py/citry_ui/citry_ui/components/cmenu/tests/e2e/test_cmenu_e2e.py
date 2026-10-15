@@ -2248,12 +2248,14 @@ def _author_disabled_page(activator: str, *, start_disabled: bool) -> tuple[Citr
     app = Citry(secret="citry-ui-menu-author-disabled", autodiscover=False)  # noqa: S106
     app.set_mounted_prefix("/citry")
     app.register_library(ComponentLibrary("citry-ui-menu-author-disabled", _MENU_COMPONENTS))
-    # The three ways an author can write the activator's `disabled`: not at
-    # all, bound to server data, or as a literal attribute that never changes.
+    # The ways an author can write the activator's `disabled`: not at all,
+    # bound to server data, as a literal attribute that never changes, or bound
+    # to browser data that page code changes without a server event.
     activator_disabled = {
         "none": "",
         "bound": 'c-disabled="author_disabled"',
         "literal": "disabled",
+        "client": ':disabled="clientDisabled"',
     }[activator]
 
     class AuthorDisabledMenu(Component):
@@ -2301,6 +2303,11 @@ def _author_disabled_page(activator: str, *, start_disabled: bool) -> tuple[Citr
               type="button"
               @c-click="toggle_both"
             >Toggle both</button>
+            <button
+              class="client-toggle"
+              type="button"
+              @click="clientDisabled = !clientDisabled"
+            >Toggle browser disabled</button>
             <c-CMenu
               #c-key="'author-disabled-menu'"
               id="author-disabled-menu"
@@ -2323,6 +2330,9 @@ def _author_disabled_page(activator: str, *, start_disabled: bool) -> tuple[Citr
           </section>
         """
         ).replace("__ACTIVATOR_DISABLED__", activator_disabled)
+        js = """
+          $component({data() { return {clientDisabled: false}; }});
+        """
 
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, bool]:
             del slots
@@ -2366,6 +2376,16 @@ def _author_disabled_page(activator: str, *, start_disabled: bool) -> tuple[Citr
             [False, True, True, False],
             id="author-and-menu-together",
         ),
+        # Page code disables the trigger while the Menu already has it
+        # disabled, so the DOM does not change; the author's disable must
+        # still outlast the Menu's re-enable.
+        pytest.param(
+            "client",
+            False,
+            ["toggle_menu", "client_toggle", "toggle_menu", "client_toggle"],
+            [False, True, True, True, False],
+            id="client-binding-under-menu-disable",
+        ),
     ],
 )
 def test_server_rerender_keeps_the_authors_trigger_disabled(
@@ -2402,9 +2422,15 @@ def test_server_rerender_keeps_the_authors_trigger_disabled(
         selector = "." + step.replace("_", "-")
         # Click through the DOM: a disabled trigger does not block these buttons,
         # but a Playwright click would wait for actionability on overlays.
-        send_event(
-            lambda selector=selector: page.locator(selector).evaluate("element => element.click()"), handler=step
-        )
+        if step.startswith("client_"):
+            # A browser-only change sends no event; Vue applies it before the
+            # click returns, and the settle below lets the Menu reconcile.
+            page.locator(selector).evaluate("element => element.click()")
+        else:
+            send_event(
+                lambda selector=selector: page.locator(selector).evaluate("element => element.click()"),
+                handler=step,
+            )
         observed.append(disabled_after_settle())
     assert observed == expected
     assert errors == []
