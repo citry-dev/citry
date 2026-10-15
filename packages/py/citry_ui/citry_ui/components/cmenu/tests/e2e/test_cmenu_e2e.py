@@ -2153,3 +2153,91 @@ def test_correlated_rerender_distinguishes_retained_anonymous_commands_and_recov
         "element => element === document.activeElement"
     )
     assert errors == []
+
+
+def _close_animation_page() -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(ComponentLibrary("citry-ui-menu-close-animation-e2e", _MENU_COMPONENTS))
+
+    class Page(Component):
+        citry = app
+        js = """
+          $component({
+            data() {
+              window.__menuOpenChanges = [];
+              return { size: "md" };
+            },
+            methods: {
+              // Closing changes a prop bound to the menu, so the menu updates
+              // while its own close animation is still playing.
+              onOpenChange(open, detail) {
+                window.__menuOpenChanges.push({ open, reason: detail.reason });
+                if (!open) this.size = "lg";
+              },
+            },
+          });
+        """
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <c-css />
+              <style>
+                #animated-menu {
+                  --cui-menu-duration: 10s;
+                }
+              </style>
+            </head>
+            <body>
+              <c-CMenu
+                id="animated-menu"
+                :size="size"
+                :onOpenChange="onOpenChange"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <button type="button" c-bind="activator_attrs">Animated menu</button>
+                </c-fill>
+                <c-fill name="default">
+                  <c-CMenuItem value="one">One</c-CMenuItem>
+                </c-fill>
+              </c-CMenu>
+              <c-js />
+            </body>
+          </html>
+        """
+
+    return str(Page())
+
+
+def test_update_during_close_keeps_the_close_animation_and_reports_one_close(page, settle_timers):
+    """A prop change made while the menu closes lets the close animation finish and reports the close once."""
+    page.set_content(_close_animation_page(), wait_until="load")
+    page.wait_for_function("document.querySelector('#animated-menu')?.hasAttribute('data-citry-menu-initialized')")
+    page.get_by_role("button", name="Animated menu").click()
+    page.wait_for_function("document.querySelector('#animated-menu').matches(':popover-open')")
+
+    page.keyboard.press("Escape")
+    # The close callback changed the bound size. Once the menu shows it, and
+    # the zero-delay reconcile that update schedules has run, the update has
+    # been handled while the 10 s close animation is still playing.
+    page.wait_for_function("document.querySelector('#animated-menu').dataset.size === 'lg'")
+    settle_timers()
+    still_closing = page.evaluate(
+        """() => {
+          const surface = document.querySelector('#animated-menu');
+          return {
+            showing: surface.matches(':popover-open'),
+            exiting: surface.hasAttribute('data-citry-menu-exiting'),
+            animations: surface.getAnimations().filter(animation => animation.playState === 'running').length,
+          };
+        }"""
+    )
+    assert still_closing == {"showing": True, "exiting": True, "animations": 1}
+
+    page.evaluate("document.querySelector('#animated-menu').getAnimations().forEach(animation => animation.finish())")
+    page.wait_for_function("!document.querySelector('#animated-menu').matches(':popover-open')")
+    assert page.evaluate("window.__menuOpenChanges") == [
+        {"open": True, "reason": "trigger"},
+        {"open": False, "reason": "escape"},
+    ]

@@ -1229,9 +1229,14 @@ class CMenu(LibraryComponent):
           const primaryTransactions = new Set();
           let refreshNativeDisabledObserver = () => {};
           const disabledElement = controllerOptions.disabledElement ?? trigger;
+          // A kept menu's trigger may still carry the `disabled` this component
+          // set for the previous render. That one is not the author's, so a kept
+          // menu counts a disabled trigger as author-set only if the previous run
+          // did; otherwise re-enabling on the server would leave it disabled.
+          const previousAuthorDisabled = surface.__citryUiMenuRuntime?.authorDirectDisabled;
           let authorDirectDisabled = externalActivation || controllerOptions.ownsTriggerDisabled
             ? false
-            : trigger.disabled && !data.disabled;
+            : trigger.disabled && !data.disabled && previousAuthorDisabled !== false;
           let committedEffectiveDisabled = externalActivation
             ? Boolean(controllerOptions.ownerDisabled?.())
             : trigger.matches(":disabled");
@@ -1262,9 +1267,11 @@ class CMenu(LibraryComponent):
           let retainedOpenSubmenuPaths = retainedRuntimeState && sameServerOpen
             ? [...(runtimeState.openSubmenuPaths ?? [])]
             : [];
+          // A menu that was showing when this render disabled it closes and
+          // reports the close, whether or not the same render also changed the
+          // server's `open` input: the disable is what closes it.
           let pendingDisabledHandoff = Boolean(
             retainedRuntimeState
-            && sameServerOpen
             && runtimeState.open
             && !runtimeState.effectiveDisabled
           );
@@ -1731,8 +1738,10 @@ class CMenu(LibraryComponent):
               // The previous run leaves an open menu showing so this run can take
               // it over. When this run starts closed because the server's `open`
               // input changed, nothing else hides it. A context menu manages its
-              // own handoff, so this applies to a plain menu only.
-              if (!nextOpen && !externalActivation && surface.matches(":popover-open")) {
+              // own handoff, so this applies to a plain menu only. A menu that
+              // this run is closing also still shows while its close animation
+              // plays; `finishExit` hides that one, so leave it alone.
+              if (!nextOpen && !externalActivation && !exitAnimation && surface.matches(":popover-open")) {
                 normalizeRootClosed("ancestor", surface);
               }
               return;
@@ -2950,6 +2959,7 @@ class CMenu(LibraryComponent):
             // applied the next generation's server-disabled attribute before
             // this cleanup runs.
             runtimeState.effectiveDisabled = committedEffectiveDisabled;
+            runtimeState.authorDirectDisabled = authorDirectDisabled;
             unregisterNativeDisabled();
             structureObserver.disconnect();
             host.removeEventListener("click", onClick, true);
