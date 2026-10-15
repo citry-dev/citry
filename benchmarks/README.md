@@ -5,6 +5,11 @@ vanilla Django templates, and Jinja2. The design, scope, and roadmap live in
 [`docs/design/benchmarking.md`](../docs/design/benchmarking.md); this README
 covers running the comparison and reading its output.
 
+The [framework interaction suite](web/README.md) in `web/` is a separate
+harness. It measures how quickly a browser shows the same project page and
+finishes the same server actions in Citry and fifteen other framework setups,
+with each application installed in its own environment.
+
 Citry's graph-first browser workload has a separate runner because browser
 startup, fragment adoption, morph, heap, and client payloads are not comparable
 to server render time. Run it with:
@@ -277,6 +282,7 @@ benchmarks/
     native_build.py  the check that makes the runners exit on a debug build
     utils.py     marker slicing shared by runners
     results/     the compact report of the 2026-09-10 rendering results
+    web/         the framework interaction suite (see web/README.md)
 ```
 
 Still ahead: asv adoption (per-commit tracking, dashboards, memory
