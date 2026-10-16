@@ -454,9 +454,8 @@ You can pass `security_csp` to `serialize()` to override the mode for one
 render. Any other value raises `ValueError`, both in `Citry(...)` and in
 `serialize()`.
 
-The Citry editor extension and `citry check` report the same problems at
-their place in your source files, when the problem is visible in the
-source file.
+Citry finds these problems only when it serializes a page, so render the
+pages you serve with `"warn"` before you switch to `"strict"`.
 
 Citry checks only what it renders. Your app owns the response header, the
 nonce, layouts, third-party resources, and every other CSP directive.

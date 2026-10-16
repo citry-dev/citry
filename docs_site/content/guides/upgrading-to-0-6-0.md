@@ -819,6 +819,7 @@ by code stops matching.
 | `citry.alpine.unknown-variable` | `citry.vue.unknown-variable` |
 | `citry.component-js.unknown-data-member` | `citry.component-js.unknown-member` |
 | `citry.browser.unknown-component-prop` | Removed |
+| `citry.csp.incompatible-browser-code` | Removed; Vue expressions never need `unsafe-eval` |
 | `citry.i18n.cross-language-fallback` on a `<c-trans>` tag | `citry.i18n.rich-message-fallback` |
 | `citry.i18n.client-message-invalid` for a missing translation | `citry.i18n.cross-language-fallback` |
 
@@ -919,6 +920,9 @@ argument.
   `citry.ownership_manifest` modules, and the `ownership` parameters of
   `CitryContext` and `CitryElement`. Delete the imports and those
   arguments.
+- **`lint_csp_compatibility` and `CspCompatibilityFinding`** are removed
+  from `citry.analysis`. They reported nothing for Vue templates, so
+  delete the call. Citry reports CSP problems when it serializes a page.
 
 ## Clean up integrations
 
@@ -1029,8 +1033,8 @@ argument.
     arguments.
 25. Pass `URLRoute(methods=...)` as a tuple of uppercase names, read
     `parameters` from `citry.analysis` results starting at index 0, and
-    remove `TemplateNode`, `citry.ownership` imports, and `ownership=`
-    arguments.
+    remove `TemplateNode`, `citry.ownership` imports,
+    `lint_csp_compatibility`, and `ownership=` arguments.
 26. Remove `citry-htmx.js`, `hx-ext="citry-fragments"`, and `data-cid-*`
     or `data-citry-key` selectors.
 27. Open each interactive page, reloading pages opened before the
