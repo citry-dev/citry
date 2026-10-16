@@ -191,3 +191,50 @@ def test_unowned_or_misclassified_socket_frames_remain_errors():
     audit["records"][-1]["message_type"] = "state"
     result = collect_sockets(events, ready, snapshot, audit)
     assert "application messages arrived after" in str(result["errors"])
+
+
+def add_late_heartbeat(events, audit, *, text, server_direction, cdp=True):
+    # The page's message log was copied before this heartbeat arrived, so only
+    # the later evidence (the CDP frames, the server audit) can contain it.
+    if cdp:
+        event_name = "webSocketFrameReceived" if server_direction == "sent" else "webSocketFrameSent"
+        events.append(
+            {"event": event_name, "value": {"requestId": "socket", "response": {"opcode": 1, "payloadData": text}}}
+        )
+    audit["records"].append(
+        {
+            "connection": "server-socket",
+            "direction": server_direction,
+            "index": 2,
+            "sha256": hashlib.sha256(text.encode()).hexdigest(),
+            "bytes": len(text.encode()),
+            "message_type": "socket.io-control",
+            "operation": None,
+            "revision": None,
+        }
+    )
+
+
+def test_heartbeat_arriving_while_evidence_is_collected_is_set_aside():
+    # Reflex pings every 25 seconds. A ping and its pong that land after the
+    # page's log was copied must not fail an otherwise complete action.
+    events, ready, snapshot, audit = evidence()
+    add_late_heartbeat(events, audit, text="2", server_direction="sent")
+    add_late_heartbeat(events, audit, text="3", server_direction="received", cdp=False)
+
+    result = collect_sockets(events, ready, snapshot, audit)
+
+    assert result["errors"] == []
+    assert result["late_control_messages"] == 2
+    assert result["decoded_response_bytes"] == len('{"operation":"op","revision":1,"text":"héllo"}'.encode())
+
+
+def test_late_application_message_outside_the_page_log_still_fails():
+    events, ready, snapshot, audit = evidence()
+    add_late_heartbeat(events, audit, text="2", server_direction="sent")
+    audit["records"][-1]["message_type"] = "state"
+
+    result = collect_sockets(events, ready, snapshot, audit)
+
+    assert "Browser/CDP/server received message counts differ (1/2/2)" in result["errors"]
+    assert result["decoded_response_bytes"] is None

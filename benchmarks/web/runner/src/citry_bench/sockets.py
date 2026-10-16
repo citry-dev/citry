@@ -13,6 +13,20 @@ def message_bytes(frame: dict) -> bytes:
     raise ValueError(f"Unsupported WebSocket opcode: {frame['opcode']}")
 
 
+def is_control_frame(frame: dict) -> bool:
+    """Return whether a CDP frame is an Engine.IO heartbeat ("2" ping or "3" pong)."""
+    return frame.get("opcode") == 1 and frame.get("payloadData") in ("2", "3")
+
+
+def is_control_record(record: dict) -> bool:
+    """Return whether a server audit record is an Engine.IO heartbeat."""
+    return (
+        record.get("message_type") == "socket.io-control"
+        and record.get("operation") is None
+        and record.get("revision") is None
+    )
+
+
 def collect_sockets(events: list[dict], ready: dict, snapshot: dict, audit: dict) -> dict:
     """Require matching message order, hashes, operation IDs and ready boundaries.
 
@@ -54,6 +68,7 @@ def collect_sockets(events: list[dict], ready: dict, snapshot: dict, audit: dict
         errors.append("Audit must describe exactly one server connection")
     selected = []
     control_messages = []
+    late_control_messages = 0
     for browser_direction, server_direction, event_name in (
         ("sent", "received", "webSocketFrameSent"),
         ("received", "sent", "webSocketFrameReceived"),
@@ -66,8 +81,24 @@ def collect_sockets(events: list[dict], ready: dict, snapshot: dict, audit: dict
         times = browser[browser_direction]
         server = ledger[server_direction]
         count = boundary[browser_direction]
+        # The page's message log is copied first, then the server audit is
+        # fetched and the CDP frames are read. The server keeps sending its
+        # timed heartbeat meanwhile (Reflex every 25 seconds), so a ping and
+        # its pong can reach the later two records only. Set those aside when
+        # every extra entry is a heartbeat; any other extra message still fails.
+        captured = len(times)
+        late_frames, late_server = frames[captured:], server[captured:]
+        if (late_frames or late_server) and (
+            all(is_control_frame(frame) for frame in late_frames)
+            and all(is_control_record(record) for record in late_server)
+        ):
+            frames, server = frames[:captured], server[:captured]
+            late_control_messages += max(len(late_frames), len(late_server))
         if len(frames) != len(times) or len(server) != len(frames) or count > len(times):
-            errors.append(f"Browser/CDP/server {browser_direction} message counts differ")
+            errors.append(
+                f"Browser/CDP/server {browser_direction} message counts differ "
+                f"({len(times)}/{len(frames)}/{len(server)})"
+            )
             continue
         for index, (frame, at, observed) in enumerate(zip(frames, times, server, strict=True), 1):
             try:
@@ -81,13 +112,7 @@ def collect_sockets(events: list[dict], ready: dict, snapshot: dict, audit: dict
                 or observed["bytes"] != len(body)
             ):
                 errors.append(f"Server/CDP {browser_direction} message {index} differs")
-            control = (
-                frame["opcode"] == 1
-                and body in (b"2", b"3")
-                and observed.get("message_type") == "socket.io-control"
-                and observed.get("operation") is None
-                and observed.get("revision") is None
-            )
+            control = frame["opcode"] == 1 and body in (b"2", b"3") and is_control_record(observed)
             if control:
                 control_messages.append(
                     {
@@ -141,6 +166,8 @@ def collect_sockets(events: list[dict], ready: dict, snapshot: dict, audit: dict
         "preparation_errors": preparation_errors,
         "messages": selected,
         "control_messages": control_messages,
+        # Heartbeats that arrived after the page's message log was copied.
+        "late_control_messages": late_control_messages,
         "control_request_bytes": sum(entry["bytes"] for entry in observed_controls if entry["direction"] == "sent"),
         "control_response_bytes": sum(
             entry["bytes"] for entry in observed_controls if entry["direction"] == "received"

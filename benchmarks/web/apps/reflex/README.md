@@ -1,6 +1,6 @@
 # Reflex canonical project page
 
-This adapter uses Reflex 0.9.10.post2, its compiled React frontend and native
+This app uses Reflex 0.9.10.post2, its compiled React frontend and native
 Socket.IO events. Python owns the shared canonical project model; Reflex state
 sends its values to the browser, where React commits the rendered elements.
 It is a browser-rendered Python UI entry, not a Python HTML renderer.
@@ -16,7 +16,7 @@ nonpersistent scenario; persistence and Redis are separate configurations.
 ## Build and dependencies
 
 The independent Python 3.12.13 environment installs published wheels from
-`uv.lock`. `build.py` prepares Node 22.22.0 and Bun 1.3.14 under this adapter's
+`uv.lock`. `build.py` prepares Node 22.22.0 and Bun 1.3.14 under this app's
 generated directories, checks their pinned archive and executable hashes,
 and runs the normal production `reflex export` command. The first native
 implementation supports macOS ARM64; other platforms fail explicitly until
@@ -44,7 +44,7 @@ regression checks both modes in fresh Python processes.
 
 Native Reflex forms collect their controls on submit. Editing a field sends
 no server event. Empty referenced inputs arrive as JSON null in this release;
-the adapter normalizes those to the empty strings expected by the shared
+the app normalizes those to the empty strings expected by the shared
 model. The server rejects a submitted board session that differs from its
 connected Reflex state. Socket.IO retains its normal connection token and
 state machinery, and the ASGI wrapper requires a matching browser Origin.
@@ -74,11 +74,16 @@ After the timed boundary, its audit endpoint decodes event packets and
 matches operation IDs, revisions and message hashes with browser evidence.
 Connection negotiation and hydration packets belong to initial readiness;
 uncorrelated later protocol traffic fails the current accounting contract.
+Heartbeats are the one exception. Engine.IO, the transport under Socket.IO,
+sends a ping and a pong every 25 seconds. The runner records heartbeats apart
+from the action's messages. A pair that arrives after the runner has copied
+the page's message log is left out of the action and counted in
+`late_control_messages`.
 Server durations are ASGI message receive-to-send intervals, not an isolated
 Python rendering measurement. HTTP timings end at response start.
 
 Correlated state updates also record `prepare_ms`. The duration sums the
-adapter's domain snapshot and Reflex-state projection, Reflex's synchronous
+app's domain snapshot and Reflex-state projection, Reflex's synchronous
 state-delta or hydration-dictionary construction, and the configured JSON
 serializer used by Socket.IO. Event dispatch, the domain mutation, asynchronous
 delta resolution, packet-wrapper construction, protocol framing and socket send
