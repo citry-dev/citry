@@ -1245,14 +1245,14 @@ class CMenu(LibraryComponent):
             : authorTriggerDisabled && !data.disabled;
           // Page code and Vue write the author's `disabled`; the Menu writes the
           // server's. The observer below tells them apart by the values this run
-          // wrote, in order. Mutation records arrive in a later microtask, after
-          // the write has returned, so a flag set around the write would already
-          // be clear. The Menu writes only a changed value, so each of its writes
-          // queues exactly one record. A redundant `disabled = true` or
+          // wrote, in order. The Menu writes only a changed value, so each of its
+          // writes queues exactly one record. A redundant `disabled = true` or
           // `setAttribute("disabled", "")` from page code also queues a record,
           // so it is seen even while the Menu already disables the trigger.
           // `toggleAttribute("disabled", true)` on an already disabled trigger
-          // queues none, so that one write is not seen.
+          // queues none, so that one write is not seen. When no other Menu
+          // observes this root, writes made before this run registers its
+          // observer produce no record.
           const ownDisabledWrites = [];
           const recordsAuthorDisabled = !externalActivation && !controllerOptions.ownsTriggerDisabled;
           // Write the trigger's `disabled` as the Menu's own value.
@@ -3027,8 +3027,10 @@ class CMenu(LibraryComponent):
               && trigger.disabled === writtenTriggerDisabled
               && trigger.disabled !== authorTriggerDisabled
             ) {
-              // This run's observer is already gone, so the record reaches the
-              // next run, which reads it as the author's value. It is one.
+              // This run no longer listens. If another Menu keeps the observer
+              // running, the next run receives this record and reads it as the
+              // author's value, which is right, because this write puts the
+              // author's value back.
               trigger.disabled = authorTriggerDisabled;
             }
             structureObserver.disconnect();

@@ -2223,7 +2223,7 @@ def _nested_page(*levels: str, opens: tuple[bool, ...] = (), siblings: bool = Fa
                 return _nested_next(state, **{f"open_{drawer}": True})
 
             def swap_on_server(self, state: Any) -> NestedOwner:
-                # Open every other level and close the drawer, in one render.
+                # Open all levels except the drawer, and close the drawer, in one render.
                 return _nested_next(state, **{f"open_{index}": index != drawer for index in range(last + 1)})
 
         def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
@@ -2325,9 +2325,8 @@ def _nested_page(*levels: str, opens: tuple[bool, ...] = (), siblings: bool = Fa
 _NESTED_OPEN = """names => Object.fromEntries(names.map(
   name => [name, document.querySelector('#' + name + '-root dialog').open]))"""
 
-# Whether a level's dialog is shown at all: open, modal, or still in the top
-# layer. A dialog left `open` without being modal shows on top of the page
-# once its ancestor opens, so it counts as shown.
+# A level's dialog `open` and `:modal` state. A dialog left `open` without
+# being modal still shows once its ancestor opens, so tests check both.
 _NESTED_SHOWN = """name => {
   const dialog = document.querySelector('#' + name + '-root dialog');
   return {open: dialog.open, modal: dialog.matches(':modal')};

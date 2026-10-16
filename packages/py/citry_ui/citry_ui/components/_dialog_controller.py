@@ -64,7 +64,8 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       if (state.dialogs.length === 0) {
         const shared = sharedLock();
         if (shared && otherLockHolders(dialog).length > 0) {
-          // A drawer already locked the page; keep its original styles.
+          // A drawer already locked the page; take the page's original styles
+          // from the drawer's record.
           state.overflow = shared.overflow;
           state.paddingInlineEnd = shared.paddingInlineEnd;
         } else {
@@ -92,7 +93,8 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       state.dialogs.splice(index, 1);
       if (state.dialogs.length === 0) {
         documentLocks.delete(documentOwner);
-        // A drawer still holding the page restores the styles when it releases.
+        // A drawer still holding the page restores the styles when it releases,
+        // so leave the page locked for it.
         if (otherLockHolders(dialog).length > 0) return;
         const root = documentOwner.documentElement;
         root.style.overflow = state.overflow;
@@ -229,8 +231,8 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         previousFocus = previous.previousFocus;
         delete dialog[handoffKey];
       }
-      // A re-render runs an enclosing dialog's callback first and may close it
-      // there, which cannot reach this handed-over dialog. Keeping it open would
+      // A re-render runs an enclosing dialog's callback first, and a close there
+      // cannot reach this handed-over dialog. Keeping it open would
       // leave an invisible modal blocking the page, so close it; the component
       // reports reason "ancestor" once its callback is ready.
       let closedByAncestor = null;

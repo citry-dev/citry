@@ -68,8 +68,9 @@
   leaves `open` unchanged keeps the component open or closed as the user
   left it.
 - `CDialog`, `CAlertDialog`, and `CCommandPalette` now call `onOpenChange`
-  with reason `"ancestor"` when an enclosing dialog or drawer closes them.
-  Previously a dialog closed by an enclosing drawer reported `"native"`.
+  with reason `"ancestor"` when an enclosing `CDrawer` closes them, as they
+  already did inside an enclosing dialog. Previously they reported
+  `"native"`.
 - The `CMenu` trigger and the `CTimePicker` control no longer stay disabled
   after a server event disables and then re-enables them.
 - A `CDialog` or `CAlertDialog` that a server event removes while it is open
