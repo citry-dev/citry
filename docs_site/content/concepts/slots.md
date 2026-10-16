@@ -87,6 +87,10 @@ Use one form or the other. Once the body has a `<c-fill>` tag, everything
 in it other than whitespace must be inside a `<c-fill>`, including the
 default slot's content.
 
+Vue's `<template #name>` does not fill a Citry slot, and the template
+fails when it loads; see
+[`<template #name>` slots](/vue/slots/#vue-slot-syntax).
+
 ## `<c-slot>` fallback
 
 Content inside `<c-slot>` is a fallback. Citry shows it when the slot is not

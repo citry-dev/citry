@@ -47,6 +47,57 @@ it:
 </template>
 ```
 
+## `<template #name>` slots { #vue-slot-syntax }
+
+Vue fills a named slot with `<template #name>` or `<template v-slot:name>`.
+Inside a Citry component tag, the template fails when it loads, on every
+page, because Citry fills slots only from `<c-fill>`. Without the check,
+the content would land in the default slot and the named slot would keep
+its fallback.
+
+```citry-html
+<!-- Fails: Vue slot syntax inside a Citry component tag. -->
+<c-Panel>
+  <template #title>Report</template>
+</c-Panel>
+
+<!-- Works: name the slot with c-fill. -->
+<c-Panel>
+  <c-fill name="title">Report</c-fill>
+</c-Panel>
+```
+
+The same goes for `v-slot` and `#default`, which name the default slot,
+for slot syntax on another element, such as `<div #title>`, and for
+`#[expr]`; write `<c-fill c-name="...">` with a Python expression
+instead.
+
+The check covers Citry component tags, including `<c-component>`, and
+looks through `<c-provide>` and `<c-cache>` to the tag around them. `<template #name>` still
+works inside a Vue component that a [Vue plugin](/vue/plugins/) registers,
+and inside `<c-element is="my-widget">`, which renders the tag you name,
+so it can be a plugin's Vue component.
+
+Directly inside a `<c-fill>`, `<template #name>` loads, because a
+transparent component (one with `transparent = True`, such as
+`<c-provide>`) can pass that content on to a Vue component that Citry
+cannot see when the template loads. Inside an ordinary component's fill
+it still does nothing: a page with Vue drops the `<template>` wrapper and
+shows its content in that fill, and a page without Vue shows nothing.
+
+To pass a slot template through a transparent component of your own,
+write its default fill out:
+
+```citry-html
+<my-widget>
+  <c-Themed>
+    <c-fill name="default">
+      <template #header>Report</template>
+    </c-fill>
+  </c-Themed>
+</my-widget>
+```
+
 ## Scoped slots { #slot-limits }
 
 A component can hand Python data to a fill, but not its Vue values. The
@@ -81,7 +132,9 @@ slot, and Citry does not support it:
 
 - A `:` binding on `<c-slot>`, such as `:selected="selected"`, fails when
   the template loads.
-- `v-slot` and `#name` fail on a component tag and on `<c-fill>`.
+- `v-slot` and `#name` fail on a component tag, on `<c-fill>`, and on a
+  `<template>` inside a component tag; see
+  [`<template #name>` slots](#vue-slot-syntax).
 - A Vue expression inside the fill cannot read the Python `row` either.
   The editor and `citry check` report it:
   [`citry.vue.python-variable`](/ide/diagnostics/#citry.vue.python-variable)

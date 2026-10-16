@@ -505,3 +505,57 @@ def wait_for_preview_ready(page: Any) -> Callable[..., None]:
         content.wait_for_function("apps => (window.__citryReadyApps?.length ?? 0) >= apps", arg=apps)
 
     return wait
+
+
+# A UI preview document is ready once it has left the iframe's first
+# `about:blank`, finished loading, and every app it configures has mounted.
+# A preview without client components has no configuration block and counts
+# as ready as soon as it has loaded.
+_UI_PREVIEW_DOCUMENT_READY = """() => {
+  if (location.href === 'about:blank' || document.readyState !== 'complete') return false;
+  const apps = document.querySelectorAll('script[type="application/json"][data-citry-vue-document]').length;
+  return (window.__citryReadyApps?.length ?? 0) >= apps;
+}"""
+
+
+@pytest.fixture
+def wait_for_ui_previews_ready(page: Any) -> Callable[[], None]:
+    """
+    Return a function that waits until every visible UI library preview on the page has mounted.
+
+    A component page shows each example in a sandboxed `[data-ui-preview-frame]`
+    iframe. `page.goto()` returns before those frames finish, and the buttons
+    the server wrote are on screen before Vue attaches their handlers, so a
+    focus, key press, or click sent then reaches plain HTML. A preview control
+    change is sent to the frame as a message, which the frame also handles only
+    once it has started.
+
+    The frames load lazily, so the function scrolls each one into view to start
+    it and returns the page to where it was scrolled before. A hidden frame
+    never loads, so it is skipped; a test that reveals one waits for it with
+    `wait_for_preview_ready`.
+
+    The listener is an init script, so request this fixture before navigating.
+    """
+    page.add_init_script(_RECORD_CITRY_READY)
+
+    def wait() -> None:
+        frames = page.locator("[data-ui-preview-frame]")
+        scroll = page.evaluate("() => [window.scrollX, window.scrollY]")
+        for index in range(frames.count()):
+            frame = frames.nth(index)
+            if not frame.is_visible():
+                continue
+            frame.scroll_into_view_if_needed()
+            content = frame.element_handle().content_frame()
+            if content is None:
+                pytest.fail("a UI preview locator does not point at an iframe")
+            # The Frame object stays the same when the iframe navigates away
+            # from `about:blank`, and the wait restarts in the new document.
+            # Chromium throttles animation frames in a cross-origin frame that
+            # is off screen, which can stall the default frame-based polling,
+            # so poll on a fixed interval instead.
+            content.wait_for_function(_UI_PREVIEW_DOCUMENT_READY, polling=100)
+        page.evaluate("([x, y]) => window.scrollTo(x, y)", scroll)
+
+    return wait

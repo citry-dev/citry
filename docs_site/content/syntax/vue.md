@@ -153,7 +153,10 @@ the browser should change it later, and send the starting value with
 A Citry component tag, such as `<c-StatusBadge>`, accepts Vue props,
 listeners, `v-if`, `v-model`, and `v-show`.
 [Props and events](/vue/props-and-events/#use-vue-directives-on-a-component-tag)
-lists them and shows how a parent and child pass data and events.
+lists them and shows how a parent and child pass data and events. To
+pass content into a named slot, use `<c-fill name="...">`, not Vue's
+`<template #name>`; see
+[`<template #name>` slots](/vue/slots/#vue-slot-syntax).
 
 ## More about Vue in Citry
 
