@@ -1713,22 +1713,6 @@ def test_registry_check_declines_unknown_vue_namespace_after_options_spread(tmp_
     assert not [item for item in report.findings if item.code == "citry.vue.unknown-variable"]
 
 
-@pytest.mark.parametrize("mode", ["off", "warn", "strict"])
-def test_registry_check_does_not_apply_the_retired_expression_csp_evaluator(tmp_path, mode):
-    engine = Citry(autodiscover=False, security_csp=mode)
-
-    class Card(Component):
-        citry = engine
-        template = '<button @click="items.map(item => item.id)"></button>'
-
-        class JsData:
-            items: list[dict[str, int]]
-
-    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-
-    assert not [item for item in report.findings if item.code == "citry.csp.incompatible-browser-code"]
-
-
 def test_registry_check_reports_unknown_component_js_variables_and_missing_context_binding(tmp_path):
     engine = Citry(autodiscover=False)
 

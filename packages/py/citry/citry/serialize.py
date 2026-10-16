@@ -542,8 +542,6 @@ def serialize_render_result(
     javascript_policy = session._javascript_policy
     if javascript_policy is not None:
         javascript_policy.inspect_reached_bindings(root)
-    if csp_validator is not None:
-        csp_validator.validate_reached_bindings(root)
     from citry._vue.serialization import (  # noqa: PLC0415
         _HYDRATION_ADMISSION_EXTRA_KEY,
         _record_hydration_page_decline,

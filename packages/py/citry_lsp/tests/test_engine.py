@@ -2212,29 +2212,6 @@ class Card(Component):
     assert "Cannot find module" not in diagnostics
 
 
-@pytest.mark.parametrize("mode", ["off", "warn", "strict"])
-def test_browser_diagnostics_do_not_apply_the_retired_expression_csp_evaluator(tmp_path, mode):
-    template_source = '<button @click="items.map(item => item.id)"></button>'
-    template_file = tmp_path / "card.html"
-    template_file.write_text(template_source, encoding="utf-8")
-    (tmp_path / "app.py").write_text(
-        "from pathlib import Path\n"
-        "from citry import Citry, Component\n"
-        f"engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, security_csp={mode!r})\n"
-        "class Card(Component):\n"
-        "    citry = engine\n"
-        "    template_file = 'card.html'\n",
-        encoding="utf-8",
-    )
-    project = load_project(tmp_path, "app:engine")
-    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
-    document.update(template_source, 1, project)
-
-    findings = browser_diagnostics(document, project, {document.uri: document})
-
-    assert not [item for item in findings if item.code == "citry.csp.incompatible-browser-code"]
-
-
 def test_component_js_unknown_variables_use_lint_globals_and_default_to_error(tmp_path):
     js_source = """
 $component(({ component }) => {

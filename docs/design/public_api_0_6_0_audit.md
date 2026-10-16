@@ -166,10 +166,10 @@ so the grand total counts them twice.
 |---|---|---|---|---|---|---|---|
 | Browser JavaScript | 8 | 9 | 9 | 20 | 9 | 6 | 61 |
 | Python API | 14 | 19 | 27 | 4 | 1 | 8 | 73 |
-| Settings, extensions, CLI, LSP | 41 | 11 | 9 | 6 | 1 | 14 | 82 |
+| Settings, extensions, CLI, LSP | 41 | 10 | 9 | 7 | 1 | 14 | 82 |
 | Template syntax | 39 | 16 | 13 | 17 | 0 | 6 | 91 |
 | HTTP, protocol, i18n, citry-ui | 19 | 16 | 9 | 9 | 4 | 6 | 63 |
-| **Total** | **121** | **71** | **67** | **56** | **15** | **40** | **370** |
+| **Total** | **121** | **70** | **67** | **57** | **15** | **40** | **370** |
 
 "restored" means 0.5.1 behavior that the branch had lost and that works
 again now. A restored row is compatible with 0.5.1 for the part that was
@@ -373,7 +373,7 @@ changes:
 | `citry.browser_render` | none | `P/browser_render.py` | new | Browser plugin types and helpers. |
 | `citry.components.mark` | none | `P/components/mark.py` | new | |
 | `citry.ext.events.renderers` | none | `P/ext/events/renderers.py` | new | Render encoders. |
-| `citry.analysis` Alpine names (`ALPINE_AMBIENT_NAMES`, `AlpineLintConsumer`, `AlpineLintFinding`, `lint_unknown_alpine_variables`, `BrowserComponentMember`, `BrowserComponentPropsUse`, `BrowserScopeWrite`, `browser_component_members`, `browser_component_prop_uses`, `browser_component_scope_writes`) | `P/analysis.py:3873` | not present | changed-incompatible | Replaced by `VUE_AMBIENT_NAMES`, `VueLintConsumer`, `VueLintFinding`, `lint_unknown_vue_variables`, `BrowserComponentMemberReference`, `BrowserComponentPropSite` and friends. `browser_component_scope_writes` has no counterpart. |
+| `citry.analysis` Alpine and Alpine-CSP names (`ALPINE_AMBIENT_NAMES`, `AlpineLintConsumer`, `AlpineLintFinding`, `lint_unknown_alpine_variables`, `BrowserComponentMember`, `BrowserComponentPropsUse`, `BrowserScopeWrite`, `browser_component_members`, `browser_component_prop_uses`, `browser_component_scope_writes`, `lint_csp_compatibility`, `CspCompatibilityFinding`) | `P/analysis.py:3873` | not present | changed-incompatible | Replaced by `VUE_AMBIENT_NAMES`, `VueLintConsumer`, `VueLintFinding`, `lint_unknown_vue_variables`, `BrowserComponentMemberReference`, `BrowserComponentPropSite` and friends. `browser_component_scope_writes`, `lint_csp_compatibility`, and `CspCompatibilityFinding` have no counterpart. |
 | `citry.analysis` changed literals and fields | | | changed-incompatible | `BrowserBinding.kind` `x-data`/`x-for` to `v-for`/`v-slot`; `BrowserExpression.host` `alpine` to `vue`; `BrowserComponentSourceAnalysis` drops `scope_writes`, adds `component_calls`, `public_names`, `sections`, `member_references`. |
 | `citry.analysis` new keyword params and trailing fields | | | changed-compatible | For example `lint_unknown_component_js_members(severity=)`, `BrowserExpression.python_bindings`. |
 | `citry.analysis` new names | | | new | 18 names including `VueLintConsumer`, `lint_vue_python_variables`, `mark_literal_findings`. |
@@ -513,7 +513,7 @@ No 0.5.1 default changed.
 | `citry.browser.unknown-component-prop` | `:26` | none | removed | Checked `$c-props` keys. In CHANGELOG. |
 | `citry.browser.missing-component-prop`, `incompatible-component-prop` | | `:28-29` | changed-compatible | Check Vue props. |
 | `citry.browser.unknown-server-event` | | | changed-compatible | Text says "Vue expression". |
-| `citry.csp.incompatible-browser-code` | | | changed-compatible | Checks the configured policy. |
+| `citry.csp.incompatible-browser-code` | `:20` | none | removed | Vue expressions compile on the server and never need `unsafe-eval`. Render-time CSP checks still run. In CHANGELOG. |
 | `citry.template.marker-name-invalid` | none | `:18` | new | |
 | `citry.js-data.public-name-collision` | none | `:20` | new | |
 | `citry.vue.unknown-variable` | none | `:21` | new | |
@@ -832,9 +832,9 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 | `#c-ignore` on component tags, and Vue-only content inside `#c-ignore` | A component or binding renders through Vue, which updates it | `#c-ignore` on the element inside the component's template (decision 6.4) |
 | `data-cid`, `data-cev-*`, `data-citry-root`, `data-citry-graph`, `data-citry-key` markers | Alpine and ownership markers | Vue `ref`; `data-cid-*` still on static output (decision 6.3) |
 | `citry.ownership`, `citry.ownership_manifest`, ownership params on `CitryContext` and `CitryElement` | Ownership graph removed | None needed |
-| `citry.analysis` Alpine names | Alpine-only | `Vue*` equivalents |
+| `citry.analysis` Alpine and Alpine-CSP names, `lint_csp_compatibility`, `CspCompatibilityFinding` | Alpine-only, or Alpine CSP only | `Vue*` equivalents; none for the CSP check |
 | `LintSettings` / `Component.Lint` / `TemplateLintInfo` Alpine names | Alpine-only; an alias would carry Alpine magic names into Vue scope | `rule_unknown_vue_variable`, `vue_variables` |
-| Diagnostic codes `citry.alpine.unknown-variable`, `citry.component-js.unknown-data-member`, `citry.browser.unknown-component-prop` | Alpine or `$c-props` concepts | `citry.vue.unknown-variable`, `citry.component-js.unknown-member` |
+| Diagnostic codes `citry.alpine.unknown-variable`, `citry.component-js.unknown-data-member`, `citry.browser.unknown-component-prop`, `citry.csp.incompatible-browser-code` | Alpine or `$c-props` concepts; Vue expressions never need `unsafe-eval` | `citry.vue.unknown-variable`, `citry.component-js.unknown-member`; render-time CSP checks |
 | `ext/events/runtime-csp.js` route and its constants | One runtime serves every CSP mode | `ext/events/runtime.js` or `citry.js` |
 | `emit_events_dependencies`, `CevAttr`, `DATA_CEV_*`, `EventsExtension.on_dependencies` | Alpine Events runtime | `build_events_manifest`, `browser_plugin` |
 | `clientGraphRevision`, `citry-client-graph/1` protocol, `citry_core._rust.client_graph` | Ownership graph removed | None needed |

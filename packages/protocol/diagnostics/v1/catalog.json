@@ -375,34 +375,6 @@
       "documentationPath": "/ide/diagnostics/#citry.vue.python-variable"
     },
     {
-      "code": "citry.csp.incompatible-browser-code",
-      "constant": "CSP_INCOMPATIBLE_BROWSER_CODE",
-      "title": "Browser code is incompatible with strict CSP",
-      "summary": "Browser code in a template or asset is not allowed by the Content Security Policy mode your application sets.",
-      "when": "The application sets security_csp to \"warn\" or \"strict\", and a browser expression or asset does something that policy forbids.",
-      "fix": "Move the logic into a method in the component's JavaScript and call that method from the template.",
-      "defaultSeverity": "error",
-      "configurableSeverity": true,
-      "surfaces": [
-        "check",
-        "lsp"
-      ],
-      "parameters": {
-        "detail": "The unsupported directive, host, token, or operation."
-      },
-      "messages": {
-        "default": "The configured browser security policy cannot accept {detail} here. Move complex logic to Component.js and call a component method from the template."
-      },
-      "examples": [
-        {
-          "title": "Move an arrow function into Component.js",
-          "language": "citry-html",
-          "source": "<button @click=\"items.map(item => item.id)\">Save</button>"
-        }
-      ],
-      "documentationPath": "/ide/diagnostics/#citry.csp.incompatible-browser-code"
-    },
-    {
       "code": "citry.component-js.unknown-variable",
       "constant": "COMPONENT_JS_UNKNOWN_VARIABLE",
       "title": "Unknown component JavaScript variable",

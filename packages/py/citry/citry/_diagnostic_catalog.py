@@ -23,7 +23,6 @@ JS_DATA_UNSUPPORTED_TYPE = 'citry.js-data.unsupported-type'
 JS_DATA_PUBLIC_NAME_COLLISION = 'citry.js-data.public-name-collision'
 VUE_UNKNOWN_VARIABLE = 'citry.vue.unknown-variable'
 VUE_PYTHON_VARIABLE = 'citry.vue.python-variable'
-CSP_INCOMPATIBLE_BROWSER_CODE = 'citry.csp.incompatible-browser-code'
 COMPONENT_JS_UNKNOWN_VARIABLE = 'citry.component-js.unknown-variable'
 COMPONENT_JS_UNKNOWN_MEMBER = 'citry.component-js.unknown-member'
 BROWSER_INVALID_STATE_BINDING_TARGET = 'citry.browser.invalid-state-binding-target'
@@ -384,28 +383,6 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                          'when': 'A name inside a $component initializer is not declared in that code, '
                                                  "destructured from the callback's argument, a JavaScript or browser "
                                                  'global, or a declared component_js_globals entry.'},
- 'citry.csp.incompatible-browser-code': {'code': 'citry.csp.incompatible-browser-code',
-                                         'configurableSeverity': True,
-                                         'constant': 'CSP_INCOMPATIBLE_BROWSER_CODE',
-                                         'defaultSeverity': 'error',
-                                         'documentationPath': '/ide/diagnostics/#citry.csp.incompatible-browser-code',
-                                         'examples': [{'language': 'citry-html',
-                                                       'source': '<button @click="items.map(item => '
-                                                                 'item.id)">Save</button>',
-                                                       'title': 'Move an arrow function into Component.js'}],
-                                         'fix': "Move the logic into a method in the component's JavaScript and call "
-                                                'that method from the template.',
-                                         'messages': {'default': 'The configured browser security policy cannot accept '
-                                                                 '{detail} here. Move complex logic to Component.js '
-                                                                 'and call a component method from the template.'},
-                                         'parameters': {'detail': 'The unsupported directive, host, token, or '
-                                                                  'operation.'},
-                                         'summary': 'Browser code in a template or asset is not allowed by the Content '
-                                                    'Security Policy mode your application sets.',
-                                         'surfaces': ['check', 'lsp'],
-                                         'title': 'Browser code is incompatible with strict CSP',
-                                         'when': 'The application sets security_csp to "warn" or "strict", and a '
-                                                 'browser expression or asset does something that policy forbids.'},
  'citry.format.cancelled': {'code': 'citry.format.cancelled',
                             'constant': 'FORMAT_CANCELLED',
                             'defaultSeverity': 'information',

@@ -96,7 +96,6 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
-    lint_csp_compatibility,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
     lint_undeclared_template_emits,
@@ -1322,25 +1321,6 @@ def browser_diagnostics(
                 ),
             )
         )
-        for csp_finding in lint_csp_compatibility(
-            expressions,
-            vue_consumers or (),
-            project.security_csp,
-        ):
-            diagnostics.append(
-                types.Diagnostic(
-                    range=_range(region.source_map.map_range(csp_finding.start_index, csp_finding.end_index)),
-                    message=csp_finding.message,
-                    severity=(
-                        types.DiagnosticSeverity.Error
-                        if csp_finding.severity == "error"
-                        else types.DiagnosticSeverity.Warning
-                    ),
-                    code=csp_finding.code,
-                    code_description=types.CodeDescription(diagnostic_documentation_url(csp_finding.code)),
-                    source="citry",
-                )
-            )
         state_roots = _current_state_key_roots(consumers, document, project, open_documents)
         if state_roots is not None:
             state_names = {root.name for root in state_roots}

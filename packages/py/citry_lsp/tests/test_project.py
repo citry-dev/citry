@@ -90,7 +90,6 @@ def test_project_worker_captures_output_and_returns_copied_registry(tmp_path):
         "print('project says hello')\n"
         "engine = Citry(\n"
         "    autodiscover=False,\n"
-        "    security_csp='warn',\n"
         "    lint=LintSettings(template_variables={'request': str}),\n"
         ")\n"
         "class Card(Component):\n"
@@ -110,7 +109,6 @@ def test_project_worker_captures_output_and_returns_copied_registry(tmp_path):
 
     assert state.status.mode == "registry"
     assert state.status.registry_ready is True
-    assert state.security_csp == "warn"
     assert state.status.message is not None
     assert "project says hello" in state.status.message
     assert state.analysis is not None
@@ -193,46 +191,6 @@ def test_invalid_environment_file_degrades_without_starting_worker(tmp_path, mon
     assert state.status.environment_file == str(environment_file)
     assert "Environment file" in (state.status.message or "")
     assert "does not exist" in (state.status.message or "")
-
-
-def test_syntax_only_project_does_not_guess_a_csp_mode(tmp_path):
-    state = load_project(tmp_path, None)
-
-    assert state.status.mode == "syntax-only"
-    assert state.security_csp is None
-
-
-@pytest.mark.parametrize(
-    "engine_settings",
-    [
-        None,
-        {"version": 2, "security_csp": "strict"},
-        {"version": 1, "security_csp": "future"},
-        {"version": 1, "security_csp": "strict", "extra": True},
-    ],
-)
-def test_engine_settings_worker_envelope_fails_closed(tmp_path, monkeypatch, engine_settings):
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "settings_app.py").write_text(
-        "from citry import Citry\nengine = Citry(autodiscover=False)\n",
-        encoding="utf-8",
-    )
-    payload = app_worker._run("settings_app:engine", tmp_path)
-    if engine_settings is None:
-        payload.pop("engine_settings")
-    else:
-        payload["engine_settings"] = engine_settings
-
-    state = project_module._project_from_worker_output(
-        tmp_path,
-        "settings_app:engine",
-        0,
-        json.dumps(payload),
-        "",
-    )
-
-    assert state.status.mode == "syntax-only"
-    assert "engine" in (state.status.message or "")
 
 
 def test_project_worker_copies_the_checked_i18n_index(tmp_path):

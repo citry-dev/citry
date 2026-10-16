@@ -732,7 +732,6 @@ class ProjectState:
     catalog: CatalogIndex | None = None
     source_analysis: SourceAnalysisIndex | None = None
     i18n: I18nProjectIndex | None = None
-    security_csp: Literal["off", "warn", "strict"] | None = None
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)
     # ty's types for `js_data()` value parts, per file, source text, and class.
     _js_data_inferred: dict[tuple[Path, str, str], Mapping[tuple[int, int], JsonWireType]] = field(
@@ -1031,14 +1030,6 @@ def _project_from_worker_output(
         if type(raw_extensions) is not dict or set(raw_extensions) != {"i18n"}:
             raise ValueError("extension analysis envelope is invalid")
         i18n = I18nProjectIndex(raw_extensions.get("i18n"))
-        raw_settings = payload.get("engine_settings")
-        if type(raw_settings) is not dict or set(raw_settings) != {"version", "security_csp"}:
-            raise ValueError("engine settings envelope is invalid")
-        if raw_settings.get("version") != 1:
-            raise ValueError("engine settings version is unsupported")
-        security_csp = raw_settings.get("security_csp")
-        if type(security_csp) is not str or security_csp not in {"off", "warn", "strict"}:
-            raise ValueError("engine security_csp setting is invalid")
     except (TypeError, ValueError) as exc:
         return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
     project_output = payload.get("project_output")
@@ -1064,7 +1055,6 @@ def _project_from_worker_output(
         catalog=catalog,
         source_analysis=source_analysis,
         i18n=i18n,
-        security_csp=cast("Literal['off', 'warn', 'strict']", security_csp),
     )
 
 

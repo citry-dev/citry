@@ -12,8 +12,6 @@
   messages are not copied into the Citry catalog.
 - Added stable Alpine-variable, server-event, and client-prop diagnostics for
   browser-expression analysis in `citry check` and the language server.
-- Added `citry.csp.incompatible-browser-code` for version-pinned Alpine CSP
-  compatibility findings in `citry check` and the language server.
 - Added stable i18n diagnostics for invalid catalogs, unknown messages, bad
   arguments, unsafe cross-language fallback, and invalid client-message
   declarations in the checker and language server.
@@ -22,3 +20,5 @@
 - Added `citry.i18n.missing-param-type`, the configurable `citry check`
   warning for a message variable without a `# @param` type, which the i18n
   compiler already reported.
+- Removed `citry.csp.incompatible-browser-code`. Citry compiles Vue
+  expressions on the server, so the rule had nothing left to report.

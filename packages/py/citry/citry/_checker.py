@@ -82,7 +82,6 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
-    lint_csp_compatibility,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
     lint_undeclared_template_emits,
@@ -746,24 +745,6 @@ def _check_template(
         )
     if engine is not None and source.consumers:
         findings.extend(_emit_findings(engine, source, browser_hosts))
-    csp_mode = engine.settings.security_csp if engine is not None else None
-    for csp_finding in lint_csp_compatibility(browser_hosts, vue_lint_consumers, csp_mode):
-        line, column = _byte_offset_coordinates(source.content, csp_finding.start_index)
-        end_line, end_column = _byte_offset_coordinates(source.content, csp_finding.end_index)
-        findings.append(
-            CheckFinding(
-                origin=source.origin,
-                message=csp_finding.message,
-                code=csp_finding.code,
-                severity=csp_finding.severity,
-                start_index=csp_finding.start_index,
-                end_index=csp_finding.end_index,
-                line=line,
-                column=column,
-                end_line=end_line,
-                end_column=end_column,
-            )
-        )
     for target_error in browser_state_binding_target_errors(template, parse_nested=nested_parser):
         findings.append(
             _browser_template_finding(

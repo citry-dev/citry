@@ -6,12 +6,9 @@ import html as html_module
 import re
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from citry._output_html import OutputAttr, OutputTemplate, scan_output_html
-
-if TYPE_CHECKING:
-    from citry.citry_render import CitryRender
 
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 _ENTITY_RE = re.compile(r"&(?:#[xX][0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]+);?")
@@ -141,21 +138,19 @@ _SVG_NATIVE_EVENT_ATTRIBUTES = frozenset({"onactivate", "onbegin", "onend", "onr
 
 @dataclass(frozen=True, slots=True)
 class _CspRenderFinding:
-    """One deduplicated problem found in reached or settled render output."""
+    """One deduplicated problem found in the render output."""
 
     detail: str
     component: str
     attribute: str | None
-    range_kind: Literal["source", "pre-extension HTML", "settled HTML"]
-    origin: str | None = None
+    range_kind: Literal["pre-extension HTML", "settled HTML"]
     start_index: int | None = None
     end_index: int | None = None
 
     def display(self) -> str:
-        source = f" ({self.origin})" if self.origin else ""
         attribute = f", attribute {self.attribute!r}" if self.attribute is not None else ""
         position = "" if self.start_index is None else f", {self.range_kind} bytes {self.start_index}:{self.end_index}"
-        return f"{self.component}{source}{attribute}{position}: {self.detail}"
+        return f"{self.component}{attribute}{position}: {self.detail}"
 
 
 class _CspRenderValidator:
@@ -169,9 +164,6 @@ class _CspRenderValidator:
         self._seen: set[tuple[object, ...]] = set()
         self._site_counts: dict[tuple[str, tuple[object, ...]], int] = {}
         self._pre_extension_raw: dict[tuple[str, str], int] = {}
-
-    def validate_reached_bindings(self, root: CitryRender) -> None:
-        """Component-boundary browser bindings are rejected before serialization."""
 
     def validate_settled_html(
         self,
@@ -389,8 +381,7 @@ class _CspRenderValidator:
         end: int | None,
         *,
         attribute: str | None = None,
-        range_kind: Literal["source", "pre-extension HTML", "settled HTML"] = "settled HTML",
-        origin: str | None = None,
+        range_kind: Literal["pre-extension HTML", "settled HTML"] = "settled HTML",
         dedupe_key: tuple[object, ...] | None = None,
     ) -> None:
         key = dedupe_key or (detail, component, attribute, range_kind, start, end)
@@ -403,7 +394,6 @@ class _CspRenderValidator:
                 component=component,
                 attribute=attribute,
                 range_kind=range_kind,
-                origin=origin,
                 start_index=start,
                 end_index=end,
             )

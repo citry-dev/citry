@@ -352,8 +352,8 @@ def test_a_citry_finding_on_the_same_text_wins():
     )
     unrelated = types.Diagnostic(
         types.Range(types.Position(0, 1), types.Position(0, 3)),
-        "csp",
-        code="citry.csp.incompatible-browser-code",
+        "alpine",
+        code="citry.template.alpine-attribute",
     )
 
     assert map_type_check_findings((projection,), (finding,), (citry,)) == ()

@@ -32,7 +32,6 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
-    lint_csp_compatibility,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
     lint_undeclared_template_emits,
@@ -367,23 +366,6 @@ def test_case_variant_dynamic_element_uses_vue_precompiled_evaluator_context():
         ("iframe", "normal"),
         ("c-card", "raw"),
     ]
-    findings = lint_csp_compatibility(
-        expressions,
-        (VueLintConsumer(frozenset({"value"}), "ignore"),),
-        "strict",
-    )
-    assert findings == ()
-
-
-def test_vue_precompiled_expressions_do_not_use_the_legacy_csp_evaluator():
-    expressions = browser_expressions(parse_template('<div v-html="markup"></div><button @click="save()"></button>'))
-    consumer = VueLintConsumer(frozenset({"markup", "save"}), "ignore")
-
-    assert lint_csp_compatibility(expressions, (consumer,), "off") == ()
-    assert lint_csp_compatibility(expressions, (consumer,), "warn") == ()
-    assert lint_csp_compatibility(expressions, (consumer,), "strict") == ()
-    with pytest.raises(ValueError, match="Unknown CSP compatibility mode"):
-        lint_csp_compatibility(expressions, (consumer,), "invalid")  # type: ignore[arg-type]
 
 
 def test_declarative_event_handlers_preserve_wire_names_arguments_and_nested_ranges():

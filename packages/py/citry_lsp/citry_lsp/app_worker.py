@@ -116,10 +116,6 @@ def _run(app: str, workspace: Path) -> dict[str, object]:
         "catalog": catalog.to_dict(),
         "source_analysis": _source_analysis(engine, catalog, analysis, app),
         "extensions": _extension_analysis(engine),
-        "engine_settings": {
-            "version": 1,
-            "security_csp": engine.settings.security_csp,
-        },
     }
 
 

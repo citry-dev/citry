@@ -385,17 +385,6 @@ class AttributeValueFinding:
 
 
 @dataclass(frozen=True, slots=True)
-class CspCompatibilityFinding:
-    """Report one browser host incompatible with the selected Vue CSP build."""
-
-    message: str
-    code: str
-    severity: Literal["warning", "error"]
-    start_index: int
-    end_index: int
-
-
-@dataclass(frozen=True, slots=True)
 class ComponentJsLintConsumer:
     """Describe globals and severity for one component JavaScript consumer."""
 
@@ -1263,23 +1252,6 @@ def _attribute_value_message(
         suggestion=suggestion,
         allowed=listed,
     )
-
-
-def lint_csp_compatibility(
-    expressions: Sequence[BrowserExpression],
-    consumers: Sequence[VueLintConsumer],
-    mode: Literal["off", "warn", "strict"] | None,
-) -> tuple[CspCompatibilityFinding, ...]:
-    """
-    Validate the mode for Vue expressions compiled into script assets.
-
-    Asset and dangerous-HTML checks run at serialization boundaries.
-    """
-    del expressions, consumers
-    if mode in {None, "off", "warn", "strict"}:
-        return ()
-    msg = f"Unknown CSP compatibility mode: {mode!r}"
-    raise ValueError(msg)
 
 
 def lint_unknown_component_js_variables(
@@ -5021,7 +4993,6 @@ __all__ = [
     "ComponentJsLintConsumer",
     "ComponentJsLintFinding",
     "ComponentNameMatch",
-    "CspCompatibilityFinding",
     "CssDataCompletion",
     "CssDataReference",
     "JsonWireField",
@@ -5104,7 +5075,6 @@ __all__ = [
     "json_wire_type_from_expression",
     "lint_alpine_attributes",
     "lint_attribute_values",
-    "lint_csp_compatibility",
     "lint_undeclared_component_js_emits",
     "lint_undeclared_component_listeners",
     "lint_undeclared_template_emits",

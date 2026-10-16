@@ -88,14 +88,17 @@ walks through every step.
   [proxy](https://citry.dev/guides/upgrading-to-0-6-0/#proxies-and-cdns)).
 - **Lint settings and diagnostic codes:** the Alpine names become Vue
   names, such as `rule_unknown_vue_variable` and
-  `citry.vue.unknown-variable`
+  `citry.vue.unknown-variable`, and `citry.csp.incompatible-browser-code`
+  is removed because Citry compiles Vue expressions on the server, so they
+  never need `unsafe-eval`
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-settings-and-extensions)).
 - **Extensions and Python tools:** dependency scripts on interactive pages
   must be classic JavaScript, `OnSerializeContext` and
   `OnDependenciesContext` gain `selected_render`, `ctx.before_manifest`
   becomes `ctx.early_scripts`, `URLRoute` checks `methods`,
-  `citry.analysis` results leave `self` out of `parameters`, and the
-  `TemplateNode` class is removed
+  `citry.analysis` results leave `self` out of `parameters`,
+  `citry.analysis.lint_csp_compatibility` and `CspCompatibilityFinding` are
+  removed, and the `TemplateNode` class is removed
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-settings-and-extensions)).
 - **Subclasses name the parent class to add inputs:** a nested `Kwargs`,
   `Slots`, `State`, `TemplateData`, `JsData`, or `CssData` on a subclass
