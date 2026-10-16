@@ -14,6 +14,7 @@ from uuid import uuid4
 from playwright.sync_api import Browser, sync_playwright
 
 from citry_bench.browser import record_not_run_session, run_session
+from citry_bench.compose import compose
 from citry_bench.config import CACHE, ROOT, digest, profile
 from citry_bench.lifecycle import application
 from citry_bench.memory import ProcessIdentity, SessionMemoryObserver, endpoint_process_memory, pin_process
@@ -296,6 +297,13 @@ def execute(settings: dict, *, qualification: bool, output: Path | None = None) 
     return directory
 
 
+def run_directory(value: str) -> Path:
+    """Accept a run folder path or the id of a run under `.benchmarks/runs/`."""
+    # Absolute, so a composed manifest's run paths work from any folder.
+    path = Path(value)
+    return (path if path.is_dir() else CACHE / "runs" / value).resolve()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -307,15 +315,21 @@ def main() -> int:
     report_command = commands.add_parser("report")
     report_command.add_argument("run")
     report_command.add_argument("--memory-run")
+    compose_command = commands.add_parser("compose")
+    compose_command.add_argument("--output", type=Path, required=True)
+    # One qualification run and the measurement run made from the same build,
+    # repeated for each run whose apps the combined report takes.
+    compose_command.add_argument(
+        "--runs", nargs=2, action="append", required=True, metavar=("QUALIFY_RUN", "MEASUREMENT_RUN")
+    )
     args = parser.parse_args()
     try:
-        if args.command == "report":
-            path = Path(args.run)
-            if not path.is_dir():
-                path = CACHE / "runs" / args.run
-            memory_path = Path(args.memory_run) if args.memory_run else None
-            if memory_path is not None and not memory_path.is_dir():
-                memory_path = CACHE / "runs" / memory_path
+        if args.command == "compose":
+            pairs = [(run_directory(qualification), run_directory(run)) for qualification, run in args.runs]
+            path = compose(args.output, pairs, command=sys.argv)
+        elif args.command == "report":
+            path = run_directory(args.run)
+            memory_path = run_directory(args.memory_run) if args.memory_run else None
             report(path, memory_directory=memory_path)
         else:
             settings = profile(args.profile)
