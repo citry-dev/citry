@@ -1,4 +1,4 @@
-<article c-bind="row_attrs" data-output-expanded="true" x-data="{ open: true }">
+<article c-bind="row_attrs" data-output-expanded="true">
 <header>
 <span class="row-title">{{ row['title'] }}</span>
 <span class="row-status">{{ row['status'] }}</span>
@@ -15,7 +15,7 @@
 <button c-data-bench-action="row['select_action']">Select</button>
 </form>
 <button type="button" @click="open = !open" :aria-expanded="open">Output details</button>
-<div x-show="open">
+<div v-show="open">
 <section>
 <h4>Dependencies</h4>
 <c-if cond="row['dependencies']">

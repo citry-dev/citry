@@ -1,9 +1,9 @@
-name = "vue-direct"
+name = "release-0.6.0"
 mode = "native"
-apps = ["citry", "citry_vue", "django_htmx_alpine", "python_vue", "python_react"]
+apps = ["citry", "django_htmx_alpine", "django_rusty_templates", "fasthtml", "reactpy", "tetra", "unicorn", "reflex", "jinja_htmx_alpine", "django_components", "python_vue", "python_react", "next", "nuxt"]
 scenario = "project_board"
 scenario_revision = "canonical-project-v1"
-counts = [14, 140]
+counts = [14, 140, 1400]
 browser = "chromium"
 python = "3.12.13"
 blocks = 1
@@ -17,7 +17,3 @@ network = "loopback"
 compression = "identity"
 seed = 1729
 publication = false
-
-[local_wheels]
-citry = ".benchmarks/wheels/vue-direct/citry-0.5.0-py3-none-any.whl"
-citry-core = ".benchmarks/wheels/citry_core-1.7.0-cp310-abi3-macosx_11_0_arm64.whl"

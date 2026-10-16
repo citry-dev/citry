@@ -14,7 +14,7 @@ from citry._protocol.events import build_call, build_call_envelope
 from django.test import Client
 
 
-class CitryVueServerTests(unittest.TestCase):
+class CitryServerTests(unittest.TestCase):
     def test_board_js_data_reuses_template_snapshot_revision(self) -> None:
         state = {"revision": 7, "phase_groups": []}
         component = app.Board._create_instance(kwargs={"session": "snapshot-reuse"}, slots={})

@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from uuid import uuid4
 
@@ -66,6 +67,26 @@ def check_native_build(name: str, installed: dict) -> None:
         "write it to the path in the benchmark profile's `[local_wheels]` table, and prepare again. "
         f"To measure the debug build on purpose, set {ALLOW_DEBUG_NATIVE_ENV}=1."
     )
+
+
+def unpublished_locked_packages(directory: Path, replaced: list[str]) -> list[str]:
+    """Return locked distributions that only a local wheel folder can supply.
+
+    Before a release is published, an app's lockfile may resolve that release
+    from wheels built on the maintainer's machine. Such an entry installs only
+    when a profile replaces it through `[local_wheels]`; naming it here turns
+    uv's missing-file error into an instruction.
+    """
+    lock = directory / "uv.lock"
+    if not lock.is_file():
+        return []
+    result = []
+    for package in tomllib.loads(lock.read_text()).get("package", []):
+        registry = package.get("source", {}).get("registry")
+        if registry is not None and not registry.startswith(("https://", "http://")):
+            if package["name"] not in replaced:
+                result.append(f"{package['name']}=={package['version']}")
+    return result
 
 
 def write_json(path: Path, data: object) -> None:
@@ -145,7 +166,25 @@ def prepared(settings: dict) -> tuple[Path, dict]:
     return directory, data
 
 
+def check_installable(settings: dict) -> None:
+    """Stop before any work when an app's lockfile needs wheels the profile does not supply."""
+    configured = settings.get("local_wheels", {})
+    for name in settings["apps"]:
+        declaration = adapter(WEB / "apps" / name)
+        if declaration["runtime"] != "python":
+            continue
+        replaced = [item for item in declaration["local_wheels"] if item in configured]
+        unpublished = unpublished_locked_packages(WEB / "apps" / name, replaced)
+        if unpublished:
+            raise ValueError(
+                f"{name} locks {', '.join(unpublished)} from local wheels, not from PyPI. "
+                "Build those wheels and select them in the profile's `[local_wheels]` table; "
+                f"apps/{name}/README.md explains how."
+            )
+
+
 def prepare(settings: dict) -> Path:
+    check_installable(settings)
     inputs = identity(settings)
     directory = CACHE / "builds" / digest(inputs)
     marker = directory / "prepared.json"
@@ -165,10 +204,19 @@ def prepare(settings: dict) -> Path:
         declaration = adapter(WEB / "apps" / name)
         copy_sources(WEB / "apps" / name, target, tuple(declaration["source_exclude"]))
         copy_sources(WEB / "scenarios" / settings["scenario"], target / "scenario")
+        # An app may name distributions that a profile can replace with
+        # locally built wheels, to test a release before it is published.
+        # Without a `[local_wheels]` table the app installs only its lockfile.
+        configured = settings.get("local_wheels", {})
+        selected_wheels = [item for item in declaration["local_wheels"] if item in configured]
         if declaration["runtime"] == "python":
             sync = ["uv", "sync", "--frozen", "--no-dev", "--python", settings["python"]]
             if not declaration["allow_dependency_build"]:
                 sync.insert(3, "--no-build")
+            # The lockfile's copy of a replaced distribution is never
+            # installed, so its recorded source need not exist on this machine.
+            for item in selected_wheels:
+                sync.extend(["--no-install-package", item])
             subprocess.run(
                 sync,
                 cwd=target,
@@ -176,14 +224,7 @@ def prepare(settings: dict) -> Path:
                 check=True,
             )
         python = runtime_python(target, declaration)
-        selected_wheels = declaration["local_wheels"]
         if selected_wheels:
-            configured = settings.get("local_wheels", {})
-            missing = set(selected_wheels) - set(configured)
-            if missing:
-                raise ValueError(
-                    f"Adapter {name} requires local wheels not configured by the profile: {sorted(missing)}"
-                )
             wheel_paths = [Path(configured[item]) for item in selected_wheels]
             wheel_paths = [path if path.is_absolute() else ROOT / path for path in wheel_paths]
             subprocess.run(

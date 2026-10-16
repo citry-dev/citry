@@ -1,38 +1,86 @@
-# Citry project board
+# Citry
 
-This application uses Citry 0.5.0's typed server events, signed component state,
-HTML rendering and normal browser update path. The `Board` event component owns
-the forms and nests layout, provider, tab, detail, phase and output components.
-The page shell owns an independent Alpine disclosure. It uses
-the published wheel, with no local runtime patches or transport replacements.
+This app serves the canonical project board with Citry 0.6.0 and its default
+Vue renderer. It uses ordinary components, Citry's default engine settings
+and no browser startup flags. Actions travel through Citry's normal signed,
+CSRF-protected Events POST route. For timing only, a small middleware in
+`app.py` reports Citry's render span as `Server-Timing: prepare` and marks
+compiled Vue definitions as immutable; each page load uses a fresh browser
+context, so that cache header does not shorten measured loads.
 
-Citry serves its manager, bundled Alpine and event runtime from local mounted
-routes. The shared scenario serves the stylesheet; `assets/readiness.js`
-observes lifecycle events. No navigation requires a CDN.
+The page mounts two Vue islands: the `Board` component, which owns every server
+action, and a separate plain Vue island for the local disclosure and preserved
+draft. The 14 to 1,400 repeated output rows are `ProjectOutput` components with
+`simple="vue"`, so each row gets its own Vue state without a Python component
+instance. Readiness waits for both Vue islands to finish rendering, the Board
+callbacks, and Events setup.
 
-At the 14-output workload, the browser component graph contains 29 component
-instances and 7 native fill records: one Page, Board, ProjectLayout, Layout,
-provider, ProjectTabs and ProjectInfo, plus 3 note panels, 5 phase groups and
-14 keyed outputs. The fixed shell has five mounted tab panels and five open
-phase groups. The 14/140/1400 output sizes replicate the canonical nested
-cohorts to 4/40/400 notes, 8/80/800 comments, 2/20/200 roles, 1/10/100
-bookmarks, 1/10/100 attachments and 2/20/200 dependencies.
+## Server HTML and browser mounting
 
-Install the exact dependencies with `uv sync --frozen --python 3.12` from this
-directory, then launch with the command in `adapter.toml`. Open
-`/?count=14&session=manual`. The benchmark runner supplies unique hidden operation IDs; manual actions
-use the default `manual` ID.
+With Citry's default settings the server writes every board's HTML, and Vue
+hydrates it (adopts those nodes instead of building them) at every size, from
+14 to 1,400 outputs.
 
-See the shared scenario README for action semantics, readiness and limits.
+`adapter.toml` states this to the runner as `rendering = "hybrid"` and
+`update_payload = "json"`. `summary.json` therefore lists every initial page's
+output as HTML and every action response as JSON (`server_prepare_kinds`).
+`test_app.py` renders each board size and fails if one of them stops
+hydrating.
 
-## Server HTML render timing
+## What the server timing covers
 
-The render span covers `CitryElement.render` plus `CitryRender.serialize` and
-`serialize_result`, counting nested calls once. It includes component template-data callbacks,
-ownership/dependency processing and HTML serialization.
+The app reports every measured server span as `Server-Timing: prepare`. On
+a page load the span covers Citry rendering, the Vue payload and definitions,
+the server HTML when Citry writes it, and serialization of the document. On an
+action it also covers the final Events envelope validation and serialization.
+Asset serving, shared model updates, transport, Vue work and browser callbacks
+stay outside the span. Because the app reports no separate `render` span,
+the raw data marks `server_render_status` as `missing` for every page; `summary.json` keeps the `prepare` value as `server_prepare_median_ms`.
 
-A request-scoped `Server-Timing: render` metric reports the sum of these spans. It excludes
-action mutation, CSRF checks, network transfer and browser work. Static responses and failed
-responses have no render metric. The existing `application` metric remains a broader, separate
-measurement. These hooks are benchmark instrumentation against the pinned release, not
-framework changes.
+An action that introduces a new compiled definition can make a later script
+request after the main Events exchange. The runner still reports the correct
+total time and summed payload bytes, but it classifies that action's latency
+phases as unclassified rather than presenting the script load as browser time.
+
+## Which Citry it installs
+
+`pyproject.toml` pins `citry==0.6.0` and `citry-core==1.8.0`, the release that
+ships the Vue renderer this app uses.
+
+Until that release is on PyPI, `uv.lock` resolves those two packages from
+wheels built from this repository and placed in
+`.benchmarks/wheels/citry-0.6.0/` at the repository root (the recorded
+relative path works from this folder, where you run `uv lock`; the runner
+never installs those two lock entries). Every other package comes from PyPI. In that state `citry-bench prepare` refuses a profile that
+includes this app unless the profile names those wheels in a `[local_wheels]`
+table, and the `citry-local-wheels` profile does. The
+[suite README](../../README.md#test-citry-with-wheels-you-build) shows how to
+build them.
+
+Once Citry 0.6.0 and citry-core 1.8.0 are published, lock the app against
+PyPI, from this folder:
+
+```bash
+uv lock --python 3.12.13 \
+  --upgrade-package citry --upgrade-package citry-core
+```
+
+A profile can still replace both packages with wheels you build, to measure a
+change before it is released. The runner hashes those wheels into the
+prepared-build identity and installs them only into this app's environment.
+
+## Run the tests
+
+With the wheels in place (or after you lock the app against PyPI, above),
+from this folder:
+
+```bash
+uv sync --frozen --python 3.12.13
+uv run --no-sync python -m unittest test_app -q
+uv run --no-sync uvicorn app:application --host 127.0.0.1 --port 8000
+```
+
+Open `/?count=14&session=manual` to see the board; 140 and 1400 outputs use
+the same app. `test_hydration_e2e.py` is a separate browser test that checks
+hydrated pages behave like pages Vue builds itself; it needs pytest and
+Playwright, which this app's environment does not install.

@@ -930,7 +930,7 @@ def test_report_groups_frameworks_sections_and_shares_select_state(tmp_path, mon
     monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(CACHE / "browsers"))
     # One app from each framework group plus one the report does not know,
     # recorded out of display order to prove the report orders them itself.
-    apps = ["python_vue", "zz_custom", "next", "django_components", "fasthtml", "citry_vue", "django_rusty_templates"]
+    apps = ["python_vue", "zz_custom", "next", "django_components", "fasthtml", "citry", "django_rusty_templates"]
     for app in apps:
         for count in (140, 1400):
             for action in ("initial", "select"):
@@ -987,7 +987,7 @@ def test_report_groups_frameworks_sections_and_shares_select_state(tmp_path, mon
         assert set(heading_x) == {name_x}
         labels = svg.locator("text[text-anchor='end']:not(.group-heading)").all_text_contents()
         assert labels == [
-            "Citry (Vue)",
+            "Citry",
             "Rusty + HTMX + Alpine",
             "django-components",
             "FastHTML",

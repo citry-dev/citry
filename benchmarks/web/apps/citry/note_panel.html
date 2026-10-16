@@ -1,4 +1,4 @@
-<section c-id="tab['id']" c-data-tab-panel="tab['id']" x-data="{ activeTab: 'outputs' }" @project-tab-change.window="activeTab = $event.detail" c-x-show="'activeTab === \'%s\'' % tab['id']">
+<section c-id="tab['id']" c-data-tab-panel="tab['id']" v-show="activeTab === tab_id">
 <h2>{{ tab['title'] }}</h2>
 <article c-for="note in tab['notes']" c-data-note-id="note['id']">
 <p class="note-text">{{ note['text'] }}</p>
@@ -11,5 +11,3 @@
 </details>
 </article>
 </section>
-
-

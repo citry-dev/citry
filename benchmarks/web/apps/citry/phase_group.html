@@ -1,8 +1,8 @@
-<section c-id="phase['anchor']" c-data-phase-id="phase['id']" data-phase-expanded="true" x-data="{ open: true }">
+<section c-id="phase['anchor']" c-data-phase-id="phase['id']" data-phase-expanded="true">
 <button type="button" @click="open = !open" :aria-expanded="open">
 <h3 class="phase-title">{{ phase['title'] }}</h3>
 </button>
-<div x-show="open">
+<div v-show="open">
 <c-if cond="phase['outputs']">
 <c-ProjectOutput c-for="row in phase['outputs']" #c-key="row['id']" c-row="row" />
 </c-if>

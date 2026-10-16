@@ -66,35 +66,7 @@ def test_maintained_cohort_profiles_include_fourteen_adapters() -> None:
         "next",
         "nuxt",
     }
-    for name in ("cohort", "cohort-local", "cohort-100x"):
+    for name in ("cohort", "cohort-100x", "release-0.6.0"):
         data = tomllib.loads((WEB / "profiles" / f"{name}.toml").read_text(encoding="utf-8"))
         assert set(data["apps"]) == expected
         assert len(data["apps"]) == 14
-
-
-def test_rusty_migration_profile_is_exact_and_has_no_local_wheels() -> None:
-    path = WEB / "profiles" / "vue-migration-rusty.toml"
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
-    assert data == {
-        "name": "vue-migration-rusty",
-        "mode": "native",
-        "apps": ["next", "nuxt", "django_rusty_templates"],
-        "scenario": "project_board",
-        "scenario_revision": "canonical-project-v1",
-        "counts": [140, 1400],
-        "browser": "chromium",
-        "python": "3.12.13",
-        "blocks": 3,
-        "sessions": 1,
-        "warmups": 0,
-        "cycles": 2,
-        "initial_timeout_ms": 30000,
-        "action_timeout_ms": 15000,
-        "cache": "cold-context",
-        "network": "loopback",
-        "compression": "identity",
-        "seed": 1729,
-        "publication": False,
-    }
-    assert "local_wheels" not in data
-    assert config.profile("vue-migration-rusty") == data

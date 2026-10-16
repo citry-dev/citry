@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import tomllib
 from citry_bench import cli, config, prepare
 from citry_bench.browser import (
     collect_network_then_heap_after_gc,
@@ -473,10 +474,10 @@ def test_hybrid_adapter_mounts_boards_below_hydration_min_count_in_the_browser(t
     assert config.initial_rendering({}, 14) == "server"
 
 
-def test_citry_vue_declares_server_html_for_every_board() -> None:
+def test_citry_declares_server_html_for_every_board() -> None:
     # With its default settings Citry writes server HTML for Vue to hydrate
     # at every board size; the app's own test checks the pages agree.
-    declaration = config.adapter(config.WEB / "apps" / "citry_vue")
+    declaration = config.adapter(config.WEB / "apps" / "citry")
 
     assert declaration["rendering"] == "hybrid"
     assert declaration["update_payload"] == "json"
@@ -529,3 +530,49 @@ def test_heap_after_gc_waits_until_network_accounting_reads_response_bodies() ->
     # Forced collection makes Chromium drop script bodies, so it must follow collect.
     assert calls == [("collect", "probe"), ("gc", "probe"), ("collect", "select"), ("collect", "plain")]
     assert payload == {"errors": []}
+
+
+def test_every_profile_loads_and_only_the_testing_profile_names_local_wheels(tmp_path, monkeypatch):
+    # Profiles that name wheels you build load only once those files exist, so
+    # create placeholder files at the paths they name under a temporary root.
+    names = sorted(path.stem for path in (config.WEB / "profiles").glob("*.toml"))
+    assert names, "no profiles found"
+    monkeypatch.setattr(config, "ROOT", tmp_path)
+    with_wheels = []
+    for name in names:
+        wheels = tomllib.loads((config.WEB / "profiles" / f"{name}.toml").read_text()).get("local_wheels", {})
+        for value in wheels.values():
+            (tmp_path / value).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / value).write_bytes(b"placeholder")
+        data = config.profile(name)
+        assert data["name"] == name
+        if wheels:
+            with_wheels.append(name)
+    # A default or release profile must install only what the lockfiles pin.
+    assert with_wheels == ["citry-local-wheels"]
+
+
+def test_release_profile_is_the_cohort_plus_the_docs_page_board_size():
+    cohort = tomllib.loads((config.WEB / "profiles/cohort.toml").read_text())
+    release = tomllib.loads((config.WEB / "profiles/release-0.6.0.toml").read_text())
+    assert release["counts"] == [*cohort["counts"], 1400]
+    assert {**release, "name": "cohort", "counts": cohort["counts"]} == cohort
+
+
+def test_prepare_stops_when_a_lockfile_needs_wheels_the_profile_does_not_supply(tmp_path, monkeypatch):
+    app = tmp_path / "apps/fixture"
+    app.mkdir(parents=True)
+    (app / "adapter.toml").write_text(
+        '[app]\nname="fixture"\nlaunch=["python"]\nhealth="/health"\nlocal_wheels=["citry", "citry-core"]\n'
+    )
+    (app / "uv.lock").write_text(
+        'version = 1\n\n[[package]]\nname = "citry"\nversion = "0.6.0"\n'
+        'source = { registry = "../../../../.benchmarks/wheels/citry-0.6.0" }\n\n'
+        '[[package]]\nname = "django"\nversion = "6.1.1"\nsource = { registry = "https://pypi.org/simple" }\n'
+    )
+    monkeypatch.setattr(prepare, "WEB", tmp_path)
+    settings = {"apps": ["fixture"]}
+    with pytest.raises(ValueError, match=r"fixture locks citry==0\.6\.0 from local wheels"):
+        prepare.check_installable(settings)
+    # The same lockfile installs once the profile replaces that package.
+    prepare.check_installable({**settings, "local_wheels": {"citry": "citry.whl"}})

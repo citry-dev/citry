@@ -3,13 +3,12 @@ const data = JSON.parse(document.getElementById('report-data').textContent);
 const names = {citry:'Citry', django_htmx_alpine:'Django + HTMX + Alpine', fasthtml:'FastHTML',
   tetra:'Tetra', unicorn:'django-unicorn', reactpy:'ReactPy', reflex:'Reflex',
   jinja_htmx_alpine:'Jinja + HTMX + Alpine', django_components:'django-components',
-  citry_vue:'Citry (Vue)',
   python_vue:'Python API + Vue', python_react:'Python API + React',
   next:'Next.js', nuxt:'Nuxt', nuxt_csr:'Nuxt CSR control',
   django_rusty_templates:'Rusty + HTMX + Alpine'};
 // Frameworks are listed in fixed groups so a reader compares like with like.
 // An app missing from these lists still appears, in a last group of its own.
-const appGroups=[['Citry',['citry','citry_vue']],
+const appGroups=[['Citry',['citry']],
   ['Django libraries',['django_htmx_alpine','django_rusty_templates','jinja_htmx_alpine','tetra','unicorn',
     'django_components']],
   ['Other Python libraries',['fasthtml','reactpy','reflex']],
