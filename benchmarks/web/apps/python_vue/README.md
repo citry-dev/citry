@@ -1,13 +1,13 @@
 # Python JSON API + Vue project board
 
-This adapter uses Vue 3.5.42 to render a browser application against the same
+This app uses Vue 3.5.42 to render a browser application against the same
 Starlette 1.6.0 JSON backend as its React counterpart. The server first returns
 an HTML shell and signed session cookie. The client loads its local production
 bundle, fetches `/initial`, and renders the returned board. Initial readiness
 includes that JSON fetch, browser rendering and lifecycle completion. There is
 no server-rendered board or hydration of pre-rendered HTML.
 
-`scenario/json_api.py` owns both adapters' shell, JSON projection, state
+`scenario/json_api.py` owns both apps' shell, JSON projection, state
 operations, CSRF checks, signed sessions, asset delivery and timing middleware.
 Its domain data and CSS come from the shared project-board scenario. The initial
 JSON response supplies a CSRF token stored in the signed session cookie. Action
@@ -26,7 +26,7 @@ Vue uses `createApp`, reactive state, provide/inject and native render functions
 phase and output expansion panels, notes, comments, roles, bookmarks, output
 forms, dependencies and attachments. The Outputs tab is initially active; tab,
 panel, disclosure and output display-control interactions stay local.
-After assigning each response to the reactive board, the adapter awaits
+After assigning each response to the reactive board, the app awaits
 `nextTick` before signaling that the new elements and handlers are ready.
 The observer counts outstanding application fetches and emits readiness only
 after JSON parsing and framework commit. Network failures log an error and emit
@@ -61,7 +61,7 @@ runs through response start, including middleware, domain work and JSON
 serialization; it excludes body transmission. This is a local diagnostic
 comparison. Instrumentation can affect timings; semantic snapshot cost is
 reported separately, while residual event-loop effects are not calibrated.
-The adapter makes no publication ranking claim.
+The app makes no publication ranking claim.
 
 Successful `/initial` and `/action` responses also emit `Server-Timing: prepare`.
 That narrower span starts with the post-mutation domain snapshot and includes

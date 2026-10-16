@@ -1,6 +1,6 @@
 # Jinja + HTMX + Alpine project board
 
-This adapter renders the shared project board with Jinja2 3.1.6 through
+This app renders the shared project board with Jinja2 3.1.6 through
 Starlette 1.6.0's `Jinja2Templates` and `TemplateResponse`. Uvicorn 0.52.4 serves
 one production process. This is a Starlette-hosted HTML template entry;
 comparison with Django includes the different hosts' request processing.
@@ -24,10 +24,10 @@ outputs it contains 4 notes, 8 comments, 2 roles, 1 bookmark, 1 attachment and
 HTMX 2.0.10 submits forms and replaces the board with its normal `outerHTML`
 swap and settle delay. Alpine 3.17.2 owns the independent local disclosure.
 Both files, licenses and source hashes are copied from the existing HTMX
-adapters into `assets/`. All browser resources are served locally; the CSS
+apps into `assets/`. All browser resources are served locally; the CSS
 comes from the shared scenario. Browser readiness uses `alpine:initialized`
 or `htmx:afterSettle`, followed by Alpine's next tick, with no pending HTMX
-request. The observer is identical to the other HTMX adapters.
+request. The observer is identical to the other HTMX apps.
 
 Starlette's signed-cookie session middleware stays enabled. The initial
 request creates a random CSRF token and stores it with the board session in
@@ -50,7 +50,7 @@ insertion, removal and reordering. Untimed qualification also selects the
 newly inserted row. The shared limits on preservation inside replaced content,
 asynchronous assets, nested lifecycle behavior and concurrent actions apply.
 The ready timestamp precedes synchronous semantic capture. Its separately
-reported cost can still perturb the event loop, so this adapter alone does not
+reported cost can still perturb the event loop, so this app alone does not
 establish a public performance comparison.
 
 ## Run locally

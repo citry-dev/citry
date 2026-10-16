@@ -1,9 +1,9 @@
 # ReactPy project board
 
-This adapter uses ReactPy 1.1.0's Python components, state hooks, native form
+This app uses ReactPy 1.1.0's Python components, state hooks, native form
 events and WebSocket layout updates. Starlette 0.52.1 and Uvicorn 0.52.4 serve
 the production application. Starlette 1.x removed `add_websocket_route`, which
-ReactPy's supported backend still calls, so this adapter pins the compatible
+ReactPy's supported backend still calls, so this app pins the compatible
 0.x release. Package versions were checked on 2026-09-10.
 
 The implementation follows ReactPy's official
@@ -13,7 +13,7 @@ The installed release's client bundle uses Preact with React compatibility.
 It sends layout models over a persistent connection; its work is not a Python
 HTML serialization measurement.
 
-The adapter sets `REACTPY_DEBUG_MODE`, `REACTPY_ASYNC_RENDERING`,
+The app sets `REACTPY_DEBUG_MODE`, `REACTPY_ASYNC_RENDERING`,
 `REACTPY_CHECK_VDOM_SPEC` and `REACTPY_CHECK_JSON_ATTRS` to `false` before importing
 ReactPy. These match the pinned release's production defaults, including its
 synchronous renderer. The runner supplies `CITRY_BENCH_RUNTIME_DIR`; each process
@@ -54,7 +54,7 @@ accepted as proof of correctness.
 This endpoint includes ReactPy's script-effect scheduling and local-module
 initialization. It may be later than the earliest moment a control could work.
 Instrumentation can affect timings; semantic snapshot cost is reported separately,
-while residual event-loop effects are not calibrated. This adapter is not yet
+while residual event-loop effects are not calibrated. This app is not yet
 qualified for a public performance comparison. It does not estimate readiness
 from a WebSocket receipt or animation frame.
 
@@ -96,8 +96,8 @@ inside layout construction. The passive audit correlates the retained serializer
 string with the original outgoing frame after readiness; it does not hash or
 encode the payload in the measured path.
 
-The pinned client has automatic reconnection behavior. This first adapter
-qualifies one uninterrupted connection; disconnects, reconnects, extra messages,
+The pinned client has automatic reconnection behavior. This app qualifies
+only one uninterrupted connection; disconnects, reconnects, extra messages,
 missing correlation and failed actions must be recorded as failed trials.
 Concurrent submissions and independent updates are not qualified. The shared
 scenario's limits on deeper preservation and asynchronous assets also apply.

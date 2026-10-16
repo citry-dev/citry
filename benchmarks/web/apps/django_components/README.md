@@ -1,6 +1,6 @@
 # Django Components, HTMX and Alpine project board
 
-This adapter uses django-components 0.152.0 and djc-core 1.3.1 with Django 6.1.1,
+This app uses django-components 0.152.0 and djc-core 1.3.1 with Django 6.1.1,
 HTMX 2.0.10 and Alpine 3.17.2. Uvicorn 0.52.4 serves the production Django ASGI
 application with `DEBUG=False`. The independent lockfile pins published packages;
 it does not import the repository's Citry implementation.
@@ -31,7 +31,7 @@ synthetic-data scenario has no authentication or database.
 
 ## Native dependencies and readiness
 
-Page uses `deps_strategy="document"`; Board updates use `"fragment"`. The adapter
+Page uses `deps_strategy="document"`; Board updates use `"fragment"`. The app
 retains the framework's dependency manager, generated fragment loader and native
 dependency processing. It does not strip framework attributes or bypass rendering
 dependencies. The manager is served from the pinned wheel through Django's static
@@ -48,7 +48,7 @@ dependencies, asynchronous component callbacks and concurrent actions need
 separate qualification. Shared scenario assertions check the complete visible
 state and working controls after every update. The ready timestamp precedes the
 synchronous semantic capture, whose separately reported cost can still perturb
-the event loop. This adapter alone establishes no publication ranking.
+the event loop. This app alone establishes no publication ranking.
 
 `Server-Timing: application` covers synchronous Django middleware, the view,
 shared action and native component rendering. It excludes ASGI scheduling and

@@ -1,9 +1,9 @@
 # Tetra project board
 
-This adapter uses Tetra 0.8.5's ordinary `Component`, public Python methods,
+This app uses Tetra 0.8.5's ordinary `Component`, public Python methods,
 encrypted component state and HTTP update protocol. Alpine submits form values
 to `act`; Tetra sends and applies its normal response. The shared domain model,
-visible board, controls and sibling disclosure match the other adapters.
+visible board, controls and sibling disclosure match the other apps.
 
 At 14 outputs, rendering creates one stateful Board plus 24 native
 BasicComponent instances: ProjectLayout, ProjectInfo, 3 NotePanels, 5
@@ -19,7 +19,7 @@ distribution omit `tetra/components/default/link/link.html`, which its built-in
 `Link` imports during `django.setup()`. A normal installation fails with
 `ComponentError` before application initialization. The 0.9.0 and 0.9.1 wheels
 also lack that template. Version 0.8.5 defines these built-ins inline and starts
-without repairing the framework. This adapter represents 0.8.5, not the latest
+without repairing the framework. This app represents 0.8.5, not the latest
 Tetra release. Exact distribution identities are retained in `provenance.json`.
 
 The Django host runs with `DEBUG=False`, active CSRF protection and one Uvicorn
@@ -32,7 +32,7 @@ channel layer, WebSocket router, Redis service or reactive component is enabled.
 
 The documented `tetra_scripts include_alpine=True` tag emits the component
 library, stock Tetra runtime and bundled Alpine 3.15.4 with morph. Its default
-template selects unminified assets even with `DEBUG=False`; this adapter retains
+template selects unminified assets even with `DEBUG=False`; this app retains
 that behavior. An explicit minified Alpine configuration was rejected during
 qualification: the wheel's `alpinejs.cdn.min.js` has a stray final `c` expression
 that raises `ReferenceError`. No framework asset is repaired or error suppressed.
@@ -46,7 +46,7 @@ Alpine's next tick. `tetra:after-request` alone is insufficient: in this version
 it fires after fetch resolves, before response parsing and DOM morphing. The
 observer never replaces the transport or advances the server revision. Concurrent
 requests, reactive subscriptions and asynchronous component assets are outside
-this adapter's qualification scope.
+this app's qualification scope.
 
 From this directory:
 

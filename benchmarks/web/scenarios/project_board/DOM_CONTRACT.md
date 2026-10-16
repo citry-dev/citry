@@ -1,8 +1,8 @@
 # Canonical project-page DOM contract
 
-Every adapter renders the canonical project page with its native composition
+Every app renders the canonical project page with its native composition
 and event mechanisms. The shared runner reads the selectors below at each
-adapter's framework-ready endpoint. IDs must be unique within the document.
+app's framework-ready endpoint. IDs must be unique within the document.
 Entity data attributes contain decimal shared-model IDs.
 
 ## Page shell and controls
@@ -73,7 +73,7 @@ Entity data attributes contain decimal shared-model IDs.
   `[data-project-tags]` containers.
 
 The shared semantic snapshot records these values synchronously inside the
-ready callback. Adapters must not call ready until the complete model revision
+ready callback. Apps must not call ready until the complete model revision
 has committed. The runner supplies expected state from the independent shared
 oracle before each operation and rejects the mark if the snapshot differs.
 The callback records its timestamp before capture and reports capture and
@@ -88,6 +88,6 @@ content, and these visibility reads do not run inside the timed callback.
 Output forms expose their description textarea and completed checkbox as local
 display controls, plus the real shared select action. Per-output Save/Add and
 attachment editing behavior from the rendering fixture is outside this scenario
-model; adapters omit or disable those controls unless the shared model is
+model; apps omit or disable those controls unless the shared model is
 extended in a coordinated change. The project-title Save action remains part of
 the shared server sequence.

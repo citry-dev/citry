@@ -1,6 +1,6 @@
 # Django Unicorn project board
 
-This adapter renders the shared project board through django-unicorn 0.67.0,
+This app renders the shared project board through django-unicorn 0.67.0,
 Django 6.1.1 and Uvicorn 0.52.4 on Python 3.12.13. Unicorn renders a normal
 Django component template and uses its native JSON action protocol, state
 checksum, request queue and bundled morphdom implementation for updates.
@@ -9,7 +9,7 @@ Alpine 3.17.2 files in `assets/`.
 
 `BoardView` keeps the editable query, title input, operation and board session
 in Unicorn's serialized state. Its template context derives rows and revision
-from the same in-memory model as the other adapters. Derived rows are not
+from the same in-memory model as the other apps. Derived rows are not
 additional editable component state. Unicorn's normal component caches remain
 enabled; no application response or rendered-board cache is added.
 
@@ -52,7 +52,7 @@ Its duration is recorded as `observer_ms` inside the measured endpoint and
 is not subtracted. It is not calibrated across frameworks. The checks cover
 this component's synchronous handlers and the sibling Alpine UI; asynchronous
 application callbacks, nested components, polling and concurrent requests are
-outside this adapter's qualification.
+outside this app's qualification.
 
 The shared Django middleware records `Server-Timing: application` through
 synchronous middleware, component processing and rendering. It excludes ASGI

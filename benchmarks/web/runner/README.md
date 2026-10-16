@@ -16,6 +16,22 @@ Chromium instance for each two-page pair:
 citry-bench memory --profile smoke
 ```
 
+`compose` builds one report folder from several passed runs, taking each app
+from the run that measured it. Each `--runs` pair is a qualification run and
+the measurement run made from the same prepared build:
+
+```console
+citry-bench compose --output ../../../.benchmarks/reports/name \
+  --runs <qualify-run> <run> --runs <qualify-run> <run>
+```
+
+It refuses a run that did not pass, runs whose profiles differ in anything
+but their name, apps and `[local_wheels]` table, runs made with different
+runner or scenario sources, runs on another host or browser version, an app
+measured by two runs, and an output folder that already has files. The
+folder's `manifest.json` records which run measured each app and size; the
+docs script `docs_site/scripts/benchmark_data.py` reads it.
+
 Every initial page load also records the browser's own first contentful
 paint (`fcp_ms`) and largest contentful paint (`lcp_ms`). The instrumentation
 script registers `PerformanceObserver`s for `paint` and
@@ -60,18 +76,18 @@ successful loads. Rows from earlier runs have no paint fields either; the report
 labels those as not recorded, and their summary rows keep their original keys.
 The read happens after page capture and network accounting (and, in memory
 runs, the forced garbage collection), so its delay after readiness differs by
-adapter; `finalized_ms` records it. The observers add a small amount of work
+app; `finalized_ms` records it. The observers add a small amount of work
 inside the measured interval, which has not been measured. Changing the instrumentation changes the runner
 source identity, so run `prepare` and `qualify` again before the next
 measurement.
 
-An adapter may declare a relative `node` executable and use `{node}` in its
+An app may declare a relative `node` executable and use `{node}` in its
 launch command. This is reserved for applications whose build step downloads
-and verifies its own runtime (the Next and Nuxt adapters do this); the runner
+and verifies its own runtime (the Next and Nuxt apps do this); the runner
 never falls back to a system Node installation.
 
 `rendering = "hybrid"` is used when the initial navigation delivers server
-HTML but measured actions deliver a browser-side payload. Such adapters must
+HTML but measured actions deliver a browser-side payload. Such apps must
 also declare `update_payload = "json"` or `"delta"`; the runner reports initial
 HTML preparation and update preparation separately.
 
@@ -81,10 +97,10 @@ arrives as server HTML for the browser framework to hydrate. The browser mounts
 smaller boards itself, so the runner labels their initial output by transport
 (JSON over HTTP, deltas over WebSocket) and does not expect the board in the
 document before scripts run. The value must be a positive integer on a hybrid
-adapter; anything else is rejected. The runner cannot check it while measuring,
-so the adapter's own tests must.
+app; anything else is rejected. The runner cannot check it while measuring,
+so the app's own tests must.
 
-An adapter may set
+An app may set
 `timing_boundary = "first-chunk"` when its framework streams and the reported
 server span ends at the first response chunk; `summary.json` keeps that boundary
 in `server_prepare_boundaries` so it is not read as complete response
@@ -141,7 +157,7 @@ The report charts the server's work only as the server segment of the load and
 action charts: for a page load, the application span of the main document's
 `Server-Timing` header, the server's whole handling of the request. Each
 observation also records the narrower output-preparation span as
-`server_prepare_ms`: the `prepare` span (or the adapter's `render` span) added
+`server_prepare_ms`: the `prepare` span (or the app's `render` span) added
 up over every response of the load. It usually covers only the part that
 builds the output, and for a page built in the browser it covers the later JSON or WebSocket output that
 the document request never includes. `summary.json` keeps its median per row

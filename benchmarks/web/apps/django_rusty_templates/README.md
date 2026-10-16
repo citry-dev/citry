@@ -1,6 +1,6 @@
 # Django Rusty Templates, HTMX and Alpine project board
 
-This maintained adapter renders the canonical project board with the official
+This maintained app renders the canonical project board with the official
 `django_rusty_templates.RustyTemplates` Django backend at package version
 0.1.0. It uses that backend for both the initial document and every HTMX board
 fragment; the app has no DjangoTemplates fallback. The backend's native
@@ -20,15 +20,15 @@ The pinned upstream commit mishandles Django's `{% empty %}` branch when an
 iterable resolves to an existing empty list. The maintained Rusty template is a
 standard-DTL equivalent: every canonical empty branch uses
 `{% if sequence %}{% for ... %}...{% endfor %}{% else %}...{% endif %}`. A
-strict parity test renders the original Django adapter template through
+strict parity test renders the original Django app template through
 `DjangoTemplates` and this variant through the configured Rusty backend at 14,
 140 and 1,400 outputs across the initial state and all nine canonical action
 states, requiring byte-identical output.
 
 HTMX 2.0.10, Alpine 3.17.2, their licenses and readiness observer are retained
-byte-for-byte from the Django + HTMX + Alpine adapter. The canonical in-memory
+byte-for-byte from the Django + HTMX + Alpine app. The canonical in-memory
 model, CSRF checks, action keys and five phase groups are shared with that
-adapter. See the scenario README for the action semantics and readiness
+app. See the scenario README for the action semantics and readiness
 contract.
 
 Run locally from this directory:
@@ -39,7 +39,7 @@ uv run --no-sync python -m unittest test_app -q
 uv run --no-sync uvicorn app:application --host 127.0.0.1 --port 8000
 ```
 
-Open `/?count=14&session=manual`; 140 and 1400 outputs use the same adapter.
+Open `/?count=14&session=manual`; 140 and 1400 outputs use the same app.
 The runner supplies unique sessions and operation IDs. `/health` does not render
 the board.
 

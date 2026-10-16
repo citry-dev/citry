@@ -1,10 +1,8 @@
 # Canonical project-page scenario
 
-The thirteen cohort applications use this deterministic in-memory model through
-their native framework hosts. The `Citry + Vue` adapter, which uses Citry's
-public Vue renderer, also uses the model but is not in the `cohort` profiles.
-The scenario keeps the `project_board` directory name
-to avoid adapter path churn, but it now represents the canonical project page
+Every benchmark application uses this deterministic in-memory model through
+its native framework host. The scenario keeps the `project_board` directory
+name so the applications' paths stay stable, but it represents the canonical project page
 from `packages/py/citry/tests/test_benchmark_citry.py`. Historical captured runs
 with 10, 100, 325, or 1,000 simple rows remain a separate workload and must not
 be compared as though they used this scenario revision.
@@ -25,7 +23,7 @@ identify this contract as `scenario_revision = "canonical-project-v1"` so a
 regenerated historical report without that revision continues to label its
 counts as flat rows.
 
-The Next and Nuxt adapters use `node_model.mjs`, a framework-neutral
+The Next and Nuxt apps use `node_model.mjs`, a framework-neutral
 translation of the same frozen source data and state transitions. It is copied
 into each prepared application beside the Python scenario modules; each build
 generates its data module from `canonical_project.json` and does not maintain a
@@ -46,7 +44,7 @@ reversed flat output list. Insert appends to the last current group. The model a
 the independent runner oracle reproduce these rules separately from the same
 frozen source data.
 
-All adapters follow [`DOM_CONTRACT.md`](DOM_CONTRACT.md). They keep all five tab
+All apps follow [`DOM_CONTRACT.md`](DOM_CONTRACT.md). They keep all five tab
 panels mounted, show Outputs initially, and render phase and output expansions
 open. Tabs, disclosure, description fields, completed checkboxes, and output
 selection use each framework's native controls. Per-output Save/Add and attachment
@@ -55,9 +53,9 @@ Save action remains active.
 
 ## Readiness and qualification
 
-Each adapter keeps its framework completion endpoint. Vue awaits the full JSON
+Each app keeps its framework completion endpoint. Vue awaits the full JSON
 response and `nextTick`; React signals from its committed-board effect; the other
-adapters retain their documented native lifecycle endpoints. The runner does not
+apps retain their documented native lifecycle endpoints. The runner does not
 add network-idle, animation-frame, or paint delays.
 
 At that endpoint, the common instrumentation records the timestamp, synchronously
@@ -65,7 +63,7 @@ captures the complete semantic DOM, and compares it with expected state prepared
 by the independent oracle before the operation. The mark is rejected when the
 snapshot differs. Capture and validation time is reported separately as
 `semantic_observer_ms`; it is outside the elapsed endpoint, though its DOM reads
-and `getComputedStyle` can still perturb later event-loop work. Adapter-provided
+and `getComputedStyle` can still perturb later event-loop work. App-provided
 `observer_ms` retains its existing meaning. Response and socket completion checks
 remain in the runner's transport accounting.
 
@@ -82,8 +80,8 @@ outside the generic readiness proof.
 The static files and responses use `Cache-Control: no-store`; profiles report
 identity encoding and loopback transport. No database, authentication, response
 compression, or application result cache is involved. Django-based hosts report
-their existing `Server-Timing` boundary, while browser-only adapters keep server
-HTML rendering as not applicable. The Next and Nuxt hybrid adapters report
+their existing `Server-Timing` boundary, while browser-only apps keep server
+HTML rendering as not applicable. The Next and Nuxt hybrid apps report
 server HTML timing for the initial document and their explicit delta/JSON
 preparation kind for actions.
 

@@ -7,8 +7,9 @@ covers running the comparison and reading its output.
 
 The [framework interaction suite](web/README.md) in `web/` is a separate
 harness. It measures how quickly a browser shows the same project page and
-finishes the same server actions in Citry and fifteen other framework setups,
-with each application installed in its own environment.
+finishes the same server actions in Citry and thirteen other framework setups,
+plus a client-rendered Nuxt control, with each application installed in its
+own environment.
 
 Citry's graph-first browser workload has a separate runner because browser
 startup, fragment adoption, morph, heap, and client payloads are not comparable
@@ -294,9 +295,6 @@ beyond-Django-family engine, ported for both scenarios
 ## Framework comparison on the docs site
 
 The [Benchmarks page](https://citry.dev/about/benchmarks/) compares how long
-the same page takes to become usable in Citry and other frameworks. A separate
-framework benchmark suite, outside this repository, measures it. To update the
-page, run
-`uv run --no-sync python -m docs_site.scripts.benchmark_data REPORT_DIR` on the
-suite's report folder; it rewrites
-`docs_site/data/benchmark_time_to_interactive.json`.
+the same page takes to become usable in Citry and other frameworks. The
+[framework interaction suite](web/README.md) measures it; see
+[Update the numbers on the docs page](web/README.md#update-the-numbers-on-the-docs-page).

@@ -18,7 +18,7 @@ HTMX submits ordinary forms and replaces the board using `outerHTML` with its
 default settle delay. Alpine owns the independent local disclosure. Browser
 readiness uses `alpine:initialized` or `htmx:afterSettle`, then Alpine's next tick,
 with no pending HTMX request. These are the same signals used by the Django HTMX
-adapter. The ready timestamp precedes synchronous semantic capture. Its separately
+app. The ready timestamp precedes synchronous semantic capture. Its separately
 reported cost can still perturb the event loop. The shared scenario's nested
 lifecycle and async-asset limitations also apply here.
 
@@ -40,7 +40,7 @@ secrets are only for the isolated synthetic benchmark, not deployment templates.
 including FastHTML routing, session middleware, action and serialization. Unlike
 the Django entries' synchronous middleware duration, it also includes ASGI work
 and scheduling inside that call. It excludes response-body transmission. Treat
-these durations as adapter-specific diagnostics rather than identical subphases.
+these durations as app-specific diagnostics rather than identical subphases.
 The response operation and revision headers use the same model result as the
 rendered board. Health checks return the runner's nonce without rendering a board.
 
