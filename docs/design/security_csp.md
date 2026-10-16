@@ -16,12 +16,10 @@ trusted tags are reconciled after string hooks. Request-scoped nonces now reach
 every structured script, each inline structured style, and browser-created
 fragment dependencies, with explicit conflicts rejected. One Events runtime
 serves every CSP mode. Warning serialization reports final-output
-incompatibilities without changing the HTML. Strict serialization rejects
-incompatible final output, requires `csp_nonce` when the output has a script
-or inline style, and emits fragments for an already-installed matching manager
-without an inline preloader. JavaScript
-inventory, managed-runtime omission, and JavaScript-free enforcement now
-operate above every dependency strategy. The landing page now promotes that
+incompatibilities without changing the HTML. Strict serialization raises
+instead of warning, and it requires `csp_nonce` when Citry emits an executable
+script or a `<style>` element. JavaScript inventory, managed-runtime omission,
+and JavaScript-free enforcement now operate above every dependency strategy. The landing page now promotes that
 graduated path without claiming that Citry constructs the host's complete
 header. The earlier Alpine ownership contract is recorded in
 [`alpinejs.md`](alpinejs.md). CSRF is a separate browser-request concern and
@@ -276,8 +274,8 @@ the dependency tags it emits and the final HTML, after extensions have
 changed it, for raw `<script>` and `<style>` tags written in templates, native
 `on*` event attributes, and `javascript:` URLs. `"off"` skips the check,
 `"warn"` reports the findings in one `RuntimeWarning`, and `"strict"` raises
-`ValueError`. Strict mode also requires `csp_nonce` when the output has a
-script or inline style, and rejects dependencies that are not structured
+`ValueError`. Strict mode also requires `csp_nonce` when Citry emits an
+executable script or a `<style>` element, and rejects dependencies that are not structured
 (section 6). This check does not report `style` attributes. A strict
 `style-src` without `'unsafe-hashes'` blocks and reports each one in the
 browser, and Vue then applies the same styles through the DOM (see the
@@ -384,9 +382,9 @@ would let unstructured markup enter a security-sensitive protocol. Structured
 Citry manifests are distinguished by a per-serialization private marker that
 is verified after every string hook and removed before HTML is returned.
 
-Warning mode runs the same settled-output checks, emits one
-Python `RuntimeWarning` containing findings deduplicated by rendered instance,
-location, and rule, and preserves the standard-runtime HTML. When arbitrary
+Warning mode runs the same final-output checks, emits one Python
+`RuntimeWarning` containing findings deduplicated by rendered instance,
+location, and rule, and returns the HTML unchanged. When arbitrary
 string hooks make source identity unknowable, Citry keeps separate rendered
 instances rather than hiding a potentially distinct conditional source site.
 It also remembers raw active tags before dependency insertion, so a later
@@ -399,23 +397,14 @@ A nonce belongs to the loaded document's policy. A later fragment response
 cannot generate a new nonce and expect that value to be accepted inside the
 existing document.
 
-In strict mode:
-
-- the base document installs the CSP-compatible Citry runtime and records its
-  nonce;
-- a fragment carries inert manifests and markup, not today's inline preloader;
-- the existing manager creates any needed script, style, or stylesheet-link
-  elements with the document nonce; and
-- ordinary CSP-compatible Alpine attributes initialize through the existing
-  Alpine mutation lifecycle.
-
-A strict fragment therefore requires a Citry-managed base document. A present
-manager rejects a runtime-variant or nonce mismatch before dependency adoption.
-If the base page did not install the manager, an inert fragment cannot observe
-that fact or execute an error without reintroducing a bootstrap script; it
-therefore remains inert. Hosts that insert strict fragments must treat the
-matching base manager as a precondition. Registration needed by a fragment
-must occur before Alpine adopts its markup.
+The CSP mode does not change which runtime a fragment uses; one runtime
+serves every mode. A fragment is serialized with the same `csp_nonce` as its
+page, and Citry stamps that nonce on the scripts and styles it emits. Before
+the browser starts a fragment, Citry's runtime checks that its nonce, runtime,
+components, and assets match the page; if they do not, the fragment does not
+start and the browser console shows an error. The CSP mode
+changes only the render-time checks on the fragment's HTML and whether a
+missing `csp_nonce` is an error.
 
 Phase 5 implements the nonce transport used by the strict contract.
 The document manager captures the nonce from its own authorizing script tag.
@@ -799,14 +788,16 @@ rather than aliasing either value.
 
 ### 7.1 Combining JavaScript, CSP, and dependency modes
 
-JavaScript delivery is applied before CSP runtime selection:
+The JavaScript mode decides what Citry emits; the CSP mode then checks that
+output. One runtime serves every CSP mode, so the CSP mode never changes which
+scripts are emitted:
 
 | Effective JavaScript mode | Effect of CSP mode |
 |---|---|
-| `"allow"` | `off` and `warn` use standard Alpine; `strict` uses the CSP build. |
-| `"warn"` | Same runtime choice as `allow`, plus the JavaScript-requirement inventory. |
-| `"omit"` | No Citry Alpine or executable dependency runtime is emitted, so Alpine expression compatibility is not checked for inert attributes. Strict CSP still validates raw executable markup and applies nonces to structured styles. |
-| `"forbid"` | Client requirements fail before runtime emission. If the subtree passes, no Alpine runtime exists for CSP to select; strict CSP still validates remaining raw executable markup and applies nonces to structured styles. |
+| `"allow"` | `warn` and `strict` check the final HTML; `strict` also requires `csp_nonce` for emitted scripts and `<style>` elements. |
+| `"warn"` | Same as `allow`, plus the JavaScript-requirement inventory. |
+| `"omit"` | No Citry runtime or executable dependency is emitted. Strict CSP still checks raw executable markup and applies nonces to structured styles. |
+| `"forbid"` | Client requirements fail before any runtime is emitted. If the render passes, strict CSP still checks remaining raw executable markup and applies nonces to structured styles. |
 
 The JavaScript policy is a restrictive ceiling over `deps_strategy`:
 

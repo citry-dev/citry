@@ -291,7 +291,7 @@ def _node_html(html: str, node: Any) -> str:
 
 
 def _decode_html_attribute(source: str) -> str:
-    """Decode HTML character references the way a browser reads an attribute value."""
+    """Decode HTML character references in an attribute value so the checks see roughly what the browser sees."""
     decoded: list[str] = []
     position = 0
     while position < len(source):
@@ -317,8 +317,8 @@ def _javascript_url(value: str) -> bool:
 
 
 def _is_native_event_attribute(name: str) -> bool:
-    # Match every `on` name rather than a fixed list, so event names that
-    # browsers add later are caught too.
+    # Any name longer than `on` that starts with `on` counts, so event names
+    # that browsers add later are caught too.
     return len(name) > 2 and name.startswith("on")
 
 

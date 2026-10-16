@@ -10,8 +10,8 @@
   diagnostic. The public reference shows it after the message and examples.
 - Recorded `citry.python.*` as a provider-owned family whose suffixes and
   messages are not copied into the Citry catalog.
-- Added stable Vue-variable, server-event, and component-prop diagnostics for
-  browser-expression analysis in `citry check` and the language server.
+- Added stable Vue-variable, server-event, and component-prop diagnostics
+  that `citry check` and the language server report for browser expressions.
 - Added stable i18n diagnostics for invalid catalogs, unknown messages, bad
   arguments, unsafe cross-language fallback, and invalid client-message
   declarations in the checker and language server.
