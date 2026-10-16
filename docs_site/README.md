@@ -317,16 +317,34 @@ The builder validates control names, labels, defaults, and options. It renders
 the controls in an open, collapsible section between the demo header and
 preview. They are documentation tooling, not rendered component content.
 
-The host sends current values to the sandboxed preview. Handle them on the
-preview root:
+Each time a control changes, the docs page sends every current value to the
+sandboxed preview, which dispatches them as a `citry-ui-preview-controls`
+window event. The event's `detail` maps each control `name` to its value, so
+copy it into data fields with the same names in the preview component's `js`:
 
-```citry-html
-<section
-  x-data="{ variant: 'underline', disabled: false }"
-  @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
->
-  ...
-</section>
+```js
+$component({
+  data() {
+    return { variant: "underline", disabled: false };
+  },
+  methods: {
+    applyPreviewControls(event) {
+      Object.assign(this, event.detail);
+    },
+  },
+  mounted() {
+    window.addEventListener(
+      "citry-ui-preview-controls",
+      this.applyPreviewControls,
+    );
+  },
+  beforeUnmount() {
+    window.removeEventListener(
+      "citry-ui-preview-controls",
+      this.applyPreviewControls,
+    );
+  },
+});
 ```
 
 Controls must map to documented component inputs or CSS variables. The current

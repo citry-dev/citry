@@ -1062,9 +1062,12 @@ def test_dialog_ui_examples_are_result_first_reactive_and_operable(
     controls = configurator_demo.locator("[data-ui-preview-controls] form")
     configurator = configurator_demo.frame_locator("[data-ui-preview-frame]")
     configured_dialog = configurator.locator('[data-citry-ui-part="dialog"]')
+    # Each control change sends every current value to the frame, so the
+    # Size and Scroll messages also carry the unchecked dismissal setting,
+    # and the waits below prove it has reached the Dialog.
+    controls.get_by_label("Allow passive dismissal").uncheck()
     controls.get_by_label("Size").select_option("lg")
     controls.get_by_label("Scroll").select_option("dialog")
-    controls.get_by_label("Allow passive dismissal").uncheck()
     _wait_for_attribute(configured_dialog, "data-size", "lg")
     _wait_for_attribute(configured_dialog, "data-scroll", "dialog")
     configurator.get_by_role("button", name="Preview configuration").click()
@@ -1151,11 +1154,15 @@ def test_combobox_ui_examples_are_result_first_reactive_and_operable(
     controls = configurator_demo.locator("[data-ui-preview-controls] form")
     configurator = configurator_demo.frame_locator("[data-ui-preview-frame]")
     configured = configurator.locator("[data-citry-combobox-root]")
-    controls.get_by_label("Variant").select_option("filled")
-    controls.get_by_label("Size").select_option("lg")
-    controls.get_by_label("Local filter").select_option("starts_with")
+    # Each control change sends every current value to the frame. Changing
+    # the checkboxes first means the Variant and Size messages carry them,
+    # so once data-size reads "lg" the combobox already has "Highlight
+    # first match" applied when focus opens the list.
     controls.get_by_label("Open on focus").check()
     controls.get_by_label("Highlight first match").check()
+    controls.get_by_label("Local filter").select_option("starts_with")
+    controls.get_by_label("Variant").select_option("filled")
+    controls.get_by_label("Size").select_option("lg")
     _wait_for_attribute(configured, "data-variant", "filled")
     _wait_for_attribute(configured, "data-size", "lg")
     configured.get_by_role("combobox").focus()
@@ -1280,9 +1287,10 @@ def test_textarea_ui_examples_cover_configuration_forms_control_and_theme(
     configured = configurator.get_by_label("Understory survey")
     controls.get_by_label("Visible rows").select_option("7")
     controls.get_by_label("Resize").select_option("both")
-    page.wait_for_timeout(0)
-    assert configured.evaluate("element => element.rows") == 7
+    # The Resize message also carries the row count, so once the textarea
+    # shows the new resize value it has the new rows too.
     _wait_for_attribute(configured, "data-resize", "both")
+    assert configured.evaluate("element => element.rows") == 7
 
     form_demo = demos.nth(6)
     form_demo.scroll_into_view_if_needed()
@@ -1407,11 +1415,12 @@ def test_checkbox_ui_examples_cover_configuration_control_mixed_and_theme(
     controls.get_by_label("Variant").select_option("outline")
     controls.get_by_label("Size").select_option("lg")
     controls.get_by_label("Indeterminate").check()
-    page.wait_for_timeout(0)
     configured_root = configured.locator("xpath=..")
+    # The Indeterminate message carries every control value, so once it
+    # has arrived the variant and size have too.
+    _wait_for_attribute(configured_root, "data-indeterminate", "")
     assert configured_root.get_attribute("data-variant") == "outline"
     assert configured_root.get_attribute("data-size") == "lg"
-    _wait_for_attribute(configured_root, "data-indeterminate", "")
     assert configured.evaluate("element => element.indeterminate") is True
 
     form = demos.nth(3).frame_locator("[data-ui-preview-frame]")
@@ -1635,8 +1644,10 @@ def test_popover_ui_examples_cover_composition_control_nesting_and_theme(
     placement = placement_demo.frame_locator("[data-ui-preview-frame]")
     placement.get_by_role("button", name="Position orbital summary").click()
     positioned = placement.get_by_role("dialog", name="Orbital summary")
-    assert positioned.get_attribute("data-placement") == "top-end"
-    assert positioned.get_attribute("data-match-width") == ""
+    # The control values reach the frame as messages, which can land after
+    # the click, so wait for the popover to reflect them.
+    _wait_for_attribute(positioned, "data-placement", "top-end")
+    _wait_for_attribute(positioned, "data-match-width", "")
 
     nested = demos.nth(6).frame_locator("[data-ui-preview-frame]")
     nested.get_by_role("button", name="Inspect Saturn").click()
@@ -1692,9 +1703,11 @@ def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
     configured = configuration_demo.frame_locator("[data-ui-preview-frame]")
     configured.get_by_role("button", name="Preview geometry").click()
     configured_drawer = configured.get_by_role("dialog", name="Configurable archive")
-    assert configured_drawer.get_attribute("data-placement") == "block-start"
-    assert configured_drawer.get_attribute("data-size") == "lg"
-    assert configured_drawer.get_attribute("data-scroll") == "drawer"
+    # The control values reach the frame as messages, which can land after
+    # the click, so wait for the drawer to reflect them.
+    _wait_for_attribute(configured_drawer, "data-placement", "block-start")
+    _wait_for_attribute(configured_drawer, "data-size", "lg")
+    _wait_for_attribute(configured_drawer, "data-scroll", "drawer")
 
     controlled = demos.nth(4).frame_locator("[data-ui-preview-frame]")
     controlled.get_by_label("Accept requests").uncheck()
@@ -1780,11 +1793,19 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
 
     controlled_demo = demos.nth(3)
     controlled_controls = controlled_demo.locator("[data-ui-preview-controls] form")
-    controlled_controls.get_by_label("Decline visibility requests").check()
     controlled = controlled_demo.frame_locator("[data-ui-preview-frame]")
+    controlled_menu = controlled.locator('[role="menu"]')
+    # The decline setting shows nowhere on the page, so a Size change after
+    # it sends a message that carries both; once the menu shows the new
+    # size, the setting has arrived and the click can be judged.
+    controlled_controls.get_by_label("Decline visibility requests").check()
+    controlled_controls.get_by_label("Size").select_option("lg")
+    _wait_for_attribute(controlled_menu, "data-size", "lg")
     controlled.get_by_role("button", name="Controlled grimoire").click()
     assert controlled.locator('[role="menu"]:popover-open').count() == 0
     controlled_controls.get_by_label("Decline visibility requests").uncheck()
+    controlled_controls.get_by_label("Size").select_option("sm")
+    _wait_for_attribute(controlled_menu, "data-size", "sm")
     controlled.get_by_role("button", name="Controlled grimoire").click()
     controlled.locator('[role="menu"]:popover-open').wait_for(state="visible")
 
@@ -1807,9 +1828,11 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
     placement.get_by_role("button", name="A deliberately wide enchanted-volume trigger").click()
     placed_surface = placement.locator('[role="menu"]:popover-open')
     placed_surface.wait_for(state="visible")
-    assert placed_surface.get_attribute("data-placement") == "top-end"
-    assert placed_surface.get_attribute("data-match-width") == ""
-    assert placement.locator(".archive-placement-demo").get_attribute("dir") == "rtl"
+    # The control values reach the frame as messages, which can land after
+    # the click, so wait for the menu to reflect them.
+    _wait_for_attribute(placed_surface, "data-placement", "top-end")
+    _wait_for_attribute(placed_surface, "data-match-width", "")
+    _wait_for_attribute(placement.locator(".archive-placement-demo"), "dir", "rtl")
 
     theme = demos.nth(11).frame_locator("[data-ui-preview-frame]")
     theme.get_by_role("button", name="Moon archive").click()
@@ -2019,7 +2042,9 @@ def test_tooltip_ui_examples_cover_focus_text_control_placement_and_theme(
     placement_demo.locator("[data-ui-preview-controls] form").get_by_label("Placement").select_option("bottom-end")
     placement = placement_demo.frame_locator("[data-ui-preview-frame]")
     placement.get_by_role("button", name="Place orbital note").focus()
-    assert placement.get_by_role("tooltip").get_attribute("data-placement") == "bottom-end"
+    # The placement reaches the frame as a message, which can land after
+    # the focus, so wait for the tooltip to reflect it.
+    _wait_for_attribute(placement.get_by_role("tooltip"), "data-placement", "bottom-end")
 
     theme = demos.nth(8).frame_locator("[data-ui-preview-frame]")
     theme.get_by_role("button", name="Auroral oval").focus()
