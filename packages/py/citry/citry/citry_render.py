@@ -417,11 +417,12 @@ class CitryRender:
 
         With ``security_csp="warn"``, Citry reports content that would break
         under a Content Security Policy but leaves the output unchanged. With
-        ``"strict"``, it uses the CSP-safe browser runtime and raises on
-        incompatible content. With ``security_javascript="warn"``, it reports
-        which components need JavaScript; ``"omit"`` drops Citry's scripts but
-        keeps the HTML and CSS; ``"forbid"`` raises when a rendered component
-        needs browser behavior.
+        ``"strict"``, it raises on incompatible final output and requires
+        ``csp_nonce`` when the output contains a script or an inline style.
+        With ``security_javascript="warn"``, it reports which components need
+        JavaScript; ``"omit"`` drops Citry's scripts but keeps the HTML and
+        CSS; ``"forbid"`` raises when a rendered component needs browser
+        behavior.
 
         Args:
             deps_strategy: How to handle the collected JS/CSS.

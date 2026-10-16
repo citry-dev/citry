@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 from dataclasses import fields
+from pathlib import Path
 from types import ModuleType
 from typing import get_type_hints
 
@@ -37,6 +38,8 @@ from citry import (
     LibraryInstallationStale,
     LibraryNotInstalled,
 )
+from citry._app_selection import CheckAppSelection
+from citry._checker import check_project
 from citry_ui import (
     CAccordion,
     CAccordionItem,
@@ -322,7 +325,7 @@ def test_package_exposes_one_explicit_ordered_component_library():
 
 def _production_component_definitions() -> frozenset[type[LibraryComponent]]:
     definitions: set[type[LibraryComponent]] = set()
-    # Quality rigs, docs snippets, and tests define demo components that are
+    # Quality test pages, docs snippets, and tests define demo components that are
     # not part of the shipped library.
     excluded_packages = {"quality", "snippets", "tests"}
 
@@ -362,6 +365,17 @@ def test_every_production_component_is_in_the_manifest_and_installed():
     # declares, so the manifest is the full set.
     installation = Citry(autodiscover=False).register_library(citry_ui)
     assert frozenset(installation.definitions) == discovered
+
+
+def test_check_project_loads_the_whole_library():
+    """`citry check` must be able to analyze every Citry UI component without failing to load the app."""
+    engine = Citry(autodiscover=False)
+    engine.register_library(citry_ui)
+
+    report = check_project(CheckAppSelection(spec="citry-ui-check", engine=engine), Path.cwd())
+
+    # Findings may include errors; this test only proves the registry loads.
+    assert report.app_failure is None
 
 
 def test_library_publication_rejects_invalid_invocations_and_manifests():

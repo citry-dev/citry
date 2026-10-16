@@ -832,7 +832,7 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 | `#c-ignore` on component tags, and Vue-only content inside `#c-ignore` | A component or binding renders through Vue, which updates it | `#c-ignore` on the element inside the component's template (decision 6.4) |
 | `data-cid`, `data-cev-*`, `data-citry-root`, `data-citry-graph`, `data-citry-key` markers | Alpine and ownership markers | Vue `ref`; `data-cid-*` still on static output (decision 6.3) |
 | `citry.ownership`, `citry.ownership_manifest`, ownership params on `CitryContext` and `CitryElement` | Ownership graph removed | None needed |
-| `citry.analysis` Alpine and Alpine-CSP names, `lint_csp_compatibility`, `CspCompatibilityFinding` | Alpine-only, or Alpine CSP only | `Vue*` equivalents; none for the CSP check |
+| `citry.analysis` Alpine names, `lint_csp_compatibility`, `CspCompatibilityFinding` | Alpine-only, or Alpine CSP only | `Vue*` equivalents; none for the CSP check |
 | `LintSettings` / `Component.Lint` / `TemplateLintInfo` Alpine names | Alpine-only; an alias would carry Alpine magic names into Vue scope | `rule_unknown_vue_variable`, `vue_variables` |
 | Diagnostic codes `citry.alpine.unknown-variable`, `citry.component-js.unknown-data-member`, `citry.browser.unknown-component-prop`, `citry.csp.incompatible-browser-code` | Alpine or `$c-props` concepts; Vue expressions never need `unsafe-eval` | `citry.vue.unknown-variable`, `citry.component-js.unknown-member`; render-time CSP checks |
 | `ext/events/runtime-csp.js` route and its constants | One runtime serves every CSP mode | `ext/events/runtime.js` or `citry.js` |

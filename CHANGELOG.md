@@ -89,8 +89,8 @@ walks through every step.
 - **Lint settings and diagnostic codes:** the Alpine names become Vue
   names, such as `rule_unknown_vue_variable` and
   `citry.vue.unknown-variable`, and `citry.csp.incompatible-browser-code`
-  is removed because Citry compiles Vue expressions on the server, so they
-  never need `unsafe-eval`
+  is removed: Vue expressions compile on the server and never need
+  `unsafe-eval`
   ([guide](https://citry.dev/guides/upgrading-to-0-6-0/#update-settings-and-extensions)).
 - **Extensions and Python tools:** dependency scripts on interactive pages
   must be classic JavaScript, `OnSerializeContext` and

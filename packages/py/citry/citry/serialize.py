@@ -540,8 +540,6 @@ def serialize_render_result(
     session.require_implemented_modes()
     csp_validator = None if session.security_csp == "off" else _CspRenderValidator(session.security_csp)
     javascript_policy = session._javascript_policy
-    if javascript_policy is not None:
-        javascript_policy.inspect_reached_bindings(root)
     from citry._vue.serialization import (  # noqa: PLC0415
         _HYDRATION_ADMISSION_EXTRA_KEY,
         _record_hydration_page_decline,

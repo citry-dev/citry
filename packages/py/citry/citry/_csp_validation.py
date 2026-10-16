@@ -17,123 +17,6 @@ _JAVASCRIPT_URL_RE = re.compile(
     re.IGNORECASE,
 )
 _URL_ATTRIBUTES = frozenset({"action", "formaction", "href", "src", "xlink:href"})
-_NATIVE_EVENT_ATTRIBUTES = frozenset(
-    {
-        "onabort",
-        "onafterprint",
-        "onanimationcancel",
-        "onanimationend",
-        "onanimationiteration",
-        "onanimationstart",
-        "onauxclick",
-        "onbeforeinput",
-        "onbeforematch",
-        "onbeforeprint",
-        "onbeforetoggle",
-        "onbeforeunload",
-        "onblur",
-        "oncancel",
-        "oncanplay",
-        "oncanplaythrough",
-        "onchange",
-        "onclick",
-        "onclose",
-        "oncontextlost",
-        "oncontextmenu",
-        "oncontextrestored",
-        "oncopy",
-        "oncuechange",
-        "oncut",
-        "ondblclick",
-        "ondrag",
-        "ondragend",
-        "ondragenter",
-        "ondragleave",
-        "ondragover",
-        "ondragstart",
-        "ondrop",
-        "ondurationchange",
-        "onemptied",
-        "onended",
-        "onerror",
-        "onfocus",
-        "onformdata",
-        "ongotpointercapture",
-        "onhashchange",
-        "oninput",
-        "oninvalid",
-        "onkeydown",
-        "onkeypress",
-        "onkeyup",
-        "onlanguagechange",
-        "onload",
-        "onloadeddata",
-        "onloadedmetadata",
-        "onloadstart",
-        "onlostpointercapture",
-        "onmessage",
-        "onmessageerror",
-        "onmousedown",
-        "onmouseenter",
-        "onmouseleave",
-        "onmousemove",
-        "onmouseout",
-        "onmouseover",
-        "onmouseup",
-        "onoffline",
-        "ononline",
-        "onpagehide",
-        "onpagereveal",
-        "onpageshow",
-        "onpageswap",
-        "onpaste",
-        "onpause",
-        "onplay",
-        "onplaying",
-        "onpointercancel",
-        "onpointerdown",
-        "onpointerenter",
-        "onpointerleave",
-        "onpointermove",
-        "onpointerout",
-        "onpointerover",
-        "onpointerrawupdate",
-        "onpointerup",
-        "onpopstate",
-        "onprogress",
-        "onratechange",
-        "onrejectionhandled",
-        "onreset",
-        "onresize",
-        "onscroll",
-        "onscrollend",
-        "onsecuritypolicyviolation",
-        "onseeked",
-        "onseeking",
-        "onselect",
-        "onslotchange",
-        "onstalled",
-        "onstorage",
-        "onsubmit",
-        "onsuspend",
-        "ontimeupdate",
-        "ontoggle",
-        "ontouchcancel",
-        "ontouchend",
-        "ontouchmove",
-        "ontouchstart",
-        "ontransitioncancel",
-        "ontransitionend",
-        "ontransitionrun",
-        "ontransitionstart",
-        "onunhandledrejection",
-        "onunload",
-        "onvolumechange",
-        "onwaiting",
-        "onwheel",
-    }
-)
-_SVG_NATIVE_EVENT_ATTRIBUTES = frozenset({"onactivate", "onbegin", "onend", "onrepeat"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,7 +229,7 @@ class _CspRenderValidator:
         inner = attr.inner_value
         raw_source = "" if inner is None else inner.content
         value_start = attr.key.end_index if inner is None else inner.start_index
-        decoded, _raw_spans = _decode_html_attribute(raw_source)
+        decoded = _decode_html_attribute(raw_source)
         if _is_native_event_attribute(name):
             self._add(
                 f"the native inline event attribute {attr.key.content!r}; use a Vue handler or Component.js",
@@ -400,14 +283,6 @@ class _CspRenderValidator:
         )
 
 
-def _located_source_range(source: str, span: tuple[int, int], needle: str) -> tuple[int, int]:
-    snippet = source[span[0] : span[1]]
-    relative = snippet.find(needle)
-    start_char = span[0] if relative < 0 else span[0] + relative
-    end_char = span[1] if relative < 0 else start_char + len(needle)
-    return len(source[:start_char].encode()), len(source[:end_char].encode())
-
-
 def _node_html(html: str, node: Any) -> str:
     end_tag = getattr(node, "end_tag", None)
     end = node.start_tag.token.end_index if end_tag is None else end_tag.token.end_index
@@ -415,52 +290,22 @@ def _node_html(html: str, node: Any) -> str:
     return raw[node.start_tag.token.start_index : end].decode()
 
 
-def _decode_html_attribute(source: str) -> tuple[str, tuple[tuple[int, int], ...]]:
-    """Decode HTML references and map each decoded character to its raw byte span."""
+def _decode_html_attribute(source: str) -> str:
+    """Decode HTML character references the way a browser reads an attribute value."""
     decoded: list[str] = []
-    raw_spans: list[tuple[int, int]] = []
-    raw_bytes = 0
     position = 0
     while position < len(source):
         match = _ENTITY_RE.match(source, position)
         raw = match.group(0) if match is not None else source[position]
         value = html_module.unescape(raw)
+        # An unknown reference such as `&bogus;` stays literal, so step past
+        # only its `&` and keep scanning the rest as ordinary text.
         if value == raw and match is not None:
             raw = source[position]
             value = raw
-        raw_start = raw_bytes
-        raw_bytes += len(raw.encode())
-        for char in value:
-            decoded.append(char)
-            raw_spans.append((raw_start, raw_bytes))
+        decoded.append(value)
         position += len(raw)
-    return "".join(decoded), tuple(raw_spans)
-
-
-def _decoded_byte_to_char_index(decoded: str, byte_offset: int) -> int:
-    safe = max(0, min(len(decoded.encode()), byte_offset))
-    prefix = decoded.encode()[:safe]
-    while True:
-        try:
-            return len(prefix.decode())
-        except UnicodeDecodeError:
-            prefix = prefix[:-1]
-
-
-def _decoded_byte_range_to_raw(
-    decoded: str,
-    raw_spans: tuple[tuple[int, int], ...],
-    start: int,
-    end: int,
-) -> tuple[int, int]:
-    start_char = _decoded_byte_to_char_index(decoded, start)
-    end_char = _decoded_byte_to_char_index(decoded, end)
-    if start_char < end_char and raw_spans:
-        return raw_spans[start_char][0], raw_spans[end_char - 1][1]
-    if start_char < len(raw_spans):
-        return raw_spans[start_char][0], raw_spans[start_char][0]
-    boundary = raw_spans[-1][1] if raw_spans else 0
-    return boundary, boundary
+    return "".join(decoded)
 
 
 def _javascript_url(value: str) -> bool:
@@ -472,6 +317,8 @@ def _javascript_url(value: str) -> bool:
 
 
 def _is_native_event_attribute(name: str) -> bool:
+    # Match every `on` name rather than a fixed list, so event names that
+    # browsers add later are caught too.
     return len(name) > 2 and name.startswith("on")
 
 

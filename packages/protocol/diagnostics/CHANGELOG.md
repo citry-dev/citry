@@ -10,7 +10,7 @@
   diagnostic. The public reference shows it after the message and examples.
 - Recorded `citry.python.*` as a provider-owned family whose suffixes and
   messages are not copied into the Citry catalog.
-- Added stable Alpine-variable, server-event, and client-prop diagnostics for
+- Added stable Vue-variable, server-event, and component-prop diagnostics for
   browser-expression analysis in `citry check` and the language server.
 - Added stable i18n diagnostics for invalid catalogs, unknown messages, bad
   arguments, unsafe cross-language fallback, and invalid client-message
@@ -20,5 +20,3 @@
 - Added `citry.i18n.missing-param-type`, the configurable `citry check`
   warning for a message variable without a `# @param` type, which the i18n
   compiler already reported.
-- Removed `citry.csp.incompatible-browser-code`. Citry compiles Vue
-  expressions on the server, so the rule had nothing left to report.

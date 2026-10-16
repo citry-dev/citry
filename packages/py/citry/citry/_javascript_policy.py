@@ -24,7 +24,6 @@ from citry.ext.dependencies.types import Dependency, Script, Style
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from citry.citry_render import CitryRender
     from citry.settings import SecurityJavascriptMode
 
 _LEADING_URL_SPACE = "".join(chr(codepoint) for codepoint in range(0x21))
@@ -66,9 +65,6 @@ class _JavascriptPolicy:
     @property
     def mode(self) -> SecurityJavascriptMode:
         return self._mode
-
-    def inspect_reached_bindings(self, root: CitryRender) -> None:
-        """Component-boundary browser bindings are rejected before serialization."""
 
     def inspect_selected_requirements(self, requirements: frozenset[str]) -> None:
         """Record selected typed browser facts before whole-HTML hooks run."""
@@ -561,7 +557,7 @@ def _attribute_map(attrs: tuple[OutputAttr, ...]) -> dict[str, str]:
 
 def _decoded_attr(attr: OutputAttr) -> str:
     inner = attr.inner_value
-    return _decode_html_attribute("" if inner is None else inner.content)[0]
+    return _decode_html_attribute("" if inner is None else inner.content)
 
 
 def _raw_script_is_executable(attrs: tuple[OutputAttr, ...]) -> bool:
