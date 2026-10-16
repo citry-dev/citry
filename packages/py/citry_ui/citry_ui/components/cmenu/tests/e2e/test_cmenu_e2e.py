@@ -2386,6 +2386,25 @@ def _author_disabled_page(activator: str, *, start_disabled: bool) -> tuple[Citr
             [False, True, True, True, False],
             id="client-binding-under-menu-disable",
         ),
+        # Page code sets the attribute while the Menu already has the trigger
+        # disabled. The DOM does not change, but the write still queues a
+        # mutation record, so the author's disable outlasts the re-enable.
+        pytest.param(
+            "none",
+            False,
+            ["toggle_menu", "page_set_attribute", "toggle_menu"],
+            [False, True, True, True],
+            id="page-set-attribute-under-menu-disable",
+        ),
+        # Page code adds the attribute with `toggleAttribute` before the Menu
+        # disables the trigger; it outlasts the Menu's disable and re-enable.
+        pytest.param(
+            "none",
+            False,
+            ["page_toggle_attribute", "toggle_menu", "toggle_menu"],
+            [False, True, True, True],
+            id="page-toggle-attribute-before-menu-disable",
+        ),
     ],
 )
 def test_server_rerender_keeps_the_authors_trigger_disabled(
@@ -2422,9 +2441,17 @@ def test_server_rerender_keeps_the_authors_trigger_disabled(
         selector = "." + step.replace("_", "-")
         # Click through the DOM: a disabled trigger does not block these buttons,
         # but a Playwright click would wait for actionability on overlays.
-        if step.startswith("client_"):
-            # A browser-only change sends no event; Vue applies it before the
-            # click returns, and the settle below lets the Menu reconcile.
+        if step.startswith("page_"):
+            # Page code writes the attribute directly, as a script outside Vue
+            # would; the settle below lets the Menu's observer see it.
+            write = {
+                "page_set_attribute": "element => element.setAttribute('disabled', '')",
+                "page_toggle_attribute": "element => element.toggleAttribute('disabled', true)",
+            }[step]
+            trigger.evaluate(write)
+        elif step.startswith("client_"):
+            # A browser-only change sends no event; Vue applies it before
+            # `evaluate` resolves, and the settle below lets the Menu reconcile.
             page.locator(selector).evaluate("element => element.click()")
         else:
             send_event(

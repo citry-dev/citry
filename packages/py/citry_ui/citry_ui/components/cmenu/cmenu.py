@@ -1243,49 +1243,27 @@ class CMenu(LibraryComponent):
           let authorDirectDisabled = externalActivation || controllerOptions.ownsTriggerDisabled
             ? false
             : authorTriggerDisabled && !data.disabled;
-          // Vue writes a bound `disabled` through the element's property. When
-          // the Menu has already disabled the trigger, the author's `true`
-          // changes nothing in the DOM, so no mutation record arrives and the
-          // observer below never learns the author's value. The trigger's
-          // `disabled` property therefore reports every write to this run, and
-          // the Menu marks its own writes so only the author's are recorded.
-          // A shared key, so the property hook calls whichever run currently
-          // owns the trigger.
-          const menuAuthorDisabledWriteKey = Symbol.for("citry-ui:menu-author-disabled-write");
-          let writingTriggerDisabled = false;
+          // Page code and Vue write the author's `disabled`; the Menu writes the
+          // server's. The observer below tells them apart by the values this run
+          // wrote, in order. Mutation records arrive in a later microtask, after
+          // the write has returned, so a flag set around the write would already
+          // be clear. The Menu writes only a changed value, so each of its writes
+          // queues exactly one record. A redundant `disabled = true` or
+          // `setAttribute("disabled", "")` from page code also queues a record,
+          // so it is seen even while the Menu already disables the trigger.
+          // `toggleAttribute("disabled", true)` on an already disabled trigger
+          // queues none, so that one write is not seen.
+          const ownDisabledWrites = [];
           const recordsAuthorDisabled = !externalActivation && !controllerOptions.ownsTriggerDisabled;
-          if (recordsAuthorDisabled && !Object.prototype.hasOwnProperty.call(trigger, "disabled")) {
-            let prototype = Object.getPrototypeOf(trigger);
-            let nativeDisabled = null;
-            while (prototype && !nativeDisabled) {
-              nativeDisabled = Object.getOwnPropertyDescriptor(prototype, "disabled") ?? null;
-              prototype = Object.getPrototypeOf(prototype);
+          // Write the trigger's `disabled` as the Menu's own value.
+          const writeOwnTriggerDisabled = (value) => {
+            // Without an observer on the trigger's root no record will arrive,
+            // and a queued value would later be matched against an author write.
+            if (recordsAuthorDisabled && anchoredLayerRuntime.menuDisabledObservers?.get(trigger.getRootNode())) {
+              ownDisabledWrites.push(value);
             }
-            // Only a native control has a `disabled` property; anything else
-            // takes `disabled` as an attribute, which the observer sees.
-            if (nativeDisabled?.get && nativeDisabled?.set) {
-              Object.defineProperty(trigger, "disabled", {
-                configurable: true,
-                enumerable: nativeDisabled.enumerable,
-                get() {
-                  return nativeDisabled.get.call(this);
-                },
-                set(value) {
-                  nativeDisabled.set.call(this, value);
-                  this[menuAuthorDisabledWriteKey]?.(nativeDisabled.get.call(this));
-                },
-              });
-            }
-          }
-          if (recordsAuthorDisabled) {
-            trigger[menuAuthorDisabledWriteKey] = (value) => {
-              if (writingTriggerDisabled) {
-                return;
-              }
-              authorDirectDisabled = value;
-              authorTriggerDisabled = value;
-            };
-          }
+            trigger.disabled = value;
+          };
           let committedEffectiveDisabled = externalActivation
             ? Boolean(controllerOptions.ownerDisabled?.())
             : trigger.matches(":disabled");
@@ -1683,14 +1661,7 @@ class CMenu(LibraryComponent):
             }
             const desiredDisabled = configuration.disabled || authorDirectDisabled;
             if (trigger.disabled !== desiredDisabled) {
-              // Mark the write as the Menu's own so the property hook above
-              // does not take it for the author's.
-              writingTriggerDisabled = true;
-              try {
-                trigger.disabled = desiredDisabled;
-              } finally {
-                writingTriggerDisabled = false;
-              }
+              writeOwnTriggerDisabled(desiredDisabled);
             }
             writtenTriggerDisabled = desiredDisabled;
           };
@@ -2879,18 +2850,33 @@ class CMenu(LibraryComponent):
           });
 
           const reconcileNativeDisabled = (records = []) => {
-            if (
-              !externalActivation
-              &&
-              !controllerOptions.ownsTriggerDisabled
-              &&
-              records.some((record) => record.type === "attributes" && record.target === trigger)
-              && trigger.disabled !== (configuration.disabled || authorDirectDisabled)
-            ) {
-              // Page code changed the trigger's `disabled`; that is now the
-              // author's value, for this run and for the cleanup to put back.
-              authorDirectDisabled = trigger.disabled;
-              authorTriggerDisabled = trigger.disabled;
+            if (recordsAuthorDisabled) {
+              const triggerRecords = records.filter((record) => (
+                record.type === "attributes" && record.target === trigger
+              ));
+              const ownWrites = ownDisabledWrites;
+              let authorValue = null;
+              triggerRecords.forEach((record, index) => {
+                // A record holds only the value before its write; the value
+                // after it is the next record's old value, or the trigger's
+                // current value for the last record.
+                const before = record.oldValue !== null;
+                const after = index + 1 < triggerRecords.length
+                  ? triggerRecords[index + 1].oldValue !== null
+                  : trigger.hasAttribute("disabled");
+                if (ownWrites.length > 0 && before !== after && ownWrites[0] === after) {
+                  ownWrites.shift();
+                } else {
+                  authorValue = after;
+                }
+              });
+              if (authorValue !== null) {
+                // Page code or Vue wrote the trigger's `disabled`; that is now
+                // the author's value, for this run and for the cleanup to put
+                // back.
+                authorDirectDisabled = authorValue;
+                authorTriggerDisabled = authorValue;
+              }
             }
             updateTrigger();
             const effectiveDisabled = effectiveOwnerDisabled();
@@ -2935,6 +2921,7 @@ class CMenu(LibraryComponent):
                 subtree: true,
                 childList: true,
                 attributes: true,
+                attributeOldValue: true,
                 attributeFilter: ["disabled"],
               });
               manager = { entries, observer };
@@ -2960,6 +2947,13 @@ class CMenu(LibraryComponent):
               return;
             }
             unregisterNativeDisabled();
+            // Records for writes made under an old root may never arrive, so a
+            // queued write could later be matched against an author write. The
+            // first registration keeps the queue: an observer another Menu
+            // already runs on this root still delivers those records.
+            if (nativeDisabledRoot !== null) {
+              ownDisabledWrites.length = 0;
+            }
             nativeDisabledRoot = nextRoot;
             unregisterNativeDisabled = registerNativeDisabled();
           };
@@ -3026,12 +3020,6 @@ class CMenu(LibraryComponent):
             // and the next run would read it as the author's. Leave the trigger
             // alone when something other than this run changed it since its last
             // write, because that value is newer than anything recorded here.
-            // Stop recording author writes first: the restore below is the
-            // Menu's own, and Vue's next patch belongs to the next run, which
-            // reads the trigger's value when it starts.
-            if (recordsAuthorDisabled) {
-              delete trigger[menuAuthorDisabledWriteKey];
-            }
             if (
               !externalActivation
               && !controllerOptions.ownsTriggerDisabled
@@ -3039,6 +3027,8 @@ class CMenu(LibraryComponent):
               && trigger.disabled === writtenTriggerDisabled
               && trigger.disabled !== authorTriggerDisabled
             ) {
+              // This run's observer is already gone, so the record reaches the
+              // next run, which reads it as the author's value. It is one.
               trigger.disabled = authorTriggerDisabled;
             }
             structureObserver.disconnect();
