@@ -67,6 +67,9 @@
   `CTour`, `CCombobox`, `CCascader`, and `CColorPicker`, a server event that
   leaves `open` unchanged keeps the component open or closed as the user
   left it.
+- `CDialog`, `CAlertDialog`, and `CCommandPalette` now call `onOpenChange`
+  with reason `"ancestor"` when an enclosing dialog or drawer closes them.
+  Previously a dialog closed by an enclosing drawer reported `"native"`.
 - The `CMenu` trigger and the `CTimePicker` control no longer stay disabled
   after a server event disables and then re-enables them.
 - A `CDialog` or `CAlertDialog` that a server event removes while it is open
@@ -74,9 +77,9 @@
   on the page.
 - An open `CTour` keeps the step the user reached when a server event
   re-renders the component that contains it, and moves to a new step when
-  the server changes `active`. Previously such a re-render sent the tour back
-  to the server's step. Its dialog also keeps the current step's title and description
-  as its accessible name after the user moves between steps.
+  the server changes `active`. Previously such a re-render sent the tour
+  back to the server's step. Its dialog also keeps the current step's title
+  and description as its accessible name after the user moves between steps.
 - `CHoverCard`, `CSelect`, `CMultiSelect`, `CCombobox`, `CCascader`,
   `CColorPicker`, `CDatePicker`, `CDateRange`, and `CTimePicker` now close
   when they are disabled while open, and call `onOpenChange(false)`. Some
