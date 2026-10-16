@@ -45,14 +45,11 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       && !element.closest("[inert]")
       && element.getClientRects().length > 0
       && getComputedStyle(element).visibility !== "hidden";
-    // CDrawer keeps its own scroll lock in a list shared with CDialog, and
-    // nested overlays can release in either order: a server re-render closes
-    // the outer one first. The two locks therefore hand the page's original
-    // styles to each other, so whichever releases last restores them and
-    // neither restores the other's `overflow: hidden`.
+    // CDrawer keeps its own scroll lock, and nested overlays can release in
+    // either order, so the two locks share the page's original styles and
+    // whichever releases last restores them. Only drawers hold that lock;
+    // CDialog lists itself there too but uses the lock below.
     const sharedLock = () => globalThis[Symbol.for("citry-ui:dialog-runtime")] ?? null;
-    // Only drawers hold that lock; CDialog lists itself there too, but its
-    // lock is the one below, so it never counts as another holder.
     const otherLockHolders = (dialog) => (sharedLock()?.dialogs ?? [])
       .filter((candidate) => candidate !== dialog
         && candidate.ownerDocument === dialog.ownerDocument
@@ -67,8 +64,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       if (state.dialogs.length === 0) {
         const shared = sharedLock();
         if (shared && otherLockHolders(dialog).length > 0) {
-          // A drawer already locked the page; keep its record of the
-          // original styles rather than the locked ones.
+          // A drawer already locked the page; keep its original styles.
           state.overflow = shared.overflow;
           state.paddingInlineEnd = shared.paddingInlineEnd;
         } else {
@@ -96,8 +92,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       state.dialogs.splice(index, 1);
       if (state.dialogs.length === 0) {
         documentLocks.delete(documentOwner);
-        // A drawer that still holds the page restores the original styles
-        // when it releases, so leave the page locked for it.
+        // A drawer still holding the page restores the styles when it releases.
         if (otherLockHolders(dialog).length > 0) return;
         const root = documentOwner.documentElement;
         root.style.overflow = state.overflow;
@@ -112,22 +107,18 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
     // nothing without the attribute. Putting the attribute back makes
     // `dialog.open` say again whether the dialog is shown, so the ordinary
     // close path can close it and release the scroll lock.
-    const restoreModalOpen = (dialog) => {
-      let modal = false;
-      try { modal = dialog.matches(":modal"); } catch { modal = false; }
-      if (modal && !dialog.open) dialog.setAttribute("open", "");
+    const isModal = (dialog) => {
+      try { return dialog.matches(":modal"); } catch { return false; }
     };
-    // The nearest enclosing <dialog> (crossing shadow roots) when it is closed,
-    // or null. An ancestor that is still modal counts as open even without its
-    // `open` attribute, because a server re-render may have removed the
-    // attribute before that ancestor's own run puts it back and closes it.
+    const restoreModalOpen = (dialog) => {
+      if (isModal(dialog) && !dialog.open) dialog.setAttribute("open", "");
+    };
+    // The nearest enclosing <dialog> when it is closed, or null. One that is
+    // still modal counts as open: a re-render may have removed its `open`
+    // attribute before its own run puts it back and closes it.
     const closedAncestorDialog = (dialog) => {
       for (let node = dialog.parentNode; node; ) {
-        if (node instanceof HTMLDialogElement) {
-          let modal = false;
-          try { modal = node.matches(":modal"); } catch { modal = false; }
-          return node.open || modal ? null : node;
-        }
+        if (node instanceof HTMLDialogElement) return node.open || isModal(node) ? null : node;
         node = node.parentNode ?? (node instanceof ShadowRoot ? node.host : null);
       }
       return null;
@@ -238,12 +229,10 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         previousFocus = previous.previousFocus;
         delete dialog[handoffKey];
       }
-      // A server re-render runs an enclosing dialog's callback first, and that
-      // run may close it. This dialog's previous run had already handed it
-      // over, so the ancestor's close could not reach it, and taking it over
-      // open would leave a modal dialog inside a closed one: invisible, yet
-      // blocking the page. Close it now instead; the component reports the
-      // close to its owner with reason "ancestor" once its callback is ready.
+      // A re-render runs an enclosing dialog's callback first and may close it
+      // there, which cannot reach this handed-over dialog. Keeping it open would
+      // leave an invisible modal blocking the page, so close it; the component
+      // reports reason "ancestor" once its callback is ready.
       let closedByAncestor = null;
       if (appliedOpen) {
         const ancestor = closedAncestorDialog(dialog);
@@ -324,9 +313,13 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         if (next === appliedOpen && dialog.open === next) return true;
         if (next) {
           if (!supportedRoot(host, documentOwner)) return false;
-          // A dialog inside a closed dialog is not rendered, so showing it as a
-          // modal would block the page with nothing visible.
-          if (closedAncestorDialog(dialog)) return false;
+          // A dialog inside a closed one is not shown, so a modal would block
+          // the page with nothing visible. Drop a server-rendered `open` too,
+          // or the dialog shows without being modal once the ancestor opens.
+          if (closedAncestorDialog(dialog)) {
+            dialog.removeAttribute("open");
+            return false;
+          }
           previousFocus = source instanceof Element ? source : deepActive(documentOwner);
           dialog.returnValue = "";
           if (dialog.open) dialog.removeAttribute("open");
@@ -442,8 +435,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         unregister(record);
         unlock(documentOwner, dialog);
         const browserFocus = deepActive(documentOwner);
-        // An enclosing dialog that closed this one directly (CDrawer closes
-        // descendant dialogs it does not own this way) reports as "ancestor".
+        // CDrawer closes a descendant dialog directly; report it as "ancestor".
         const ancestor = closedAncestorDialog(dialog);
         nativeClosed?.(ancestor ? "ancestor" : "native", ancestor ?? dialog, dialog.returnValue);
         restoreFocus(browserFocus);
@@ -593,7 +585,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       deepActive,
       isFocusable,
       restoreModalOpen,
-      closedAncestorDialog,
       counts: () => ({ modals: modalRecords.length }),
     };
   })();

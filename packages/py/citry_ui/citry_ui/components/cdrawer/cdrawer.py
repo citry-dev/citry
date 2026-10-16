@@ -501,6 +501,10 @@ class CDrawer(LibraryComponent):
           const closeDescendants = () => {
             for (const candidate of [...modalRuntime.dialogs].reverse()) {
               if (candidate === drawer || !drawer.contains(candidate) || !candidate.open) continue;
+              // A drawer handed over to its next run has no listener to hear
+              // this close. Its next run sees this closed ancestor and closes
+              // and reports it; a drawer the page removed closes on its own.
+              if (candidate[drawerHandoffKey]?.open) continue;
               const controller = modalRuntime.drawerControllers.get(candidate);
               if (controller) controller.forceClose("ancestor", drawer);
               else candidate.close();
@@ -767,10 +771,11 @@ class CDrawer(LibraryComponent):
           // `open` input changed to false.
           //
           // A server re-render runs an enclosing dialog's callback first, and that
-          // run may close it. This drawer was already handed over, so that close
-          // could not reach it, and taking it over open would leave a modal drawer
-          // inside a closed dialog: invisible, yet blocking the page. Close it
-          // instead and report the close as "ancestor" once the callback is known.
+          // run may close it. An enclosing drawer leaves this handed-over drawer
+          // to this run, and an enclosing CDialog cannot reach it. Taking it over
+          // open would leave a modal drawer inside a closed dialog: invisible, yet
+          // blocking the page. Close it instead and report the close as
+          // "ancestor" once the callback is known.
           let ancestorClose = null;
           if (handoff?.open && drawer.open) {
             for (let node = composedParent(host); node; node = composedParent(node)) {

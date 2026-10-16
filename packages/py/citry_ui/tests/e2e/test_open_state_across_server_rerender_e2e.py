@@ -1610,9 +1610,10 @@ _SECOND = "#overlay-slot > .instance:nth-child(2)"
 # part that is not hidden. A popover left in the top layer with `hidden` set
 # is not visible, so it does not count. A dialog that is still modal but no
 # longer `open` is hidden yet keeps blocking the page; it is neither open nor
-# closed, so the check returns null and the caller fails. A modal family's
-# dialog that is `open` but not modal is shown without blocking the page or
-# taking Escape; that is not a real open either, so it also returns null.
+# closed, so the check returns null and the caller fails. The dialog of a
+# component in `_MODAL` that is `open` but not modal is shown without
+# blocking the page or taking Escape; that is not a real open either, so it
+# also returns null.
 _IS_OPEN = """([scope, selector, modal]) => {
   const popup = document.querySelector(scope + ' ' + selector);
   if (!popup) return false;
@@ -2129,26 +2130,78 @@ def test_server_rerender_that_removes_an_open_overlay_reports_nothing_and_releas
     assert released == {"overflow": "", "inert": [], "focusConnected": True}
 
 
-# An overlay inside another one. The outer and the inner each take their own
-# server `open` input, so the server can close the outer while it leaves the
-# inner's input as it was.
-_NESTED_TAGS = {"cdialog": "CDialog", "cdrawer": "CDrawer"}
+# Overlays inside one another, or side by side. Each level takes its own
+# server `open` input (`open_0` for the first level, and so on), so a server
+# event can change one level while it leaves the others as they were.
+_NESTED_TAGS = {"cdialog": "CDialog", "cdrawer": "CDrawer", "ccommand_palette": "CCommandPalette"}
+
+# The `onOpenChange` log name of each level, from the outermost one.
+_LEVEL_NAMES = {2: ("outer", "inner"), 3: ("outer", "middle", "inner")}
 
 
-def _nested_page(outer: str, inner: str) -> tuple[Citry, str]:
+def _level_markup(component: str, index: int, name: str, body: str) -> str:
+    tag = _NESTED_TAGS[component]
+    if component == "ccommand_palette":
+        # A palette holds commands rather than content, so it is always the
+        # innermost level.
+        return f"""
+          <div id="{name}-root">
+            <c-{tag}
+              label="{name.capitalize()} commands"
+              c-entries="palette_entries"
+              c-open="open_{index}"
+              :onOpenChange="(open, detail) => log(open, detail, '{name}')"
+            >
+              <c-fill name="activator" data="{{ activator_attrs }}">
+                <c-CButton c-attrs="activator_attrs">Open {name}</c-CButton>
+              </c-fill>
+            </c-{tag}>
+          </div>
+        """
+    return f"""
+      <div id="{name}-root">
+        <c-{tag}
+          c-open="open_{index}"
+          :onOpenChange="(open, detail) => log(open, detail, '{name}')"
+        >
+          <c-fill name="activator" data="{{ activator_attrs }}">
+            <button
+              type="button"
+              c-bind="activator_attrs"
+            >Open {name}</button>
+          </c-fill>
+          <c-fill name="title">{name.capitalize()} overlay</c-fill>
+          <c-fill name="default">{body or f"{name.capitalize()} body"}</c-fill>
+        </c-{tag}>
+      </div>
+    """
+
+
+def _nested_page(*levels: str, opens: tuple[bool, ...] = (), siblings: bool = False) -> tuple[Citry, str]:
     app = Citry(secret="citry-ui-nested-overlay-rerender-e2e", autodiscover=False)  # noqa: S106
     app.set_mounted_prefix("/citry")
     app.register_library(citry_ui)
-    outer_tag = _NESTED_TAGS[outer]
-    inner_tag = _NESTED_TAGS[inner]
+    names = _LEVEL_NAMES[len(levels)]
+    last = len(levels) - 1
+    # The level that `open_drawer_on_server` opens and `swap_on_server` closes.
+    drawer = levels.index("cdrawer") if "cdrawer" in levels else last
+    if siblings:
+        markup = "".join(_level_markup(component, index, names[index], "") for index, component in enumerate(levels))
+    else:
+        markup = ""
+        for index in range(last, -1, -1):
+            markup = _level_markup(levels[index], index, names[index], markup)
+    initial = dict.fromkeys(("open_0", "open_1", "open_2"), False)
+    initial.update({f"open_{index}": value for index, value in enumerate(opens)})
 
     class NestedOwner(Component):
         citry = app
 
         class Kwargs:
             step: int = 0
-            outer_open: bool = False
-            inner_open: bool = False
+            open_0: bool = initial["open_0"]
+            open_1: bool = initial["open_1"]
+            open_2: bool = initial["open_2"]
 
         class State(Kwargs):
             pass
@@ -2158,20 +2211,34 @@ def _nested_page(outer: str, inner: str) -> tuple[Citry, str]:
                 return _nested_next(state)
 
             def open_outer_on_server(self, state: Any) -> NestedOwner:
-                return _nested_next(state, outer_open=True)
+                return _nested_next(state, open_0=True)
 
-            def open_both_on_server(self, state: Any) -> NestedOwner:
-                return _nested_next(state, outer_open=True, inner_open=True)
+            def open_all_on_server(self, state: Any) -> NestedOwner:
+                return _nested_next(state, **{f"open_{index}": True for index in range(last + 1)})
 
             def close_outer_on_server(self, state: Any) -> NestedOwner:
-                return _nested_next(state, outer_open=False)
+                return _nested_next(state, open_0=False)
+
+            def open_drawer_on_server(self, state: Any) -> NestedOwner:
+                return _nested_next(state, **{f"open_{drawer}": True})
+
+            def swap_on_server(self, state: Any) -> NestedOwner:
+                # Open every other level and close the drawer, in one render.
+                return _nested_next(state, **{f"open_{index}": index != drawer for index in range(last + 1)})
 
         def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
-            return {"step": kwargs.step, "outer_open": kwargs.outer_open, "inner_open": kwargs.inner_open}
+            return {
+                "step": kwargs.step,
+                "open_0": kwargs.open_0,
+                "open_1": kwargs.open_1,
+                "open_2": kwargs.open_2,
+                "palette_entries": [CCommandPaletteCommand("a", "Alpha")],
+            }
 
-        template = f"""
+        template = (
+            """
           <section>
-            <output id="owner-step">{{{{ step }}}}</output>
+            <output id="owner-step">{{ step }}</output>
             <button
               id="advance-owner"
               type="button"
@@ -2183,48 +2250,31 @@ def _nested_page(outer: str, inner: str) -> tuple[Citry, str]:
               @c-click="open_outer_on_server"
             >Open outer on server</button>
             <button
-              id="open-both-on-server"
+              id="open-all-on-server"
               type="button"
-              @c-click="open_both_on_server"
-            >Open both on server</button>
+              @c-click="open_all_on_server"
+            >Open all on server</button>
             <button
               id="close-outer-on-server"
               type="button"
               @c-click="close_outer_on_server"
             >Close outer on server</button>
-            <div id="outer-root">
-              <c-{outer_tag}
-                c-open="outer_open"
-                :onOpenChange="(open, detail) => log(open, detail, 'outer')"
-              >
-                <c-fill name="activator" data="{{ activator_attrs }}">
-                  <button
-                    type="button"
-                    c-bind="activator_attrs"
-                  >Open outer</button>
-                </c-fill>
-                <c-fill name="title">Outer overlay</c-fill>
-                <c-fill name="default">
-                  <div id="inner-root">
-                    <c-{inner_tag}
-                      c-open="inner_open"
-                      :onOpenChange="(open, detail) => log(open, detail, 'inner')"
-                    >
-                      <c-fill name="activator" data="{{ activator_attrs }}">
-                        <button
-                          type="button"
-                          c-bind="activator_attrs"
-                        >Open inner</button>
-                      </c-fill>
-                      <c-fill name="title">Inner overlay</c-fill>
-                      <c-fill name="default">Inner body</c-fill>
-                    </c-{inner_tag}>
-                  </div>
-                </c-fill>
-              </c-{outer_tag}>
-            </div>
+            <button
+              id="open-drawer-on-server"
+              type="button"
+              @c-click="open_drawer_on_server"
+            >Open drawer on server</button>
+            <button
+              id="swap-on-server"
+              type="button"
+              @c-click="swap_on_server"
+            >Swap on server</button>
+            """
+            + markup
+            + """
           </section>
         """
+        )
         js = """
           $component({
             methods: {
@@ -2236,7 +2286,12 @@ def _nested_page(outer: str, inner: str) -> tuple[Citry, str]:
         """
 
     def _nested_next(state: Any, **changes: Any) -> NestedOwner:
-        values = {"step": state.step + 1, "outer_open": state.outer_open, "inner_open": state.inner_open}
+        values = {
+            "step": state.step + 1,
+            "open_0": state.open_0,
+            "open_1": state.open_1,
+            "open_2": state.open_2,
+        }
         values.update(changes)
         return NestedOwner(**values)
 
@@ -2265,17 +2320,40 @@ def _nested_page(outer: str, inner: str) -> tuple[Citry, str]:
     return app, str(Page())
 
 
-# Whether the outer and the inner dialog element are open.
-_NESTED_OPEN = """() => ({
-  outer: document.querySelector('#outer-root dialog').open,
-  inner: document.querySelector('#inner-root dialog').open,
-})"""
+# Whether each level's dialog element is open. A level's first dialog in
+# document order is its own, because its descendants come after it.
+_NESTED_OPEN = """names => Object.fromEntries(names.map(
+  name => [name, document.querySelector('#' + name + '-root dialog').open]))"""
+
+# Whether a level's dialog is shown at all: open, modal, or still in the top
+# layer. A dialog left `open` without being modal shows on top of the page
+# once its ancestor opens, so it counts as shown.
+_NESTED_SHOWN = """name => {
+  const dialog = document.querySelector('#' + name + '-root dialog');
+  return {open: dialog.open, modal: dialog.matches(':modal')};
+}"""
+
+
+def _nested_state(page: Any, names: tuple[str, ...]) -> dict[str, bool]:
+    return page.evaluate(_NESTED_OPEN, list(names))
+
+
+def _open_level_by_user(page: Any, name: str) -> None:
+    page.locator(f"#{name}-root").get_by_role("button", name=f"Open {name}").first.click()
+    page.wait_for_function(f"({_NESTED_SHOWN})('{name}').modal === true")
 
 
 @pytest.mark.parametrize("opened_by", ["user", "server"])
 @pytest.mark.parametrize(
-    ("outer", "inner"),
-    [("cdialog", "cdialog"), ("cdrawer", "cdialog"), ("cdialog", "cdrawer")],
+    "levels",
+    [
+        ("cdialog", "cdialog"),
+        ("cdrawer", "cdialog"),
+        ("cdialog", "cdrawer"),
+        ("cdrawer", "cdrawer"),
+        ("cdrawer", "cdialog", "cdrawer"),
+    ],
+    ids=lambda levels: "-in-".join(reversed(levels)),
 )
 def test_server_close_of_an_outer_overlay_closes_an_open_inner_one_and_releases_the_page(
     page: Any,
@@ -2283,36 +2361,101 @@ def test_server_close_of_an_outer_overlay_closes_an_open_inner_one_and_releases_
     wait_for_citry_ready: Any,
     send_event: Any,
     settle_timers: Any,
-    outer: str,
-    inner: str,
+    levels: tuple[str, ...],
     opened_by: str,
 ) -> None:
-    """Closing the outer overlay on the server also closes an open inner one, reports it, and frees the page."""
-    app, html = _nested_page(outer, inner)
+    """Closing the outer overlay on the server closes the open ones inside it, reports them, and frees the page."""
+    app, html = _nested_page(*levels)
+    names = _LEVEL_NAMES[len(levels)]
+    label = " holding ".join(levels)
     page.goto(serve_citry_ui_live(app, html) + "/")
     wait_for_citry_ready()
     if opened_by == "server":
-        _server_event(page, send_event, "#open-both-on-server", "open_both_on_server", 1)
+        _server_event(page, send_event, "#open-all-on-server", "open_all_on_server", 1)
     else:
         _server_event(page, send_event, "#open-outer-on-server", "open_outer_on_server", 1)
-        page.locator("#inner-root").get_by_role("button", name="Open inner").click()
-    page.wait_for_function(f"(({_NESTED_OPEN})()).inner === true")
+        for name in names[1:]:
+            _open_level_by_user(page, name)
+    page.wait_for_function(f"(({_NESTED_OPEN})({list(names)!r})).inner === true")
     opened = page.evaluate("window.__openChanges")
 
     _server_event(page, send_event, "#close-outer-on-server", "close_outer_on_server", 2)
     settle_timers()
 
-    assert page.evaluate(_NESTED_OPEN) == {"outer": False, "inner": False}
-    _assert_page_released(page, f"{outer} holding {inner}")
-    # The server closed the outer overlay, which reports nothing; the inner
-    # one closed because its ancestor did, which its owner hears about.
-    assert page.evaluate("window.__openChanges")[len(opened) :] == [
-        {"open": False, "reason": "ancestor", "instance": "inner"}
-    ]
+    assert _nested_state(page, names) == dict.fromkeys(names, False)
+    _assert_page_released(page, label)
+    # The server closed the outer overlay, which reports nothing; each level
+    # inside it closed because its ancestor did, which its owner hears about.
+    reports = page.evaluate("window.__openChanges")[len(opened) :]
+    assert sorted(reports, key=lambda report: report["instance"]) == sorted(
+        ({"open": False, "reason": "ancestor", "instance": name} for name in names[1:]),
+        key=lambda report: report["instance"],
+    )
 
-    # A later re-render that leaves the inner's server `open` unchanged keeps
-    # it closed, as the ancestor close left it.
+    # A later re-render that leaves the inner levels' server `open` unchanged
+    # keeps them closed, as the ancestor close left them.
     _server_event(page, send_event, "#advance-owner", "advance", 3)
     settle_timers()
-    assert page.evaluate(_NESTED_OPEN) == {"outer": False, "inner": False}
-    _assert_page_released(page, f"{outer} holding {inner}")
+    assert _nested_state(page, names) == dict.fromkeys(names, False)
+    _assert_page_released(page, label)
+
+
+@pytest.mark.parametrize(
+    "levels",
+    [("cdialog", "cdialog"), ("cdialog", "ccommand_palette"), ("cdrawer", "ccommand_palette")],
+    ids=lambda levels: "-in-".join(reversed(levels)),
+)
+def test_inner_overlay_rendered_open_inside_a_closed_outer_one_starts_closed(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    send_event: Any,
+    settle_timers: Any,
+    levels: tuple[str, ...],
+) -> None:
+    """An inner overlay the server renders open inside a closed outer one is closed, and opens normally later."""
+    app, html = _nested_page(*levels, opens=(False, True))
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    wait_for_citry_ready()
+
+    # The inner overlay never opened for the user, so nothing is reported, and
+    # opening the outer one shows only the outer one.
+    _open_level_by_user(page, "outer")
+    settle_timers()
+    assert page.evaluate(_NESTED_SHOWN, "inner") == {"open": False, "modal": False}
+    # A re-render that keeps the inner's server `open` unchanged leaves it so.
+    _server_event(page, send_event, "#advance-owner", "advance", 1)
+    settle_timers()
+    assert page.evaluate(_NESTED_SHOWN, "inner") == {"open": False, "modal": False}
+    assert [report["instance"] for report in page.evaluate("window.__openChanges")] == ["outer"]
+
+    # The user can still open the inner overlay as usual.
+    _open_level_by_user(page, "inner")
+    assert page.evaluate(_NESTED_SHOWN, "inner") == {"open": True, "modal": True}
+
+
+@pytest.mark.parametrize("palette_first", [True, False], ids=["drawer-later", "drawer-earlier"])
+def test_palette_opened_by_the_server_while_a_drawer_closes_in_the_same_render_opens(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    send_event: Any,
+    settle_timers: Any,
+    palette_first: bool,
+) -> None:
+    """One server render that opens a palette and closes a drawer beside it leaves the palette open."""
+    levels = ("ccommand_palette", "cdrawer") if palette_first else ("cdrawer", "ccommand_palette")
+    palette, drawer = ("outer", "inner") if palette_first else ("inner", "outer")
+    app, html = _nested_page(*levels, siblings=True)
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    wait_for_citry_ready()
+    _server_event(page, send_event, "#open-drawer-on-server", "open_drawer_on_server", 1)
+    page.wait_for_function(f"({_NESTED_SHOWN})('{drawer}').modal === true")
+
+    _server_event(page, send_event, "#swap-on-server", "swap_on_server", 2)
+    settle_timers()
+
+    assert page.evaluate(_NESTED_SHOWN, palette) == {"open": True, "modal": True}
+    assert page.evaluate(_NESTED_SHOWN, drawer) == {"open": False, "modal": False}
+    # Both changes came from the server, so neither overlay reports.
+    assert page.evaluate("window.__openChanges") == []
